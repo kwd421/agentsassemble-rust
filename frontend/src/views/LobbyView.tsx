@@ -84,6 +84,7 @@ export default function LobbyView({
   canonicalHasMoreHistory = false,
   canonicalWindowRevision = 0,
   participantProfiles = {},
+  searchLabel,
   loadCanonicalHistory,
   providerRequests = [],
   resolveProviderRequest,
@@ -122,6 +123,7 @@ export default function LobbyView({
   canonicalHasMoreHistory?: boolean;
   canonicalWindowRevision?: number;
   participantProfiles?: Record<string, CanonicalParticipantProfile>;
+  searchLabel?: string;
   loadCanonicalHistory?: (beforeSeq: number) => Promise<{
     loadedCount: number;
     oldestSeq: number;
@@ -299,6 +301,7 @@ export default function LobbyView({
         return {
           id: result.event_id,
           author: result.author || "Room",
+          avatarImage: participantProfiles[result.participant_id]?.avatarImageUrl,
           body: result.content || result.attachment_filenames.join(", "),
           meta: messageSearchScope === "all"
             ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ${timeLabel}`
@@ -333,6 +336,7 @@ export default function LobbyView({
       messageSearchChannelLabels,
       messageSearchScope,
       onOpenCrossChannelSearchResult,
+      participantProfiles,
     ]
   );
   const latestReadSequence = useMemo(
@@ -506,6 +510,7 @@ export default function LobbyView({
         icon={<Hash size={20} />}
         title="general"
         subtitle="사람과 에이전트가 함께 보는 기본 채널"
+        searchLabel={searchLabel}
         membersOpen={membersOpen}
         onToggleMembers={onToggleMembers}
         headerActions={effectiveHeaderActions}

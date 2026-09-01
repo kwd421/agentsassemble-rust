@@ -32,6 +32,7 @@ export type ChannelHeaderActions = {
 export type ChannelSearchItem = {
   id: string;
   author: string;
+  avatarImage?: string;
   body: string;
   meta?: string;
   exactTime?: string;
@@ -49,6 +50,7 @@ export default function ChannelHeader({
   icon,
   title,
   subtitle,
+  searchLabel,
   children,
   headerActions,
   membersOpen,
@@ -70,6 +72,7 @@ export default function ChannelHeader({
   icon: ReactNode;
   title: string;
   subtitle?: string;
+  searchLabel?: string;
   children?: ReactNode;
   headerActions?: ChannelHeaderActions;
   membersOpen?: boolean;
@@ -95,6 +98,7 @@ export default function ChannelHeader({
   const [activeSearchIndex, setActiveSearchIndex] = useState(-1);
   const popupSearchRef = useRef<HTMLInputElement | null>(null);
   const searchQuery = controlledSearchQuery ?? uncontrolledSearchQuery;
+  const effectiveSearchLabel = searchLabel || title;
 
   useEffect(() => {
     function handleWindowKeyDown(event: KeyboardEvent) {
@@ -187,7 +191,11 @@ export default function ChannelHeader({
   }
 
   return (
-    <header className="dc-chat-head flex h-12 shrink-0 items-center gap-2 px-3 lg:px-4">
+    <header
+      className="dc-chat-head flex h-12 shrink-0 items-center gap-2 px-3 lg:px-4"
+      data-members-available={Boolean(onToggleMembers)}
+      data-members-open={Boolean(membersOpen)}
+    >
       {onOpenMobileSidebar && (
         <button
           type="button"
@@ -255,20 +263,6 @@ export default function ChannelHeader({
         >
           <Pin size={17} />
         </button>
-        <label className="dc-head-search hidden md:flex">
-          <span className="sr-only">{title} 검색</span>
-          <input
-            type="search"
-            placeholder={`${title} 검색`}
-            value={searchQuery}
-            onChange={handleSearchChange}
-            onKeyDown={handleSearchKeyDown}
-            onFocus={() => {
-              if (searchQuery.trim()) setActivePanel("search");
-            }}
-          />
-          <Search size={14} aria-hidden />
-        </label>
         {onToggleMembers && (
           <button
             type="button"
@@ -282,8 +276,27 @@ export default function ChannelHeader({
             {membersOpen ? <Users size={18} /> : <PanelRight size={18} />}
           </button>
         )}
+        <label className="dc-head-search hidden md:flex">
+          <span className="sr-only">{effectiveSearchLabel} 검색</span>
+          <input
+            type="search"
+            placeholder={`${effectiveSearchLabel} 검색`}
+            value={searchQuery}
+            onChange={handleSearchChange}
+            onKeyDown={handleSearchKeyDown}
+            onFocus={() => {
+              if (searchQuery.trim()) setActivePanel("search");
+            }}
+          />
+          <Search size={14} aria-hidden />
+        </label>
         {activePanel && (
-          <section className="dc-head-popover" role="status" aria-live="polite">
+          <section
+            className="dc-head-popover"
+            data-panel={activePanel}
+            role="status"
+            aria-live="polite"
+          >
             {activePanel === "notifications" && (
               <>
                 <p className="dc-head-popover-title">채널 알림</p>
@@ -356,7 +369,7 @@ export default function ChannelHeader({
             )}
             {activePanel === "search" && (
               <>
-                <p className="dc-head-popover-title">채널 검색</p>
+                <p className="dc-head-popover-title">방 검색</p>
                 {onSearchScopeChange && (
                   <div className="dc-head-search-scope" role="group" aria-label="검색 범위">
                     <button
@@ -376,12 +389,12 @@ export default function ChannelHeader({
                   </div>
                 )}
                 <label className="dc-head-popover-search">
-                  <span className="sr-only">{title} 검색어</span>
+                  <span className="sr-only">{effectiveSearchLabel} 검색어</span>
                   <Search size={14} aria-hidden />
                   <input
                     ref={popupSearchRef}
                     type="search"
-                    aria-label={`${title} 검색어`}
+                    aria-label={`${effectiveSearchLabel} 검색어`}
                     aria-activedescendant={
                       searchMatches.length
                         ? `channel-search-result-${searchMatches[activeSearchIndex < 0 ? 0 : activeSearchIndex].id}`
@@ -419,16 +432,32 @@ export default function ChannelHeader({
                           onClick={() => selectSearchItem(item)}
                           title={item.exactTime}
                         >
-                          <span className="dc-head-search-result-author preserve-words">
-                            {item.author || "Room"}
+                          <span className="dc-head-search-result-avatar" aria-hidden>
+                            {(item.author || "R").slice(0, 1).toLocaleUpperCase()}
+                            {item.avatarImage && (
+                              <img
+                                src={item.avatarImage}
+                                alt=""
+                                onError={(event) => {
+                                  event.currentTarget.hidden = true;
+                                }}
+                              />
+                            )}
                           </span>
-                          {item.meta && (
-                            <span className="dc-head-search-result-meta preserve-words">
-                              {item.meta}
+                          <span className="dc-head-search-result-copy">
+                            <span className="dc-head-search-result-heading">
+                              <span className="dc-head-search-result-author preserve-words">
+                                {item.author || "Room"}
+                              </span>
+                              {item.meta && (
+                                <span className="dc-head-search-result-meta preserve-words">
+                                  {item.meta}
+                                </span>
+                              )}
                             </span>
-                          )}
-                          <span className="dc-head-search-result-body preserve-words">
-                            {item.body}
+                            <span className="dc-head-search-result-body preserve-words">
+                              {item.body}
+                            </span>
                           </span>
                         </button>
                       ))}

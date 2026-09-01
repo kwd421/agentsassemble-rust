@@ -62,7 +62,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     mobileSidebarOpen, mobileViewportIsActive, openAddFriendView, openAgentCreate,
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
-    quotaViewer, rightPanelMode, rightPanelSearchQuery,
+    quotaViewer, rightPanelMode,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend, selectHomeFriend,
@@ -70,7 +70,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     sendParticipantKick, sendParticipantMute, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setCreateChannelOpen, setLeaveRoomTargetId, setMembersOpen,
     setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
-    setPendingMessageSearchTarget, setRightPanelMode, setRightPanelSearchQuery, setRoomMenu,
+    setPendingMessageSearchTarget, setRightPanelMode, setRoomMenu,
     shellStyle, showFriendsDirectory, showMembers, sideChatDraftsByContext,
     sideChatError, sideChatEvents, startSidebarResize, toggleChannelSection,
     toggleMembers, typingIndicators, updateMemberRole, updateSideChatDraft,
@@ -461,6 +461,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               canonicalHasMoreHistory={activeRoomHistory.hasMoreBefore}
               canonicalWindowRevision={activeRoomHistory.windowRevision}
               participantProfiles={canonicalRoom.participantProfiles}
+              searchLabel={activeRoom.label}
               loadCanonicalHistory={loadCanonicalRoomHistory}
               providerRequests={canonicalRoom.providerRequests}
               resolveProviderRequest={canonicalRoom.sendProviderRequestResolution}
@@ -484,6 +485,8 @@ export default function AppView({ controller }: { controller: AppController }) {
               meetingId={activeRoom.meetingId}
               sessionToken={admittedSessionToken}
               localDisplayName={guestSession?.displayName || ""}
+              participantProfiles={canonicalRoom.participantProfiles}
+              searchLabel={activeRoom.label}
               canPost={lobbyPostingState.canPost}
               membersOpen={membersOpen}
               onToggleMembers={toggleMembers}
@@ -546,7 +549,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           data-testid="room-right-panel"
           data-panel-mode={rightPanelMode}
         >
-          <div className="dc-right-panel-search">
+          <div className="dc-right-panel-header-spacer">
             <button
               type="button"
               className="dc-compact-panel-close"
@@ -555,16 +558,6 @@ export default function AppView({ controller }: { controller: AppController }) {
             >
               <X size={18} />
             </button>
-            <label className="dc-member-search-box">
-              <span className="sr-only">{activeRoom.label} 검색</span>
-              <input
-                type="search"
-                value={rightPanelSearchQuery}
-                onChange={(event) => setRightPanelSearchQuery(event.currentTarget.value)}
-                placeholder={`${activeRoom.label} 검색`}
-              />
-              <Search size={15} aria-hidden />
-            </label>
           </div>
           <div className="dc-right-panel-tabs" role="tablist" aria-label="우측 패널">
             <button
@@ -617,8 +610,6 @@ export default function AppView({ controller }: { controller: AppController }) {
                 quotaViewer={quotaViewer}
                 onAgentUsageRequest={loadProviderUsage}
                 onStartAddAgent={openAgentCreate}
-                memberSearchQuery={rightPanelSearchQuery}
-                onMemberSearchQueryChange={setRightPanelSearchQuery}
                 agentSessions={activeRoomAgentSessions}
                 capabilities={activeRoomCapabilities}
                 onAgentControl={sendAgentControl}

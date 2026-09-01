@@ -344,12 +344,13 @@ Every Rust-only frontend change must be allowlisted with its file and reason. Th
 allowlist is limited to runtime bootstrap, ticket/transport, Tauri native boundary,
 behavior-preserving structure-gate splits, and the observed
 `styles/channel-search.css` cascade correction that hides the mobile message-search
-trigger when the copied desktop search field is visible. Product-controller
-orchestration, client-owned authority, changed DOM order, or any other changed CSS
-cascade is not justified by the allowlist. Packaged 1440-by-900 verification of that
-correction exposed one desktop `general` message-search field, one right-panel member
-filter, no duplicate mobile trigger, and a visible header toggle that removed and
-restored the whole right panel without clipping the remaining header controls.
+trigger when the copied desktop search field is visible, plus the subsequent
+Discord-reference correction that keeps one room-named message search in a stable
+header slot while the right-panel body opens and closes. The obsolete right-panel
+member filter and its independent query state are removed. Search results resolve
+avatars by canonical `participant_id` against the current room profile SSoT rather
+than matching mutable names. Product-controller orchestration, client-owned
+authority, or any other changed CSS cascade is not justified by the allowlist.
 
 At the public Rust comparison commit:
 

@@ -5008,3 +5008,32 @@ The critical web reviewer and Daybreaker Blue High found no actionable issue and
 approved each of `9fa3dac`, `7d06973`, `5b7dcc0`, `22c8df0`, and `1c5b37e`, cumulative
 `6f9115a..1c5b37e`, and pushed HEAD `1c5b37e` at C0/H0/M0/L0. Neither reviewer ran an automated
 security scan.
+
+### Room search header and result identity correction: 2026-09-01
+
+The 1440-by-900 packaged comparison exposed two desktop search fields with different owners: the
+channel header searched canonical messages while the right panel filtered only its current member
+projection. Discord reference captures showed one room search remaining at the same header position
+while only the member body opened or closed. The correction removes the member-filter state and
+filter pass, keeps one room-named message search in a fixed 300-pixel header slot, and makes the
+room-wide `all` scope the default. The right-panel body retains its existing 300-pixel ownership and
+gets no new request or client authority.
+
+Search results now return the canonical message actor `participant_id` and resolve the current
+profile image through the existing room participant/Agent Session profile projection. Display-name
+matching was rejected because names are mutable and non-unique. Missing or failed images fall back
+to the bounded author initial. The wire addition reuses the already decoded canonical event and
+adds no SQL column, index, join, background task, timer, polling, cache, fallback, disk projection,
+or unbounded allocation. Focused persistence, provider, TCP, parser, search lifecycle, header, and
+lobby tests plus the production frontend build pass. Computer Use then verified the rebuilt
+1440-by-900 package with one `새 회의실 검색` field, no `general` or right-panel member-search
+duplicate, and a stable search/toggle header position before and after closing the member body. A
+real `INTERRUPT` query returned ten canonical results in room-wide scope with a circular avatar
+surface for every result. The profile-image branch is covered by a canonical-participant fixture;
+this isolated room's current profiles intentionally use initial fallbacks where no SSoT image is
+set.
+
+The first packaged attempt failed strict response parsing because the frontend and desktop had been
+rebuilt while the bundled server sidecar still emitted the previous result contract. No fallback or
+lenient parser was added. Rebuilding the release server sidecar and repackaging made the same query
+pass, confirming the build-input mismatch as the root cause.

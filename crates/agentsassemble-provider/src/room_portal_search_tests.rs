@@ -55,6 +55,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let page = LobbyMessageSearchPage {
         results: vec![LobbyMessageSearchResult {
             event_id: "message-1".to_owned(),
+            participant_id: "human-1".to_owned(),
             seq: 1,
             created_at: "2026-08-30T00:00:00Z".to_owned(),
             author: "Human".to_owned(),

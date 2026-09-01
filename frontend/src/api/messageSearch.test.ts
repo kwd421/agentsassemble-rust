@@ -33,6 +33,7 @@ function jsonResponse(value: unknown, privateResponse = true) {
 function result(eventId = "event-1", seq = 7) {
   return {
     event_id: eventId,
+    participant_id: "operator-local",
     channel_id: "lobby",
     seq,
     created_at: "2026-08-29T01:00:00Z",

@@ -19,6 +19,12 @@ the original whitespace-insensitive match when the compact query has at least th
 Results are newest-first in pages of 30; context is the selected event with at most 15 earlier and 15
 later lobby messages in chronological order.
 
+Each result also carries the canonical message actor's `participant_id`. The copied frontend uses
+that identity only to resolve the current room-owned participant or Agent Session profile and render
+its avatar; it never guesses identity from a mutable or duplicated display name. If the current
+profile has no image, the result renders its bounded initial without inventing another profile
+source.
+
 Search metadata is a derived SQLite projection, not message authority. One minimal record table owns
 the event pointer, canonical creation order, casefolded search text, and compact text. A contentless
 `unicode61` FTS table preserves the phrase candidate path without copying result content. The canonical
@@ -113,6 +119,14 @@ frontend/original-CSS build, 98 frontend files with 612 tests, 26 desktop tests,
 integration, and real-TCP boundary test (including search ticket replay/cross-purpose/wrong-room and
 post-exchange revocation), document tests, warning-denied Clippy, formatting, and diff checks. The
 final whole-repository gate and packaged evidence are recorded in `docs/VERIFICATION.md`.
+
+The desktop room header now has one room-named message search. Its fixed header slot remains visible
+while the member body opens and closes; the removed right-panel member filter no longer owns a
+second query or duplicates the search affordance. The default scope is the room-wide `all` request,
+which still fails explicitly for custom-channel storage until that Rust owner exists. This layout
+change removes one React state and one filter pass; it adds no request, timer, polling loop, cache,
+fallback, or durable state. Focused frontend tests cover the room label and profile-SSoT avatar, and
+the TCP search test covers the returned participant identity.
 
 ### Packaged and real-provider evidence
 

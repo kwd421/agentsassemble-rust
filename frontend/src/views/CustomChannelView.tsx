@@ -22,6 +22,7 @@ import {
   useRoomMessageSearch,
   type RoomMessageSearchController,
 } from "./useRoomMessageSearch";
+import type { CanonicalParticipantProfile } from "../lib/canonicalRoomProjection";
 
 /**
  * A custom (user-created) channel: a text channel renders its own message
@@ -35,6 +36,8 @@ export default function CustomChannelView({
   meetingId,
   sessionToken,
   localDisplayName,
+  participantProfiles = {},
+  searchLabel,
   canPost,
   membersOpen,
   onToggleMembers,
@@ -51,6 +54,8 @@ export default function CustomChannelView({
   meetingId: string;
   sessionToken: string;
   localDisplayName: string;
+  participantProfiles?: Record<string, CanonicalParticipantProfile>;
+  searchLabel?: string;
   canPost: boolean;
   membersOpen?: boolean;
   onToggleMembers?: () => void;
@@ -70,6 +75,7 @@ export default function CustomChannelView({
         meetingId={meetingId}
         sessionToken={sessionToken}
         localDisplayName={localDisplayName}
+        searchLabel={searchLabel}
         canJoin={canPost}
         membersOpen={membersOpen}
         onToggleMembers={onToggleMembers}
@@ -85,6 +91,8 @@ export default function CustomChannelView({
       meetingId={meetingId}
       sessionToken={sessionToken}
       localDisplayName={localDisplayName}
+      participantProfiles={participantProfiles}
+      searchLabel={searchLabel}
       canPost={canPost}
       membersOpen={membersOpen}
       onToggleMembers={onToggleMembers}
@@ -105,6 +113,8 @@ function TextChannelBody({
   meetingId,
   sessionToken,
   localDisplayName,
+  participantProfiles,
+  searchLabel,
   canPost,
   membersOpen,
   onToggleMembers,
@@ -121,6 +131,8 @@ function TextChannelBody({
   meetingId: string;
   sessionToken: string;
   localDisplayName: string;
+  participantProfiles: Record<string, CanonicalParticipantProfile>;
+  searchLabel?: string;
   canPost: boolean;
   membersOpen?: boolean;
   onToggleMembers?: () => void;
@@ -160,6 +172,7 @@ function TextChannelBody({
     return {
       id: result.event_id,
       author: result.author || "익명",
+      avatarImage: participantProfiles[result.participant_id]?.avatarImageUrl,
       body: result.content || result.attachment_filenames.join(", "),
       meta: messageSearchScope === "all"
         ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ${timeLabel}`
@@ -226,6 +239,7 @@ function TextChannelBody({
         icon={<Hash size={18} />}
         title={channel.name}
         subtitle="커스텀 텍스트 채널"
+        searchLabel={searchLabel}
         membersOpen={membersOpen}
         onToggleMembers={onToggleMembers}
         onOpenMobileSidebar={onOpenMobileSidebar}
@@ -305,6 +319,7 @@ function VoiceChannelBody({
   meetingId,
   sessionToken,
   localDisplayName,
+  searchLabel,
   canJoin,
   membersOpen,
   onToggleMembers,
@@ -316,6 +331,7 @@ function VoiceChannelBody({
   meetingId: string;
   sessionToken: string;
   localDisplayName: string;
+  searchLabel?: string;
   canJoin: boolean;
   membersOpen?: boolean;
   onToggleMembers?: () => void;
@@ -410,6 +426,7 @@ function VoiceChannelBody({
         icon={<Volume2 size={18} />}
         title={channel.name}
         subtitle="음성 채널 (오디오는 준비 중 · 현재는 접속/프레즌스)"
+        searchLabel={searchLabel}
         membersOpen={membersOpen}
         onToggleMembers={onToggleMembers}
         onOpenMobileSidebar={onOpenMobileSidebar}

@@ -145,8 +145,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     {}
   );
   const [channelSearchQuery, setChannelSearchQuery] = useState("");
-  const [rightPanelSearchQuery, setRightPanelSearchQuery] = useState("");
-  const [messageSearchScope, setMessageSearchScope] = useState<ChannelSearchScope>("channel");
+  const [messageSearchScope, setMessageSearchScope] = useState<ChannelSearchScope>("all");
   const [pendingMessageSearchTarget, setPendingMessageSearchTarget] = useState<{
     channelId: string;
     eventId: string;
@@ -423,7 +422,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     [activeCustomChannels]
   );
   useEffect(() => {
-    setMessageSearchScope("channel");
+    setMessageSearchScope("all");
     setPendingMessageSearchTarget(null);
   }, [activeRoom.meetingId]);
   const menuRoom = roomMenu ? rooms.find((room) => room.id === roomMenu.roomId) : undefined;
@@ -757,7 +756,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     operatorPairingUrl, pendingGuestAvatarImage, pendingGuestDisplayName, pendingMessageSearchTarget,
     publicInviteStatus, quotaViewer,
     requestGuestJoin, retryOperatorPairing, rightPanelMode,
-    rightPanelSearchQuery, roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
+    roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
     scopedOnlineCount, scopedViewerDisplayName, selectDirectoryFriend,
@@ -767,7 +766,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     setGuestRecoveryRequest, setLeaveRoomTargetId, setMembersOpen,
     setMessageSearchScope, setMobileRoomInfoInitialMode, setMobileRoomInfoOpen, setMobileSidebarOpen,
     setPendingGuestAvatarImage, setPendingGuestDisplayName, setPendingMessageSearchTarget,
-    setRightPanelMode, setRightPanelSearchQuery, setRoomMenu, setSettingsModal,
+    setRightPanelMode, setRoomMenu, setSettingsModal,
     settingsModalInitialSectionId, settingsModalRoom, shellStyle, showFriendsDirectory,
     showMembers, sideChatDraftsByContext, sideChatError, sideChatEvents,
     startInviteTunnel, startSidebarResize, startupIdentityResolved, stopInviteTunnel,

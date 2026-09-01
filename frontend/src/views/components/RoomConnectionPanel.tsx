@@ -35,8 +35,6 @@ type RoomConnectionPanelProps = {
   quotaViewer?: AgentQuotaVisibilityViewer;
   onAgentUsageRequest?: (session: RoomAgentSession) => void | Promise<void>;
   onStartAddAgent?: () => void;
-  memberSearchQuery?: string;
-  onMemberSearchQueryChange?: (query: string) => void;
   agentSessions?: RoomAgentSession[];
   capabilities?: Record<string, boolean>;
   onAgentControl?: (
@@ -78,8 +76,6 @@ export default function RoomConnectionPanel({
   quotaViewer,
   onAgentUsageRequest,
   onStartAddAgent,
-  memberSearchQuery,
-  onMemberSearchQueryChange,
   agentSessions = [],
   capabilities = {},
   onAgentControl,
@@ -160,9 +156,7 @@ export default function RoomConnectionPanel({
         onSessionActionComplete={onSessionActionComplete}
         quotaViewer={quotaViewer}
         onAgentUsageRequest={onAgentUsageRequest}
-        searchQuery={memberSearchQuery}
-        onSearchQueryChange={onMemberSearchQueryChange}
-        hideSearch={memberSearchQuery !== undefined}
+        hideSearch
         agentSessions={agentSessions}
         onAgentControl={capabilities["agent.control"] ? onAgentControl : undefined}
         availableProviders={availableProviders}

@@ -36,6 +36,7 @@ export type MessageSearchAuthority = RoomHttpAuthority;
 
 export type RoomSearchResult = Readonly<{
   event_id: string;
+  participant_id: string;
   channel_id: "lobby";
   seq: number;
   created_at: string;
@@ -59,6 +60,7 @@ type SearchGrant = Readonly<{ baseUrl: string; ticket: string }>;
 
 const SEARCH_RESULT_KEYS = [
   "event_id",
+  "participant_id",
   "channel_id",
   "seq",
   "created_at",
@@ -183,6 +185,7 @@ function parseSearchResult(value: unknown): RoomSearchResult {
   if (!hasVisibleText(content) && filenames.length === 0) invalidResponse();
   return Object.freeze({
     event_id: eventId(result.event_id),
+    participant_id: boundedString(result.participant_id, 256),
     channel_id: "lobby",
     seq: positiveSequence(result.seq),
     created_at: timestamp(result.created_at),

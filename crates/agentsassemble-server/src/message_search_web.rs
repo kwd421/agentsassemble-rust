@@ -54,6 +54,7 @@ struct SearchResponse {
 #[derive(Serialize)]
 struct SearchResult {
     event_id: String,
+    participant_id: String,
     channel_id: &'static str,
     seq: i64,
     created_at: String,
@@ -229,6 +230,7 @@ fn project_page(page: LobbyMessageSearchPage) -> SearchResponse {
             .into_iter()
             .map(|result| SearchResult {
                 event_id: result.event_id,
+                participant_id: result.participant_id,
                 channel_id: LOBBY_CHANNEL_ID,
                 seq: result.seq,
                 created_at: result.created_at,

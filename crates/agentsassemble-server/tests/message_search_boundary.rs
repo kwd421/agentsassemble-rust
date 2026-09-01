@@ -69,6 +69,10 @@ async fn local_tcp_search_and_context_are_exact() {
     let first = json_body(first).await;
     assert_eq!(first["results"].as_array().map(Vec::len), Some(30));
     assert_eq!(first["results"][0]["event_id"], messages[34].id);
+    assert_eq!(
+        first["results"][0]["participant_id"],
+        LOCAL_OPERATOR_PARTICIPANT_ID
+    );
     assert!(
         first["next_cursor"]
             .as_str()

@@ -12,8 +12,8 @@ const expectedCss = new Map([
     "ec5e1ef2db1793bcc1a326ae07a1b9ddfc3499f89dd3ab8f0374fe5386cc0331",
   ],
   [
-    "useRoomMessageSearch-zcoL7RyC.css",
-    "11ef334f47deae9e89d775309ed75363793549bfd8a95d9fa67a5932dd9b59e8",
+    "useRoomMessageSearch-BBKeNGgP.css",
+    "21d5c6fab91b09acda78881428fb38a26483184f260603d23261da5701ad9d28",
   ],
 ]);
 

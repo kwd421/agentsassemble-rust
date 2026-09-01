@@ -105,6 +105,13 @@ function SearchBackedLobby({ target }: { target: LobbyEvent }) {
     <LobbyView
       activeRoom={room}
       agents={[]}
+      searchLabel={room.label}
+      participantProfiles={{
+        "agent-1": {
+          displayName: target.name,
+          avatarImageUrl: "https://assets.example/agent-1.png",
+        },
+      }}
       canonicalEvents={[target]}
       canonicalHasMoreHistory={false}
       sharedMessageSearch={{
@@ -122,6 +129,7 @@ function SearchBackedLobby({ target }: { target: LobbyEvent }) {
         results: query
           ? [{
               event_id: target.id,
+              participant_id: "agent-1",
               channel_id: "lobby",
               seq: 7,
               created_at: target.created_at,
@@ -189,8 +197,13 @@ describe("LobbyView active provider turn", () => {
     );
 
     fireEvent.keyDown(window, { key: "f", ctrlKey: true });
-    const popupSearch = await screen.findByRole("searchbox", { name: "general 검색어" });
+    const popupSearch = await screen.findByRole("searchbox", { name: "Room A 검색어" });
     fireEvent.change(popupSearch, { target: { value: "회귀" } });
+    expect(
+      screen.getByRole("button", { name: /Agent B.*릴리스 전 회귀 검증/ })
+        .querySelector(".dc-head-search-result-avatar img")
+        ?.getAttribute("src")
+    ).toBe("https://assets.example/agent-1.png");
     fireEvent.keyDown(popupSearch, { key: "ArrowDown" });
     fireEvent.keyDown(popupSearch, { key: "Enter" });
 

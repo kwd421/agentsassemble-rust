@@ -253,6 +253,7 @@ fn project_page(
         last_cursor = Some((created_at_nanos, event.seq));
         results.push(LobbyMessageSearchResult {
             event_id: event.id,
+            participant_id: event.actor.participant_id,
             seq: event.seq,
             created_at: event
                 .created_at

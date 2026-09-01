@@ -54,6 +54,7 @@ describe("ChannelHeader room search scope", () => {
       <ChannelHeader
         icon="#"
         title="release-notes"
+        searchLabel="Release Room"
         externalSearch
         searchQuery="배포 오류"
         searchScope="channel"
@@ -63,7 +64,7 @@ describe("ChannelHeader room search scope", () => {
     );
 
     expect(
-      (screen.getByRole("searchbox", { name: "release-notes 검색어" }) as HTMLInputElement).value
+      (screen.getByRole("searchbox", { name: "Release Room 검색어" }) as HTMLInputElement).value
     ).toBe("배포 오류");
     fireEvent.click(screen.getByRole("button", { name: "모든 채널" }));
 

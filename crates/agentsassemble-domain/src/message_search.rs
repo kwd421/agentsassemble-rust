@@ -17,6 +17,7 @@ pub const MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS: usize = 12_000;
 #[serde(deny_unknown_fields)]
 pub struct LobbyMessageSearchResult {
     pub event_id: String,
+    pub participant_id: String,
     pub seq: i64,
     pub created_at: String,
     pub author: String,

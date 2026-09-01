@@ -23,6 +23,7 @@ import { useRoomMessageSearch } from "./useRoomMessageSearch";
 const page: RoomSearchPage = {
   results: [{
     event_id: "event-1",
+    participant_id: "operator-local",
     channel_id: "lobby",
     seq: 1,
     created_at: "2026-08-30T01:00:00Z",
