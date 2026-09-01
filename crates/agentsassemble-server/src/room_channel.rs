@@ -1,17 +1,17 @@
 use std::{io, time::Duration};
 
 use agentsassemble_protocol::{
-    ClientFrame, CommandNack, CommandResolution, ProtocolError, ServerFrame,
+    ClientFrame, CommandNack, CommandResolution, MAX_ROOM_SOCKET_MESSAGE_BYTES, ProtocolError,
+    ServerFrame,
 };
 use axum::extract::ws::Message;
 use futures_util::{Sink, SinkExt};
 use tokio_util::sync::CancellationToken;
 
-pub(crate) const MAX_WS_MESSAGE_BYTES: usize = 256 * 1024;
 const WS_WRITE_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) fn decode_client_frame(encoded: &str) -> Result<(ClientFrame, usize), io::Error> {
-    if encoded.len() > MAX_WS_MESSAGE_BYTES {
+    if encoded.len() > MAX_ROOM_SOCKET_MESSAGE_BYTES {
         return Err(invalid_data("WebSocket frame exceeds the product limit"));
     }
     let frame = serde_json::from_str(encoded).map_err(invalid_frame)?;
@@ -20,7 +20,7 @@ pub(crate) fn decode_client_frame(encoded: &str) -> Result<(ClientFrame, usize),
 
 pub(crate) fn encode_server_frame(frame: &ServerFrame) -> Result<String, io::Error> {
     let encoded = serde_json::to_string(frame).map_err(io::Error::other)?;
-    if encoded.len() > MAX_WS_MESSAGE_BYTES {
+    if encoded.len() > MAX_ROOM_SOCKET_MESSAGE_BYTES {
         return Err(invalid_data("WebSocket frame exceeds the product limit"));
     }
     Ok(encoded)

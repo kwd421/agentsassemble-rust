@@ -31,6 +31,7 @@ import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVI
 import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 import { roomMessagePayload } from "./lib/roomMessagePayload";
 import { ROOM_HISTORY_MAX_EVENTS } from "./types/generated/ROOM_HISTORY_WIRE";
+import { MAX_ROOM_SOCKET_MESSAGE_BYTES } from "./types/generated/ROOM_SOCKET_WIRE";
 import { scheduleUncertainCommandRetry, type PendingCommandRetryState } from "./roomSocketRetryPolicy";
 
 export type { RoomSocketAuth } from "./api";
@@ -52,7 +53,6 @@ export type {
 
 const ROOM_SOCKET_COMMAND_TIMEOUT_MS = 20_000;
 const ROOM_SOCKET_KEEPALIVE_MS = 3 * 60_000;
-const MAX_ROOM_SOCKET_MESSAGE_BYTES = 256 * 1024;
 const UTF8_ENCODER = new TextEncoder();
 
 interface PendingRoomCommand extends PendingCommandRetryState {

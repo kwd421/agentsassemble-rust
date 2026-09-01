@@ -27,6 +27,7 @@ pub use local_control::{
 
 pub const PROTOCOL_VERSION: u32 = 1;
 pub const PRODUCT_SURFACE_REVISION: u32 = 12;
+pub const MAX_ROOM_SOCKET_MESSAGE_BYTES: usize = 256 * 1024;
 pub const HUMAN_INVITE_SIGNED_TOKEN_PREFIX: &str = "aai1";
 pub const HUMAN_INVITE_JOIN_CODE_PREFIX: &str = "aaj1_";
 pub const HUMAN_INVITE_SIGNED_TOKEN_MAX_BYTES: usize = 4 * 1024;
