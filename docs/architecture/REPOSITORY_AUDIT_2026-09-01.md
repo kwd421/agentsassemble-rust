@@ -187,7 +187,7 @@ last best effort after the explicit owner has reported the result.
 
 ### F-04 — signed capabilities advertised actions that did not exist
 
-Disposition: `Corrected locally through cccf513; pushed re-review pending`; high
+Disposition: `Closed through 7b2168f; both manual reviewers approved`; high
 product/medium structure impact.
 
 Before `1a87de8`, the signed capability projection included `room.delete`,
@@ -933,7 +933,7 @@ This table routes findings; it does not add another contract layer.
 | F-01 | Antigravity driver/module graph | 1 | no production import/build/runtime transcript edge; missing native completion is explicit |
 | F-02 | Codex/OpenCode native drivers | 1 | one documented completion/session authority per provider, with focused protocol fixtures |
 | F-03 | common adapter plus provider teardown | 1 | abort/cleanup returns a typed result and failed cleanup prevents unsafe reuse |
-| F-04 | protocol product surface plus capability projection | 0B | corrected through `cccf513`; pushed re-review pending |
+| F-04 | protocol product surface plus capability projection | 0B | closed through `7b2168f`; both manual reviewers approved C0/H0/M0/L0 |
 | F-05 | frontend composition/product-surface gate | 0B | normal startup/room use issues no request or timer for an absent/deferred owner |
 | F-06 | Agent Session projection/profile owner | 3 | roster, timeline, search, restart, and editor obey Agent/participant SSoTs |
 | F-07 | provider registration/operation descriptor | 0B and 1 | Phase 0B gates false UI operations; Phase 1 closes provider-native operations and exact model selection |
