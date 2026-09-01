@@ -476,7 +476,11 @@ Disposition: `Fix`; medium product/structure impact.
   components, and styles; the static unsupported notice remains, and roster ownership
   now follows explicit `owner_id` only. Daybreaker's re-review found an obsolete
   quota-visibility suite outside Vitest's include set; `534a953` removes that final
-  excluded test, and the deleted helper has no repository reference.
+  excluded test, and the deleted helper has no repository reference. Critical-web
+  Pro then found that a secondary roster projection still treated Agent Session
+  `external_owned=false` runtime custody as viewer ownership. Correction `9256976`
+  removes that derived ownership state and fallback; both roster projection paths now
+  group Agent participants only by the room-owned `owner_id`.
 - The remaining issue is exact model selection: the first-discovered-model
   substitution and stale OpenCode preference above are unchanged.
 

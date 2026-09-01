@@ -5858,6 +5858,16 @@ DeepSeek credential behavior is unchanged. No dummy route, client authority,
 placeholder result, compatibility path, retry, polling, heartbeat, timer, fallback,
 or replacement abstraction was added.
 
+Critical-web Pro's correction review found one further Low in the secondary roster
+projection. When a room participant had an Agent Session but no primary `LiveAgent`
+entry, the copied code treated `external_owned=false` runtime custody as viewer-owned
+human identity and could replace a missing owner with the viewer. Correction `9256976`
+removes the redundant `ownedByViewer` projection and its viewer fallback. Primary and
+secondary Agent rows now group only by the room participant's exact `owner_id`;
+`external_owned` remains runtime custody only. The direct regression covers a local
+runtime owned by another room human and passes with all 12 MemberList tests. The
+production build, exact CSS gate, diff gate, and architecture gate also pass.
+
 Provider focused tests pass 158 Rust cases. The server boundary compiles, 26 focused
 frontend tests pass after the credential correction, 20 focused frontend tests pass
 after the usage correction, the production build and architecture gate pass after
@@ -5903,8 +5913,9 @@ production build plus CSS, diff, and architecture gates pass. The JavaScript is
 is 148,564 bytes raw and 26,236 bytes under `gzip -9`, with SHA-256
 `2227380ce846d01d0c1f704ffb291a50c6cf4ab3a51d44e7df63ea24011e0989`.
 These reductions are dead-code removal evidence, not a broad latency claim.
-Daybreaker approves `534a953`, exact `879db4b..534a953`, cumulative
-`5ec012f..534a953`, and HEAD `534a953` at `C0/H0/M0/L0`. Critical ChatGPT Pro's
-correction review remains pending; no Pro final approval is claimed here. Exact
+Daybreaker approves `ae171dc`, exact `534a953..ae171dc`, full correction
+`879db4b..ae171dc`, cumulative `5ec012f..ae171dc`, and HEAD `ae171dc` at
+`C0/H0/M0/L0`. Replacement critical-web Pro and Daybreaker review of `9256976`
+remain pending; no Pro final approval is claimed here. Exact
 preferred-model selection and removal of the first-discovered-model substitution remain
 the next F-07 work.
