@@ -69,17 +69,19 @@ contracts, findings, or verification journals.
   individual commit, exact `a9dceae..d45978a`, cumulative F-05
   `8903445..d45978a`, and HEAD `d45978a` at `C0/H0/M0/L0`. Evidence-backed
   dormant-source cleanup remains in F-05.
-- Completed build-artifact lifecycle correction through `52d9383`. macOS debug
-  builds retain full debug information without Cargo's default unpacked per-unit
-  object copies, and the desktop shell shares the repository Cargo target instead
-  of owning a second cache. Complete verification now checks the exact project-owned
-  targets before compiling: an obsolete desktop target is removed, while the active
-  target is retained below the measured 20 GiB ceiling and rebuilt from clean state
-  only after exceeding it. Daybreaker found that the first physical-size counter
-  counted hard-link entries twice; `52d9383` now counts each `(device, inode)` once
-  and pins that boundary with a regression. The remeasured complete cache occupies
-  11.800 GiB physically, contains no
-  `.rcgu.o` files, and passes the full verification suite in 234.62 seconds.
+- Build-artifact lifecycle correction is implemented through `5d812e1` and awaits
+  final cross-review. macOS uses packed debug information, eliminating Cargo's
+  unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
+  desktop shell shares the repository Cargo target. Routine complete verification
+  performs non-destructive checks before and after the build. It fails closed if an
+  obsolete desktop target exists or the active cache exceeds the measured 24 GiB
+  ceiling; only explicit `make artifact-prune` maintenance invokes Cargo clean, so
+  verification cannot race-delete another Cargo/Tauri operation. Unix accounting
+  deduplicates hard links and uses allocated blocks; platforms without that metadata
+  use logical bytes and never collapse zero file identities. The packed warm cache
+  occupies 20.668 GiB physically, contains zero `.rcgu.o` files and 33 dSYM bundles,
+  leaves the obsolete desktop target absent, and passes a packed cold build/test run
+  plus the final warm complete verification in 822.72 and 315.16 seconds respectively.
 - Sequence/exit owner: [`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`](docs/PRODUCT_REIMPLEMENTATION_PLAN.md)
 - Finding/evidence owner: [`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md`](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md)
 - Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`;

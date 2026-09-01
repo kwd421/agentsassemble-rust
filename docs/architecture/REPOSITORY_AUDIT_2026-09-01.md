@@ -1092,39 +1092,59 @@ touched. Available disk rose from 21 GiB to 95 GiB. A target-qualified Cargo cle
 also removed shared host intermediates, contrary to the narrower expected effect,
 so the final cleanup design never assumes that target-qualified cleanup is selective.
 
-Commit `8cda5f6` disables only macOS `split-debuginfo=unpacked`; it preserves full
-debug information and leaves targets such as Windows MSVC unchanged, where `off` is
-unsupported. A controlled cold domain-test build fell from 290 MiB and 568
-`.rcgu.o` files in 21.44 seconds to 259 MiB, zero `.rcgu.o` files, and 20.78
-seconds. Commit `b62c4cc` then gives the desktop build the existing repository target
-instead of a second Cargo owner. Desktop warning-denied clippy and all 25 desktop
-tests pass from that shared target, and `desktop/src-tauri/target` remains absent.
+Commit `8cda5f6` first disabled macOS `split-debuginfo=unpacked`. A controlled cold
+domain-test build fell from 290 MiB and 568 `.rcgu.o` files in 21.44 seconds to
+259 MiB, zero `.rcgu.o` files, and 20.78 seconds. Source-level inspection later
+proved that this initial `off` setting also removed source DWARF, so it did not
+preserve the debugging contract. Commit `ee76d37` corrects the owner to macOS
+`packed`: the same controlled build occupies 285 MiB, creates no `.rcgu.o` files,
+and emits a dSYM whose compile unit names the Rust source. The accepted 26 MiB cost
+over `off` retains debugger information while still avoiding the default unpacked
+object explosion. Other targets, including Windows MSVC, are unchanged.
 
-The first fresh complete `make verify` after both corrections took 436.67 seconds
-and produced one complete cache with zero `.rcgu.o` units. Commit `9e13cf3` makes
-the exact project-owned cleanup boundary the first step of complete verification.
-It always removes a reappearing obsolete desktop target and cleans the active root
-target only when physical allocation
-exceeds 20 GiB, leaving 8 GiB of measured change headroom before paying for a cold
-rebuild. The same verification invocation then rebuilds the current HEAD cache, so
-cleanup never leaves the routine next build intentionally cold. The owner rejects a
-symlinked target, accepts no arbitrary path, uses Cargo's own clean command, and adds
-no timer, background worker, age heuristic, fallback, or swallowed failure. Tests
-cover below-ceiling retention, above-ceiling exact cleanup, obsolete-owner cleanup,
-and symlink rejection.
+Commit `b62c4cc` gives the desktop build the existing repository target instead of
+a second Cargo owner. Desktop warning-denied clippy and all 25 desktop tests pass
+from that shared target, and `desktop/src-tauri/target` remains absent. The initial
+cleanup owner in `9e13cf3` ran automatically before verification. Critical ChatGPT
+Pro found that Cargo clean does not own a target-wide exclusion lock and therefore
+could delete files used by another Cargo or Tauri operation. Commit `36494b6`
+separates non-destructive routine checking from destructive maintenance: `make
+verify` checks before and after compilation and fails closed with an explicit
+instruction, while only operator-invoked `make artifact-prune` runs Cargo clean.
+Commit `0b9d5db` makes that explicit maintenance clean the active shared target even
+below its ceiling, avoiding a mixed-debug cache without adding a classifier.
 
 Daybreaker found one Low measurement defect in the first review: the physical-byte
 counter counted each hard-link directory entry rather than each allocated inode. On
-the retained complete cache, that reported 12.013 GiB instead of 11.800 GiB by
+the then-retained cache, that reported 12.013 GiB instead of 11.800 GiB by
 double-counting 218.090 MiB across 483 hard-link entries. Commit `52d9383`
-deduplicates regular files by `(device, inode)` and adds an exact hard-link regression.
-The corrected measurement is 11.800 GiB physically, 11.621 GiB logically, and
-20,173 unique regular-file inodes. A complete post-correction verification retained
-that cache and passed architecture and source gates, 102 frontend files/639 tests,
-25 desktop tests, all workspace and real TCP boundary tests, and warning-denied
-clippy in 234.62 seconds. The accepted trade-off is an evidence-triggered cold
-verification after the cache crosses 20 GiB rather than either unbounded disk growth
-or a speculative third-party artifact classifier.
+deduplicates regular files by `(device, inode)` and pins that boundary. Pro also
+found that `st_blocks` is not a portable Python stat field. Commit `36494b6` uses
+allocated blocks where the platform exposes them and otherwise uses logical file
+bytes; a zero or unavailable file identity never deduplicates distinct entries.
+This keeps one measurement owner without inventing platform-specific disk APIs.
+
+The packed full-workspace cache exceeded the original 20 GiB ceiling at 20.56 GiB,
+which would have forced a cold build instead of retaining the next quick build.
+Commit `5d812e1` sets the observed ceiling to 24 GiB and checks it again after full
+verification. The final warm cache occupies 20.667786 GiB physically and
+20.134152 GiB logically across 20,006 unique regular files; 483 additional hard-link
+entries are counted once. It contains zero `.rcgu.o` files and 33 dSYM bundles, and
+an inspected provider dSYM names `crates/agentsassemble-provider/src/lib.rs` as a
+compile unit. A packed cold build/test run passed the product suites in 822.72
+seconds and exposed the too-small original ceiling. The final warm `make verify`
+then passed architecture/source gates, 102 frontend files/639 tests, 25 desktop
+tests, every workspace and real TCP boundary test, warning-denied clippy, both
+artifact checks, and diff check in 315.16 seconds.
+
+The owner rejects symlinked or non-directory targets, accepts no arbitrary path,
+and adds no timer, background worker, age heuristic, retry, fallback, or swallowed
+failure. Focused tests cover retention and over-limit detection, explicit active
+maintenance, obsolete-owner detection, hard-link identity, platforms without block
+counts, unavailable file identities, non-destructive failure, and symlink rejection.
+The trade-off is explicit maintenance after a deterministic check rather than unsafe
+automatic deletion, and a bounded 24 GiB warm cache rather than either repeated cold
+verification or unbounded disk growth.
 
 ## Current verdict and exit
 
