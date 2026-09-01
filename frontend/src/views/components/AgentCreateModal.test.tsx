@@ -169,43 +169,6 @@ describe("AgentCreateModal", () => {
     expect(screen.getByRole("listitem", { name: "Claude Code" }).getAttribute("data-active")).toBe("true");
   });
 
-  it("keeps a provider usable while its last verified catalog is shown", async () => {
-    const onCreate = vi.fn().mockResolvedValue(undefined);
-    const warning = "Catalog refresh timed out. Using the last verified model list.";
-    render(
-      <AgentCreateModal
-        open
-        meetingId="room-a"
-        roomLabel="Room A"
-        catalogRevision="cat-stale"
-        providers={[
-          {
-            ...codexProvider(),
-            catalog_source: "stale_cache",
-            discovery_error_code: "model_discovery_timeout",
-            discovery_error: warning,
-          },
-        ]}
-        onClose={() => undefined}
-        onCreate={onCreate}
-      />
-    );
-
-    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
-    await chooseWorkspace();
-
-    expect(screen.getByText(warning)).toBeTruthy();
-    expect(primaryActionButton().hasAttribute("disabled")).toBe(false);
-    await userEvent.click(primaryActionButton());
-    expect(onCreate).toHaveBeenCalledWith(
-      expect.objectContaining({
-        providerId: "codex",
-        catalogRevision: "cat-stale",
-        modelId: "gpt-5.6-luna",
-      })
-    );
-  });
-
   it("does not advertise authentication when no Rust operation owns it", async () => {
     render(
       <AgentCreateModal

@@ -28,12 +28,6 @@ export function deriveAgentCreateStatus({
   if (selectedProvider?.discovery_status === "loading") {
     return "모델 목록을 불러오는 중입니다";
   }
-  if (
-    selectedProvider?.catalog_source === "stale_cache" &&
-    selectedProvider.discovery_error
-  ) {
-    return selectedProvider.discovery_error;
-  }
   if (selectedProvider?.discovery_status === "failed" && selectedProvider.available) {
     return selectedProvider.discovery_error || "모델 목록을 불러오지 못했습니다";
   }

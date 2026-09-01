@@ -82,7 +82,7 @@ export interface NativeCliProviderAvailability {
   startable: boolean;
   available: boolean;
   discovery_status?: "loading" | "ready" | "failed";
-  catalog_source?: "discovered" | "static_manifest" | "stale_cache";
+  catalog_source?: "discovered" | "static_manifest";
   discovery_error_code?: string;
   discovery_error?: string;
   credential_available?: boolean;
