@@ -21,7 +21,6 @@ type RoomConnectionPanelProps = {
   room: RoomSummary;
   agents: LiveAgent[];
   members: RoomMember[];
-  roomSessionToken?: string;
   viewerParticipantId?: string;
   displayResourceBase?: string;
   onRoleChange?: (memberId: string, role: RoleId) => void;
@@ -57,7 +56,6 @@ export default function RoomConnectionPanel({
   room,
   agents,
   members,
-  roomSessionToken = "",
   viewerParticipantId = "operator-local",
   displayResourceBase = "",
   onRoleChange,
@@ -92,7 +90,6 @@ export default function RoomConnectionPanel({
       <MemberList
         agents={agents}
         members={members}
-        roomSessionToken={roomSessionToken}
         viewerParticipantId={viewerParticipantId}
         displayResourceBase={displayResourceBase}
         roomId={room.id}

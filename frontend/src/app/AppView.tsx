@@ -444,7 +444,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               room={activeRoom}
               agents={scopedAgents}
               members={activeRoomMembers}
-              roomSessionToken={admittedSessionToken}
               viewerParticipantId={guestSession?.agentId || "operator-local"}
               displayResourceBase={canonicalRoom.displayResourceBase}
               onRoleChange={updateMemberRole}

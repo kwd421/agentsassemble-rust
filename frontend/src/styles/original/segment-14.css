@@ -60,7 +60,6 @@
   object-fit: cover;
 }
 
-.dc-agent-profile-field,
 .dc-guest-name-field,
 .dc-image-cropper label {
   display: grid;
@@ -70,7 +69,6 @@
   font-weight: 800;
 }
 
-.dc-agent-profile-field input,
 .dc-guest-name-field input {
   min-height: 38px;
   border: 1px solid var(--color-line);
@@ -83,18 +81,12 @@
   outline: none;
 }
 
-.dc-agent-profile-avatar-row,
 .dc-guest-avatar-row,
 .dc-image-crop-actions {
   display: flex;
   align-items: center;
   gap: 10px;
   flex-wrap: wrap;
-}
-
-.dc-agent-profile-preview {
-  width: 44px;
-  height: 44px;
 }
 
 .dc-image-cropper {

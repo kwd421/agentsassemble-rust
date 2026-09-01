@@ -7,7 +7,6 @@ import "../views/lobby/MessageMutationControls.css";
 import "../views/components/ProviderControlSelect.css";
 import "../views/components/AgentPersonaPicker.css";
 import "../views/components/UserSettingsPanel.css";
-import "../views/components/member/AgentIdentitySettings.css";
 import "../views/components/member/MemberOwnership.css";
 import "../views/components/DisconnectedRoomView.css";
 import "../views/components/RoomInviteModal.css";

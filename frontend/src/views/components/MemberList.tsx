@@ -26,7 +26,6 @@ export type { RoleId };
 export default function MemberList({
   agents,
   members = [],
-  roomSessionToken = "",
   viewerParticipantId = "operator-local",
   displayResourceBase = "",
   roomName,
@@ -49,7 +48,6 @@ export default function MemberList({
 }: {
   agents: LiveAgent[];
   members?: RoomMember[];
-  roomSessionToken?: string;
   viewerParticipantId?: string;
   displayResourceBase?: string;
   roomId: string;
@@ -252,9 +250,7 @@ export default function MemberList({
       {detailEntry && (
         <MemberDetailModal
           entry={detailEntry}
-          roomSessionToken={roomSessionToken}
           onClose={() => setDetailEntryId("")}
-          onSessionActionComplete={onSessionActionComplete}
           onAgentControl={onAgentControl}
           availableProviders={availableProviders}
           onAgentConfigure={onAgentConfigure}

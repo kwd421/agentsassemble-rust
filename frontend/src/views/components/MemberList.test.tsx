@@ -368,7 +368,7 @@ describe("MemberList component wiring", () => {
     expect(screen.queryByText("Stale Participant")).toBeNull();
   });
 
-  it("saves profile changes only through Agent Session authority", async () => {
+  it("keeps profile mutation unavailable until an Agent profile owner exists", () => {
     const onAgentConfigure = vi.fn().mockResolvedValue(undefined);
     const sessionWithAvatar = {
       ...SESSION,
@@ -394,25 +394,12 @@ describe("MemberList component wiring", () => {
     ).toBe("http://127.0.0.1:43123/api/attachments/agent-avatar?view=1");
     fireEvent.click(screen.getByText("Agent One"));
     const dialog = screen.getByRole("dialog", { name: "Agent One" });
-    const avatarInput = within(dialog).getByLabelText("에이전트 프로필 사진 선택");
-    const avatarInputClick = vi.spyOn(avatarInput, "click");
-    fireEvent.click(
-      within(dialog).getByRole("button", { name: "Agent One 프로필 사진 편집" })
-    );
-    expect(avatarInputClick).toHaveBeenCalledOnce();
-    expect((within(dialog).getByRole("textbox", { name: "표시 이름" }) as HTMLInputElement).value)
-      .toBe("Agent One");
-    fireEvent.change(within(dialog).getByRole("textbox", { name: "표시 이름" }), {
-      target: { value: "Makima" },
-    });
-    fireEvent.click(within(dialog).getByRole("button", { name: "프로필 저장" }));
-
-    await waitFor(() =>
-      expect(onAgentConfigure).toHaveBeenCalledWith(sessionWithAvatar, {
-        display_name: "Makima",
-        avatar_image_url: "/api/attachments/agent-avatar?view=1",
-      })
-    );
-    expect(localStorage.getItem("agentsassemble.agentProfiles.v1")).toBeNull();
+    expect(within(dialog).queryByRole("textbox", { name: "표시 이름" })).toBeNull();
+    expect(within(dialog).queryByLabelText("에이전트 프로필 사진 선택")).toBeNull();
+    expect(within(dialog).queryByRole("button", { name: /프로필 사진 편집/ })).toBeNull();
+    expect(
+      within(dialog).getByRole("region", { name: "Agent One 실행 및 설정" })
+    ).toBeTruthy();
+    expect(onAgentConfigure).not.toHaveBeenCalled();
   });
 });
