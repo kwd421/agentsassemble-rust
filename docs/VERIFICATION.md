@@ -5552,3 +5552,27 @@ misdescribed the 844.34 kB aggregate as a per-chunk-rounded total. Corrections t
 Critical ChatGPT Pro and Daybreaker Blue High each approved correction
 `9759d73..7f2e878`, the original batch as corrected, cumulative
 F-05 `8903445..7f2e878`, and HEAD `7f2e878` at `C0/H0/M0/L0`.
+
+### F-05 absent public-account exposure: 2026-09-01
+
+The original account section mounted a Google account component that immediately read
+`/api/account` and could call three further `/api/account/google*` operations or load
+Google's browser identity script. The current Rust product surface owns none of those
+routes. Central startup identity and admitted-guest recovery are separate flows and do
+not make the copied per-server public-account contract complete.
+
+Commit `96a7573` removes that settings mount and its sole component, client types and
+calls, browser script loader, and isolated component tests. Ordinary profile editing,
+central startup identity, and guest recovery remain unchanged. The current settings
+flow asserts that no public-account control is exposed; no placeholder route, local
+account state, compatibility path, retry, polling, timer, or silent failure replaces it.
+
+The focused `UserPanel` suite passes 9 tests, all 102 frontend files/640 tests pass, and
+the production TypeScript/Vite build plus exact CSS name/hash gate pass. Emitted
+JavaScript is a 5.18/2.15 kB `AdminPanel` chunk plus an 832.92/250.16 kB main chunk:
+raw bytes total 838.11 kB and the displayed gzip figures total 252.31 kB. CSS is
+168.65/29.55 kB. Against the prior reviewed 844.34/254.02 kB JavaScript and
+169.13/29.62 kB CSS, this is a 6.23/1.71 kB JavaScript and 0.48/0.07 kB CSS reduction.
+These are build-size observations; the owning-boundary intent is to remove user-triggered
+requests and script injection to an absent authority, not to claim measured runtime CPU,
+memory, or latency improvement.

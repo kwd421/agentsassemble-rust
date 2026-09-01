@@ -300,6 +300,15 @@ ChatGPT Pro and Daybreaker Blue High each approved correction `9759d73..7f2e878`
 the original batch as corrected,
 cumulative F-05 `8903445..7f2e878`, and HEAD `7f2e878` at `C0/H0/M0/L0`.
 
+Local feature commit `96a7573` removes the still-reachable public Google settings mount
+and its sole `/api/account*` client, Google browser-script loader, and component tests.
+The central startup identity path, admitted-guest recovery, and ordinary profile owner
+remain distinct and unchanged. Repository-wide frontend search finds no remaining
+`/api/account*` caller or Google Identity script owner. The focused profile suite,
+complete 102-file/640-test frontend suite, production build, exact CSS gate, architecture
+gate, and diff check pass. Dormant AI-friend and evidence-backed dormant-source cleanup
+remain in F-05; no backend completion is claimed.
+
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
 Disposition: `Fix`; high product/medium ownership impact.

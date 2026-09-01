@@ -9,9 +9,9 @@ Earlier dated sections retain their execution evidence, but their completion cla
 do not override the current findings in
 `docs/architecture/REPOSITORY_AUDIT_2026-09-01.md` or the sequence in
 `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`. Friends, side-chat, custom-channel, Room
-Connector, pairing-issuer, and companion entry points are now inactive while their
-Rust owners are absent; copied account/provider controls and a dormant AI-friend
-branch still require correction, and Agent Session identity plus several provider
+Connector, pairing-issuer, companion, and public Google account entry points are now
+inactive while their Rust owners are absent; copied provider controls and a dormant
+AI-friend branch still require correction, and Agent Session identity plus several provider
 completion/lifecycle contracts are reopened. D-01 removed the uncalled
 HTTP host-challenge routes and startup secret at `a7949bd`; remote profile,
 preferences, message pins, message search, message attachments, and bound
@@ -81,7 +81,7 @@ boundary resumes explicitly at `Historical public Rust slice and provenance reco
 | Custom text channels | server message owner absent; create/select/render entry paths are inactive through `d058af8`, so the copied poller is outside the production graph; `a2b2f41` restricts active search routing to `all`/`lobby` |
 | Voice | user-deferred; the custom-channel view is outside the production graph through `d058af8`, so its copied presence poll and join heartbeat do not run |
 | Mafia, RimWorld | user-deferred; no production request/poll/heartbeat is permitted |
-| Accounts/Google/operator pairing/companion | public Google remains exposed without its complete owner; copied operator-pairing issuance and companion controls are inactive through `11e167b` and `7159c2d`, while incoming pairing redemption remains a separate incomplete flow |
+| Accounts/Google/operator pairing/companion | public Google account settings and their absent-route client are inactive through `96a7573`; copied operator-pairing issuance and companion controls are inactive through `11e167b` and `7159c2d`, while central startup identity and incoming pairing redemption remain separate incomplete flows |
 | Provider operations | four providers registered; only DeepSeek credential operations exist; copied provider-response write UI/state and the always-empty provider-request snapshot field are locally removed through `cccf513`, while other login/usage/refresh controls overclaim |
 | Room Connector | original retained flow and Rust owner absent; the copied obsolete invite entry is inactive through `762ba40` |
 | External/managed AgentBridge | complete admission/runtime owners absent; the companion entry is inactive through `7159c2d`, while the dormant AI-friend branch remains pending source cleanup |
