@@ -185,23 +185,34 @@ Use one common fallible abort/poison outcome, provider-specific explicit teardow
 where necessary, and typed residual-process/hook failure. `Drop` may remain only a
 last best effort after the explicit owner has reported the result.
 
-### F-04 — signed capabilities advertise actions that do not exist
+### F-04 — signed capabilities advertised actions that did not exist
 
-Disposition: `Fix`; high product/medium structure impact.
+Disposition: `Fixed locally through e711def; pushed cross-review pending`; high
+product/medium structure impact.
 
-`agentsassemble-domain/src/model.rs:113-128` computes `room.delete`,
-`participant.kick`, `provider.request.resolve`, and bridge permissions.
-`server_proof.rs:42-63` signs them. `agentsassemble-protocol/src/lib.rs:92-175`
-contains no room delete, participant kick, provider-request resolution, or agent
-re-add action. The active frontend nevertheless calls them in
-`useAppController.tsx:595-600`, `useCanonicalRoom.ts:592-615,732-745`, and
-`AppOverlays.tsx:164-168`.
+Before `1a87de8`, the signed capability projection included `room.delete`,
+`participant.kick`, `provider.request.resolve`, and `bridge.report`, although the
+registered product surface had no matching executable action. The strict client
+rejected those commands before send, so no permission bypass was found; the concrete
+defect was a signed false product promise. `1a87de8` removes those four fields from
+the single Rust capability owner and regenerated TypeScript contract. It retains
+`bridge.publish` because the current vote authorization path consumes that exact
+permission.
 
-The client currently rejects actions absent from the signed product surface, so no
-permission bypass was found. The UI and capability projection still make false
-product promises. Until each complete action owner exists, remove the capability
-and hide/gate the control. Later derive advertised capability from both principal
-permission and executable product surface.
+`5842f8a` removes the copied room-delete and participant-kick controls, command
+construction, ACK validation, and obsolete tests. It retains the
+`participant_kicked` event projection because current lifecycle paths can still emit
+that server-owned event. `e711def` removes the copied provider-response controls and
+the otherwise unowned per-room provider-request React state, normalization, model,
+card, tests, and CSS. The server/protocol provider-request read field remains intact;
+the frontend simply does not promote it into write authority until a complete action
+owner exists.
+
+The correction adds no route, authority, fallback, compatibility branch, retry,
+timer, polling, heartbeat, or feature framework. Repository-wide searches found no
+remaining frontend caller for the three absent actions. The later owning slices may
+reintroduce a control only with its complete server action, authorization, transition,
+failure, and real-user flow.
 
 ### F-05 — copied frontend actively calls missing Rust services
 
@@ -908,7 +919,7 @@ This table routes findings; it does not add another contract layer.
 | F-01 | Antigravity driver/module graph | 1 | no production import/build/runtime transcript edge; missing native completion is explicit |
 | F-02 | Codex/OpenCode native drivers | 1 | one documented completion/session authority per provider, with focused protocol fixtures |
 | F-03 | common adapter plus provider teardown | 1 | abort/cleanup returns a typed result and failed cleanup prevents unsafe reuse |
-| F-04 | protocol product surface plus capability projection | 0B | no advertised control/capability lacks an executable action |
+| F-04 | protocol product surface plus capability projection | 0B | locally fixed through `e711def`; pushed cross-review pending |
 | F-05 | frontend composition/product-surface gate | 0B | normal startup/room use issues no request or timer for an absent/deferred owner |
 | F-06 | Agent Session projection/profile owner | 3 | roster, timeline, search, restart, and editor obey Agent/participant SSoTs |
 | F-07 | provider registration/operation descriptor | 0B and 1 | Phase 0B gates false UI operations; Phase 1 closes provider-native operations and exact model selection |

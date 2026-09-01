@@ -5380,3 +5380,43 @@ production CSS-verified frontend build, warning-denied server Clippy, Rust forma
 diff checks, and the architecture/source-growth/policy gates passed. No provider or
 packaged frontend was started because this correction changes only the already-verified
 human HTTP authority hop. The later cumulative D-03 review closed at `5693e13`.
+
+### F-04 executable capability and frontend authority correction: 2026-09-01
+
+Before `1a87de8`, the signed snapshot advertised four capabilities with no matching
+registered action. The strict client rejected the copied room-delete,
+participant-kick, and provider-response commands before send, so the observed threat
+was not an authorization bypass but a signed false product promise and permanently
+unusable UI. The capability owner now omits `room.delete`, `participant.kick`,
+`provider.request.resolve`, and `bridge.report`; it retains `bridge.publish` because
+the current vote authorization path uses it.
+
+Commits `5842f8a` and `e711def` remove the three unusable control paths and their dead
+command, state, model, test, and presentation branches. The existing
+`participant_kicked` read projection and the server/protocol provider-request field
+remain because current server lifecycles and the provider-request read contract still own them; no
+client write authority is inferred from either. Repository-wide searches found no
+remaining frontend caller for the absent commands. No route, placeholder, fallback,
+compatibility branch, retry, timer, polling, heartbeat, or generic feature abstraction
+was added.
+
+The observed production bundle changed from 791.52 kB to 785.90 kB minified
+JavaScript (239.04 kB to 237.59 kB gzip) and from 169.18 kB to 165.72 kB CSS
+(29.60 kB to 29.06 kB gzip). These are reductions of 5.62/1.45 kB JavaScript and
+3.46/0.54 kB CSS, not a CPU or memory benchmark. The owning-boundary intent was to
+remove unreachable React normalization and state updates rather than introduce a
+second capability framework. The exact product/security invariant preserved is that
+only a registered action can be advertised or rendered as executable, while current
+vote authorization and server-originated lifecycle/read data remain intact.
+
+The focused domain serialization test, domain/protocol warning-denied Clippy, and two
+production frontend builds passed before this documentation record. One first full
+frontend run exposed that the exact-command retry test depended on `vi.waitFor` to
+advance the final half of a documented 2,000 ms backoff at its timeout boundary. The
+test now advances the owned retry delay explicitly; this changes no production timer
+or retry policy. The corrected candidate passed a fresh complete `make verify`:
+architecture/source-growth/policy/diff gates, Rust format/check, the CSS-verified
+production frontend build, all 103 frontend files and 646 tests, the desktop build,
+warning-denied Clippy and 25 tests, and the full Rust workspace test and
+warning-denied Clippy suites. Pushed critical-web and Daybreaker manual review remain
+pending.
