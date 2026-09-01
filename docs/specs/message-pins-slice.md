@@ -1,11 +1,14 @@
 # Lobby message pins
 
+Status: implementation and flow evidence retained; remote-human HTTP authorization
+reopened by repository audit D-03
+
 ## Definition
 
 Reconnect the copied lobby pin list, pin, unpin, and pinned-message navigation to
 canonical Rust room events through bounded-purpose HTTP authority.
 
-## Current contract
+## Approved target contract after Phase 0B
 
 - `room_events` remains the only message authority. A pin is a durable pointer to one
   existing public `message_final`; it never copies or rewrites message content.
@@ -20,20 +23,22 @@ canonical Rust room events through bounded-purpose HTTP authority.
   a currently joined human with `message.modify`; read-only sessions cannot mutate.
   Room status, membership, invite scope, and current profile remain owned by their
   existing authorities.
-- Local desktop and remote-human HTTP access each use a fresh, one-use, room- and
-  operation-purpose ticket. The local desktop receives it through a typed host command;
-  the remote human exchanges its live session bearer. Raw host tokens, reusable room
-  socket tickets, direct session bearers at the pin route, and cross-purpose tickets are
+- Local desktop HTTP access uses a fresh one-use room- and operation-purpose ticket
+  received through a typed host command. A remote human presents its durable session
+  bearer in the bounded Authorization header directly to the pin route, which resolves the exact room principal and operation;
+  the audited preliminary session-to-purpose-ticket exchange is a Phase 0B removal target.
+  Raw issuer credentials, reusable room socket tickets, and cross-scope credentials are
   not accepted.
-- Ticket authentication happens before a mutation body is read. The persistence unit
+- Authentication happens before a mutation body is read. The persistence unit
   reauthorizes the exact room participant and validates the target event before changing
-  the pin and reading the returned list. Wrong-room, wrong-purpose, replayed, expired,
+  the pin and reading the returned list. Wrong-room, wrong-scope, replayed local tickets, expired,
   revoked, missing, non-message, malformed, and read-only requests fail without state
   change.
 - `GET /api/room-pins?room_id=...&channel_id=lobby` returns the copied projection:
   `event_id`, `channel_id`, `pinned_at`, `seq`, `author`, `content`, `created_at`, and
-  `attachment_filenames`. Until message attachments are implemented, the final field is
-  an empty list. Results are newest pin first with event identity as the stable tie-break.
+  `attachment_filenames`. The current message-attachment owner supplies canonical
+  filenames for attached messages. Results are newest pin first with event identity
+  as the stable tie-break.
 - `POST /api/room-pins` accepts exactly `room_id`, `channel_id`, `event_id`, and
   `pinned`. Re-pinning refreshes the existing pointer's timestamp; unpinning an absent
   pointer to a valid message remains an idempotent no-op. Missing, non-message, deleted,
@@ -61,22 +66,25 @@ canonical Rust room events through bounded-purpose HTTP authority.
    canonical projection, navigates to it, and retains the pin after an exact restart.
 2. A writable admitted human can list and mutate pins; a read-only admitted human can
    list but receives a stable denial on mutation.
-3. Wrong room/purpose, replayed/expired ticket, revoked membership/session, malformed or
-   oversized body, absent target, and non-message target leave durable state unchanged.
+3. Wrong room/scope, replayed or expired local ticket, expired or revoked remote
+   session, malformed or oversized body, absent target, and non-message target leave
+   durable state unchanged.
 4. Re-pinning one event produces one row at the newest position; unpin is exact and
    deletion of a room removes only that room's pins through room ownership. A 65th
    distinct pin fails without changing the complete 64-item list; re-pin and unpin remain
    available at the bound.
-5. No legacy host-token, raw-session, placeholder, fake-authority, migration, or fallback
-   path becomes reachable. Existing architecture, source-growth, and 800-line gates pass.
+5. No legacy host-token, session bearer outside the bounded Authorization header,
+   placeholder, fake-authority, migration, or fallback path becomes reachable.
+   Existing architecture, source-growth, and 800-line gates pass.
 
 ## Verification path
 
 - Persistence behavior and schema invariants, including exact target validation,
   transactional rollback, ordering, re-pin, unpin, and room-cascade cleanup.
-- Ticket/store, local-control, desktop registry/capability, and real TCP HTTP tests for
-  purpose separation, auth-before-body, room/session revalidation, and read-only denial.
+- Local ticket/store, private-control, desktop registry/capability, and remote bearer
+  real-TCP HTTP tests for scope separation, auth-before-body, room/session revalidation,
+  disclosure rejection, and read-only denial.
 - Focused copied-frontend API/controller tests, full frontend suite/build, `make verify`,
   and a fresh isolated packaged Computer Use flow with exact process/data cleanup.
-- Each independent commit remains below 1,000 changed lines. Push and cross-review at
-  three completed features or 2,000 aggregate changed lines, whichever comes first.
+- Each independent commit remains below 1,000 changed lines. Batch timing is owned by
+  `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`.

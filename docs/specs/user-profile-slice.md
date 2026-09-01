@@ -1,6 +1,7 @@
 # Human User Profile Slice
 
-Status: active implementation owner
+Status: published contract owner; Agent Session projection and remote-human HTTP
+authorization boundaries reopened by repository audit F-06 and D-03
 
 ## Definition
 
@@ -18,8 +19,9 @@ viewer through canonical room events.
   room mute, invite scope, and derived capabilities. A profile update may not
   overwrite any of those fields.
 - Each Agent Session remains the SSoT for its own agent display name, avatar,
-  provider/model/runtime state, permissions, and ownership. It is never merged
-  with its human owner's profile.
+  provider/model/runtime state, persona selection, and provider-session identity.
+  Room permissions and membership remain participant-owned. The Agent Session is
+  never merged with its human owner's profile.
 - Only human memberships whose durable participant identity belongs to the
   authenticated user receive the profile display-name/avatar projection.
 
@@ -28,7 +30,11 @@ viewer through canonical room events.
 - `GET /api/user-profile` and `POST /api/user-profile` use an authenticated
   server-derived principal. The packaged desktop obtains a fresh one-use local
   principal ticket through the existing private Tauri/runtime control boundary
-  for each HTTP operation; it never exposes the host secret.
+  for each HTTP operation; it never exposes an issuer credential. An admitted
+  remote human presents the durable session bearer only in the bounded Authorization
+  header at the target, which revalidates the exact session/person/room binding and
+  operation before reading or committing. The bearer never enters a URL, body, log,
+  event, prompt, fixture, or durable row.
 - The profile is stored once by user ID. Its participant ID is stable and is not
   supplied by the profile payload.
 - Profile input is bounded and normalized with the original accepted status,
@@ -68,8 +74,9 @@ viewer through canonical room events.
 - The response may race live event delivery, but both describe already committed
   state. HTTP success means the canonical profile, projections, and events are
   durably committed; live publication is restartable independently. The room
-  owner attempts publication before the response and periodically retries any
-  cursor backlog. A reconnect recovers the same participant projection without
+  owner attempts publication before the response; a real publication failure arms
+  bounded retry, while normal operation remains wake-driven. A reconnect recovers
+  the same participant projection without
   client-side synthesis. Live clients ignore duplicate sequence numbers and
   require the next exact sequence or request resynchronization.
 - Attachment bodies, decoded resources, and absolute storage are bounded. Unsupported

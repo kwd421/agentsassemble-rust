@@ -16,6 +16,33 @@ The cutover unit is an authoritative contract owner, not a feature label. Routin
 - Rust opens only a fresh authority created at the current schema or an already-current Rust authority. It does not import or convert Python or older Rust data.
 - Rust writes are never followed by automatic Python rollback or a compatibility writer.
 
+Audit correction at Rust baseline `8a5f75a`: later implementation-history text
+that describes Antigravity transcript discovery/polling is not an approved target
+contract. The live transcript path is finding F-01 in
+`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md` and must be removed from the
+production graph; any requested historical copy must remain outside every build
+and runtime connection. PTY/ConPTY and managed hooks remain. Transcript,
+print, scraping, silence inference, or another provider may not replace a missing
+native completion signal; until an exact signal is proven, that turn path is
+explicitly incomplete. The same audit reopens Codex/OpenCode completion inference,
+Agent Session profile projection, false product capabilities, and copied frontend
+calls without Rust owners. Historical verification below does not override those
+current findings.
+
+The same baseline's defensive-complexity audit also rejects a security label as
+sufficient evidence. The uncalled HTTP host-challenge/startup-secret path, remote
+human per-operation HTTP ticket exchange, remote WebSocket proof, and current
+per-frame HMAC/base64/counter envelope are findings D-01 through D-03 and are not
+approved target contracts. D-02 retains a smaller local fresh-challenge receipt
+because private control/Tauri IPC carries its key separately from the loopback
+socket and therefore detects post-grant sidecar death plus port substitution. Local
+per-frame authentication remains evidence-pending on an actual in-scope relay. The
+target retains desktop private-control tickets, one-use socket upgrade tickets,
+finite snapshot/catch-up synchronization, strict bounded generated frames, sequence,
+request-ID deduplication, uncertain-ACK replay, TLS/origin/ingress, and the one-time
+native/sidecar product-surface equality check. Guardian/lease/boot custody remains
+because it has observed process-escape and orphan-disk evidence.
+
 ## Stable boundaries
 
 ### Room authority
@@ -118,12 +145,12 @@ bounded and re-encoded to static PNG. Pending preview and bound reads are
 non-cacheable, `nosniff`, and `no-referrer`; active content, arbitrary URLs,
 cross-room references, and cross-owner binding fail closed.
 Pending preview uses an exact current-local-manager ticket. A bound read accepts
-either an exact current local member ticket or an admitted human's purpose- and
-asset-bound one-use ticket. The latter retains durable session provenance and
-revalidates session, membership, profile binding, room reference, and asset bytes
-in one transaction; the raw session credential never authenticates the attachment
-route. Rejected reads validate metadata and `length(content)` without loading the
-bounded BLOB, while successful reads pay one second query for its bytes.
+either an exact current local member ticket or an admitted human's session bearer
+from the bounded Authorization header. The target resolves the remote principal and
+revalidates session, membership, profile binding, room reference, operation, and
+asset bytes in one transaction; the bearer never enters a URL, body, log, event, or
+durable row. Rejected reads validate metadata and `length(content)` without loading
+the bounded BLOB, while successful reads pay one additional query for its bytes.
 The desktop private control pipe exposes upload, pending-read, and bound-read as
 three typed commands. Upload and pending-read retain the exact server, authority
 lineage, room UID, manager user, and participant tuple through target revalidation;
@@ -215,8 +242,8 @@ budget. The pending command owns its current transmission generation and disting
 frame encoding from an accepted send; removing the pending command removes that state. The retry-policy
 owner atomically refuses a second charge for the same generation, so a pre-send close or competing
 terminal signal cannot manufacture an extra attempt.
-Close-derived accounting waits behind authenticated frames already accepted into that connection's
-verification queue. A valid terminal ACK or NACK settles and removes both pending authority and its
+Close-derived accounting waits behind product frames already accepted into that connection's
+ordered frame-processing queue. A valid terminal ACK or NACK settles and removes both pending authority and its
 transmission state before close may classify the still-pending sent commands.
 The eighth unresolved reply ends replay, rejects only that local operation as `outcome_unknown`,
 and leaves the otherwise authenticated socket open; it never claims rejection or commitment and
@@ -263,21 +290,26 @@ The existing outer envelope remains compatible:
 
 Action payloads are added only by the slice that implements them.
 
-One-use room tickets also carry a private proof key. The server registers the
-canonical live receiver before reading a durable snapshot, serializes the exact
-final Snapshot frame at cursor `C`, and fixes one transactionally authorized
-high-water `H`. A versioned length-delimited `Subscribed` HMAC binds the ticket-
-derived connection nonce, challenge, room/principal/participant, protocol and
-accepted streams, current server product surface, exact permissions digest,
-`C`, `H`, and the SHA-256 digest of the exact Snapshot UTF-8 bytes. The server
-sends `Subscribed`, that exact Snapshot, then the bounded contiguous durable
-range `C+1..H`; overflow or a missing sequence closes without readiness.
+One-use room tickets bind the exact principal, room, origin, and short expiry. The
+server consumes the ticket, registers the canonical live receiver before reading a
+durable snapshot, serializes one bounded Snapshot at cursor `C`, and fixes one
+transactionally authorized high-water `H`. It sends strict generated `Subscribed`
+metadata, that Snapshot, then the bounded contiguous durable range `C+1..H`;
+overflow, malformed JSON, an identity/surface mismatch, or a missing sequence closes
+without readiness. Remote TLS/origin admission protects the transport and adds no
+proof using a key from that same authority. Local desktop additionally verifies one
+fresh-challenge receipt using the key delivered over private control/Tauri IPC.
+Whether post-receipt local frames require authentication remains open until controlled
+reproduction or equivalent concrete topology evidence establishes an active relay in
+the room-transport threat boundary. If retained, it covers the Snapshot and every
+later bidirectional product frame.
 
-The browser compares the receipt with its already pinned native/server surface,
-recomputes the connection nonce, HMAC, Snapshot-byte digest, and canonical
-permission digest, and reaches ready only at `delivered_seq == H`. TCP open is
-not product readiness, and queued commands cannot cross the socket before that
-boundary. A single absolute deadline owns the whole establishment flow.
+The browser validates every generated frame and its expected room, participant,
+protocol, streams, surface revision, `C`, and `H`, and reaches ready only at
+`delivered_seq == H`. TCP open is not product readiness, and queued commands cannot
+cross the socket before that boundary. A single absolute deadline owns the whole
+establishment flow. Sequence and request identity continue to own gap detection,
+deduplication, and uncertain-ACK replay.
 
 ### Application and transport boundary
 
@@ -377,32 +409,31 @@ not completion evidence.
 A credential resolves once to an `AuthenticatedPrincipal` containing stable identity, room scope, client kind, and server-derived capabilities. Client-supplied roles, operator flags, participant type, or capabilities are never authority.
 
 Opaque, short-lived, one-use WebSocket tickets remain the room-connection
-credential. Browser-compatible HTTP ticket issuance stays an adapter while it is
-a reachable flow and always requires a high-entropy host secret or an authenticated
-session. Desktop mode cannot start with an empty host secret; Tauri generates it
-per owned runtime. Its private control pipe issues either a room WebSocket ticket
+credential. Desktop HTTP authority crosses the private control pipe as an exact
+purpose ticket. At the audited baseline, remote humans first exchange their
+session bearer for another purpose ticket; D-03 replaces that redundant hop with
+one route-specific durable authorization at the target. The separate HTTP host
+challenge and startup-secret preamble have no production caller and are removed by
+D-01; they are not part of the target credential contract. The private control pipe
+issues either a room WebSocket ticket
 with the validated loopback WebSocket origin or one exact-purpose local HTTP grant
 with the validated loopback HTTP origin. Current HTTP grants separate server-operator,
 room-bound preference, message-search-read, and human-invite create/revoke,
 settings-directory-read, and central-registration authority. React receives neither
-the host secret nor a reusable credential. A ticket presented to the wrong transport
+an issuer credential nor a reusable local credential. A ticket presented to the wrong transport
 or scope is consumed and rejected rather than interpreted as another authority.
-Public human-session grants reuse this same bounded store but retain the opaque
-durable `HumanSessionAuthorization` and one exact purpose. Issuance is capped at
-1,792 live public grants and eight per session fingerprint, leaving at least 2,304
-of the production store's 4,096 entries for local/private authority. Grant expiry is
-the earlier of the store TTL and backing session expiry. Read-only sessions cannot
-mint preference-write grants. Consumption removes a wrong-purpose grant before
-rejecting it; the later target adapter must still revalidate its durable session
-before any read or write. Public WebSocket, own-profile, and preference read/write
-exchange routes are connected and verified with that target revalidation. The room
-attachment exchange remains incomplete and is not claimed reachable until its
-corresponding message behavior and target revalidation are implemented and verified.
-Lobby message search and context consume the same one-use `message-search-read`
-purpose before query or body validation, then revalidate current membership and
-`room.history` permission in the canonical persistence read transaction. Their GET
-responses are private/no-store, and an unavailable custom channel is never replaced
-with lobby data.
+
+The audited implementation also mints short-lived public grants for own-profile,
+preference, search, pin, and attachment HTTP operations before revalidating the same
+durable `HumanSessionAuthorization` at the target. That second credential lifecycle
+is implementation evidence, not the approved target. Phase 0B makes each target
+route authenticate the session bearer from the bounded Authorization header, resolve its exact room/principal
+scope, and revalidate the operation-specific permission in the owning persistence
+transaction. The bearer never enters a URL, body, log, event, prompt, fixture, or
+durable row. Read-only and revoked sessions still fail closed, target responses
+remain private/no-store, and an unavailable custom channel is never replaced with
+lobby data. The separate one-use WebSocket exchange remains because a browser
+WebSocket upgrade does not normally carry that Authorization header.
 Central server registration is a third, exact-purpose one-use ticket issued only
 through the private desktop control pipe and consumed only by the desktop-mounted
 registration-proof POST. Its Ed25519 private key is a separate owner-only write-once
@@ -421,7 +452,28 @@ transcript verifies under the pinned Ed25519 key. A self-consistent response sig
 a substituted loopback key therefore fails before any registration request reaches the
 central directory.
 
-The local HTTP/WebSocket adapter has explicit resource budgets: admission is bounded immediately after TCP accept, incomplete HTTP headers and request bodies have real deadlines, and a consumed one-use ticket must atomically acquire a process-wide WebSocket lease before HTTP 101. The active-only lease owner admits at most 128 connections globally, eight for one principal, and 64 for one room; rejected acquisition increments no scope, and checked process-local `u64` generation IDs prevent stale release from freeing a replacement. Inner product frames stop at 256 KiB and their authenticated wire envelopes at 384 KiB, the first subscription has a ten-second deadline, and the process-wide raw governor above owns message, byte, and control-frame windows. When a bounded principal or room map cannot admit a new key, the rejected frame still charges the global scope and any already-tracked applicable scope without retaining another key. The one-use ticket proof establishes a connection key; after the receipt-bound plain Snapshot, every frame in both directions is authenticated over connection nonce, direction, a strict contiguous counter, and exact inner bytes before projection or command execution. Binary frames are rejected. The server closes a socket after five minutes without client ingress. The browser therefore schedules one authenticated keepalive only after three minutes without a client frame, resets that one-shot owner after a command, and cancels it with the exact connection; it does not poll HTTP or durable state. Room queue admission never waits and returns `room_busy` when saturated.
+The local HTTP/WebSocket adapter has explicit resource budgets: admission is
+bounded immediately after TCP accept, incomplete HTTP headers and request bodies
+have real deadlines, and a consumed one-use ticket must atomically acquire a
+process-wide WebSocket lease before HTTP 101. The active-only lease owner currently
+admits at most 128 connections globally, eight for one principal, and 64 for one
+room; F-08 requires real TCP evidence before changing that shared budget. Checked
+process-local generation IDs prevent stale release from freeing a replacement.
+Product frames stop at 256 KiB, the first finite subscription has a ten-second
+deadline, and the raw governor owns message, byte, and control-frame windows.
+Binary frames are rejected. The audited baseline additionally wraps every frame in
+a 384-KiB HMAC/base64/counter envelope. D-02 removes remote proof plus base64,
+repeated key derivation, and the permissions digest, keeps a smaller local one-time
+receipt, and requires controlled reproduction or equivalent concrete active-relay
+topology evidence before retaining local per-frame authentication over raw bounded
+UTF-8 bytes, starting with the Snapshot. It preserves the finite
+snapshot/catch-up high water, event sequence, request-ID deduplication, and
+uncertain-ACK replay. The server
+closes a socket after five minutes without client ingress. The browser therefore
+schedules one connection keepalive only after three minutes without a client
+frame, resets that one-shot owner after a command, and cancels it with the exact
+connection; it does not poll HTTP or durable state. Room queue admission never
+waits and returns `room_busy` when saturated.
 
 Authorization is evaluated from the current principal and durable room state when
 the application command runs, not frozen as a hard-coded local-operator identity at
@@ -488,7 +540,7 @@ schema instead of being converted or exposed.
 
 ### Runtime lifecycle
 
-Tauri owns the local sidecar it starts. The package carries the built frontend once as a Tauri resource for the sidecar and passes that fixed resource directory as `--frontend`; the server remains the sole canonical-path and `index.html` validator and fails startup if the resource is absent. The sidecar binds loopback, reports one structured startup record containing the selected address and readiness, and is cancelled and reaped by its owner. The server accepts its host secret only from a private anonymous stdin control pipe; argv and environment credentials do not exist. Tauri keeps that write end open, and EOF makes a running sidecar shut down. A second anonymous control pipe is owned only by Tauri and watched by a separate minimal process; parent death closes it and the watchdog force-kills the sidecar process tree even if the sidecar is stopped and cannot cooperate. Transport failure or an invalid ticket response retires the unhealthy owned child so the next request starts a fresh runtime, while valid application rejection does not restart it. Reusing an existing runtime requires a data-root-scoped ownership record plus a live readiness proof. The lifecycle control plane is separate from room application messages.
+Tauri owns the local sidecar it starts. The package carries the built frontend once as a Tauri resource for the sidecar and passes that fixed resource directory as `--frontend`; the server remains the sole canonical-path and `index.html` validator and fails startup if the resource is absent. The sidecar binds loopback, reports one structured startup record containing the selected address and readiness, and is cancelled and reaped by its owner. Tauri keeps its private anonymous stdin control pipe open, issues typed local control requests through it, and EOF makes a running sidecar shut down; no reusable issuer credential is sent to React, argv, the environment, or durable storage. The audited secret preamble exists only to support the dead HTTP host-challenge path and is removed with D-01. A second anonymous control pipe is owned only by Tauri and watched by a separate minimal process; parent death closes it and the watchdog force-kills the sidecar process tree even if the sidecar is stopped and cannot cooperate. Transport failure or an invalid ticket response retires the unhealthy owned child so the next request starts a fresh runtime, while valid application rejection does not restart it. Reusing an existing runtime requires a data-root-scoped ownership record plus a live readiness proof. The lifecycle control plane is separate from room application messages.
 
 On macOS, the desktop runtime supervisor is also the lifecycle owner for its private
 executable copies. The running desktop-image re-exec and server-sidecar binding share
@@ -548,13 +600,13 @@ Unix runtime handles and activated lease markers bind the exact current OS boot 
 
 Initial reconciliation runs exactly once before network admission. One cancellation-owned reconciler then scans fixed-size cursor pages for every `prepared`, `effect_inflight`, `unconfirmed`, or `effect_applied` reservation created before or after admission, observes with fixed concurrency and timeout bounds, and applies only its captured candidate. The browser command owner and reconciler compete for the same exact in-memory request claim and retain it across their complete asynchronous operation; a loser returns unresolved, closing the former check-then-act race. A changed candidate CAS is discarded. Abandoned pre-effect work is durably rejected without provider I/O, and already-applied stops are checkpointed without another stop. `Gone` terminalizes the captured lifecycle request. An exact same-sidecar `Adopted` or `LeaseUncertain` runtime is first committed under CAS, then reloaded as that recovery operation's own current candidate, stopped only by its exact durable handle/owner/lease generation, committed as `Gone`, and finally released from the confirmed-stop tombstone. This cleanup never retries the original provider effect, including OpenCode session creation. Stop failure, `Ambiguous`, or observation timeout remains fail-closed; cancellation is checked before observation and application but cannot cancel an exact stop after it starts. Runtime adoption never asserts provider-conversation activity.
 
-The watcher pages at most 64 pending lifecycle reservations through one schema-owned partial `(room_id, session_id)` index, excludes blocking provider-turn owners in the same candidate query, observes at most eight candidates concurrently, and bounds each observation to two seconds. Its first periodic tick is delayed by the scan interval because startup already performs the mandatory pre-admission pass. The one-second watcher remains an explicit owner-loss contract: a room or provider task can end after committing external-effect authority but before returning a typed result, and no browser retry is required to recover that durable request. It is not used to validate every ordinary Agent Session repeatedly. Before schema 50, one empty lifecycle page selected up to 64 ordinary sessions and then issued a blocking-turn query, session/room read, and reservation read for each—193 SQL statements for a full inactive page. The current empty page is one covering pending-index scan; exact session and reservation reads occur only for selected unresolved candidates. The partial index contains no completed or rejected history, and `EXPLAIN QUERY PLAN` confirms the pending index, Agent Session primary key, and blocking-turn partial index without a DISTINCT temporary B-tree. Startup still performs the complete pre-admission integrity scan, normal writes preserve session and reservation authority in one transaction, the database permits only its exact process writer, and every live candidate still enters complete authority validation and exact CAS. The accepted trade-off is one small clean-schema index and no continuous out-of-band corruption scan of unrelated sessions; schema 49 is rejected rather than converted or served through compatibility code.
+The watcher pages at most 64 pending lifecycle reservations through one schema-owned partial `(room_id, session_id)` index, excludes blocking provider-turn owners in the same candidate query, observes at most eight candidates concurrently, and bounds each observation to two seconds. Its first periodic tick is delayed by the scan interval because startup already performs the mandatory pre-admission pass. The recovery watcher is an explicit owner-loss contract: a room or provider task can end after committing external-effect authority but before returning a typed result, and no browser retry is required to recover that durable request. The audited interval is one second, but D-06 requires idle-cost and recovery-latency measurement before approving or changing that value. It is not used to validate every ordinary Agent Session repeatedly. Before schema 50, one empty lifecycle page selected up to 64 ordinary sessions and then issued a blocking-turn query, session/room read, and reservation read for each—193 SQL statements for a full inactive page. The current empty page is one covering pending-index scan; exact session and reservation reads occur only for selected unresolved candidates. The partial index contains no completed or rejected history, and `EXPLAIN QUERY PLAN` confirms the pending index, Agent Session primary key, and blocking-turn partial index without a DISTINCT temporary B-tree. Startup still performs the complete pre-admission integrity scan, normal writes preserve session and reservation authority in one transaction, the database permits only its exact process writer, and every live candidate still enters complete authority validation and exact CAS. The accepted trade-off is one small clean-schema index and no continuous out-of-band corruption scan of unrelated sessions; schema 49 is rejected rather than converted or served through compatibility code.
 
 The common provider adapter owns live runtime slots, one supervisor identity, and the provider-neutral room-observation lifecycle independently of room persistence. A driver may know Codex JSONL, Antigravity PTY/ConPTY, or OpenCode HTTP/SSE, but it does not decide room lifecycle, replay, publication, handoff, decline, or recovery semantics. One common outcome is either a bounded public message with an optional exact Agent Session handoff or an explicit supported decline. Executable binding follows the selected runtime shape. Single-file providers on Linux and Android copy verified bytes into a sealed executable `memfd`; other Unix targets execute a byte-verified `0500` copy held inside an explicitly verified private `0700` staging directory; Windows holds the verified image without write/delete sharing. The native Codex executable and its required sibling `codex-code-mode-host` instead form one byte-identified multi-file bundle, so every Unix target stages both files together and the resident Codex driver retains that staging lease through its full lifetime. Staged bytes are hashed directly with the already-open source object's stable identity. Filesystem-staged provider images and Unix private companion helpers share one provider-owned lease root: active runtimes hold their directory lease, while the next creation or owner drop reclaims only unlocked crash directories under the root lock. Linux and Android single-file provider images remain sealed `memfd` objects outside that filesystem owner. The scan is absolutely bounded and unsafe or unknown entries fail closed; this correction adds no timer, sweeper, compatibility cleanup, fallback, or alternate launch path. Linux/Android bind the running server through `/proc/self/exe`; on macOS the desktop supervisor opens the current executable, verifies its device/inode against the process's mapped text vnodes, and launches the server from a private staged copy of those open bytes. The server refuses provider custody without that launch proof, and the guardian then binds the exact running server object before either helper re-executes. Codex uses the provider environment allowlist plus one process-private RoomPortal bearer, `app-server --stdio`, process-local model/effort/tier/sandbox/approval, an exact runtime `untrusted` workspace entry, and private RoomPortal MCP configuration, one bounded JSONL reader, a 256-message/2 MiB aggregate pre-turn notification queue, and default-denied server requests. The runtime trust entry disables workspace `.codex/config.toml`, hooks, and exec policies while leaving the session-flag RoomPortal MCP active; ordinary `AGENTS.md` discovery remains part of the thread contract. On Unix the complete provider launch manifest, including that bearer, crosses an anonymous inherited descriptor rather than argv or the guardian environment; Windows adds it only to the exact owned provider environment. Each RoomPortal generates a fresh unpredictable environment-variable name containing `TOKEN`, so pre-existing user configuration cannot name the bearer as another MCP credential. Codex's built-in sensitive-name exclusions are forced on for model-reachable tool children without replacing either pre-existing or current user filter fields, and this owned app-server disables shell snapshots so the bearer cannot be copied into snapshot state and replayed around the filter. The RoomPortal itself remains in server memory and is exposed through an unguessable process-lifetime path plus independently authenticated bearer on an ephemeral loopback HTTP listener. The locked rmcp streamable-HTTP implementation bounds request bodies. A hard eight-connection semaphore bounds pre-authentication tasks and file descriptors; when full, the accept owner aborts the oldest registry-locked unauthenticated connection and waits for its permit to return before admitting a replacement. Exact constant-time bearer validation and the authenticated transition are one operation under that same registry mutex, so a successfully authenticated connection cannot be evicted between those steps. Unauthenticated requests never consume the separate eight authenticated request permits, every connection has an absolute deadline and disables keep-alive, incomplete headers and bodies expire, stateless JSON responses validate the exact Host and capability path, and cancellation closes every accepted connection with the portal. The bearer never appears in provider argv. Codex explicitly approves only the private server that exposes the exact eight room tools—discussion read, attachment read, lobby-message search, lobby-message context, publish, decline, roll, and choose—and the app-server pump accepts only the exact `agentsassemble_room` MCP-tool elicitation shape. The installed app-server protocol does not provide a trustworthy tool-name field on that elicitation, so the private server boundary and its fixed route set are the approval scope, leaving every other provider request denied. Codex therefore creates no portal sidecar, receives no portal filesystem path, and cannot turn ordinary output into room authority. Process reuse also requires live guardian custody and the exact provider anchor group; Linux/Android then perform a final bounded `/proc/<pid>/stat` check and reject zombie or dead leaders, which retain a PID and PGID until their guardian parent reaps them.
 
 After Codex process initialization, the driver starts or resumes one bounded exact provider thread before reporting the provider session active. A cancelled request remains bound to its method, parameters, and JSON-RPC ID, so retry reads the original response rather than repeating the external effect. A definitive initialize failure is poisoned on that process. The complete attachment response is retained until all original-compatible identity and model locations are normalized; missing, malformed, changed, or conflicting thread identities and any reported model different from the exact configured model fail closed instead of opening or committing another conversation. A poisoned driver can never satisfy runtime reuse: fatal turn poison is stopped under the exact runtime owner and held as a confirmed-stop tombstone until persistence checkpoints it, while other poisoned attachment state returns an explicit restart-required failure.
 
-Antigravity uses one persistent native PTY or managed system-ConPTY session and never invokes print mode. Its workspace hook file is an exclusive managed boundary: any pre-existing project hook refuses launch, the installed document contains only the AgentsAssemble policy hook, and the workspace reference count retains its first quoted absolute guardian-staged or Windows byte-verified locked helper until the last same-workspace session stops. Every provider process receives its own canonical absolute room-helper prefix independently of that shared hook command; its prompt, terminal permission policy, and hook policy require that exact per-session prefix. Portal authority therefore remains per-session while neither a bare basename nor a workspace-shadowed executable receives automatic sandbox bypass. A fresh launch nonce and exact durable turn ID enter every terminal prompt, so concurrent sessions cannot claim the same newly created transcript from equal room text. New attachment remains unbound until exactly one transcript contains that input; multiple candidates fail closed. Cache files, per-poll transcript tails, line sizes, and event counts are all bounded before JSON allocation, while resume reads only new rows from the exact durable conversation path.
+Antigravity uses one persistent native PTY or managed system-ConPTY session and never invokes print mode. Its workspace hook file is an exclusive managed boundary: any pre-existing project hook refuses launch, the installed document contains only the AgentsAssemble policy hook, and the workspace reference count retains its first quoted absolute guardian-staged or Windows byte-verified locked helper until the last same-workspace session stops. Every provider process receives its own canonical absolute room-helper prefix independently of that shared hook command; its prompt, terminal permission policy, and hook policy require that exact per-session prefix. Portal authority therefore remains per-session while neither a bare basename nor a workspace-shadowed executable receives automatic sandbox bypass. The current provider exposes no approved native attachment/completion receipt, so its turn path remains explicitly incomplete until the provider-specific owner proves one. Transcript discovery, provider-history parsing, terminal scraping, silence inference, print mode, or another provider may not supply that authority.
 
 Antigravity exposes no correlated native acknowledgement that proves a Ctrl-C has
 ended one exact turn while keeping its PTY reusable. The driver therefore never
@@ -568,7 +620,7 @@ changing persistence, room, protocol, or frontend ownership.
 
 OpenCode uses one persistent loopback `serve --pure` process and native HTTP/SSE session identity. The process gets a private empty configuration root, disables project configuration, default and external plugins, and external skill discovery, while retaining the installed native data store needed for authentication and durable provider sessions. Each runtime receives a fresh high-entropy Basic-auth password in its exact child environment; the strict loopback client requires those credentials and applies them to every JSON and SSE request. On Unix the credential remains inside the anonymous inherited launch manifest and never enters provider argv or the guardian environment. Reserving a port is not readiness authority: before transmitting any HTTP credential, the driver must observe the exact bounded `opencode server listening` line for that selected IPv4 loopback endpoint from the byte-bound child stdout. Every initial or later request then opens a credential-free TCP connection, revalidates exact guardian/child custody after the connection exists, and only sends HTTP through that already connected socket using Hyper without redirects, proxies, or transparent reconnection. If the child died before verification, a replacement listener receives EOF and no request bytes; if it dies after verification, the established socket cannot move to a newly bound listener. Only an authenticated health check over that custody-bound transport permits RoomPortal registration. Because the stable OpenCode HTTP contract does not accept a caller-chosen idempotent session ID, the driver marks session creation uncertain immediately before the first authenticated `POST /session` and clears that authority only after a successful response yields a valid identity. Response loss leaves the runtime observable only as `LeaseUncertain`; neither `Adopted` recovery nor a direct runtime reuse may send a second session-creation request. Assistant responses and SSE events share one provider-specific model parser: every supplied direct or nested alias must be a bounded nonempty string, all aliases must agree, both provider and model components must exist, and both channels must exactly match the configured model before a turn can complete.
 
-Provider turns enter through the common adapter only when durable active-turn, provider-session, runtime-handle, owner, profile, and filesystem authority all match. Ordered turns additionally carry a bounded 20,000-character canonical RoomPortal view, its exact input sequence, and at most 64 unique Agent Session handles. If the Agent Session selected a persona, the persistence owner renders its private card against that same canonical message prefix and freezes the bounded provider-neutral result in the existing assignment envelope; recovery never rereads changed library content. The adapter prepares the portal before provider I/O and accepts completion only after an exact read receipt plus exactly one turn-scoped message publication or supported decline; ordinary assistant final text is ignored as room authority. The portal creates an unguessable turn generation at `begin_observation`. A message or decline may be staged before or after `read_discussion`, matching the original tolerant order, but finalization requires the receipt generation and staged outcome generation to equal that exact active turn generation. Retrying a cancelled caller reuses the exact portal state, including an already staged terminal action. The adapter releases the outer runtime-slot mutex before waiting on a long turn, clones the runtime's inner serialized driver owner, and races driver work against an exact-runtime cancellation token; stop and shutdown can therefore cancel the wait, acquire the driver, and reap the owned process within their existing bound. A Codex turn uses `turn/start` with the original app-server workspace/model/effort/approval/sandbox-policy settings, room-observation orientation, and source metadata. Its response must expose one bounded exact provider-turn identity across original-compatible aliases; a bounded process-lifetime history prevents that identity from being rebound to another logical turn. Every reported model, including a `model/rerouted` destination, must still match the selected model. Output-bearing notifications require both exact thread and turn identities, while malformed unscoped output poisons the turn instead of entering its result. Official `hook/*` control notifications are thread-scoped: their thread identity remains mandatory and their nullable turn identity is compared only when present. Valid unmatched notifications remain under the aggregate queue budget, that budget is decremented when a match is consumed, and completion accepts either an explicit signal or the original final-message-plus-thread-idle grace signal. A cancelled caller continues the same pending request or active turn; a different logical turn cannot replace it.
+Provider turns enter through the common adapter only when durable active-turn, provider-session, runtime-handle, owner, profile, and filesystem authority all match. Ordered turns additionally carry a bounded 20,000-character canonical RoomPortal view, its exact input sequence, and at most 64 unique Agent Session handles. If the Agent Session selected a persona, the persistence owner renders its private card against that same canonical message prefix and freezes the bounded provider-neutral result in the existing assignment envelope; recovery never rereads changed library content. The adapter prepares the portal before provider I/O and accepts completion only after an exact read receipt plus exactly one turn-scoped message publication or supported decline; ordinary assistant final text is ignored as room authority. The portal creates an unguessable turn generation at `begin_observation`. A message or decline may be staged before or after `read_discussion`, matching the original tolerant order, but finalization requires the receipt generation and staged outcome generation to equal that exact active turn generation. Retrying a cancelled caller reuses the exact portal state, including an already staged terminal action. The adapter releases the outer runtime-slot mutex before waiting on a long turn, clones the runtime's inner serialized driver owner, and races driver work against an exact-runtime cancellation token; stop and shutdown can therefore cancel the wait, acquire the driver, and reap the owned process within their existing bound. A Codex turn uses `turn/start` with the original app-server workspace/model/effort/approval/sandbox-policy settings, room-observation orientation, and source metadata. Its response must expose one bounded exact provider-turn identity across the one verified installed-protocol shape; a bounded process-lifetime history prevents that identity from being rebound to another logical turn. Every reported model, including a `model/rerouted` destination, must still match the selected model. Output-bearing notifications require both exact thread and turn identities, while malformed unscoped output poisons the turn instead of entering its result. Official `hook/*` control notifications are thread-scoped: their thread identity remains mandatory and their nullable turn identity is compared only when present. Valid unmatched notifications remain under the aggregate queue budget and that budget is decremented when a match is consumed. Completion requires the exact verified terminal event; the final-message-plus-thread-idle grace inference present at the audited baseline is an open defect, not a supported architecture contract. A cancelled caller continues the same pending request or active turn; a different logical turn cannot replace it.
 
 The room mutation task owns scheduling, while SQLite owns its durable authority.
 Each private queue item binds an event ID to its provider delivery semantic—ordered

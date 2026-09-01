@@ -1,8 +1,8 @@
 # Room Settings, Scheduling, Tabletop, Preferences, and Appearance Slice
 
-Status: Stage A verified; Stage B local-operator and remote-session preferences
-production-browser verified; appearance persistence, authenticated HTTP, typed
-desktop issuance, copied-frontend activation, and packaged restart recovery verified
+Status: implementation and flow evidence retained; remote-session HTTP authorization
+reopened by repository audit D-03. Stage A, local desktop authority, appearance
+lifecycle, copied-frontend activation, and packaged restart evidence remain.
 
 ## Definition
 
@@ -23,6 +23,12 @@ proved that continuous is shown only for a room already carrying that legacy val
 The user explicitly requires a Rust product with no legacy or compatibility
 migration. That part of the earlier approval is superseded; the corrected design
 below must be reviewed with the resulting implementation.
+
+Audit correction at Rust baseline `8a5f75a`: the remote browser must present its
+durable session once at the target preferences or appearance route, which performs
+the exact room/permission/lifecycle revalidation. The detailed remote exchange and
+derived-grant descriptions below are historical implementation evidence until
+Phase 0B removes that extra credential hop. Desktop private-control grants remain.
 
 ## Original reachable contract
 
@@ -184,31 +190,29 @@ a cached ticket capability. The current HTTP appearance manager is derived by a
 separate full `require_complete_bootstrap_in_transaction` integrity check and the
 exact local user, participant, and active-membership binding.
 
-Preference reads and writes use separate one-use room HTTP purposes. A write
-consumes its ticket, performs a short identity authorization, releases the
-connection before reading the bounded body, then repeats the same authorization in
-the write transaction. Notification values, defaults, exact fields, the 54-entry
+Local desktop preference reads and writes use separate one-use room HTTP purposes.
+A remote browser presents its durable session bearer in the bounded Authorization
+header directly to the exact target.
+A write authenticates before reading the bounded body, then revalidates the same
+room/user/participant/permission authority in the write transaction. Notification
+values, defaults, exact fields, the 54-entry
 cap, and builtin-or-`c[0-9a-f]{12}` channel grammar match the original.
 `last_read_at` is not normalized: it is at most 64 Unicode scalar values and only
 CR, LF, and TAB are forbidden. A top-level partial update replaces the complete
 `channel_settings` map when that field is present.
 
 The local operator obtains those purposes only from the desktop private-control
-owner. An admitted remote human sends its raw session credential only to the exact
-`/api/session-tickets/preferences-read` or `preferences-write` exchange. The
-frontend then sends only the derived one-use grant to `/api/room-settings`; it does
-not attach a desktop device credential or retry target rejection as raw-session
-authentication. Read-only sessions may exchange the read purpose but receive the
-canonical `session_read_only` rejection from the write exchange.
+owner. An admitted remote human sends its session credential only to
+`/api/room-settings`; that route does not interpret a desktop device credential or
+retry a target rejection through another authority. Read-only sessions may read but
+receive the canonical `session_read_only` rejection from a write.
 
 The durable invite/admission session stores only the bearer fingerprint and binds
-the exact room, user, participant, client, scope, expiry, and revocation state. A
-consumed preference grant retains immutable session provenance and revalidates the
-current durable session before room-user identity. Writes authorize once before
-the bounded body and again in the mutation transaction, so replacement, leave,
-expiry, or revocation between those points cannot commit. One internal consumed-
-ticket sum type dispatches local and remote authorities after the same one-use
-consume; failure never falls through to another authority.
+the exact room, user, participant, client, scope, expiry, and revocation state.
+Writes authorize once before the bounded body and again in the mutation transaction,
+so replacement, leave, expiry, or revocation between those points cannot commit.
+Local ticket and remote session authentication converge only after each boundary has
+resolved a typed principal; failure never falls through to another authority.
 
 Per-room `GET /api/room-settings` preserves the combined `{room_id, settings}`
 wire response while the frontend projects only the caller preference fields.
@@ -281,28 +285,32 @@ binary upload/read remain authenticated HTTP request/response controls. Neither
 transport is a fallback for the other.
 
 The persistence owner, atomic settings transition, existing attachment route,
-remote human-session exchange, private control pipe, and typed desktop bridge are
-active and test-verified. The control-pipe boundary performs a real HTTP upload and
+private control pipe, and typed desktop bridge are active and test-verified. The
+audited remote human-session exchange is historical evidence and remains reopened
+until D-03 is implemented. The control-pipe boundary performs a real HTTP upload and
 pending preview after issuance, and rejects changed server, lineage, room UID, and
 malformed asset authority. A remote bound read
-retains its persistence-issued session provenance in the one-use grant and
-revalidates session, membership, profile binding, room reference, metadata, and
-bytes in one SQLite snapshot. Read-only room members may read; the raw session
-credential is rejected by the attachment target. Local desktop issuance, the
+must revalidate session, membership, profile binding, room reference, metadata, and
+bytes in one SQLite snapshot. Read-only room members may read. Local desktop issuance, the
 frontend's strict grant request functions, and the copied settings UI are active.
 The controller derives current local manager authority for each upload; remote humans
-exchange their live session only for an exact bound-read grant. Canonical private
+present their live session only to the exact bound-read target. Canonical private
 references are never placed directly in an image element. The frontend fetches the
-PNG under one-use authority, requires the exact private/no-store metadata and a
+PNG under resolved local-ticket or remote-session authority, requires the exact
+private/no-store metadata and a
 nonempty domain-bounded PNG-signature body, publishes only an object URL, rejects late
 generations, and revokes the old URL after replacement or on room, directory-authority
 currentness, reference, or component-lifetime change.
 
-The remote cutover deliberately pays one additional same-origin exchange request
+### Historical remote exchange evidence (superseded by D-03)
+
+The audited remote cutover pays one additional same-origin exchange request
 per preference read/write or bound-appearance read, plus bounded session
-revalidation. That cost keeps the
-longer-lived session credential out of the target route and preserves one-use
-purpose separation. Bound appearance reads first load only metadata, stored byte
+revalidation. That implementation kept the longer-lived session credential out of
+the target route and preserved one-use purpose separation. D-03 rejects that
+justification because the second credential does not close a distinct in-scope
+threat; the direct target authorization above is the approved contract. Bound
+appearance reads first load only metadata, stored byte
 length, and room settings; the up-to-10-MiB BLOB is fetched only after current
 authority and reference checks succeed. This deliberately adds one short SQLite
 query on successful reads to avoid the code-path cost of copying a large BLOB for
@@ -375,11 +383,10 @@ re-enters the unchanged exact room resolver and performs a fresh grant/read.
   or structure gate makes that genuinely impossible. Each implementation change
   carries its focused invariant test; cross-layer, restart, race, packaged-client,
   and verification-record work remain separate.
-- Completed feature commits accumulate locally until three features or 2,000
-  aggregate changed lines, whichever comes first. That exact batch is then pushed
-  and cross-reviewed by the critical web session and Daybreaker Blue High.
+- Batch timing is owned by `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`. The exact pushed
+  batch is cross-reviewed by the critical web session and Daybreaker Blue High.
   Provider-dependent verification uses persistent Codex Terra, Antigravity Flash,
-  and OpenCode Hy3 free sessions, never print mode, and removes every
+  and OpenCode Muse Spark sessions, never print mode, and removes every
   verification-owned process, window, server, and temporary resource afterward.
 
 Room close/archive/delete, operator pairing, external-agent admission, custom

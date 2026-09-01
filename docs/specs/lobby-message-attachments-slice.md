@@ -1,15 +1,18 @@
 # Lobby message attachments
 
+Status: implementation and flow evidence retained; remote-human HTTP authorization
+reopened by repository audit D-03
+
 ## Definition
 
 Reconnect the copied lobby composer and message attachment renderer to one durable
 Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle.
 
-## Current contract
+## Approved target contract after Phase 0B
 
 - This slice owns only attachments on the ordinary lobby `message_final` path. Custom
-  channels, votes, message edit/delete, search, and history paging remain unavailable
-  until their own message authorities exist. An attachment-only ordinary message is a
+  channels remain outside this owner; votes, message edit/delete, search, and history
+  paging are separate implemented message authorities rather than attachment state. An attachment-only ordinary message is a
   valid reachable message; a message with neither visible text nor an attachment is not.
 - `room_events` remains message authority. A separate message-attachment table owns
   pending bytes and, after send, the exact `(room_id, event sequence)` that retains
@@ -39,14 +42,17 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   routes turns. Any failure rolls back all of those changes. A replay of the same
   request returns the committed event; a different request cannot bind the same
   pending object.
-- Uploads use fresh one-use operation-, room-, and principal-bound HTTP grants; the
-  server creates the opaque attachment ID only inside the insertion transaction. Human
-  reads additionally bind the grant to the exact asset. Local grants originate only at
-  the typed desktop control boundary; admitted humans exchange their live session
-  credential before the attachment route. Raw host secrets, raw reusable session
-  credentials at the target, cross-purpose grants, read-only or muted uploaders,
-  expired grants, and revoked/left/kicked sessions fail closed. A joined member with
-  `room.history` may still read while muted or read-only. Grant authentication happens
+- Local uploads use fresh one-use operation-, room-, and principal-bound HTTP grants;
+  the server creates the opaque attachment ID only inside the insertion transaction.
+  Local grants originate only at the typed desktop control boundary, and human reads
+  additionally bind local grants to the exact asset. Admitted remote humans present
+  their durable session credential in the bounded Authorization header at the target
+  upload/read route, which resolves the
+  exact room, principal, operation, and asset before access. The audited preliminary
+  session-to-purpose-ticket exchange is a Phase 0B removal target. Raw issuer secrets,
+  cross-scope credentials, read-only or muted uploaders,
+  expired local grants, and revoked/left/kicked sessions fail closed. A joined member with
+  `room.history` may still read while muted or read-only. Authentication happens
   before the bounded body or attachment BLOB is read; after body processing, exact
   current room/session/participant authority is revalidated again in the same SQLite
   transaction as storage accounting and insertion. Bound reads perform their target
@@ -110,11 +116,13 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   attachments after a failed send, and clears them only after the committed ACK. The
   active upload is owned by one browser operation generation spanning the exact room,
   session, posting authority, role state, and component lifetime. Retiring any of those
-  aborts grant exchange, file conversion, and target transfer; currentness is checked
-  again after grant issuance and immediately before target dispatch, and a late result
+  aborts local grant issuance or remote target authorization, file conversion, and
+  target transfer; currentness is checked again after authority resolution and
+  immediately before target dispatch, and a late result
   cannot enter another room's draft. The server has no attachment-grant revoke command,
-  so the client does not invent one: an issued but undispatched purpose-bound one-use
-  grant remains unusable to the retired client and expires at its existing short TTL.
+  so the client does not invent one: an issued but undispatched local purpose-bound
+  one-use grant remains unusable to the retired client and expires at its existing
+  short TTL.
   Authority-generation retirement runs in the commit layout phase, before any new
   layout observer can release or commit work under the replaced principal.
   The prior unowned path could continue converting one 10-MiB file into a roughly
@@ -125,7 +133,7 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   work for images outside the viewport. One AppView-lifetime scheduler owns the
   capacity used by every exact room-and-authority reader and survives lobby replacement
   by another channel, admin, or plugin view. It admits at most four local
-  or remote reads, below the server's eight concurrent grant ceiling;
+  or remote reads;
   the fifth remains queued until an active transport actually settles, even when its
   caller has already aborted, and cancellation before deferred transport entry performs
   no transfer. Intersecting images retain only
@@ -250,7 +258,7 @@ speculate about it.
    attachment. The target authenticates before body admission, and unreferenced
    same-room attachments are unreadable to humans and agents.
 4. Ordered and ambient Agent Sessions receive the exact attachment IDs with canonical
-   room context. Codex Terra, Antigravity Flash, and OpenCode Hy3-free each exercise the
+   room context. Codex Terra, Antigravity Flash, and OpenCode Muse Spark each exercise the
    real attachment path when that provider-visible boundary is complete; no transcript,
    print-mode, fake provider, or alternate attachment fallback is used.
 5. Expiry and room deletion remove only their exact pending/bound rows. Absolute storage
@@ -282,7 +290,7 @@ speculate about it.
   owning boundary, preserved contracts, trade-off, and measured verification; do not
   add a cache or transport abstraction from intuition alone.
 - Commit each buildable, independently verifiable and rollbackable change below 1,000
-  changed lines. Push at three completed features or 2,000 aggregate changed lines,
+  changed lines. Batch timing is owned by `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`;
   then obtain manual web-session and Daybreaker Blue High source reviews for security,
   structure, duplicated policy, overimplementation, SSoT, lifecycle cleanup, and removable
   state. The Standard Scan already started for pushed HEAD `b46aa02` is a one-time review;

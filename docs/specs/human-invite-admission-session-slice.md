@@ -1,27 +1,28 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: atomic SQLite, bounded RoomRuntime admission, local HTTP preflight/join,
-pre-join avatar flow, fail-closed browser credential custody, the live-session
-profile/preferences/WebSocket exchanges, and exact participant leave are implemented
-and production-browser verified; configured-manual and managed public ingress with
-stable entry plus backend manager invite create/revoke and private-control ticket
-issuance, exact manager-room authority transport and transaction revalidation, and
-the native desktop manager-invite ticket bridge plus the strict C1b create/revoke
-frontend API contract are implemented and test-verified; retained controller custody
-and UI cutover are implemented and manually approved; the complete packaged
-managed-ingress invite matrix is locally verified and published for batched manual
-review; bound room-appearance reads have a typed session exchange and the desktop/
-frontend appearance path is packaged-verified, while general message attachments
-remain incomplete
+Status: implementation evidence retained; current contract reopened by repository
+audit D-02, D-03, and D-07. Human admission/session and one-use WebSocket exchange
+remain, while
+the per-operation remote HTTP purpose-ticket exchange is a simplification target.
+Desktop private-control purpose tickets are not reopened by this finding.
 
 ## Definition
 
+Audit correction at Rust baseline `8a5f75a`: a remote human already presenting a
+room session bearer must be authorized once at the target HTTP route rather than
+minting and consuming a second purpose ticket first. The detailed exchange
+implementation below is historical evidence until Phase 0B replaces it; it is not
+the approved target contract. Socket upgrade tickets remain one-use because the
+WebSocket boundary cannot carry the session Authorization header normally. The
+remote socket grant carries no proof key, and remote receipts/frames carry no proof
+field because key delivery would share the same HTTPS/WSS ingress authority.
+
 This slice establishes one durable authority for a human browser invite, admission,
-profile binding, room membership, and expiring room session. It then lets that live
-session exchange for exact one-use WebSocket, own-profile, and preference read/write
-grants. Bound room-appearance reads now use an exact asset-bound exchange and
-same-snapshot durable session revalidation; general message attachments remain
-incomplete and unclaimed. Invite
+profile binding, room membership, and expiring room session. That live session is
+authorized directly at each exact HTTP target and exchanged once for a short-lived,
+one-use WebSocket ticket. Bound room-appearance reads remain exact-asset operations
+with same-snapshot durable session revalidation; general message attachments are a
+separate current owner and do not borrow admission state. Invite
 management remains local-operator authority. Backend create binds its
 new credentials and URLs to one ready ingress snapshot, while revoke remains
 room-bound and ingress-independent. An external invite is not a completed user flow
@@ -222,11 +223,13 @@ Human invite creation preserves both current credentials. `invite_token` is the
 signed `aai1.<claims>.<HMAC-SHA256>` value, while `join_code` is `aaj1_` plus exactly
 24 operating-system-random bytes encoded as unpadded base64url; `join_url` carries
 the latter. Both are accepted by browser admission, resolve the same durable invite,
-and remain distinct opaque values. The signed claims retain the current schema,
-room and display identity, URLs, expiry, nonce, and permission fields; successful
-verification must also find the exact current row and match its canonical authority
-fields before admission. No rowless signed-token or old-token compatibility path is
-introduced.
+and remain distinct opaque values. At the audited baseline, the signed claims include
+schema, room/display identity, URLs, expiry, nonce, permissions, and fixed descriptive
+fields. D-07 requires a finite current consumer for every retained claim; unconsumed
+self-description is removed rather than preserved for a possible future reader.
+Verification must still find the exact current row and match every retained canonical
+authority field before admission. No rowless signed-token or old-token compatibility
+path is introduced.
 
 The existing permission-checked host-key owner supplies the persisted 32-byte HMAC
 key for both current invite signatures and deterministic sessions, matching the
@@ -369,21 +372,20 @@ operator and external-agent sessions, not borrowed by this human slice. Capacity
 queries use the same stored-active-and-unexpired live predicate as authorization;
 an unmaterialized expired row never consumes a slot.
 
-## Session-derived grants and revocation
+## Target session authorization and revocation
 
-Raw room-session bearers are accepted only by the admission preflight, leave/revoke,
-and typed session-exchange endpoints. Target profile, preference, and WebSocket
-routes—and any future attachment route—never interpret a raw session bearer as a
-purpose ticket.
+Raw room-session bearers are accepted by admission preflight, leave/revoke, and the
+exact profile, preference, appearance, pin, search, or attachment HTTP target through
+the bounded Authorization header. It never enters a URL, body, log, event, prompt,
+fixture, or durable row. A target resolves the durable session authorization once, then revalidates its room,
+user, participant, scope, expiry, revocation, and operation-specific permission at
+the owning persistence boundary. It never widens a session into another purpose or
+falls through to desktop authority.
 
-The session exchange surface is a closed set of typed routes rather than a
-client-selected purpose string:
-
-- WebSocket connect;
-- own profile access, used by profile read/update and normal-scope avatar upload;
-- room preference read and, for normal scope only, preference write;
-- room attachment upload and exact private-attachment read when the corresponding
-  message behavior is active.
+Only WebSocket connection uses a typed session-exchange route, because the browser
+upgrade cannot normally carry the Authorization header. It mints one opaque,
+short-lived, one-use socket ticket bound to the exact room and origin. Desktop local
+HTTP/WS tickets remain a separate private-control contract.
 
 Read-only room scope denies posting, preference mutation, profile-avatar upload, and
 every room attachment upload. It still permits the human to read and patch their
@@ -398,12 +400,12 @@ do not mint or consume a session-derived avatar-read grant, so other room member
 render the avatar. Unexpired pre-admission preview remains exact invite/credential
 custody rather than admitted-session authority.
 
-Every derived grant retains immutable session-fingerprint provenance plus the exact
-room, user, participant, client kind, scope, and purpose. Grant consumption removes
-the in-memory item first and then revalidates the durable session and current
-room/profile/membership binding. Wrong purpose, wrong room, replay, expiry, or
-session-only revocation consumes and rejects the grant. Existing local-operator
+The audited implementation's public HTTP grant store, exchange endpoints, provenance
+sublimits, and consume-on-wrong-purpose behavior below are historical implementation
+evidence. D-03 removes that second public credential lifecycle. Existing local-operator
 typed grants remain separate and unchanged.
+
+### Historical public HTTP grant implementation (superseded by D-03)
 
 A derived grant never outlives its backing session. A target write consumes the
 grant before reading its bounded body, then revalidates the session, membership,
@@ -420,6 +422,8 @@ store owner. No new request-rate limiter is introduced in this slice: the existi
 128-connection HTTP admission bound, 4,096-item store capacity, public/private
 partition, and per-session outstanding bound are observed controls, while an
 additional requests-per-minute threshold would be an unmeasured product restriction.
+
+### Retained session and socket lifecycle
 
 A session WebSocket subscribes to revocation notification before its connect grant
 is consumed, then revalidates the database after subscription. It revalidates before
@@ -467,7 +471,7 @@ at-least-once delivery, and cursor replay never creates a second durable event.
 The transport split follows the verified Discord-style ownership rule:
 
 - bounded request/response operations use HTTP: invite creation, preflight,
-  admission, pre-join avatar, session-ticket exchange, own profile/preferences,
+  admission, pre-join avatar, one WebSocket-ticket exchange, own profile/preferences,
   room-appearance upload/read, and leave/revoke;
 - canonical snapshot, room events, and room commands use WebSocket.
 
@@ -529,10 +533,15 @@ boundaries:
    reference with the paired base. Presentation provenance never authorizes or
    retargets a request, and an older response generation cannot replace a newer
    pair.
-2. B1b makes the native runtime ticket one strictly validated owner before any
-   socket or resource effect. It accepts exactly `ticket`, `ttl_seconds`,
-   `websocket_base_url`, and `server_proof_key`; both secrets are 64 lowercase hex
-   characters, TTL is a positive safe integer, and the URL is exactly
+2. Historical B1b made the native runtime ticket plus frame-proof key one strictly
+   validated owner before any socket or resource effect. D-02 retains that key only
+   for a smaller local fresh-challenge receipt because native control and loopback
+   frames cross separate paths. The target accepts exactly `ticket`, `ttl_seconds`,
+   `websocket_base_url`, and `server_proof_key`. That key is an independent 32-byte
+   CSPRNG value unique to the same one-use ticket, shares its TTL and consumption,
+   and is strictly validated before any socket, display-resource, readiness, or
+   command effect.
+   The opaque ticket is nonempty, TTL is a positive safe integer, and the URL is exactly
    `ws://127.0.0.1:<port>` with no credentials, path, query, fragment, or alternate
    serialization. The derived HTTP display base belongs only to that accepted
    socket generation. Canonical room and Agent Session avatar references remain
@@ -621,10 +630,9 @@ boundaries:
 These stages add no durable frontend invite state, second URL/timestamp policy,
 generic resource framework, compatibility path, or fallback. Each independently
 buildable commit must remain below 1,000 changed lines, must pass the repository gates
-and focused contract tests, and remains independently rollbackable. Completed feature
-commits accumulate locally until the first of three feature commits or 2,000 aggregate
-insertions plus deletions since the last reviewed baseline; that exact batch is then
-pushed and reviewed by both manual reviewers. A correction needed to close an active
+and focused contract tests, and remains independently rollbackable. Batch timing is
+owned by `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`; the resulting exact range is pushed
+and reviewed by both manual reviewers. A correction needed to close an active
 review may be pushed and re-reviewed immediately as part of that batch. Packaged
 Computer Use remains the completion test rather than a substitute for these authority
 and failure contracts.
@@ -1164,7 +1172,8 @@ while promoting the same opaque ID through the profile lifecycle.
   sources. The guest session owns one verified surface projection; it does not add a
   directory cache, authority trait, compatibility reader, or second socket state.
 - Preserved security and product contract: the raw human bearer remains confined to
-  typed ticket exchange. Preflight and admission variants reject missing, extra, or
+  the bounded Authorization header at an exact HTTP target or the typed WebSocket
+  ticket exchange. Preflight and admission variants reject missing, extra, or
   mistyped fields. Fresh join binds the echoed request ID, preflight room, and
   requesting client; recovery binds the requested room and client. The server-returned
   avatar is the only avatar
@@ -1176,8 +1185,11 @@ while promoting the same opaque ID through the profile lifecycle.
   failed admission is not converted into stored-session success. Per-attempt generation
   fencing rechecks after asynchronous digest verification and before the lifetime pin
   or any persistence/UI side effect, so a changed entrance cannot commit stale state.
-  The later signed
-  WebSocket receipt still pins the exact surface digest and room/participant.
+  The finite remote WebSocket handshake validates that already pinned surface plus
+  the exact room/participant and reaches readiness only at its contiguous high-water;
+  because remote key delivery would share that same HTTPS/WSS authority, D-02 adds no
+  remote signed receipt or per-frame proof layer. The separately delivered local
+  receipt remains owned by the native path.
 - CPU, memory, disk, and latency cost: a successful admission response performs one
   existing bootstrap-status SQLite read so server ID and lineage are not copied into
   a new process state owner. It serializes one bounded product-surface object and the
@@ -1264,7 +1276,7 @@ while promoting the same opaque ID through the profile lifecycle.
   Commit `28babe8` is 387 insertions and 35 deletions across four files; production
   and test modules are 189 and 168 lines, with no source-gate exception.
 
-### Shared grant-store limits instead of a second session ticket cache
+### Historical public grant-store limits (superseded by D-03)
 
 - Prior cost and threat: the existing grant store was globally bounded at 4,096, but
   an exchange endpoint without provenance sublimits lets public sessions occupy all
@@ -1322,16 +1334,16 @@ while promoting the same opaque ID through the profile lifecycle.
 
 ### Profile targets reuse one durable session snapshot
 
-- Prior cost and threat: accepting the principal snapshot carried by an in-memory
-  grant would allow a revoked, expired, left, foreign, or corrupt session to read or
-  mutate the person profile. Re-running the generic room-principal profile path would
-  still not prove the exact human-session fingerprint, expiry, client, scope, room,
-  user, and participant captured by the grant. A separate profile lookup after the
-  human-session join would also reread profile state already decoded by that join.
+- Prior cost and threat: accepting a principal snapshot without target revalidation
+  would allow a revoked, expired, left, foreign, or corrupt session to read or mutate
+  the person profile. Re-running the generic room-principal profile path would still
+  not prove the exact human-session fingerprint, expiry, client, scope, room, user,
+  and participant. A separate profile lookup after the human-session join would also
+  reread profile state already decoded by that join.
 - Change intent and smallest design: commit `8efaa25` adds one internal
   `revalidate_human_session` function to the existing persistence owner. It resolves
   the exact fingerprint in the target transaction and compares every immutable
-  provenance field plus the server-derived capability ceiling. Display name is
+  session field plus the server-derived capability ceiling. Display name is
   deliberately excluded from the equality check because the revisioned person
   profile owns that mutable value. The resolver returns its already decoded profile
   to the profile target, avoiding a second indexed profile query. `UserProfile` is
@@ -1343,7 +1355,7 @@ while promoting the same opaque ID through the profile lifecycle.
   projection, and events in the same SQLite transaction. Read-only room scope may
   still read and patch the person profile, but cannot acquire new upload authority.
   Current profile name/status/avatar changes do not invalidate an otherwise exact
-  grant. Session end/expiry, inactive room, participant leave, missing/corrupt profile,
+  session. Session end/expiry, inactive room, participant leave, missing/corrupt profile,
   or changed immutable provenance fails closed. Existing local/private profile methods
   and projection semantics are unchanged.
 - Observed CPU, memory, disk, and latency cost: a target performs one read transaction
@@ -1356,7 +1368,7 @@ while promoting the same opaque ID through the profile lifecycle.
   decoded profile removes one otherwise certain primary-key query rather than adding
   speculative state.
 - Verification: a real read-only admission reads and updates its full profile, then
-  reuses the same grant provenance after the mutable display name changes. A changed
+  reuses the same session after the mutable display name changes. A changed
   durable expiry is rejected as `invalid_state`; participant leave rejects both read
   and write as `session_revoked`; the rejected patch leaves no value after membership
   restoration; a corrupt profile revision still fails. All 160 persistence tests,
@@ -1535,15 +1547,16 @@ disk evidence; the current store-wide worst case remains capped by the existing
   prove removal is allowed only after the backing invite is terminal and can never
   reopen admission because its current gate precedes device-key lookup.
 - Replacement tests admit one stable participant through different reusable invites,
-  prove only the new session remains live, the old bearer/grants/socket fail, and the
+  prove only the new session remains live, the old bearer/HTTP authorization/socket fail, and the
   same-participant replacement does not increase capacity.
 - Pre-join avatar tests prove exact invite/credential custody, replacement, one-hour
   expiry, safe-raster limits, failed-admission custody, and atomic ownership transfer
   to the same profile rendered in the room and lower-left panel. Current replacement
   and storage acceptance is owned by the asset-custody correction rather than the
   historical generic uploader quotas recorded above.
-- Real Axum tests exercise create, preflight, admission, every typed ticket exchange,
-  target-ticket replay/wrong-purpose/wrong-room, raw-bearer rejection, read-only
+- Real Axum tests exercise create, preflight, admission, the typed WebSocket-ticket
+  exchange, local target-ticket replay/wrong-purpose/wrong-room, direct remote target
+  authorization, bearer rejection outside the bounded Authorization header, read-only
   full person-profile patch success, read-only profile-avatar upload/room-upload denial,
   same-user existing-avatar bind/clear, foreign-avatar rejection, public bound
   profile-avatar read, and proof that profile mic/deaf fields do not mutate room mute

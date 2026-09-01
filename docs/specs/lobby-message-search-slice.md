@@ -1,6 +1,7 @@
 # Lobby Message Search Slice
 
-Status: complete and verified
+Status: implementation and flow evidence retained; remote-human HTTP authorization
+reopened by repository audit D-03
 
 ## Definition
 
@@ -8,7 +9,7 @@ A current room human or active Agent Session searches the complete canonical lob
 and reads one bounded chronological context window through the copied product surface without
 receiving private event fields or invented custom-channel data.
 
-## Current contract
+## Approved target contract after Phase 0B
 
 The authoritative input remains `room_events`. Search indexes only public, non-deleted
 `message_final` records with visible text or attachments and matches the casefolded author, visible
@@ -32,11 +33,13 @@ message transaction inserts both projections, and database-owned deletion remove
 its record loses its canonical reference. There is no sync-on-read task, second database, raw-event
 copy, compatibility rebuild, or migration path.
 
-Human reads use `GET /api/room-search` and `GET /api/room-search/context` with a fresh, purpose-bound,
-one-use `message-search-read` ticket. Local desktop issuance and remote session exchange converge on
-that one purpose, the ticket is consumed before request validation, and persistence revalidates the
-current room human plus `room.history` permission in the same read transaction. Both responses are
-private/no-store. An invalid nonempty cursor fails rather than silently restarting pagination.
+Human reads use `GET /api/room-search` and `GET /api/room-search/context`. Local desktop requests keep
+their fresh one-use `message-search-read` ticket because it crosses the private-control boundary.
+Remote humans present their durable session bearer in the bounded Authorization header directly to the target, which resolves the exact
+room participant and revalidates `room.history` in the same persistence read transaction. The audited
+implementation's preliminary remote session-to-purpose-ticket exchange is historical evidence and a
+Phase 0B removal target, not part of this approved contract. Both responses are private/no-store. An
+invalid nonempty cursor fails rather than silently restarting pagination.
 
 `channel_id=lobby` and `channel_id=all` currently search the same implemented lobby owner. Any
 concrete non-lobby channel remains explicitly unavailable until custom-channel messages have a Rust
@@ -92,7 +95,7 @@ loop; page and context allocations remain bounded by 30 and 31 results on the ex
 connection. Dataset construction took 4.978 seconds but is not claimed as a production write metric.
 The probe source and generated database were removed after measurement.
 
-### Copied-frontend authority cutover evidence
+### Historical copied-frontend authority cutover evidence
 
 The copied frontend previously sent a durable room-session bearer directly to the search endpoint,
 could issue an unauthenticated local request, substituted only the loaded in-memory timeline after an
@@ -100,7 +103,7 @@ empty canonical result, and cast lobby context into custom-channel events despit
 Rust custom-channel message owner. Those paths could cross purpose authority, hide failed canonical
 reads, or present invented history.
 
-The frontend now resolves one local-or-remote `RoomHttpAuthority`, obtains a fresh one-use
+The audited frontend resolves one local-or-remote `RoomHttpAuthority`, obtains a fresh one-use
 `message-search-read` grant for each search or context read, sends only that grant to the target, and
 validates the complete private/no-store response before exposing it. The parser accepts only the
 currently emitted visible lobby `message_final` variants, including a strict canonical poll
@@ -110,6 +113,12 @@ Room, channel, or authority changes synchronously invalidate pending requests an
 query/results. Concrete custom channels report the unimplemented owner rather than synthesizing
 context or falling back to loaded events. Message attachments, pins, and search share only the small
 HTTP-authority value; each feature retains its own ticket purpose, parser, and lifecycle owner.
+
+D-03 supersedes only the remote half of that cutover: the local desktop still obtains
+the one-use search ticket, while an admitted browser sends its session bearer in the
+bounded Authorization header directly to the target. Both paths resolve one typed
+principal before the same search owner and retain the parser, invalidation, no-store,
+custom-channel rejection, and no-fallback behavior above.
 
 This cutover adds no persistent browser state, worker, process, disk owner, compatibility path, or
 generic provider/search framework. Per response, validation is bounded by the existing 30-result or
@@ -167,8 +176,9 @@ measurement artifacts were stopped or moved to Trash after verification; Compute
 3. Context rejects unknown/non-lobby targets and returns at most 31 canonical events in chronological
    order with all shared public-event redaction, including `provider_turn_id`, intact.
 4. Local operator, read/write guest, and read-only guest reads succeed only while current
-   `room.history` authority remains valid. Missing, expired, replayed, crossed-purpose, wrong-room,
-   and revoked grants fail closed without leaking search or context data.
+   `room.history` authority remains valid. Missing, expired, replayed, crossed-purpose, or
+   wrong-room local tickets and expired, revoked, wrong-room, or wrong-scope remote sessions
+   fail closed without leaking search or context data.
 5. The copied frontend has one strict local/remote authority path, validates the complete bounded
    response before use, never falls back to visible in-memory messages, paginates, and navigates to
    an old result through the server context window.
@@ -189,8 +199,8 @@ measurement artifacts were stopped or moved to Trash after verification; Compute
 
 - focused domain/persistence tests for normalization, indexing, pagination, context, redaction, and
   deletion lifecycle;
-- real loopback TCP tests for local/remote tickets, replay/cross-purpose/wrong-room denial, response
-  headers, and context bounds;
+- real loopback TCP tests for local tickets and remote Authorization bearers, including local
+  replay/cross-purpose and both paths' wrong-room/scope denial, response headers, and context bounds;
 - focused RoomPortal MCP/terminal/provider tests for exact turn and receipt ownership;
 - copied-frontend API/controller tests followed by packaged local and isolated-browser verification;
 - representative release measurements of final schema/read/write costs;

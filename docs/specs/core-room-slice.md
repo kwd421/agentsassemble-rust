@@ -1,6 +1,6 @@
 # Core Room Production Slice
 
-Status: active implementation owner
+Status: published foundational contract owner; not the current workboard route
 
 ## Definition
 

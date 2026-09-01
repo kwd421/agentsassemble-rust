@@ -1,10 +1,21 @@
 # Persona-card library and Agent Session selection
 
+Status: persona-card contract retained; DeepSeek fixed-host network policy reopened
+by repository audit D-04
+
 ## Definition
 
 Reconnect the copied persona picker to one Rust-owned import library and apply the
 selected normalized persona to ordinary Agent Session turns. This is the Risu/CCv3/
 CHARX product flow, not the excluded scripted-meeting pipeline.
+
+Audit correction at Rust baseline `8a5f75a`: the fixed official DeepSeek HTTPS
+endpoint has no caller-controlled destination, so its custom public-IP DNS resolver
+is not an approved SSRF layer. Keep TLS hostname validation, HTTPS-only fixed origin,
+redirect prohibition, request/response/tool/time bounds, and credential redaction.
+Decide ambient-proxy exclusion only from an explicit credential/proxy policy and
+operating evidence. A future caller-selected Custom API endpoint has a separate SSRF
+owner and cannot inherit this fixed-host decision.
 
 ## Verified original behavior
 
@@ -378,7 +389,9 @@ conversation context without a second disk authority or provider-private history
 fixed when the Agent Session is created; completing a turn cannot move it and erase earlier visible
 room context.
 
-The concrete threats found during manual review were stale runtime credentials, quarantining a
+### Historical DeepSeek fixed-host hardening evidence (superseded by D-04)
+
+The concrete threats recorded during the earlier manual review were stale runtime credentials, quarantining a
 runtime after a definitive pre-side-effect rejection, accepting a malformed completion envelope,
 losing a committed room-random response before terminal publication, and sending a credentialed
 request through ambient proxy or non-public DNS authority. The driver marks a turn replay-unsafe
@@ -424,8 +437,8 @@ existing owners: API providers may own a completely absent filesystem-authority 
 frontend creation-event projection now accepts and cross-checks the server-owned persona fields.
 Neither correction adds a fallback, compatibility reader, duplicate persona state, or provider
 branch. Exact fixture hashes, state transitions, clean full-suite results, and resource cleanup are
-recorded in `docs/VERIFICATION.md`. External manual review remains the only open exit condition for
-this candidate.
+recorded in `docs/VERIFICATION.md`. That candidate later passed its manual review; the
+current slice is reopened only for the separate D-04 fixed-host network-policy decision.
 
 ## Manual-review findings
 
@@ -576,7 +589,7 @@ this candidate.
 - The copied frontend, HTTP/TCP authority, persistence, provider-neutral turn context,
   packaged local flow, and at least the authorized real provider matrix are verified.
   Computer Use owns only that packaged verification run and is fully cleaned afterward.
-- Every independent commit remains below 1,000 changed lines. Push and cross-review occur
-  at three completed product features or 2,000 aggregate changed lines, with structure,
+- Every independent commit remains below 1,000 changed lines. Batch timing is owned by
+  `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`, with structure,
   duplicate policy, overimplementation, lifecycle, performance evidence, and security
   included in both critical-web and Daybreaker Blue High review requests.

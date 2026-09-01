@@ -1,37 +1,27 @@
 # Frontend/backend exposure map
 
-Status: source-derived reimplementation exposure inventory, 2026-08-31
+Status: source-derived exposure inventory reopened by the 2026-09-01 repository
+audit. It records exposure evidence, not product completion.
 
 Comparison baseline: original
-`d5046473010d1353a81ee38337360e6d98f7bd6f`; public Rust
-`23c9f35`. The local-authority, surface, connection-admission, subscription, and moderation
-boundary is complete. Central registration, canonical participant roles, participant
-mute, exact provider interruption, and the required packaged provider matrix have
-passed both manual reviews. Room-global settings, local-operator preferences, human
-admission, the session-derived person-profile exchange, and the admitted-human
-WebSocket are source-connected and integration-verified. Real production-browser
-one-use/reusable normal and read-only admission, avatar, reload, posting/denial, and
-restart recovery pass against the canonical Rust authority. Remote-session
-preferences now pass their real write, read-only denial, reload, and restart flow.
-Exact `participant.leave` now passes its real WebSocket UI, HTTP connector, session
-revocation, reload, and restart flow. Lobby message-pin persistence, local/remote HTTP
-authority, and copied frontend controls are source-connected, fully test-verified, and
-approved by both manual reviewers. The isolated packaged flow now passes local
-list/mutation/navigation, writable remote list/mutation, read-only list with mutation
-controls withheld, exact restart retention, and visible custom-channel unavailability.
-Canonical lobby history pagination is source-connected and packaged-verified for local and
-admitted read-only clients, including strict pre-cursor pages and a read-only no-mutation check.
-Canonical lobby polls are source-connected and packaged-verified for local, admitted read/write,
-and read-only clients across reload and restart. Codex Terra, Antigravity Flash, and OpenCode Muse
-Spark use the same provider-neutral vote owner; no provider-specific tally or client authority is
-present.
+`d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust `8a5f75a`.
+Earlier dated sections retain their execution evidence, but their completion claims
+do not override the current findings in
+`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md` or the sequence in
+`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`. In particular, copied friends, side-chat,
+custom-channel, account, provider-operation, and external-AI controls remain active
+or reachable without complete Rust owners, and Agent Session identity plus several
+provider completion/lifecycle contracts are reopened. The HTTP host-challenge
+routes have no production caller, remote human HTTP currently performs a redundant
+purpose-ticket exchange, and room frames carry an unapproved cryptographic envelope;
+audit D-01 through D-03 route those corrections before further UI completion.
 
 ## Scope and method
 
-This inventory compares the reachable source registrations in the Python product at
-`../AgentsAssemble` with that product's canonical React client, then records the
-remaining Rust cutover gap. It is not a feature specification and does not make an
-unreferenced route public by default.
+This inventory compares the reachable registrations and canonical React client at
+the frozen original commit above with the Rust product, then records the remaining
+cutover gap. The dirty original working tree is never used as authority. This is not
+a feature specification and does not make an unreferenced route public by default.
 
 Evidence owners:
 
@@ -66,6 +56,30 @@ reimplementation is called complete, the final handoff must explicitly enumerate
 A backend route, command, or event existing in source is not evidence that the
 frontend exposes its real user flow. Tests, copied components, fixtures, and local
 fake state likewise cannot close an exposure row.
+
+## Current audited exposure snapshot
+
+This compact table is the current exposure owner at Rust baseline `8a5f75a`.
+Everything after it is frozen original evidence or a dated execution journal and
+must not be read as a newer current-state override.
+
+| Surface | Current exposure |
+| --- | --- |
+| Core room, general messages/history/search/pins/attachments/votes | finite sync/replay and features implemented; frame-proof threat decision and false capabilities reopened |
+| Human profile/avatar and room appearance | implemented; Agent identity projection is separately reopened |
+| Human invite/admission/session/public ingress | substantial implementation; dead host challenge and redundant remote HTTP ticket exchange plus guide/client-kind/TCP findings remain open |
+| Participant role/mute/self-leave | implemented; kick/re-add and room lifecycle are not |
+| Agent Session create/configure/lifecycle | partial; provider completion, cleanup, and profile SSoT are reopened |
+| Friends | active copied UI calls absent Rust routes |
+| Side chat | active mounted UI calls absent Rust routes |
+| Custom text channels | reachable copied UI polls absent message routes; server message owner absent |
+| Voice | user-deferred, but the reachable copied custom-channel view still contains active five-second presence polling and a 20-second join heartbeat; gate it now so the required target issues no production voice request/timer |
+| Mafia, RimWorld | user-deferred; no production request/poll/heartbeat is permitted |
+| Accounts/Google/operator pairing/companion | partial or absent; copied controls exceed current owners |
+| Provider operations | four providers registered; only DeepSeek credential operations exist; other login/usage/refresh controls overclaim |
+| Room Connector | original retained flow; copied invite uses an obsolete failing client path; Rust owner absent |
+| External/managed AgentBridge | vocabulary only; complete admission/runtime owners absent |
+| Runtime/update/resources/release diagnostics | dormant or partly unreachable copied source; no parity claim |
 
 ## Python backend behavior with no direct React exposure
 
@@ -192,7 +206,7 @@ disposable output root:
   until the exact server name was entered, then removed the disposable room and
   immediately revoked the paired public session.
 
-## Canonical React behavior not provided at Rust baseline `5aaa04b`
+## Historical Rust exposure snapshot at baseline `5aaa04b`
 
 The Rust server currently exposes `GET /healthz`, `GET /api/host-challenge`,
 `GET /api/server-info`, `POST /api/server-info/challenge`, `POST /api/ws-ticket`,
@@ -265,9 +279,11 @@ manifest, invoke handler, and advertised command list consume that same registry
 The webview pins both surface digests for its lifetime before opening a room
 socket. Production room composition requests only advertised streams, rejects
 commands absent from the advertised action set, and sends canonical
-`message.send` as content-only. Consequently copied side-chat/plugin socket code
-and the RimWorld view remain source provenance but are not mounted or requested
-by the current Rust product surface. The absent native Google-login command is
+`message.send` as content-only. Consequently copied plugin socket code and the
+RimWorld view remain source provenance and are not mounted or requested by the
+current Rust product surface. That statement never covered HTTP side chat: the
+active room controller now enables `useRoomSideChat`, and the mounted right/mobile
+panels call absent Rust routes. The absent native Google-login command is
 also rejected at the host-surface boundary rather than being attempted as an
 unregistered Tauri invocation. Central guest creation, recovery, bootstrap, and
 proof-bound local-server registration use their implemented owners and do not
@@ -289,7 +305,7 @@ local-runtime evidence only. The separate 2026-08-26 production-central package
 is the evidence for the guest and server-registration rows above; it is not Google
 OAuth or Public Account settings evidence.
 
-## Stage A feature-candidate delta
+## Historical Stage A feature-candidate delta
 
 The active Stage A candidate removes the discarded conversion and relay prototype
 before adding any new authority. It accepts only a fresh or exact-current Rust
@@ -310,7 +326,7 @@ appearance persistence, local/remote HTTP boundaries, typed desktop issuance, an
 the copied frontend's authenticated object-URL lifecycle are active. Custom channels
 and plugin hosting remain incomplete.
 
-## Stage B local preference exposure delta
+## Historical Stage B local preference exposure delta
 
 The copied room-settings UI now loads and saves the local operator's room and per-channel
 notification preferences through separate one-use read and write grants.
@@ -335,7 +351,7 @@ write grant. The copied channel menu uses this path after admission, while a tok
 pre-admission remote remains failed closed. No local-operator authority, cached
 default, compatibility bearer branch, or client-owned mutation substitutes for it.
 
-## Public Rust slice, active gap, and provenance gate
+## Historical public Rust slice and provenance record
 
 The frontend source, styles, assets, and component hierarchy were copied from the
 original React frontend rather than recreated, but that statement is not parity
