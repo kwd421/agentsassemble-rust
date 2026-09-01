@@ -5755,3 +5755,45 @@ still called roster projection and the removed editor open. This entry and the
 current exposure tables correct that finding without rewriting the historical
 baseline or claiming packaged F-06 completion. Critical ChatGPT Pro cumulative
 re-review and final documentation approval remain pending.
+
+### F-06 packaged identity and search-avatar correction: 2026-09-02
+
+An isolated packaged desktop build with bundle ID
+`app.agentsassemble.rust.f06verify0902` created one fresh human, room, and actual
+Codex Terra, Antigravity Flash, and OpenCode Muse Spark Agent Session. Before a
+provider was selected, the create dialog did not expose the provider-owned nickname
+field. After normal app restart, all three sessions retained their Agent
+Session-owned display name, provider, and model in the roster; the Agent detail
+surface retained runtime configuration without exposing the unsupported identity
+editor. Mention candidates used the same canonical names.
+
+Actual Antigravity and OpenCode turns reached busy/typing, final timeline, and
+message-search states with the canonical Agent Session identity. Antigravity
+returned `F06_TYPING_OK .`; OpenCode returned `F06_OPENCODE_OK`. Both runtimes were
+stopped through the product controls. Codex identity projection passed before and
+after restart, but two real start attempts terminated with
+`runtime_start_recovered_gone`: the original provider start had not completed before
+server recovery, and no Codex provider process was created. That is retained as an
+explicit provider-lifecycle failure; it was not retried again, replaced by another
+provider, or reported as packaged provider completion.
+
+The run also found that a search result with no custom Agent Session avatar rendered
+an author initial while roster and timeline used the provider logo. Commit `e869f42`
+passes the already-canonical `providerKind` into the search item and reuses the
+existing `ProviderLogo` owner. Custom avatar images still take precedence and
+avatarless humans still render an initial. Repackaged verification showed the
+Antigravity and OpenCode provider logos in search and preserved the human initial.
+The change adds no CSS, request, state owner, timer, polling, retry, fallback, or
+compatibility path. `ChannelHeader.tsx` reaches the 500-line structure-review signal
+but retains one header/panel state flow; extracting the small avatar branch would add
+an interface and glue without separating an independent state or invariant owner.
+
+Focused lobby verification passes 18/18. The production frontend emits the unchanged
+150.97/26.87 kB displayed raw/gzip CSS artifact and all 98 files/619 tests pass. A
+fresh complete `make verify`, including real TCP-boundary tests, passes in 228.86
+seconds with a 582,074,368-byte maximum resident set. This records validation cost,
+not a runtime performance improvement. After packaged verification the exact app and
+its isolated profile/cache/WebKit/preferences data were removed; Cargo release
+artifacts reclaimed 1.9 GiB while the 21 GiB debug cache needed for the next
+incremental verification was retained. Critical ChatGPT Pro and Daybreaker Blue High
+review of this correction and final F-06 documentation remain pending.

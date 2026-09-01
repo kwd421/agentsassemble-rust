@@ -436,7 +436,14 @@ participant. Commit `11d3528` removes the incomplete editor and its invalid gene
 attachment/runtime-configure path; it does not invent the missing Agent profile
 mutation or avatar lifecycle owner. Daybreaker Blue High found and approved the
 typing correction, then reported only stale current-state documentation. Packaged
-restart verification and the future complete editor contract keep F-06 open.
+restart verification now confirms canonical identity in roster, mention, typing,
+timeline, and search for Codex Terra, Antigravity Flash, and OpenCode Muse Spark
+sessions. Actual Antigravity and OpenCode turns complete. Codex start instead
+exposes `runtime_start_recovered_gone` and remains an explicit lifecycle failure.
+Correction `e869f42` reuses the existing provider-logo owner for avatarless Agent
+search results while preserving human initials and custom Agent avatars. The Codex
+lifecycle failure and future complete Agent profile mutation/avatar owner keep F-06
+open; neither is hidden by a fallback or placeholder.
 
 ### F-07 — provider catalog and controls overstate real operations
 

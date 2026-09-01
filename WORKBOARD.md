@@ -116,7 +116,16 @@ contracts, findings, or verification journals.
   passes in 244.54 seconds with a 578,846,720-byte maximum resident set. Daybreaker
   Blue High approved the three feature commits and typing correction individually at
   `C0/H0/M0/L0`; its only cumulative/HEAD finding is this stale current-state
-  documentation. Final cumulative approval and packaged F-06 completion remain open.
+  documentation. Isolated packaged verification now confirms canonical identity
+  across restart, roster, mention, typing, timeline, and search for Codex Terra,
+  Antigravity Flash, and OpenCode Muse Spark sessions. Actual Antigravity and
+  OpenCode turns complete with that identity; Codex start instead exposes the exact
+  `runtime_start_recovered_gone` lifecycle failure and remains open without a retry
+  or fallback. Correction `e869f42` reuses the shared provider-logo owner for
+  avatarless Agent Session search results while preserving custom Agent avatars and
+  human initials. A fresh complete `make verify` passes in 228.86 seconds with a
+  582,074,368-byte maximum resident set. Final cumulative approval and the complete
+  Agent profile mutation/asset owner remain open.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
