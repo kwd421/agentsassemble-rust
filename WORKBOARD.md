@@ -36,11 +36,13 @@ contracts, findings, or verification journals.
 - Active task: F-05 frontend exposure correction — gate copied requests,
   polling, and heartbeats whose complete Rust owner does not yet exist. Do not add
   dummy routes, fallback data, timers, or a generic feature framework. The first
-  independently committed batch through `a2b2f41` removes the active Friends,
+  independently committed batch through `87d3d0d` removes the active Friends,
   side-chat, custom-channel, and deferred voice entry paths; a fresh `make verify`
   passed before review. Initial cross-review found three Low dead-state remnants;
-  `a2b2f41` removes them, a fresh complete `make verify` passes, and correction
-  re-review is pending.
+  `a2b2f41` removes them and a fresh complete `make verify` passes. Follow-up
+  re-review found two Low producerless/dead projections plus one Low documentation
+  overclaim; `87d3d0d` and the current documentation correction address them, with
+  a fresh complete `make verify` passing and final re-review pending.
   External-AI/AI-friend invite,
   operator-pairing, companion, and public Google controls plus evidence-backed
   dormant-source cleanup remain in F-05.

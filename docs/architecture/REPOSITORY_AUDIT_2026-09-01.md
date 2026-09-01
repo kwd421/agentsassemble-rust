@@ -272,7 +272,11 @@ no issue and approved `8903445..cf71db4` at `C0/H0/M0/L0`. Daybreaker found thre
 dead-state remnants: mobile side-chat mode state and branches, a producerless canonical
 socket callback, and a permanently-false custom-channel search branch. `a2b2f41`
 removes those owners without replacing them. A fresh complete repository gate passes;
-correction re-review is pending.
+correction re-review confirmed the original three findings closed, then found two Low
+source remnants and one Low documentation overclaim. `87d3d0d` removes the producerless
+`onLobby`/`onRoster` handler contract and consumerless controller projections; the
+verification record is narrowed to the exact side-chat callback removed. Final
+repository gates pass; final re-review is pending.
 
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 

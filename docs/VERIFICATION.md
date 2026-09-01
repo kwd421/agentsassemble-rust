@@ -5479,7 +5479,7 @@ message search retained a permanently-false custom-channel routing branch.
 
 Commit `a2b2f41` removes those three owners rather than adding feature flags or future
 abstractions. Mobile room information now has only its current information state,
-canonical socket callbacks contain only produced events, and search maps its two
+the producerless canonical side-chat callback is absent, and search maps its two
 current scopes directly to `all` or `lobby`. The correction production build passed
 with unchanged exact CSS, 853.72 kB total emitted JavaScript minified and 256.36 kB
 gzip after chunk regrouping; all 103 frontend files and 644 tests passed, followed by
@@ -5487,3 +5487,22 @@ a fresh complete `make verify`: architecture/source-growth/policy/diff gates, Ru
 format/check, the CSS-verified production build, desktop build/Clippy/25 tests, all
 Rust workspace tests including TCP boundary suites, and workspace warning-denied
 Clippy. Correction re-review is pending.
+
+The next manual pass confirmed those original three findings closed. It found two
+additional Low source remnants: `RoomSocketHandlers` still declared producerless
+`onLobby`/`onRoster` callbacks, and the app controller still exported raw mobile
+setters, viewport state, a members setter, and a computed viewer label with no
+consumer. Critical ChatGPT Pro separately found one Low documentation overclaim: the
+record said every canonical callback had a producer even though the deferred plugin
+bridge remains source-only. That finding does not authorize moving the user-deferred
+RimWorld/plugin scope forward.
+
+Commit `87d3d0d` removes only the two producerless handler fields and unused public
+projections/computation while retaining internal mobile gestures, `toggleMembers`,
+current room-event decoding, and the deferred plugin source. This record now names
+only the exact removed side-chat callback. The final candidate production build emits
+853.34 kB total JavaScript minified and 256.30 kB gzip with unchanged exact CSS. A
+fresh complete `make verify` passes the architecture/source-growth/policy/diff gates,
+Rust format/check, CSS-verified production build, all 103 frontend files and 644
+tests, desktop build/Clippy/25 tests, all Rust workspace and TCP boundary tests, and
+workspace warning-denied Clippy. Final manual re-review is pending.
