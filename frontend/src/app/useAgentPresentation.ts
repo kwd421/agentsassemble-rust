@@ -120,10 +120,6 @@ export function useAgentPresentation({
 
   const scopedAgents = agents.filter((agent) => roomHasAgent(activeRoom, agent));
   const scopedViewerParticipantId = guestSession?.agentId || "operator-local";
-  const scopedViewerDisplayName =
-    activeRoomMembers.find(
-      (member) => member.participant_id === scopedViewerParticipantId
-    )?.display_name || guestSession?.displayName || scopedViewerParticipantId;
   const changeAgentActivityVisibility = useCallback(
     (session: { participant_id: string }, visible: boolean) => {
       setAgentActivityVisibility((previous) => {
@@ -174,7 +170,6 @@ export function useAgentPresentation({
     loadProviderUsage,
     quotaViewer,
     scopedAgents,
-    scopedViewerDisplayName,
     changeAgentActivityVisibility,
     scopedMentionables,
     scopedOnlineCount,

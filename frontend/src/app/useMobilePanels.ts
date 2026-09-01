@@ -163,10 +163,7 @@ export function useMobilePanels({ canOpenRoomInfo }: { canOpenRoomInfo: boolean 
 
   return {
     mobileSidebarOpen,
-    setMobileSidebarOpen,
     mobileRoomInfoOpen,
-    setMobileRoomInfoOpen,
-    mobileViewportIsActive,
     openMobileSidebar,
     closeMobileSidebar,
     openMobileRoomInfo,

@@ -1,6 +1,5 @@
 import type {
   LobbyAttachmentRef,
-  LobbyEvent,
   LobbyPostResponse,
   RoomAgentSession,
   RoomEvent,
@@ -16,8 +15,6 @@ import type { ServerProductSurface } from "./types/generated/ServerProductSurfac
 import type { RoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 
 export interface RoomSocketHandlers {
-  onLobby?: (events: LobbyEvent[]) => void;
-  onRoster?: (members: RoomMember[]) => void;
   onRoomSnapshot?: (
     snapshot: RoomSocketSnapshot,
     displayResourceBase: string
