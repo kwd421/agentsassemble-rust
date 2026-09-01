@@ -5467,5 +5467,23 @@ A fresh complete `make verify` passed: architecture, source-growth, policy, and 
 gates; Rust formatting and checks; the exact-CSS production frontend build; all 103
 frontend files and 644 tests; desktop preparation/build, warning-denied Clippy, and
 tests; all Rust workspace tests including real TCP boundary suites; and workspace
-warning-denied Clippy. Exact pushed-range Critical ChatGPT Pro and Daybreaker Blue
-High manual review is pending.
+warning-denied Clippy. The exact pushed range then entered Critical ChatGPT Pro and
+Daybreaker Blue High manual review.
+
+Initial cross-review differed. Critical ChatGPT Pro found no actionable issue and
+approved each commit, exact `8903445..cf71db4`, and HEAD `cf71db4` at
+`C0/H0/M0/L0`. Daybreaker returned three Low findings: reachable mobile side-chat
+mode state and branches remained although no caller supplied content; canonical room
+socket types and projection retained a callback with no decoder/producer; and active
+message search retained a permanently-false custom-channel routing branch.
+
+Commit `a2b2f41` removes those three owners rather than adding feature flags or future
+abstractions. Mobile room information now has only its current information state,
+canonical socket callbacks contain only produced events, and search maps its two
+current scopes directly to `all` or `lobby`. The correction production build passed
+with unchanged exact CSS, 853.72 kB total emitted JavaScript minified and 256.36 kB
+gzip after chunk regrouping; all 103 frontend files and 644 tests passed, followed by
+a fresh complete `make verify`: architecture/source-growth/policy/diff gates, Rust
+format/check, the CSS-verified production build, desktop build/Clippy/25 tests, all
+Rust workspace tests including TCP boundary suites, and workspace warning-denied
+Clippy. Correction re-review is pending.

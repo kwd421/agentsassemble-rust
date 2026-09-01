@@ -76,8 +76,8 @@ boundary resumes explicitly at `Historical public Rust slice and provenance reco
 | Participant role/mute/self-leave | implemented; kick/re-add and room lifecycle are not |
 | Agent Session create/configure/lifecycle | partial; provider completion, cleanup, and profile SSoT are reopened |
 | Friends | server owner absent; the normal-startup and room-invite entry paths are inactive through `f687667`; dormant copied source remains pending review |
-| Side chat | server owner absent; active room, mobile, and RimWorld entry paths are inactive through `eecdb20`; dormant copied source remains pending review |
-| Custom text channels | server message owner absent; create/select/render entry paths are inactive through `d058af8`, so the copied poller is outside the production graph |
+| Side chat | server owner absent; active room, mobile, and RimWorld entry paths are inactive through `eecdb20`, and `a2b2f41` removes the leftover mobile-mode and producerless socket-callback state; dormant copied source remains pending review |
+| Custom text channels | server message owner absent; create/select/render entry paths are inactive through `d058af8`, so the copied poller is outside the production graph; `a2b2f41` restricts active search routing to `all`/`lobby` |
 | Voice | user-deferred; the custom-channel view is outside the production graph through `d058af8`, so its copied presence poll and join heartbeat do not run |
 | Mafia, RimWorld | user-deferred; no production request/poll/heartbeat is permitted |
 | Accounts/Google/operator pairing/companion | partial or absent; copied controls exceed current owners |

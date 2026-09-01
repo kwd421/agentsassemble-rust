@@ -267,8 +267,12 @@ referenced by the CSS provenance import owner; this batch does not claim their d
 `FrontendUpdateNotice` remains unmounted. The next F-05 review must decide their removal
 from actual reachability and CSS ownership evidence, then assess the still-exposed
 external-AI/AI-friend invite, operator-pairing, companion, and public Google controls.
-The candidate passed the complete repository gate; exact pushed-range cross-review is
-pending.
+The initial candidate passed the complete repository gate. Critical ChatGPT Pro found
+no issue and approved `8903445..cf71db4` at `C0/H0/M0/L0`. Daybreaker found three Low
+dead-state remnants: mobile side-chat mode state and branches, a producerless canonical
+socket callback, and a permanently-false custom-channel search branch. `a2b2f41`
+removes those owners without replacing them. A fresh complete repository gate passes;
+correction re-review is pending.
 
 ### F-06 — Agent Session identity SSoT is reversed in frontend projection
 
