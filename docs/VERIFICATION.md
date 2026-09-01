@@ -5732,8 +5732,26 @@ participant contributes room role while an Agent Session with the same participa
 ID contributes display name, avatar, and provider. A missing session avatar does not
 fall back to participant identity. Current and paged lobby history and lobby search
 therefore consume the same Agent Session identity map. Focused projection/search
-tests pass 35/35 and the full frontend passes 98 files/618 tests. Roster projection
-and the incomplete Agent identity editor remain open; this candidate does not claim
-the full F-06 SSoT correction or a runtime performance improvement. Complete
-repository verification passes in 239.05 seconds with a 579,043,328-byte maximum
-resident set; external review is pending.
+tests pass 35/35 and the full frontend passes 98 files/618 tests.
+
+Correction `f1edead` replaces a fabricated identity-changing `agent.configure`
+fixture with the real runtime-only contract. Commit `fe568bb` makes Agent Session
+identity authoritative in desktop/mobile rosters while retaining participant-owned
+role, mute, and membership. Commit `11d3528` removes the unsupported Agent identity
+editor, generic profile-attachment path, and related dead CSS while preserving human
+profile editing and Agent runtime configuration. Commit `e0a681d` applies canonical
+Agent identity to mention candidates. Daybreaker Blue High then found the same
+participant-first identity defect in typing/progress labels; correction `97816b5`
+closes both paths and its focused 7 tests pass. The full frontend passes 98
+files/618 tests and complete repository verification passes in 244.54 seconds with a
+578,846,720-byte maximum resident set. No change claims a runtime performance gain,
+adds a route, fallback, timer, polling, retry, compatibility path, or replacement
+abstraction.
+
+Daybreaker Blue High approved `fe568bb`, `11d3528`, `e0a681d`, `97816b5`, and exact
+correction range `e0a681d..97816b5` individually at `C0/H0/M0/L0`. Its sole Low on
+the corrected cumulative ranges and HEAD was stale current-state documentation that
+still called roster projection and the removed editor open. This entry and the
+current exposure tables correct that finding without rewriting the historical
+baseline or claiming packaged F-06 completion. Critical ChatGPT Pro cumulative
+re-review and final documentation approval remain pending.

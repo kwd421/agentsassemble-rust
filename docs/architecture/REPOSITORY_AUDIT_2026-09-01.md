@@ -429,8 +429,14 @@ Candidate `fbebad6` corrects the first shared projection owner. Participant data
 projected first for room role, then an Agent Session with the same participant ID
 authoritatively replaces display name, avatar, and provider. Current/paged lobby
 history and lobby search use this one map. Focused tests pass 35/35 and the complete
-frontend passes 98 files/618 tests. Roster projection still prefers participant
-identity and the incomplete editor remains exposed, so F-06 remains open.
+frontend passes 98 files/618 tests. Subsequent commits `fe568bb`, `e0a681d`, and
+`97816b5` apply the same owner to desktop/mobile rosters, mentions, and
+typing/progress labels without moving room role, mute, or membership out of the
+participant. Commit `11d3528` removes the incomplete editor and its invalid generic
+attachment/runtime-configure path; it does not invent the missing Agent profile
+mutation or avatar lifecycle owner. Daybreaker Blue High found and approved the
+typing correction, then reported only stale current-state documentation. Packaged
+restart verification and the future complete editor contract keep F-06 open.
 
 ### F-07 — provider catalog and controls overstate real operations
 

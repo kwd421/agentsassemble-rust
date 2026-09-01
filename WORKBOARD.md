@@ -103,12 +103,20 @@ contracts, findings, or verification journals.
   removes the unimported Python-mirrored provider-permission helper; deferred
   Mafia/RimWorld/voice and named Phase 6/8 surfaces remain untouched. The resulting
   production CSS is 152.64/27.14 kB and the frontend passes 98 files/617 tests.
-  Candidate `fbebad6` begins F-06 by making Agent Session identity authoritative in
+  Commit `fbebad6` begins F-06 by making Agent Session identity authoritative in
   the shared canonical timeline/history/search profile map while retaining room role
-  from the participant; focused 35 tests and the full 98-file/618-test frontend pass.
-  Roster projection and the incomplete Agent identity editor remain open, so F-06 is
-  not claimed complete. A fresh complete `make verify` passes in 239.05 seconds with
-  a 579,043,328-byte maximum resident set. Cross-review is pending.
+  from the participant. Correction `f1edead` makes the configure regression use the
+  real runtime-only contract rather than an impossible identity mutation. Commits
+  `fe568bb`, `e0a681d`, and `97816b5` apply the same ownership to desktop/mobile
+  rosters, mentions, and typing/progress labels; participant data still owns room
+  role, mute, membership, and permissions. Commit `11d3528` hides the incomplete
+  Agent identity editor instead of routing profile fields through runtime configure
+  or the generic attachment owner; human profile and Agent runtime settings remain.
+  The full frontend passes 98 files/618 tests, and a fresh complete `make verify`
+  passes in 244.54 seconds with a 578,846,720-byte maximum resident set. Daybreaker
+  Blue High approved the three feature commits and typing correction individually at
+  `C0/H0/M0/L0`; its only cumulative/HEAD finding is this stale current-state
+  documentation. Final cumulative approval and packaged F-06 completion remain open.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
