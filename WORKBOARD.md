@@ -700,6 +700,41 @@ contracts, findings, or verification journals.
   gates in 190.51 seconds with 770,097,152-byte maximum RSS. No TokenRouter credential
   was available for an authorized real completion, so real-turn evidence remains open
   for the Phase 1 matrix rather than being simulated.
+- Implemented pending Phase 1 whole-phase review: Custom API backend at `22d37aa`
+  and frontend connection at `5cd595f`. The provider accepts one caller-selected
+  direct HTTPS OpenAI-compatible base URL or complete `/chat/completions` URL and one
+  required model ID. Selection normalizes that URL once, stores it only in the private
+  durable Agent Session, includes it in runtime profile identity, and runtime launch
+  accepts only the identical normalized authority. The public session projection
+  exposes neither the URL nor its credential. Runtime profile version 5 and schema
+  version 56 reject older state without migration or compatibility decoding.
+  The concrete threat was credentialed SSRF: an arbitrary hostname could otherwise
+  send the Custom API bearer credential to loopback, link-local, private, reserved, or
+  DNS-rebound addresses. The Custom API owner therefore requires HTTPS, rejects
+  embedded credentials/query/fragment, local names and non-public IP literals, disables
+  proxies and redirects, and validates every DNS answer on each connection. Fixed-host
+  providers retain their existing platform resolver/proxy behavior; the extra resolver
+  and its DNS lookup cost exist only while a Custom API runtime is launched. A mixed
+  public/private DNS answer fails closed, and local-network models remain the Local
+  provider's responsibility. No polling, heartbeat, retry, cache, fallback, background
+  task, or silent error path was added.
+  The catalog registration derives both caller-input requirements from one
+  `ProviderConfigurationAuthority` enum, preventing two boolean authorities inside the
+  registry; the two public capability bits are only its frontend projection. Shared
+  code owns HTTPS/SSE/tool mechanics, while endpoint normalization, credential account,
+  model ID, request shape, and visible failures remain Custom API-owned. The 856-line
+  selection file was reviewed at the 800-line strong warning: it still owns one
+  fail-closed catalog-to-session transition, while the new Custom API tests are a
+  separate 100-line module; extracting the transition would increase state passing and
+  interfaces without separating an invariant. The 661-line registration table likewise
+  remains one declarative discovery/launch owner.
+  Direct tests cover URL normalization, IPv4/IPv6 and mapped-address denial, runtime
+  revalidation, catalog shape, selection/profile identity, private projection, isolated
+  credential HTTP authority, and the actual modal request. A fresh complete
+  `make verify` passes all 100 frontend files/664 tests, desktop, Rust unit/integration,
+  real TCP/WebSocket, generated-binding, Clippy, policy, structure, diff, CSS, and
+  artifact gates. No Custom API credential or user endpoint was supplied for an
+  authorized real completion, so real-turn evidence remains open for the Phase 1 matrix.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
