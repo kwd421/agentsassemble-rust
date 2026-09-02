@@ -5990,5 +5990,7 @@ Critical-web Pro and Daybreaker each manually approve individual `5b94ac6`,
 `1959a08`, and `d081761` at `C0/H0/M0/L0`. Each revises exact
 `67303e0..d081761` and HEAD `d081761` only at `C0/H0/M0/L1` because the preceding
 current-state records still called the now-removed model substitution open. This
-documentation correction addresses that single shared Low; final correction
-re-review remains pending.
+documentation correction addresses that single shared Low. Critical-web Pro and
+Daybreaker each then manually approve individual `e13210f`, corrected exact
+`67303e0..e13210f`, and HEAD `e13210f` at `C0/H0/M0/L0` with no actionable
+finding.

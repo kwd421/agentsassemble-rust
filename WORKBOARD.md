@@ -196,8 +196,10 @@ contracts, findings, or verification journals.
   preferred-missing packaged flow remains `unknown` because every current catalog
   contained its preference. Critical-web Pro and Daybreaker approve each source
   commit at `C0/H0/M0/L0` and revise exact `67303e0..d081761` and HEAD `d081761`
-  only at `C0/H0/M0/L1` for stale current-state documentation corrected here. Final
-  correction re-review remains pending; no broader provider-completion claim is made.
+  only at `C0/H0/M0/L1` for stale current-state documentation corrected in
+  `e13210f`. Each then approves individual `e13210f`, corrected exact
+  `67303e0..e13210f`, and HEAD `e13210f` at `C0/H0/M0/L0`. No broader
+  provider-completion claim is made.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

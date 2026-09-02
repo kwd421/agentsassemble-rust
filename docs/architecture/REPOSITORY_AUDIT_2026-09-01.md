@@ -459,7 +459,7 @@ F-06 `8903445..7566d3f`, and HEAD `7566d3f` at `C0/H0/M0/L0`; the superseded
 
 ### F-07 — provider catalog and controls overstate real operations
 
-Disposition: `Fixed through d081761; correction review pending`; medium
+Disposition: `Fixed through d081761; reviewed through e13210f`; medium
 product/structure impact.
 
 - Before `5b94ac6`, `catalog.rs` substituted the first discovered model when the
@@ -506,8 +506,10 @@ product/structure impact.
   one candidate. Commit `d081761` removes the producerless `stale_cache` source,
   status branch, and test without replacing it. Both manual reviewers approve each
   source commit at `C0/H0/M0/L0`; each revises exact `67303e0..d081761` and HEAD
-  `d081761` only at `C0/H0/M0/L1` for the stale current-state records corrected here.
-  Final correction re-review remains pending.
+  `d081761` only at `C0/H0/M0/L1` for the stale current-state records corrected in
+  `e13210f`. Each then approves individual `e13210f`, corrected exact
+  `67303e0..e13210f`, and HEAD `e13210f` at `C0/H0/M0/L0` with no actionable
+  finding.
 
 Require an exact verified preferred model or explicit unavailable/unselected state.
 Advertise login, credential, usage, refresh, and model operations only from their
