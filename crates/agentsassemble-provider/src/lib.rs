@@ -18,6 +18,8 @@ mod codex_identity;
 mod configuration;
 mod credential_provider;
 mod credentials;
+#[cfg(test)]
+mod cursor_acp_protocol;
 mod custom_api;
 mod deepseek;
 mod driver;
