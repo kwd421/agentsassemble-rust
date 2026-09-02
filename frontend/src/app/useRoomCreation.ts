@@ -4,6 +4,7 @@ import { createRoom } from "../api";
 import { ApiError } from "../lib/apiErrors";
 import { createFreshRoom, type RoomDockItem } from "../lib/roomDockModel";
 import type { RoomDirectoryAuthority } from "../lib/roomDirectoryContract";
+import { createSecureRequestId } from "../lib/secureRequestId";
 import {
   RoomDirectoryOperationSuperseded,
   type RoomDirectoryContinuity,
@@ -112,7 +113,7 @@ export function useRoomCreation({
     try {
       continuity = captureRoomDirectoryContinuity();
       const intent = pendingRef.current || {
-        requestId: globalThis.crypto.randomUUID(),
+        requestId: createSecureRequestId(),
         room: createFreshRoom(),
       };
       pendingRef.current = intent;

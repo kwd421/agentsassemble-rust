@@ -30,6 +30,7 @@ import {
   type DesktopBootstrapGrant,
 } from "../../lib/desktopBridge";
 import { rememberGuestProfile } from "../../lib/deviceIdentity";
+import { createSecureRequestId } from "../../lib/secureRequestId";
 import {
   hydratePersistedRoom,
   mergeServerRoomsIntoDock,
@@ -86,7 +87,7 @@ export default function StartupIdentityGate({
   const [status, setStatus] = useState("저장된 사용자 확인 중");
   const [error, setError] = useState("");
   const googleAbortController = useRef<AbortController | null>(null);
-  const bootstrapRequestId = useRef(globalThis.crypto.randomUUID());
+  const bootstrapRequestId = useRef(createSecureRequestId());
 
   useEffect(
     () => () => {

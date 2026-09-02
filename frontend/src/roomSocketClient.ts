@@ -33,6 +33,7 @@ import { providerCatalogIsValid } from "./lib/providerCatalogContract";
 import { ROOM_HISTORY_MAX_EVENTS } from "./types/generated/ROOM_HISTORY_WIRE";
 import { MAX_ROOM_SOCKET_MESSAGE_BYTES } from "./types/generated/ROOM_SOCKET_WIRE";
 import { scheduleUncertainCommandRetry, type PendingCommandRetryState } from "./roomSocketRetryPolicy";
+import { createSecureRequestId } from "./lib/secureRequestId";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -107,7 +108,6 @@ export function openRoomSocket(
   let reconnectTimer = 0;
   let reconnectAttempt = 0;
   let lastSeq = 0;
-  let requestCounter = 0;
   let transportReady = false;
   let sendPendingForConnection: (() => void) | null = null;
   let stopKeepaliveForConnection: (() => void) | null = null;
@@ -115,14 +115,6 @@ export function openRoomSocket(
   const requestTicket = dependencies.getTicket || getWsTicket;
   const createSocket = dependencies.createSocket || ((url: string) => new WebSocket(url));
   const pending = new Map<string, PendingRoomCommand>();
-
-  function nextRequestId() {
-    if (typeof crypto !== "undefined" && typeof crypto.randomUUID === "function") {
-      return crypto.randomUUID();
-    }
-    requestCounter += 1;
-    return `web-${Date.now().toString(36)}-${requestCounter.toString(36)}`;
-  }
 
   function sendPending() {
     sendPendingForConnection?.();
@@ -622,7 +614,16 @@ export function openRoomSocket(
         ));
         return;
       }
-      const requestId = nextRequestId();
+      let requestId: string;
+      try {
+        requestId = createSecureRequestId();
+      } catch {
+        reject(new RoomSocketSayError(
+          "Secure request identity is unavailable.",
+          "request_id_unavailable"
+        ));
+        return;
+      }
       const encoded = JSON.stringify({
         op: "command",
         request_id: requestId,

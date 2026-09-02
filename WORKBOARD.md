@@ -36,6 +36,16 @@ contracts, findings, or verification journals.
   web reviewer to very-high. Review-required corrections are re-reviewed before the
   phase closes. This latest user direction replaces the earlier per-batch external
   review cadence; independent sub-1,000-line commits remain mandatory.
+- Completed: F-14. Room commands no longer substitute a wall-clock/counter identifier
+  when WebCrypto UUID generation is unavailable. One browser request-ID owner now
+  serves bootstrap, room creation, room admission, and room commands; durable client
+  identity remains separate because it has a different storage lifecycle. A room
+  command fails before pending-state insertion, its deadline, or socket transmission
+  without secure request identity, while the existing exact serialized-ID replay
+  contract is unchanged. The focused unavailable-identity regression, all 653 frontend
+  tests, the production TypeScript/Vite build, and the copied CSS gate pass. This
+  removes a concrete replay-identity downgrade without adding state, retry, fallback,
+  polling, or a broader identifier abstraction.
 - Completed: D-01 at `a7949bd`; the uncalled HTTP challenge/ticket bootstrap and
   startup secret are absent, while private-control and admitted-human socket ticket
   issuance remain.

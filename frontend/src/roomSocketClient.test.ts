@@ -78,10 +78,25 @@ function providerAvailability() {
 
 afterEach(() => {
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
 describe("bounded canonical room socket", () => {
+  it("rejects a command before admission when secure request identity is unavailable", async () => {
+    const { handle, sockets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    expect(sockets[0].sent).toHaveLength(1);
+    vi.stubGlobal("crypto", {});
+
+    await expect(handle.command("message.send", { content: "blocked" })).rejects.toMatchObject({
+      category: "request_id_unavailable",
+    });
+    expect(sockets[0].sent).toHaveLength(1);
+    handle.close();
+  });
+
   it("holds commands and readiness until the exact finite high-water is delivered", async () => {
     const onOpen = vi.fn();
     const onEvents = vi.fn();

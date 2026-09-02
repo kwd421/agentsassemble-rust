@@ -1,5 +1,6 @@
 import { ApiError } from "./apiErrors";
 import type { RoomGuestSession } from "./roomGuestSession";
+import { createSecureRequestId } from "./secureRequestId";
 
 export const ROOM_ADMISSION_INTENT_STORAGE_KEY =
   "agentsassemble.roomAdmissionIntent.v1";
@@ -373,12 +374,17 @@ export async function loadOrCreateRoomAdmissionIntent(
   const existing = await loadRoomAdmissionIntent(input);
   if (existing?.kind === "pending") return existing.intent;
   if (existing) unavailable();
-  if (typeof globalThis.crypto?.randomUUID !== "function") unavailable();
   const fingerprints = await expectedFingerprints(input);
+  let requestId: string;
+  try {
+    requestId = createSecureRequestId();
+  } catch {
+    unavailable();
+  }
   const stored: StoredPendingRoomAdmissionIntent = {
     version: 1,
     ...fingerprints,
-    requestId: globalThis.crypto.randomUUID(),
+    requestId,
     meetingId: input.meetingId,
     displayName: input.displayName,
     avatarImage: input.avatarImage,
