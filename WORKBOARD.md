@@ -263,6 +263,13 @@ contracts, findings, or verification journals.
     compatibility path, or provider-request surface is introduced; focused frontend
     tests, generated bindings, the production build, architecture/diff gates, and a
     complete verification pass.
+  - Initial manual review of public `a07ecdf` is complete. Critical-web Pro found one
+    cumulative Medium: socket event/settings bodies still accepted partial generated
+    projections. Daybreaker found three Lows: the same boundary gap, catalog-absent
+    controls and manually unbound key lists, and incomplete Agent Session participant/
+    create-ACK binding. Independent corrections `77eea8a`, `fd473e8`, and `9320494`
+    close those roots. Re-review and complete repository verification remain pending;
+    F-11 is not closed.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

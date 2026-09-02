@@ -674,6 +674,37 @@ Implementation plan and evidence:
    owned role/join/mute semantics are derived from generated `Participant` and proven
    through the real snapshot/event paths.
 
+Initial manual cross-review of public `a07ecdf` found four actionable issues. Critical-
+web Pro assigned one cumulative Medium to partial `RoomEvent`/`PublicRoomSettings`
+acceptance. Daybreaker assigned one Low to that boundary, one Low to catalog-absent
+synthetic controls and manually unbound generated key lists, and one Low to missing
+Agent Session participant/create-ACK cohesion. Pro approved every individual source
+commit but revised cumulative `dff4b65..a07ecdf` and HEAD at `C0/H0/M1/L0`;
+Daybreaker revised the three source commits and cumulative HEAD at `C0/H0/M0/L3`.
+
+Correction `77eea8a` makes the endpoint-owned socket validator require current event
+version, timestamp, exact nonempty actor, generated optional-field types, and exact
+public room settings. Settings ACKs now require the event and result projections to
+match field-by-field; the downstream actor projection no longer substitutes flat
+legacy fields or an empty identity. The old `activity_plugin` default is absent.
+Correction `fd473e8` displays only controls actually serialized by the catalog and
+compile-ties catalog/provider/control/option key lists to generated types. Correction
+`9320494` requires nonempty room/session/participant identity, binds state events to
+their participant, and requires the created event, top-level Participant, and top-
+level Agent Session projections to agree.
+
+The concrete threat was an authenticated but malformed or conflicting socket body
+crossing the canonical browser boundary and becoming a second authority. The added
+work stays at that owner: one room-settings comparison over the server's existing
+50-channel maximum and one create-ACK comparison over 38 Agent Session plus 11
+Participant fields. It adds no steady task, timer, polling, heartbeat, retry,
+fallback, compatibility path, cache, or framework. The accepted trade-off is this
+bounded admission work and a current 817.95 kB production JavaScript artifact in
+exchange for terminal rejection before projection; no throughput or size improvement
+is claimed. Focused correction tests pass, all 97 frontend files/631 tests pass, and
+the production TypeScript/Vite build plus original CSS gate pass. Complete repository
+verification and correction re-review remain pending, so no final approval is claimed.
+
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,
 alternate harnesses, Agent profile mutation, voice, and Mafia remain separate future
