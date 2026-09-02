@@ -619,6 +619,37 @@ universal decoder: snapshot, live event, history, search, and provider-request
 boundaries keep separate finite envelopes, errors, and runtime rejection. Verify
 them together because they currently consume the split owners.
 
+Implementation plan and evidence:
+
+1. Remove the orphan `generatedRoomEvent.ts` and make live, history, and search use
+   the real `ts-rs` `RoomEvent`/`PublicRoomSettings` output. Dynamic event extras stay
+   local to the boundary that understands them; no replacement global event union is
+   introduced.
+2. Replace the handwritten provider catalog interfaces with aliases of the generated
+   types and one socket-local finite validator. Keep `interactive`, which current Rust
+   really serializes. Remove `work_harness_available`, `custom_endpoint`,
+   `custom_model`, and public `executable`, which current Rust neither serializes nor
+   accepts as catalog-owned controls. React currently retains the catalog and a second
+   independently parsed provider array per room and performs two state updates per
+   catalog transition; the Rust owner already bounds one public catalog at 48 KiB, so
+   retain only the catalog state and derive its provider list without claiming a wire-
+   size reduction.
+3. Derive the browser Agent Session and room-member projection from generated
+   `AgentSession` and `Participant`. Reuse one exact Participant/Agent Session field
+   schema for snapshot and event rejection, while history pagination, search context,
+   live sequencing, catalog update, and command ACKs keep separate error semantics.
+   Remove copied session diagnostics, `share_activity`, legacy participant kinds, and
+   the independent member `thinking` signal because no current Rust producer owns
+   them. The local viewer-only activity-visibility preference remains a UI projection.
+
+No frontend provider-request consumer remains after the reviewed F-04 removal, so
+this correction verifies its absence instead of recreating it. Custom providers,
+alternate harnesses, Agent profile mutation, voice, and Mafia remain separate future
+product slices. Completion requires focused boundary tests, generated bindings,
+production TypeScript/Vite output, repository structure/diff gates, and complete
+verification, with each of the three source changes independently buildable and
+rollbackable below 1,000 changed lines.
+
 ### F-12 — one DeepSeek turn has no complete wall-clock/cost budget
 
 Disposition: `Measure and bound at the owning turn`; medium resource/cost risk.
