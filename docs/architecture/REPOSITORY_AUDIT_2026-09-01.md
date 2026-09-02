@@ -698,13 +698,30 @@ crossing the canonical browser boundary and becoming a second authority. The add
 work stays at that owner: one room-settings comparison over the server's existing
 50-channel maximum and one create-ACK comparison over 38 Agent Session plus 11
 Participant fields. It adds no steady task, timer, polling, heartbeat, retry,
-fallback, compatibility path, cache, or framework. The accepted trade-off is this
-bounded admission work and a current 818.10 kB production JavaScript artifact in
-exchange for terminal rejection before projection; no throughput or size improvement
-is claimed. Focused correction tests pass, all 98 frontend files/633 tests pass, and
-the production TypeScript/Vite build plus original CSS gate pass. Fresh complete
+fallback, compatibility path, cache, or framework. The accepted trade-off at reviewed
+HEAD `1c9f397` was this bounded admission work and an 818.10 kB production JavaScript
+artifact in exchange for terminal rejection before projection; no throughput or size
+improvement is claimed. Focused correction tests pass, all 98 frontend files/633 tests
+pass, and the production TypeScript/Vite build plus original CSS gate pass. Fresh complete
 repository verification passes every gate in 163.03 seconds with 788,037,632-byte
-maximum RSS. Correction re-review remains pending, so no final approval is claimed.
+maximum RSS.
+
+Daybreaker's first correction re-review returned `REVISE — C0/H0/M1/L1`. The Medium
+was a reachable create/start mismatch: Rust commits `agent_session_created`, join,
+attach, and final `agent_session_state` events for the default startable-provider UI
+path, but the browser required the ACK's final event to remain the creation event. The
+server also replaced `result.event` without updating `result.event_seq`. The Low was
+the workboard's stale use of “Current defect” and premature root-closure wording.
+Correction `71acb41` updates the final sequence at the persistence owner and validates
+the exact four-event creation/start transition, its nested start projection, and the
+deduplicated replay; stopped creation remains the separate one-event contract. This is
+bounded ACK admission only and adds no task, retry, timer, polling, fallback, or
+compatibility decoder. Persistence create/start tests (4), the actual server TCP
+create/start/replay boundary test, frontend contract tests (5), TypeScript/Vite and
+original CSS build, and architecture/policy gates pass. The focused build reports an
+820.14 kB production JavaScript artifact as an observation only. Complete verification
+of this follow-up and both correction re-reviews remain pending, so no final approval
+is claimed.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,
