@@ -816,6 +816,41 @@ contracts, findings, or verification journals.
   664 tests, desktop 25, domain 57, persistence 243, protocol 6, provider 186, server
   88, and every real TCP/WebSocket suite in 204.22 seconds with 2,012,725,248-byte
   maximum RSS. These are verification costs, not a Cursor runtime performance claim.
+- Implemented pending Phase 1 whole-phase review: Grok official-ACP vertical through
+  `0365a2b`, `7593404`, `6dd2016`, and contract tests `daa8fa0`. Read-only comparison
+  against original `d5046473` confirms that the current product catalog excludes
+  `[model.<id>]` entries from the native `grok models` inventory and launches the
+  selected model as `grok [--permission-mode acceptEdits] agent --model <id>
+  --reasoning-effort <low|medium|high> stdio`. The Rust path omits the superseded
+  one-shot JSON/resume, transcript, print, and compatibility paths.
+  One shared typed ACP client now owns protocol initialization, new/load session,
+  prompt output, cancellation, and permission responses for Cursor and Grok. One
+  shared ACP runtime separately owns verified-process custody, pipes, bounded stderr
+  drainage, and private RoomPortal lifetime. Provider differences remain local:
+  Cursor confirms and selects a session model and rejects all permission requests;
+  Grok requires the process-selected initialization model before opening a session
+  and permits only an exact canonical RoomPortal tool while the matching session,
+  turn, and room observation are active. Conflicting identities, prefix/suffix
+  impostors, inactive observations, native tools, and every other permission request
+  fail closed. Native Grok tool permission remains explicitly unavailable pending
+  whole-matrix hardening rather than receiving a broad approval path.
+  Grok catalog discovery performs one bounded eight-second owned process probe and
+  one optional two-second, 1 MiB-bounded configuration read per discovery. It adds no
+  steady timer, polling, heartbeat, retry, fallback, transcript, silently ignored
+  catalog failure, or second catalog cache. Provider state is isolated in a stable
+  private `0700` directory keyed by room, Agent Session, and runtime profile beneath
+  the database state root; the user's login file is referenced without copying
+  credential data.
+  ACP lines remain capped at 256 KiB, assistant output at 128 KiB, and protocol
+  handshakes at ten seconds, while ordinary long turns receive no invented whole-turn
+  timeout. The common void observation-abort callback and its ignored cleanup result
+  remain open Phase 1 matrix work; this slice does not claim that contract complete.
+  The four focused ACP/Grok contract groups pass, all 191 provider tests pass, all-
+  target provider Clippy is warning-free, and architecture/source-policy gates pass.
+  Static inspection of the installed official client found `grok 1.0.5`, the
+  `grok agent stdio` entry point, protocol V1, load-session and HTTP MCP capability,
+  and an exact initialized model receipt. No prompt or real provider turn was sent;
+  the authorized Grok matrix flow remains open rather than being simulated.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop

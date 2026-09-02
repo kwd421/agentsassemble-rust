@@ -634,10 +634,33 @@ exclusive provider identity, so one provider or model family may appear in multi
 groups.
 This is also a repository-wide file-boundary rule: independently changing owners
 are split before the source ceiling, while code that must change atomically to
-preserve one invariant remains together. The current first-bundle runtime still has
-fixed Codex, Antigravity, and OpenCode discovery/launch branches and accepts only the
-builtin execution harness; that fixed branching is current truth, not the target
-shape.
+preserve one invariant remains together. The compile-time provider registry now owns
+catalog discovery and runtime launch dispatch; provider-specific catalog, command,
+credential, endpoint, and protocol rules remain in their provider modules instead of
+becoming registry conditionals. The production runtime still accepts only the
+builtin execution harness; alternate-harness experiments remain deferred.
+
+ACP providers use the maintained `agent-client-protocol` implementation. One typed
+ACP client owns protocol-V1 initialization, new/load session, exact model receipt,
+prompt output, permission response, cancellation receipt, and poisoned-connection
+state. One ACP runtime separately owns the verified executable, process tree, pipes,
+stderr drainage, and private RoomPortal lifetime. Cursor selects the model through
+the session configuration receipt and rejects every permission request. Grok binds
+the model in its exact process command and requires the initialization
+`modelState.currentModelId` receipt before it creates or loads a session. Grok grants
+`allow_once` only for an exact canonical RoomPortal tool during the current bound
+session, turn, and room observation; a conflicting tool identity, inactive
+observation, native tool, or other permission request is rejected or cancelled.
+Agent-initiated native Grok tool permission therefore remains unavailable pending the
+Phase 1 matrix hardening instead of receiving a permissive default.
+
+Grok keeps its CLI-owned conversation state in a private `0700` directory derived
+from the room, Agent Session, and runtime-profile identity under the database state
+root. `GROK_HOME` points only there while `GROK_AUTH_PATH` names the user's existing
+login file without copying it. Catalog discovery separately reads at most 1 MiB of
+the user's Grok configuration within two seconds solely to exclude registered custom
+models, then runs one owned eight-second `grok models` probe. Neither path adds a
+steady timer, polling loop, retry, transcript, output parser, or fallback runtime.
 
 An Agent Session's configured and desired state is durable room state. Its public projection deliberately excludes workspace paths, executable paths, filesystem identities, runtime handles, provider conversation identities, lifecycle intents, and the runtime profile key/version; those fields exist only in the private durable record. Exact workspace input is canonicalized without text cleanup. The workspace identity and the executable identity—bound to both its opened filesystem object and complete bytes—are revalidated between a short replay transaction and the final write transaction. The final transaction reauthorizes the room and rechecks command replay before committing, while slow filesystem work never holds the single SQLite writer. Filesystem validation uses a fixed-capacity set of detached standard threads with deadlines; a stalled operation retains its permit until it actually exits but cannot make Tokio runtime shutdown join a blocked filesystem worker. Rooms admit at most 64 sessions so non-event snapshot metadata remains bounded. Live provider processes and their task handles are observed resources owned by one server supervisor. Lifecycle effects begin only from committed intent and report completion through the room mutation owner. Stop confirmation is durably marked before finalization so a retry cannot repeat an already-applied external effect. Replayed commands reuse their durable result before consulting a newer catalog or launching an effect.
 

@@ -6161,3 +6161,37 @@ and installed-store failure contracts remain. No schema, SQL, provider process,
 real credential mutation, source-selection framework, task, timer, polling,
 heartbeat, retry, compatibility path, fallback, placeholder, or swallowed failure
 was added.
+
+### Grok official ACP static and contract boundary: 2026-09-03
+
+Read-only comparison against original `d5046473` confirmed the reachable
+`grok_live_session`/`acp_stdio` runtime, exact `grok` command ordering, and custom-
+model exclusion rule. Static local inspection, without a provider prompt, found
+`grok 1.0.5`, the official `grok agent stdio` entry point, protocol V1, load-session
+and HTTP MCP support, and the exact process-selected initialized model receipt.
+
+Commits `0365a2b` and `7593404` establish one typed ACP protocol owner and one ACP
+process/RoomPortal owner shared with Cursor. Commit `6dd2016` connects the Grok-owned
+catalog, command, profile validation, private state directory, model receipt,
+permission policy, turn result, exact cancel receipt, and stop path. Commit `daa8fa0`
+pins the failure boundaries without sleeps: a mismatched initialized model poisons
+the connection, only an exact active RoomPortal tool receives `allow_once`, custom
+models cannot enter the native catalog, and runtime-profile state directories are
+stable and isolated with private permissions.
+
+The focused ACP and Grok groups pass eight tests in total, the complete provider
+target passes all 191 tests in 83.38 seconds, all-target provider Clippy passes with
+warnings denied, and the architecture, source-growth, policy, formatting, and diff
+checks pass. Source review confirms the new discovery/runtime adds no polling,
+heartbeat, retry, fallback, transcript, print, second catalog cache, or background
+cleanup task. One catalog refresh costs at most one eight-second owned model probe
+and one optional two-second/1 MiB-bounded configuration read; the steady-state
+runtime owns one ACP process, one private RoomPortal, and bounded protocol/output
+buffers. These are code
+and deterministic verification bounds, not real-turn latency or memory measurements.
+
+No real Grok turn, credential mutation, packaged frontend, or Computer Use session
+was started. Grok/Codex Luna/OpenCode Muse Spark real-flow evidence remains open for
+the Phase 1 matrix. The existing void observation-abort result is also explicitly
+open for phase-wide typed cleanup; this section does not turn that incomplete
+contract into a passing claim.
