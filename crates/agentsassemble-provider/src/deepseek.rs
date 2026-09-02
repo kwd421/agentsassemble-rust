@@ -20,11 +20,10 @@ use crate::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
     },
-    remote_https::direct_client,
+    remote_https::fixed_endpoint_client,
     room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
 };
 
-const DEEPSEEK_API_HOST: &str = "api.deepseek.com";
 const CHAT_COMPLETIONS_URL: &str = "https://api.deepseek.com/chat/completions";
 const MAX_REQUEST_BYTES: usize = 256_000 - 16_384 - 32_768;
 const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
@@ -434,7 +433,7 @@ impl ProviderDriver for DeepSeekDriver {
 
 impl DeepSeekApi {
     fn new() -> Result<Self, DriverError> {
-        let client = direct_client(DEEPSEEK_API_HOST).map_err(|_| API_UNAVAILABLE)?;
+        let client = fixed_endpoint_client().map_err(|_| API_UNAVAILABLE)?;
         let endpoint = Url::parse(CHAT_COMPLETIONS_URL).map_err(|_| API_UNAVAILABLE)?;
         Ok(Self { client, endpoint })
     }
