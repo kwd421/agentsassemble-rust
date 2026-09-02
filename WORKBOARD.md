@@ -612,6 +612,23 @@ contracts, findings, or verification journals.
   structure, diff, CSS, and artifact gates in 200.28 seconds with 1,785,643,008-byte
   maximum RSS. No Vercel credential was available for an authorized real completion,
   so real-turn evidence remains explicitly open for the Phase 1 provider matrix.
+- Implemented pending Phase 1 whole-phase review: remote catalog projection cleanup at
+  `57a82e5`. Repository-wide consumer searches showed that `selection_kind`,
+  `compatibility_evidence`, and the projected `tools` flag had no consumer, while an
+  absent `relation_scope` already means the same global selection relation as the
+  repeated `"global"` value. The shared projection owner now omits those four redundant
+  per-model entries and retains the consumed model identity, label, family, context,
+  output, price, vision, reasoning, description, and per-model reasoning-effort data.
+  This is not a changed catalog policy or a provider-specific compression path: exact
+  selection, the 256 compatible-model ceiling, and `per_model` relation validation are
+  unchanged. A temporary live measurement using the production fetch/projection path
+  found Vercel's 229-model option array reduced from 98,768 to 74,036 bytes and LLM
+  Gateway's 249-model array from 98,811 to 74,233 bytes. The network-dependent test was
+  removed immediately. The three deterministic projection tests, all seven selection
+  tests, Clippy with warnings denied, formatting, architecture/policy gates, and diff
+  checks pass. The selection group was run serially because its existing executable-
+  validation tests share a four-permit filesystem worker; no product capacity, retry,
+  fallback, polling, heartbeat, timer, cache, or failure handling changed.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
