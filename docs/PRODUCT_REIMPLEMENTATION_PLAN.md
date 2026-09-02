@@ -540,9 +540,11 @@ Correction substage:
   to a confirmed current owner or removing it; an unreachable lazy chunk and route
   vocabulary are not an implemented operational feature.
 - Exit: the full retained provider matrix and all visible operational controls have
-  source/static contract evidence. Installed and explicitly authorized providers
-  additionally have exact real-client evidence and cleanup records; unavailable or
-  unauthorized providers remain truthfully unavailable, never simulated.
+  source/static contract evidence. Installed providers whose real-client execution
+  is explicitly authorized additionally have exact real-client evidence and cleanup
+  records. Runtime-unavailable providers remain truthfully unavailable; missing
+  provider-run authorization changes no product or catalog state and leaves only
+  real-client evidence incomplete. No provider is simulated.
 
 ### Phase 9 — final parity, performance, and repository cleanup
 
