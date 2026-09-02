@@ -218,6 +218,14 @@ wait; inability to confirm that wait is the distinct non-startable
 `model_discovery_cleanup_failed` result instead of the original error. Other explicit
 portal teardown and hook cleanup remain open under F-03.
 
+Antigravity hook correction `1328811` closes the concrete hook-registry site. The
+last explicit release now removes the exact managed hook before it drops registry or
+helper-executable ownership; an open, lock, read, identity, or write failure retains
+that ownership and is returned by runtime stop or by a launch failure after hook
+installation. `Drop` remains only a final fail-closed attempt. Antigravity is still
+non-startable without a native attachment/completion receipt, and explicit portal
+teardown remains open under F-03.
+
 ### F-04 — signed capabilities advertised actions that did not exist
 
 Disposition: `Closed through 7b2168f; both manual reviewers approved`; high

@@ -977,6 +977,19 @@ contracts, findings, or verification journals.
   provider tests, warning-denied provider Clippy, formatting, diff, architecture,
   policy, and source-structure gates pass. No retry, fallback, polling, heartbeat,
   background cleanup, credential exposure, or real provider run was added.
+- Completed the Antigravity hook portion of F-03 at `1328811`; explicit portal
+  teardown remains open. The prior last-registration path removed registry and
+  helper-executable ownership before it opened, locked, read, verified, and rewrote
+  the hook document, then discarded every cleanup failure. The last explicit release
+  now performs those exact operations before dropping either owner, and runtime stop
+  or a launch failure after hook installation returns a cleanup failure instead of
+  claiming release. `Drop` is only a final fail-closed attempt. The focused corruption
+  test proves a failed release retains the helper owner and a later exact release can
+  remove the restored managed definition; all 200 provider tests, warning-denied
+  provider Clippy, formatting, diff, architecture, policy, and source-structure gates
+  pass. Antigravity remains non-startable without a native receipt. No timer, polling,
+  heartbeat, automatic retry, fallback, background cleanup, real provider run, or
+  measured performance claim was added.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
