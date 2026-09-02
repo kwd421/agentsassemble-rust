@@ -376,6 +376,11 @@ contracts, findings, or verification journals.
     (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom API);
     Ollama and LM Studio; and the remaining original native providers Cursor, Freebuff,
     and Grok when its official ACP client is available.
+  - For that API family, first establish the smallest common HTTPS/SSE execution
+    mechanism from DeepSeek and matching verified-original behavior: transport,
+    streaming decode, cancellation, normalized failure/usage, bounds, and redaction.
+    Provider endpoints, credentials, headers, catalogs/defaults/model controls,
+    completion/session identity, and Custom API SSRF policy stay provider-owned.
   - After breadth exists, harden cancellation/interruption, restart/reconnect,
     long-running turns, authorized tool use, ambiguous completion/effects, explicit
     failure, and exact cleanup across the entire available-provider matrix. Only then

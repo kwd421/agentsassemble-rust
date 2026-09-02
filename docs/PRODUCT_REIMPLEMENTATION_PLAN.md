@@ -370,9 +370,13 @@ Correction substage:
   (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom
   API); local Ollama/LM Studio; and the remaining original native providers
   (Cursor, Freebuff, and Grok when its official ACP client is installed).
-- Extract a shared remote HTTPS/SSE mechanism only from demonstrated duplication;
-  endpoints, credentials, catalogs, model controls, completion signals, and
-  provider-session identity remain provider-owned.
+- Before connecting the remote API family, establish its smallest common HTTPS/SSE
+  execution mechanism from the implemented DeepSeek path and matching verified
+  original contracts. It owns only proven-identical request transport, streaming
+  decode, cancellation, normalized failures/usage, bounds, and secret redaction;
+  it is not a DeepSeek clone or a speculative universal adapter. Endpoints,
+  credentials, headers, catalogs, defaults/model controls, completion signals,
+  provider-session identity, and Custom API SSRF policy remain provider-owned.
 - Once that real breadth exists, harden the whole available-provider matrix for
   cancellation/interruption, restart/reconnect, long-running turns, authorized tool
   use, ambiguous completion/effects, explicit failure, and exact process/resource
