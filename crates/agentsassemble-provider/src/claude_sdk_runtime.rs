@@ -41,7 +41,7 @@ pub(crate) struct ClaudeSdkRuntime {
     child: Box<dyn ChildWrapper>,
     _node_guard: BoundExecutable,
     _claude_guard: BoundExecutable,
-    _private_claude: PrivateExecutable,
+    _private_claude: Option<PrivateExecutable>,
     _sdk_bundle: PrivateClaudeSdkBundle,
     client: Client,
     stderr_task: JoinHandle<()>,
@@ -57,7 +57,10 @@ impl ClaudeSdkRuntime {
     ) -> Result<(Self, ClaudeSdkAttachment), DriverLaunchError> {
         let (node, claude, private_claude, sdk_bundle) = bind_runtime(session).await?;
         let room_portal = create_room_portal().await?;
-        let arguments = arguments(&sdk_bundle, &private_claude)?;
+        let arguments = arguments(
+            &sdk_bundle,
+            child_executable_path(&claude, private_claude.as_ref()),
+        )?;
         let (process_group, pipes) = UnixProcessCustody::start_with_children(
             runtime_lease,
             guardian,
@@ -91,7 +94,10 @@ impl ClaudeSdkRuntime {
     ) -> Result<(Self, ClaudeSdkAttachment), DriverLaunchError> {
         let (node, claude, private_claude, sdk_bundle) = bind_runtime(session).await?;
         let room_portal = create_room_portal().await?;
-        let arguments = arguments(&sdk_bundle, &private_claude)?;
+        let arguments = arguments(
+            &sdk_bundle,
+            child_executable_path(&claude, private_claude.as_ref()),
+        )?;
         let mut command = CommandWrap::with_new(node.launch_path(), |command| {
             command
                 .args(&arguments)
@@ -208,7 +214,7 @@ async fn bind_runtime(
     (
         BoundExecutable,
         BoundExecutable,
-        PrivateExecutable,
+        Option<PrivateExecutable>,
         PrivateClaudeSdkBundle,
     ),
     DriverLaunchError,
@@ -219,13 +225,20 @@ async fn bind_runtime(
     )
     .await
     .map_err(|_| DriverLaunchError::safe(executable_error()))?;
-    let companion_name = Path::new(&session.executable)
-        .file_name()
-        .and_then(|name| name.to_str())
-        .ok_or_else(|| DriverLaunchError::safe(executable_error()))?;
-    let private_claude = claude
-        .stage_private_companion(companion_name)
-        .map_err(|_| DriverLaunchError::safe(executable_error()))?;
+    #[cfg(any(target_os = "linux", target_os = "android"))]
+    let private_claude = {
+        let companion_name = Path::new(&session.executable)
+            .file_name()
+            .and_then(|name| name.to_str())
+            .ok_or_else(|| DriverLaunchError::safe(executable_error()))?;
+        Some(
+            claude
+                .stage_private_companion(companion_name)
+                .map_err(|_| DriverLaunchError::safe(executable_error()))?,
+        )
+    };
+    #[cfg(not(any(target_os = "linux", target_os = "android")))]
+    let private_claude: Option<PrivateExecutable> = None;
     let (node_path, node_identity) = resolve_executable("node")
         .await
         .map_err(|_| DriverLaunchError::safe(node_error()))?
@@ -241,9 +254,9 @@ async fn bind_runtime(
 
 fn arguments(
     bundle: &PrivateClaudeSdkBundle,
-    claude: &PrivateExecutable,
+    claude: &Path,
 ) -> Result<Vec<String>, DriverLaunchError> {
-    [&bundle.bridge, &bundle.sdk, claude.path()]
+    [&bundle.bridge, &bundle.sdk, claude]
         .into_iter()
         .map(|path| {
             path.to_str()
@@ -252,6 +265,13 @@ fn arguments(
         })
         .chain(std::iter::once(Ok("session".to_owned())))
         .collect()
+}
+
+fn child_executable_path<'a>(
+    bound: &'a BoundExecutable,
+    private: Option<&'a PrivateExecutable>,
+) -> &'a Path {
+    private.map_or_else(|| Path::new(bound.launch_path()), PrivateExecutable::path)
 }
 
 async fn connect_client<I, O>(
