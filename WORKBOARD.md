@@ -536,6 +536,37 @@ contracts, findings, or verification journals.
   generated-binding, Clippy, policy, structure, diff, CSS, and artifact gates. No
   Cerebras key was available for an authorized real completion, so real-turn evidence
   remains explicitly open for the Phase 1 provider matrix rather than being simulated.
+- Implemented pending Phase 1 whole-phase review: OpenRouter API vertical at `d06da15`.
+  The registered `openrouter_api` path now owns its exact completion endpoint,
+  `HTTP-Referer`/`X-Title` headers, preferred `openai/gpt-4.1-mini` identity,
+  output control, provider-specific failures, and isolated keyring account. Its one
+  exact private credential route reuses the authorization-before-body owner, and the
+  copied Agent-add flow exposes the operation only from the registered Rust capability.
+  Request execution, SSE/tool completion, cancellation, secret redaction, and lifecycle
+  remain in the common remote runtime; no second state machine or provider branch was
+  added there.
+  A live 2026-09-03 request to the original unpaged public URL returned 341 tool-capable
+  models and 599,654 bytes, so the original 256-entry policy rejects the entire current
+  response before exposing a usable provider. OpenRouter's live endpoint accepts a
+  server-side `limit`, preserves the requested most-popular ordering, and returns
+  `total_count` plus an explicit next link. This slice requests one finite 32-model page:
+  the smallest tested page that retains useful breadth while its complete projected
+  provider fits the existing 16 KiB per-provider and 48 KiB aggregate public catalog
+  owners. A temporary real-discovery test exercised the production Rust path and proved
+  a nonempty, startable OpenRouter projection inside both bounds; the test file was then
+  removed rather than adding network dependence to the suite. The unrequested tail is
+  not fetched, no page loop, background task, retry, fallback, polling, heartbeat, cache,
+  or silent failure exists, and an absent preferred model remains visibly unselected.
+  The feature changes 350 lines and its 117-line provider module is the largest new
+  file. The existing 639-line catalog remains one public selection-authority flow after
+  the 500-line review; identical remote output-token controls and public gateway
+  fetch/projection now each have one owner. Repository-wide searches found no duplicate
+  OpenRouter endpoint, header, credential path, catalog, or runtime owner. A fresh
+  complete `make verify` passes frontend 99 files/656 tests, desktop, Rust unit/
+  integration, real TCP/WebSocket, generated-binding, Clippy, policy, structure, diff,
+  CSS, and artifact gates in 235.05 seconds with 1,779,924,992-byte maximum RSS. No
+  OpenRouter key was available for an authorized real completion, so real-turn evidence
+  remains open for the Phase 1 matrix rather than being simulated.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
