@@ -6083,10 +6083,14 @@ exact `e76cda7..9821433`, complete F-09 `820e427..9821433`, and HEAD `9821433` a
 `e76cda7` at `C0/H0/M0/L0`, revises `cae8d64` at `C0/H0/M0/L1` for the two guide
 projections above, and revises requested exact/cumulative `820e427..e76cda7` and that
 HEAD snapshot at `C0/H0/M0/L2` for the projection Low plus stale current-state
-workboard/audit text. Commit `9821433` and the current closure documentation correct
-those findings; correction cross-review remains pending and no final F-09 closure is
-claimed yet. No schema, SQL, session transition, timer, polling, heartbeat, retry,
-fallback, compatibility shim, placeholder, fake authority, or dummy route was added.
+workboard/audit text. Commits `9821433` and `0fd931d` correct those findings.
+Critical-web Pro and Daybreaker Blue High each manually approve the individual
+corrections, exact `9821433..0fd931d`, full correction `e76cda7..0fd931d`,
+cumulative F-09 `820e427..0fd931d`, and HEAD `0fd931d` at `C0/H0/M0/L0` with no
+actionable finding. The historical individual `cae8d64` verdict remains
+`C0/H0/M0/L1`; only the final cumulative tree closes its Low. No schema, SQL,
+session transition, timer, polling, heartbeat, retry, fallback, compatibility shim,
+placeholder, fake authority, or dummy route was added.
 The final warm complete verification after `9821433` also passes every gate in
 249.21 seconds with 2,401,419,264-byte maximum RSS; it retains the current build cache
 and is 224.11 seconds faster than the preceding cold run. This comparison measures

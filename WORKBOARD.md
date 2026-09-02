@@ -213,7 +213,8 @@ contracts, findings, or verification journals.
   pass. Critical-web Pro and Daybreaker Blue High each approve individual
   `c184739`, documentation correction `c47dbbb`, exact `952fa96..c47dbbb`, and
   HEAD `c47dbbb` at `C0/H0/M0/L0` with no actionable finding.
-- Active task: F-09 human invite guide and accepted client kinds. Current-original
+- Completed: F-09 human invite guide and accepted client kinds through `0fd931d`.
+  Current-original
   commit `d504647` and the Rust frontend each send only exact `human`; source commits
   `0e38579`, `cae8d64`, and `e76cda7` therefore remove the unknown-token coercion,
   align the guide with terminal session expiry, and remove the frontend's 60-second
@@ -222,9 +223,15 @@ contracts, findings, or verification journals.
   no longer advertises same-invite renewal. Daybreaker approves the complete
   `820e427..9821433` range and HEAD at `C0/H0/M0/L0`. Critical-web Pro independently
   revises the requested `e76cda7` snapshot at `C0/H0/M0/L2` for those two projections
-  and stale current-state documentation. Commit `9821433` plus the current closure
-  documentation correct those findings; correction cross-review remains pending, so
-  F-09 is not yet closed.
+  and stale current-state documentation. Commits `9821433` and `0fd931d` correct
+  those findings. Critical-web Pro and Daybreaker Blue High each approve the
+  individual corrections, exact `9821433..0fd931d`, full correction
+  `e76cda7..0fd931d`, cumulative F-09 `820e427..0fd931d`, and HEAD `0fd931d` at
+  `C0/H0/M0/L0` with no actionable finding.
+- Active task: F-10 DeepSeek credential-source authority. Remove the implicit
+  keyring-to-environment priority only at the existing credential-store and strict
+  frontend response boundaries; deletion must become visibly missing. Do not add a
+  source-selection framework, compatibility path, fallback, or second authority.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

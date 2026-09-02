@@ -553,7 +553,7 @@ saturation, not absolute pre-classification DoS prevention.
 
 ### F-09 — human invite guide and accepted aliases need current-client proof
 
-Disposition: `Fixed through 9821433; correction cross-review pending`; low.
+Disposition: `Fixed and reviewed through 0fd931d`; low.
 
 The reachable original frontend at `d504647` and the Rust frontend each send only
 exact `human`. Commit `0e38579` replaces the human-admission denylist with that one
@@ -566,8 +566,10 @@ an obsolete same-invite E2E fixture—are corrected in `9821433`; its manual re-
 approves the complete range and HEAD at `C0/H0/M0/L0`. Critical-web Pro final review
 of the requested `e76cda7` snapshot independently found the same projection Low plus
 this stale current-state audit/workboard Low, revising the range and snapshot at
-`C0/H0/M0/L2`. Commit `9821433` and the current closure documentation correct both;
-their correction re-review remains pending, so this finding is not routed closed yet.
+`C0/H0/M0/L2`. Commits `9821433` and `0fd931d` correct both. Critical-web Pro and
+Daybreaker Blue High each approve the individual corrections, exact
+`9821433..0fd931d`, full correction `e76cda7..0fd931d`, cumulative F-09
+`820e427..0fd931d`, and HEAD `0fd931d` at `C0/H0/M0/L0` with no actionable finding.
 
 ### F-10 — DeepSeek keyring-to-environment priority is an unapproved fallback shape
 
@@ -1194,7 +1196,7 @@ This table routes findings; it does not add another contract layer.
 | F-06 | Agent Session projection/profile owner | 3 | roster, timeline, search, restart, and editor obey Agent/participant SSoTs |
 | F-07 | provider registration/operation descriptor | 0B and 1 | Phase 0B gates false UI operations; Phase 1 closes provider-native operations and exact model selection |
 | F-08 | HTTP admission/transport owner | 0B | closed at `c0cb3e2`; 127 classified-public body requests retain one local total slot, excess public receives 503, and release restores public admission |
-| F-09 | human admission owner | 0B | fixed through `9821433`; correction cross-review still pending |
+| F-09 | human admission owner | 0B | closed through reviewed HEAD `0fd931d` at `C0/H0/M0/L0` |
 | F-10 | provider credential store | 1 | one explicit credential source with visible revoke/restart behavior |
 | F-11 | Rust protocol exporter plus endpoint decoders | 0B | generated semantic types/constants are shared; snapshot/live/history/search/request envelopes, bounds, errors, and strict rejection remain endpoint-local |
 | F-12 | DeepSeek complete-turn owner | 1 | measured complete-turn latency/cost and one cancellable wall-clock/cost budget |
