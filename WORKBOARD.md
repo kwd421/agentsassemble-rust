@@ -268,8 +268,9 @@ contracts, findings, or verification journals.
     projections. Daybreaker found three Lows: the same boundary gap, catalog-absent
     controls and manually unbound key lists, and incomplete Agent Session participant/
     create-ACK binding. Independent corrections `77eea8a`, `fd473e8`, and `9320494`
-    close those roots. Re-review and complete repository verification remain pending;
-    F-11 is not closed.
+    close those roots. Fresh complete repository verification passes in 163.03 seconds
+    with 788,037,632-byte maximum RSS; correction re-review remains pending, so F-11
+    is not closed.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

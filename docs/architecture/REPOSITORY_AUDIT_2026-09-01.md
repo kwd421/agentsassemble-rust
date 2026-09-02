@@ -699,11 +699,12 @@ work stays at that owner: one room-settings comparison over the server's existin
 50-channel maximum and one create-ACK comparison over 38 Agent Session plus 11
 Participant fields. It adds no steady task, timer, polling, heartbeat, retry,
 fallback, compatibility path, cache, or framework. The accepted trade-off is this
-bounded admission work and a current 817.95 kB production JavaScript artifact in
+bounded admission work and a current 818.10 kB production JavaScript artifact in
 exchange for terminal rejection before projection; no throughput or size improvement
-is claimed. Focused correction tests pass, all 97 frontend files/631 tests pass, and
-the production TypeScript/Vite build plus original CSS gate pass. Complete repository
-verification and correction re-review remain pending, so no final approval is claimed.
+is claimed. Focused correction tests pass, all 98 frontend files/633 tests pass, and
+the production TypeScript/Vite build plus original CSS gate pass. Fresh complete
+repository verification passes every gate in 163.03 seconds with 788,037,632-byte
+maximum RSS. Correction re-review remains pending, so no final approval is claimed.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,
