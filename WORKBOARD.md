@@ -391,7 +391,10 @@ contracts, findings, or verification journals.
     the official Agent SDK; the remote API family
     (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom API);
     Ollama and LM Studio; and the remaining original native providers Cursor, Freebuff,
-    and Grok when its official ACP client is available.
+    and Grok through its official ACP stdio contract. Grok registration and
+    static/contract verification are mandatory even without a local executable;
+    executable/login/run-authorization absence affects availability and real-run
+    evidence only.
   - For that API family, first establish the smallest common HTTPS/SSE execution
     mechanism from DeepSeek and matching verified-original behavior: transport,
     streaming decode, cancellation, normalized failure/usage, bounds, and redaction.

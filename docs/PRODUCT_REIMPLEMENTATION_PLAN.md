@@ -59,8 +59,9 @@ Defer until the retained core is complete and the user explicitly reopens them:
 - redesign of the current retained `Harness` / `API` / `Local` provider chooser
   taxonomy;
 - any new provider not present in the verified original inventory. Grok is one of
-  the retained original sixteen, but its implementation and real verification wait
-  for the official client to be installed and for explicit provider-run approval.
+  the retained original sixteen, so its static/contract implementation remains
+  mandatory in Phase 1. Only its local availability and real-run evidence wait for
+  the official client, login, and provider-run authorization.
 
 ## Product-wide invariants
 
@@ -196,7 +197,7 @@ silently redefined as Gemini CLI.
 | --- | --- | --- | --- |
 | Codex | persistent `app-server --stdio` | implemented; completion aliases/inference reopened | exact current app-server protocol, Codex-owned CLI config, no heuristic fallback |
 | Antigravity | persistent PTY/ConPTY plus hooks | implemented with forbidden transcript polling | keep PTY/ConPTY and hooks; remove transcript and print completely; exact native signal or explicit incomplete |
-| Grok | official ACP stdio | absent | add only when official installed client is available; preserve ACP contract |
+| Grok | official ACP stdio | absent | implement the ACP registration, catalog/selection, lifecycle, turn, failure, cancellation, and stop contracts; client/login absence affects availability and real-run evidence only |
 | Claude | persistent Claude Code terminal/hook path | absent | use Claude Agent SDK as directed; no old transcript or print path |
 | Cursor | persistent Cursor terminal/room portal | absent | reimplement the verified reachable current flow or record explicit unsupported evidence |
 | Freebuff | persistent terminal runtime | absent | reimplement only its verified current reachable flow, without shared-terminal heuristics |
@@ -403,7 +404,10 @@ Correction substage:
   through the official Agent SDK; the OpenAI-compatible remote family
   (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom
   API); local Ollama/LM Studio; and the remaining original native providers
-  (Cursor, Freebuff, and Grok when its official ACP client is installed).
+  (Cursor, Freebuff, and Grok through its official ACP stdio contract). Grok's
+  registration and static/contract verification do not depend on a local executable;
+  executable/login/authorization absence yields explicit unavailability and leaves
+  only real-run evidence incomplete.
 - Before connecting the remote API family, establish its smallest common HTTPS/SSE
   execution mechanism from the implemented DeepSeek path and matching verified
   original contracts. It owns only proven-identical request transport, streaming
@@ -417,10 +421,11 @@ Correction substage:
   cleanup. Only then perform provider-specific performance and UX refinement backed
   by observed cost or failure evidence. An unavailable client remains truthfully
   unavailable rather than being simulated or replaced.
-- Exit: each enabled provider has exactly one completion/session authority and a
-  visible failure/uncertainty contract, the retained original provider inventory is
-  implemented or truthfully unavailable, and no scraping, transcript, print,
-  silent fallback, or ownerless cleanup remains.
+- Exit: all sixteen retained providers have static/contract implementations. Each
+  enabled provider has exactly one completion/session authority and a visible
+  failure/uncertainty contract; a missing executable, credential, or run approval is
+  projected as unavailable and may leave only real-run evidence incomplete. No
+  scraping, transcript, print, silent fallback, or ownerless cleanup remains.
 
 ### Phase 2 — finish exact Agent Session control
 
