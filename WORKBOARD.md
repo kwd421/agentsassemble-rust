@@ -18,8 +18,11 @@ contracts, findings, or verification journals.
   runtime measurement/hardening; D-07 executes with Phase 5 human admission; split
   F-18/F-20 work remains with its already named external-admission/custom-channel
   owners; C-01 executes before Phase 4's first participant mutation, and F-19/C-09
-  execute with Phase 4 room settings. Reordering does not waive a finding; its owning
-  phase cannot exit before the finding is closed or evidence-deferred.
+  execute with Phase 4 room settings. C-13 splits between Phase 1 provider custody
+  and Phase 5 human identity/admission; C-10 splits between Phase 8 operational
+  surfaces and Phase 9's final inactive-surface proof. Reordering does not waive a
+  finding; its owning phase cannot exit before the finding is closed or
+  evidence-deferred.
 - Current phase execution: establish the whole phase's dependency skeleton and
   acceptance matrix first, implement the smallest shared owners, connect one complete
   vertical flow for every target in dependency order, then harden and verify the phase

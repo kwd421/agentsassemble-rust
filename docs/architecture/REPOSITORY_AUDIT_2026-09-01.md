@@ -1161,7 +1161,9 @@ extensibility and do not replace it with a generic extension bag.
 ### C-10 — dead copied surfaces resemble live product contracts
 
 Disposition: `Gate or remove by retained-surface ownership`; medium maintenance
-risk.
+risk; Phase 8 for operational Admin ownership and Phase 9 for the final inactive
+deferred-surface proof. This does not schedule voice, Mafia, or RimWorld
+implementation.
 
 The unmounted Admin component, deferred Mafia/RimWorld paths, old broad `api.ts`
 calls, and unimported
@@ -1203,7 +1205,8 @@ codec, or repository abstraction would be overimplementation.
 
 ### C-13 — identical internal wire constants have multiple producers
 
-Disposition: `Consolidate per protocol`; low drift risk.
+Disposition: `Consolidate per protocol`; low drift risk; Phase 1 for provider
+custody and Phase 5 for human identity/admission.
 
 Browser-device credential prefix/length repeats in `deviceIdentity.ts:6-9` and
 `human_browser_credential.rs:4-7`; human-session bearer format repeats in
@@ -1505,10 +1508,10 @@ This table routes findings; it does not add another contract layer.
 | C-07 | master/architecture/spec/exposure/verification owners | 0A | each document owns one concern and current statuses/baselines agree |
 | C-08 | provider registration/operation descriptor | 0B | no provider-name UI policy can advertise an absent server operation |
 | C-09 | room-settings owner | 4 | prove a current non-deferred consumer or remove `activity_plugin` cleanly |
-| C-10 | frontend production graph | 0B | dead/deferred backup code cannot mount, import behavior, poll, or imply a route |
+| C-10 | frontend production graph | 8 and 9 | operational code has a current owner or is removed; deferred code cannot mount, request, poll, heartbeat, or imply parity |
 | C-11 | domain vocabulary plus existing lifecycle/turn/reconciliation owners | 1 | finite serialized states have one owner while each transition authority, effect, and error remains local |
 | C-12 | entity-specific persistence row owners | Phase 1 and prerequisite to next affected mutation | exact row primitives remove codec/SQL drift without generic repositories or moved authorization |
-| C-13 | existing browser/session/provider protocol owners | 0B and 1 | identical wire constants have one producer; every trust boundary still validates independently |
+| C-13 | existing browser/session/provider protocol owners | 1 and 5 | identical wire constants have one producer; every trust boundary still validates independently |
 | C-14 | existing Codex bundle owner | 1 | pure bundle identity is shared while every TOCTOU revalidation boundary remains |
 | D-01 | local startup/control and core HTTP routes | 0B | no host challenge/secret path; desktop and human socket tickets still complete |
 | D-02 | room socket protocol/client and ingress topology | 0B | remote proof is absent; local receipt and frame proof remain only if separate controlled evidence defeats the smaller child-identity plus one-use-ticket design; otherwise grants contain no proof key and frames use bounded JSON; finite subscribe, sequence, replay, and failure contracts hold |

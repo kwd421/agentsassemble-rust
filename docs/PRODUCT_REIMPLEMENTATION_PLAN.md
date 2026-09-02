@@ -396,6 +396,9 @@ Correction substage:
   platform, boot, lease generation, independently adoptable owner, and stale-CAS
   snapshots. Introduce a larger authority type only if it reduces actual state and
   glue after measurement.
+- Resolve C-13's provider-custody portion by exporting the guardian ready marker
+  from its existing protocol owner. Keep parsing, boundary errors, and process
+  custody checks independent; do not create a general wire-constant crate.
 - Connect every retained provider to the real basic Phase 1 contract: Claude
   through the official Agent SDK; the OpenAI-compatible remote family
   (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom
@@ -467,6 +470,9 @@ Correction substage:
 
 ### Phase 5 — identity, accounts, friends, and human admission completion
 
+- Resolve C-13's human portion at its two existing protocol owners: export the
+  browser-device credential and human-session bearer constants without merging
+  generation, parsing, authorization, signatures, or boundary errors.
 - Finish account status, Google challenge/connect/delete, native handoff, recovery,
   friends, host, and operator-pairing flows that remain in the retained product.
 - Resolve D-07 at the human-invite credential owner: prove a finite current consumer
@@ -523,6 +529,9 @@ Correction substage:
 - Implement provider login/usage/catalog refresh only where the actual provider
   supports it. Add runtime update/resources/release-health surfaces only after
   confirming they remain current reachable product behavior.
+- Resolve C-10's operational portion by either connecting the copied Admin surface
+  to a confirmed current owner or removing it; an unreachable lazy chunk and route
+  vocabulary are not an implemented operational feature.
 - Exit: the full retained provider matrix and all visible operational controls have
   source/static contract evidence. Installed and explicitly authorized providers
   additionally have exact real-client evidence and cleanup records; unavailable or
@@ -530,6 +539,10 @@ Correction substage:
 
 ### Phase 9 — final parity, performance, and repository cleanup
 
+- Close C-10's remaining production-graph proof: user-deferred voice, Mafia, and
+  RimWorld source may remain untouched during earlier phases, but it must not mount,
+  request, poll, heartbeat, or imply Rust parity. Do not implement or delete those
+  deferred products as incidental cleanup.
 - Re-run the full exposure inventory and report backend-only, indirect/service-only,
   partial, and intentionally unavailable surfaces.
 - Verify local and admitted-user packaged flows, restart/reconnect, all retained
