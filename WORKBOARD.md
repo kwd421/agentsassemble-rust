@@ -1,15 +1,17 @@
 # WORKBOARD
 
-Status: The Phase 0A source/duplication/defensive-complexity audit and planning
-review are closed at reviewed content checkpoint `9711232`. Phase 0B foundation
-correction is active from public baseline `4ab5ee1`.
+Status: The Phase 0A source/duplication/defensive-complexity inventory at
+`9711232` remains reviewed historical evidence. Its finding-number order is not
+the production roadmap. The corrected provider-first plan is active pending its
+manual documentation cross-review; the next implementation slice is Phase 1.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating product
 contracts, findings, or verification journals.
 
 ## Active work
 
-- Phase: 0B foundation correction.
+- Phase: plan correction, then Phase 1 provider-first implementation. No product
+  implementation starts until this documentation correction is reviewed.
 - Completed: D-01 at `a7949bd`; the uncalled HTTP challenge/ticket bootstrap and
   startup secret are absent, while private-control and admitted-human socket ticket
   issuance remain.
@@ -342,24 +344,32 @@ contracts, findings, or verification journals.
     `2a53349` and `5ae8b34`, exact correction `58f0f8b..5ae8b34`, corrected Participant
     batch `4fc06a0..5ae8b34`, cumulative F-11 `dff4b65..5ae8b34`, and HEAD `5ae8b34`
     at `C0/H0/M0/L0` with no actionable finding.
-- Active task: F-12 DeepSeek complete-turn time and cost ownership.
-  - Evidence: one turn currently permits an initial completion plus sixteen tool rounds,
-    while each fixed-host response can read for three minutes. The finite composition can
-    occupy about 51 minutes and repeatedly applies the selected per-request output ceiling.
-    Current-original `d5046473` instead has a 180-second inactivity deadline reset by
-    meaningful provider/tool progress; it is not a complete wall-clock or cost budget.
-  - Measurement: use only official DeepSeek Flash through the real packaged room flow.
-    Measure an ordinary read/publish turn and a deliberate multi-tool search/context turn;
-    this does not restore v0 research depth, research steering, or scripted meetings.
-  - Owner: keep one complete deadline and cumulative API-usage budget inside the DeepSeek
-    driver. Use the official response `usage` values as billing truth, preserve the selected
-    turn-level output limit across tool rounds, and make post-dispatch ambiguity explicit.
-  - Non-goals: no provider-usage UI, dynamic-pricing framework, generic provider budget
-    trait, retry/fallback, new periodic task, or configurable future-provider layer.
-  - Acceptance: measured limits retain both real flows, timeout and usage exhaustion are
-    cancellable and fail closed without repeating a paid request, secrets/provider-private
-    content never enter logs or fixtures, focused contract tests and complete verification
-    pass, and packaged verification resources are removed when that run ends.
+- Rejected task: F-12 DeepSeek complete-turn/cost budget. Reqwest's three-minute
+  `read_timeout` applies to each read and resets after successful progress; it is not
+  multiplied into a 51-minute whole-turn deadline. DeepSeek already has a finite initial
+  response plus sixteen tool rounds, caller cancellation, and a selected per-request
+  output bound. No observed cost, hang, or security threat justifies narrowing valid
+  long-running work with another wall-clock or cumulative token/cost owner. Preserve the
+  existing bounds and explicit failure semantics; measurements may inform a later product
+  decision but do not pre-authorize a limit.
+- Next production work: Phase 1 provider-first completion.
+  - First close the current Codex, Antigravity, OpenCode, and DeepSeek authority,
+    completion, cancellation, and cleanup gaps.
+  - Then implement Claude through the official Agent SDK; the remote API family
+    (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom API);
+    Ollama and LM Studio; and the remaining original native providers Cursor, Freebuff,
+    and Grok when its official ACP client is available.
+  - Share only proven-identical transport, decoding, bounds, secret handling, redaction,
+    cancellation, and cleanup mechanisms. Endpoints, credentials, catalogs, model
+    controls, session identity, completion receipts, permissions, and lifecycle semantics
+    remain with their actual owner. Do not build a generic provider framework in advance.
+  - Restore each copied frontend entry point with its owning backend slice. Keep the
+    original `Harness`/`API`/`Local` grouping until post-parity redesign; a provider or
+    model family may appear in more than one route group.
+  - Critical-web Pro owns whole-plan, product-parity, coverage, phase, SSoT/DDD, and
+    overimplementation review. Daybreaker Blue High owns manual source/diff security,
+    async/process/TCP/WebSocket, polling/timer/fallback, swallowed-failure, and cleanup
+    review. A diff approval is not approval of plan completeness.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

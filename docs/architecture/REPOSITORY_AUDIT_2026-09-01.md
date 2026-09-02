@@ -1,9 +1,11 @@
 # Repository-wide reimplementation audit — 2026-09-01
 
 Status: manual source, history, duplication, and defensive-complexity audit
-complete; the Phase 0A planning route is approved at reviewed content checkpoint
+complete; its Phase 0A finding inventory is approved at reviewed content checkpoint
 `9711232`. Product implementation remains paused. This record owns findings and
-dispositions, not product contracts or the implementation sequence.
+dispositions, not product contracts or the implementation sequence; the corrected
+provider-first sequence in `docs/PRODUCT_REIMPLEMENTATION_PLAN.md` supersedes the
+old finding-number route and is pending manual documentation cross-review.
 
 Audited baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`, Rust
 `8a5f75a`. User-owned working-tree changes in `AGENTS.md` and `.agents/` were not
@@ -82,10 +84,11 @@ only after the correction commit is pushed and re-reviewed.
 
 - Critical ChatGPT Pro and Daybreaker Blue High each closed their respective
   documentation findings and returned `APPROVE — C0/H0/M0/L0` for the Phase 0A
-  planning state at reviewed content checkpoint `9711232`.
+  finding inventory at reviewed content checkpoint `9711232`.
 - Both reviews left F-20, D-02/D-03, the frontend allowlist, and the historical
   `b558da5` rollback/review limitation in their documented states. Approval closes
-  the Phase 0A plan and finding route only; it does not close pending product work.
+  the historical Phase 0A inventory only; it does not approve implementation order
+  or close pending product work.
 
 ### Phase 0B D-01/D-02 manual cross-review closure
 
@@ -883,30 +886,31 @@ batch `4fc06a0..5ae8b34`, cumulative F-11 `dff4b65..5ae8b34`, and HEAD `5ae8b34`
 `C0/H0/M0/L0`.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
-this correction verifies its absence instead of recreating it. Custom providers,
-alternate harnesses, Agent profile mutation, voice, and Mafia remain separate future
-product slices. Completion requires focused boundary tests, generated bindings,
+this correction verifies its absence instead of recreating it. Remaining providers
+are independent work inside the provider-first phase; alternate harnesses, Agent
+profile mutation, voice, and Mafia remain separate later slices. Completion requires
+focused boundary tests, generated bindings,
 production TypeScript/Vite output, repository structure/diff gates, and complete
 verification, with each of the three source changes independently buildable and
 rollbackable below 1,000 changed lines.
 
-### F-12 — one DeepSeek turn has no complete wall-clock/cost budget
+### F-12 — rejected complete-turn budget finding
 
-Disposition: `Measure and bound at the owning turn`; medium resource/cost risk.
+Disposition: `Rejected after client-semantics recheck`; no finding.
 
-`deepseek.rs:33,158-191` permits an initial completion plus sixteen tool rounds.
-The shared remote client gives each response read up to three minutes
-(`remote_https.rs:17-26`), so the API portion alone can occupy roughly 51 minutes in
-the worst case, before room-tool execution. Per-request and round bounds are useful,
-but they do not bound the complete user operation, process slot, credentialed
-network cost, or cancellation latency.
+`deepseek.rs:33,158-191` permits an initial completion plus sixteen tool rounds and
+retains caller cancellation and the selected per-request output bound. The earlier
+51-minute claim incorrectly multiplied the configured three-minute read timeout by
+the request count. Reqwest documents that `read_timeout` applies to each read and
+resets after every successful read, so it is a progress-reset inactivity bound, not
+a whole-response or whole-turn deadline.
 
-Measure ordinary read/publish and deliberate multi-tool search/context flows through
-the real packaged product. These are ordinary room interactions and do not restore
-the excluded v0 standard/deep research steering or scripted-meeting pipeline. Then
-add the smallest complete-turn deadline or budget that preserves required provider
-behavior. Record observed latency/cost, accepted maximum, cancellation owner, and
-uncertain-effect result. Do not shorten it from intuition or add a retry/fallback.
+No measured cost incident, hung-progress path, or concrete in-scope threat currently
+justifies an additional wall-clock or cumulative token/cost policy. Such a policy
+would reject valid long-running agent work and add state without preserving current
+behavior. Retain the finite round, cancellation, output, and read-inactivity owners.
+Latency and usage may be measured during real provider verification, but measurement
+does not authorize a new limit, retry, fallback, usage UI, or generic budget layer.
 
 ### F-13 — provider factory erases guardian/helper construction causes
 
@@ -1480,7 +1484,7 @@ This table routes findings; it does not add another contract layer.
 | F-09 | human admission owner | 0B | closed through reviewed HEAD `0fd931d` at `C0/H0/M0/L0` |
 | F-10 | provider credential store | 1 | one explicit credential source with visible revoke/restart behavior |
 | F-11 | Rust protocol exporter plus endpoint decoders | 0B | generated semantic types/constants are shared; snapshot/live/history/search/request envelopes, bounds, errors, and strict rejection remain endpoint-local |
-| F-12 | DeepSeek complete-turn owner | 1 | measured complete-turn latency/cost and one cancellable wall-clock/cost budget |
+| F-12 | rejected after Reqwest semantics recheck | none | no invented whole-turn budget; retain finite rounds, caller cancellation, selected output bounds, and progress-reset read inactivity |
 | F-13 | provider factory/custody launcher | 1 | bounded typed guardian/helper cause reaches provider-unavailable/start failure |
 | F-14 | browser request-identity owner | 0B | secure UUID absence fails before send; replay still uses one exact ID |
 | F-15 | frontend stylesheet entry | 0B | behavior side-effect import is gone and packaged layout/cascade is unchanged |

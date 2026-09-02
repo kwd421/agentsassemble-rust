@@ -46,6 +46,27 @@ because it has observed process-escape and orphan-disk evidence.
 
 ## Stable boundaries
 
+### Module and shared-security ownership
+
+The workspace uses pragmatic domain boundaries rather than mirroring either the
+Python tree or a textbook DDD framework. Domain code owns product types and
+invariants without depending on HTTP, React, Tauri, SQLite, or provider protocols.
+Persistence owns SQLite transactions and row codecs; the server owns use-case
+orchestration and authorization; the provider crate owns provider protocols and
+runtime custody; desktop owns OS integration; and the frontend renders server-owned
+state. A split is justified by a different owner, permission, lifecycle, invariant,
+or change reason—not by LOC alone or a hypothetical future backend.
+
+An identical security mechanism has exactly one implementation owner. Token syntax,
+constant-time secret comparison, bounded decoding, redaction, origin/transport checks,
+and shared asset-safety calculations are reused at their common boundary. The product
+semantics using them remain separate: Human Invite, Room Connector, AgentBridge,
+room permissions, Person Profile, Agent Session, and each asset lifecycle do not
+share credentials, writable state, authorization decisions, or deletion rules merely
+because they reuse a primitive. Do not add per-feature crypto, ticket stores, policy
+stacks, generic repositories, or a universal authorization framework when an existing
+owner plus one domain-specific check preserves the complete contract.
+
 ### Room authority
 
 Each room has one bounded command queue and one mutation task. That task serializes validation, domain transition, durable event sequence allocation, command-result persistence, and publication. Different rooms may execute concurrently. A cache, timer, queue, or projection is derived state and never a second room authority.
@@ -600,7 +621,20 @@ The provider crate owns installed-provider discovery, catalog normalization, cat
 
 Future provider cutovers use one explicit compile-time registry rather than adding independent catalog, selection, factory, and frontend branches. A registration owns one stable descriptor, discovery function, exact supported provider/runtime/transport combinations, launch constructor, and capability set. The catalog descriptor is also the only behavioral provider input to the copied frontend. Branding may have one presentation-only resolver, but provider identity must not create frontend-owned transport, credential, capability, or validation branches. Provider modules own native differences; common registry, selection, and supervisor modules contain no growing provider-name conditionals. Persisted provider kind, runtime kind, transport, execution harness, model, and profile key remain exact server authority. An existing session changes that composition only while fully stopped and only after fresh catalog and filesystem revalidation; there is no live hot-swap or fallback.
 
-Claude is not inserted ahead of its ordered provider slice. When that slice begins, its reachable runtime is implemented against the official Claude Agent SDK rather than a transcript scraper, print mode, or compatibility shim. Experiments that expose subscription-backed model sources to alternate harnesses, including a CLIProxyAPI-style model-source gateway, remain deferred until the product reimplementation is complete and are not part of the current runtime architecture or completion evidence. This is also a repository-wide file-boundary rule: independently changing owners are split before the source ceiling, while code that must change atomically to preserve one invariant remains together. The current first-bundle runtime still has fixed Codex, Antigravity, and OpenCode discovery/launch branches and accepts only the builtin execution harness; that fixed branching is current truth, not the target shape.
+Claude is implemented in the provider-first phase against the official Claude Agent
+SDK rather than a transcript scraper, print mode, or compatibility shim. Experiments
+that expose subscription-backed model sources to alternate harnesses, including a
+CLIProxyAPI-style model-source gateway, remain deferred until the product
+reimplementation is complete and are not part of the current runtime architecture or
+completion evidence. The copied Agent Add surface retains the original
+`Harness`/`API`/`Local` presentation until post-parity redesign. Those groups describe
+an access/execution route, not exclusive provider identity, so one provider or model
+family may appear in multiple groups. This is also a repository-wide file-boundary
+rule: independently changing owners are split before the source ceiling, while code
+that must change atomically to preserve one invariant remains together. The current
+first-bundle runtime still has fixed Codex, Antigravity, and OpenCode discovery/launch
+branches and accepts only the builtin execution harness; that fixed branching is
+current truth, not the target shape.
 
 An Agent Session's configured and desired state is durable room state. Its public projection deliberately excludes workspace paths, executable paths, filesystem identities, runtime handles, provider conversation identities, lifecycle intents, and the runtime profile key/version; those fields exist only in the private durable record. Exact workspace input is canonicalized without text cleanup. The workspace identity and the executable identity—bound to both its opened filesystem object and complete bytes—are revalidated between a short replay transaction and the final write transaction. The final transaction reauthorizes the room and rechecks command replay before committing, while slow filesystem work never holds the single SQLite writer. Filesystem validation uses a fixed-capacity set of detached standard threads with deadlines; a stalled operation retains its permit until it actually exits but cannot make Tokio runtime shutdown join a blocked filesystem worker. Rooms admit at most 64 sessions so non-event snapshot metadata remains bounded. Live provider processes and their task handles are observed resources owned by one server supervisor. Lifecycle effects begin only from committed intent and report completion through the room mutation owner. Stop confirmation is durably marked before finalization so a retry cannot repeat an already-applied external effect. Replayed commands reuse their durable result before consulting a newer catalog or launching an effect.
 

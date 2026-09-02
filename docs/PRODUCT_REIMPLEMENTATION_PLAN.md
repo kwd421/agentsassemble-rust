@@ -1,7 +1,10 @@
 # Product reimplementation master plan
 
-Status: approved planning owner at reviewed content checkpoint `9711232`; Phase 0B
-foundation correction is active from public baseline `4ab5ee1`.
+Status: authoritative working plan. The Phase 0A inventory at `9711232` remains
+historical reviewed evidence, but its finding-number execution order no longer
+blocks retained-product implementation. The next production work is the
+provider-first order below; this correction requires manual cross-review before
+its status is called approved.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -52,6 +55,7 @@ Defer until the retained core is complete and the user explicitly reopens them:
 - voice presence/chat, Mafia, and the RimWorld plugin;
 - PostgreSQL central-hosting support;
 - CLIProxyAPI-style model-source extraction and alternate-harness experiments;
+- redesign of the copied `Harness` / `API` / `Local` provider chooser taxonomy;
 - any new provider not present in the verified original inventory. Grok is one of
   the retained original sixteen, but its implementation and real verification wait
   for the official client to be installed and for explicit provider-run approval.
@@ -92,6 +96,10 @@ Defer until the retained core is complete and the user explicitly reopens them:
     or concrete in-scope threat. A security label does not justify duplicate
     credentials, proof state, crypto, polling, or recovery machinery when a smaller
     fail-closed owner preserves the same product and security contract.
+12. Identical security mechanisms have one common owner. Product-specific scope,
+    authorization, and lifecycle stay with their domain owner, but token syntax,
+    bounded input, secret redaction, safe comparison, transport checks, and shared
+    asset safety calculations are not independently reimplemented per feature.
 
 ## Authority map
 
@@ -119,6 +127,30 @@ Defer until the retained core is complete and the user explicitly reopens them:
 | Public ingress | configured-manual/managed/stable-entry owners | invite presentation and public route admission |
 | Product surface | concrete registered HTTP/WS actions | native/sidecar startup equality and frontend feature gating |
 
+## Architecture and module policy
+
+Use pragmatic domain-driven boundaries in the existing Rust workspace. Domain
+types and invariants do not depend on HTTP, React, Tauri, SQLite, or a provider
+protocol. Persistence owns concrete SQLite transactions; the server owns use-case
+orchestration and authorization; provider code owns native protocol facts; desktop
+owns OS integration; and the frontend projects server authority without becoming
+another writer.
+
+The principal domain owners are Room participation/settings/channels, Person
+Profile, Agent Session, Human Invite/Admission, Room Connector, external
+AgentBridge, managed AgentBridge runtime, and each distinct asset lifecycle. A
+module or file is split when those owners, permissions, lifecycles, invariants, or
+change reasons differ. It is retained when splitting would expose more state,
+interfaces, dependencies, or glue and make one invariant harder to follow. LOC is
+only the structure signal defined by `Rule.md`.
+
+Share a mechanism only after repository-wide search proves the semantics are the
+same. Do not add a universal repository trait, generic state-machine framework,
+event bus, provider abstraction, configuration hierarchy, or other ceremony for
+possible future use. In particular, common authentication and safety primitives
+must not collapse Human Invite, Room Connector, AgentBridge, room permissions, or
+asset lifecycles into one credential or authority.
+
 ## Retained feature inventory and dependency order
 
 The status below describes the audited baseline, not an approval. `implemented`
@@ -129,7 +161,7 @@ means code exists; it can still be reopened by Phase 0 findings.
 | Core room snapshot/event transport | finite snapshot/catch-up/replay is implemented; redundant receipt and per-frame proof removed at `3ffb9eb`, `77cae0e`, and `0d24741` | preserve the synchronization contract through final real-flow verification | 0, 9 |
 | Local bootstrap, room directory/create | implemented | reconcile stale spec statuses and final real-flow evidence | 0, 9 |
 | Room settings/preferences/appearance | substantially implemented | verify one authority per setting and exact copied controls | 4, 9 |
-| Human profile and avatar | implemented but Agent projection/UI ownership is inconsistent | restore human and Agent Session SSoTs; keep exact asset lifecycle | 3 |
+| Human profile and avatar | person-profile projection, room-owned participant fields, Agent Session identity projection, and the four separate asset lifecycles are implemented; Agent profile/avatar mutation has no complete owner | add only the distinct Agent mutation/asset owner and verify later surfaces as they become reachable | 3 |
 | Human invite/admission/session/public ingress | substantially implemented; dead host challenge removed at `a7949bd` and redundant remote HTTP exchange removed through `9bfee34` | fix guide drift and remaining boundaries | 0, 4-5 |
 | Participant role/mute/leave | implemented | add complete kick/re-add and room lifecycle actions before advertising them | 4 |
 | General messages/history/edit/delete | implemented | retain canonical owner and final parity verification | 9 |
@@ -138,7 +170,7 @@ means code exists; it can still be reopened by Phase 0 findings.
 | Ordered/ambient provider turns | implemented for four providers, reopened | remove transcript/fallback authority and repair cleanup/error ownership | 1-2 |
 | Pause/resume/interrupt/stop | partly implemented | finish only against providers with exact native receipts; unsupported remains explicit | 2 |
 | Friends | copied UI actively calls an absent Rust route | implement complete owner or hide until implemented | 5 |
-| Custom text channels | settings/UI exist; message APIs are absent and poll | implement server message owner and event flow before enabling | 6 |
+| Custom text channels | backend message owner is absent; copied create/select/render paths are inactive and the current UI exposes only fixed `general` | implement room-owned channel state, message/event flow, and restored entry points before enabling | 6 |
 | Side chat | copied UI actively calls absent Rust routes | implement HTTP bootstrap plus WS events before enabling | 6 |
 | Accounts/Google/recovery | local and central bootstrap are partial | implement exact account/handoff/recovery flows without bypass | 5 |
 | Room Connector/current-session AI invite | copied control sends a payload the human-only Rust route rejects | implement distinct connector admission and MCP room-tool flow | 7 |
@@ -165,7 +197,7 @@ inventory.
 | Cursor | persistent Cursor terminal/room portal | absent | reimplement the verified reachable current flow or record explicit unsupported evidence |
 | Freebuff | persistent terminal runtime | absent | reimplement only its verified current reachable flow, without shared-terminal heuristics |
 | OpenCode | owned loopback HTTP/SSE server | implemented; completion/cleanup authority reopened | Muse Spark default only when present; one explicit completion owner; exact child/peer custody |
-| DeepSeek | official HTTPS OpenAI-compatible API | implemented | official Flash path, explicit credential owner, bounded complete turn, ordinary fixed-host TLS without a speculative DNS policy |
+| DeepSeek | official HTTPS OpenAI-compatible API | implemented | official Flash path, explicit credential owner, finite tool rounds, cancellation, selected output limits, and progress-reset read inactivity; no invented whole-turn or cumulative token/cost cap |
 | Cerebras | HTTPS OpenAI-compatible API | absent | common remote API mechanism plus provider-owned catalog/header policy |
 | OpenRouter | HTTPS OpenAI-compatible API | absent | common remote API mechanism plus provider-owned endpoint/catalog policy |
 | Vercel AI Gateway | HTTPS OpenAI-compatible API | absent | common remote API mechanism plus provider-owned endpoint/catalog policy |
@@ -186,7 +218,21 @@ Alternate Codex/Claude/OpenCode/Pi harness installation over API/local models is
 separate deferred experiment. It does not justify an abstraction or compatibility
 path in the core provider implementation now.
 
+The copied Agent Add surface keeps its original `Harness` / `API` / `Local`
+grouping until post-parity redesign. These labels describe an access/execution
+route, not a model family: the same model family or provider presentation may
+legitimately appear in more than one group. Preserve that original behavior now;
+do not redesign the taxonomy during provider cutover.
+
 ## Ordered implementation phases
+
+Closed Phase 0 evidence remains valid, but residual audit cleanup is not allowed to
+hold the retained product behind finding-number order. The production sequence is:
+finish the full retained provider inventory, then Agent Session controls, remaining
+profile/asset ownership, room lifecycle, identity/friends/human admission, custom
+channels/side chat, external AI paths, operational surfaces, and final parity.
+Frontend source is restored from the copied/original baseline with the backend
+slice that owns it; it is never recreated later as an unrelated redesign.
 
 ### Phase 0 — freeze and correct the foundation
 
@@ -197,13 +243,14 @@ Audit-freeze substage:
 - Correct current architecture/spec/exposure claims that contradict the audit.
 - Cross-review the full previously unreviewed range, each commit, the cumulative
   diff, this master plan, and the finding register.
-- Exit 0A: the inventory and finding map are approved as the implementation route;
-  no product-code completion is claimed.
+- Exit 0A: the inventory and finding map are approved as reviewed evidence; the
+  master plan still owns dependency order and no product-code completion is claimed.
 
 Phase 0A closed at reviewed content checkpoint `9711232`: critical-web Pro and
 Daybreaker Blue High each returned `APPROVE — C0/H0/M0/L0` for the correction
-chain and cumulative planning range. This approves the route, not any pending
-product finding or Phase 0B implementation.
+chain and finding inventory. That approval remains historical audit evidence; it
+does not approve the now-corrected implementation order, any pending product
+finding, or Phase 0B implementation.
 
 Correction substage:
 
@@ -287,8 +334,11 @@ Correction substage:
   tool descriptors, and provider-owned launch syntax.
 - Restore one Rust-generated frontend wire contract for snapshot, live event,
   history, search, and provider-request decoding.
-- Measure and bound the complete DeepSeek turn rather than multiplying only
-  per-request timeouts across an unbounded user-visible wait.
+- Preserve DeepSeek's finite tool-round bound, caller cancellation, selected
+  per-request output limit, and the shared three-minute read-inactivity timeout.
+  Reqwest resets that timeout after every successful read; it is not a whole-turn
+  deadline. Do not add a total wall-clock or cumulative token/cost cap without
+  observed product need and explicit acceptance of the resulting behavior change.
 - Remove the fixed DeepSeek host's custom public-IP DNS resolver; decide
   `.no_proxy()` only from an explicit credential/proxy policy and observed operating
   requirements. User-selected Custom API endpoints keep their separate SSRF owner.
@@ -296,9 +346,22 @@ Correction substage:
   platform, boot, lease generation, independently adoptable owner, and stale-CAS
   snapshots. Introduce a larger authority type only if it reduces actual state and
   glue after measurement.
+- After correcting Codex, Antigravity, OpenCode, and DeepSeek, implement Claude
+  through the official Agent SDK, then the OpenAI-compatible remote family
+  (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom
+  API), local Ollama/LM Studio, and the remaining original native providers
+  (Cursor, Freebuff, and Grok when its official ACP client is installed).
+- Extract a shared remote HTTPS/SSE mechanism only from demonstrated duplication;
+  endpoints, credentials, catalogs, model controls, completion signals, and
+  provider-session identity remain provider-owned.
+- Verify each available provider through ordinary and long-running room turns,
+  authorized tool use, cancellation/stop, restart, explicit failure, and exact
+  process/resource cleanup. An unavailable client remains unavailable rather than
+  being simulated or replaced.
 - Exit: each enabled provider has exactly one completion/session authority and a
-  visible failure/uncertainty contract, with no scraping, transcript, print, silent
-  fallback, or ownerless cleanup.
+  visible failure/uncertainty contract, the retained original provider inventory is
+  implemented or truthfully unavailable, and no scraping, transcript, print,
+  silent fallback, or ownerless cleanup remains.
 
 ### Phase 2 — finish exact Agent Session control
 
@@ -313,10 +376,11 @@ Correction substage:
 
 ### Phase 3 — profile and asset SSoT correction
 
-- Project human identity from the person profile everywhere, including search,
-  timeline, custom channels, voice when later reopened, and the left-bottom card.
-- Project Agent identity from the Agent Session and merge only room-owned
-  membership fields from its participant.
+- Preserve the completed person-profile projection in the left-bottom card,
+  timeline, search, and current roster, and extend it only when later retained
+  surfaces become reachable.
+- Preserve the completed Agent Session identity projection and merge only
+  room-owned membership fields from its participant.
 - Give Agent avatar/profile mutation its own complete storage/ticket lifecycle or
   keep the editor unavailable until that boundary exists.
 - Preserve current+pending profile replacement, pre-join transfer, room-owned
@@ -338,6 +402,10 @@ Correction substage:
 - Finish account status, Google challenge/connect/delete, native handoff, recovery,
   friends, host, and operator-pairing flows that remain in the retained product.
 - Preserve distinct local operator, admitted human, and central identity owners.
+- Restore the original invitation flows but refine rough presentation with the
+  existing frontend design system and Discord-like interaction conventions. Human
+  Invite, Room Connector, and AgentBridge may share visual language, never backend
+  credentials, permissions, or lifecycle state.
 - Exit: every visible account/friend/invite control completes a real flow or is not
   exposed; no startup request targets an absent route.
 
@@ -349,6 +417,10 @@ Correction substage:
   a separate reachable original flow is later proven.
 - Implement side-chat bootstrap/mutation plus live WebSocket projection.
 - Remove the current missing-route polling before either surface is enabled.
+- Restore the original channel-add behavior and retained interaction flow when its
+  backend owner exists. The original rough dialog is not a visual contract: use the
+  copied design system and coherent Discord-like UX without changing authority,
+  permissions, state transitions, or failure behavior.
 - Exit: each copied entry point has a complete backend owner and real packaged
   verification. Voice remains deferred and inactive.
 
@@ -374,10 +446,8 @@ Correction substage:
   the room owner, reconnects, and leaves/stops without leaking provider-private
   data or borrowing another path's authority.
 
-### Phase 8 — remaining provider and operational surfaces
+### Phase 8 — operational surfaces
 
-- Add Claude Agent SDK, then the rest of the original provider inventory in
-  independently verified provider slices using the common mechanisms above.
 - Implement provider login/usage/catalog refresh only where the actual provider
   supports it. Add runtime update/resources/release-health surfaces only after
   confirming they remain current reachable product behavior.
@@ -432,3 +502,12 @@ For defensive code, reviewers must name the reachable use case, observed failure
 or in-scope threat and compare the smallest fail-closed alternative; future risk or
 the word security alone is not approval evidence. Findings and final disposition
 are recorded without copying full review prose into multiple product documents.
+
+The reviewers have distinct primary duties. Critical-web Pro reviews the complete
+inventory, original-to-Rust coverage, phase placement, observable product behavior,
+SSoT/DDD boundaries, and overimplementation. Daybreaker Blue High manually reviews
+the actual source and diff for authorization, async/process/TCP/WebSocket failure
+paths, lifecycle cleanup, polling/timers, fallback, and swallowed failure. Both may
+report cross-cutting ownership or duplication defects, but a diff approval never
+proves the master plan complete. The implementing agent independently verifies the
+original entry point, owner, transition, failure semantics, and real UI flow.
