@@ -83,7 +83,11 @@ impl SqliteStore {
         participant.role = update.role;
         participant.updated_at = Utc::now();
         let event = role_updated_event(&mut transaction, principal, &participant).await?;
-        let result = json!({"participant": participant, "event": event});
+        let result = json!({
+            "participant": participant,
+            "event": event,
+            "event_seq": event.seq,
+        });
         sqlx::query(
             "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
         )
