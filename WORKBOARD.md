@@ -567,6 +567,24 @@ contracts, findings, or verification journals.
   CSS, and artifact gates in 235.05 seconds with 1,779,924,992-byte maximum RSS. No
   OpenRouter key was available for an authorized real completion, so real-turn evidence
   remains open for the Phase 1 matrix rather than being simulated.
+- Implemented pending Phase 1 whole-phase review: canonical snapshot provider catalog at
+  `6c844b6`. `RoomSnapshot` previously serialized the same provider inventory twice:
+  `provider_catalog.providers` was authoritative and `available_providers` was a direct
+  clone that the browser accepted only when byte-equivalent, then discarded. The protocol
+  and socket now emit only `provider_catalog`; the generated TypeScript contract and every
+  live fixture derive from that owner, while the browser's trust-boundary decoder rejects
+  the retired alias as an unknown top-level field. This removes one full serialized copy
+  of every provider entry from each snapshot before adding the larger verified Vercel
+  catalog, without changing catalog selection, operation exposure, UI state, or any room
+  authority. No compatibility decoder, pagination framework, cache, retry, fallback,
+  polling, heartbeat, timer, or alternate state was added. The 54 focused socket/canonical-
+  room tests and production frontend build pass; a fresh complete `make verify` passes all
+  99 frontend files/656 tests, desktop, Rust unit/integration, real TCP/WebSocket,
+  generated-binding, Clippy, policy, structure, diff, CSS, and artifact gates in 236.28
+  seconds with 1,941,831,680-byte maximum RSS. The existing 542-line browser validation
+  file retains one cohesive trust-boundary responsibility after its 500-line review;
+  splitting the snapshot key check would add an interface and key-list forwarding without
+  separating state or an invariant.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
