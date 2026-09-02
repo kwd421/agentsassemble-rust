@@ -90,10 +90,14 @@ pub(crate) fn gateway_model_options(
         .get("data")
         .and_then(Value::as_array)
         .ok_or(RemoteCatalogError::Malformed)?;
-    if entries.len() > MAX_CATALOG_MODELS {
+    let options = entries
+        .iter()
+        .filter_map(gateway_model_option)
+        .collect::<Vec<_>>();
+    if options.len() > MAX_CATALOG_MODELS {
         return Err(RemoteCatalogError::TooLarge);
     }
-    Ok(entries.iter().filter_map(gateway_model_option).collect())
+    Ok(options)
 }
 
 pub(crate) async fn fetch_gateway_model_options(
@@ -407,10 +411,29 @@ mod tests {
 
     #[test]
     fn gateway_projection_rejects_an_unbounded_remote_inventory() {
-        let payload = json!({"data": (0..257).map(|index| json!({"id": format!("model-{index}")})).collect::<Vec<_>>()});
+        let payload = json!({"data": (0..257).map(|index| json!({
+            "id": format!("model-{index}"),
+            "supported_parameters": ["tools"]
+        })).collect::<Vec<_>>()});
         assert_eq!(
             gateway_model_options(&payload),
             Err(RemoteCatalogError::TooLarge)
         );
+    }
+
+    #[test]
+    fn gateway_projection_bounds_compatible_models_not_remote_noise() {
+        let mut entries = (0..300)
+            .map(|index| json!({"id": format!("incompatible-{index}")}))
+            .collect::<Vec<_>>();
+        entries.push(json!({
+            "id": "compatible",
+            "supported_parameters": ["tools"]
+        }));
+
+        let options = gateway_model_options(&json!({"data": entries}))
+            .unwrap_or_else(|error| panic!("project gateway catalog: {error:?}"));
+        assert_eq!(options.len(), 1);
+        assert_eq!(options[0].value, "compatible");
     }
 }
