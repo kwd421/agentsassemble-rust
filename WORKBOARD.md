@@ -3,8 +3,8 @@
 Status: The Phase 0A source/duplication/defensive-complexity inventory at
 `9711232` remains reviewed historical evidence. Its finding-number order is not
 the production roadmap. The corrected provider-first plan is approved and active.
-Before Phase 1, the two confirmed live Phase 0B
-prerequisites F-14 and F-16 must close without expanding into unrelated polishing.
+The finite Phase 0B prerequisites F-14 and F-16 are implemented; their whole-phase
+cross-review must close before Phase 1 begins, without unrelated polishing.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating product
 contracts, findings, or verification journals.
@@ -409,12 +409,12 @@ contracts, findings, or verification journals.
   `3229fbe`, exact correction `5badabe..3229fbe`, full correction
   `62d58b9..3229fbe`, cumulative plan `1c5b37e..3229fbe`, HEAD, and master-plan
   completeness at `C0/H0/M0/L0` with no actionable finding.
-- Next production work: Phase 1 provider-first completion.
-  - Prerequisite only: replace F-14's browser request-ID compatibility fallback
-    with fail-closed secure UUID creation and make F-16's closed catalog watch
-    terminate instead of immediately re-entering the select loop. Verify each exact
-    failure boundary, then start the provider breadth pass; do not turn this into a
-    general frontend/socket refinement detour.
+- Next production work: close the Phase 0B whole-phase review, then start Phase 1
+  provider-first completion.
+  - Closeout only: confirm F-14's fail-closed request-ID boundary and F-16's current
+    sender-custody invariant plus preventive terminal branch. Both implementations
+    are complete; do not manufacture a reachable F-16 closure path or turn review
+    closeout into a general frontend/socket refinement detour.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
     contracts. On Codex, Antigravity, OpenCode, and DeepSeek, remove only false or

@@ -2,10 +2,10 @@
 
 Status: authoritative working plan. The Phase 0A inventory at `9711232` remains
 historical reviewed evidence, but its finding-number execution order no longer
-defines the production roadmap. The next product work closes only the confirmed
-live Phase 0B prerequisites F-14 and F-16, then follows the provider-first order
-below; the corrected provider-first plan is approved by manual documentation
-cross-review.
+defines the production roadmap. The finite Phase 0B prerequisites F-14 and F-16
+are implemented and await whole-phase cross-review; after that review closes, work
+follows the provider-first order below. The corrected provider-first plan is approved
+by manual documentation cross-review.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -348,7 +348,8 @@ Correction substage:
   it; retain its recovery state machine and change only a cadence with observed
   idle cost and recovery-latency evidence.
 - Phase 0B is no longer a serial global exit gate. Its completed corrections remain
-  recorded in the workboard; only the still-live F-14 and F-16 boundaries gate Phase 1.
+  recorded in the workboard; only final cross-review of the finite F-14 and F-16
+  boundaries gates Phase 1.
   D-06 joins Phase 1's provider-runtime measurement/hardening owner, D-07 moves to
   Phase 5 human admission, and split findings such as F-18/F-20 remain with their
   already named later product owners. Reordering never silently closes or waives a
