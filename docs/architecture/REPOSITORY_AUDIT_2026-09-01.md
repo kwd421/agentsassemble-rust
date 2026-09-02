@@ -1271,16 +1271,19 @@ codec, or repository abstraction would be overimplementation.
 
 ### C-13 — identical internal wire constants have multiple producers
 
-Disposition: `Consolidate per protocol`; low drift risk; Phase 1 for provider
-custody and Phase 5 for human identity/admission.
+Disposition: `Provider custody completed at 3779085`; low drift risk; Phase 5
+remains for human identity/admission.
 
 Browser-device credential prefix/length repeats in `deviceIdentity.ts:6-9` and
 `human_browser_credential.rs:4-7`; human-session bearer format repeats in
 `human_admission_store.rs:25-27` and `human_session_bearer.rs:4-7`; the guardian ready
-marker repeats in `guardian.rs:23` and `unix_custody.rs:31`. Export each
-from its existing protocol/provider owner. Generation, parsing, canonical decoding,
-fingerprint/signature checks, authorization, and boundary errors remain independent;
-do not add a common authentication or wire-constant crate.
+marker previously repeated in `guardian.rs` and `unix_custody.rs`. The guardian now
+exports that one provider-private prefix to its custody parser and tests; bounded
+line/PID parsing, boundary errors, and process checks remain independent. Export the
+two remaining human values from their existing protocol owners in Phase 5.
+Generation, canonical decoding, fingerprint/signature checks, and authorization stay
+at their distinct boundaries; do not add a common authentication or wire-constant
+crate.
 
 ### C-14 — Codex bundle identity meaning is duplicated
 

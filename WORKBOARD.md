@@ -1049,6 +1049,16 @@ contracts, findings, or verification journals.
   platform-neutral unit branch; no Windows binary or real provider ran. The change
   adds no state, abstraction, polling, retry, heartbeat, timer, silent failure, or
   background task and does not expand any file's responsibility.
+- Completed the Phase 1 provider-custody portion of C-13 at `3779085`. The
+  provider guardian's ready-line prefix is now produced, parsed, and exercised by
+  tests from the one existing guardian protocol constant. `unix_custody` retains
+  its independent bounded line parser, PID validation, failure mapping, and process
+  custody checks; this does not create a general wire-constant module. Eight focused
+  guardian tests plus the exact runtime initialization/reuse/stop regression pass,
+  as do provider Clippy, formatting, diff, architecture, policy, and source-structure
+  gates. The change removes only two duplicate literals and adds no state, allocation,
+  task, timer, polling, retry, fallback, or performance claim. C-13's distinct human
+  browser-credential and session-bearer items remain routed to Phase 5.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
