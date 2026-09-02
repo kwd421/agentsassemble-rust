@@ -3,15 +3,17 @@
 Status: The Phase 0A source/duplication/defensive-complexity inventory at
 `9711232` remains reviewed historical evidence. Its finding-number order is not
 the production roadmap. The corrected provider-first plan is active pending its
-manual documentation cross-review; the next implementation slice is Phase 1.
+manual documentation cross-review. Before Phase 1, the two confirmed live Phase 0B
+prerequisites F-14 and F-16 must close without expanding into unrelated polishing.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating product
 contracts, findings, or verification journals.
 
 ## Active work
 
-- Phase: plan correction, then Phase 1 provider-first implementation. No product
-  implementation starts until this documentation correction is reviewed.
+- Phase: plan correction, finite Phase 0B prerequisite closure (F-14 and F-16),
+  then Phase 1 provider-first implementation. No product implementation starts
+  until this documentation correction is reviewed.
 - Current phase execution: establish the whole phase's dependency skeleton and
   acceptance matrix first, implement the smallest shared owners, connect one complete
   vertical flow for every target in dependency order, then harden and verify the phase
@@ -366,6 +368,11 @@ contracts, findings, or verification journals.
   existing bounds and explicit failure semantics; measurements may inform a later product
   decision but do not pre-authorize a limit.
 - Next production work: Phase 1 provider-first completion.
+  - Prerequisite only: replace F-14's browser request-ID compatibility fallback
+    with fail-closed secure UUID creation and make F-16's closed catalog watch
+    terminate instead of immediately re-entering the select loop. Verify each exact
+    failure boundary, then start the provider breadth pass; do not turn this into a
+    general frontend/socket refinement detour.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
     contracts. On Codex, Antigravity, OpenCode, and DeepSeek, remove only false or
@@ -398,6 +405,12 @@ contracts, findings, or verification journals.
     MCP and native function/tool-call integrations are thin transport bindings; every
     call rechecks the bound session/capability. Unsupported tool transport stays
     explicitly unavailable—never output parsing, prompt convention, or client mutation.
+    Phase 1 removes duplicated provider-local tool-name/schema/allow-list declarations,
+    including the current DeepSeek list, only where they express that same contract.
+  - Real provider and packaged-frontend verification for current work uses Grok,
+    Codex Luna, and OpenCode Muse Spark contributor free. Antigravity is excluded from
+    this active real-run matrix. No missing client/model may be replaced by another
+    provider, model, mock, or fallback; unavailable evidence remains incomplete.
   - Share only proven-identical transport, decoding, bounds, secret handling, redaction,
     cancellation, and cleanup mechanisms. Endpoints, credentials, catalogs, model
     controls, session identity, completion receipts, permissions, and lifecycle semantics

@@ -111,11 +111,17 @@ Only verification-owned data may be destroyed.
 
 Frontend flows that require real Agent Sessions use exactly this matrix:
 
-- Codex: Terra;
-- Antigravity: Flash;
+- Grok: exact installed official-client model selected for the run;
+- Codex: Luna;
 - OpenCode: Muse Spark contributor free.
 
-The verification records the exact provider/model identifiers exposed by the installed runtime at execution time. Missing login, unavailable capability, unsupported model, or provider failure remains visible as failed or `unknown`; it never triggers model substitution, a mock pass, or a fallback provider.
+Antigravity is excluded from the active real-provider verification matrix until the
+user reopens it; this does not erase it from the retained parity inventory or rewrite
+historical Antigravity evidence. The verification records the exact provider/model
+identifiers exposed by the installed runtime at execution time. Missing login,
+unavailable official Grok client, unavailable capability, unsupported model, or
+provider failure remains visible as failed or `unknown`; it never triggers model
+substitution, a mock pass, or a fallback provider.
 
 Provider credentials, private conversation state, hidden reasoning, and provider-private identifiers are excluded from screenshots, logs, fixtures, public events, and committed artifacts.
 

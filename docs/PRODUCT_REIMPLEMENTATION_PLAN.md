@@ -2,9 +2,10 @@
 
 Status: authoritative working plan. The Phase 0A inventory at `9711232` remains
 historical reviewed evidence, but its finding-number execution order no longer
-blocks retained-product implementation. The next production work is the
-provider-first order below; this correction requires manual cross-review before
-its status is called approved.
+defines the production roadmap. The next product work closes only the confirmed
+live Phase 0B prerequisites F-14 and F-16, then follows the provider-first order
+below; this correction requires manual cross-review before its status is called
+approved.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -240,7 +241,10 @@ bound Agent Session and room capability on every call. Provider-native web, file
 other tools remain subject to that Agent Session's explicit policy and never acquire
 room authority from the provider itself. A provider without an exact supported tool
 transport reports the capability unavailable; output parsing, prompt conventions, or
-client-side state mutation are forbidden substitutes.
+client-side state mutation are forbidden substitutes. Phase 1 removes duplicated
+provider-local names, schemas, and allow lists—including the current DeepSeek list—
+only where repository-wide comparison proves they express this same RoomPortal
+contract; provider-specific subsets remain explicit projections of the canonical set.
 
 The Agent Add surface keeps the current retained Rust frontend's
 `Harness` / `API` / `Local` grouping during provider cutover. Older
@@ -348,6 +352,11 @@ Correction substage:
 
 ### Phase 1 — provider contract and process correctness
 
+- Enter Phase 1 only after the finite Phase 0B prerequisite slice closes F-14's
+  insecure browser request-ID compatibility fallback and F-16's closed catalog-watch
+  busy-spin. Verify those exact failures, then leave frontend/socket refinement and
+  proceed; they are structural prerequisites, not permission to polish the first
+  product area.
 - Build Phase 1 breadth-first. First establish the complete sixteen-provider
   acceptance matrix and the smallest shared registration, selection, start,
   ordinary-turn, visible-failure, and stop contracts. Remove from the four current
