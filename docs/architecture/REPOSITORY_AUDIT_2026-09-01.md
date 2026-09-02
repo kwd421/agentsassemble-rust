@@ -236,6 +236,19 @@ remote rmcp client remains cleanup-unconfirmed instead of becoming successful on
 later stop. Portal cleanup after a failure during provider construction remains open
 under F-03; `Drop` is still the last best effort for that path.
 
+Provider-construction correction `15585cb` closes that currently reachable portion.
+Codex, OpenCode, Claude Agent SDK, and the shared Cursor/Grok ACP runtime explicitly
+stop any started process and shut down the created Portal on later construction
+failure. The remote API family explicitly closes its rmcp client and Portal when
+client connection, tool discovery, or canonical tool validation fails. Cleanup
+uncertainty is preserved as `DriverLaunchError::uncertain` through provider-family
+wrappers and registration instead of being converted back to a safe failure. The
+common helper only combines results; transport-specific process and client cleanup
+remain with their existing owners. Antigravity's current launch fails before
+preparation at its missing-native-receipt gate, so its dormant post-gate path remains
+outside this closure. OpenCode's pre-stop native abort/disconnect handling remains
+to be judged separately against exact provider-session semantics before F-03 closes.
+
 ### F-04 — signed capabilities advertised actions that did not exist
 
 Disposition: `Closed through 7b2168f; both manual reviewers approved`; high

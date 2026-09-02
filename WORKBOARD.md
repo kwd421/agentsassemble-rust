@@ -1010,6 +1010,30 @@ contracts, findings, or verification journals.
   performance claim was added. Files over 500 lines retain one existing provider or
   Portal state/invariant owner; splitting this stop call would add state-transfer and
   error-forwarding interfaces without separating a change reason.
+- Completed the currently reachable provider-construction teardown portion of F-03
+  at `15585cb`. Codex, OpenCode, Claude Agent SDK, and the shared Cursor/Grok ACP
+  runtime now close a created RoomPortal when process spawn, pipe acquisition,
+  protocol connection, or startup confirmation fails, and they stop an already
+  started owned process before returning. The remote API family closes its rmcp
+  client and Portal when connection, tool discovery, or exact catalog validation
+  fails. One small cleanup-result owner combines an already provider-owned resource
+  result with Portal shutdown; provider-specific process/client owners still perform
+  the actual cleanup. Any unconfirmed resource or Portal cleanup remains the typed
+  uncertain `provider_launch_cleanup_unconfirmed` result rather than being narrowed
+  to a safe launch failure. The common non-Unix child-stop primitive owns the sole
+  five-second bound; Codex and OpenCode platform process setup moved into private
+  modules so their main provider files remain below the strong 800-line warning
+  without exposing new state or forwarding interfaces. Antigravity still fails at
+  its native-receipt gate before preparation and therefore creates no Portal or
+  process; its dormant later construction path is not claimed as future completion.
+  All 203 provider tests, warning-denied provider Clippy, formatting, diff,
+  architecture, policy, and source-structure gates pass. A Windows cross-check
+  reached `aws-lc-sys` but could not compile project code because the host has no
+  `x86_64-w64-mingw32-gcc`; Windows compile/runtime behavior remains unknown. No
+  retry, fallback, polling, heartbeat, background cleanup, credential exposure, or
+  real provider run was added. OpenCode's pre-stop native abort/disconnect result
+  handling remains an explicit F-03 review boundary rather than being declared safe
+  by this construction slice.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
