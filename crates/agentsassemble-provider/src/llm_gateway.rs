@@ -4,6 +4,7 @@ use serde_json::{Value, json};
 use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
+    launch_error::DriverLaunchError,
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
@@ -80,7 +81,7 @@ pub(crate) const fn credential_error(error: ProviderCredentialError) -> DriverEr
 
 pub(crate) async fn launch(
     credentials: ProviderCredentialStore,
-) -> Result<RemoteOpenAiDriver, DriverError> {
+) -> Result<RemoteOpenAiDriver, DriverLaunchError> {
     RemoteOpenAiDriver::launch(&LLM_GATEWAY_SPEC, credentials).await
 }
 

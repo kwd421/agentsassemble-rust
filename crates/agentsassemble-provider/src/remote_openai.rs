@@ -18,6 +18,8 @@ use crate::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
     },
+    launch_cleanup,
+    launch_error::DriverLaunchError,
     local_openai::fixed_loopback_completion,
     openai_stream::{AssistantMessage, OpenAiStreamCompletion, ToolCall, send_chat_completion},
     remote_https::fixed_endpoint_client,
@@ -82,7 +84,7 @@ impl RemoteOpenAiDriver {
     pub(crate) async fn launch(
         spec: &'static RemoteOpenAiSpec,
         credentials: ProviderCredentialStore,
-    ) -> Result<Self, DriverError> {
+    ) -> Result<Self, DriverLaunchError> {
         let (client, endpoint) = match (spec.endpoint, spec.authentication) {
             (RemoteOpenAiEndpoint::Fixed(endpoint), RemoteOpenAiAuthentication::Bearer { .. }) => {
                 let client = fixed_endpoint_client().map_err(|_| {
@@ -103,7 +105,8 @@ impl RemoteOpenAiDriver {
                 return Err(provider_error(
                     "provider_api_unavailable",
                     spec.errors.api_unavailable,
-                ));
+                )
+                .into());
             }
         };
         Self::launch_with_api(
@@ -125,17 +128,16 @@ impl RemoteOpenAiDriver {
         session_endpoint_authority: String,
         client: Client,
         endpoint: Url,
-    ) -> Result<Self, DriverError> {
+    ) -> Result<Self, DriverLaunchError> {
         if spec.endpoint != RemoteOpenAiEndpoint::AgentSession
             || !matches!(
                 spec.authentication,
                 RemoteOpenAiAuthentication::Bearer { .. }
             )
         {
-            return Err(provider_error(
-                "provider_api_unavailable",
-                spec.errors.api_unavailable,
-            ));
+            return Err(
+                provider_error("provider_api_unavailable", spec.errors.api_unavailable).into(),
+            );
         }
         Self::launch_with_api(
             spec,
@@ -154,18 +156,25 @@ impl RemoteOpenAiDriver {
         spec: &'static RemoteOpenAiSpec,
         credentials: ProviderCredentialStore,
         api: RemoteOpenAiApi,
-    ) -> Result<Self, DriverError> {
-        let portal = RoomPortal::create().await.map_err(|_| PORTAL_UNAVAILABLE)?;
+    ) -> Result<Self, DriverLaunchError> {
+        let mut portal = RoomPortal::create().await.map_err(|_| PORTAL_UNAVAILABLE)?;
         let portal_client = ().serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(portal.endpoint())
                 .auth_header(portal.bearer_token()),
         ));
-        let portal_client = portal_client.await.map_err(|_| PORTAL_UNAVAILABLE)?;
-        let tools = portal_client
-            .list_all_tools()
-            .await
-            .map_err(|_| PORTAL_UNAVAILABLE)?;
-        validate_tool_catalog(&tools)?;
+        let Ok(mut portal_client) = portal_client.await else {
+            let error = failed_remote_launch(&mut portal, None, PORTAL_UNAVAILABLE).await;
+            return Err(error);
+        };
+        let Ok(tools) = portal_client.list_all_tools().await else {
+            let error =
+                failed_remote_launch(&mut portal, Some(&mut portal_client), PORTAL_UNAVAILABLE)
+                    .await;
+            return Err(error);
+        };
+        if let Err(error) = validate_tool_catalog(&tools) {
+            return Err(failed_remote_launch(&mut portal, Some(&mut portal_client), error).await);
+        }
         Ok(Self {
             spec,
             api,
@@ -505,6 +514,22 @@ impl ProviderDriver for RemoteOpenAiDriver {
     fn turn_failure_effect_uncertain(&self) -> bool {
         self.turn_effect_uncertain
     }
+}
+
+async fn failed_remote_launch(
+    portal: &mut RoomPortal,
+    client: Option<&mut PortalClient>,
+    failure: DriverError,
+) -> DriverLaunchError {
+    let client = if let Some(client) = client {
+        match client.close_with_timeout(PORTAL_CLOSE_TIMEOUT).await {
+            Ok(Some(_)) => Ok(()),
+            Ok(None) | Err(_) => Err(launch_cleanup::unconfirmed()),
+        }
+    } else {
+        Ok(())
+    };
+    launch_cleanup::owned_and_portal(portal, client, DriverLaunchError::safe(failure)).await
 }
 
 impl RemoteOpenAiApi {

@@ -6,6 +6,7 @@ use serde_json::{Value, json};
 use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
+    launch_error::DriverLaunchError,
     remote_catalog::{
         RemoteCatalogError, bound_catalog_options, bounded_catalog_text, catalog_model_family,
     },
@@ -119,7 +120,7 @@ pub(crate) const fn credential_error(error: ProviderCredentialError) -> DriverEr
 
 pub(crate) async fn launch(
     credentials: ProviderCredentialStore,
-) -> Result<RemoteOpenAiDriver, DriverError> {
+) -> Result<RemoteOpenAiDriver, DriverLaunchError> {
     RemoteOpenAiDriver::launch(&TOKENROUTER_SPEC, credentials).await
 }
 

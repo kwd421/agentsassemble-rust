@@ -48,7 +48,7 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
     let mut driver =
         RemoteOpenAiDriver::launch(&DEEPSEEK_SPEC, ProviderCredentialStore::production())
             .await
-            .unwrap_or_else(|error| panic!("launch in-process portal: {error}"));
+            .unwrap_or_else(|error| panic!("launch in-process portal: {}", error.error));
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(1);
     driver
         .portal

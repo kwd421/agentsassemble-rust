@@ -1,14 +1,9 @@
 use std::{path::Path, time::Duration};
 
-#[cfg(not(unix))]
-use std::process::Stdio;
-
 use agentsassemble_domain::DurableAgentSession;
 use hyper::StatusCode;
-#[cfg(windows)]
-use process_wrap::tokio::JobObject;
 #[cfg(not(unix))]
-use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
+use process_wrap::tokio::ChildWrapper;
 use serde_json::{Value, json};
 use tokio::{sync::oneshot, task::JoinHandle};
 
@@ -18,11 +13,10 @@ mod session_creation;
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use crate::filesystem::BoundExecutable;
 #[cfg(not(unix))]
-use crate::opencode_protocol::{health_error, spawn_error, stop_error};
-#[cfg(not(unix))]
-use crate::process::sanitize_environment;
+use crate::opencode_protocol::health_error;
 use crate::{
     filesystem::bind_executable_with_children,
+    launch_cleanup,
     launch_error::DriverLaunchError,
     loopback_http::{JsonResponse, LoopbackHttp, VerifiedLoopbackConnection},
     opencode_protocol::{
@@ -50,8 +44,6 @@ use session_creation::{SessionCreationAuthority, guarded_session_creation};
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(15);
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
 const TURN_TIMEOUT: Duration = Duration::from_mins(3);
-#[cfg(not(unix))]
-const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MCP_NAME: &str = "agentsassemble_room";
 const SERVER_USERNAME: &str = "agentsassemble";
 
@@ -111,9 +103,11 @@ impl OpenCodeDriver {
         )
         .await
         .map_err(|_| executable_error())?;
-        let room_portal = RoomPortal::create().await.map_err(portal_driver_error)?;
+        let http = LoopbackHttp::new(&endpoint, workspace, SERVER_USERNAME, &server_password)
+            .map_err(http_driver_error)?;
+        let mut room_portal = RoomPortal::create().await.map_err(portal_driver_error)?;
         #[cfg(unix)]
-        let (process_group, pipes) = UnixProcessCustody::start_with_children(
+        let started = UnixProcessCustody::start_with_children(
             runtime_lease,
             guardian,
             &executable,
@@ -121,7 +115,12 @@ impl OpenCodeDriver {
             &environment,
             workspace,
         )
-        .await?;
+        .await;
+        #[cfg(unix)]
+        let (process_group, pipes) = match started {
+            Ok(started) => started,
+            Err(error) => return Err(launch_cleanup::portal(&mut room_portal, error).await),
+        };
         #[cfg(unix)]
         let (stdout_task, stderr_task, startup) = {
             drop(pipes.stdin);
@@ -133,42 +132,15 @@ impl OpenCodeDriver {
             )
         };
         #[cfg(not(unix))]
-        let (child, stdout_task, stderr_task, startup) = {
-            let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
-                command
-                    .args(&arguments)
-                    .current_dir(workspace)
-                    .stdin(Stdio::null())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-            });
-            sanitize_environment(command.command_mut());
-            command.command_mut().envs(environment.iter().cloned());
-            command.wrap(KillOnDrop);
-            #[cfg(windows)]
-            command.wrap(JobObject);
-            let mut child = command
-                .spawn()
-                .map_err(|_| DriverLaunchError::safe(spawn_error()))?;
-            drop(command);
-            let stdout = child
-                .stdout()
-                .take()
-                .ok_or_else(|| DriverLaunchError::uncertain(spawn_error()))?;
-            let stderr = child
-                .stderr()
-                .take()
-                .ok_or_else(|| DriverLaunchError::uncertain(spawn_error()))?;
-            let (stdout_task, startup) = observe_startup(stdout, ready_line);
-            (
-                child,
-                stdout_task,
-                tokio::spawn(drain_output(stderr)),
-                startup,
-            )
-        };
-        let http = LoopbackHttp::new(&endpoint, workspace, SERVER_USERNAME, &server_password)
-            .map_err(http_driver_error)?;
+        let (child, stdout_task, stderr_task, startup) = crate::opencode_process::start(
+            &executable,
+            &arguments,
+            workspace,
+            &environment,
+            ready_line,
+            &mut room_portal,
+        )
+        .await?;
         let driver = Self {
             #[cfg(unix)]
             process_group,
@@ -607,10 +579,7 @@ impl OpenCodeDriver {
         #[cfg(unix)]
         let process = self.process_group.stop().await;
         #[cfg(not(unix))]
-        let process = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill()))
-            .await
-            .map_err(|_| stop_error())
-            .and_then(|stopped| stopped.map_err(|_| stop_error()));
+        let process = crate::opencode_process::stop(self.child.as_mut()).await;
         self.stdout_task.abort();
         self.stderr_task.abort();
         let _ = (&mut self.stdout_task).await;

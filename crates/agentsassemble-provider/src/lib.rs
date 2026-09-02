@@ -22,6 +22,8 @@ mod codex;
 #[cfg(unix)]
 mod codex_code_mode_host;
 mod codex_identity;
+#[cfg(not(unix))]
+mod codex_process;
 mod configuration;
 mod credential_provider;
 mod credentials;
@@ -40,6 +42,7 @@ mod guardian;
 mod guardian_health;
 #[cfg(unix)]
 mod guardian_lifetime;
+mod launch_cleanup;
 mod launch_error;
 mod llm_gateway;
 mod lm_studio;
@@ -48,6 +51,8 @@ mod loopback_http;
 mod ollama;
 mod openai_stream;
 mod opencode;
+#[cfg(not(unix))]
+mod opencode_process;
 mod opencode_protocol;
 mod opencode_sse;
 mod opencode_startup;

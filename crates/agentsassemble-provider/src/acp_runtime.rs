@@ -1,5 +1,5 @@
 #[cfg(not(unix))]
-use std::{io, process::Stdio, time::Duration};
+use std::{io, process::Stdio};
 
 use agent_client_protocol::schema::v1::{HttpHeader, McpServer, McpServerHttp};
 use agentsassemble_domain::DurableAgentSession;
@@ -18,6 +18,7 @@ use crate::{
     acp_client::{AcpClient, AcpPermissionPolicy},
     driver::{DriverError, ProviderTurnRequest},
     filesystem::{BoundExecutable, bind_executable_with_children},
+    launch_cleanup,
     launch_error::DriverLaunchError,
     room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
 };
@@ -25,9 +26,6 @@ use crate::{
 use crate::{
     guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease, unix_custody::UnixProcessCustody,
 };
-
-#[cfg(not(unix))]
-const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 pub(crate) struct AcpRuntime {
     #[cfg(not(unix))]
@@ -51,8 +49,8 @@ impl AcpRuntime {
         permission_policy: AcpPermissionPolicy,
     ) -> Result<Self, DriverLaunchError> {
         let executable = bind(session).await?;
-        let room_portal = create_room_portal().await?;
-        let (process_group, pipes) = UnixProcessCustody::start_with_children(
+        let mut room_portal = create_room_portal().await?;
+        let started = UnixProcessCustody::start_with_children(
             runtime_lease,
             guardian,
             &executable,
@@ -60,9 +58,23 @@ impl AcpRuntime {
             environment,
             std::path::Path::new(&session.workspace),
         )
-        .await?;
+        .await;
+        let (mut process_group, pipes) = match started {
+            Ok(started) => started,
+            Err(error) => return Err(launch_cleanup::portal(&mut room_portal, error).await),
+        };
         let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
-        let client = AcpClient::connect(pipes.stdin, pipes.stdout, permission_policy).await?;
+        let client = match AcpClient::connect(pipes.stdin, pipes.stdout, permission_policy).await {
+            Ok(client) => client,
+            Err(error) => {
+                let process = process_group.stop().await;
+                stderr_task.abort();
+                let _ = stderr_task.await;
+                return Err(
+                    launch_cleanup::owned_and_portal(&mut room_portal, process, error).await,
+                );
+            }
+        };
         Ok(Self {
             process_group,
             _executable_guard: executable,
@@ -86,7 +98,7 @@ impl AcpRuntime {
         )
         .into());
         let executable = bind(session).await?;
-        let room_portal = create_room_portal().await?;
+        let mut room_portal = create_room_portal().await?;
         let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
             command
                 .args(arguments)
@@ -100,23 +112,40 @@ impl AcpRuntime {
         command.wrap(KillOnDrop);
         #[cfg(windows)]
         command.wrap(JobObject);
-        let mut child = command
-            .spawn()
-            .map_err(|error| DriverLaunchError::safe(spawn_error(&error)))?;
-        let stdin = child
-            .stdin()
-            .take()
-            .ok_or_else(|| DriverLaunchError::uncertain(protocol_error()))?;
-        let stdout = child
-            .stdout()
-            .take()
-            .ok_or_else(|| DriverLaunchError::uncertain(protocol_error()))?;
-        let stderr = child
-            .stderr()
-            .take()
-            .ok_or_else(|| DriverLaunchError::uncertain(protocol_error()))?;
+        let mut child = match command.spawn() {
+            Ok(child) => child,
+            Err(error) => {
+                let failure = DriverLaunchError::safe(spawn_error(&error));
+                return Err(launch_cleanup::portal(&mut room_portal, failure).await);
+            }
+        };
+        let Some(stdin) = child.stdin().take() else {
+            let process = stop_failed_child(child.as_mut()).await;
+            let failure = DriverLaunchError::safe(protocol_error());
+            return Err(launch_cleanup::owned_and_portal(&mut room_portal, process, failure).await);
+        };
+        let Some(stdout) = child.stdout().take() else {
+            let process = stop_failed_child(child.as_mut()).await;
+            let failure = DriverLaunchError::safe(protocol_error());
+            return Err(launch_cleanup::owned_and_portal(&mut room_portal, process, failure).await);
+        };
+        let Some(stderr) = child.stderr().take() else {
+            let process = stop_failed_child(child.as_mut()).await;
+            let failure = DriverLaunchError::safe(protocol_error());
+            return Err(launch_cleanup::owned_and_portal(&mut room_portal, process, failure).await);
+        };
         let stderr_task = tokio::spawn(drain_stderr(stderr));
-        let client = AcpClient::connect(stdin, stdout, permission_policy).await?;
+        let client = match AcpClient::connect(stdin, stdout, permission_policy).await {
+            Ok(client) => client,
+            Err(error) => {
+                let process = stop_failed_child(child.as_mut()).await;
+                stderr_task.abort();
+                let _ = stderr_task.await;
+                return Err(
+                    launch_cleanup::owned_and_portal(&mut room_portal, process, error).await,
+                );
+            }
+        };
         Ok(Self {
             child,
             _executable_guard: executable,
@@ -155,10 +184,7 @@ impl AcpRuntime {
         #[cfg(unix)]
         let process = self.process_group.stop().await;
         #[cfg(not(unix))]
-        let process = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill()))
-            .await
-            .map_err(|_| stop_error())
-            .and_then(|stopped| stopped.map_err(|_| stop_error()));
+        let process = stop_failed_child(self.child.as_mut()).await;
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
         let portal = self
@@ -220,6 +246,13 @@ async fn create_room_portal() -> Result<RoomPortal, DriverLaunchError> {
     RoomPortal::create()
         .await
         .map_err(|_| DriverLaunchError::safe(room_portal_unavailable()))
+}
+
+#[cfg(not(unix))]
+async fn stop_failed_child(child: &mut dyn ChildWrapper) -> Result<(), DriverError> {
+    crate::process::stop_child(child)
+        .await
+        .map_err(|_| stop_error())
 }
 
 async fn drain_stderr(mut stderr: impl AsyncRead + Unpin) {

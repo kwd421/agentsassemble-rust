@@ -8,6 +8,7 @@ use url::{Host, Position};
 use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
+    launch_error::DriverLaunchError,
     remote_https::{custom_endpoint_client, public_unicast},
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
@@ -159,7 +160,7 @@ pub(crate) const fn credential_error(error: ProviderCredentialError) -> DriverEr
 pub(crate) async fn launch(
     credentials: ProviderCredentialStore,
     session: &DurableAgentSession,
-) -> Result<RemoteOpenAiDriver, DriverError> {
+) -> Result<RemoteOpenAiDriver, DriverLaunchError> {
     let (client, endpoint) = completion_endpoint(&session.provider_endpoint)?;
     RemoteOpenAiDriver::launch_for_session_endpoint(
         &CUSTOM_API_SPEC,

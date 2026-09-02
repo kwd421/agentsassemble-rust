@@ -1,13 +1,9 @@
 use std::{collections::VecDeque, time::Duration};
-#[cfg(not(unix))]
-use std::{io, process::Stdio};
 
 use agentsassemble_domain::DurableAgentSession;
 use futures_util::StreamExt;
-#[cfg(windows)]
-use process_wrap::tokio::JobObject;
 #[cfg(not(unix))]
-use process_wrap::tokio::{ChildWrapper, CommandWrap, KillOnDrop};
+use process_wrap::tokio::ChildWrapper;
 use serde_json::{Value, json};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
@@ -15,14 +11,13 @@ use tokio::{
 };
 use tokio_util::codec::{FramedRead, LinesCodec};
 
-#[cfg(not(unix))]
-use crate::process::sanitize_environment;
 use crate::{
     codex_identity::{
         checked_provider_session_id, observed_model_id_from_response,
         provider_session_id_from_response, provider_session_mismatch, provider_session_unconfirmed,
     },
     filesystem::{BoundExecutable, bind_codex_executable},
+    launch_cleanup,
     launch_error::DriverLaunchError,
     room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
     runtime::{
@@ -36,8 +31,6 @@ use crate::{
 };
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
-#[cfg(not(unix))]
-const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
 const MAX_PENDING_NOTIFICATIONS: usize = 256;
 const MAX_PENDING_NOTIFICATION_BYTES: usize = 2 * 1024 * 1024;
@@ -108,8 +101,6 @@ impl CodexDriver {
         .into());
 
         let inherited_mcp_servers = config::inherited_mcp_servers().await?;
-        let room_portal = create_room_portal().await?;
-        let arguments = command_arguments(session, &room_portal, &inherited_mcp_servers)?;
         let executable = bind_codex_executable(
             session.executable.clone(),
             session.executable_identity.clone(),
@@ -117,9 +108,17 @@ impl CodexDriver {
         .await
         .map_err(|_| executable_authority_error())?;
         #[cfg(unix)]
+        let code_mode_host = crate::filesystem::codex_code_mode_host_path(&executable)
+            .map_err(|_| executable_authority_error())?;
+        let mut room_portal = create_room_portal().await?;
+        let arguments = match command_arguments(session, &room_portal, &inherited_mcp_servers) {
+            Ok(arguments) => arguments,
+            Err(error) => {
+                return Err(launch_cleanup::portal(&mut room_portal, error.into()).await);
+            }
+        };
+        #[cfg(unix)]
         {
-            let code_mode_host = crate::filesystem::codex_code_mode_host_path(&executable)
-                .map_err(|_| executable_authority_error())?;
             return Self::spawn_unix(
                 room_portal,
                 executable,
@@ -133,33 +132,13 @@ impl CodexDriver {
         }
         #[cfg(not(unix))]
         {
-            let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
-                command
-                    .args(&arguments)
-                    .current_dir(&session.workspace)
-                    .stdin(Stdio::piped())
-                    .stdout(Stdio::piped())
-                    .stderr(Stdio::piped());
-            });
-            sanitize_environment(command.command_mut());
-            room_portal.configure_environment(command.command_mut());
-            command.wrap(KillOnDrop);
-            #[cfg(windows)]
-            command.wrap(JobObject);
-            let mut child = match command.spawn() {
-                Ok(child) => child,
-                Err(error) => return Err(spawn_error(&error).into()),
-            };
-            drop(command);
-            let Some(stdin) = child.stdin().take() else {
-                return Err(failed_spawn_error(child.as_mut()).await);
-            };
-            let Some(stdout) = child.stdout().take() else {
-                return Err(failed_spawn_error(child.as_mut()).await);
-            };
-            let Some(stderr) = child.stderr().take() else {
-                return Err(failed_spawn_error(child.as_mut()).await);
-            };
+            let (child, stdin, stdout, stderr) = crate::codex_process::start(
+                &executable,
+                &arguments,
+                std::path::Path::new(&session.workspace),
+                &mut room_portal,
+            )
+            .await?;
             let stderr_task = tokio::spawn(drain_stderr(stderr));
             Ok(Self {
                 child,
@@ -189,7 +168,7 @@ impl CodexDriver {
 
     #[cfg(unix)]
     async fn spawn_unix(
-        room_portal: RoomPortal,
+        mut room_portal: RoomPortal,
         executable: crate::filesystem::BoundExecutable,
         arguments: Vec<String>,
         workspace: &std::path::Path,
@@ -198,7 +177,7 @@ impl CodexDriver {
         guardian_launch: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
         let provider_environment = room_portal.provider_environment();
-        let (process_group, pipes) = UnixProcessCustody::start_codex(
+        let result = UnixProcessCustody::start_codex(
             runtime_lease,
             guardian_launch,
             &executable,
@@ -207,7 +186,11 @@ impl CodexDriver {
             workspace,
             code_mode_host,
         )
-        .await?;
+        .await;
+        let (process_group, pipes) = match result {
+            Ok(started) => started,
+            Err(error) => return Err(launch_cleanup::portal(&mut room_portal, error).await),
+        };
         let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
         Ok(Self {
             process_group,
@@ -451,23 +434,7 @@ impl CodexDriver {
         #[cfg(unix)]
         let process = self.process_group.stop().await;
         #[cfg(not(unix))]
-        let stopped = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill())).await;
-        #[cfg(not(unix))]
-        let process = stopped
-            .map_err(|_| {
-                DriverError::new(
-                    "provider_stop_unconfirmed",
-                    "The Codex app-server exceeded its shutdown deadline.",
-                )
-            })
-            .and_then(|stopped| {
-                stopped.map_err(|_| {
-                    DriverError::new(
-                        "provider_stop_unconfirmed",
-                        "The Codex app-server shutdown could not be confirmed.",
-                    )
-                })
-            });
+        let process = crate::codex_process::stop(self.child.as_mut()).await;
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
         let portal = self
@@ -692,29 +659,6 @@ async fn drain_stderr(mut stderr: impl AsyncRead + Unpin) {
             Ok(0) | Err(_) => return,
             Ok(_) => {}
         }
-    }
-}
-
-#[cfg(not(unix))]
-async fn failed_spawn_error(child: &mut dyn ChildWrapper) -> DriverLaunchError {
-    match tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(child.kill())).await {
-        Ok(Ok(())) => DriverLaunchError::safe(protocol_error()),
-        Ok(Err(_)) | Err(_) => DriverLaunchError::uncertain(protocol_error()),
-    }
-}
-
-#[cfg(not(unix))]
-fn spawn_error(error: &io::Error) -> DriverError {
-    if error.kind() == io::ErrorKind::NotFound {
-        DriverError::new(
-            "provider_executable_missing",
-            "The Codex executable is no longer available.",
-        )
-    } else {
-        DriverError::new(
-            "provider_spawn_failed",
-            "The Codex app-server process could not be started.",
-        )
     }
 }
 

@@ -294,7 +294,7 @@ mod tests {
     async fn local_runtime_attaches_without_a_credential_or_provider_process() {
         let mut driver = RemoteOpenAiDriver::launch(&SPEC, ProviderCredentialStore::production())
             .await
-            .unwrap_or_else(|error| panic!("launch local runtime: {error}"));
+            .unwrap_or_else(|error| panic!("launch local runtime: {}", error.error));
         let mut session = durable_session(
             "room",
             "ollama-session",

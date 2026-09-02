@@ -1,5 +1,7 @@
 use std::{env, ffi::OsString, io, process::Stdio, time::Duration};
 
+#[cfg(not(unix))]
+use process_wrap::tokio::ChildWrapper;
 #[cfg(windows)]
 use process_wrap::tokio::JobObject;
 #[cfg(unix)]
@@ -9,6 +11,8 @@ use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_util::sync::CancellationToken;
 
 const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+#[cfg(not(unix))]
+const CHILD_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROBE_STREAM_BYTES: usize = 2 * 1024 * 1024;
 const PROVIDER_ENVIRONMENT: [&str; 22] = [
     "APPDATA",
@@ -45,6 +49,22 @@ pub(crate) enum ProbeFailure {
     Cancelled,
     CatalogTooLarge,
     CleanupUnconfirmed,
+}
+
+#[cfg(not(unix))]
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ChildStopFailure {
+    Deadline,
+    Unconfirmed,
+}
+
+#[cfg(not(unix))]
+pub(crate) async fn stop_child(child: &mut dyn ChildWrapper) -> Result<(), ChildStopFailure> {
+    match tokio::time::timeout(CHILD_STOP_TIMEOUT, Box::into_pin(child.kill())).await {
+        Ok(Ok(())) => Ok(()),
+        Ok(Err(_)) => Err(ChildStopFailure::Unconfirmed),
+        Err(_) => Err(ChildStopFailure::Deadline),
+    }
 }
 
 pub(crate) async fn probe(
