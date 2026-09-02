@@ -92,6 +92,7 @@ impl AntigravityDriver {
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
+        require_native_receipt()?;
         let PreparedAntigravity {
             arguments,
             workspace,
@@ -135,6 +136,7 @@ impl AntigravityDriver {
         session: &DurableAgentSession,
         companion: &BoundExecutable,
     ) -> Result<Self, DriverLaunchError> {
+        require_native_receipt()?;
         let PreparedAntigravity {
             arguments,
             workspace,
@@ -246,6 +248,10 @@ const fn native_receipt_unavailable() -> DriverError {
         ANTIGRAVITY_NATIVE_RECEIPT_ERROR_CODE,
         ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE,
     )
+}
+
+fn require_native_receipt() -> Result<(), DriverLaunchError> {
+    Err(DriverLaunchError::safe(native_receipt_unavailable()))
 }
 
 fn clean_identifier(value: &str) -> String {

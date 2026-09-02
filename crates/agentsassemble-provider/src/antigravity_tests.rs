@@ -1,6 +1,6 @@
 use agentsassemble_domain::DurableAgentSession;
 
-use super::command_arguments;
+use super::{command_arguments, require_native_receipt};
 use crate::test_support::durable_session;
 
 fn session() -> DurableAgentSession {
@@ -53,4 +53,14 @@ fn command_is_persistent_and_never_uses_print_mode() {
 
     "../another-conversation".clone_into(&mut session.provider_session_id);
     assert!(command_arguments(&session).is_err());
+}
+
+#[test]
+fn launch_fails_safely_before_any_native_effect_without_a_receipt_contract() {
+    let Err(error) = require_native_receipt() else {
+        panic!("Antigravity must not launch without an exact native receipt");
+    };
+
+    assert_eq!(error.error.code, "provider_native_receipt_unavailable");
+    assert!(!error.effect_uncertain);
 }
