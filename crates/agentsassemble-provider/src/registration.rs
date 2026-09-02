@@ -21,6 +21,8 @@ use crate::{
     cerebras,
     codex::CodexDriver,
     credentials::ProviderCredentialStore,
+    cursor,
+    cursor_acp::CursorAcpDriver,
     custom_api, deepseek,
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
@@ -124,6 +126,23 @@ pub(crate) static OPENCODE_PROVIDER: ProviderRegistration = ProviderRegistration
     configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_opencode_registered,
     launch: launch_opencode,
+};
+
+pub(crate) static CURSOR_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "cursor",
+    display_name: "Cursor",
+    provider_kind: "cursor_live_session",
+    runtime_kind: "live_cli",
+    transport: "acp_stdio",
+    catalog_group: "harness",
+    workspace_required: true,
+    connection_kind: "native_cli_bridge",
+    executable_required: true,
+    probe_executable: "cursor-agent",
+    credential_available: false,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
+    discover: discover_cursor_registered,
+    launch: launch_cursor,
 };
 
 pub(crate) static DEEPSEEK_PROVIDER: ProviderRegistration = ProviderRegistration {
@@ -245,10 +264,11 @@ pub(crate) static CUSTOM_API_PROVIDER: ProviderRegistration = ProviderRegistrati
     launch: launch_custom_api,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 12] = [
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 13] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
+    &CURSOR_PROVIDER,
     &DEEPSEEK_PROVIDER,
     &CEREBRAS_PROVIDER,
     &OPENROUTER_PROVIDER,
@@ -309,6 +329,13 @@ fn discover_opencode_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_opencode(provider, cancellation))
+}
+
+fn discover_cursor_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(cursor::discover(provider, cancellation))
 }
 
 fn discover_deepseek_registered(
@@ -538,6 +565,27 @@ fn launch_opencode<'a>(
         .await?;
         #[cfg(not(unix))]
         let driver = OpenCodeDriver::spawn(session).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_cursor<'a>(
+    factory: &'a ProductionDriverFactory,
+    session: &'a DurableAgentSession,
+    runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    #[cfg(not(unix))]
+    let _ = (factory, runtime_lease);
+    Box::pin(async move {
+        #[cfg(unix)]
+        let driver = CursorAcpDriver::spawn(
+            session,
+            runtime_lease,
+            factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
+        )
+        .await?;
+        #[cfg(not(unix))]
+        let driver = CursorAcpDriver::spawn(session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }
