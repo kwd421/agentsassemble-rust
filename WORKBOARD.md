@@ -272,15 +272,23 @@ contracts, findings, or verification journals.
     projections. Daybreaker found three Lows: the same boundary gap, catalog-absent
     controls and manually unbound key lists, and incomplete Agent Session participant/
     create-ACK binding. Independent corrections `77eea8a`, `fd473e8`, and `9320494`
-    addressed those initial roots. Fresh verification of `1c9f397` passed in 163.03
+    addressed those initially reported sites. Fresh verification of `1c9f397` passed in 163.03
     seconds with 788,037,632-byte maximum RSS. Daybreaker's first correction re-review
     then found one Medium: default `agent.create(start=true)` returns the creation event
     plus a final `agent_session_state`, while the browser required only the creation
     event. It also found one Low stale-status claim in this workboard. `71acb41` fixes
     the server's stale final `event_seq` and validates the real create/start and replay
-    transition without a fallback. Fresh complete verification passes in 247.45 seconds
-    with 1,860,009,984-byte maximum RSS. Both correction re-reviews remain pending, so
-    F-11 is not closed.
+    transition without a fallback. Fresh complete verification passed in 247.45 seconds
+    with 1,860,009,984-byte maximum RSS. The next manual reviews found two remaining
+    strict-boundary gaps: Daybreaker Low 1 showed that nested create/start event copies
+    were compared by identity rather than complete payload, and Critical-web Pro Medium
+    1 showed that standalone `room_settings_updated` events did not validate their exact
+    generated settings projection. Pro also assigned Low 1 to the earlier overstatement
+    that the settings root was already closed. Corrections `98a9af9` and `a8583f0`
+    respectively bind complete duplicate event projections and require exact settings in
+    the shared live/history/snapshot event validator. Complete verification passes in
+    164.33 seconds with 791,937,024-byte maximum RSS. Final correction re-reviews remain
+    pending, so F-11 is not closed.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

@@ -724,7 +724,37 @@ verification passes all 98 frontend files/635 tests, 25 desktop tests, the Rust
 workspace including TCP and WebSocket boundaries, Clippy, generated bindings, and all
 repository gates in 247.45 seconds with 1,860,009,984-byte maximum RSS. Its production
 JavaScript artifact is 820.35 kB, again an observation rather than an improvement claim.
-Both correction re-reviews remain pending, so no final approval is claimed.
+The next manual re-reviews found two residual sites. Daybreaker returned
+`REVISE — C0/H0/M0/L1` because nested create/start events and the final ACK event were
+compared with their outer event only by ID, sequence, room, and type; different actor or
+display payloads could therefore become a second projection. Critical-web Pro returned
+`REVISE — C0/H0/M1/L0` for the cumulative correction because a standalone
+`room_settings_updated` event reached live, history, and snapshot through the shared
+event validator without validating its nested generated `PublicRoomSettings`. Pro also
+assigned the earlier correction-document commit one Low for claiming that root closed
+before this remaining path was checked.
+
+Correction `98a9af9` compares each server-duplicated create/start event as one complete
+JSON projection and rejects nested or final actor/content disagreement. Correction
+`a8583f0` adds the missing event-type rule to the existing endpoint validator, so the
+same exact settings owner now applies to command ACK, live, history, and snapshot events.
+These are bounded trust-boundary comparisons over already admitted socket values; they
+add no state, task, timer, polling, heartbeat, retry, fallback, compatibility decoder,
+cache, or framework. The accepted cost is serialization of at most the four existing
+create/start event copies and one exact settings check before projection. The generated
+semantic types, endpoint-specific envelope/error/sequence owners, room settings product
+behavior, and create/start persistence transition are unchanged.
+
+The focused Agent Session/settings/history tests pass 25 cases. Fresh complete
+verification passes all 98 frontend files/640 tests, 25 desktop tests, all Rust unit and
+real TCP/WebSocket suites, generated bindings, warning-denied Clippy, diff, structure,
+policy, CSS, and artifact gates in 164.33 seconds with 791,937,024-byte maximum RSS. The
+production JavaScript artifact is 820.38 kB and is recorded only as an observation.
+`participantEventContract.ts` is now exactly 500 lines: it still owns one cohesive
+Participant/Agent Session/create-ACK transition invariant, while splitting would expose
+its exact parsing internals or add cross-file glue, so the warning does not justify a
+mechanical split. Both corrections remain subject to final Pro and Daybreaker re-review;
+no final approval is claimed.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,
