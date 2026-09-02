@@ -949,6 +949,19 @@ contracts, findings, or verification journals.
   turn fixture still completes through one `turn/completed`, and all 197 provider
   tests, warning-denied provider Clippy, formatting, diff, architecture, and source-
   structure gates pass. No real provider turn was run for this correction.
+- Completed the observation-abort portion of F-03 at `fa8fac8`; portal teardown,
+  hook cleanup, and residual-process reporting remain open. Codex, OpenCode, Claude
+  Agent SDK, the shared remote OpenAI runtime, and shared Cursor/Grok ACP runtime now
+  return their RoomPortal abort result instead of discarding it. ACP always attempts
+  both permission-gate deactivation and portal close, even if either fails. The common
+  turn owner also closes a partially begun observation and treats any abort failure as
+  restart-required, then uses the existing exact stop/lease/tombstone path before
+  returning; a normal definitive provider failure with successful cleanup still keeps
+  its runtime. This addresses the concrete stale-observation/permission threat without
+  a new state machine, timer, retry, polling, fallback, background task, or alternate
+  cleanup path. The focused failed-abort test proves one exact stop and no runtime
+  reuse; all 198 provider tests, warning-denied provider Clippy, formatting, diff,
+  architecture, policy, and source-structure gates pass. No real provider ran.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop

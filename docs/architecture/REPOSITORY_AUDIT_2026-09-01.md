@@ -203,6 +203,13 @@ Use one common fallible abort/poison outcome, provider-specific explicit teardow
 where necessary, and typed residual-process/hook failure. `Drop` may remain only a
 last best effort after the explicit owner has reported the result.
 
+Observation-abort correction `fa8fac8` completes only the first part of this finding.
+Every retained RoomPortal-capable driver now returns its abort result, including both
+the ACP permission gate and portal close attempt. The common turn owner also aborts a
+partially begun observation and forces an exact owned-runtime stop whenever abort
+fails, so failed cleanup cannot leave that runtime reusable. Explicit portal teardown,
+hook cleanup, and residual-process reporting remain open under F-03.
+
 ### F-04 — signed capabilities advertised actions that did not exist
 
 Disposition: `Closed through 7b2168f; both manual reviewers approved`; high
