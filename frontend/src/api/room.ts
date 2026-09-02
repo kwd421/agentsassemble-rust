@@ -103,8 +103,6 @@ export interface ServerRoomsResponse {
   rooms: ServerRoom[];
 }
 
-export type ParticipantType = "human" | "subscription_ai" | "api" | "local" | "remote" | "unknown";
-
 export type RoomMember = Participant;
 
 export interface VoiceParticipant {

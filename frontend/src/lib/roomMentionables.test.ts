@@ -5,6 +5,7 @@ import {
   mentionQueryAtCursor,
 } from "./mentionComposerModel";
 import { roomMentionables } from "./roomMentionables";
+import { participantFixture } from "../test/participant";
 
 describe("roomMentionables", () => {
   it("shows one display-name option per participant instead of a second id option", () => {
@@ -21,18 +22,18 @@ describe("roomMentionables", () => {
           },
         ],
         members: [
-          {
+          participantFixture({
             participant_id: "operator-local",
             display_name: "SeiNel",
             participant_type: "human",
-          },
-          {
+          }),
+          participantFixture({
             participant_id: "codex-codex-gpt-5.6-luna",
             display_name: "Stale Participant",
             avatar_image_url: "/api/attachments/stale-avatar?view=1",
             owner_id: "operator-local",
-            provider_kind: "stale-provider",
-          },
+            participant_type: "agent",
+          }),
         ],
       });
 
@@ -72,7 +73,11 @@ describe("roomMentionables", () => {
           { agent_id: "bravo", display_name: "동일 이름" },
           { agent_id: "charlie" },
         ],
-        members: [],
+        members: [
+          participantFixture({ participant_id: "alpha", participant_type: "agent" }),
+          participantFixture({ participant_id: "bravo", participant_type: "agent" }),
+          participantFixture({ participant_id: "charlie", participant_type: "agent" }),
+        ],
       }).map(({ token, label }) => ({ token, label }))
     ).toEqual([
       { token: "alpha", label: "동일 이름 · alpha" },
@@ -87,7 +92,9 @@ describe("roomMentionables", () => {
       displayResourceBase: "http://127.0.0.1:43123",
       viewerParticipantId: "host",
       agents: [{ agent_id: "sol-dm", display_name: "Sol — 던전 마스터" }],
-      members: [],
+      members: [
+        participantFixture({ participant_id: "sol-dm", participant_type: "agent" }),
+      ],
     })[0];
 
     expect(mentionable).toMatchObject({
@@ -107,7 +114,7 @@ describe("roomMentionables", () => {
     });
   });
 
-  it("does not describe a room participant with stale LiveAgent ownership", () => {
+  it("takes agent presentation while keeping ownership room-owned", () => {
     const mentionable = roomMentionables({
       displayResourceBase: "",
       viewerParticipantId: "host",
@@ -115,22 +122,21 @@ describe("roomMentionables", () => {
         {
           agent_id: "agent-1",
           display_name: "Agent One",
-          owner_id: "remote-owner",
-          owner_display_name: "Remote Owner",
         },
       ],
       members: [
-        {
+        participantFixture({
           participant_id: "remote-owner",
           display_name: "Remote Owner",
           participant_type: "human",
-        },
-        {
+          owner_id: "remote-owner",
+        }),
+        participantFixture({
           participant_id: "agent-1",
           display_name: "Participant Copy",
           owner_id: "",
-          participant_type: "local",
-        },
+          participant_type: "agent",
+        }),
       ],
     }).find((entry) => entry.token === "agent-1");
 

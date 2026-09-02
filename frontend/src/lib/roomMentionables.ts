@@ -1,3 +1,4 @@
+import type { RoomMember } from "../api";
 import type { Mentionable } from "./mentionComposerModel";
 import { resolveAttachmentReference } from "./attachmentReference";
 
@@ -7,15 +8,6 @@ type AgentMentionIdentity = {
   avatar_image_url?: string;
   owner_id?: string;
   owner_display_name?: string;
-  provider_kind?: string;
-};
-
-type MemberMentionIdentity = {
-  participant_id: string;
-  display_name?: string;
-  avatar_image_url?: string;
-  owner_id?: string;
-  participant_type?: string;
   provider_kind?: string;
 };
 
@@ -31,7 +23,7 @@ export function roomMentionables({
 }: {
   viewerParticipantId: string;
   agents: AgentMentionIdentity[];
-  members: MemberMentionIdentity[];
+  members: RoomMember[];
   displayResourceBase: string;
 }): Mentionable[] {
   const viewerId = clean(viewerParticipantId);
@@ -46,7 +38,6 @@ export function roomMentionables({
     participantIds.set(key, participantId);
   }
 
-  agents.forEach((agent) => append(agent.agent_id));
   members.forEach((member) => append(member.participant_id));
   const viewerDisplayName = clean(
     memberById.get(viewerId)?.display_name
@@ -64,20 +55,25 @@ export function roomMentionables({
   });
 
   function mentionableFor(participantId: string): Mentionable {
-    const agent = agentById.get(participantId);
     const member = memberById.get(participantId);
-    const displayName = clean(agent ? agent.display_name : member?.display_name);
+    if (
+      !member ||
+      (member.participant_type !== "human" && member.participant_type !== "agent")
+    ) {
+      throw new Error("Room mention participant has an unsupported canonical type.");
+    }
+    const agent = member.participant_type === "agent"
+      ? agentById.get(participantId)
+      : undefined;
+    if (member.participant_type === "agent" && !agent) {
+      throw new Error("Room mention agent is missing its canonical Agent Session projection.");
+    }
+    const displayName = clean(agent ? agent.display_name : member.display_name);
     const uniqueDisplayName =
       displayName && displayNameCounts.get(displayName.toLowerCase()) === 1;
-    const participantKind =
-      agent || (member?.participant_type && member.participant_type !== "human")
-        ? "agent"
-        : "human";
-    const ownerId = clean(member ? member.owner_id : agent?.owner_id);
-    const ownerDisplayName = clean(
-      memberById.get(ownerId)?.display_name ||
-        (!member ? agent?.owner_display_name : "")
-    );
+    const participantKind = member.participant_type;
+    const ownerId = clean(member.owner_id);
+    const ownerDisplayName = clean(memberById.get(ownerId)?.display_name);
     return {
       token: participantId,
       label: uniqueDisplayName
@@ -86,11 +82,11 @@ export function roomMentionables({
           ? `${displayName} · ${participantId}`
           : participantId,
       avatarImage: resolveAttachmentReference(
-        agent ? agent.avatar_image_url : member?.avatar_image_url,
+        agent ? agent.avatar_image_url : member.avatar_image_url,
         displayResourceBase
       ),
       participantKind,
-      providerKind: clean(agent ? agent.provider_kind : member?.provider_kind) || undefined,
+      providerKind: clean(agent?.provider_kind) || undefined,
       detail:
         participantKind === "agent"
           ? ownerDisplayName
