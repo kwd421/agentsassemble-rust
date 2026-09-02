@@ -909,6 +909,33 @@ contracts, findings, or verification journals.
   invariant. It will be revisited if another owner or change reason enters. Repository-
   wide checks found no new polling, heartbeat, retry, fallback, transcript, print, or
   silently swallowed failure.
+- Implemented pending Phase 1 whole-phase review: Freebuff static/fail-closed vertical
+  at `477a69a`. Read-only comparison against original `d5046473` found no structured
+  provider protocol: it repeatedly captured a PTY screen to infer model labels, slept
+  between synthetic arrow-key navigation, treated the last 40 terminal lines as the
+  public answer, cached inferred menu positions, and silently ignored room-publication
+  failure. None of those polling, timing, screen-scraping, completion-inference, cache,
+  or swallowed-failure paths was ported. The locally installed official Freebuff
+  `0.0.154` help surface exposes only its interactive TUI, `--continue`, `--cwd`, and
+  `login`; it has no prompt argument, headless/JSON output, ACP server, or other exact
+  session/completion receipt. The official headless/SDK request
+  `CodebuffAI/freebuff#947` remains open, and its own evidence distinguishes the
+  Freebuff device token from the separately published
+  paid Codebuff SDK API-key contract, so substituting that SDK would change both product
+  and credential authority.
+  Freebuff is now the sixteenth retained registration and uses the current `Harness`
+  grouping. Discovery owns only bounded executable presence/identity. A present CLI is
+  visibly `available` but not `startable`, with no model/default/control claims and the
+  shared `provider_native_receipt_unavailable` failure; a missing CLI remains a distinct
+  `command_missing` failure. The launch boundary independently fails before any process
+  or provider effect, so a forged/stale stored profile cannot bypass catalog selection.
+  The exact sixteen-provider registration-set test and Freebuff unavailable-state test
+  pass with all 197 provider tests, warning-denied provider Clippy, formatting, diff,
+  architecture, policy, and source-structure gates. No real Freebuff process, login,
+  model, prompt, or turn was run. No polling, heartbeat, timer, retry, fallback,
+  transcript, print, cache, background task, or credential state was added. The central
+  registration owner is now 833 lines; the prior strong-warning review still applies
+  because this one declarative entry added no second state flow or independent owner.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
