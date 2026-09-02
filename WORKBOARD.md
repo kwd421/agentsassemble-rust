@@ -430,6 +430,20 @@ contracts, findings, or verification journals.
   2 MiB tail; those costs and provider-private-history reads are gone. Focused tests,
   all 151 provider tests, Clippy with warnings denied, formatting, architecture/policy
   gates, and diff checks pass. No Antigravity turn or Phase 1 completion is claimed.
+- Implemented pending Phase 1 whole-phase review: fixed-endpoint HTTPS ownership at
+  `c43e161`. The previous DeepSeek-only client installed a second DNS resolver, rejected
+  every non-public resolution, and forced `no_proxy` even though the credential target
+  is a code-owned constant and redirects are disabled. No observed request forgery path
+  justified that duplicate resolver, while it performed an extra lookup task and blocked
+  ordinary system proxy policy. The common fixed-endpoint client now retains HTTPS-only,
+  TLS hostname validation through reqwest/rustls, redirect denial, the ten-second connect
+  timeout, and the progress-reset three-minute read-inactivity timeout, while using the
+  platform resolver and configured proxy path. The `ip_network` dependency and 109 lines
+  of resolver/test state are removed. This owner is intentionally not reusable for
+  caller-selected Custom API URLs; their hostname/address validation remains a separate
+  Phase 1 SSRF boundary. All 150 provider tests, Clippy with warnings denied, formatting,
+  architecture/policy gates, and diff checks pass. No remote-provider implementation or
+  performance gain is claimed by this refactor.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
