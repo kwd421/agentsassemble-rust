@@ -629,6 +629,39 @@ contracts, findings, or verification journals.
   checks pass. The selection group was run serially because its existing executable-
   validation tests share a four-permit filesystem worker; no product capacity, retry,
   fallback, polling, heartbeat, timer, cache, or failure handling changed.
+- Implemented pending Phase 1 whole-phase review: LLM Gateway vertical through
+  `2e3e645`, `eb982ac`, and `9759646`. The first commit consolidates the identical
+  public-gateway fetch, empty-compatible-catalog rejection, exact preferred-model
+  selection, and common output/permission control transition already copied across
+  Cerebras, OpenRouter, and Vercel. Provider endpoint, display name, preferred model,
+  and optional reasoning control remain explicit inputs; no provider switch, framework,
+  state, or lifecycle owner was introduced. The second commit gives per-model relation
+  metadata one exact representation for an optional empty value. An explicit empty
+  entry now permits omission, while a nonempty-only relation still rejects omission;
+  the remote gateway projection adds that empty entry because its shared request
+  contract omits `reasoning_effort` when the user selects provider default. Existing
+  Codex and Cerebras requirements remain unchanged.
+  `9759646` registers the exact `llm_gateway_api` HTTPS provider, public `/v1/models`
+  catalog, `/v1/chat/completions` SSE endpoint, `gpt-oss-120b` preference, optional
+  default plus none/minimal/low/medium/high/xhigh/max reasoning control, output limit,
+  provider-specific failures, isolated keyring account, private authorization-before-
+  body credential route, and capability-derived Agent-add surface. It reuses the common
+  bounded catalog projection and remote SSE/tool runtime; endpoint, credential, model
+  and reasoning policy, request shape, and errors remain provider-owned. A temporary
+  production-path request on 2026-09-03 observed 249 compatible models, retained the
+  exact preferred model as startable, and produced a complete eight-provider public
+  catalog of 172,032 bytes under the 192 KiB aggregate and 256 KiB WebSocket bounds.
+  The network-dependent test was removed immediately. Repository-wide searches found no
+  second LLM Gateway endpoint, credential route, catalog-transition owner, timer, retry,
+  fallback, polling, heartbeat, cache, or swallowed failure. The 680-line catalog and
+  551-line registration files remain respectively one public catalog state-transition
+  owner and one declarative registration/launch table after the 500-line review;
+  splitting either now would add forwarding interfaces without separating an invariant.
+  A fresh complete `make verify` passes all 99 frontend files/660 tests, desktop,
+  Rust unit/integration, real TCP/WebSocket, generated-binding, Clippy, policy,
+  structure, diff, CSS, and artifact gates in 258.66 seconds with 1,806,270,464-byte
+  maximum RSS. No LLM Gateway credential was available for an authorized real
+  completion, so real-turn evidence remains explicitly open for the Phase 1 matrix.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
