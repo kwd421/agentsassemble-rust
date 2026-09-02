@@ -585,6 +585,33 @@ contracts, findings, or verification journals.
   file retains one cohesive trust-boundary responsibility after its 500-line review;
   splitting the snapshot key check would add an interface and key-list forwarding without
   separating state or an invariant.
+- Implemented pending Phase 1 whole-phase review: Vercel AI Gateway vertical through
+  `c70c9fe` and `3af62ec`. The verified original applies its 256-model ceiling after
+  projecting compatible entries, while the shared Rust parser had incorrectly rejected
+  any raw catalog above 256 entries. `c70c9fe` restores that one policy owner: 257 valid
+  text/tool models fail closed, but arbitrary incompatible entries do not consume the
+  compatible-model budget. No Vercel exception or alternate parser was introduced.
+  `3af62ec` registers the exact `vercel_ai_gateway` HTTPS path, public `/v1/models`
+  catalog, `/v1/chat/completions` SSE runtime, `openai/gpt-5.4-mini` preference,
+  output control, provider-specific failure text, isolated keyring account, private
+  authorization-before-body credential route, and capability-derived Agent-add surface.
+  It reuses the existing gateway projection and remote SSE/tool runtime; endpoint,
+  credential, default selection, request shape, and errors remain provider-owned.
+  On 2026-09-03 the public endpoint returned 365 raw entries/373,107 bytes, of which
+  229 were text/tool compatible. The production Rust path projected those 229 models
+  to a 99,723-byte provider containing the exact preference, and the complete seven-
+  provider catalog was ready at 124,630 bytes. Those measurements replace the obsolete
+  16 KiB/48 KiB publication limits with 128 KiB per provider and 192 KiB aggregate
+  absolute ceilings, leaving 64 KiB inside the unchanged 256 KiB WebSocket frame for
+  room metadata. Separate regressions reject each enlarged bound and prove a 229-model
+  catalog crosses the real WebSocket snapshot once, without the retired duplicate alias.
+  The live measurement test was removed immediately; there is no network-dependent suite,
+  page loop, retry, fallback, polling, heartbeat, timer, cache, or swallowed catalog
+  failure. A fresh complete `make verify` passes all 99 frontend files/658 tests,
+  desktop, Rust unit/integration, real TCP/WebSocket, generated-binding, Clippy, policy,
+  structure, diff, CSS, and artifact gates in 200.28 seconds with 1,785,643,008-byte
+  maximum RSS. No Vercel credential was available for an authorized real completion,
+  so real-turn evidence remains explicitly open for the Phase 1 provider matrix.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
