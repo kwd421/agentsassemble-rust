@@ -393,8 +393,9 @@ contracts, findings, or verification journals.
     Ollama and LM Studio; and the remaining original native providers Cursor, Freebuff,
     and Grok through its official ACP stdio contract. Grok registration and
     static/contract verification are mandatory even without a local executable;
-    executable/login/run-authorization absence affects availability and real-run
-    evidence only.
+    executable/login absence affects runtime availability, while absent provider-run
+    authorization affects only whether real-run evidence may be collected. Every
+    retained provider, including Cursor, requires its static/contract implementation.
   - For that API family, first establish the smallest common HTTPS/SSE execution
     mechanism from DeepSeek and matching verified-original behavior: transport,
     streaming decode, cancellation, normalized failure/usage, bounds, and redaction.

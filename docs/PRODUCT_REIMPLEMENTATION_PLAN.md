@@ -60,8 +60,9 @@ Defer until the retained core is complete and the user explicitly reopens them:
   taxonomy;
 - any new provider not present in the verified original inventory. Grok is one of
   the retained original sixteen, so its static/contract implementation remains
-  mandatory in Phase 1. Only its local availability and real-run evidence wait for
-  the official client, login, and provider-run authorization.
+  mandatory in Phase 1. The official client and login determine runtime
+  availability; provider-run authorization determines only whether real-run
+  evidence may be collected.
 
 ## Product-wide invariants
 
@@ -199,7 +200,7 @@ silently redefined as Gemini CLI.
 | Antigravity | persistent PTY/ConPTY plus hooks | implemented with forbidden transcript polling | keep PTY/ConPTY and hooks; remove transcript and print completely; exact native signal or explicit incomplete |
 | Grok | official ACP stdio | absent | implement the ACP registration, catalog/selection, lifecycle, turn, failure, cancellation, and stop contracts; client/login absence affects availability and real-run evidence only |
 | Claude | persistent Claude Code terminal/hook path | absent | use Claude Agent SDK as directed; no old transcript or print path |
-| Cursor | persistent Cursor terminal/room portal | absent | reimplement the verified reachable current flow or record explicit unsupported evidence |
+| Cursor | persistent Cursor terminal/room portal | absent | implement the verified reachable registration, lifecycle, turn, failure, and stop contracts; missing client capability is an explicit runtime-unavailable state, not a substitute for static implementation |
 | Freebuff | persistent terminal runtime | absent | reimplement only its verified current reachable flow, without shared-terminal heuristics |
 | OpenCode | owned loopback HTTP/SSE server | implemented; completion/cleanup authority reopened | Muse Spark default only when present; one explicit completion owner; exact child/peer custody |
 | DeepSeek | official HTTPS OpenAI-compatible API | implemented | official Flash path, explicit credential owner, finite tool rounds, cancellation, selected output limits, and progress-reset read inactivity; no invented whole-turn or cumulative token/cost cap |
@@ -406,8 +407,8 @@ Correction substage:
   API); local Ollama/LM Studio; and the remaining original native providers
   (Cursor, Freebuff, and Grok through its official ACP stdio contract). Grok's
   registration and static/contract verification do not depend on a local executable;
-  executable/login/authorization absence yields explicit unavailability and leaves
-  only real-run evidence incomplete.
+  executable/login absence yields explicit runtime unavailability, while absent
+  provider-run authorization changes only whether real-run evidence can be collected.
 - Before connecting the remote API family, establish its smallest common HTTPS/SSE
   execution mechanism from the implemented DeepSeek path and matching verified
   original contracts. It owns only proven-identical request transport, streaming
@@ -423,9 +424,10 @@ Correction substage:
   unavailable rather than being simulated or replaced.
 - Exit: all sixteen retained providers have static/contract implementations. Each
   enabled provider has exactly one completion/session authority and a visible
-  failure/uncertainty contract; a missing executable, credential, or run approval is
-  projected as unavailable and may leave only real-run evidence incomplete. No
-  scraping, transcript, print, silent fallback, or ownerless cleanup remains.
+  failure/uncertainty contract. A missing executable, credential, or login is
+  projected as runtime unavailable; missing run authorization does not alter product
+  state and leaves only real-run evidence incomplete. No scraping, transcript,
+  print, silent fallback, or ownerless cleanup remains.
 
 ### Phase 2 — finish exact Agent Session control
 
