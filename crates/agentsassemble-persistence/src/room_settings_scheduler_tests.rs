@@ -25,23 +25,6 @@ async fn mode_transitions_preserve_delivery_kind_and_ambient_parallelism() {
     )
     .await
     .unwrap_or_else(|error| panic!("switch to ambient: {error}"));
-    assert_eq!(
-        ambient_settings.result["event_seq"],
-        json!(ambient_settings.event.seq)
-    );
-    let ambient_replay = update_mode(
-        &store,
-        &principal,
-        "settings-ambient",
-        &initial_revision,
-        "ambient",
-    )
-    .await
-    .unwrap_or_else(|error| panic!("replay ambient settings: {error}"));
-    assert!(ambient_replay.deduplicated);
-    assert_eq!(ambient_replay.result, ambient_settings.result);
-    assert_eq!(ambient_replay.event.seq, ambient_settings.event.seq);
-
     let Err(stale) = update_mode(
         &store,
         &principal,
@@ -122,6 +105,37 @@ async fn mode_transitions_preserve_delivery_kind_and_ambient_parallelism() {
             RoomInputDeliveryKind::OrderedObservation,
         ]
     );
+}
+
+#[tokio::test]
+async fn settings_result_binds_event_sequence_and_replays() {
+    let (store, principal, _directory) = fixture().await;
+    let initial_revision = public_settings(&RoomSettings::defaults("General"))
+        .unwrap_or_else(|error| panic!("initial settings revision: {error}"))
+        .settings_revision;
+    let committed = update_mode(
+        &store,
+        &principal,
+        "settings-sequence",
+        &initial_revision,
+        "ambient",
+    )
+    .await
+    .unwrap_or_else(|error| panic!("update settings: {error}"));
+    assert_eq!(committed.result["event_seq"], json!(committed.event.seq));
+
+    let replay = update_mode(
+        &store,
+        &principal,
+        "settings-sequence",
+        &initial_revision,
+        "ambient",
+    )
+    .await
+    .unwrap_or_else(|error| panic!("replay settings: {error}"));
+    assert!(replay.deduplicated);
+    assert_eq!(replay.result, committed.result);
+    assert_eq!(replay.event.seq, committed.event.seq);
 }
 
 async fn insert_second_agent(store: &SqliteStore) {
