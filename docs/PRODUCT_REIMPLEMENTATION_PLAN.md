@@ -233,6 +233,15 @@ RoomPortal MCP used to expose bounded room tools to a resident provider. Sharing
 MCP library or tool schemas must not merge their principals, credentials, permissions,
 state, or lifecycle.
 
+RoomPortal owns each product tool's schema, authorization, state transition, and
+result meaning once. MCP and provider-native function/tool calling are thin transport
+bindings to that same owner, not separate implementations; the server rechecks the
+bound Agent Session and room capability on every call. Provider-native web, file, or
+other tools remain subject to that Agent Session's explicit policy and never acquire
+room authority from the provider itself. A provider without an exact supported tool
+transport reports the capability unavailable; output parsing, prompt conventions, or
+client-side state mutation are forbidden substitutes.
+
 The Agent Add surface keeps the current retained Rust frontend's
 `Harness` / `API` / `Local` grouping during provider cutover. Older
 `Subscription` naming is not the target contract for this surface. These groups

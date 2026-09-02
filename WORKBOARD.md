@@ -394,6 +394,10 @@ contracts, findings, or verification journals.
     AI app/CLI session use current-session room tools. Room Connector MCP and the
     resident provider's private RoomPortal MCP may share libraries/schemas, never
     principals, credentials, permissions, state, or lifecycle.
+  - RoomPortal owns room-tool meaning, authorization, mutation, and results once.
+    MCP and native function/tool-call integrations are thin transport bindings; every
+    call rechecks the bound session/capability. Unsupported tool transport stays
+    explicitly unavailable—never output parsing, prompt convention, or client mutation.
   - Share only proven-identical transport, decoding, bounds, secret handling, redaction,
     cancellation, and cleanup mechanisms. Endpoints, credentials, catalogs, model
     controls, session identity, completion receipts, permissions, and lifecycle semantics
