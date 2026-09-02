@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use agentsassemble_domain::DurableAgentSession;
 use agentsassemble_domain::{ProviderAvailability, ProviderControlOption};
 use serde::Deserialize;
@@ -14,7 +14,7 @@ use crate::{
     claude_sdk_assets::PrivateClaudeSdkBundle,
     process::{ProbeFailure, probe},
 };
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use crate::{
     claude_sdk_client::ClaudeSdkAttachment,
     claude_sdk_runtime::ClaudeSdkRuntime,
@@ -22,11 +22,11 @@ use crate::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
     },
-    guardian::GuardianLaunch,
     launch_error::DriverLaunchError,
     room_portal::{ProviderTurnOutcome, RoomPortalError},
-    runtime_lease::HeldRuntimeLease,
 };
+#[cfg(unix)]
+use crate::{guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease};
 
 const PREFERRED_MODEL: &str = "claude-haiku-4-5";
 const EFFORTS: [&str; 5] = ["low", "medium", "high", "xhigh", "max"];
@@ -202,14 +202,15 @@ fn parse_catalog(output: &str) -> Option<ClaudeCatalog> {
     })
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 pub(crate) struct ClaudeAgentSdkDriver {
     runtime: ClaudeSdkRuntime,
     attachment: Option<ClaudeSdkAttachment>,
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl ClaudeAgentSdkDriver {
+    #[cfg(unix)]
     pub(crate) async fn spawn(
         session: &DurableAgentSession,
         runtime_lease: &HeldRuntimeLease,
@@ -223,9 +224,19 @@ impl ClaudeAgentSdkDriver {
             attachment: Some(attachment),
         })
     }
+
+    #[cfg(windows)]
+    pub(crate) async fn spawn(session: &DurableAgentSession) -> Result<Self, DriverLaunchError> {
+        validate_profile(session).map_err(DriverLaunchError::safe)?;
+        let (runtime, attachment) = ClaudeSdkRuntime::spawn(session).await?;
+        Ok(Self {
+            runtime,
+            attachment: Some(attachment),
+        })
+    }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 impl ProviderDriver for ClaudeAgentSdkDriver {
     fn attach_session<'a>(
         &'a mut self,
@@ -296,7 +307,7 @@ impl ProviderDriver for ClaudeAgentSdkDriver {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 fn validate_profile(session: &DurableAgentSession) -> Result<(), DriverError> {
     if !valid_model_id(&session.public.model)
         || !EFFORTS.contains(&session.public.reasoning_effort.as_str())
@@ -341,7 +352,7 @@ fn effort_label(effort: &str) -> &str {
     }
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 const fn profile_error() -> DriverError {
     DriverError::new(
         "invalid_runtime_profile",
@@ -349,7 +360,7 @@ const fn profile_error() -> DriverError {
     )
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 const fn protocol_error() -> DriverError {
     DriverError::new(
         "provider_protocol_invalid",
@@ -357,7 +368,7 @@ const fn protocol_error() -> DriverError {
     )
 }
 
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 const fn portal_error(error: RoomPortalError) -> DriverError {
     match error {
         RoomPortalError::ReceiptMissing => DriverError::new(

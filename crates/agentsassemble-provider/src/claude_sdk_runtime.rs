@@ -1,11 +1,17 @@
 use std::path::Path;
+#[cfg(windows)]
+use std::{process::Stdio, time::Duration};
 
 use agentsassemble_domain::DurableAgentSession;
+#[cfg(windows)]
+use process_wrap::tokio::{ChildWrapper, CommandWrap, JobObject, KillOnDrop};
 use tokio::{
     io::{AsyncRead, AsyncReadExt, AsyncWrite},
     task::JoinHandle,
 };
 
+#[cfg(windows)]
+use crate::process::sanitize_environment;
 use crate::{
     claude_sdk_assets::PrivateClaudeSdkBundle,
     claude_sdk_client::{ClaudeSdkAttachment, ClaudeSdkClient, ClaudeSdkTurn},
@@ -17,15 +23,22 @@ use crate::{
     launch_error::DriverLaunchError,
     room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
 };
+#[cfg(unix)]
 use crate::{
     guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease, unix_custody::UnixProcessCustody,
 };
+
+#[cfg(windows)]
+const STOP_TIMEOUT: Duration = Duration::from_secs(5);
 
 type Client =
     ClaudeSdkClient<Box<dyn AsyncWrite + Send + Unpin>, Box<dyn AsyncRead + Send + Unpin>>;
 
 pub(crate) struct ClaudeSdkRuntime {
+    #[cfg(unix)]
     process_group: UnixProcessCustody,
+    #[cfg(windows)]
+    child: Box<dyn ChildWrapper>,
     _node_guard: BoundExecutable,
     _claude_guard: BoundExecutable,
     _private_claude: PrivateExecutable,
@@ -36,6 +49,7 @@ pub(crate) struct ClaudeSdkRuntime {
 }
 
 impl ClaudeSdkRuntime {
+    #[cfg(unix)]
     pub(crate) async fn spawn(
         session: &DurableAgentSession,
         runtime_lease: &HeldRuntimeLease,
@@ -71,6 +85,57 @@ impl ClaudeSdkRuntime {
         ))
     }
 
+    #[cfg(windows)]
+    pub(crate) async fn spawn(
+        session: &DurableAgentSession,
+    ) -> Result<(Self, ClaudeSdkAttachment), DriverLaunchError> {
+        let (node, claude, private_claude, sdk_bundle) = bind_runtime(session).await?;
+        let room_portal = create_room_portal().await?;
+        let arguments = arguments(&sdk_bundle, &private_claude)?;
+        let mut command = CommandWrap::with_new(node.launch_path(), |command| {
+            command
+                .args(&arguments)
+                .current_dir(&session.workspace)
+                .stdin(Stdio::piped())
+                .stdout(Stdio::piped())
+                .stderr(Stdio::piped());
+        });
+        sanitize_environment(command.command_mut());
+        command.wrap(KillOnDrop);
+        command.wrap(JobObject);
+        let mut child = command
+            .spawn()
+            .map_err(|_| DriverLaunchError::safe(spawn_error()))?;
+        drop(command);
+        let stdin = child
+            .stdin()
+            .take()
+            .ok_or_else(|| DriverLaunchError::uncertain(protocol_error()))?;
+        let stdout = child
+            .stdout()
+            .take()
+            .ok_or_else(|| DriverLaunchError::uncertain(protocol_error()))?;
+        let stderr = child
+            .stderr()
+            .take()
+            .ok_or_else(|| DriverLaunchError::uncertain(protocol_error()))?;
+        let stderr_task = tokio::spawn(drain_stderr(stderr));
+        let (client, attachment) = connect_client(stdin, stdout, session, &room_portal).await?;
+        Ok((
+            Self {
+                child,
+                _node_guard: node,
+                _claude_guard: claude,
+                _private_claude: private_claude,
+                _sdk_bundle: sdk_bundle,
+                client,
+                stderr_task,
+                room_portal,
+            },
+            attachment,
+        ))
+    }
+
     pub(crate) async fn turn(
         &mut self,
         turn_id: &str,
@@ -83,12 +148,24 @@ impl ClaudeSdkRuntime {
         if self.client.requires_restart() {
             return Ok(false);
         }
-        self.process_group.leader_is_running().await
+        #[cfg(unix)]
+        return self.process_group.leader_is_running().await;
+        #[cfg(windows)]
+        self.child
+            .try_wait()
+            .map(|status| status.is_none())
+            .map_err(|_| protocol_error())
     }
 
     pub(crate) async fn stop(&mut self) -> Result<(), DriverError> {
         let protocol = self.client.shutdown().await;
+        #[cfg(unix)]
         let process = self.process_group.stop().await;
+        #[cfg(windows)]
+        let process = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill()))
+            .await
+            .map_err(|_| stop_error())?
+            .map_err(|_| stop_error());
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
         protocol.and(process)
@@ -119,6 +196,7 @@ impl ClaudeSdkRuntime {
 
 impl Drop for ClaudeSdkRuntime {
     fn drop(&mut self) {
+        #[cfg(unix)]
         self.process_group.request_stop();
         self.stderr_task.abort();
     }
@@ -226,6 +304,22 @@ const fn executable_error() -> DriverError {
 
 const fn node_error() -> DriverError {
     DriverError::new("provider_sdk_host_missing", "Node.js is unavailable.")
+}
+
+#[cfg(windows)]
+const fn spawn_error() -> DriverError {
+    DriverError::new(
+        "provider_sdk_host_failed",
+        "The Claude Agent SDK host could not start.",
+    )
+}
+
+#[cfg(windows)]
+const fn stop_error() -> DriverError {
+    DriverError::new(
+        "provider_stop_failed",
+        "The Claude Agent SDK process did not stop cleanly.",
+    )
 }
 
 const fn sdk_error() -> DriverError {

@@ -16,7 +16,7 @@ mod cerebras;
 mod claude;
 mod claude_sdk_assets;
 mod claude_sdk_client;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 mod claude_sdk_runtime;
 mod codex;
 #[cfg(unix)]

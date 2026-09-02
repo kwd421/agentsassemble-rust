@@ -11,7 +11,7 @@ use tokio_util::sync::CancellationToken;
 
 #[cfg(any(unix, windows))]
 use crate::antigravity::AntigravityDriver;
-#[cfg(unix)]
+#[cfg(any(unix, windows))]
 use crate::claude::ClaudeAgentSdkDriver;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
@@ -618,7 +618,9 @@ fn launch_claude<'a>(
     session: &'a DurableAgentSession,
     runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
-    #[cfg(not(unix))]
+    #[cfg(windows)]
+    let _ = (factory, runtime_lease);
+    #[cfg(not(any(unix, windows)))]
     let _ = (factory, session, runtime_lease);
     Box::pin(async move {
         #[cfg(unix)]
@@ -628,9 +630,11 @@ fn launch_claude<'a>(
             factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
         )
         .await?;
-        #[cfg(unix)]
+        #[cfg(windows)]
+        let driver = ClaudeAgentSdkDriver::spawn(session).await?;
+        #[cfg(any(unix, windows))]
         return Ok(Box::new(driver) as Box<dyn ProviderDriver>);
-        #[cfg(not(unix))]
+        #[cfg(not(any(unix, windows)))]
         Err(DriverError::new(
             "provider_runtime_unsupported",
             "Claude Agent SDK processes are unsupported on this platform.",
