@@ -376,6 +376,18 @@ contracts, findings, or verification journals.
   long-running work with another wall-clock or cumulative token/cost owner. Preserve the
   existing bounds and explicit failure semantics; measurements may inform a later product
   decision but do not pre-authorize a limit.
+- Plan-lock review findings: critical-web Pro found that Grok static implementation
+  was incorrectly gated by a local client, then found the same escape for Cursor and
+  a coupling between provider-run authorization, runtime availability, and evidence.
+  Daybreaker independently confirmed the cross-provider contract inconsistency. Commits
+  `6f14d23`, `5badabe`, and `3229fbe` close those findings, including the residual Phase 8
+  wording. Pro withdrew the macOS Keychain finding because the shipped process has one
+  composition-owned credential store; reopen it only if a second production store or a
+  Keychain interaction-state user outside that owner is added. The F-12 rejection above
+  remains unchanged. Critical-web Pro and Daybreaker Blue `xhigh` each approve individual
+  `3229fbe`, exact correction `5badabe..3229fbe`, full correction
+  `62d58b9..3229fbe`, cumulative plan `1c5b37e..3229fbe`, HEAD, and master-plan
+  completeness at `C0/H0/M0/L0` with no actionable finding.
 - Next production work: Phase 1 provider-first completion.
   - Prerequisite only: replace F-14's browser request-ID compatibility fallback
     with fail-closed secure UUID creation and make F-16's closed catalog watch
