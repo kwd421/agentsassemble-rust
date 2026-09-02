@@ -735,6 +735,43 @@ contracts, findings, or verification journals.
   real TCP/WebSocket, generated-binding, Clippy, policy, structure, diff, CSS, and
   artifact gates. No Custom API credential or user endpoint was supplied for an
   authorized real completion, so real-turn evidence remains open for the Phase 1 matrix.
+- Implemented pending Phase 1 whole-phase review: local OpenAI-compatible Ollama and
+  LM Studio verticals at `be12e21`. Each provider owns its executable, fixed numeric
+  loopback endpoint, discovery commands and deadlines, model-capability policy,
+  preferred model, labels, visible failures, and registration. Ollama inspects at most
+  the first 32 inventory entries and admits only models whose `Capabilities` section
+  declares tools; its installed versus cloud location is projected on each model so the
+  existing frontend presents one provider in the Local and Harness groups without a
+  second provider identity. LM Studio requires the exact running-server status and
+  admits only loaded `llm` entries explicitly marked `trainedForToolUse`.
+  The common OpenAI-compatible runtime now represents bearer-authenticated and
+  unauthenticated transports as distinct authentication authorities. The latter is
+  accepted only with a fixed `http://127.0.0.1:<port>` endpoint, disables proxies and
+  redirects, emits no Authorization header, and retains the existing three-minute
+  read-inactivity, request/response, SSE, tool-round, RoomPortal, and visible-failure
+  bounds. This is not the child-process `LoopbackHttp` owner: Ollama and LM Studio are
+  independently launched local servers, so claiming AA child ownership or attaching
+  its private Basic capability would be incorrect. No local credential state, endpoint
+  input, provider conversation store, polling, heartbeat, retry, fallback, cache, or
+  background task was introduced. Discovery is one cancellation-aware bounded startup
+  operation and every spawned probe tree is terminated and reaped by the existing
+  process owner.
+  Invalid LM Studio JSON is reported as malformed discovery rather than being collapsed
+  into an empty model inventory. Model identifiers reuse the catalog owner's 128-byte
+  option bound before becoming command arguments; common labels and HTTP/SSE mechanics
+  are shared, while the two inventory schemas and state meanings remain provider-owned.
+  Repository-wide searches found no second production endpoint, model-policy, local
+  credential route, registration, retry, fallback, polling, heartbeat, timer, cache, or
+  swallowed failure. The new owners are 317-line Ollama, 208-line LM Studio, and
+  146-line local transport modules. Existing 738-line catalog, 663-line registration,
+  and 660-line common runtime files remain below the 800-line strong warning and each
+  retains one state-transition, declarative table, or turn/runtime invariant owner;
+  moving provider logic into them was deliberately avoided. A fresh complete
+  `make verify` passes all 100 frontend files/664 tests, desktop, all 180 provider
+  tests, Rust unit/integration, real TCP/WebSocket, generated-binding, Clippy, policy,
+  structure, diff, CSS, and artifact gates. The user-authorized real-provider matrix
+  excludes Ollama and LM Studio, so no installed server or model was invoked and
+  real-turn evidence remains explicitly uncollected rather than simulated.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
