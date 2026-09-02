@@ -901,10 +901,12 @@ the worst case, before room-tool execution. Per-request and round bounds are use
 but they do not bound the complete user operation, process slot, credentialed
 network cost, or cancellation latency.
 
-Measure real standard/deep tool flows, then add the smallest complete-turn deadline
-or budget that preserves required provider behavior. Record observed latency/cost,
-accepted maximum, cancellation owner, and uncertain-effect result. Do not shorten it
-from intuition or add a retry/fallback.
+Measure ordinary read/publish and deliberate multi-tool search/context flows through
+the real packaged product. These are ordinary room interactions and do not restore
+the excluded v0 standard/deep research steering or scripted-meeting pipeline. Then
+add the smallest complete-turn deadline or budget that preserves required provider
+behavior. Record observed latency/cost, accepted maximum, cancellation owner, and
+uncertain-effect result. Do not shorten it from intuition or add a retry/fallback.
 
 ### F-13 — provider factory erases guardian/helper construction causes
 
