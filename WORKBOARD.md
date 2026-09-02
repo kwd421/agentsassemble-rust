@@ -490,6 +490,21 @@ contracts, findings, or verification journals.
   formatting, architecture/policy gates, and diff checks pass. This is a duplication and
   secret-collision prevention boundary, not a measured CPU, memory, latency, or disk
   improvement.
+- Implemented pending Phase 1 whole-phase review: shared remote OpenAI-compatible runtime
+  at `01e07f5` and `e03cacc`. The first commit is a pure source-owner relocation so the
+  functional refactor remains independently reviewable and below the commit-size gate.
+  The second keeps one 568-line cohesive owner for remote SSE turn, RoomPortal tool,
+  attachment, completion, interruption-uncertainty, and shutdown state; immutable provider
+  endpoint/header/request/error policy is a separate 80-line owner because it changes when
+  a provider is added while runtime state does not. DeepSeek now supplies its exact endpoint,
+  request body dialect, reasoning replay rule, credential account, and existing user-visible
+  errors from its 107-line provider module. This preserves the existing catalog, credential
+  route, selected model/Thinking/output values, required first room read, terminal-effect
+  handling, provider-session identity, and stop behavior. No second provider, route, state,
+  retry, fallback, polling, heartbeat, timer, or framework was added. All 156 provider tests,
+  the exact DeepSeek request-profile regression, Clippy with warnings denied, formatting,
+  architecture/source-policy gates, and diff checks pass. The refactor removes the imminent
+  copy boundary for the retained remote family but claims no measured resource improvement.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
