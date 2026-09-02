@@ -962,6 +962,21 @@ contracts, findings, or verification journals.
   cleanup path. The focused failed-abort test proves one exact stop and no runtime
   reuse; all 198 provider tests, warning-denied provider Clippy, formatting, diff,
   architecture, policy, and source-structure gates pass. No real provider ran.
+- Completed the catalog-probe process portion of F-03 at `c429173`; explicit portal
+  teardown and hook cleanup remain open. The prior shared probe always issued kill and
+  a second wait even after its process-group or Job Object wait had already completed,
+  while cancellation, timeout, stream failure, and missing-pipe cleanup discarded both
+  kill and wait errors. Normal completion now uses its existing whole-tree wait as the
+  single receipt. Every failure path sends termination and requires a group/job wait
+  within the existing ten-second probe bound; an unconfirmed wait becomes the distinct
+  non-startable `model_discovery_cleanup_failed` catalog state rather than being hidden
+  by the original failure. This removes one redundant kill/wait pair from each successful
+  probe without claiming measured latency improvement. The existing real cancellation
+  test confirms the spawned descendant is gone, a synthetic failed kill/wait confirms
+  the typed cleanup result, and catalog projection confirms it cannot start. All 199
+  provider tests, warning-denied provider Clippy, formatting, diff, architecture,
+  policy, and source-structure gates pass. No retry, fallback, polling, heartbeat,
+  background cleanup, credential exposure, or real provider run was added.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop

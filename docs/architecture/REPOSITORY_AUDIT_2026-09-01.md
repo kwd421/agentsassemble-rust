@@ -210,6 +210,14 @@ partially begun observation and forces an exact owned-runtime stop whenever abor
 fails, so failed cleanup cannot leave that runtime reusable. Explicit portal teardown,
 hook cleanup, and residual-process reporting remain open under F-03.
 
+Provider-probe correction `c429173` also closes the concrete `process.rs` site. A
+successful process-group/Job Object wait is already the completion receipt and no
+longer receives a redundant kill plus second wait. Cancellation, timeout, malformed
+stream, or missing-pipe failure now sends termination and requires a bounded group/job
+wait; inability to confirm that wait is the distinct non-startable
+`model_discovery_cleanup_failed` result instead of the original error. Other explicit
+portal teardown and hook cleanup remain open under F-03.
+
 ### F-04 — signed capabilities advertised actions that did not exist
 
 Disposition: `Closed through 7b2168f; both manual reviewers approved`; high
