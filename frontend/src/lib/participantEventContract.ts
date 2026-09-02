@@ -303,6 +303,7 @@ function creationStartedSessionMatches(prepared: unknown, final: unknown): boole
       finalSession.status === "attached" &&
       finalSession.runtime_status === "idle" &&
       finalSession.enabled === true &&
+      finalSession.provider_session_active === true &&
       AGENT_SESSION_KEYS.every((key) => {
         if (transitionKeys.has(key)) return true;
         if (key !== "persona_card") return preparedSession[key] === finalSession[key];

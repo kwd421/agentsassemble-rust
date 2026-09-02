@@ -105,6 +105,7 @@ function creationStartRecords() {
     ...preparedSession,
     status: "attached",
     runtime_status: "idle",
+    provider_session_active: true,
     updated_at: "2026-08-25T00:00:04Z",
   };
   const stateEvent = {
@@ -345,7 +346,10 @@ describe("Agent Session socket contract", () => {
     },
   );
 
-  it("rejects a create-and-start ACK outside the committed lifecycle state", async () => {
+  it.each([
+    ["wrong final identity", { status: "available", model: "conflicting-model" }],
+    ["inactive provider session", { provider_session_active: false }],
+  ])("rejects a create-and-start ACK with %s", async (_label, conflict) => {
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets } = await openReadyHarness(errors);
     void handle.command("agent.create", {
@@ -357,8 +361,7 @@ describe("Agent Session socket contract", () => {
     const { participant, initialSession, events, start } = creationStartRecords();
     const invalidSession = {
       ...(events[3] as Record<string, unknown>).agent_session as Record<string, unknown>,
-      status: "available",
-      model: "conflicting-model",
+      ...conflict,
     };
     const invalidFinal = { ...events[3], agent_session: invalidSession };
     const invalidEvents = [...events.slice(0, 3), invalidFinal];
