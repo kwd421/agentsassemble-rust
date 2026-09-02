@@ -31,6 +31,7 @@ mod custom_api;
 mod deepseek;
 mod driver;
 mod filesystem;
+mod freebuff;
 mod grok;
 mod grok_acp;
 #[cfg(unix)]
@@ -54,6 +55,8 @@ mod openrouter;
 mod process;
 mod profile;
 mod registration;
+#[cfg(test)]
+mod registration_tests;
 mod remote_catalog;
 mod remote_https;
 mod remote_openai;

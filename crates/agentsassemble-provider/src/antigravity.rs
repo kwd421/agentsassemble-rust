@@ -5,7 +5,7 @@ use agentsassemble_domain::DurableAgentSession;
 use crate::{
     antigravity_hook::AntigravityHookRegistration,
     antigravity_transport::AntigravityTerminal,
-    catalog::{ANTIGRAVITY_NATIVE_RECEIPT_ERROR_CODE, ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE},
+    catalog::{ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE, NATIVE_RECEIPT_ERROR_CODE},
     filesystem::{BoundExecutable, bind_executable},
     launch_error::DriverLaunchError,
     room_portal::{RoomPortal, RoomPortalError},
@@ -245,7 +245,7 @@ const fn executable_error() -> DriverError {
 
 const fn native_receipt_unavailable() -> DriverError {
     DriverError::new(
-        ANTIGRAVITY_NATIVE_RECEIPT_ERROR_CODE,
+        NATIVE_RECEIPT_ERROR_CODE,
         ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE,
     )
 }

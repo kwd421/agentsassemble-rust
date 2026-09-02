@@ -24,8 +24,7 @@ const MAX_PROVIDER_BYTES: usize = 128 * 1024;
 const MAX_PROVIDER_OPTIONS: usize = 256;
 pub(crate) const MAX_OPTION_VALUE_BYTES: usize = 128;
 const MAX_OPTION_LABEL_BYTES: usize = 256;
-pub(crate) const ANTIGRAVITY_NATIVE_RECEIPT_ERROR_CODE: &str =
-    "provider_native_receipt_unavailable";
+pub(crate) const NATIVE_RECEIPT_ERROR_CODE: &str = "provider_native_receipt_unavailable";
 pub(crate) const ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE: &str =
     "Antigravity has no approved native attachment and completion receipt.";
 
@@ -139,7 +138,7 @@ pub(crate) async fn discover_antigravity(
     provider.executable_identity = executable_identity;
     incomplete_provider(
         provider,
-        ANTIGRAVITY_NATIVE_RECEIPT_ERROR_CODE,
+        NATIVE_RECEIPT_ERROR_CODE,
         ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE,
     )
 }
@@ -468,7 +467,7 @@ pub(crate) fn failed_provider(
     unavailable_provider(provider, available, code, message)
 }
 
-fn incomplete_provider(
+pub(crate) fn incomplete_provider(
     provider: ProviderAvailability,
     code: &str,
     message: &str,

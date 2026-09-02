@@ -29,7 +29,7 @@ use crate::{
     cursor_acp::CursorAcpDriver,
     custom_api, deepseek,
     driver::{DriverError, DriverFuture, ProviderDriver},
-    grok,
+    freebuff, grok,
     grok_acp::GrokAcpDriver,
     launch_error::DriverLaunchError,
     llm_gateway, lm_studio, ollama,
@@ -304,12 +304,13 @@ pub(crate) static CUSTOM_API_PROVIDER: ProviderRegistration = ProviderRegistrati
     launch: launch_custom_api,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 15] = [
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 16] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &CLAUDE_PROVIDER,
     &OPENCODE_PROVIDER,
     &CURSOR_PROVIDER,
+    &freebuff::PROVIDER,
     &GROK_PROVIDER,
     &DEEPSEEK_PROVIDER,
     &CEREBRAS_PROVIDER,
