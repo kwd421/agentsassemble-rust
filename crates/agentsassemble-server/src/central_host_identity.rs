@@ -339,8 +339,10 @@ mod tests {
         let Value::Object(payload) = payload else {
             panic!("registration envelope is not an object");
         };
+        let mut keys = payload.keys().map(String::as_str).collect::<Vec<_>>();
+        keys.sort_unstable();
         assert_eq!(
-            payload.keys().map(String::as_str).collect::<Vec<_>>(),
+            keys,
             [
                 "host_key_fingerprint",
                 "host_public_key_jwk",
