@@ -140,6 +140,7 @@ async fn remote_api_credential_routes_require_operator_authority() {
         "vercel",
         "llmgateway",
         "tokenrouter",
+        "custom_api",
     ] {
         let response = Client::new()
             .get(format!(

@@ -166,6 +166,7 @@ fn new_durable_session(public: AgentSession, draft: &AgentSessionDraft) -> Durab
         executable_identity: draft.executable_identity.clone(),
         workspace: draft.workspace.clone(),
         workspace_identity: draft.workspace_identity.clone(),
+        provider_endpoint: draft.provider_endpoint.clone(),
         runtime_profile_key: draft.runtime_profile_key.clone(),
         runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
         provider_session_id: String::new(),

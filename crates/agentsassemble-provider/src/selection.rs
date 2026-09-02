@@ -26,6 +26,7 @@ pub struct ProviderSelection {
     pub executable_identity: String,
     pub workspace: String,
     pub workspace_identity: String,
+    pub provider_endpoint: String,
     pub model: String,
     pub reasoning_effort: String,
     pub service_tier: String,
@@ -93,6 +94,9 @@ impl ProviderSelection {
                 registration.provider_kind == provider.provider_kind
                     && registration.runtime_kind == provider.runtime_kind
                     && registration.connection_kind == provider.connection_kind
+                    && registration.configuration_authority.custom_endpoint()
+                        == provider.custom_endpoint
+                    && registration.configuration_authority.custom_model() == provider.custom_model
             })
             .ok_or_else(|| unsupported(&provider.id))?;
         let executable_identity = if registration.executable_required {
@@ -121,7 +125,11 @@ impl ProviderSelection {
                 "Provider executable authority is inconsistent.",
             ));
         };
-        let model = selected_value(provider, "model", input.model)?;
+        let model = if registration.configuration_authority.custom_model() {
+            required_custom_model(input.model)?
+        } else {
+            selected_value(provider, "model", input.model)?
+        };
         let reasoning_effort =
             selected_value(provider, "reasoning_effort", input.reasoning_effort)?;
         validate_model_relation(provider, &model, "reasoning_efforts", &reasoning_effort)?;
@@ -158,15 +166,22 @@ impl ProviderSelection {
                 "Bot cards and Risu modules are available only to API and Local Agent Sessions.",
             ));
         }
-        if input
+        let provider_endpoint = if registration.configuration_authority.custom_endpoint() {
+            let requested = input.provider_endpoint.as_deref().unwrap_or_default();
+            crate::custom_api::normalize_endpoint(requested).map_err(|error| {
+                ProviderSelectionError::new("invalid_provider_endpoint", error.message())
+            })?
+        } else if input
             .provider_endpoint
             .is_some_and(|value| !value.is_empty())
         {
             return Err(ProviderSelectionError::new(
                 "unsupported_control",
-                "Custom provider endpoints are not available in this runtime slice.",
+                "This provider does not accept a custom endpoint.",
             ));
-        }
+        } else {
+            String::new()
+        };
         let workspace_required = registration.workspace_required
             || permission_mode == "workspace_write"
             || execution_harness != "builtin";
@@ -198,6 +213,7 @@ impl ProviderSelection {
             executable_identity,
             workspace,
             workspace_identity,
+            provider_endpoint,
             model,
             reasoning_effort,
             service_tier,
@@ -224,6 +240,7 @@ impl ProviderSelection {
                 self.executable_identity.as_str(),
                 self.workspace.as_str(),
                 self.workspace_identity.as_str(),
+                self.provider_endpoint.as_str(),
                 self.model.as_str(),
                 self.reasoning_effort.as_str(),
                 self.service_tier.as_str(),
@@ -259,6 +276,7 @@ impl From<ProviderSelection> for AgentSessionDraft {
             executable_identity: selection.executable_identity,
             workspace: selection.workspace,
             workspace_identity: selection.workspace_identity,
+            provider_endpoint: selection.provider_endpoint,
             model: selection.model,
             reasoning_effort: selection.reasoning_effort,
             service_tier: selection.service_tier,
@@ -272,6 +290,12 @@ impl From<ProviderSelection> for AgentSessionDraft {
             transport: selection.transport,
         }
     }
+}
+
+fn required_custom_model(requested: Option<String>) -> Result<String, ProviderSelectionError> {
+    requested.filter(|model| !model.is_empty()).ok_or_else(|| {
+        ProviderSelectionError::new("unsupported_model", "Custom API model ID is required.")
+    })
 }
 
 fn unsupported(provider_id: &str) -> ProviderSelectionError {
@@ -303,6 +327,10 @@ fn executable_validation_error(failure: FilesystemFailure) -> ProviderSelectionE
     };
     ProviderSelectionError::new("catalog_inconsistent", message)
 }
+
+#[cfg(test)]
+#[path = "selection_custom_api_tests.rs"]
+mod custom_api_tests;
 
 #[cfg(test)]
 mod tests {
@@ -380,6 +408,8 @@ mod tests {
                 discovery_error_code: String::new(),
                 discovery_error: String::new(),
                 credential_available: false,
+                custom_endpoint: false,
+                custom_model: false,
                 controls: vec![
                     control(
                         "model",

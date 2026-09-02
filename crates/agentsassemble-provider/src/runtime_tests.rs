@@ -711,6 +711,7 @@ fn session(
         session.executable_identity.as_str(),
         session.workspace.as_str(),
         session.workspace_identity.as_str(),
+        session.provider_endpoint.as_str(),
         session.public.model.as_str(),
         session.public.reasoning_effort.as_str(),
         session.public.service_tier.as_str(),

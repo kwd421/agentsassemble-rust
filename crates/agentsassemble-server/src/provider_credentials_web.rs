@@ -64,6 +64,9 @@ registered_routes! {
         private "/api/provider-credentials/tokenrouter" => get(tokenrouter_status)
             .post(set_tokenrouter)
             .delete(delete_tokenrouter),
+        private "/api/provider-credentials/custom_api" => get(custom_api_status)
+            .post(set_custom_api)
+            .delete(delete_custom_api),
     }
 }
 
@@ -191,6 +194,27 @@ async fn delete_tokenrouter(
     request: Request,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
     delete_credential(state, request, ProviderCredentialId::TokenRouter).await
+}
+
+async fn custom_api_status(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    credential_status(state, request, ProviderCredentialId::CustomApi).await
+}
+
+async fn set_custom_api(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    set_credential(state, request, ProviderCredentialId::CustomApi).await
+}
+
+async fn delete_custom_api(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    delete_credential(state, request, ProviderCredentialId::CustomApi).await
 }
 
 async fn credential_status(

@@ -5,7 +5,7 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
 };
 
 // The public endpoint currently contains more entries than the bounded public
@@ -17,7 +17,7 @@ pub(crate) const CATALOG_ENDPOINT: &str =
 pub(crate) static OPENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     credential: ProviderCredentialId::OpenRouter,
     provider_kind: "openrouter_api",
-    endpoint: "https://openrouter.ai/api/v1/chat/completions",
+    endpoint: RemoteOpenAiEndpoint::Fixed("https://openrouter.ai/api/v1/chat/completions"),
     headers: &[
         ("HTTP-Referer", "http://127.0.0.1:8765/"),
         ("X-Title", "AgentsAssemble"),

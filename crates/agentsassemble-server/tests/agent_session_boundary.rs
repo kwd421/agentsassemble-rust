@@ -398,6 +398,7 @@ fn assert_public_session(session: &Value) {
         "workspace_identity",
         "executable",
         "executable_identity",
+        "provider_endpoint",
         "runtime_profile_key",
         "runtime_profile_version",
         "provider_session_id",
@@ -653,6 +654,8 @@ fn agent_catalog_with_fixture(root: &Path, fixture: &[u8]) -> ProviderCatalog {
             discovery_error_code: String::new(),
             discovery_error: String::new(),
             credential_available: false,
+            custom_endpoint: false,
+            custom_model: false,
             controls: vec![
                 ProviderControl {
                     key: "model".to_owned(),

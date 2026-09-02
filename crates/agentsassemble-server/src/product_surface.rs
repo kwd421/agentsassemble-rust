@@ -152,6 +152,10 @@ mod tests {
             registered_route_exposure(HttpMethod::Delete, "/api/provider-credentials/tokenrouter"),
             Some(RouteExposure::Private)
         );
+        assert_eq!(
+            registered_route_exposure(HttpMethod::Delete, "/api/provider-credentials/custom_api"),
+            Some(RouteExposure::Private)
+        );
         assert!(registered_route_path("/api/room-invite/join"));
         assert!(!registered_route_path("/api/not-registered"));
     }

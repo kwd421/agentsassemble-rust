@@ -28,11 +28,17 @@ pub(crate) struct RemoteOpenAiErrors {
 pub(crate) struct RemoteOpenAiSpec {
     pub(crate) credential: ProviderCredentialId,
     pub(crate) provider_kind: &'static str,
-    pub(crate) endpoint: &'static str,
+    pub(crate) endpoint: RemoteOpenAiEndpoint,
     pub(crate) headers: &'static [(&'static str, &'static str)],
     pub(crate) request_payload: fn(&DurableAgentSession, &[Value], Option<&[Value]>) -> Value,
     pub(crate) retain_reasoning: bool,
     pub(crate) errors: RemoteOpenAiErrors,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum RemoteOpenAiEndpoint {
+    Fixed(&'static str),
+    AgentSession,
 }
 
 impl RemoteOpenAiSpec {

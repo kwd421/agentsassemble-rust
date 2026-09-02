@@ -102,6 +102,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         executable_identity: "executable-identity".to_owned(),
         workspace: "/owned/workspace".to_owned(),
         workspace_identity: "workspace-identity".to_owned(),
+        provider_endpoint: String::new(),
         runtime_profile_key: "profile-1".to_owned(),
         runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
         provider_session_id: String::new(),

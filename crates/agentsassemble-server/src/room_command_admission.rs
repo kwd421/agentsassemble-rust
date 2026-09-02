@@ -260,6 +260,7 @@ mod tests {
                 &Handle::from_path(&workspace)
                     .unwrap_or_else(|error| panic!("identify workspace: {error}")),
             ),
+            provider_endpoint: String::new(),
             model: "gpt-5.6-terra".to_owned(),
             reasoning_effort: "medium".to_owned(),
             service_tier: "default".to_owned(),

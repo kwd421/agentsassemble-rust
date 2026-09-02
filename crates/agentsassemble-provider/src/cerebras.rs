@@ -5,7 +5,7 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
 };
 
 pub(crate) const CATALOG_ENDPOINT: &str =
@@ -14,7 +14,7 @@ pub(crate) const CATALOG_ENDPOINT: &str =
 pub(crate) static CEREBRAS_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     credential: ProviderCredentialId::Cerebras,
     provider_kind: "cerebras_api",
-    endpoint: "https://api.cerebras.ai/v1/chat/completions",
+    endpoint: RemoteOpenAiEndpoint::Fixed("https://api.cerebras.ai/v1/chat/completions"),
     headers: &[("X-Cerebras-Version-Patch", "2")],
     request_payload,
     retain_reasoning: false,

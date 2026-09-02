@@ -50,6 +50,7 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
         executable_identity: "owned-codex-identity".to_owned(),
         workspace: "/owned/workspace".to_owned(),
         workspace_identity: "owned-workspace-identity".to_owned(),
+        provider_endpoint: String::new(),
         runtime_profile_key: "profile-1".to_owned(),
         runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
         provider_session_id: "provider-thread-1".to_owned(),

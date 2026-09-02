@@ -5,7 +5,7 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
 };
 
 pub(crate) const CATALOG_ENDPOINT: &str = "https://ai-gateway.vercel.sh/v1/models";
@@ -13,7 +13,7 @@ pub(crate) const CATALOG_ENDPOINT: &str = "https://ai-gateway.vercel.sh/v1/model
 pub(crate) static VERCEL_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     credential: ProviderCredentialId::Vercel,
     provider_kind: "vercel_ai_gateway",
-    endpoint: "https://ai-gateway.vercel.sh/v1/chat/completions",
+    endpoint: RemoteOpenAiEndpoint::Fixed("https://ai-gateway.vercel.sh/v1/chat/completions"),
     headers: &[],
     request_payload,
     retain_reasoning: false,

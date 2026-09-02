@@ -10,7 +10,7 @@ use crate::{
         RemoteCatalogError, bound_catalog_options, bounded_catalog_text, catalog_model_family,
     },
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
 };
 
 pub(crate) const DISPLAY_NAME: &str = "TokenRouter";
@@ -22,7 +22,7 @@ pub(crate) const CATALOG_ENDPOINT: &str =
 pub(crate) static TOKENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     credential: ProviderCredentialId::TokenRouter,
     provider_kind: PROVIDER_KIND,
-    endpoint: "https://api.tokenrouter.com/v1/chat/completions",
+    endpoint: RemoteOpenAiEndpoint::Fixed("https://api.tokenrouter.com/v1/chat/completions"),
     headers: &[],
     request_payload,
     retain_reasoning: false,

@@ -10,7 +10,7 @@ use sha2::{Digest, Sha256};
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    cerebras,
+    cerebras, custom_api,
     filesystem::{FilesystemFailure, resolve_codex_executable, resolve_executable},
     llm_gateway, openrouter,
     process::{ProbeFailure, probe},
@@ -346,6 +346,22 @@ pub(crate) async fn discover_tokenrouter(
     )
 }
 
+pub(crate) async fn discover_custom_api(
+    mut provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
+    if cancellation.is_cancelled() {
+        return failed_provider(provider, ProbeFailure::Cancelled);
+    }
+    custom_api::DISPLAY_NAME.clone_into(&mut provider.display_name);
+    "static_manifest".clone_into(&mut provider.catalog_source);
+    ready_provider(
+        provider,
+        String::new(),
+        vec![remote_output_token_control(), permission_control(false)],
+    )
+}
+
 async fn discover_gateway(
     provider: ProviderAvailability,
     cancellation: &CancellationToken,
@@ -402,7 +418,7 @@ fn ready_provider(
     if !controls_are_bounded(&controls) {
         return failed_provider(provider, ProbeFailure::CatalogTooLarge);
     }
-    if !controls_are_consistent(&default_model, &controls) {
+    if !controls_are_consistent(&default_model, &controls, provider.custom_model) {
         return malformed_provider(provider);
     }
     provider.default_model = default_model;
@@ -595,7 +611,11 @@ fn controls_are_bounded(controls: &[ProviderControl]) -> bool {
     })
 }
 
-fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) -> bool {
+fn controls_are_consistent(
+    default_model: &str,
+    controls: &[ProviderControl],
+    custom_model: bool,
+) -> bool {
     let mut control_keys = BTreeSet::new();
     if controls.iter().any(|control| {
         let unselected_model = control.key == "model" && control.default_value.is_empty();
@@ -616,7 +636,11 @@ fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) ->
     }) {
         return false;
     }
-    let Some(model_control) = controls.iter().find(|control| control.key == "model") else {
+    let model_control = controls.iter().find(|control| control.key == "model");
+    if custom_model {
+        return default_model.is_empty() && model_control.is_none();
+    }
+    let Some(model_control) = model_control else {
         return false;
     };
     if model_control.default_value != default_model {

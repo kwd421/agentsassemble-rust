@@ -3,7 +3,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     FilesystemFailure, MAX_PROVIDER_BYTES, MAX_PROVIDER_OPTIONS, ProbeFailure, await_filesystem,
-    failed_provider, incomplete_provider, opencode_models, ready_provider,
+    discover_custom_api, failed_provider, incomplete_provider, opencode_models, ready_provider,
 };
 
 #[tokio::test]
@@ -214,6 +214,35 @@ fn non_model_control_still_requires_a_valid_default() {
 
     assert!(!malformed.startable);
     assert_eq!(malformed.discovery_error_code, "model_discovery_malformed");
+}
+
+#[tokio::test]
+async fn custom_api_catalog_requires_caller_owned_endpoint_and_model() {
+    let provider = discover_custom_api(
+        crate::registration::loading_provider(&crate::registration::CUSTOM_API_PROVIDER),
+        &CancellationToken::new(),
+    )
+    .await;
+
+    assert!(provider.available);
+    assert!(provider.startable);
+    assert!(provider.custom_endpoint);
+    assert!(provider.custom_model);
+    assert!(provider.default_model.is_empty());
+    assert!(
+        provider
+            .controls
+            .iter()
+            .all(|control| control.key != "model")
+    );
+    assert_eq!(
+        provider
+            .controls
+            .iter()
+            .map(|control| control.key.as_str())
+            .collect::<Vec<_>>(),
+        ["max_output_tokens", "permission_mode"]
+    );
 }
 
 #[test]

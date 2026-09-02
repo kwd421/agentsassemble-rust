@@ -167,6 +167,9 @@ fn apply_draft(
         .workspace_identity
         .clone_from(&draft.workspace_identity);
     session
+        .provider_endpoint
+        .clone_from(&draft.provider_endpoint);
+    session
         .runtime_profile_key
         .clone_from(&draft.runtime_profile_key);
     session.runtime_profile_version = CURRENT_RUNTIME_PROFILE_VERSION;

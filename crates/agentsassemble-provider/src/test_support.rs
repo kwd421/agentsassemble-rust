@@ -57,6 +57,7 @@ pub(crate) fn durable_session(
         executable_identity: String::new(),
         workspace: String::new(),
         workspace_identity: String::new(),
+        provider_endpoint: String::new(),
         runtime_profile_key: "profile".to_owned(),
         runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
         provider_session_id: String::new(),

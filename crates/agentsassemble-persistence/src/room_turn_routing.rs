@@ -197,6 +197,7 @@ mod tests {
             executable_identity: "test-provider".to_owned(),
             workspace: "/test".to_owned(),
             workspace_identity: "test-workspace".to_owned(),
+            provider_endpoint: String::new(),
             runtime_profile_key: "test".to_owned(),
             runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
             provider_session_id: "test-session".to_owned(),

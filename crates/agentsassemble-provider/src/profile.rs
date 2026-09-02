@@ -1,7 +1,7 @@
 use sha2::{Digest, Sha256};
 
 #[must_use]
-pub fn runtime_profile_key(fields: [&str; 14]) -> String {
+pub fn runtime_profile_key(fields: [&str; 15]) -> String {
     format!(
         "provider-profile-v2-{:x}",
         Sha256::digest(fields.join("\0").as_bytes())
@@ -10,7 +10,7 @@ pub fn runtime_profile_key(fields: [&str; 14]) -> String {
 
 #[must_use]
 pub(crate) fn runtime_profile_key_with_output(
-    fields: [&str; 14],
+    fields: [&str; 15],
     max_output_tokens: u32,
 ) -> String {
     if max_output_tokens == 0 {

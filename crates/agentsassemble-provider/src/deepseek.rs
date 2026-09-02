@@ -5,13 +5,13 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
 };
 
 pub(crate) static DEEPSEEK_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     credential: ProviderCredentialId::DeepSeek,
     provider_kind: "deepseek_api",
-    endpoint: "https://api.deepseek.com/chat/completions",
+    endpoint: RemoteOpenAiEndpoint::Fixed("https://api.deepseek.com/chat/completions"),
     headers: &[],
     request_payload,
     retain_reasoning: true,

@@ -10,7 +10,7 @@ use crate::{QueuedRoomInput, persona::PersonaAssetSummary};
 
 pub const LOCAL_OPERATOR_USER_ID: &str = "operator-local-user";
 pub const LOCAL_OPERATOR_PARTICIPANT_ID: &str = "operator-local";
-pub const CURRENT_RUNTIME_PROFILE_VERSION: u32 = 4;
+pub const CURRENT_RUNTIME_PROFILE_VERSION: u32 = 5;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -306,6 +306,10 @@ pub struct ProviderAvailability {
     #[serde(default, skip_serializing_if = "String::is_empty")]
     pub discovery_error: String,
     pub credential_available: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub custom_endpoint: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub custom_model: bool,
     pub controls: Vec<ProviderControl>,
 }
 
@@ -361,6 +365,7 @@ pub struct DurableAgentSession {
     pub executable_identity: String,
     pub workspace: String,
     pub workspace_identity: String,
+    pub provider_endpoint: String,
     pub runtime_profile_key: String,
     pub runtime_profile_version: u32,
     pub provider_session_id: String,
@@ -387,6 +392,7 @@ struct RawDurableAgentSession {
     executable_identity: String,
     workspace: String,
     workspace_identity: String,
+    provider_endpoint: String,
     runtime_profile_key: String,
     runtime_profile_version: u32,
     provider_session_id: String,
@@ -437,6 +443,7 @@ impl<'de> Deserialize<'de> for DurableAgentSession {
             executable_identity: raw.executable_identity,
             workspace: raw.workspace,
             workspace_identity: raw.workspace_identity,
+            provider_endpoint: raw.provider_endpoint,
             runtime_profile_key: raw.runtime_profile_key,
             runtime_profile_version: raw.runtime_profile_version,
             provider_session_id: raw.provider_session_id,
@@ -475,6 +482,7 @@ pub struct AgentSessionDraft {
     pub executable_identity: String,
     pub workspace: String,
     pub workspace_identity: String,
+    pub provider_endpoint: String,
     pub model: String,
     pub reasoning_effort: String,
     pub service_tier: String,

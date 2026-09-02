@@ -5,7 +5,7 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
 };
 
 pub(crate) const DISPLAY_NAME: &str = "LLM Gateway";
@@ -26,7 +26,7 @@ pub(crate) const REASONING_EFFORTS: [(&str, &str); 8] = [
 pub(crate) static LLM_GATEWAY_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     credential: ProviderCredentialId::LlmGateway,
     provider_kind: PROVIDER_KIND,
-    endpoint: "https://api.llmgateway.io/v1/chat/completions",
+    endpoint: RemoteOpenAiEndpoint::Fixed("https://api.llmgateway.io/v1/chat/completions"),
     headers: &[],
     request_payload,
     retain_reasoning: false,

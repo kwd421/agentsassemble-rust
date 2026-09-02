@@ -20,7 +20,7 @@ use crate::{
     },
     openai_stream::{AssistantMessage, OpenAiStreamCompletion, ToolCall, send_chat_completion},
     remote_https::fixed_endpoint_client,
-    remote_openai_spec::{RemoteOpenAiSpec, provider_error},
+    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiSpec, provider_error},
     room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
 };
 
@@ -51,6 +51,7 @@ struct RemoteOpenAiApi {
     spec: &'static RemoteOpenAiSpec,
     client: Client,
     endpoint: Url,
+    session_endpoint_authority: Option<String>,
 }
 
 struct ExecutedTool {
@@ -63,6 +64,60 @@ impl RemoteOpenAiDriver {
     pub(crate) async fn launch(
         spec: &'static RemoteOpenAiSpec,
         credentials: ProviderCredentialStore,
+    ) -> Result<Self, DriverError> {
+        let RemoteOpenAiEndpoint::Fixed(endpoint) = spec.endpoint else {
+            return Err(provider_error(
+                "provider_api_unavailable",
+                spec.errors.api_unavailable,
+            ));
+        };
+        let client = fixed_endpoint_client()
+            .map_err(|_| provider_error("provider_api_unavailable", spec.errors.api_unavailable))?;
+        let endpoint = Url::parse(endpoint)
+            .map_err(|_| provider_error("provider_api_unavailable", spec.errors.api_unavailable))?;
+        Self::launch_with_api(
+            spec,
+            credentials,
+            RemoteOpenAiApi {
+                spec,
+                client,
+                endpoint,
+                session_endpoint_authority: None,
+            },
+        )
+        .await
+    }
+
+    pub(crate) async fn launch_for_session_endpoint(
+        spec: &'static RemoteOpenAiSpec,
+        credentials: ProviderCredentialStore,
+        session_endpoint_authority: String,
+        client: Client,
+        endpoint: Url,
+    ) -> Result<Self, DriverError> {
+        if spec.endpoint != RemoteOpenAiEndpoint::AgentSession {
+            return Err(provider_error(
+                "provider_api_unavailable",
+                spec.errors.api_unavailable,
+            ));
+        }
+        Self::launch_with_api(
+            spec,
+            credentials,
+            RemoteOpenAiApi {
+                spec,
+                client,
+                endpoint,
+                session_endpoint_authority: Some(session_endpoint_authority),
+            },
+        )
+        .await
+    }
+
+    async fn launch_with_api(
+        spec: &'static RemoteOpenAiSpec,
+        credentials: ProviderCredentialStore,
+        api: RemoteOpenAiApi,
     ) -> Result<Self, DriverError> {
         let portal = RoomPortal::create().await.map_err(|_| PORTAL_UNAVAILABLE)?;
         let portal_client = ().serve(StreamableHttpClientTransport::from_config(
@@ -77,7 +132,7 @@ impl RemoteOpenAiDriver {
         validate_tool_catalog(&tools)?;
         Ok(Self {
             spec,
-            api: RemoteOpenAiApi::new(spec)?,
+            api,
             portal: Some(portal),
             portal_client: Some(portal_client),
             tools,
@@ -236,12 +291,24 @@ impl RemoteOpenAiDriver {
     }
 
     fn validate_session(&self, session: &DurableAgentSession) -> Result<(), DriverError> {
+        let endpoint_matches = match self.spec.endpoint {
+            RemoteOpenAiEndpoint::Fixed(_) => {
+                session.provider_endpoint.is_empty()
+                    && self.api.session_endpoint_authority.is_none()
+            }
+            RemoteOpenAiEndpoint::AgentSession => self
+                .api
+                .session_endpoint_authority
+                .as_deref()
+                .is_some_and(|authority| authority == session.provider_endpoint),
+        };
         if self.stopped
             || self.attached_session_id.as_deref() != Some(&session.public.session_id)
             || session.public.provider_kind != self.spec.provider_kind
             || session.public.runtime_kind != "api"
             || session.public.transport != "https"
             || session.public.permission_mode != "meeting_read_only"
+            || !endpoint_matches
         {
             return Err(provider_error(
                 "provider_session_mismatch",
@@ -406,18 +473,6 @@ impl ProviderDriver for RemoteOpenAiDriver {
 }
 
 impl RemoteOpenAiApi {
-    fn new(spec: &'static RemoteOpenAiSpec) -> Result<Self, DriverError> {
-        let unavailable =
-            || provider_error("provider_api_unavailable", spec.errors.api_unavailable);
-        let client = fixed_endpoint_client().map_err(|_| unavailable())?;
-        let endpoint = Url::parse(spec.endpoint).map_err(|_| unavailable())?;
-        Ok(Self {
-            spec,
-            client,
-            endpoint,
-        })
-    }
-
     async fn complete(
         &self,
         session: &DurableAgentSession,

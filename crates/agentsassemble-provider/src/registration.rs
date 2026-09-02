@@ -14,14 +14,14 @@ use crate::guardian::GuardianLaunch;
 use crate::{
     ProviderCredentialId,
     catalog::{
-        discover_antigravity, discover_cerebras, discover_codex, discover_deepseek,
-        discover_llm_gateway, discover_opencode, discover_openrouter, discover_tokenrouter,
-        discover_vercel,
+        discover_antigravity, discover_cerebras, discover_codex, discover_custom_api,
+        discover_deepseek, discover_llm_gateway, discover_opencode, discover_openrouter,
+        discover_tokenrouter, discover_vercel,
     },
     cerebras,
     codex::CodexDriver,
     credentials::ProviderCredentialStore,
-    deepseek,
+    custom_api, deepseek,
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
     llm_gateway,
@@ -42,6 +42,22 @@ type ProviderLaunch =
         &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>>;
 
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ProviderConfigurationAuthority {
+    Catalog,
+    CallerOpenAi,
+}
+
+impl ProviderConfigurationAuthority {
+    pub(crate) const fn custom_endpoint(self) -> bool {
+        matches!(self, Self::CallerOpenAi)
+    }
+
+    pub(crate) const fn custom_model(self) -> bool {
+        matches!(self, Self::CallerOpenAi)
+    }
+}
+
 pub(crate) struct ProviderRegistration {
     pub(crate) id: &'static str,
     pub(crate) display_name: &'static str,
@@ -54,6 +70,7 @@ pub(crate) struct ProviderRegistration {
     pub(crate) executable_required: bool,
     pub(crate) probe_executable: &'static str,
     pub(crate) credential_available: bool,
+    pub(crate) configuration_authority: ProviderConfigurationAuthority,
     discover: ProviderDiscovery,
     launch: ProviderLaunch,
 }
@@ -70,6 +87,7 @@ pub(crate) static CODEX_PROVIDER: ProviderRegistration = ProviderRegistration {
     executable_required: true,
     probe_executable: "codex",
     credential_available: false,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_codex_registered,
     launch: launch_codex,
 };
@@ -86,6 +104,7 @@ pub(crate) static ANTIGRAVITY_PROVIDER: ProviderRegistration = ProviderRegistrat
     executable_required: true,
     probe_executable: "agy",
     credential_available: false,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_antigravity_registered,
     launch: launch_antigravity,
 };
@@ -102,6 +121,7 @@ pub(crate) static OPENCODE_PROVIDER: ProviderRegistration = ProviderRegistration
     executable_required: true,
     probe_executable: "opencode",
     credential_available: false,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_opencode_registered,
     launch: launch_opencode,
 };
@@ -118,6 +138,7 @@ pub(crate) static DEEPSEEK_PROVIDER: ProviderRegistration = ProviderRegistration
     executable_required: false,
     probe_executable: "",
     credential_available: true,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_deepseek_registered,
     launch: launch_deepseek,
 };
@@ -134,6 +155,7 @@ pub(crate) static CEREBRAS_PROVIDER: ProviderRegistration = ProviderRegistration
     executable_required: false,
     probe_executable: "",
     credential_available: true,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_cerebras_registered,
     launch: launch_cerebras,
 };
@@ -150,6 +172,7 @@ pub(crate) static OPENROUTER_PROVIDER: ProviderRegistration = ProviderRegistrati
     executable_required: false,
     probe_executable: "",
     credential_available: true,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_openrouter_registered,
     launch: launch_openrouter,
 };
@@ -166,6 +189,7 @@ pub(crate) static VERCEL_PROVIDER: ProviderRegistration = ProviderRegistration {
     executable_required: false,
     probe_executable: "",
     credential_available: true,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_vercel_registered,
     launch: launch_vercel,
 };
@@ -182,6 +206,7 @@ pub(crate) static LLM_GATEWAY_PROVIDER: ProviderRegistration = ProviderRegistrat
     executable_required: false,
     probe_executable: "",
     credential_available: true,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_llm_gateway_registered,
     launch: launch_llm_gateway,
 };
@@ -198,11 +223,29 @@ pub(crate) static TOKENROUTER_PROVIDER: ProviderRegistration = ProviderRegistrat
     executable_required: false,
     probe_executable: "",
     credential_available: true,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_tokenrouter_registered,
     launch: launch_tokenrouter,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 9] = [
+pub(crate) static CUSTOM_API_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "custom_api",
+    display_name: custom_api::DISPLAY_NAME,
+    provider_kind: custom_api::PROVIDER_KIND,
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    credential_available: true,
+    configuration_authority: ProviderConfigurationAuthority::CallerOpenAi,
+    discover: discover_custom_api_registered,
+    launch: launch_custom_api,
+};
+
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 10] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
@@ -212,6 +255,7 @@ static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 9] = [
     &VERCEL_PROVIDER,
     &LLM_GATEWAY_PROVIDER,
     &TOKENROUTER_PROVIDER,
+    &CUSTOM_API_PROVIDER,
 ];
 
 pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistration] {
@@ -307,6 +351,13 @@ fn discover_tokenrouter_registered(
     Box::pin(discover_tokenrouter(provider, cancellation))
 }
 
+fn discover_custom_api_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(discover_custom_api(provider, cancellation))
+}
+
 pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderAvailability {
     ProviderAvailability {
         id: registration.id.to_owned(),
@@ -327,6 +378,8 @@ pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderA
         discovery_error_code: String::new(),
         discovery_error: String::new(),
         credential_available: registration.credential_available,
+        custom_endpoint: registration.configuration_authority.custom_endpoint(),
+        custom_model: registration.configuration_authority.custom_model(),
         controls: Vec::new(),
     }
 }
@@ -579,6 +632,22 @@ fn launch_tokenrouter<'a>(
             .await
             .map_err(|error| DriverLaunchError::safe(tokenrouter::credential_error(error)))?;
         let driver = tokenrouter::launch(factory.credentials.clone()).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_custom_api<'a>(
+    factory: &'a ProductionDriverFactory,
+    session: &'a DurableAgentSession,
+    _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        factory
+            .credentials
+            .secret(ProviderCredentialId::CustomApi)
+            .await
+            .map_err(|error| DriverLaunchError::safe(custom_api::credential_error(error)))?;
+        let driver = custom_api::launch(factory.credentials.clone(), session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

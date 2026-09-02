@@ -22,7 +22,12 @@ const CATALOG_KEYS: ExactGeneratedKeys<
 const CATALOG_REQUIRED_KEYS = CATALOG_KEYS.filter(
   (key) => !CATALOG_OPTIONAL_KEYS.includes(key as "discovered_at")
 );
-const PROVIDER_OPTIONAL_KEYS = ["discovery_error_code", "discovery_error"] as const;
+const PROVIDER_OPTIONAL_KEYS = [
+  "discovery_error_code",
+  "discovery_error",
+  "custom_endpoint",
+  "custom_model",
+] as const;
 const GENERATED_PROVIDER_KEYS = [
   "id",
   "display_name",
@@ -40,6 +45,8 @@ const GENERATED_PROVIDER_KEYS = [
   "discovery_error_code",
   "discovery_error",
   "credential_available",
+  "custom_endpoint",
+  "custom_model",
   "controls",
 ] as const satisfies readonly (keyof ProviderAvailability)[];
 const PROVIDER_KEYS: ExactGeneratedKeys<
@@ -145,6 +152,9 @@ function providerIsValid(value: unknown): boolean {
     Boolean(provider.runtime_kind) &&
     Boolean(provider.connection_kind) &&
     booleanKeys.every((key) => typeof provider[key] === "boolean") &&
+    ["custom_endpoint", "custom_model"].every(
+      (key) => provider[key] === undefined || typeof provider[key] === "boolean",
+    ) &&
     ["harness", "api", "local"].includes(String(provider.catalog_group)) &&
     ["loading", "ready", "failed"].includes(String(provider.discovery_status)) &&
     ["discovered", "static_manifest"].includes(String(provider.catalog_source)) &&

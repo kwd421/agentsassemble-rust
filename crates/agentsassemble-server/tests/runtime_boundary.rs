@@ -572,6 +572,8 @@ fn large_provider_catalog() -> ProviderCatalog {
             discovery_error_code: String::new(),
             discovery_error: String::new(),
             credential_available: true,
+            custom_endpoint: false,
+            custom_model: false,
             controls: vec![ProviderControl {
                 key: "model".to_owned(),
                 label: "Model".to_owned(),

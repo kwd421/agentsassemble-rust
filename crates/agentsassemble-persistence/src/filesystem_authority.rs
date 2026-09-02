@@ -201,6 +201,7 @@ mod tests {
             executable_identity: String::new(),
             workspace: String::new(),
             workspace_identity: String::new(),
+            provider_endpoint: String::new(),
             model: "deepseek-v4-flash".to_owned(),
             reasoning_effort: "high".to_owned(),
             service_tier: "default".to_owned(),
