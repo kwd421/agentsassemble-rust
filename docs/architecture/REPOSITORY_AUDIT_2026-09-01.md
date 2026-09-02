@@ -638,7 +638,15 @@ Implementation plan and evidence:
    independently parsed provider array per room and performs two state updates per
    catalog transition; the Rust owner already bounds one public catalog at 48 KiB, so
    retain only the catalog state and derive its provider list without claiming a wire-
-   size reduction.
+   size reduction. Completed: generated aliases now own provider/catalog/control
+   semantics; a finite socket validator rejects extra private fields, malformed catalog
+   updates, and snapshot provider aliases that disagree with the catalog owner. The
+   second React array and its second transition update are gone, as are the producerless
+   custom-endpoint/work-harness controls. `interactive` and all server-produced catalog
+   controls remain. Snapshot equality adds one bounded serialization comparison over at
+   most the existing 48 KiB catalog; that small admission cost is accepted to reject two
+   conflicting authorities before projection. Production build and all 622 frontend
+   tests pass; no wire-size or speculative throughput improvement is claimed.
 3. Derive the browser Agent Session and room-member projection from generated
    `AgentSession` and `Participant`. Reuse one exact Participant/Agent Session field
    schema for snapshot and event rejection, while history pagination, search context,

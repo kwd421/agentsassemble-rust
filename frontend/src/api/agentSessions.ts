@@ -118,13 +118,10 @@ export interface FrontendLiveAgentCreateRequest {
   catalogRevision?: string;
   displayName: string;
   workspacePath: string;
-  engagementMode?: string;
   modelId?: string;
-  providerEndpoint?: string;
   reasoningEffort?: string;
   serviceTier?: string;
   variant?: string;
-  executionHarness?: string;
   permissionMode?: string;
   maxOutputTokens?: number;
   personaCardId?: string;

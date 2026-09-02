@@ -6,6 +6,7 @@ import {
   joinedParticipantFromEvent,
 } from "./participantEventContract";
 import { isParticipantRole } from "./participantRole";
+import { providerCatalogIsValid } from "./providerCatalogContract";
 import { voteSummaryResultIsValid } from "./roomVoteSummaryContract";
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
@@ -212,8 +213,10 @@ export function snapshotValidationError(
     !Array.isArray(value.agent_sessions) ||
     !Array.isArray(value.active_turns) ||
     !Array.isArray(value.events) ||
-    !isRecord(value.provider_catalog) ||
+    !providerCatalogIsValid(value.provider_catalog) ||
     !Array.isArray(value.available_providers) ||
+    JSON.stringify(value.available_providers) !==
+      JSON.stringify(value.provider_catalog.providers) ||
     !isRecord(value.capabilities) ||
     typeof value.has_more_before !== "boolean" ||
     typeof value.resume_gap !== "boolean"

@@ -69,12 +69,15 @@ describe("AgentSessionDetails diagnostics", () => {
       provider_kind: "deepseek_api",
       runtime_kind: "api",
       connection_kind: "native_cli_bridge",
-      executable: "",
+      workspace_required: false,
       default_model: "deepseek-chat",
       catalog_group: "api",
       interactive: true,
       startable: true,
       available: true,
+      discovery_status: "ready",
+      catalog_source: "static_manifest",
+      credential_available: true,
       controls: [],
     };
     const session: RoomAgentSession = {

@@ -11,7 +11,6 @@ import {
 import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
 import AgentActivitySettings from "./AgentActivitySettings";
 import ProviderRuntimeSettingField from "./ProviderRuntimeSettingField";
-import WorkspacePickerField from "./WorkspacePickerField";
 
 export type AgentSessionControlAction = "start" | "pause" | "stop" | "resume" | "interrupt";
 
@@ -114,7 +113,6 @@ export default function AgentSessionDetails({
   const [actionStatus, setActionStatus] = useState("");
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingsBusy, setSettingsBusy] = useState(false);
-  const [workspacePath, setWorkspacePath] = useState("");
   const status = session.runtime_status;
   const hasRunBefore = Boolean(
     session.started_at ||
@@ -146,18 +144,6 @@ export default function AgentSessionDetails({
     ? settings[invalidRuntimeControl.key] || ""
     : "";
   const visibleSessionError = sessionErrorMessage(session);
-  const workHarnessNeedsWorkspace = Boolean(
-    (
-      provider?.work_harness_available &&
-      settings.permission_mode === "workspace_write" &&
-      session.permission_mode !== "workspace_write"
-    ) || (
-      settings.execution_harness &&
-      settings.execution_harness !== "builtin" &&
-      (session.execution_harness || "builtin") === "builtin"
-    )
-  );
-
   useEffect(() => {
     const storedModel = session.model || controlDefault(provider, "model");
     const storedSettings = {
@@ -179,7 +165,6 @@ export default function AgentSessionDetails({
         controlDefault(provider, "max_output_tokens"),
     };
     setSettings(storedSettings);
-    setWorkspacePath("");
   }, [
     provider,
     session.session_id,
@@ -212,16 +197,12 @@ export default function AgentSessionDetails({
       !onConfigure ||
       !canConfigure ||
       invalidRuntimeControl ||
-      settingsBusy ||
-      (workHarnessNeedsWorkspace && !workspacePath)
+      settingsBusy
     ) return;
     setSettingsBusy(true);
     setActionStatus("");
     try {
-      await onConfigure(session, {
-        ...settings,
-        ...(workspacePath ? { workspace: workspacePath } : {}),
-      });
+      await onConfigure(session, settings);
       setActionStatus("런타임 설정 저장 완료 · 다음 시작부터 적용");
     } catch (error) {
       setActionStatus(error instanceof Error ? error.message : "런타임 설정 저장 실패");
@@ -282,22 +263,13 @@ export default function AgentSessionDetails({
               />
             );
           })}
-          {workHarnessNeedsWorkspace && (
-            <WorkspacePickerField
-              value={workspacePath}
-              disabled={!canConfigure || settingsBusy}
-              onChange={setWorkspacePath}
-              onError={setActionStatus}
-            />
-          )}
           <button
             type="button"
             className="dc-member-session-button"
             disabled={
               !canConfigure ||
               Boolean(invalidRuntimeControl) ||
-              settingsBusy ||
-              (workHarnessNeedsWorkspace && !workspacePath)
+              settingsBusy
             }
             onClick={() => void saveSettings()}
           >

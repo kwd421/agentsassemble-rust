@@ -11,6 +11,10 @@ import type { PublicRoomSettings } from "./types/generated/PublicRoomSettings";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
 import type { CommandAck } from "./types/generated/CommandAck";
 import type { CommandResolution } from "./types/generated/CommandResolution";
+import type { ProviderAvailability } from "./types/generated/ProviderAvailability";
+import type { ProviderCatalog } from "./types/generated/ProviderCatalog";
+import type { ProviderControl as GeneratedProviderControl } from "./types/generated/ProviderControl";
+import type { ProviderControlOption as GeneratedProviderControlOption } from "./types/generated/ProviderControlOption";
 import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
 import type { RoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 
@@ -65,50 +69,10 @@ export interface RoomHistoryPage {
   has_more_before: boolean;
 }
 
-export interface NativeCliProviderAvailability {
-  id: string;
-  display_name: string;
-  provider_kind: string;
-  runtime_kind: "live_cli" | "opencode" | "api";
-  catalog_group: "harness" | "api" | "local";
-  workspace_required?: boolean;
-  work_harness_available?: boolean;
-  custom_endpoint?: boolean;
-  custom_model?: boolean;
-  connection_kind: "native_cli_bridge";
-  executable: string;
-  default_model: string;
-  interactive: true;
-  startable: boolean;
-  available: boolean;
-  discovery_status?: "loading" | "ready" | "failed";
-  catalog_source?: "discovered" | "static_manifest";
-  discovery_error_code?: string;
-  discovery_error?: string;
-  credential_available?: boolean;
-  controls: ProviderControl[];
-}
-
-export interface ProviderCatalogSnapshot {
-  status: "loading" | "ready" | "failed";
-  catalog_revision: string;
-  discovered_at?: string;
-  providers: NativeCliProviderAvailability[];
-}
-
-export interface ProviderControlOption {
-  value: string;
-  label: string;
-  metadata?: Record<string, unknown>;
-}
-
-export interface ProviderControl {
-  key: string;
-  label: string;
-  kind: "select" | "combobox";
-  options: ProviderControlOption[];
-  default_value: string;
-}
+export type NativeCliProviderAvailability = ProviderAvailability;
+export type ProviderCatalogSnapshot = ProviderCatalog;
+export type ProviderControlOption = GeneratedProviderControlOption;
+export type ProviderControl = GeneratedProviderControl;
 
 export interface RoomSocketSnapshot {
   op: "snapshot";

@@ -39,6 +39,26 @@ function leaveAck(
   };
 }
 
+function providerAvailability() {
+  return {
+    id: "codex",
+    display_name: "Codex",
+    provider_kind: "codex_live_session",
+    runtime_kind: "live_cli",
+    catalog_group: "harness",
+    workspace_required: true,
+    connection_kind: "native_cli_bridge",
+    default_model: "gpt-5.6-luna",
+    interactive: true,
+    startable: true,
+    available: true,
+    discovery_status: "ready",
+    catalog_source: "discovered",
+    credential_available: false,
+    controls: [],
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.useRealTimers();
@@ -505,15 +525,72 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     receiveServerFrame(sockets[0], {
       op: "provider_catalog_updated",
-      catalog: { status: "ready", catalog_revision: "cat-2", providers: [] },
+      catalog: {
+        status: "ready",
+        catalog_revision: "cat-2",
+        providers: [providerAvailability()],
+      },
     });
     await vi.waitFor(() =>
       expect(onProviderCatalog).toHaveBeenCalledWith({
         status: "ready",
         catalog_revision: "cat-2",
-        providers: [],
+        providers: [providerAvailability()],
       })
     );
+    handle.close();
+  });
+
+  it("rejects provider catalog pushes with fields outside the generated contract", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+
+    receiveServerFrame(sockets[0], {
+      op: "provider_catalog_updated",
+      catalog: {
+        status: "ready",
+        catalog_revision: "cat-private-field",
+        providers: [{ ...providerAvailability(), executable: "/private/bin/codex" }],
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(errors.at(-1)?.category).toBe("provider_catalog_invalid")
+    );
+    expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it("rejects snapshot provider aliases that disagree with the catalog owner", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    (frames.snap as unknown as Record<string, unknown>).available_providers = [
+      providerAvailability(),
+    ];
+    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.snap);
+
+    await vi.waitFor(() =>
+      expect(errors.at(-1)?.category).toBe("snapshot_schema_invalid")
+    );
+    expect(handle.ready()).toBe(false);
     handle.close();
   });
 

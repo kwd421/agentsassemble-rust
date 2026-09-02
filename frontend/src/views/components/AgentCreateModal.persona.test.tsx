@@ -62,7 +62,6 @@ describe("AgentCreateModal persona selection", () => {
     await userEvent.click(screen.getByRole("button", { name: /적용 안 함/ }));
     await waitFor(() => expect(screen.getByRole("radio", { name: /Night Guide/ })).toBeTruthy());
     await userEvent.click(screen.getByRole("radio", { name: /Night Guide/ }));
-    await userEvent.click(screen.getByRole("button", { name: "폴더 선택" }));
     await userEvent.click(
       screen.getByRole("dialog", { name: "에이전트 추가" })
         .querySelector<HTMLButtonElement>(".dc-agent-create-primary")!
@@ -81,12 +80,14 @@ function deepSeekProvider(): NativeCliProviderAvailability {
     provider_kind: "deepseek_api",
     runtime_kind: "api",
     catalog_group: "api",
+    workspace_required: false,
     connection_kind: "native_cli_bridge",
-    executable: "",
     default_model: "deepseek-chat",
     interactive: true,
     startable: true,
     available: true,
+    discovery_status: "ready",
+    catalog_source: "static_manifest",
     credential_available: true,
     controls: [],
   };

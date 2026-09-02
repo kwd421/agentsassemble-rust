@@ -12,7 +12,6 @@ import {
 import {
   openRoomSocket,
   RoomSocketSayError,
-  type NativeCliProviderAvailability,
   type PluginEnvelope,
   type ProviderCatalogSnapshot,
   type RoomSocketAuth,
@@ -105,9 +104,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   const [sessionsByRoom, setSessionsByRoom] = useState<Record<string, RoomAgentSession[]>>({});
   const [participantsByRoom, setParticipantsByRoom] = useState<Record<string, RoomMember[]>>({});
   const [capabilitiesByRoom, setCapabilitiesByRoom] = useState<Record<string, Record<string, boolean>>>({});
-  const [providersByRoom, setProvidersByRoom] = useState<
-    Record<string, NativeCliProviderAvailability[]>
-  >({});
   const [providerCatalogByRoom, setProviderCatalogByRoom] = useState<
     Record<string, ProviderCatalogSnapshot>
   >({});
@@ -330,10 +326,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           ...previous,
           [roomId]: snapshot.capabilities || {},
         }));
-        setProvidersByRoom((previous) => ({
-          ...previous,
-          [roomId]: snapshot.available_providers || [],
-        }));
         setProviderCatalogByRoom((previous) => ({
           ...previous,
           [roomId]: snapshot.provider_catalog || EMPTY_PROVIDER_CATALOG,
@@ -407,7 +399,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           !socketIsAccepted(currentSocket)
         ) return;
         setProviderCatalogByRoom((previous) => ({ ...previous, [roomId]: catalog }));
-        setProvidersByRoom((previous) => ({ ...previous, [roomId]: catalog.providers || [] }));
       },
       onOpen: () => {
         if (!connectionIsCurrent()) return;
@@ -718,7 +709,9 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     roomSettings: projectionIsCurrent ? roomSettingsByRoom[roomId] || null : null,
     agentSessions,
     capabilities: projectionIsCurrent ? capabilitiesByRoom[roomId] || {} : {},
-    availableProviders: projectionIsCurrent ? providersByRoom[roomId] || [] : [],
+    availableProviders: projectionIsCurrent
+      ? providerCatalogByRoom[roomId]?.providers || []
+      : [],
     providerCatalog: projectionIsCurrent
       ? providerCatalogByRoom[roomId] || EMPTY_PROVIDER_CATALOG
       : EMPTY_PROVIDER_CATALOG,

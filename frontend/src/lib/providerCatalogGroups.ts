@@ -12,7 +12,10 @@ export const PROVIDER_GROUPS = [
 export function providerCatalogGroup(
   provider: NativeCliProviderAvailability
 ): ProviderCatalogGroup {
-  return provider.catalog_group;
+  if (["harness", "api", "local"].includes(provider.catalog_group)) {
+    return provider.catalog_group as ProviderCatalogGroup;
+  }
+  throw new Error("Provider catalog group is outside the current room contract.");
 }
 
 export function projectProvidersByCatalogGroup(

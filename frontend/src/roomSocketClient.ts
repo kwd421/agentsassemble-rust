@@ -19,7 +19,6 @@ import {
 } from "./lib/roomSocketValidation";
 import {
   RoomSocketSayError,
-  type ProviderCatalogSnapshot,
   type RoomCommandAck,
   type RoomHistoryPage,
   type RoomSocketClientDependencies,
@@ -30,6 +29,7 @@ import {
 import { PRODUCT_SURFACE_REVISION } from "./types/generated/PRODUCT_SURFACE_REVISION";
 import { requireAcceptedRoomRuntimeTicket } from "./lib/roomRuntimeTicket";
 import { roomMessagePayload } from "./lib/roomMessagePayload";
+import { providerCatalogIsValid } from "./lib/providerCatalogContract";
 import { ROOM_HISTORY_MAX_EVENTS } from "./types/generated/ROOM_HISTORY_WIRE";
 import { MAX_ROOM_SOCKET_MESSAGE_BYTES } from "./types/generated/ROOM_SOCKET_WIRE";
 import { scheduleUncertainCommandRetry, type PendingCommandRetryState } from "./roomSocketRetryPolicy";
@@ -443,8 +443,14 @@ export function openRoomSocket(
           acceptEventFrame(msg, Number.MAX_SAFE_INTEGER, false);
           return;
         }
-        if (msg.op === "provider_catalog_updated" && isRecord(msg.catalog)) {
-          handlers.onProviderCatalog?.(msg.catalog as unknown as ProviderCatalogSnapshot);
+        if (msg.op === "provider_catalog_updated") {
+          if (!providerCatalogIsValid(msg.catalog)) {
+            throw new RoomSocketSayError(
+              "Provider catalog update did not match the generated room contract.",
+              "provider_catalog_invalid",
+            );
+          }
+          handlers.onProviderCatalog?.(msg.catalog);
           return;
         }
         if (msg.op === "resync_required") {

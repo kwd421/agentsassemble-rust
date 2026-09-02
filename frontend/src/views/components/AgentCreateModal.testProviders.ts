@@ -7,12 +7,15 @@ export function codexProvider(): NativeCliProviderAvailability {
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli" as const,
     catalog_group: "harness",
+    workspace_required: true,
     connection_kind: "native_cli_bridge" as const,
-    executable: "codex",
     default_model: "gpt-5.6-luna",
     interactive: true as const,
     startable: true,
     available: true,
+    discovery_status: "ready",
+    catalog_source: "discovered",
+    credential_available: false,
     controls: [
       {
         key: "model",
@@ -32,13 +35,15 @@ export function claudeProvider(): NativeCliProviderAvailability {
     provider_kind: "claude_code",
     runtime_kind: "live_cli" as const,
     catalog_group: "harness",
+    workspace_required: true,
     connection_kind: "native_cli_bridge" as const,
-    executable: "claude",
     default_model: "claude-haiku-4-5",
     interactive: true as const,
     startable: true,
     available: true,
+    discovery_status: "ready",
     catalog_source: "static_manifest" as const,
+    credential_available: false,
     controls: [
       {
         key: "model",
@@ -61,15 +66,15 @@ export function deepSeekProvider(): NativeCliProviderAvailability {
     provider_kind: "deepseek_api",
     runtime_kind: "api",
     connection_kind: "native_cli_bridge",
-    executable: "",
     default_model: "deepseek-chat",
     interactive: true,
     startable: true,
     available: true,
+    discovery_status: "ready",
+    catalog_source: "static_manifest",
     catalog_group: "api",
     credential_available: true,
     workspace_required: false,
-    work_harness_available: true,
     controls: [
       {
         key: "max_output_tokens",
@@ -160,9 +165,7 @@ export function openCodeProvider(): NativeCliProviderAvailability {
     runtime_kind: "opencode",
     catalog_group: "harness",
     workspace_required: true,
-    work_harness_available: false,
     credential_available: false,
-    executable: "opencode",
     default_model: "opencode-go/glm-5.2",
     controls: [
       {

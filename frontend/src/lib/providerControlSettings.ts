@@ -81,13 +81,17 @@ export function effectiveProviderControlOptions(
       const selectedEffort = settings.reasoning_effort || "default";
       const allowed = new Set(
         variants
-          .filter(
-            (variant): variant is Record<string, unknown> =>
-              Boolean(variant) &&
-              typeof variant === "object" &&
-              String(variant.reasoning_effort || "default") === selectedEffort
+          .filter((variant) => {
+            if (!variant || typeof variant !== "object" || Array.isArray(variant)) {
+              return false;
+            }
+            return String(
+              (variant as Record<string, unknown>).reasoning_effort || "default"
+            ) === selectedEffort;
+          })
+          .map((variant) =>
+            String((variant as Record<string, unknown>).service_tier || "default")
           )
-          .map((variant) => String(variant.service_tier || "default"))
       );
       return control.options.filter((option) => allowed.has(option.value));
     }

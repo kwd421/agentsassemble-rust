@@ -66,8 +66,6 @@ export default function AgentCreateModal({
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
   const [providerApiKey, setProviderApiKey] = useState("");
-  const [customEndpoint, setCustomEndpoint] = useState("");
-  const [customModel, setCustomModel] = useState("");
   const [personaCardId, setPersonaCardId] = useState("");
   const [credentialStatus, setCredentialStatus] = useState<ProviderCredentialStatus | null>(null);
   const [credentialBusy, setCredentialBusy] = useState(false);
@@ -75,17 +73,10 @@ export default function AgentCreateModal({
   const groupedProviders = projectProvidersByCatalogGroup(providers);
   const visibleProviders = providerGroup ? groupedProviders[providerGroup] : [];
   const selectedProvider = visibleProviders.find((provider) => provider.id === providerId);
-  const workHarnessEnabled = Boolean(
-    selectedProvider?.work_harness_available && settings.permission_mode === "workspace_write"
-  );
-  const nativeHarnessEnabled = Boolean(
-    settings.execution_harness && settings.execution_harness !== "builtin"
-  );
   const workspaceRequired = Boolean(
     selectedProvider && (
-      selectedProvider.workspace_required !== false ||
-      workHarnessEnabled ||
-      nativeHarnessEnabled
+      selectedProvider.workspace_required ||
+      settings.permission_mode === "workspace_write"
     )
   );
   const selectedProviderMissing = Boolean(providerId && providers.length && !selectedProvider);
@@ -103,8 +94,6 @@ export default function AgentCreateModal({
       selectedProvider.startable &&
       !invalidControl &&
       displayName.trim() &&
-      (!selectedProvider.custom_endpoint || customEndpoint.trim()) &&
-      (!selectedProvider.custom_model || customModel.trim()) &&
       (!workspaceRequired || workspacePath.trim())
   );
   const statusMessage = deriveAgentCreateStatus({
@@ -120,8 +109,6 @@ export default function AgentCreateModal({
   useEffect(() => {
     if (!open) {
       wasOpen.current = false;
-      setCustomEndpoint("");
-      setCustomModel("");
       setPersonaCardId("");
       return;
     }
@@ -170,8 +157,6 @@ export default function AgentCreateModal({
     setDisplayName(defaultAgentDisplayName(provider, initialSettings));
     setDisplayNameEdited(false);
     setSettings(initialSettings);
-    setCustomEndpoint("");
-    setCustomModel("");
     setPersonaCardId("");
     setStartNow(provider.startable);
   }
@@ -182,8 +167,6 @@ export default function AgentCreateModal({
     setDisplayName("");
     setDisplayNameEdited(false);
     setSettings({});
-    setCustomEndpoint("");
-    setCustomModel("");
     setPersonaCardId("");
     setStartNow(false);
     setStatus("");
@@ -223,14 +206,10 @@ export default function AgentCreateModal({
         catalogRevision,
         displayName,
         workspacePath,
-        modelId: selectedProvider.custom_model ? customModel.trim() : settings.model || "",
-        providerEndpoint: selectedProvider.custom_endpoint
-          ? customEndpoint.trim()
-          : "",
+        modelId: settings.model || "",
         reasoningEffort: settings.reasoning_effort || "",
         serviceTier: settings.service_tier || "",
         variant: settings.variant || "",
-        executionHarness: settings.execution_harness || "builtin",
         permissionMode: settings.permission_mode || "meeting_read_only",
         maxOutputTokens: Number(settings.max_output_tokens || 0),
         personaCardId,
@@ -396,7 +375,7 @@ export default function AgentCreateModal({
                 <WorkspacePickerField
                   value={workspacePath}
                   description={
-                    workHarnessEnabled
+                    settings.permission_mode === "workspace_write"
                       ? "API 모델이 이 폴더의 텍스트를 읽을 수 있습니다. 파일 변경과 명령 실행은 매번 승인을 요청합니다."
                       : ""
                   }
@@ -405,40 +384,6 @@ export default function AgentCreateModal({
                 />
               )}
               </div>
-            </section>
-          )}
-
-          {selectedProvider?.custom_endpoint && (
-            <section className="dc-agent-section">
-              <p className="dc-agent-section-title">API 연결</p>
-              <div className="dc-agent-field-grid dc-agent-field-grid--dual">
-                <label className="dc-agent-field">
-                  <span>API 주소</span>
-                  <input
-                    type="url"
-                    value={customEndpoint}
-                    placeholder="https://example.com/v1 또는 …/chat/completions"
-                    onChange={(event) => setCustomEndpoint(event.currentTarget.value)}
-                  />
-                </label>
-                <label className="dc-agent-field">
-                  <span>모델 ID</span>
-                  <input
-                    value={customModel}
-                    placeholder="provider가 요구하는 정확한 모델 ID"
-                    onChange={(event) => {
-                      const value = event.currentTarget.value;
-                      setCustomModel(value);
-                      if (!displayNameEdited) {
-                        setDisplayName(value.trim() ? `Custom ${value.trim()}` : "Custom API");
-                      }
-                    }}
-                  />
-                </label>
-              </div>
-              <p className="preserve-words">
-                Base URL과 /chat/completions 전체 주소를 모두 받을 수 있습니다.
-              </p>
             </section>
           )}
 

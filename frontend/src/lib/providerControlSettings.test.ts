@@ -13,12 +13,15 @@ function relatedProvider(): NativeCliProviderAvailability {
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli",
     catalog_group: "harness",
+    workspace_required: true,
     connection_kind: "native_cli_bridge",
-    executable: "codex",
     default_model: "model-low",
     interactive: true,
     startable: true,
     available: true,
+    discovery_status: "ready",
+    catalog_source: "discovered",
+    credential_available: false,
     controls: [
       {
         key: "model",
