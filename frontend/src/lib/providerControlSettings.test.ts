@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { NativeCliProviderAvailability } from "../roomSocketClient";
 import {
+  displayProviderControls,
   effectiveProviderControlOptions,
   initializeProviderSettings,
   reconcileProviderSettings,
@@ -105,6 +106,18 @@ function relatedProvider(): NativeCliProviderAvailability {
 }
 
 describe("providerControlSettings", () => {
+  it("displays only controls owned by the provider catalog", () => {
+    const provider = relatedProvider();
+    provider.controls = provider.controls.filter(
+      (control) => !["reasoning_effort", "service_tier"].includes(control.key)
+    );
+
+    expect(displayProviderControls(provider).map((control) => control.key)).toEqual([
+      "model",
+      "permission_mode",
+    ]);
+  });
+
   it("initializes every catalog control from its default", () => {
     expect(initializeProviderSettings(relatedProvider())).toEqual({
       model: "model-low",

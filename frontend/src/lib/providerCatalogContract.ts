@@ -1,9 +1,29 @@
 import type { ProviderAvailability } from "../types/generated/ProviderAvailability";
 import type { ProviderCatalog } from "../types/generated/ProviderCatalog";
-import { assertExactKeys, strictRecord } from "./strictJsonContract";
+import type { ProviderControl } from "../types/generated/ProviderControl";
+import type { ProviderControlOption } from "../types/generated/ProviderControlOption";
+import {
+  assertExactKeys,
+  strictRecord,
+  type ExactGeneratedKeys,
+} from "./strictJsonContract";
 
-const CATALOG_KEYS = ["status", "catalog_revision", "providers"] as const;
-const PROVIDER_KEYS = [
+const CATALOG_OPTIONAL_KEYS = ["discovered_at"] as const;
+const GENERATED_CATALOG_KEYS = [
+  "status",
+  "catalog_revision",
+  "discovered_at",
+  "providers",
+] as const satisfies readonly (keyof ProviderCatalog)[];
+const CATALOG_KEYS: ExactGeneratedKeys<
+  ProviderCatalog,
+  typeof GENERATED_CATALOG_KEYS
+> = GENERATED_CATALOG_KEYS;
+const CATALOG_REQUIRED_KEYS = CATALOG_KEYS.filter(
+  (key) => !CATALOG_OPTIONAL_KEYS.includes(key as "discovered_at")
+);
+const PROVIDER_OPTIONAL_KEYS = ["discovery_error_code", "discovery_error"] as const;
+const GENERATED_PROVIDER_KEYS = [
   "id",
   "display_name",
   "provider_kind",
@@ -17,11 +37,42 @@ const PROVIDER_KEYS = [
   "available",
   "discovery_status",
   "catalog_source",
+  "discovery_error_code",
+  "discovery_error",
   "credential_available",
   "controls",
-] as const;
-const CONTROL_KEYS = ["key", "label", "kind", "options", "default_value"] as const;
-const OPTION_KEYS = ["value", "label"] as const;
+] as const satisfies readonly (keyof ProviderAvailability)[];
+const PROVIDER_KEYS: ExactGeneratedKeys<
+  ProviderAvailability,
+  typeof GENERATED_PROVIDER_KEYS
+> = GENERATED_PROVIDER_KEYS;
+const PROVIDER_REQUIRED_KEYS = PROVIDER_KEYS.filter(
+  (key) => !PROVIDER_OPTIONAL_KEYS.includes(
+    key as (typeof PROVIDER_OPTIONAL_KEYS)[number]
+  )
+);
+const GENERATED_CONTROL_KEYS = [
+  "key",
+  "label",
+  "kind",
+  "options",
+  "default_value",
+] as const satisfies readonly (keyof ProviderControl)[];
+const CONTROL_KEYS: ExactGeneratedKeys<
+  ProviderControl,
+  typeof GENERATED_CONTROL_KEYS
+> = GENERATED_CONTROL_KEYS;
+const OPTION_OPTIONAL_KEYS = ["metadata"] as const;
+const GENERATED_OPTION_KEYS = ["value", "label", "metadata"] as const satisfies readonly (
+  keyof ProviderControlOption
+)[];
+const OPTION_KEYS: ExactGeneratedKeys<
+  ProviderControlOption,
+  typeof GENERATED_OPTION_KEYS
+> = GENERATED_OPTION_KEYS;
+const OPTION_REQUIRED_KEYS = OPTION_KEYS.filter(
+  (key) => !OPTION_OPTIONAL_KEYS.includes(key as "metadata")
+);
 
 function exactRecord(
   value: unknown,
@@ -34,7 +85,7 @@ function exactRecord(
 }
 
 function optionIsValid(value: unknown): boolean {
-  const option = exactRecord(value, OPTION_KEYS, ["metadata"]);
+  const option = exactRecord(value, OPTION_REQUIRED_KEYS, OPTION_OPTIONAL_KEYS);
   return (
     typeof option.value === "string" &&
     typeof option.label === "string" &&
@@ -62,10 +113,11 @@ function controlIsValid(value: unknown): boolean {
 }
 
 function providerIsValid(value: unknown): boolean {
-  const provider = exactRecord(value, PROVIDER_KEYS, [
-    "discovery_error_code",
-    "discovery_error",
-  ]);
+  const provider = exactRecord(
+    value,
+    PROVIDER_REQUIRED_KEYS,
+    PROVIDER_OPTIONAL_KEYS,
+  );
   const stringKeys = [
     "id",
     "display_name",
@@ -105,7 +157,7 @@ function providerIsValid(value: unknown): boolean {
 
 export function providerCatalogIsValid(value: unknown): value is ProviderCatalog {
   try {
-    const catalog = exactRecord(value, CATALOG_KEYS, ["discovered_at"]);
+    const catalog = exactRecord(value, CATALOG_REQUIRED_KEYS, CATALOG_OPTIONAL_KEYS);
     if (
       !["loading", "ready", "failed"].includes(String(catalog.status)) ||
       typeof catalog.catalog_revision !== "string" ||

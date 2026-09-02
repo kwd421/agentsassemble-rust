@@ -3,23 +3,6 @@ import type {
   ProviderControl,
 } from "../roomSocketClient";
 
-const PASSIVE_STANDARD_CONTROLS: Record<string, ProviderControl> = {
-  reasoning_effort: {
-    key: "reasoning_effort",
-    label: "추론 강도",
-    kind: "select",
-    options: [{ value: "", label: "기본" }],
-    default_value: "",
-  },
-  service_tier: {
-    key: "service_tier",
-    label: "응답 속도",
-    kind: "select",
-    options: [{ value: "", label: "기본" }],
-    default_value: "",
-  },
-};
-
 export function displayProviderControls(
   provider: NativeCliProviderAvailability
 ): ProviderControl[] {
@@ -33,7 +16,7 @@ export function displayProviderControls(
     "permission_mode",
   ];
   const standard = standardKeys.flatMap((key) => {
-    const control = controlsByKey.get(key) || PASSIVE_STANDARD_CONTROLS[key];
+    const control = controlsByKey.get(key);
     return control ? [control] : [];
   });
   const providerSpecific = provider.controls.filter(

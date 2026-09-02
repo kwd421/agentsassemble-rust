@@ -568,12 +568,8 @@ describe("AgentCreateModal", () => {
     expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
     await chooseProviderControl("모델", "Gemma 4 12B Local");
     expect(model.disabled).toBe(true);
-    expect(
-      (screen.getByRole("combobox", { name: "추론 강도" }) as HTMLButtonElement).disabled
-    ).toBe(true);
-    expect(
-      (screen.getByRole("switch", { name: "응답 속도" }) as HTMLButtonElement).disabled
-    ).toBe(true);
+    expect(screen.queryByRole("combobox", { name: "추론 강도" })).toBeNull();
+    expect(screen.queryByRole("switch", { name: "응답 속도" })).toBeNull();
     expectProviderControlValue("권한", "읽기 전용");
     expect(screen.queryByRole("button", { name: "폴더 선택" })).toBeNull();
     await userEvent.click(primaryActionButton());
