@@ -211,11 +211,15 @@ where
 }
 
 fn valid_session_id(observed: &str, resumed: &str) -> bool {
-    if resumed.is_empty() {
-        uuid::Uuid::parse_str(observed).is_ok()
-    } else {
-        observed == resumed
-    }
+    let Ok(session_id) = uuid::Uuid::parse_str(observed) else {
+        return false;
+    };
+    session_id.get_version_num() == 4
+        && session_id
+            .hyphenated()
+            .to_string()
+            .eq_ignore_ascii_case(observed)
+        && (resumed.is_empty() || observed == resumed)
 }
 
 const fn protocol_error() -> DriverError {
@@ -224,3 +228,7 @@ const fn protocol_error() -> DriverError {
         "Claude Agent SDK returned an invalid protocol receipt.",
     )
 }
+
+#[cfg(test)]
+#[path = "claude_sdk_client_tests.rs"]
+mod tests;

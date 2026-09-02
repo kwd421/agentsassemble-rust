@@ -322,11 +322,12 @@ fn valid_model_id(value: &str) -> bool {
     .find_map(|prefix| value.strip_prefix(prefix)) else {
         return false;
     };
-    !rest.is_empty()
-        && rest
-            .bytes()
-            .all(|byte| byte.is_ascii_digit() || byte == b'-')
-        && rest.split('-').all(|part| !part.is_empty())
+    let mut parts = rest.split('-');
+    let valid_part =
+        |part: &str| !part.is_empty() && part.bytes().all(|byte| byte.is_ascii_digit());
+    parts.next().is_some_and(valid_part)
+        && parts.next().is_none_or(valid_part)
+        && parts.next().is_none()
 }
 
 fn effort_label(effort: &str) -> &str {
@@ -374,9 +375,5 @@ const fn portal_error(error: RoomPortalError) -> DriverError {
 }
 
 #[cfg(test)]
-mod tests {
-    #[test]
-    fn model_ids_are_exact() {
-        assert!(super::valid_model_id("claude-opus-4-6") && !super::valid_model_id("alias"));
-    }
-}
+#[path = "claude_tests.rs"]
+mod tests;

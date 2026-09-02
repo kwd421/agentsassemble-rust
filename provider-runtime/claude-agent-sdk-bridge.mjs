@@ -5,6 +5,7 @@ const MAX_INPUT_LINE_BYTES = 256 * 1024;
 const MAX_OUTPUT_LINE_BYTES = 256 * 1024;
 const MAX_RESULT_BYTES = 128 * 1024;
 const MODEL_ID = /^claude-(?:fable|haiku|opus|sonnet)-\d+(?:-\d+)?$/;
+const SESSION_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const EFFORTS = new Set(["low", "medium", "high", "xhigh", "max"]);
 
 class InputQueue {
@@ -182,7 +183,7 @@ function sessionOptions(command, claudePath, sessionId) {
     ...(tier === "fast" ? { settings: { fastMode: true, fastModePerSessionOptIn: true } } : {}),
     ...(command.resume_session_id ? { resume: sessionId } : { sessionId }),
   };
-  return { options, model, effort, tier };
+  return { options, workspace, model, effort, tier, permission };
 }
 
 function validateInitialization(models, model, effort, tier) {
@@ -195,11 +196,17 @@ function validateInitialization(models, model, effort, tier) {
 function validInit(message, active, session) {
   return (
     message.session_id === session.id &&
+    message.cwd === session.workspace &&
     message.model === session.model &&
     message.effort === session.effort &&
-    (session.tier !== "fast" || message.fast_mode_state === "on") &&
+    (session.tier === "fast" ? message.fast_mode_state === "on" : message.fast_mode_state !== "on") &&
+    message.permissionMode === (session.permission === "workspace_write" ? "acceptEdits" : "dontAsk") &&
+    Array.isArray(message.tools) &&
+    (session.permission !== "meeting_read_only" ||
+      message.tools.every((tool) => tool.startsWith("mcp__agentsassemble_room__"))) &&
     Array.isArray(message.mcp_servers) &&
-    message.mcp_servers.some(
+    message.mcp_servers.length === 1 &&
+    message.mcp_servers.every(
       (server) => server?.name === "agentsassemble_room" && server.status === "connected",
     ) &&
     active !== null
@@ -219,7 +226,8 @@ function validResult(message, active, session) {
     message.terminal_reason === "completed" &&
     message.modelUsage &&
     Object.hasOwn(message.modelUsage, session.model) &&
-    (session.tier !== "fast" || message.fast_mode_state === "on") &&
+    (session.tier === "fast" ? message.fast_mode_state === "on" : message.fast_mode_state !== "on") &&
+    (message.queued_turn_count ?? 0) === 0 &&
     typeof message.result === "string" &&
     Buffer.byteLength(message.result) <= MAX_RESULT_BYTES
   );
@@ -228,6 +236,7 @@ function validResult(message, active, session) {
 async function session(sdk, claudePath, command, commands) {
   const resume = command.resume_session_id ?? "";
   const id = resume ? requireString(resume, "resume session") : randomUUID();
+  if (!SESSION_ID.test(id)) throw new Error("invalid session ID");
   const queue = new InputQueue();
   const configured = sessionOptions(command, claudePath, id);
   const query = sdk.query({ prompt: queue, options: configured.options });
@@ -313,6 +322,7 @@ async function main() {
 }
 
 main().catch(async () => {
+  process.stdin.destroy();
   await emitFatal("claude_sdk_bridge_failed").catch(() => {});
   process.exitCode = 1;
 });

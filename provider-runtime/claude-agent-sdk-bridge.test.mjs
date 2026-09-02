@@ -73,3 +73,22 @@ test("session correlates one SDK result and closes explicitly", async () => {
   assert.deepEqual(await runtime.next(), { type: "stopped" });
   assert.equal(await closed(runtime.child), 0);
 });
+
+test("session rejects a non-UUID durable identity", async () => {
+  const runtime = start("session");
+  const exit = closed(runtime.child);
+  runtime.child.stdin.write(
+    `${JSON.stringify({
+      type: "initialize",
+      workspace: "/fixture/workspace",
+      model: "claude-sonnet-5",
+      reasoning_effort: "high",
+      service_tier: "default",
+      permission_mode: "meeting_read_only",
+      resume_session_id: "legacy-session-alias",
+      room_portal: { url: "http://127.0.0.1:43210/mcp", bearer_token: "fixture-token" },
+    })}\n`,
+  );
+  assert.deepEqual(await runtime.next(), { type: "fatal", code: "claude_sdk_bridge_failed" });
+  assert.equal(await exit, 1);
+});

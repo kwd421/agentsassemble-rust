@@ -87,3 +87,7 @@ fn copy_regular_file(source: &Path, destination: &Path, limit: u64) -> io::Resul
     }
     Ok(destination.to_path_buf())
 }
+
+#[cfg(test)]
+#[path = "claude_sdk_assets_tests.rs"]
+mod tests;
