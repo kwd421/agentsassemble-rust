@@ -772,6 +772,50 @@ contracts, findings, or verification journals.
   structure, diff, CSS, and artifact gates. The user-authorized real-provider matrix
   excludes Ollama and LM Studio, so no installed server or model was invoked and
   real-turn evidence remains explicitly uncollected rather than simulated.
+- Implemented pending Phase 1 whole-phase review: Cursor official-ACP vertical through
+  `383423b`, `a99b125`, and `22ebefc`, with dependency-induced canonical JSON
+  corrections at `e1e3e4a` and `e32b2ac`. Read-only comparison against original
+  `d5046473` found a persistent Cursor PTY/RoomPortal path, terminal-output completion,
+  transcript support, and a second corrective prompt when the first prompt omitted its
+  room-read receipt. The Rust path instead uses the currently installed official
+  `cursor-agent acp` protocol-V1 server and the maintained `agent-client-protocol`
+  library. Static `cursor-agent acp --help` and the bounded production
+  `cursor-agent models` probe confirm both installed entry points without starting a
+  provider turn.
+  The Cursor module owns live catalog parsing and exact model/effort/tier tuples; one
+  567-line ACP session owner keeps initialization, native new/load, exact model
+  confirmation, prompt, bounded output, cancel receipt, and poison/restart invariants
+  together. It was reviewed at the 500-line structure warning and remains below the
+  800-line strong split signal; splitting that state flow would add cross-module state
+  transfer and interfaces. The 380-line process owner separately owns executable and
+  process custody, stderr drainage, and the private bearer-authenticated HTTP
+  RoomPortal. The existing common adapter remains the only room-observation finalizer.
+  There is no Cursor-specific room-tool declaration, polling, heartbeat, retry,
+  transcript, terminal parsing, corrective second prompt, or completion fallback.
+  ACP lines are capped at 256 KiB and assistant output at 128 KiB; startup/model/cancel
+  handshakes are bounded, while ordinary long turns retain no invented total timeout.
+  Exact native `cancelled` completion permits retained-runtime interrupt. Every ACP
+  permission request currently rejects or cancels, so only `meeting_read_only` is
+  advertised; workspace-write and actual RoomPortal tool approval remain explicitly
+  unverified rather than permissively inferred. No real Cursor provider turn was run,
+  because Cursor is outside the user-authorized Grok/Codex Luna/OpenCode Muse Spark
+  real-run matrix.
+  The ACP dependency enables insertion-preserving JSON maps workspace-wide. Complete
+  verification exposed two pre-existing hidden order dependencies: canonical command
+  hashes and room-settings revisions relied on the former map backend, while a central
+  registration test mistook object member order for its exact-field contract. One
+  61-line domain encoder now explicitly sorts canonical JSON object keys and preserves
+  both public values; the central test still checks the exact field set and signed
+  transcript without requiring meaningless wire order. Repository-wide searches found
+  no second Cursor production owner; the Rust key-iteration search found no other exact
+  JSON-object-order assertion. The three
+  typed in-memory ACP wire tests use synchronization channels rather than sleeps and
+  prove new/session model selection, durable load with a category-less exact `model`
+  option, and native cancellation receipt. A fresh `/usr/bin/time -l make verify`
+  passes all architecture/source/policy/diff and artifact gates, frontend 100 files/
+  664 tests, desktop 25, domain 57, persistence 243, protocol 6, provider 186, server
+  88, and every real TCP/WebSocket suite in 204.22 seconds with 2,012,725,248-byte
+  maximum RSS. These are verification costs, not a Cursor runtime performance claim.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
