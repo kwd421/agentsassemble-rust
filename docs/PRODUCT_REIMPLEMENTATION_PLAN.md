@@ -3,9 +3,9 @@
 Status: authoritative working plan. The Phase 0A inventory at `9711232` remains
 historical reviewed evidence, but its finding-number execution order no longer
 defines the production roadmap. The finite Phase 0B prerequisites F-14 and F-16
-are implemented and await whole-phase cross-review; after that review closes, work
-follows the provider-first order below. The corrected provider-first plan is approved
-by manual documentation cross-review.
+and their whole-phase cross-review are complete. Work now follows the provider-first
+order below. The corrected provider-first plan is approved by manual documentation
+cross-review.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -347,9 +347,8 @@ Correction substage:
 - Measure the one-second unresolved-runtime reconciliation cadence before changing
   it; retain its recovery state machine and change only a cadence with observed
   idle cost and recovery-latency evidence.
-- Phase 0B is no longer a serial global exit gate. Its completed corrections remain
-  recorded in the workboard; only final cross-review of the finite F-14 and F-16
-  boundaries gates Phase 1.
+- Phase 0B is no longer a serial global exit gate. Its completed corrections and
+  final cross-review are recorded in the workboard.
   D-06 joins Phase 1's provider-runtime measurement/hardening owner, D-07 moves to
   Phase 5 human admission, and split findings such as F-18/F-20 remain with their
   already named later product owners. Reordering never silently closes or waives a
@@ -357,12 +356,11 @@ Correction substage:
 
 ### Phase 1 — provider contract and process correctness
 
-- Enter Phase 1 only after the finite Phase 0B prerequisite slice closes F-14's
+- Phase 1 entry is open: the finite Phase 0B prerequisite slice closed F-14's
   insecure browser request-ID compatibility fallback and F-16's latent closed-watch
-  continuation. Verify the request-ID failure and catalog sender-custody invariant,
-  then leave frontend/socket refinement and
-  proceed; they are structural prerequisites, not permission to polish the first
-  product area.
+  continuation, and both manual reviewers approved those boundaries. Leave unrelated
+  frontend/socket refinement behind; these were structural prerequisites, not
+  permission to polish the first product area.
 - Build Phase 1 breadth-first. First establish the complete sixteen-provider
   acceptance matrix and the smallest shared registration, selection, start,
   ordinary-turn, visible-failure, and stop contracts. Remove from the four current

@@ -3,17 +3,16 @@
 Status: The Phase 0A source/duplication/defensive-complexity inventory at
 `9711232` remains reviewed historical evidence. Its finding-number order is not
 the production roadmap. The corrected provider-first plan is approved and active.
-The finite Phase 0B prerequisites F-14 and F-16 are implemented; their whole-phase
-cross-review must close before Phase 1 begins, without unrelated polishing.
+The finite Phase 0B prerequisites F-14 and F-16 and their whole-phase cross-review
+are complete. Phase 1 provider-first implementation is active.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating product
 contracts, findings, or verification journals.
 
 ## Active work
 
-- Phase: finite Phase 0B prerequisite closure (F-14 and F-16), then Phase 1
-  provider-first implementation. Both prerequisite implementations and the complete
-  local gate are finished; Phase 0B awaits its one whole-phase external cross-review.
+- Phase: Phase 1 provider-first implementation. The finite Phase 0B prerequisites
+  and their complete local gate and whole-phase external cross-review are finished.
 - Historical Phase 0B labels are not a serial global gate. D-06 executes with Phase 1
   runtime measurement/hardening; D-07 executes with Phase 5 human admission; split
   F-18/F-20 work remains with its already named external-admission/custom-channel
@@ -54,9 +53,16 @@ contracts, findings, or verification journals.
   live CPU defect. The one-line terminal handling prevents a future custody change from
   exposing an immediate closed-watch loop while adding no polling, retry, fallback,
   abstraction, or state. Normal catalog pushes and socket behavior are unchanged.
-  Fresh complete `make verify` before this review correction passed the frontend,
-  desktop, Rust, real TCP/WebSocket, generated-binding, Clippy, policy, structure,
-  diff, CSS, and artifact gates in 198.50 seconds with 1,750,450,176-byte maximum RSS.
+  Fresh complete `make verify` at public HEAD `15b4c5c` passed the frontend (99
+  files/653 tests), desktop, Rust, real TCP/WebSocket, generated-binding, Clippy,
+  policy, structure, diff, CSS, and artifact gates in 180.78 seconds with
+  1,948,237,824-byte maximum RSS. Critical-web Pro and Daybreak Blue `xhigh` each
+  manually approve individual `2f66567`, corrected F-16 through `15b4c5c`, exact
+  `9c31832..15b4c5c`, cumulative `4dbfd79..15b4c5c`, HEAD `15b4c5c`, and Phase 0B
+  behavior at `C0/H0/M0/L0`. The only review findings were the removed synthetic
+  F-16 reachability claim/test and stale closeout wording; no source, documentation,
+  structure, duplication, overimplementation, ownership, lifecycle, polling, timer,
+  fallback, swallowed-failure, compatibility, or performance-evidence finding remains.
 - Completed: D-01 at `a7949bd`; the uncalled HTTP challenge/ticket bootstrap and
   startup secret are absent, while private-control and admitted-human socket ticket
   issuance remain.
@@ -409,12 +415,7 @@ contracts, findings, or verification journals.
   `3229fbe`, exact correction `5badabe..3229fbe`, full correction
   `62d58b9..3229fbe`, cumulative plan `1c5b37e..3229fbe`, HEAD, and master-plan
   completeness at `C0/H0/M0/L0` with no actionable finding.
-- Next production work: close the Phase 0B whole-phase review, then start Phase 1
-  provider-first completion.
-  - Closeout only: confirm F-14's fail-closed request-ID boundary and F-16's current
-    sender-custody invariant plus preventive terminal branch. Both implementations
-    are complete; do not manufacture a reachable F-16 closure path or turn review
-    closeout into a general frontend/socket refinement detour.
+- Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
     contracts. On Codex, Antigravity, OpenCode, and DeepSeek, remove only false or
