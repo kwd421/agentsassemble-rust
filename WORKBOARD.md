@@ -321,12 +321,24 @@ contracts, findings, or verification journals.
     generated bindings, Clippy, policy, structure, diff, and artifact gates in 257.28
     seconds with 1,839,890,432-byte maximum RSS. No performance gain is claimed. The
     initial Daybreaker review found one Low legacy Participant-kind owner: the UI still
-    exposed unused `subscription_ai/api/local/remote/unknown` metadata and a member-based
-    mention fallback despite admitting only `human|agent`. Correction `b4739ce` removes
-    those branches and makes mention membership room-owned. Its focused 27 tests,
-    production build/CSS, all 652 frontend tests, and fresh complete `make verify` pass in
-    164.73 seconds with 769,294,336-byte maximum RSS. Pro's original-batch response and
-    both correction re-reviews remain pending; F-11 stays open until both approve.
+    exposed unused `subscription_ai/api/local/remote/unknown` metadata despite admitting
+    only `human|agent`. Independent repository-wide correction inspection also found a
+    partial mention projection. Correction `b4739ce` removes the reported legacy
+    vocabulary and makes mention enumeration room-owned. Its focused 27 tests, production
+    build/CSS, all 652 frontend tests, and fresh complete `make verify` pass in 164.73
+    seconds with 769,294,336-byte maximum RSS. Pro's completed original-batch review found
+    the same obsolete vocabulary Low plus a separate Low stale push-state sentence;
+    `58f0f8b` had already corrected that sentence before the result was read. Daybreaker's
+    correction re-review then found that mention presentation still accepted a handwritten
+    Agent identity with producerless avatar/owner fields and that the first correction note
+    incorrectly attributed the independently found mention issue to its initial review.
+    Source correction `2a53349` now accepts generated Agent Sessions keyed by
+    `participant_id`; the room Participant remains the only ownership source, while Agent
+    Session supplies display/provider presentation. The focused 5 tests, production
+    build/CSS, and all 652 frontend tests pass. Fresh complete `make verify` passes every
+    frontend, desktop, Rust, real TCP/WebSocket, generated-binding, Clippy, policy,
+    structure, diff, CSS, and artifact gate in 164.79 seconds with 778,829,824-byte
+    maximum RSS. Both correction re-reviews remain pending, so F-11 stays open.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

@@ -845,13 +845,12 @@ Daybreaker's initial review approves `4fc06a0` and `2f8ebbb` but returns
 `fc229c0..fccf024`, cumulative F-11 `dff4b65..fccf024`, and HEAD. The valid Low is an
 obsolete compatibility owner outside the first searched projection paths:
 `api/room.ts` still declared legacy `subscription_ai/api/local/remote/unknown`
-Participant kinds, `participantTypes.ts` retained their unreachable options and display
-branches, and `roomMentionables.ts` could infer Agent membership/provider presentation
-from its own partial member shape. Correction `b4739ce` removes those types and branches,
-accepts exact room Participants in mention projection, enumerates only room members,
-uses the bound Agent Session projection only for Agent presentation, and fails closed on
-an impossible type or missing Agent projection. It adds no new abstraction, compatibility
-route, fallback, timer, polling, heartbeat, retry, state, or policy owner.
+Participant kinds and `participantTypes.ts` retained their unreachable options and display
+branches. A repository-wide correction search independently found that
+`roomMentionables.ts` could infer membership from its own partial member shape. Correction
+`b4739ce` removes the reviewed types and branches, accepts exact room Participants, and
+enumerates only room members. It adds no new abstraction, compatibility route, fallback,
+timer, polling, heartbeat, retry, state, or policy owner.
 
 The correction changes 108 lines and removes 22 net lines. Focused mention/roster/socket
 tests pass 27 cases, all 99 frontend files/652 tests pass, and the TypeScript/Vite build
@@ -859,8 +858,26 @@ plus original CSS gate pass with an observed 818.72 kB JavaScript asset. Fresh c
 `make verify` passes desktop, Rust unit, actual TCP/WebSocket boundaries, generated
 bindings, warning-denied Clippy, policy, structure, diff, CSS, and artifact gates in
 164.73 seconds with 769,294,336-byte maximum RSS. No performance improvement is claimed.
-Pro's original-batch result and both reviewers' correction verdicts remain pending, so
-final approval is not claimed.
+Pro's completed original-batch review reports the same obsolete vocabulary Low plus a
+separate Low that `fccf024` still described its already-public source commits as local and
+waiting to be pushed. The source Low is corrected by `b4739ce`; the stale push-state text
+is corrected by `58f0f8b`, which was public before the Pro result was read.
+
+Daybreaker's correction re-review found two remaining Lows. First,
+`roomMentionables.ts` still accepted a handwritten Agent identity with producerless
+avatar and owner fields even though its only caller derives agents from Agent Sessions.
+Second, the correction record incorrectly attributed the independently discovered mention
+issue to Daybreaker's initial finding. Source correction `2a53349` accepts generated
+`RoomAgentSession[]` directly, keys it by `participant_id`, and removes the custom fields.
+Room Participants remain the sole membership and ownership source; Agent Sessions provide
+display/provider presentation, while a human Participant alone provides a profile avatar.
+The correction adds no background work or alternate authority and removes two net source
+lines. Its focused 5 tests, production build/CSS, and all 99 frontend files/652 tests pass
+in 10.18 seconds with 322,568,192-byte maximum RSS. Fresh complete `make verify` passes
+every frontend, desktop, Rust, real TCP/WebSocket, generated-binding, warning-denied
+Clippy, policy, structure, diff, CSS, and artifact gate in 164.79 seconds with
+778,829,824-byte maximum RSS. Both manual correction verdicts remain pending, so final
+approval is not claimed.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,
