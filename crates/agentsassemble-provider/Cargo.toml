@@ -9,6 +9,7 @@ agentsassemble-domain = { path = "../agentsassemble-domain" }
 base64.workspace = true
 bytes.workspace = true
 chrono.workspace = true
+eventsource-stream.workspace = true
 futures-util.workspace = true
 fs2.workspace = true
 http-body-util.workspace = true

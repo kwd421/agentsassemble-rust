@@ -27,6 +27,7 @@ mod guardian_health;
 mod guardian_lifetime;
 mod launch_error;
 mod loopback_http;
+mod openai_stream;
 mod opencode;
 mod opencode_protocol;
 mod opencode_sse;

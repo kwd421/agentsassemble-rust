@@ -1,8 +1,7 @@
 use std::{collections::HashSet, time::Duration};
 
 use agentsassemble_domain::DurableAgentSession;
-use futures_util::StreamExt;
-use reqwest::{Client, StatusCode, Url};
+use reqwest::{Client, Url};
 use rmcp::{
     RoleClient, ServiceExt,
     model::{CallToolRequestParams, CallToolResult, Tool},
@@ -11,7 +10,6 @@ use rmcp::{
         StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
     },
 };
-use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value, json};
 
 use crate::{
@@ -20,14 +18,14 @@ use crate::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
     },
+    openai_stream::{
+        AssistantMessage, OpenAiStreamCompletion, OpenAiStreamError, ToolCall, send_chat_completion,
+    },
     remote_https::fixed_endpoint_client,
     room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
 };
 
 const CHAT_COMPLETIONS_URL: &str = "https://api.deepseek.com/chat/completions";
-const MAX_REQUEST_BYTES: usize = 256_000 - 16_384 - 32_768;
-const MAX_RESPONSE_BYTES: usize = 4 * 1024 * 1024;
-const MAX_TOOL_ARGUMENT_BYTES: usize = 64 * 1024;
 const MAX_TOOL_RESULT_BYTES: usize = 128 * 1024;
 const MAX_TOOL_ROUNDS: usize = 16;
 const PORTAL_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
@@ -65,45 +63,6 @@ pub(crate) struct DeepSeekDriver {
 struct DeepSeekApi {
     client: Client,
     endpoint: Url,
-}
-
-#[derive(Debug, Deserialize)]
-struct CompletionResponse {
-    id: String,
-    model: String,
-    choices: Vec<CompletionChoice>,
-}
-
-#[derive(Debug, Deserialize)]
-struct CompletionChoice {
-    index: u32,
-    finish_reason: String,
-    message: AssistantMessage,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct AssistantMessage {
-    role: String,
-    #[serde(default)]
-    content: Option<String>,
-    #[serde(default)]
-    reasoning_content: Option<String>,
-    #[serde(default)]
-    tool_calls: Vec<ToolCall>,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct ToolCall {
-    id: String,
-    #[serde(rename = "type")]
-    kind: String,
-    function: ToolFunction,
-}
-
-#[derive(Debug, Clone, Deserialize, Serialize)]
-struct ToolFunction {
-    name: String,
-    arguments: String,
 }
 
 struct ExecutedTool {
@@ -161,13 +120,7 @@ impl DeepSeekDriver {
                 .await?;
             validate_completion(&response, &session.public.model)?;
             let provider_turn_id = response.id.clone();
-            let mut message = response
-                .choices
-                .into_iter()
-                .next()
-                .ok_or(INVALID_RESPONSE)?
-                .message;
-            validate_tool_calls(&message.tool_calls)?;
+            let mut message = response.message;
             if message.tool_calls.is_empty() {
                 if observation.is_some() {
                     return Err(DriverError::new(
@@ -440,60 +393,28 @@ impl DeepSeekApi {
         credential: &DeepSeekCredential,
         messages: &[Value],
         tools: Option<&[Value]>,
-    ) -> Result<CompletionResponse, DriverError> {
+    ) -> Result<OpenAiStreamCompletion, DriverError> {
         let mut payload = json!({
             "model": session.public.model,
             "messages": messages,
             "thinking": {"type": if session.public.variant == "non_thinking" { "disabled" } else { "enabled" }},
             "reasoning_effort": session.public.reasoning_effort,
             "max_tokens": session.public.max_output_tokens,
-            "stream": false,
+            "stream": true,
+            "stream_options": {"include_usage": true},
         });
         if let Some(tools) = tools {
             payload["tools"] = Value::Array(tools.to_vec());
         }
-        let encoded = serde_json::to_vec(&payload).map_err(|_| INVALID_RESPONSE)?;
-        if encoded.len() > MAX_REQUEST_BYTES {
-            return Err(DriverError::new(
-                "provider_context_limit",
-                "The bounded DeepSeek request context is too large.",
-            ));
-        }
-        let response = self
+        let body = serde_json::to_vec(&payload).map_err(|_| INVALID_RESPONSE)?;
+        let request = self
             .client
             .post(self.endpoint.clone())
-            .bearer_auth(credential.expose())
-            .header(reqwest::header::CONTENT_TYPE, "application/json")
-            .body(encoded)
-            .send()
+            .bearer_auth(credential.expose());
+        send_chat_completion(request, body)
             .await
-            .map_err(|_| API_UNAVAILABLE)?;
-        let status = response.status();
-        let body = bounded_body(response).await?;
-        if !status.is_success() {
-            return Err(http_error(status));
-        }
-        serde_json::from_slice(&body).map_err(|_| INVALID_RESPONSE)
+            .map_err(deepseek_stream_error)
     }
-}
-
-async fn bounded_body(response: reqwest::Response) -> Result<Vec<u8>, DriverError> {
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_RESPONSE_BYTES as u64)
-    {
-        return Err(INVALID_RESPONSE);
-    }
-    let mut body = Vec::new();
-    let mut stream = response.bytes_stream();
-    while let Some(chunk) = stream.next().await {
-        let chunk = chunk.map_err(|_| API_UNAVAILABLE)?;
-        if body.len().saturating_add(chunk.len()) > MAX_RESPONSE_BYTES {
-            return Err(INVALID_RESPONSE);
-        }
-        body.extend_from_slice(&chunk);
-    }
-    Ok(body)
 }
 
 fn api_tools(tools: &[Tool], random_tools: bool) -> Vec<Value> {
@@ -528,46 +449,17 @@ fn validate_tool_catalog(tools: &[Tool]) -> Result<(), DriverError> {
 }
 
 fn validate_completion(
-    response: &CompletionResponse,
+    response: &OpenAiStreamCompletion,
     expected_model: &str,
 ) -> Result<(), DriverError> {
-    if response.id.is_empty()
-        || response.id.len() > 128
-        || response.id.trim() != response.id
-        || response.id.chars().any(char::is_control)
-        || response.model != expected_model
-        || response.choices.len() != 1
-    {
+    if response.model != expected_model {
         return Err(INVALID_RESPONSE);
     }
-    let choice = &response.choices[0];
-    let has_tools = !choice.message.tool_calls.is_empty();
-    if choice.index != 0
-        || choice.message.role != "assistant"
-        || (has_tools && choice.finish_reason != "tool_calls")
-        || (!has_tools && choice.finish_reason != "stop")
+    let has_tools = !response.message.tool_calls.is_empty();
+    if (has_tools && response.finish_reason != "tool_calls")
+        || (!has_tools && response.finish_reason != "stop")
     {
         return Err(INVALID_RESPONSE);
-    }
-    Ok(())
-}
-
-fn validate_tool_calls(calls: &[ToolCall]) -> Result<(), DriverError> {
-    let mut ids = HashSet::new();
-    if calls.len() > 16
-        || calls.iter().any(|call| {
-            call.kind != "function"
-                || call.id.is_empty()
-                || call.id.len() > 128
-                || call.id.trim() != call.id
-                || call.id.chars().any(char::is_control)
-                || !ids.insert(call.id.as_str())
-                || call.function.name.is_empty()
-                || call.function.name.len() > 128
-                || call.function.arguments.len() > MAX_TOOL_ARGUMENT_BYTES
-        })
-    {
-        return Err(INVALID_TOOL_CALL);
     }
     Ok(())
 }
@@ -629,17 +521,24 @@ fn canonical_content(value: &str) -> Option<String> {
     (!value.is_empty() && value.chars().count() <= 12_000).then(|| value.to_owned())
 }
 
-fn http_error(status: StatusCode) -> DriverError {
-    match status {
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => DriverError::new(
+const fn deepseek_stream_error(error: OpenAiStreamError) -> DriverError {
+    match error {
+        OpenAiStreamError::ContextLimit => DriverError::new(
+            "provider_context_limit",
+            "The bounded DeepSeek request context is too large.",
+        ),
+        OpenAiStreamError::CredentialRejected => DriverError::new(
             "provider_credential_rejected",
             "DeepSeek rejected the configured credential.",
         ),
-        StatusCode::TOO_MANY_REQUESTS => DriverError::new(
+        OpenAiStreamError::RateLimited => DriverError::new(
             "provider_rate_limited",
             "DeepSeek rate-limited the request.",
         ),
-        _ => API_UNAVAILABLE,
+        OpenAiStreamError::ResponseTooLarge | OpenAiStreamError::InvalidResponse => {
+            INVALID_RESPONSE
+        }
+        OpenAiStreamError::Http | OpenAiStreamError::Transport => API_UNAVAILABLE,
     }
 }
 

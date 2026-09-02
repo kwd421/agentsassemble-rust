@@ -1,19 +1,17 @@
 use agentsassemble_domain::RoomRandomResult;
 use serde_json::json;
 
-use super::{
-    AssistantMessage, CompletionResponse, DeepSeekDriver, RoomObservationStart, ToolCall,
-    ToolFunction, assistant_value, validate_completion, validate_tool_calls,
-};
+use super::{DeepSeekDriver, RoomObservationStart, assistant_value, validate_completion};
 use crate::{
     credentials::ProviderCredentialStore,
+    openai_stream::{AssistantMessage, OpenAiStreamCompletion, ToolCall, ToolFunction},
     room_portal::{ProviderRoomToolIngress, ProviderRoomToolResult},
 };
 
 fn tool_call(id: &str, name: &str, arguments: &serde_json::Value) -> ToolCall {
     ToolCall {
         id: id.to_owned(),
-        kind: "function".to_owned(),
+        kind: "function",
         function: ToolFunction {
             name: name.to_owned(),
             arguments: arguments.to_string(),
@@ -23,27 +21,20 @@ fn tool_call(id: &str, name: &str, arguments: &serde_json::Value) -> ToolCall {
 
 #[test]
 fn thinking_tool_transaction_preserves_exact_authority() {
-    let response: CompletionResponse = serde_json::from_value(json!({
-        "id": "chatcmpl-1",
-        "model": "deepseek-v4-flash",
-        "choices": [{
-            "index": 0,
-            "finish_reason": "tool_calls",
-            "message": {
-            "role": "assistant",
-            "content": null,
-            "reasoning_content": "private reasoning",
-            "tool_calls": [{
-                "id": "call-1",
-                "type": "function",
-                "function": {"name": "read_discussion", "arguments": "{}"}
-            }]
-        }}]
-    }))
-    .unwrap_or_else(|error| panic!("decode fixture: {error}"));
+    let response = OpenAiStreamCompletion {
+        id: "chatcmpl-1".to_owned(),
+        model: "deepseek-v4-flash".to_owned(),
+        finish_reason: "tool_calls".to_owned(),
+        message: AssistantMessage {
+            role: "assistant",
+            content: None,
+            reasoning_content: Some("private reasoning".to_owned()),
+            tool_calls: vec![tool_call("call-1", "read_discussion", &json!({}))],
+        },
+        usage: None,
+    };
     assert!(validate_completion(&response, "deepseek-v4-flash").is_ok());
-    let message: &AssistantMessage = &response.choices[0].message;
-    assert!(validate_tool_calls(&message.tool_calls).is_ok());
+    let message = &response.message;
     let replay = assistant_value(message);
     assert_eq!(replay["role"], "assistant");
     assert_eq!(replay["content"], "");
@@ -141,38 +132,32 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
 
 #[test]
 fn incomplete_or_inconsistent_completion_cannot_enter_room_tools() {
-    let fixture = |finish_reason: &str, role: &str, index: u32| {
-        serde_json::from_value::<CompletionResponse>(json!({
-            "id": "chatcmpl-1",
-            "model": "deepseek-v4-flash",
-            "choices": [{
-                "index": index,
-                "finish_reason": finish_reason,
-                "message": {
-                    "role": role,
-                    "content": null,
-                    "reasoning_content": "bounded reasoning",
-                    "tool_calls": [{
-                        "id": "call-1",
-                        "type": "function",
-                        "function": {"name": "read_discussion", "arguments": "{}"}
-                    }]
-                }
-            }]
-        }))
-        .unwrap_or_else(|error| panic!("decode completion fixture: {error}"))
+    let fixture = |finish_reason: &str, model: &str| OpenAiStreamCompletion {
+        id: "chatcmpl-1".to_owned(),
+        model: model.to_owned(),
+        finish_reason: finish_reason.to_owned(),
+        message: AssistantMessage {
+            role: "assistant",
+            content: None,
+            reasoning_content: Some("bounded reasoning".to_owned()),
+            tool_calls: vec![tool_call("call-1", "read_discussion", &json!({}))],
+        },
+        usage: None,
     };
 
     assert!(
-        validate_completion(&fixture("tool_calls", "assistant", 0), "deepseek-v4-flash").is_ok()
+        validate_completion(
+            &fixture("tool_calls", "deepseek-v4-flash"),
+            "deepseek-v4-flash"
+        )
+        .is_ok()
     );
     for response in [
-        fixture("length", "assistant", 0),
-        fixture("content_filter", "assistant", 0),
-        fixture("insufficient_system_resource", "assistant", 0),
-        fixture("stop", "assistant", 0),
-        fixture("tool_calls", "user", 0),
-        fixture("tool_calls", "assistant", 1),
+        fixture("length", "deepseek-v4-flash"),
+        fixture("content_filter", "deepseek-v4-flash"),
+        fixture("insufficient_system_resource", "deepseek-v4-flash"),
+        fixture("stop", "deepseek-v4-flash"),
+        fixture("tool_calls", "substituted-model"),
     ] {
         assert!(validate_completion(&response, "deepseek-v4-flash").is_err());
     }
