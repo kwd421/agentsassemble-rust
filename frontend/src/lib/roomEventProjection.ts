@@ -67,8 +67,8 @@ type TimelineRoomEvent = Pick<
 
 function actor(event: TimelineRoomEvent) {
   return {
-    id: String(event.actor?.participant_id || event.participant_id || event.actor_id || ""),
-    type: String(event.actor?.participant_type || event.participant_type || event.actor_type || ""),
+    id: event.actor.participant_id,
+    type: event.actor.participant_type,
   };
 }
 

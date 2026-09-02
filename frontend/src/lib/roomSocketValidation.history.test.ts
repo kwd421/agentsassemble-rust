@@ -4,9 +4,11 @@ import { commandAckResultIsValid } from "./roomSocketValidation";
 const event = (seq: number, overrides: Record<string, unknown> = {}) => ({
   v: 1,
   id: `event-${seq}`,
+  created_at: `2026-08-25T00:00:${String(seq).padStart(2, "0")}Z`,
   room_id: "general",
   seq,
   type: "message_final",
+  actor: { participant_id: "operator-local", participant_type: "human" },
   content: `message ${seq}`,
   ...overrides,
 });
@@ -71,6 +73,14 @@ describe("canonical room history ACK validation", () => {
       events: [event(1, {
         type: "participant_updated", participant_id: "agent-one", role: "host",
       })],
+      oldest_seq: 1, last_seq: 1, has_more_before: false,
+    }],
+    ["a missing generated timestamp", { before_seq: 0, limit: 3 }, {
+      events: [event(1, { created_at: undefined })],
+      oldest_seq: 1, last_seq: 1, has_more_before: false,
+    }],
+    ["a partial generated actor", { before_seq: 0, limit: 3 }, {
+      events: [event(1, { actor: { participant_id: "operator-local" } })],
       oldest_seq: 1, last_seq: 1, has_more_before: false,
     }],
     ["an empty newest page above zero high water", { before_seq: 0, limit: 3 }, {

@@ -52,19 +52,18 @@ export function event(seq: number) {
   return {
     v: 1,
     id: `evt-${seq}`,
+    created_at: `2026-08-25T00:00:${String(seq).padStart(2, "0")}Z`,
     room_id: "general",
     seq,
     type: "message_final",
+    actor: { participant_id: "operator-local", participant_type: "human" },
     content: `message ${seq}`,
   };
 }
 
 export function malformedRoleEvent(seq: number) {
   return {
-    v: 1,
-    id: `evt-${seq}`,
-    room_id: "general",
-    seq,
+    ...event(seq),
     type: "participant_updated",
     participant_id: "agent-one",
     role: "host",
@@ -73,10 +72,7 @@ export function malformedRoleEvent(seq: number) {
 
 export function malformedMuteEvent(seq: number) {
   return {
-    v: 1,
-    id: `evt-${seq}`,
-    room_id: "general",
-    seq,
+    ...event(seq),
     type: "participant_muted",
     participant_id: "",
     muted: true,
@@ -90,7 +86,23 @@ function snapshot(cursor: number) {
     op: "snapshot",
     stream: "room_events",
     room: { room_id: "general" },
-    room_settings: {},
+    room_settings: {
+      settings_revision: "settings-general",
+      label: "General",
+      topic: "",
+      appearance: {
+        banner_preset: "default",
+        banner_image_url: "",
+        icon_image_url: "",
+        icon_label: "G",
+        invite_scope: "room",
+      },
+      conversation_mode: "ordered",
+      tool_mode: "chat",
+      ordered_exclude_previous_speaker: true,
+      channels: [],
+      activity_plugin: "",
+    },
     participants: [],
     agent_sessions: [],
     active_turns: [],

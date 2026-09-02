@@ -77,9 +77,11 @@ describe("canonical room socket quiet keepalive", () => {
         event: {
           v: 1,
           id: "evt-1",
+          created_at: "2026-08-25T00:00:01Z",
           room_id: "general",
           seq: 1,
           type: "message_final",
+          actor: { participant_id: "operator-local", participant_type: "human" },
           content: "still here",
         },
         event_seq: 1,

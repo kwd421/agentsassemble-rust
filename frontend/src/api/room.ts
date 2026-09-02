@@ -374,6 +374,7 @@ export function normalizeRoomGlobalSettings(
     typeof appearance.icon_image_url !== "string" ||
     typeof appearance.icon_label !== "string" ||
     typeof appearance.invite_scope !== "string" ||
+    typeof payload.activity_plugin !== "string" ||
     !["ordered", "ambient"].includes(String(payload.conversation_mode || "")) ||
     !["chat", "tabletop"].includes(String(payload.tool_mode || "")) ||
     typeof payload.ordered_exclude_previous_speaker !== "boolean" ||
@@ -398,7 +399,7 @@ export function normalizeRoomGlobalSettings(
     toolMode: payload.tool_mode as RoomToolMode,
     orderedExcludePreviousSpeaker: payload.ordered_exclude_previous_speaker,
     channels: normalizeRoomChannelList(payload.channels as ApiRoomChannel[]),
-    activityPlugin: String(payload.activity_plugin || ""),
+    activityPlugin: payload.activity_plugin,
   };
 }
 

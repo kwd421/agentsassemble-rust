@@ -22,9 +22,11 @@ function leaveAck(
     event: {
       v: 1,
       id: "leave-event-1",
+      created_at: "2026-08-25T00:00:01Z",
       room_id: "general",
       seq: 1,
       type: "participant_left",
+      actor: { participant_id: "operator-local", participant_type: "human" },
       participant_id: "operator-local",
     },
     event_seq: 1,
@@ -646,6 +648,28 @@ describe("bounded canonical room socket", () => {
     (frames.snap as unknown as Record<string, unknown>).available_providers = [
       providerAvailability(),
     ];
+    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.snap);
+
+    await vi.waitFor(() =>
+      expect(errors.at(-1)?.category).toBe("snapshot_schema_invalid")
+    );
+    expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it("rejects a snapshot missing a generated room-settings field", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    delete (frames.snap.room_settings as unknown as Record<string, unknown>)
+      .activity_plugin;
     sockets[0].receive(frames.receipt);
     sockets[0].receive(frames.snap);
 

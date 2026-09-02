@@ -1,3 +1,8 @@
+export type ExactGeneratedKeys<
+  Value,
+  Keys extends readonly (keyof Value)[],
+> = Exclude<keyof Value, Keys[number]> extends never ? Keys : never;
+
 export function strictRecord(value: unknown, label: string): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`${label} 응답 형식이 올바르지 않습니다.`);

@@ -1,5 +1,9 @@
 import type { RoomEvent } from "../api";
 import { RoomSocketSayError } from "../roomSocketTypes";
+import type { Actor } from "../types/generated/Actor";
+import type { PublicRoomSettings } from "../types/generated/PublicRoomSettings";
+import type { RoomAppearance } from "../types/generated/RoomAppearance";
+import type { RoomChannel } from "../types/generated/RoomChannel";
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreationProjectionFromEvent,
@@ -9,6 +13,59 @@ import {
 import { isParticipantRole } from "./participantRole";
 import { providerCatalogIsValid } from "./providerCatalogContract";
 import { voteSummaryResultIsValid } from "./roomVoteSummaryContract";
+import {
+  assertExactKeys,
+  strictRecord,
+  type ExactGeneratedKeys,
+} from "./strictJsonContract";
+
+const GENERATED_ACTOR_KEYS = ["participant_id", "participant_type"] as const;
+const ACTOR_KEYS: ExactGeneratedKeys<Actor, typeof GENERATED_ACTOR_KEYS> =
+  GENERATED_ACTOR_KEYS;
+const GENERATED_ROOM_SETTINGS_KEYS = [
+  "settings_revision",
+  "label",
+  "topic",
+  "appearance",
+  "conversation_mode",
+  "tool_mode",
+  "ordered_exclude_previous_speaker",
+  "channels",
+  "activity_plugin",
+] as const;
+const ROOM_SETTINGS_KEYS: ExactGeneratedKeys<
+  PublicRoomSettings,
+  typeof GENERATED_ROOM_SETTINGS_KEYS
+> = GENERATED_ROOM_SETTINGS_KEYS;
+const GENERATED_APPEARANCE_KEYS = [
+  "banner_preset",
+  "banner_image_url",
+  "icon_image_url",
+  "icon_label",
+  "invite_scope",
+] as const;
+const APPEARANCE_KEYS: ExactGeneratedKeys<
+  RoomAppearance,
+  typeof GENERATED_APPEARANCE_KEYS
+> = GENERATED_APPEARANCE_KEYS;
+const GENERATED_CHANNEL_KEYS = [
+  "id",
+  "name",
+  "type",
+  "position",
+  "created_at",
+] as const;
+const CHANNEL_KEYS: ExactGeneratedKeys<RoomChannel, typeof GENERATED_CHANNEL_KEYS> =
+  GENERATED_CHANNEL_KEYS;
+const ROOM_EVENT_OPTIONAL_STRING_KEYS = [
+  "participant_id",
+  "participant_type",
+  "actor_id",
+  "actor_type",
+  "display_name",
+  "content",
+  "message_kind",
+] as const satisfies readonly (keyof RoomEvent)[];
 
 export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
@@ -16,6 +73,62 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
 
 export function isSequence(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function publicRoomSettingsIsValid(value: unknown): value is PublicRoomSettings {
+  try {
+    const settings = strictRecord(value, "room settings");
+    assertExactKeys(settings, ROOM_SETTINGS_KEYS, "room settings");
+    const appearance = strictRecord(settings.appearance, "room settings appearance");
+    assertExactKeys(appearance, APPEARANCE_KEYS, "room settings appearance");
+    if (
+      ["settings_revision", "label", "topic", "conversation_mode", "tool_mode", "activity_plugin"]
+        .some((key) => typeof settings[key] !== "string") ||
+      typeof settings.ordered_exclude_previous_speaker !== "boolean" ||
+      APPEARANCE_KEYS.some((key) => typeof appearance[key] !== "string") ||
+      !Array.isArray(settings.channels)
+    ) {
+      return false;
+    }
+    return settings.channels.every((value) => {
+      const channel = strictRecord(value, "room settings channel");
+      assertExactKeys(channel, CHANNEL_KEYS, "room settings channel");
+      return (
+        ["id", "name", "type", "created_at"].every(
+          (key) => typeof channel[key] === "string"
+        ) &&
+        (channel.type === "text" || channel.type === "voice") &&
+        Number.isSafeInteger(channel.position) &&
+        Number(channel.position) >= 0
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
+function publicRoomSettingsMatch(left: unknown, right: unknown): boolean {
+  if (!publicRoomSettingsIsValid(left) || !publicRoomSettingsIsValid(right)) {
+    return false;
+  }
+  return ROOM_SETTINGS_KEYS.every((key) => {
+    if (key === "appearance") {
+      return APPEARANCE_KEYS.every(
+        (appearanceKey) => left.appearance[appearanceKey] === right.appearance[appearanceKey]
+      );
+    }
+    if (key === "channels") {
+      return (
+        left.channels.length === right.channels.length &&
+        left.channels.every((channel, index) =>
+          CHANNEL_KEYS.every(
+            (channelKey) => channel[channelKey] === right.channels[index][channelKey]
+          )
+        )
+      );
+    }
+    return left[key] === right[key];
+  });
 }
 
 export function participantProjectionIsValid(event: RoomEvent): boolean {
@@ -57,13 +170,28 @@ export function participantProjectionIsValid(event: RoomEvent): boolean {
 }
 
 export function publicRoomEventIsValid(value: unknown, expectedRoomId: string): value is RoomEvent {
+  const actor = isRecord(value) && isRecord(value.actor) ? value.actor : null;
   return Boolean(
     isRecord(value) &&
+    value.v === 1 &&
     typeof value.id === "string" &&
     value.id &&
+    typeof value.created_at === "string" &&
+    value.created_at &&
     value.room_id === expectedRoomId &&
     typeof value.type === "string" &&
     value.type &&
+    actor &&
+    Object.keys(actor).length === ACTOR_KEYS.length &&
+    ACTOR_KEYS.every(
+      (key) => typeof actor[key] === "string" && Boolean(actor[key])
+    ) &&
+    ROOM_EVENT_OPTIONAL_STRING_KEYS.every(
+      (key) =>
+        value[key] === undefined ||
+        value[key] === null ||
+        typeof value[key] === "string"
+    ) &&
     isSequence(value.seq) &&
     value.seq > 0 &&
     participantProjectionIsValid(value as unknown as RoomEvent)
@@ -139,11 +267,7 @@ export function commandAckResultIsValid(
   const event = isRecord(result.event) ? result.event : null;
   const hasDurableEvent = Boolean(
     event &&
-    typeof event.id === "string" &&
-    event.id &&
-    event.room_id === expectedRoomId &&
-    isSequence(event.seq) &&
-    event.seq > 0 &&
+    publicRoomEventIsValid(event, expectedRoomId) &&
     result.event_seq === event.seq
   );
   if (action === "message.send" || action.startsWith("room.random.")) {
@@ -172,7 +296,11 @@ export function commandAckResultIsValid(
     );
   }
   if (action === "room.settings.update") {
-    return Boolean(isRecord(result.room_settings) && event?.type === "room_settings_updated");
+    return Boolean(
+      hasDurableEvent &&
+      event?.type === "room_settings_updated" &&
+      publicRoomSettingsMatch(result.room_settings, event.room_settings)
+    );
   }
   if (action === "participant.mute") {
     const participant = isRecord(result.participant) ? result.participant : null;
@@ -221,7 +349,7 @@ export function snapshotValidationError(
     value.stream !== "room_events" ||
     !isRecord(value.room) ||
     value.room.room_id !== expectedRoomId ||
-    !isRecord(value.room_settings) ||
+    !publicRoomSettingsIsValid(value.room_settings) ||
     !Array.isArray(value.participants) ||
     !Array.isArray(value.agent_sessions) ||
     !Array.isArray(value.active_turns) ||
