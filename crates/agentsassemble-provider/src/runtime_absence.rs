@@ -162,19 +162,19 @@ mod windows_tests {
             launch_token: token.clone(),
         };
         assert!(observation_proves_gone(
-            &format!("runtime-v5-windows-{token}-{}", uuid::Uuid::new_v4()),
+            &crate::runtime_handle::new_windows_handle_id(&token),
             &token,
             &observation,
             ObservationScope::ColdRestart,
         ));
         assert!(!observation_proves_gone(
-            &format!("runtime-v5-windows-{other}-{}", uuid::Uuid::new_v4()),
+            &crate::runtime_handle::new_windows_handle_id(&other),
             &token,
             &observation,
             ObservationScope::ColdRestart,
         ));
         assert!(!observation_proves_gone(
-            "runtime-v5-windows-malformed",
+            "runtime-v6-windows-malformed",
             &token,
             &observation,
             ObservationScope::ColdRestart,

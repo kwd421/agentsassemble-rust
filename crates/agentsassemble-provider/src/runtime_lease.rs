@@ -86,7 +86,7 @@ impl HeldRuntimeLease {
         #[cfg(unix)]
         return crate::runtime_handle::new_unix_handle_id(&self.boot_identity, &self.token);
         #[cfg(not(unix))]
-        format!("runtime-v5-windows-{}-{}", self.token, Uuid::new_v4())
+        crate::runtime_handle::new_windows_handle_id(&self.token)
     }
 
     #[cfg(unix)]
@@ -607,7 +607,7 @@ mod tests {
 
     fn previous_boot_handle(current: &str) -> String {
         let mut bytes = current.as_bytes().to_vec();
-        let first_boot_digit = "runtime-v5-".len();
+        let first_boot_digit = "runtime-v6-".len();
         bytes[first_boot_digit] = if bytes[first_boot_digit] == b'0' {
             b'1'
         } else {

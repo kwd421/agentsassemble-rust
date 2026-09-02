@@ -2,8 +2,8 @@ use std::io;
 
 use uuid::Uuid;
 
-const UNIX_HANDLE_PREFIX: &str = "runtime-v5-";
-const WINDOWS_HANDLE_PREFIX: &str = "runtime-v5-windows-";
+const UNIX_HANDLE_PREFIX: &str = "runtime-v6-";
+const WINDOWS_HANDLE_PREFIX: &str = "runtime-v6-windows-";
 const BOOT_IDENTITY_BYTES: usize = 64;
 const UUID_TEXT_BYTES: usize = 36;
 
@@ -24,10 +24,13 @@ pub(crate) struct RuntimeHandleIdentity {
 pub(crate) fn new_unix_handle_id(boot_identity: &str, launch_token: &str) -> String {
     debug_assert!(is_valid_boot_identity(boot_identity));
     debug_assert!(is_canonical_uuid(launch_token));
-    format!(
-        "{UNIX_HANDLE_PREFIX}{boot_identity}-{launch_token}-{}",
-        Uuid::new_v4()
-    )
+    format!("{UNIX_HANDLE_PREFIX}{boot_identity}-{launch_token}")
+}
+
+#[cfg(any(windows, test))]
+pub(crate) fn new_windows_handle_id(launch_token: &str) -> String {
+    debug_assert!(is_canonical_uuid(launch_token));
+    format!("{WINDOWS_HANDLE_PREFIX}{launch_token}")
 }
 
 pub(crate) fn parse_handle_id(handle_id: &str) -> io::Result<RuntimeHandleIdentity> {
@@ -41,7 +44,7 @@ pub(crate) fn parse_handle_id(handle_id: &str) -> io::Result<RuntimeHandleIdenti
 }
 
 fn parse_windows_handle(encoded: &str) -> io::Result<RuntimeHandleIdentity> {
-    let (launch_token, _runtime_id) = parse_uuid_pair(encoded)?;
+    let launch_token = parse_uuid(encoded)?;
     Ok(RuntimeHandleIdentity {
         platform: RuntimeHandlePlatform::Windows,
         boot_identity: None,
@@ -54,11 +57,11 @@ fn parse_unix_handle(encoded: &str) -> io::Result<RuntimeHandleIdentity> {
         .get(..BOOT_IDENTITY_BYTES)
         .filter(|identity| is_valid_boot_identity(identity))
         .ok_or_else(|| io::Error::other("provider runtime boot identity is invalid"))?;
-    let suffix = encoded
+    let launch_token = encoded
         .get(BOOT_IDENTITY_BYTES..)
         .and_then(|value| value.strip_prefix('-'))
         .ok_or_else(|| io::Error::other("provider runtime handle is invalid"))?;
-    let (launch_token, _runtime_id) = parse_uuid_pair(suffix)?;
+    let launch_token = parse_uuid(launch_token)?;
     Ok(RuntimeHandleIdentity {
         platform: RuntimeHandlePlatform::Unix,
         boot_identity: Some(boot_identity.to_owned()),
@@ -66,20 +69,13 @@ fn parse_unix_handle(encoded: &str) -> io::Result<RuntimeHandleIdentity> {
     })
 }
 
-fn parse_uuid_pair(encoded: &str) -> io::Result<(&str, &str)> {
-    let launch_token = encoded
-        .get(..UUID_TEXT_BYTES)
-        .ok_or_else(|| io::Error::other("provider runtime handle identity is invalid"))?;
-    let runtime_id = encoded
-        .get(UUID_TEXT_BYTES..)
-        .and_then(|value| value.strip_prefix('-'))
-        .ok_or_else(|| io::Error::other("provider runtime handle identity is invalid"))?;
-    if !is_canonical_uuid(launch_token) || !is_canonical_uuid(runtime_id) {
+fn parse_uuid(encoded: &str) -> io::Result<&str> {
+    if encoded.len() != UUID_TEXT_BYTES || !is_canonical_uuid(encoded) {
         return Err(io::Error::other(
             "provider runtime handle identity is invalid",
         ));
     }
-    Ok((launch_token, runtime_id))
+    Ok(encoded)
 }
 
 pub(crate) fn is_valid_boot_identity(identity: &str) -> bool {
@@ -101,7 +97,7 @@ mod tests {
     fn strict_decoder_distinguishes_unix_and_windows_generations() {
         let token = uuid::Uuid::new_v4().to_string();
         let unix = super::new_unix_handle_id(&"a".repeat(64), &token);
-        let windows = format!("runtime-v5-windows-{token}-{}", uuid::Uuid::new_v4());
+        let windows = super::new_windows_handle_id(&token);
 
         let unix = parse_handle_id(&unix)
             .unwrap_or_else(|error| panic!("parse Unix runtime handle: {error}"));
@@ -121,9 +117,10 @@ mod tests {
     fn decoder_rejects_cross_version_and_trailing_data() {
         let token = uuid::Uuid::new_v4().to_string();
         let runtime = uuid::Uuid::new_v4();
+        assert!(parse_handle_id(&format!("runtime-v5-{}-{token}", "a".repeat(64))).is_err());
+        assert!(parse_handle_id(&format!("runtime-v6-windows-{token}-{runtime}")).is_err());
         assert!(
-            parse_handle_id(&format!("runtime-v4-{}-{token}-{runtime}", "a".repeat(64))).is_err()
+            parse_handle_id(&format!("runtime-v6-{}-{token}-{runtime}", "a".repeat(64))).is_err()
         );
-        assert!(parse_handle_id(&format!("runtime-v5-windows-{token}-{runtime}-extra")).is_err());
     }
 }

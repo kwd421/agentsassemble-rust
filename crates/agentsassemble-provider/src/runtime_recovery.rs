@@ -128,7 +128,7 @@ mod tests {
         ));
 
         let mut previous_handle = current_handle.into_bytes();
-        let first_boot_digit = "runtime-v5-".len();
+        let first_boot_digit = "runtime-v6-".len();
         previous_handle[first_boot_digit] = if previous_handle[first_boot_digit] == b'0' {
             b'1'
         } else {
@@ -159,7 +159,7 @@ mod tests {
         let launch_token = lease.token().to_owned();
         lease.cleanup_pre_effect();
         let mut previous_handle = current_handle.clone().into_bytes();
-        let first_boot_digit = "runtime-v5-".len();
+        let first_boot_digit = "runtime-v6-".len();
         previous_handle[first_boot_digit] = if previous_handle[first_boot_digit] == b'0' {
             b'1'
         } else {
