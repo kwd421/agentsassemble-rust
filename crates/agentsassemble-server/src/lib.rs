@@ -61,6 +61,7 @@ mod central_host_identity;
 mod central_registration_web;
 mod connection_admission;
 mod event_publication;
+mod http_admission;
 mod http_api;
 mod http_transport;
 mod human_admission_runtime;

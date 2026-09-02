@@ -1,11 +1,4 @@
-use std::{
-    net::SocketAddr,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-    time::Duration,
-};
+use std::{net::SocketAddr, time::Duration};
 
 use axum::Router;
 use hyper::server::conn::http1;
@@ -13,31 +6,18 @@ use hyper_util::{
     rt::{TokioIo, TokioTimer},
     service::TowerToHyperService,
 };
-use tokio::{net::TcpStream, sync::OwnedSemaphorePermit};
+use tokio::net::TcpStream;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
+    http_admission::HttpConnectionAdmission,
     ingress_trust::{LocalIngress, PeerAddr},
     public_ingress::PublicIngress,
 };
 
-pub(crate) const MAX_HTTP_CONNECTIONS: usize = 128;
 pub(crate) const HTTP_CONNECTION_LIFETIME: Duration = Duration::from_secs(30);
 const HTTP_HEADER_TIMEOUT: Duration = Duration::from_secs(3);
 const MAX_HTTP_BUFFER_BYTES: usize = 256 * 1024;
-
-#[derive(Clone, Default)]
-pub(crate) struct RejectionCounter(Arc<AtomicU64>);
-
-impl RejectionCounter {
-    pub(crate) fn record(&self) {
-        self.0.fetch_add(1, Ordering::Relaxed);
-    }
-
-    pub(crate) fn total(&self) -> u64 {
-        self.0.load(Ordering::Relaxed)
-    }
-}
 
 pub(crate) async fn serve_connection(
     stream: TcpStream,
@@ -45,9 +25,10 @@ pub(crate) async fn serve_connection(
     ingress: LocalIngress,
     public_ingress: PublicIngress,
     app: Router,
-    _permit: OwnedSemaphorePermit,
+    admission: HttpConnectionAdmission,
     shutdown: CancellationToken,
 ) {
+    let admission_guard = admission.clone();
     let mut builder = http1::Builder::new();
     builder
         .timer(TokioTimer::new())
@@ -56,7 +37,8 @@ pub(crate) async fn serve_connection(
     let app = app
         .layer(axum::Extension(PeerAddr(peer)))
         .layer(axum::Extension(ingress))
-        .layer(axum::Extension(public_ingress));
+        .layer(axum::Extension(public_ingress))
+        .layer(axum::Extension(admission));
     let connection = builder
         .serve_connection(TokioIo::new(stream), TowerToHyperService::new(app))
         .with_upgrades();
@@ -68,17 +50,5 @@ pub(crate) async fn serve_connection(
             Err(_) => tracing::debug!("HTTP connection exceeded its absolute lifetime"),
         }
     }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::RejectionCounter;
-
-    #[test]
-    fn overload_counter_aggregates_without_per_connection_logging() {
-        let counter = RejectionCounter::default();
-        counter.record();
-        counter.record();
-        assert_eq!(counter.total(), 2);
-    }
+    drop(admission_guard);
 }

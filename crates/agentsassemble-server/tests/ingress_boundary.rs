@@ -9,6 +9,7 @@ use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{AppState, TicketStore, serve};
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+use futures_util::future::join_all;
 use ring::signature::{ED25519, UnparsedPublicKey};
 use serde_json::{Value, json};
 use tokio::{
@@ -278,6 +279,90 @@ async fn manual_public_ingress_enforces_the_real_tcp_route_and_origin_boundary()
     .await;
     assert!(response.starts_with("HTTP/1.1 403"), "{response}");
     unconfigured.stop().await;
+}
+
+#[tokio::test]
+async fn classified_public_saturation_preserves_one_local_http_connection() {
+    let server = start_manual(None).await;
+    let public_connections =
+        join_all((0..127).map(|_| open_public_body_connection(server.address))).await;
+
+    let public_overload = request(
+        server.address,
+        "GET /api/server-info HTTP/1.1",
+        &public_headers(),
+    )
+    .await;
+    assert!(
+        public_overload.starts_with("HTTP/1.1 503"),
+        "classified public traffic consumed the local reserve: {public_overload}"
+    );
+
+    let authority = server.address.to_string();
+    let local = request(
+        server.address,
+        "GET /healthz HTTP/1.1",
+        &format!("Host: {authority}\r\n"),
+    )
+    .await;
+    assert!(local.starts_with("HTTP/1.1 200"), "{local}");
+
+    drop(public_connections);
+    let public_after_release = request(
+        server.address,
+        "GET /api/server-info HTTP/1.1",
+        &public_headers(),
+    )
+    .await;
+    assert!(public_after_release.starts_with("HTTP/1.1 200"));
+    server.stop().await;
+}
+
+async fn open_public_body_connection(address: SocketAddr) -> TcpStream {
+    let mut socket = TcpStream::connect(address)
+        .await
+        .unwrap_or_else(|error| panic!("connect public body client: {error}"));
+    socket
+        .write_all(
+            format!(
+                "POST /api/server-info/challenge HTTP/1.1\r\n{}Origin: https://directory.example\r\nContent-Type: application/json\r\nContent-Length: 256\r\nExpect: 100-continue\r\nConnection: close\r\n\r\n",
+                public_headers()
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("write public body headers: {error}"));
+    let response = tokio::time::timeout(Duration::from_secs(2), read_response_head(&mut socket))
+        .await
+        .unwrap_or_else(|_| panic!("public 100-continue barrier timed out"));
+    assert!(response.starts_with("HTTP/1.1 100 Continue"), "{response}");
+    socket
+}
+
+async fn read_response_head(socket: &mut TcpStream) -> String {
+    let mut response = Vec::with_capacity(1024);
+    let mut buffer = [0_u8; 1024];
+    loop {
+        let read = socket
+            .read(&mut buffer)
+            .await
+            .unwrap_or_else(|error| panic!("read public interim response: {error}"));
+        assert!(
+            read > 0,
+            "public request closed before its interim response"
+        );
+        response.extend_from_slice(&buffer[..read]);
+        if response.windows(4).any(|window| window == b"\r\n\r\n") {
+            return String::from_utf8(response)
+                .unwrap_or_else(|error| panic!("public interim response is not UTF-8: {error}"));
+        }
+    }
+}
+
+fn public_headers() -> String {
+    format!(
+        "Host: {PUBLIC_AUTHORITY}\r\nX-Forwarded-Proto: https\r\nX-AgentsAssemble-Proxy-Token: {PROXY_SECRET}\r\n"
+    )
 }
 
 async fn public_frontend_fixture() -> (tempfile::TempDir, PathBuf) {

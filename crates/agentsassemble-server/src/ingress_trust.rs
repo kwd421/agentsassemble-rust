@@ -3,6 +3,7 @@ use std::{
     sync::Arc,
 };
 
+use crate::http_admission::HttpConnectionAdmission;
 use crate::http_api::TAURI_ORIGINS;
 use crate::product_surface::{RouteExposure, registered_route_exposure, registered_route_path};
 use crate::public_ingress::{MANUAL_PROXY_TOKEN_HEADER, PublicIngress, PublicIngressAuthorization};
@@ -104,6 +105,15 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
     let public_trusted = public_authorization.is_some();
     if !(local_trusted || public_trusted) || !registered {
         return StatusCode::FORBIDDEN.into_response();
+    }
+    if public_trusted && !local_trusted {
+        let admitted = request
+            .extensions()
+            .get::<HttpConnectionAdmission>()
+            .is_some_and(HttpConnectionAdmission::admit_public);
+        if !admitted {
+            return StatusCode::SERVICE_UNAVAILABLE.into_response();
+        }
     }
     if exact_exposure == Some(RouteExposure::IdentityProbePublic) {
         let identity_origin = if local_trusted {

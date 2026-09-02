@@ -1,4 +1,4 @@
-use std::{future::Future, net::SocketAddr, sync::Arc, time::Duration};
+use std::{future::Future, net::SocketAddr, time::Duration};
 
 use agentsassemble_persistence::PersistenceError;
 use agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES;
@@ -13,7 +13,7 @@ use axum::{
 use serde::Deserialize;
 use serde_json::{Value, json};
 use thiserror::Error;
-use tokio::{net::TcpListener, sync::Semaphore, task::JoinHandle};
+use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tower_http::{
     services::{ServeDir, ServeFile},
@@ -23,7 +23,8 @@ use tower_http::{
 
 use crate::{
     AppState, RoomShutdownError, TicketIssueError,
-    http_transport::{MAX_HTTP_CONNECTIONS, RejectionCounter, serve_connection},
+    http_admission::HttpAdmission,
+    http_transport::serve_connection,
     ingress_trust::{LocalIngress, require_trusted_ingress},
     provider_turn_reconciliation_runtime::reconcile_provider_turn_ownership,
     reconcile_runtime_ownership,
@@ -318,8 +319,7 @@ async fn serve_runtime(
     let public_ingress = state.public_ingress();
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
-    let http_admission = Arc::new(Semaphore::new(MAX_HTTP_CONNECTIONS));
-    let rejected_connections = RejectionCounter::default();
+    let http_admission = HttpAdmission::default();
     let reconciliation_owner = tokio::spawn(watch_runtime_reconciliation(
         state.store.clone(),
         state.provider_adapter.clone(),
@@ -336,8 +336,7 @@ async fn serve_runtime(
             Ok(accepted) => accepted,
             Err(error) => break Err(error),
         };
-        let Ok(permit) = http_admission.clone().try_acquire_owned() else {
-            rejected_connections.record();
+        let Some(admission) = http_admission.admit() else {
             drop(stream);
             continue;
         };
@@ -351,16 +350,13 @@ async fn serve_runtime(
             connection_ingress,
             connection_public_ingress,
             connection_app,
-            permit,
+            admission,
             shutdown,
         ));
     };
     let ingress_shutdown = tokio::spawn(async move { public_ingress.shutdown().await });
     drain_connections(&connections, &connection_shutdown).await;
-    let rejected = rejected_connections.total();
-    if rejected > 0 {
-        tracing::warn!(rejected, "HTTP overload connections were rejected");
-    }
+    http_admission.report_rejections();
     let (reconciliation_shutdown, (room_shutdown, provider_shutdown)) =
         drain_reconciliation_then(reconciliation_owner, async {
             let room_shutdown = rooms.shutdown().await;
