@@ -719,9 +719,12 @@ bounded ACK admission only and adds no task, retry, timer, polling, fallback, or
 compatibility decoder. Persistence create/start tests (4), the actual server TCP
 create/start/replay boundary test, frontend contract tests (5), TypeScript/Vite and
 original CSS build, and architecture/policy gates pass. The focused build reports an
-820.14 kB production JavaScript artifact as an observation only. Complete verification
-of this follow-up and both correction re-reviews remain pending, so no final approval
-is claimed.
+820.14 kB production JavaScript artifact as an observation only. Fresh complete
+verification passes all 98 frontend files/635 tests, 25 desktop tests, the Rust
+workspace including TCP and WebSocket boundaries, Clippy, generated bindings, and all
+repository gates in 247.45 seconds with 1,860,009,984-byte maximum RSS. Its production
+JavaScript artifact is 820.35 kB, again an observation rather than an improvement claim.
+Both correction re-reviews remain pending, so no final approval is claimed.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,

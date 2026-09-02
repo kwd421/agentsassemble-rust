@@ -278,8 +278,9 @@ contracts, findings, or verification journals.
     plus a final `agent_session_state`, while the browser required only the creation
     event. It also found one Low stale-status claim in this workboard. `71acb41` fixes
     the server's stale final `event_seq` and validates the real create/start and replay
-    transition without a fallback. Complete verification and both correction re-reviews
-    remain pending, so F-11 is not closed.
+    transition without a fallback. Fresh complete verification passes in 247.45 seconds
+    with 1,860,009,984-byte maximum RSS. Both correction re-reviews remain pending, so
+    F-11 is not closed.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
