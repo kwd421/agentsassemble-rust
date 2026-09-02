@@ -626,15 +626,18 @@ SDK rather than a transcript scraper, print mode, or compatibility shim. Experim
 that expose subscription-backed model sources to alternate harnesses, including a
 CLIProxyAPI-style model-source gateway, remain deferred until the product
 reimplementation is complete and are not part of the current runtime architecture or
-completion evidence. The copied Agent Add surface retains the original
-`Harness`/`API`/`Local` presentation until post-parity redesign. Those groups describe
-an access/execution route, not exclusive provider identity, so one provider or model
-family may appear in multiple groups. This is also a repository-wide file-boundary
-rule: independently changing owners are split before the source ceiling, while code
-that must change atomically to preserve one invariant remains together. The current
-first-bundle runtime still has fixed Codex, Antigravity, and OpenCode discovery/launch
-branches and accepts only the builtin execution harness; that fixed branching is
-current truth, not the target shape.
+completion evidence. The Agent Add surface keeps the current retained Rust
+frontend's `Harness`/`API`/`Local` presentation during provider cutover; older
+`Subscription` naming is not the target contract for this surface. Further redesign
+waits until post-parity. Those groups describe an access/execution route, not
+exclusive provider identity, so one provider or model family may appear in multiple
+groups.
+This is also a repository-wide file-boundary rule: independently changing owners
+are split before the source ceiling, while code that must change atomically to
+preserve one invariant remains together. The current first-bundle runtime still has
+fixed Codex, Antigravity, and OpenCode discovery/launch branches and accepts only the
+builtin execution harness; that fixed branching is current truth, not the target
+shape.
 
 An Agent Session's configured and desired state is durable room state. Its public projection deliberately excludes workspace paths, executable paths, filesystem identities, runtime handles, provider conversation identities, lifecycle intents, and the runtime profile key/version; those fields exist only in the private durable record. Exact workspace input is canonicalized without text cleanup. The workspace identity and the executable identity—bound to both its opened filesystem object and complete bytes—are revalidated between a short replay transaction and the final write transaction. The final transaction reauthorizes the room and rechecks command replay before committing, while slow filesystem work never holds the single SQLite writer. Filesystem validation uses a fixed-capacity set of detached standard threads with deadlines; a stalled operation retains its permit until it actually exits but cannot make Tokio runtime shutdown join a blocked filesystem worker. Rooms admit at most 64 sessions so non-event snapshot metadata remains bounded. Live provider processes and their task handles are observed resources owned by one server supervisor. Lifecycle effects begin only from committed intent and report completion through the room mutation owner. Stop confirmation is durably marked before finalization so a retry cannot repeat an already-applied external effect. Replayed commands reuse their durable result before consulting a newer catalog or launching an effect.
 

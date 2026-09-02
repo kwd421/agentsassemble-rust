@@ -364,8 +364,15 @@ contracts, findings, or verification journals.
     controls, session identity, completion receipts, permissions, and lifecycle semantics
     remain with their actual owner. Do not build a generic provider framework in advance.
   - Restore each copied frontend entry point with its owning backend slice. Keep the
-    original `Harness`/`API`/`Local` grouping until post-parity redesign; a provider or
-    model family may appear in more than one route group.
+    current retained Rust frontend's `Harness`/`API`/`Local` grouping during provider
+    cutover; older `Subscription` naming is not the target for this surface. Further
+    redesign waits until post-parity, and a provider or model family may appear in
+    more than one route group.
+  - Treat the current Rust frontend as the presentation baseline. Restoring an
+    inactive original flow must preserve the reviewed single-search, result-avatar
+    and provider-logo projection, unified header/right-panel geometry,
+    profile/modal stacking, and current Agent Add composition; import the missing
+    behavior instead of replacing the current UI with an older tree.
   - Critical-web Pro owns whole-plan, product-parity, coverage, phase, SSoT/DDD, and
     overimplementation review. Daybreaker Blue High owns manual source/diff security,
     async/process/TCP/WebSocket, polling/timer/fallback, swallowed-failure, and cleanup

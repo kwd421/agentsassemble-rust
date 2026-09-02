@@ -55,7 +55,8 @@ Defer until the retained core is complete and the user explicitly reopens them:
 - voice presence/chat, Mafia, and the RimWorld plugin;
 - PostgreSQL central-hosting support;
 - CLIProxyAPI-style model-source extraction and alternate-harness experiments;
-- redesign of the copied `Harness` / `API` / `Local` provider chooser taxonomy;
+- redesign of the current retained `Harness` / `API` / `Local` provider chooser
+  taxonomy;
 - any new provider not present in the verified original inventory. Grok is one of
   the retained original sixteen, but its implementation and real verification wait
   for the official client to be installed and for explicit provider-run approval.
@@ -218,11 +219,12 @@ Alternate Codex/Claude/OpenCode/Pi harness installation over API/local models is
 separate deferred experiment. It does not justify an abstraction or compatibility
 path in the core provider implementation now.
 
-The copied Agent Add surface keeps its original `Harness` / `API` / `Local`
-grouping until post-parity redesign. These labels describe an access/execution
-route, not a model family: the same model family or provider presentation may
-legitimately appear in more than one group. Preserve that original behavior now;
-do not redesign the taxonomy during provider cutover.
+The Agent Add surface keeps the current retained Rust frontend's
+`Harness` / `API` / `Local` grouping during provider cutover. Older
+`Subscription` naming is not the target contract for this surface. These groups
+describe an access/execution route, not a model family: the same model family or
+provider presentation may legitimately appear in more than one group. Further
+taxonomy redesign waits until post-parity.
 
 ## Ordered implementation phases
 
@@ -231,8 +233,17 @@ hold the retained product behind finding-number order. The production sequence i
 finish the full retained provider inventory, then Agent Session controls, remaining
 profile/asset ownership, room lifecycle, identity/friends/human admission, custom
 channels/side chat, external AI paths, operational surfaces, and final parity.
-Frontend source is restored from the copied/original baseline with the backend
-slice that owns it; it is never recreated later as an unrelated redesign.
+The current retained Rust frontend and its reviewed presentation corrections are
+the UI baseline. When a disabled or removed original entry point becomes complete,
+restore only that missing product flow from the copied/original backup into its
+owning backend slice; do not overwrite the current frontend or recreate it later as
+an unrelated redesign.
+
+In particular, preserve the current single-search presentation, canonical
+search-result avatar/provider logo projection, unified channel header and
+right-panel geometry, profile-card/modal stacking, provider icon normalization,
+and Agent Add composition. Original source remains behavior evidence for missing
+flows, not permission to roll these reviewed Rust-frontend corrections back.
 
 ### Phase 0 — freeze and correct the foundation
 
