@@ -8,6 +8,7 @@ use uuid::Uuid;
 
 use agentsassemble_domain::VoteCommand;
 
+use crate::driver::ProviderTurnRequest;
 #[cfg(windows)]
 use crate::filesystem::BoundExecutable;
 #[cfg(unix)]
@@ -384,6 +385,37 @@ impl RoomPortal {
                 Ok(())
             }
         }
+    }
+
+    pub(crate) fn begin_turn(&self, request: &ProviderTurnRequest) -> Result<(), RoomPortalError> {
+        let observation = request
+            .room_observation
+            .as_ref()
+            .ok_or(RoomPortalError::Observation)?;
+        self.begin_observation(RoomObservationStart {
+            session_id: &observation.session_id,
+            turn_id: &request.turn_id,
+            input_up_to_seq: observation.input_up_to_seq,
+            durable_turn_generation: request.turn_generation,
+            execution_id: &request.execution_id,
+            room_view: &observation.view,
+            attachment_ids: &observation.attachment_ids,
+            attachment_ingress: observation.attachment_ingress.clone(),
+            allowed_agent_ids: &observation.allowed_agent_ids,
+            tabletop_tools: observation.tabletop_tools,
+            tool_ingress: observation.room_tool_ingress.clone(),
+        })
+    }
+
+    pub(crate) fn finish_turn(
+        &self,
+        request: &ProviderTurnRequest,
+    ) -> Result<ProviderTurnOutcome, RoomPortalError> {
+        let observation = request
+            .room_observation
+            .as_ref()
+            .ok_or(RoomPortalError::Observation)?;
+        self.finish_observation(&request.turn_id, observation.input_up_to_seq)
     }
 
     pub(crate) fn finish_observation(

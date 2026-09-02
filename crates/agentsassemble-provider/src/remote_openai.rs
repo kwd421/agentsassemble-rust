@@ -24,7 +24,7 @@ use crate::{
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiSpec, provider_error,
     },
-    room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
+    room_portal::{ProviderTurnOutcome, RoomPortal},
 };
 
 const MAX_TOOL_RESULT_BYTES: usize = 128 * 1024;
@@ -443,28 +443,10 @@ impl ProviderDriver for RemoteOpenAiDriver {
     }
 
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
-        let observation = request.room_observation.as_ref().ok_or_else(|| {
-            provider_error(
-                "provider_protocol_invalid",
-                self.spec.errors.invalid_response,
-            )
-        })?;
         self.portal
             .as_ref()
             .ok_or(PORTAL_UNAVAILABLE)?
-            .begin_observation(RoomObservationStart {
-                session_id: &observation.session_id,
-                turn_id: &request.turn_id,
-                input_up_to_seq: observation.input_up_to_seq,
-                durable_turn_generation: request.turn_generation,
-                execution_id: &request.execution_id,
-                room_view: &observation.view,
-                attachment_ids: &observation.attachment_ids,
-                attachment_ingress: observation.attachment_ingress.clone(),
-                allowed_agent_ids: &observation.allowed_agent_ids,
-                tabletop_tools: observation.tabletop_tools,
-                tool_ingress: observation.room_tool_ingress.clone(),
-            })
+            .begin_turn(request)
             .map_err(|_| PORTAL_UNAVAILABLE)
     }
 
@@ -472,16 +454,10 @@ impl ProviderDriver for RemoteOpenAiDriver {
         &mut self,
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnOutcome, DriverError> {
-        let observation = request.room_observation.as_ref().ok_or_else(|| {
-            provider_error(
-                "provider_protocol_invalid",
-                self.spec.errors.invalid_response,
-            )
-        })?;
         self.portal
             .as_ref()
             .ok_or(PORTAL_UNAVAILABLE)?
-            .finish_observation(&request.turn_id, observation.input_up_to_seq)
+            .finish_turn(request)
             .map_err(|_| PORTAL_UNAVAILABLE)
     }
 

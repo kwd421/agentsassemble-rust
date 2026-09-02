@@ -1,7 +1,8 @@
 use agentsassemble_domain::RoomRandomResult;
 use serde_json::json;
 
-use super::{RemoteOpenAiDriver, RoomObservationStart, assistant_value, validate_completion};
+use super::{RemoteOpenAiDriver, assistant_value, validate_completion};
+use crate::room_portal::RoomObservationStart;
 use crate::{
     credentials::ProviderCredentialStore,
     deepseek::DEEPSEEK_SPEC,

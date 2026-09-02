@@ -851,6 +851,16 @@ contracts, findings, or verification journals.
   `grok agent stdio` entry point, protocol V1, load-session and HTTP MCP capability,
   and an exact initialized model receipt. No prompt or real provider turn was sent;
   the authorized Grok matrix flow remains open rather than being simulated.
+- Implemented pending Phase 1 whole-phase review: canonical RoomPortal turn projection.
+  Repository-wide comparison found the same `ProviderTurnRequest` to
+  `RoomObservationStart` field mapping independently copied by Codex, OpenCode, the
+  remote OpenAI-compatible runtime, and the shared ACP runtime. `RoomPortal` now owns
+  that pure conversion and finish cursor once; provider-specific error mapping and ACP
+  activation state remain with their existing owners. This removes 51 net lines and a
+  fifth prospective Claude copy without changing room authority, lifecycle, transport,
+  timing, or failure semantics. All 191 provider tests and warning-denied provider
+  Clippy pass; no performance improvement beyond removed duplicate allocation/copy code
+  is claimed.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop

@@ -35,7 +35,7 @@ use crate::{
     },
     opencode_sse::{OpenCodeTurnEvents, collect_turn_events},
     opencode_startup::{drain_output, observe_startup, reserve_loopback_port, server_password},
-    room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
+    room_portal::{ProviderTurnOutcome, RoomPortal},
     runtime::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -749,24 +749,8 @@ impl ProviderDriver for OpenCodeDriver {
     }
 
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
-        let observation = request
-            .room_observation
-            .as_ref()
-            .ok_or_else(portal_unavailable)?;
         self.room_portal
-            .begin_observation(RoomObservationStart {
-                session_id: &observation.session_id,
-                turn_id: &request.turn_id,
-                input_up_to_seq: observation.input_up_to_seq,
-                durable_turn_generation: request.turn_generation,
-                execution_id: &request.execution_id,
-                room_view: &observation.view,
-                attachment_ids: &observation.attachment_ids,
-                attachment_ingress: observation.attachment_ingress.clone(),
-                allowed_agent_ids: &observation.allowed_agent_ids,
-                tabletop_tools: observation.tabletop_tools,
-                tool_ingress: observation.room_tool_ingress.clone(),
-            })
+            .begin_turn(request)
             .map_err(portal_driver_error)
     }
 
@@ -774,12 +758,8 @@ impl ProviderDriver for OpenCodeDriver {
         &mut self,
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnOutcome, DriverError> {
-        let observation = request
-            .room_observation
-            .as_ref()
-            .ok_or_else(portal_unavailable)?;
         self.room_portal
-            .finish_observation(&request.turn_id, observation.input_up_to_seq)
+            .finish_turn(request)
             .map_err(portal_driver_error)
     }
 

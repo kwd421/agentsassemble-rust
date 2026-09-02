@@ -19,7 +19,7 @@ use crate::{
     driver::{DriverError, ProviderTurnRequest},
     filesystem::{BoundExecutable, bind_executable_with_children},
     launch_error::DriverLaunchError,
-    room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal, RoomPortalError},
+    room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
 };
 #[cfg(unix)]
 use crate::{
@@ -168,23 +168,7 @@ impl AcpRuntime {
         &mut self,
         request: &ProviderTurnRequest,
     ) -> Result<(), RoomPortalError> {
-        let observation = request
-            .room_observation
-            .as_ref()
-            .ok_or(RoomPortalError::Observation)?;
-        self.room_portal.begin_observation(RoomObservationStart {
-            session_id: &observation.session_id,
-            turn_id: &request.turn_id,
-            input_up_to_seq: observation.input_up_to_seq,
-            durable_turn_generation: request.turn_generation,
-            execution_id: &request.execution_id,
-            room_view: &observation.view,
-            attachment_ids: &observation.attachment_ids,
-            attachment_ingress: observation.attachment_ingress.clone(),
-            allowed_agent_ids: &observation.allowed_agent_ids,
-            tabletop_tools: observation.tabletop_tools,
-            tool_ingress: observation.room_tool_ingress.clone(),
-        })?;
+        self.room_portal.begin_turn(request)?;
         self.client
             .set_room_observation_active(true)
             .map_err(|_| RoomPortalError::Authority)
@@ -194,15 +178,10 @@ impl AcpRuntime {
         &mut self,
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnOutcome, RoomPortalError> {
-        let observation = request
-            .room_observation
-            .as_ref()
-            .ok_or(RoomPortalError::Observation)?;
         self.client
             .set_room_observation_active(false)
             .map_err(|_| RoomPortalError::Authority)?;
-        self.room_portal
-            .finish_observation(&request.turn_id, observation.input_up_to_seq)
+        self.room_portal.finish_turn(request)
     }
 
     pub(crate) fn abort_observation(&mut self) {
