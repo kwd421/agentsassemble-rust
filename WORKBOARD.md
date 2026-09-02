@@ -205,10 +205,12 @@ contracts, findings, or verification journals.
   existing ingress owner classifies a connection as trusted public. A real TCP
   request-body barrier proves one local health request progresses while 127 public
   connections are active, the next public request receives 503, and public admission
-  resumes after release. Pre-header sockets remain unclassified and can occupy all
-  total permits for the existing three-second header deadline; this is an explicit
-  residual limit, not a hidden fallback. Complete verification passes; manual source
-  review has not yet been requested.
+  resumes after every held request reaches its terminal TCP response. Pre-header
+  sockets remain unclassified and can occupy all total permits for the existing
+  three-second header deadline; this is an explicit residual limit, not a hidden
+  fallback. Correction `c184739` replaces the initial client-drop teardown with those
+  terminal-response barriers. Complete verification and focused correction gates
+  pass; manual correction review is pending.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

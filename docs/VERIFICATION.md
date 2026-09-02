@@ -6008,11 +6008,17 @@ Source commit `c0cb3e2` keeps the total ceiling at 128 and adds a 127-connection
 classified-public ceiling at the existing ingress-trust boundary. With 127 public
 request bodies active, the next public request returns 503, an exact local
 `/healthz` request returns 200, and public admission returns 200 after the held
-connections are dropped. `cargo test -p agentsassemble-server --test
-ingress_boundary` passes all 6 real TCP cases in 0.11 seconds, and `cargo test -p
-agentsassemble-server --tests` passes every server unit, TCP, WebSocket, and lifecycle
-suite. Server all-target Clippy, architecture/source-growth, policy, and diff gates
-pass.
+requests receive their exact bodies and every terminal TCP response is read. The
+six-case real TCP ingress suite passes in 0.11 seconds, and the complete server test
+target passes every unit, TCP, WebSocket, and lifecycle suite. Server all-target
+Clippy, architecture/source-growth, policy, and diff gates pass. Daybreaker
+correction review found that the initial test merely dropped the
+127 clients before the restored-public assertion; client drop did not prove the
+server had processed EOF and released its permits. Correction `c184739` first probes
+local capacity under stable saturation, then completes every held request with an
+exact 256-byte JSON body and reads every terminal TCP response before asserting that
+public admission is restored. The corrected focused test and all six ingress cases
+pass, and it adds no sleep, retry, or internal admission-state assertion.
 
 The change adds no listener, socket, task, request buffer, retry, polling, heartbeat,
 timer, fallback, or duplicate trust rule. One additional semaphore is shared by the
@@ -6032,4 +6038,6 @@ active Cargo target occupied 25,846,026,240 bytes, above the repository's measur
 tests, 88 server tests, and the complete domain, protocol, TCP, and WebSocket suites.
 Its maximum resident-set report is 2,415,034,368 bytes, and the retained next-build
 target is 21 GiB. These are validation and artifact-lifecycle costs, not runtime
-latency or memory claims. Manual cross-review of `c0cb3e2` is pending.
+latency or memory claims. Daybreaker revised `c0cb3e2`, `14b3ac6`, exact
+`952fa96..14b3ac6`, and HEAD `14b3ac6` at `C0/H0/M0/L1` only for the teardown
+barrier above; critical-web Pro review of that pushed range remains in progress.

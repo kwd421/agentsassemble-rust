@@ -517,7 +517,8 @@ real provider operation owner. Do not add dummy routes.
 
 ### F-08 — one global HTTP connection budget may let public traffic starve local control
 
-Disposition: `Fixed at c0cb3e2; review pending`; medium availability impact.
+Disposition: `Fixed at c0cb3e2; evidence corrected at c184739; review pending`;
+medium availability impact.
 
 The prior owner admitted 128 connections before ingress classification with no
 public partition. In the controlled counterfactual, 128 trusted-public requests could
@@ -532,8 +533,10 @@ Commit `c0cb3e2` moves both HTTP limits and rejection observation into
 each classified-public connection retains one of 127 public permits for its lifetime.
 At the real TCP boundary, 127 active public body requests make the next public request
 return 503 while a local `/healthz` request returns 200; releasing those connections
-lets public admission return 200 again. The trust decision remains solely in
-`ingress_trust.rs`.
+and reading every terminal TCP response lets public admission return 200 again. The
+trust decision remains solely in `ingress_trust.rs`. Correction `c184739` makes that
+release observation deterministic instead of treating client-socket drop as proof
+that the server had already released the permit.
 
 This is deliberately a partition inside the existing resource ceiling: it adds one
 semaphore, one optional public permit and connection-owned synchronization state, but
