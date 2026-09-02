@@ -54,10 +54,10 @@ fn fixed_vectors_pin_every_admission_transcript() {
 }
 
 #[test]
-fn canonical_input_preserves_original_text_and_human_alias_contracts() {
+fn canonical_input_preserves_text_and_requires_the_current_human_token() {
     let mut source = input(
         "  123e4567-e89b-12d3-a456-426614174000  ",
-        " PERSON ",
+        " human ",
         " /api/attachments/avatar_1234?view=1 ",
     );
     source.meeting_id_assertion = " general\r\n ".to_owned();
@@ -80,18 +80,8 @@ fn canonical_input_preserves_original_text_and_human_alias_contracts() {
     assert_eq!(request.request_id().to_string(), source.request_id.trim());
     assert_eq!(request.meeting_id_assertion(), "general");
     assert_eq!(request.display_name(), "Name\t With  Spaces");
-    assert_eq!(request.participant_type_input(), "PERSON");
+    assert_eq!(request.participant_type_input(), "human");
     assert_eq!(request.avatar_attachment_id(), Some("avatar_1234"));
-
-    let human = prepared("human", "/api/attachments/avatar_1234?view=1");
-    let person = prepared("person", "/api/attachments/avatar_1234?view=1");
-    let browser = prepared("browser", "/api/attachments/avatar_1234?view=1");
-    let unknown_token = prepared("some-unknown-value", "/api/attachments/avatar_1234?view=1");
-    assert_eq!(human.display_name(), person.display_name());
-    assert_eq!(human.avatar_attachment_id(), person.avatar_attachment_id());
-    assert_ne!(human.payload_hash(), person.payload_hash());
-    assert_ne!(human.payload_hash(), browser.payload_hash());
-    assert_ne!(browser.payload_hash(), unknown_token.payload_hash());
 }
 
 #[test]
@@ -115,6 +105,13 @@ fn invalid_identity_input_fails_and_invalid_optional_avatar_is_omitted() {
         );
     }
     for participant_type in [
+        "",
+        "Human",
+        "person",
+        "people",
+        "user",
+        "browser",
+        "some-unknown-value",
         "agent",
         "ai",
         "bot",

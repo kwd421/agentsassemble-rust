@@ -307,10 +307,7 @@ fn canonical_request_id(value: &str) -> Result<Uuid, HumanAdmissionInputError> {
 }
 
 fn is_human_participant_type(value: &str) -> bool {
-    !matches!(
-        value.to_ascii_lowercase().as_str(),
-        "agent" | "ai" | "bot" | "subscription_ai" | "api" | "local" | "remote" | "unknown"
-    )
+    value == "human"
 }
 
 fn update_field(digest: &mut Sha256, value: &str) {
