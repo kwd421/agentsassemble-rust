@@ -13,6 +13,11 @@ mod antigravity_windows;
 mod catalog;
 mod catalog_service;
 mod cerebras;
+mod claude;
+mod claude_sdk_assets;
+mod claude_sdk_client;
+#[cfg(unix)]
+mod claude_sdk_runtime;
 mod codex;
 #[cfg(unix)]
 mod codex_code_mode_host;

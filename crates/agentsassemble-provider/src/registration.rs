@@ -12,6 +12,8 @@ use tokio_util::sync::CancellationToken;
 #[cfg(any(unix, windows))]
 use crate::antigravity::AntigravityDriver;
 #[cfg(unix)]
+use crate::claude::ClaudeAgentSdkDriver;
+#[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::{
     ProviderCredentialId,
@@ -113,6 +115,23 @@ pub(crate) static ANTIGRAVITY_PROVIDER: ProviderRegistration = ProviderRegistrat
     configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_antigravity_registered,
     launch: launch_antigravity,
+};
+
+pub(crate) static CLAUDE_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "claude",
+    display_name: "Claude Code",
+    provider_kind: "claude_code",
+    runtime_kind: "live_cli",
+    transport: "agent_sdk_stdio",
+    catalog_group: "harness",
+    workspace_required: true,
+    connection_kind: "native_cli_bridge",
+    executable_required: true,
+    probe_executable: "claude",
+    credential_available: false,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
+    discover: discover_claude_registered,
+    launch: launch_claude,
 };
 
 pub(crate) static OPENCODE_PROVIDER: ProviderRegistration = ProviderRegistration {
@@ -285,9 +304,10 @@ pub(crate) static CUSTOM_API_PROVIDER: ProviderRegistration = ProviderRegistrati
     launch: launch_custom_api,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 14] = [
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 15] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
+    &CLAUDE_PROVIDER,
     &OPENCODE_PROVIDER,
     &CURSOR_PROVIDER,
     &GROK_PROVIDER,
@@ -344,6 +364,13 @@ fn discover_antigravity_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_antigravity(provider, cancellation))
+}
+
+fn discover_claude_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(crate::claude::discover(provider, cancellation))
 }
 
 fn discover_opencode_registered(
@@ -581,6 +608,32 @@ fn launch_antigravity<'a>(
         Err(DriverError::new(
             "provider_runtime_unsupported",
             "Terminal provider sessions are unsupported on this platform.",
+        )
+        .into())
+    })
+}
+
+fn launch_claude<'a>(
+    factory: &'a ProductionDriverFactory,
+    session: &'a DurableAgentSession,
+    runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    #[cfg(not(unix))]
+    let _ = (factory, session, runtime_lease);
+    Box::pin(async move {
+        #[cfg(unix)]
+        let driver = ClaudeAgentSdkDriver::spawn(
+            session,
+            runtime_lease,
+            factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
+        )
+        .await?;
+        #[cfg(unix)]
+        return Ok(Box::new(driver) as Box<dyn ProviderDriver>);
+        #[cfg(not(unix))]
+        Err(DriverError::new(
+            "provider_runtime_unsupported",
+            "Claude Agent SDK processes are unsupported on this platform.",
         )
         .into())
     })
