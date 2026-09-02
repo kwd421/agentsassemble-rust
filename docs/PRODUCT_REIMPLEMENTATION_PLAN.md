@@ -338,8 +338,9 @@ Correction substage:
   a 127-connection trusted-public partition inside the unchanged 128-connection
   total ceiling. Keep pre-header classification limits explicit; do not add a second
   listener, retry, timer, or fallback.
-- Make closed provider-catalog authority terminal instead of busy-spinning each
-  connected room socket.
+- Replace the latent closed provider-catalog watch continuation with terminal handling;
+  current `ProviderCatalogService`/`AppState` sender custody makes closure unreachable,
+  so do not claim a live spin or add synthetic runtime machinery.
 - Route the human-invite token self-description audit to Phase 5, where its finite
   clients and admission owner can prove each consumer or remove the unconsumed claim.
   It is not a provider-foundation prerequisite.
@@ -356,8 +357,9 @@ Correction substage:
 ### Phase 1 — provider contract and process correctness
 
 - Enter Phase 1 only after the finite Phase 0B prerequisite slice closes F-14's
-  insecure browser request-ID compatibility fallback and F-16's closed catalog-watch
-  busy-spin. Verify those exact failures, then leave frontend/socket refinement and
+  insecure browser request-ID compatibility fallback and F-16's latent closed-watch
+  continuation. Verify the request-ID failure and catalog sender-custody invariant,
+  then leave frontend/socket refinement and
   proceed; they are structural prerequisites, not permission to polish the first
   product area.
 - Build Phase 1 breadth-first. First establish the complete sixteen-provider

@@ -956,21 +956,24 @@ Behavior modules must be imported solely by their real owner. Verify the copied
 desktop geometry and cascade before/after; do not reorder styles opportunistically
 or rewrite the frontend.
 
-### F-16 — closed provider-catalog watch can busy-spin every room socket
+### F-16 — latent closed provider-catalog watch loop
 
-Disposition: `Fix first`; high CPU/availability impact.
+Disposition: `Preventive cleanup before Phase 1`; no current production impact.
 
 `room_socket_session.rs:251-254` awaits `catalog_updates.changed()` but uses
 `continue` when the watch sender is closed. A closed Tokio watch returns an error
-immediately on every later call, so the socket's `select!` loop can spin without
-yielding useful work for every connected room session. Repository-wide search found
-no other swallowed closed-watch loop with this shape.
+immediately on every later call, so this branch would spin without yielding useful
+work if the sender could close. In the current production graph it cannot:
+`ProviderCatalogService` retains a sender in every clone, and the socket owns its
+containing `AppState` for the session lifetime. Repository-wide search found no other
+swallowed closed-watch loop with this shape.
 
 Treat sender closure as terminal owner failure: close the affected session or
 permanently disable that branch with one explicit visible state, according to the
 catalog owner's shutdown contract. Do not add sleep, retry, polling, or another
-catalog source to mask it. Add one focused closed-channel CPU/progress regression
-test rather than a broad timer test suite.
+catalog source to mask it. Do not add a synthetic naked-watch test or helper that
+claims to reproduce the production ownership graph; source and lifecycle inspection
+are the applicable evidence until sender custody changes.
 
 ### F-17 — malformed OpenCode SSE data is silently discarded
 
@@ -1496,7 +1499,7 @@ This table routes findings; it does not add another contract layer.
 | F-13 | provider factory/custody launcher | 1 | bounded typed guardian/helper cause reaches provider-unavailable/start failure |
 | F-14 | browser request-identity owner | 0B | secure UUID absence fails before send; replay still uses one exact ID |
 | F-15 | frontend stylesheet entry | 0B | behavior side-effect import is gone and packaged layout/cascade is unchanged |
-| F-16 | room socket/catalog subscription owner | 0B | closed watch terminates/disables once and a focused regression proves no spin |
+| F-16 | room socket/catalog subscription owner | 0B | latent closed-watch continuation is terminal; current sender custody remains explicit and no synthetic live-impact claim remains |
 | F-17 | OpenCode SSE decoder | 1 | malformed `data:` fails immediately; valid comments and split chunks still pass |
 | F-18 | invite controller and admission surfaces | 0B, 7 | old host-token path is absent; human flow remains exact; bridge controls stay unavailable until Phase 7 |
 | F-19 | domain settings/profile contract exporter | 4 | active UI hints match the decided product limit or document an intentional narrower UX bound; server remains authoritative |
