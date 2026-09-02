@@ -4,8 +4,8 @@ Status: authoritative working plan. The Phase 0A inventory at `9711232` remains
 historical reviewed evidence, but its finding-number execution order no longer
 defines the production roadmap. The next product work closes only the confirmed
 live Phase 0B prerequisites F-14 and F-16, then follows the provider-first order
-below; this correction requires manual cross-review before its status is called
-approved.
+below; the corrected provider-first plan is approved by manual documentation
+cross-review.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
