@@ -102,7 +102,7 @@ impl AntigravityDriver {
         let terminal_helper = room_portal
             .create_terminal_helper(guardian)
             .map_err(portal_driver_error)?;
-        let hook = AntigravityHookRegistration::register(
+        let mut hook = AntigravityHookRegistration::register(
             &workspace,
             terminal_helper.hook_command(),
             terminal_helper.hook_executable_owner(),
@@ -114,7 +114,7 @@ impl AntigravityDriver {
             ("COLUMNS".to_owned(), "120".to_owned()),
             ("LINES".to_owned(), "40".to_owned()),
         ]);
-        let terminal = crate::antigravity_unix::spawn_terminal(
+        let terminal = match crate::antigravity_unix::spawn_terminal(
             runtime_lease,
             guardian,
             executable,
@@ -122,7 +122,11 @@ impl AntigravityDriver {
             &environment,
             &workspace,
         )
-        .await?;
+        .await
+        {
+            Ok(terminal) => terminal,
+            Err(error) => return Err(launch_failure_after_hook(&mut hook, error)),
+        };
         Ok(Self::from_parts(
             terminal,
             room_portal,
@@ -146,7 +150,7 @@ impl AntigravityDriver {
         let terminal_helper = room_portal
             .create_terminal_helper(companion)
             .map_err(portal_driver_error)?;
-        let hook = AntigravityHookRegistration::register(
+        let mut hook = AntigravityHookRegistration::register(
             &workspace,
             terminal_helper.hook_command(),
             terminal_helper.hook_executable_owner(),
@@ -158,12 +162,15 @@ impl AntigravityDriver {
             ("COLUMNS".to_owned(), "120".to_owned()),
             ("LINES".to_owned(), "40".to_owned()),
         ]);
-        let terminal = crate::antigravity_windows::spawn_terminal(
+        let terminal = match crate::antigravity_windows::spawn_terminal(
             executable,
             &arguments,
             &environment,
             &workspace,
-        )?;
+        ) {
+            Ok(terminal) => terminal,
+            Err(error) => return Err(launch_failure_after_hook(&mut hook, error)),
+        };
         Ok(Self::from_parts(
             terminal,
             room_portal,
@@ -188,9 +195,22 @@ impl AntigravityDriver {
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
         self.terminal.stop().await?;
+        if let Some(hook) = self.hook.as_mut() {
+            hook.release()?;
+        }
         self.hook.take();
         self.terminal_helper.take();
         Ok(())
+    }
+}
+
+fn launch_failure_after_hook(
+    hook: &mut AntigravityHookRegistration,
+    failure: DriverLaunchError,
+) -> DriverLaunchError {
+    match hook.release() {
+        Ok(()) => failure,
+        Err(error) => DriverLaunchError::uncertain(error),
     }
 }
 

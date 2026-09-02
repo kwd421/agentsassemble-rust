@@ -30,6 +30,7 @@ static REGISTRATIONS: OnceLock<Mutex<HashMap<PathBuf, Registration>>> = OnceLock
 
 pub(crate) struct AntigravityHookRegistration {
     workspace: PathBuf,
+    released: bool,
 }
 
 impl AntigravityHookRegistration {
@@ -44,7 +45,10 @@ impl AntigravityHookRegistration {
         let mut registrations = registry.lock().map_err(|_| hook_error())?;
         if let Some(active) = registrations.get_mut(&workspace) {
             active.count = active.count.checked_add(1).ok_or_else(hook_error)?;
-            return Ok(Self { workspace });
+            return Ok(Self {
+                workspace,
+                released: false,
+            });
         }
         let directory = HookDirectory::open(&workspace)?;
         let _lock = directory.lock()?;
@@ -62,41 +66,46 @@ impl AntigravityHookRegistration {
                 _executable_owner: executable_owner,
             },
         );
-        Ok(Self { workspace })
+        Ok(Self {
+            workspace,
+            released: false,
+        })
+    }
+
+    pub(crate) fn release(&mut self) -> Result<(), DriverError> {
+        if self.released {
+            return Ok(());
+        }
+        let registry = REGISTRATIONS.get().ok_or_else(hook_error)?;
+        let mut registrations = registry.lock().map_err(|_| hook_error())?;
+        let active = registrations
+            .get_mut(&self.workspace)
+            .ok_or_else(hook_error)?;
+        if active.count > 1 {
+            active.count -= 1;
+            self.released = true;
+            return Ok(());
+        }
+        let definition = active.definition.clone();
+        let directory = HookDirectory::open(&self.workspace)?;
+        let _lock = directory.lock()?;
+        let mut document = directory.read_document()?;
+        if document.get(HOOK_NAME) != Some(&definition) {
+            return Err(hook_error());
+        }
+        document.remove(HOOK_NAME);
+        directory.write_document(&document)?;
+        registrations.remove(&self.workspace);
+        self.released = true;
+        Ok(())
     }
 }
 
 impl Drop for AntigravityHookRegistration {
     fn drop(&mut self) {
-        let Some(registry) = REGISTRATIONS.get() else {
-            return;
-        };
-        let Ok(mut registrations) = registry.lock() else {
-            return;
-        };
-        let Some(active) = registrations.get_mut(&self.workspace) else {
-            return;
-        };
-        if active.count > 1 {
-            active.count -= 1;
-            return;
-        }
-        let definition = active.definition.clone();
-        registrations.remove(&self.workspace);
-        let Ok(directory) = HookDirectory::open(&self.workspace) else {
-            return;
-        };
-        let Ok(_lock) = directory.lock() else {
-            return;
-        };
-        let Ok(mut document) = directory.read_document() else {
-            return;
-        };
-        if document.get(HOOK_NAME) != Some(&definition) {
-            return;
-        }
-        document.remove(HOOK_NAME);
-        let _ = directory.write_document(&document);
+        // Explicit runtime and launch owners call `release`; Drop is only a final
+        // fail-closed attempt, and `release` retains registry ownership on failure.
+        let _last_resort = self.release();
     }
 }
 
@@ -436,5 +445,34 @@ mod tests {
         }
         assert!(owner_dropped.load(Ordering::SeqCst));
         assert!(!directory.join("hooks.json").exists());
+    }
+
+    #[test]
+    fn failed_explicit_release_retains_owner_and_can_retry() {
+        let workspace =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create hook workspace: {error}"));
+        let directory = workspace.path().join(".agents");
+        let owner_dropped = Arc::new(AtomicBool::new(false));
+        let mut registration = AntigravityHookRegistration::register(
+            workspace.path(),
+            HOOK_COMMAND,
+            Arc::new(OwnerDrop(owner_dropped.clone())),
+        )
+        .unwrap_or_else(|error| panic!("register hook: {error}"));
+        let hook_path = directory.join("hooks.json");
+        let installed = std::fs::read(&hook_path)
+            .unwrap_or_else(|error| panic!("read installed hook: {error}"));
+        std::fs::write(&hook_path, b"{}\n")
+            .unwrap_or_else(|error| panic!("replace installed hook: {error}"));
+
+        assert!(registration.release().is_err());
+        assert!(!owner_dropped.load(Ordering::SeqCst));
+        std::fs::write(&hook_path, installed)
+            .unwrap_or_else(|error| panic!("restore installed hook: {error}"));
+        registration
+            .release()
+            .unwrap_or_else(|error| panic!("retry hook release: {error}"));
+        assert!(owner_dropped.load(Ordering::SeqCst));
+        assert!(!hook_path.exists());
     }
 }
