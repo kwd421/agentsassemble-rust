@@ -1,3 +1,4 @@
+use agentsassemble_domain::AgentLifecycleAction;
 use agentsassemble_persistence::{
     AgentTurnAssignment, PersistenceError, RuntimeReconciliationCandidate,
     RuntimeReconciliationObservation, SqliteStore,
@@ -168,13 +169,13 @@ pub(super) async fn release_checkpointed_absence(
     provider_adapter: &ProviderAdapter,
     candidate: &RuntimeReconciliationCandidate,
 ) {
-    match candidate.session.lifecycle_intent_action.as_str() {
-        "start" => {
+    match candidate.session.lifecycle_intent_action {
+        AgentLifecycleAction::Start => {
             provider_adapter
                 .release_checkpointed_start_absence(&candidate.session)
                 .await;
         }
-        "" | "stop" => {
+        AgentLifecycleAction::None | AgentLifecycleAction::Stop => {
             provider_adapter
                 .release_confirmed_stop(
                     &candidate.session.public.room_id,
@@ -185,7 +186,6 @@ pub(super) async fn release_checkpointed_absence(
                 )
                 .await;
         }
-        _ => unreachable!("checkpointed lifecycle absence must be start or stop"),
     }
 }
 

@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    AgentSessionDraft, AuthenticatedPrincipal, ParticipantStatus, RoomEvent, canonical_payload_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSessionDraft, AuthenticatedPrincipal,
+    ParticipantStatus, RoomEvent, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -281,9 +282,9 @@ impl SqliteStore {
         validate_runtime_started(&session, started)?;
         require_intent(
             &session,
-            "start",
+            AgentLifecycleAction::Start,
             &expected_operation_id,
-            "effect_inflight",
+            AgentLifecycleIntentStatus::EffectInflight,
             "stale_start_confirmation",
         )?;
         finish_lifecycle_command(
@@ -426,7 +427,7 @@ async fn resume_create_start(
     let prepared_result: Value = serde_json::from_str(&stored.prepared_result_json)?;
     validate_prepared_result(&prepared_result, &stored.session_id)?;
     let session = load_session(transaction, &principal.room_id, &stored.session_id).await?;
-    if session.lifecycle_intent_action != "start"
+    if session.lifecycle_intent_action != AgentLifecycleAction::Start
         || session.lifecycle_intent_id != stored.operation_id
     {
         return Err(rejected(
@@ -434,9 +435,9 @@ async fn resume_create_start(
             "The stored create/start operation does not own this Agent Session.",
         ));
     }
-    match session.lifecycle_intent_status.as_str() {
-        "prepared" => {}
-        "effect_inflight" | "unconfirmed" => {
+    match session.lifecycle_intent_status {
+        AgentLifecycleIntentStatus::Prepared => {}
+        AgentLifecycleIntentStatus::EffectInflight | AgentLifecycleIntentStatus::Unconfirmed => {
             return Err(PersistenceError::CommandUnresolved {
                 code: "runtime_effect_unconfirmed",
                 message: "The original provider start effect remains unresolved. Wait for authoritative runtime observation before retrying it.".to_owned(),

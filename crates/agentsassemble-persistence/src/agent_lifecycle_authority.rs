@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, ClientKind, DurableAgentSession, clean_identifier, stable_identity_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, ClientKind,
+    DurableAgentSession, clean_identifier, stable_identity_hash,
 };
 use serde_json::Value;
 
@@ -121,7 +122,7 @@ pub(crate) fn validate_runtime_started(
 
 pub(crate) fn require_matching_operation(
     session: &DurableAgentSession,
-    action: &str,
+    action: AgentLifecycleAction,
     operation_id: &str,
 ) -> Result<(), PersistenceError> {
     if session.lifecycle_intent_action == action && session.lifecycle_intent_id == operation_id {
@@ -134,9 +135,9 @@ pub(crate) fn require_matching_operation(
 }
 
 pub(crate) fn lifecycle_intent_is_empty(session: &DurableAgentSession) -> bool {
-    session.lifecycle_intent_action.is_empty()
+    session.lifecycle_intent_action.is_none()
         && session.lifecycle_intent_id.is_empty()
-        && session.lifecycle_intent_status.is_empty()
+        && session.lifecycle_intent_status.is_none()
 }
 
 pub(crate) fn agent_stop_requires_cleanup(session: &DurableAgentSession) -> bool {
@@ -151,12 +152,11 @@ pub(crate) fn agent_stop_requires_cleanup(session: &DurableAgentSession) -> bool
 
 pub(crate) fn require_intent(
     session: &DurableAgentSession,
-    action: &str,
+    action: AgentLifecycleAction,
     operation_id: &str,
-    status: &str,
+    status: AgentLifecycleIntentStatus,
     code: &'static str,
 ) -> Result<(), PersistenceError> {
-    let action = action.strip_prefix("agent.").unwrap_or(action);
     if session.lifecycle_intent_action != action
         || session.lifecycle_intent_id != operation_id
         || session.lifecycle_intent_status != status

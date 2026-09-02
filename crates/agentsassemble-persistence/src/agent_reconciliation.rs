@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, DurableAgentSession, Participant, ParticipantStatus, Room, RoomStatus,
-    canonical_payload_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, DurableAgentSession,
+    Participant, ParticipantStatus, Room, RoomStatus, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -303,40 +303,46 @@ fn validate_candidate_authority(
     {
         return Err(invalid_stored_authority());
     }
-    let lifecycle_fields = [
-        session.lifecycle_intent_action.as_str(),
-        session.lifecycle_intent_id.as_str(),
-        session.lifecycle_intent_status.as_str(),
+    let lifecycle_fields_empty = [
+        session.lifecycle_intent_action.is_none(),
+        session.lifecycle_intent_id.is_empty(),
+        session.lifecycle_intent_status.is_none(),
     ];
     let pending_reservations = reservations
         .iter()
         .filter(|reservation| reservation["status"].as_str() == Some("pending"))
         .count();
-    if lifecycle_fields.iter().all(|value| value.is_empty()) {
+    if lifecycle_fields_empty.iter().all(|empty| *empty) {
         return if pending_reservations == 0 {
             Ok(None)
         } else {
             Err(invalid_stored_authority())
         };
     }
-    if lifecycle_fields.iter().any(|value| value.is_empty())
-        || !matches!(session.lifecycle_intent_action.as_str(), "start" | "stop")
+    if lifecycle_fields_empty.iter().any(|empty| *empty)
         || !matches!(
             (
-                session.lifecycle_intent_action.as_str(),
-                session.lifecycle_intent_status.as_str()
+                session.lifecycle_intent_action,
+                session.lifecycle_intent_status
             ),
-            ("start", "prepared" | "effect_inflight" | "unconfirmed")
-                | (
-                    "stop",
-                    "prepared" | "effect_inflight" | "unconfirmed" | "effect_applied"
-                )
+            (
+                AgentLifecycleAction::Start,
+                AgentLifecycleIntentStatus::Prepared
+                    | AgentLifecycleIntentStatus::EffectInflight
+                    | AgentLifecycleIntentStatus::Unconfirmed
+            ) | (
+                AgentLifecycleAction::Stop,
+                AgentLifecycleIntentStatus::Prepared
+                    | AgentLifecycleIntentStatus::EffectInflight
+                    | AgentLifecycleIntentStatus::Unconfirmed
+                    | AgentLifecycleIntentStatus::EffectApplied
+            )
         )
     {
         return Err(invalid_stored_authority());
     }
     let mut matching_reservations = reservations.iter().filter(|reservation| {
-        reservation_matches_intent(reservation, &session.lifecycle_intent_action)
+        reservation_matches_intent(reservation, session.lifecycle_intent_action.as_str())
             && reservation["operation_id"].as_str() == Some(session.lifecycle_intent_id.as_str())
             && reservation["status"].as_str() == Some("pending")
     });
@@ -522,26 +528,30 @@ pub(crate) fn reconcile_observation(
 }
 
 pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, PersistenceError> {
-    if session.lifecycle_intent_action == "stop"
+    if session.lifecycle_intent_action == AgentLifecycleAction::Stop
         && matches!(
-            session.lifecycle_intent_status.as_str(),
-            "prepared" | "effect_inflight" | "unconfirmed"
+            session.lifecycle_intent_status,
+            AgentLifecycleIntentStatus::Prepared
+                | AgentLifecycleIntentStatus::EffectInflight
+                | AgentLifecycleIntentStatus::Unconfirmed
         )
     {
-        "effect_applied".clone_into(&mut session.lifecycle_intent_status);
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectApplied;
         reconcile_confirmed_stop(session)?;
         return Ok(true);
     }
-    if session.lifecycle_intent_action == "start"
+    if session.lifecycle_intent_action == AgentLifecycleAction::Start
         && matches!(
-            session.lifecycle_intent_status.as_str(),
-            "prepared" | "effect_inflight" | "unconfirmed"
+            session.lifecycle_intent_status,
+            AgentLifecycleIntentStatus::Prepared
+                | AgentLifecycleIntentStatus::EffectInflight
+                | AgentLifecycleIntentStatus::Unconfirmed
         )
     {
         session.runtime_handle_id.clear();
         session.runtime_owner_id.clear();
         session.runtime_lease_token.clear();
-        "prepared".clone_into(&mut session.lifecycle_intent_status);
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
         "starting".clone_into(&mut session.public.runtime_status);
         session.public.provider_session_active = false;
         session.public.updated_at = Utc::now();
@@ -591,8 +601,8 @@ pub(crate) fn validate_adoption(
 }
 
 fn needs_reconciliation(session: &DurableAgentSession) -> bool {
-    if session.lifecycle_intent_action == "stop"
-        && session.lifecycle_intent_status == "effect_applied"
+    if session.lifecycle_intent_action == AgentLifecycleAction::Stop
+        && session.lifecycle_intent_status == AgentLifecycleIntentStatus::EffectApplied
     {
         return confirmed_stop_needs_reconciliation(session);
     }
@@ -600,14 +610,14 @@ fn needs_reconciliation(session: &DurableAgentSession) -> bool {
         || !session.runtime_handle_id.is_empty()
         || !session.runtime_owner_id.is_empty()
         || !session.runtime_lease_token.is_empty()
-        || !session.lifecycle_intent_action.is_empty()
+        || !session.lifecycle_intent_action.is_none()
         || !session.lifecycle_intent_id.is_empty()
-        || !session.lifecycle_intent_status.is_empty()
+        || !session.lifecycle_intent_status.is_none()
 }
 
 fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
-    session.lifecycle_intent_action == "stop"
-        && session.lifecycle_intent_status == "effect_applied"
+    session.lifecycle_intent_action == AgentLifecycleAction::Stop
+        && session.lifecycle_intent_status == AgentLifecycleIntentStatus::EffectApplied
         && (!session.runtime_handle_id.is_empty()
             || !session.runtime_owner_id.is_empty()
             || !session.runtime_lease_token.is_empty()
@@ -637,13 +647,14 @@ fn reconcile_confirmed_stop(session: &mut DurableAgentSession) -> Result<(), Per
 
 fn retain_uncertain_runtime(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
     merge_inflight_events(session)?;
-    if matches!(session.lifecycle_intent_action.as_str(), "start" | "stop")
-        && matches!(
-            session.lifecycle_intent_status.as_str(),
-            "prepared" | "effect_inflight"
-        )
-    {
-        "unconfirmed".clone_into(&mut session.lifecycle_intent_status);
+    if matches!(
+        session.lifecycle_intent_action,
+        AgentLifecycleAction::Start | AgentLifecycleAction::Stop
+    ) && matches!(
+        session.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::Prepared | AgentLifecycleIntentStatus::EffectInflight
+    ) {
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::Unconfirmed;
     }
     "unavailable".clone_into(&mut session.public.status);
     session.public.enabled = false;
@@ -664,9 +675,9 @@ fn disconnect_after_restart(session: &mut DurableAgentSession) -> Result<(), Per
     "Server restarted without a current owned provider handle."
         .clone_into(&mut session.public.last_error);
     "server_restarted".clone_into(&mut session.public.last_error_code);
-    session.lifecycle_intent_action.clear();
+    session.lifecycle_intent_action = AgentLifecycleAction::None;
     session.lifecycle_intent_id.clear();
-    session.lifecycle_intent_status.clear();
+    session.lifecycle_intent_status = AgentLifecycleIntentStatus::None;
     Ok(())
 }
 

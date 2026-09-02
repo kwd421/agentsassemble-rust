@@ -1,6 +1,7 @@
 use agentsassemble_domain::{
-    AgentSessionDraft, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, ClientKind,
-    DurableAgentSession, Participant, canonical_payload_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSessionDraft, AuthenticatedPrincipal,
+    CURRENT_RUNTIME_PROFILE_VERSION, ClientKind, DurableAgentSession, Participant,
+    canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -173,9 +174,9 @@ fn apply_draft(
         .runtime_profile_key
         .clone_from(&draft.runtime_profile_key);
     session.runtime_profile_version = CURRENT_RUNTIME_PROFILE_VERSION;
-    session.lifecycle_intent_action.clear();
+    session.lifecycle_intent_action = AgentLifecycleAction::None;
     session.lifecycle_intent_id.clear();
-    session.lifecycle_intent_status.clear();
+    session.lifecycle_intent_status = AgentLifecycleIntentStatus::None;
 }
 
 fn require_agent_control(principal: &AuthenticatedPrincipal) -> Result<(), PersistenceError> {
@@ -214,9 +215,9 @@ fn require_stopped_profile(session: &DurableAgentSession) -> Result<(), Persiste
         && session.runtime_handle_id.is_empty()
         && session.runtime_owner_id.is_empty()
         && session.runtime_lease_token.is_empty()
-        && session.lifecycle_intent_action.is_empty()
+        && session.lifecycle_intent_action.is_none()
         && session.lifecycle_intent_id.is_empty()
-        && session.lifecycle_intent_status.is_empty();
+        && session.lifecycle_intent_status.is_none();
     if !stopped {
         return Err(rejected(
             "runtime_profile_conflict",

@@ -1,4 +1,6 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, canonical_payload_hash};
+use agentsassemble_domain::{
+    AgentLifecycleIntentStatus, AuthenticatedPrincipal, canonical_payload_hash,
+};
 use serde_json::Value;
 
 use crate::{
@@ -43,8 +45,9 @@ impl SqliteStore {
             || reservation.action != action
             || reservation.payload != *payload
             || !matches!(
-                candidate.session.lifecycle_intent_status.as_str(),
-                "effect_inflight" | "unconfirmed"
+                candidate.session.lifecycle_intent_status,
+                AgentLifecycleIntentStatus::EffectInflight
+                    | AgentLifecycleIntentStatus::Unconfirmed
             )
         {
             return Err(PersistenceError::CommandConflict);

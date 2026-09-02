@@ -4,6 +4,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
+
+use crate::{AgentLifecycleAction, AgentLifecycleIntentStatus};
 use uuid::Uuid;
 
 use crate::{QueuedRoomInput, persona::PersonaAssetSummary};
@@ -379,9 +381,9 @@ pub struct DurableAgentSession {
     pub active_source_event_id: String,
     pub input_up_to_event_id: String,
     pub input_up_to_seq: i64,
-    pub lifecycle_intent_action: String,
+    pub lifecycle_intent_action: AgentLifecycleAction,
     pub lifecycle_intent_id: String,
-    pub lifecycle_intent_status: String,
+    pub lifecycle_intent_status: AgentLifecycleIntentStatus,
 }
 
 #[derive(Deserialize)]
@@ -406,9 +408,9 @@ struct RawDurableAgentSession {
     active_source_event_id: String,
     input_up_to_event_id: String,
     input_up_to_seq: i64,
-    lifecycle_intent_action: String,
+    lifecycle_intent_action: AgentLifecycleAction,
     lifecycle_intent_id: String,
-    lifecycle_intent_status: String,
+    lifecycle_intent_status: AgentLifecycleIntentStatus,
     #[serde(flatten)]
     unknown: BTreeMap<String, Value>,
 }

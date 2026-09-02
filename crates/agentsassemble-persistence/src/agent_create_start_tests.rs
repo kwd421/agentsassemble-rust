@@ -1,9 +1,9 @@
 use std::{fs::File, path::Path};
 
 use agentsassemble_domain::{
-    AgentSession, AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind,
-    InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, RoomEvent, stable_content_identity,
-    stable_identity_hash,
+    AgentLifecycleIntentStatus, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
+    CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, RoomEvent,
+    stable_content_identity, stable_identity_hash,
 };
 use same_file::Handle;
 use serde_json::{Value, json};
@@ -443,7 +443,10 @@ async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
     .unwrap_or_else(|error| panic!("read retained session: {error}"));
     let session = serde_json::from_str::<agentsassemble_domain::DurableAgentSession>(&encoded)
         .unwrap_or_else(|error| panic!("decode retained session: {error}"));
-    assert_eq!(session.lifecycle_intent_status, "unconfirmed");
+    assert_eq!(
+        session.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::Unconfirmed
+    );
 }
 
 #[tokio::test]

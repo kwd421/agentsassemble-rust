@@ -1,4 +1,7 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, DurableAgentSession, canonical_payload_hash};
+use agentsassemble_domain::{
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, DurableAgentSession,
+    canonical_payload_hash,
+};
 use chrono::Utc;
 use serde_json::Value;
 
@@ -23,9 +26,9 @@ pub(crate) fn authorize_start_effect(
 ) -> Result<(), PersistenceError> {
     require_intent(
         session,
-        START,
+        AgentLifecycleAction::Start,
         operation_id,
-        "prepared",
+        AgentLifecycleIntentStatus::Prepared,
         "stale_start_authorization",
     )?;
     if runtime_handle_id.is_empty()
@@ -55,7 +58,7 @@ pub(crate) fn authorize_start_effect(
     session.public.last_error.clear();
     session.public.last_error_code.clear();
     session.public.recovery_required = false;
-    "effect_inflight".clone_into(&mut session.lifecycle_intent_status);
+    session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectInflight;
     Ok(())
 }
 
@@ -190,15 +193,15 @@ impl SqliteStore {
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_intent(
             &session,
-            STOP,
+            AgentLifecycleAction::Stop,
             operation_id,
-            "prepared",
+            AgentLifecycleIntentStatus::Prepared,
             "stale_stop_authorization",
         )?;
         let effect = stop_effect(&session)?;
         "stopping".clone_into(&mut session.public.runtime_status);
         session.public.enabled = false;
-        "effect_inflight".clone_into(&mut session.lifecycle_intent_status);
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectInflight;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         transaction.commit().await?;

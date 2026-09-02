@@ -1,6 +1,6 @@
 use std::time::Duration;
 
-use agentsassemble_domain::AuthenticatedPrincipal;
+use agentsassemble_domain::{AgentLifecycleIntentStatus, AuthenticatedPrincipal};
 use agentsassemble_persistence::{
     AgentTurnAssignment, LiveRuntimeReconciliation, PersistenceError,
     ProviderTurnReconciliationCursor, RuntimeReconciliationCandidate, RuntimeReconciliationCursor,
@@ -51,13 +51,13 @@ pub fn reconcile_runtime_ownership<'a>(
         let mut observed_candidates = Vec::new();
         let mut assignments = Vec::new();
         for candidate in candidates {
-            match candidate.session.lifecycle_intent_status.as_str() {
-                "prepared" => {
+            match candidate.session.lifecycle_intent_status {
+                AgentLifecycleIntentStatus::Prepared => {
                     store
                         .reject_abandoned_lifecycle_before_effect(&candidate)
                         .await?;
                 }
-                "effect_applied" => assignments
+                AgentLifecycleIntentStatus::EffectApplied => assignments
                     .extend(commit_startup_gone(store, provider_adapter, &candidate).await?),
                 _ => observed_candidates.push(candidate),
             }
@@ -214,17 +214,18 @@ fn reconcile_dynamic_candidates<'a>(
             let Some(command_owner) = claim_candidate(rooms, &candidate) else {
                 continue;
             };
-            match candidate.session.lifecycle_intent_status.as_str() {
-                "prepared" => {
+            match candidate.session.lifecycle_intent_status {
+                AgentLifecycleIntentStatus::Prepared => {
                     commit_abandoned_pre_effect(store, rooms, &candidate).await;
                 }
-                "effect_applied" => {
+                AgentLifecycleIntentStatus::EffectApplied => {
                     commit_and_publish_gone(store, provider_adapter, rooms, &candidate).await;
                 }
-                "effect_inflight" | "unconfirmed" => {
+                AgentLifecycleIntentStatus::EffectInflight
+                | AgentLifecycleIntentStatus::Unconfirmed => {
                     needs_observation.push((candidate, command_owner));
                 }
-                _ => {}
+                AgentLifecycleIntentStatus::None => {}
             }
         }
         let observed = stream::iter(needs_observation)

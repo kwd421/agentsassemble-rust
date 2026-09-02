@@ -1,3 +1,4 @@
+use agentsassemble_domain::AgentLifecycleIntentStatus;
 use serde_json::json;
 
 use super::{
@@ -93,7 +94,10 @@ async fn exact_effect_inflight_replay_remains_live_recovery_authority() {
         )
         .await
         .unwrap_or_else(|error| panic!("load effect-inflight candidate: {error}"));
-    assert_eq!(candidate.session.lifecycle_intent_status, "effect_inflight");
+    assert_eq!(
+        candidate.session.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::EffectInflight
+    );
     assert_eq!(
         store
             .apply_live_runtime_reconciliation(&candidate, &RuntimeReconciliationObservation::Gone)

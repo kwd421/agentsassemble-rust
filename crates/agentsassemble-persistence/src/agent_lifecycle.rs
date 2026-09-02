@@ -1,6 +1,7 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
-    ParticipantStatus, canonical_payload_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal,
+    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantStatus,
+    canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -163,9 +164,9 @@ impl SqliteStore {
             session.public.last_error.clear();
             session.public.last_error_code.clear();
             session.public.recovery_required = false;
-            "start".clone_into(&mut session.lifecycle_intent_action);
+            session.lifecycle_intent_action = AgentLifecycleAction::Start;
             session.lifecycle_intent_id.clone_from(&operation_id);
-            "prepared".clone_into(&mut session.lifecycle_intent_status);
+            session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
             session.public.updated_at = Utc::now();
             save_session(&mut transaction, &session).await?;
             operation_id
@@ -255,9 +256,9 @@ impl SqliteStore {
         validate_runtime_started(&session, started)?;
         require_intent(
             &session,
-            START,
+            AgentLifecycleAction::Start,
             &expected_operation_id,
-            "effect_inflight",
+            AgentLifecycleIntentStatus::EffectInflight,
             "stale_start_confirmation",
         )?;
         let reservation = LifecycleReservation::new(
@@ -301,10 +302,12 @@ fn matching_start_intent(
     if lifecycle_intent_is_empty(session) {
         return Ok(false);
     }
-    require_matching_operation(session, "start", operation_id)?;
-    match session.lifecycle_intent_status.as_str() {
-        "prepared" => Ok(true),
-        "effect_inflight" | "unconfirmed" => Err(unresolved_effect()),
+    require_matching_operation(session, AgentLifecycleAction::Start, operation_id)?;
+    match session.lifecycle_intent_status {
+        AgentLifecycleIntentStatus::Prepared => Ok(true),
+        AgentLifecycleIntentStatus::EffectInflight | AgentLifecycleIntentStatus::Unconfirmed => {
+            Err(unresolved_effect())
+        }
         _ => Err(rejected(
             "invalid_state",
             "Stored provider start intent is invalid.",
@@ -313,9 +316,9 @@ fn matching_start_intent(
 }
 
 pub(crate) fn clear_intent(session: &mut DurableAgentSession) {
-    session.lifecycle_intent_action.clear();
+    session.lifecycle_intent_action = AgentLifecycleAction::None;
     session.lifecycle_intent_id.clear();
-    session.lifecycle_intent_status.clear();
+    session.lifecycle_intent_status = AgentLifecycleIntentStatus::None;
 }
 
 pub(crate) fn require_valid_turn_authority(

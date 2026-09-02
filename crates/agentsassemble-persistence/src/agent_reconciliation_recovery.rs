@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use agentsassemble_domain::DurableAgentSession;
+use agentsassemble_domain::{
+    AgentLifecycleAction, AgentLifecycleIntentStatus, DurableAgentSession,
+};
 use chrono::Utc;
 use serde_json::json;
 
@@ -44,21 +46,21 @@ async fn reject_abandoned_in_transaction(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     current: RuntimeReconciliationCandidate,
 ) -> Result<(), PersistenceError> {
-    if current.session.lifecycle_intent_status != "prepared" {
+    if current.session.lifecycle_intent_status != AgentLifecycleIntentStatus::Prepared {
         return Err(stale_candidate());
     }
     let reservation = current
         .reservation
         .as_ref()
         .ok_or_else(invalid_stored_authority)?;
-    let (code, message) = match current.session.lifecycle_intent_action.as_str() {
-        "start" => (ABANDONED_START_CODE, ABANDONED_START_MESSAGE),
-        "stop" => (ABANDONED_STOP_CODE, ABANDONED_STOP_MESSAGE),
-        _ => return Err(invalid_stored_authority()),
+    let (code, message) = match current.session.lifecycle_intent_action {
+        AgentLifecycleAction::Start => (ABANDONED_START_CODE, ABANDONED_START_MESSAGE),
+        AgentLifecycleAction::Stop => (ABANDONED_STOP_CODE, ABANDONED_STOP_MESSAGE),
+        AgentLifecycleAction::None => return Err(invalid_stored_authority()),
     };
     reject_lifecycle_command(transaction, &reservation_ref(reservation), code, message).await?;
     let mut session = current.session;
-    if session.lifecycle_intent_action == "start"
+    if session.lifecycle_intent_action == AgentLifecycleAction::Start
         && session.runtime_handle_id.is_empty()
         && session.runtime_owner_id.is_empty()
         && session.runtime_lease_token.is_empty()
@@ -113,7 +115,7 @@ async fn apply_reconciliation(
 ) -> Result<Vec<AgentTurnAssignment>, PersistenceError> {
     let mut transaction = store.pool.begin().await?;
     let current = current_candidate(&mut transaction, candidate).await?;
-    if current.session.lifecycle_intent_status == "prepared" {
+    if current.session.lifecycle_intent_status == AgentLifecycleIntentStatus::Prepared {
         reject_abandoned_in_transaction(&mut transaction, current).await?;
         transaction.commit().await?;
         return Ok(Vec::new());
@@ -127,10 +129,12 @@ async fn apply_reconciliation(
         return Ok(assignments);
     }
     if observation == &RuntimeReconciliationObservation::Gone
-        && session.lifecycle_intent_action == "start"
+        && session.lifecycle_intent_action == AgentLifecycleAction::Start
         && matches!(
-            session.lifecycle_intent_status.as_str(),
-            "prepared" | "effect_inflight" | "unconfirmed"
+            session.lifecycle_intent_status,
+            AgentLifecycleIntentStatus::Prepared
+                | AgentLifecycleIntentStatus::EffectInflight
+                | AgentLifecycleIntentStatus::Unconfirmed
         )
     {
         reject_recovered_start(&mut transaction, &mut session, &current).await?;
@@ -175,8 +179,8 @@ pub(crate) async fn apply_live_reconciliation(
     }
     let mut session = current.session;
     if !matches!(
-        session.lifecycle_intent_status.as_str(),
-        "effect_inflight" | "unconfirmed"
+        session.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::EffectInflight | AgentLifecycleIntentStatus::Unconfirmed
     ) || session.lifecycle_intent_id != reservation.operation_id
     {
         return Err(stale_candidate());
@@ -200,7 +204,7 @@ pub(crate) async fn apply_live_reconciliation(
             previous_owner_id,
             new_owner_id,
             runtime_profile_key,
-        } if session.lifecycle_intent_action == "start" => {
+        } if session.lifecycle_intent_action == AgentLifecycleAction::Start => {
             validate_adoption(
                 &session,
                 handle_id,
@@ -217,7 +221,7 @@ pub(crate) async fn apply_live_reconciliation(
             session.public.last_error.clear();
             session.public.last_error_code.clear();
             session.public.recovery_required = false;
-            "prepared".clone_into(&mut session.lifecycle_intent_status);
+            session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
             session.public.updated_at = Utc::now();
             save_reconciled_session(&mut transaction, &session).await?;
             true
@@ -281,12 +285,14 @@ fn recovered_stop_is_terminal(
     session: &DurableAgentSession,
     observation: &RuntimeReconciliationObservation,
 ) -> bool {
-    session.lifecycle_intent_action == "stop"
-        && (session.lifecycle_intent_status == "effect_applied"
+    session.lifecycle_intent_action == AgentLifecycleAction::Stop
+        && (session.lifecycle_intent_status == AgentLifecycleIntentStatus::EffectApplied
             || (observation == &RuntimeReconciliationObservation::Gone
                 && matches!(
-                    session.lifecycle_intent_status.as_str(),
-                    "prepared" | "effect_inflight" | "unconfirmed"
+                    session.lifecycle_intent_status,
+                    AgentLifecycleIntentStatus::Prepared
+                        | AgentLifecycleIntentStatus::EffectInflight
+                        | AgentLifecycleIntentStatus::Unconfirmed
                 )))
 }
 

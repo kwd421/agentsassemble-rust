@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    DurableAgentSession, Participant, QueuedRoomInput, RoomInputDeliveryKind,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, DurableAgentSession, Participant,
+    QueuedRoomInput, RoomInputDeliveryKind,
 };
 use serde_json::{Value, json};
 
@@ -167,8 +168,14 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
         .unwrap_or_else(|| panic!("ambiguous start lease was released"));
     assert_eq!(retained.session.runtime_handle_id, "uncertain-runtime");
     assert_eq!(retained.session.runtime_owner_id, "supervisor-instance-1");
-    assert_eq!(retained.session.lifecycle_intent_action, "start");
-    assert_eq!(retained.session.lifecycle_intent_status, "unconfirmed");
+    assert_eq!(
+        retained.session.lifecycle_intent_action,
+        AgentLifecycleAction::Start
+    );
+    assert_eq!(
+        retained.session.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::Unconfirmed
+    );
     store
         .apply_runtime_reconciliation(
             &retained,
@@ -206,7 +213,10 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
         .unwrap_or_else(|| panic!("unresolved replay released the runtime lease"));
     assert_eq!(unchanged.session.runtime_handle_id, "uncertain-runtime");
     assert_eq!(unchanged.session.runtime_owner_id, "supervisor-instance-1");
-    assert_eq!(unchanged.session.lifecycle_intent_status, "unconfirmed");
+    assert_eq!(
+        unchanged.session.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::Unconfirmed
+    );
 }
 
 #[tokio::test]
@@ -672,8 +682,8 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     .unwrap_or_else(|error| panic!("read reconciled stop: {error}"));
     let durable = serde_json::from_str::<DurableAgentSession>(&encoded)
         .unwrap_or_else(|error| panic!("decode reconciled stop: {error}"));
-    assert!(durable.lifecycle_intent_action.is_empty());
-    assert!(durable.lifecycle_intent_status.is_empty());
+    assert!(durable.lifecycle_intent_action.is_none());
+    assert!(durable.lifecycle_intent_status.is_none());
     assert!(durable.runtime_handle_id.is_empty());
     assert!(durable.runtime_owner_id.is_empty());
     assert!(!durable.public.provider_session_active);

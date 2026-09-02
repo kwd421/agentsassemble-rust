@@ -326,7 +326,7 @@ fn route_session_is_eligible(session: &DurableAgentSession, participant: &Partic
         && session.public.status == "attached"
         && matches!(session.public.runtime_status.as_str(), "idle" | "busy")
         && session.public.provider_session_active
-        && session.lifecycle_intent_action.is_empty()
+        && session.lifecycle_intent_action.is_none()
 }
 
 async fn recent_agent_speaking_state(
@@ -396,7 +396,7 @@ fn session_is_assignable(session: &DurableAgentSession) -> bool {
         && session.public.provider_session_active
         && session.public.active_turn_id.is_empty()
         && session.inflight_inputs.is_empty()
-        && session.lifecycle_intent_action.is_empty()
+        && session.lifecycle_intent_action.is_none()
 }
 
 fn turn_authority_is_active(session: &DurableAgentSession) -> Result<bool, PersistenceError> {

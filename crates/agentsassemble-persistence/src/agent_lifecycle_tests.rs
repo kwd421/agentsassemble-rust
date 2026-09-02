@@ -1,7 +1,8 @@
 use agentsassemble_domain::{
-    AgentSession, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet,
-    ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant,
-    ParticipantRole, ParticipantStatus, QueuedRoomInput, RoomInputDeliveryKind,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession, AuthenticatedPrincipal,
+    CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
+    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantRole, ParticipantStatus,
+    QueuedRoomInput, RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -119,9 +120,9 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         active_source_event_id: String::new(),
         input_up_to_event_id: String::new(),
         input_up_to_seq: 0,
-        lifecycle_intent_action: String::new(),
+        lifecycle_intent_action: AgentLifecycleAction::None,
         lifecycle_intent_id: String::new(),
-        lifecycle_intent_status: String::new(),
+        lifecycle_intent_status: AgentLifecycleIntentStatus::None,
     };
     sqlx::query(
         "INSERT INTO participants(room_id, participant_id, participant_json) VALUES (?, ?, ?)",
@@ -160,7 +161,10 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     assert!(effect.operation_id.starts_with("identity-v1-"));
     assert_ne!(effect.operation_id, "start-lifecycle");
     assert_eq!(effect.session.public.runtime_status, "starting");
-    assert_eq!(effect.session.lifecycle_intent_status, "prepared");
+    assert_eq!(
+        effect.session.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::Prepared
+    );
     let started = AgentRuntimeStarted {
         runtime_handle_id: "owned-runtime-1".to_owned(),
         runtime_owner_id: "supervisor-instance-1".to_owned(),
@@ -276,7 +280,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         .unwrap_or_else(|error| panic!("decode stopped session: {error}"));
     assert_eq!(durable.provider_session_id, "provider-thread-1");
     assert!(durable.runtime_handle_id.is_empty());
-    assert!(durable.lifecycle_intent_action.is_empty());
+    assert!(durable.lifecycle_intent_action.is_none());
     let reservations = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM lifecycle_command_reservations WHERE room_id = 'general'",
     )
@@ -501,8 +505,11 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
     assert_eq!(durable.provider_session_id, "provider-thread-preserved");
     assert_eq!(durable.runtime_handle_id, "runtime-before-ambiguous-stop");
     assert_eq!(durable.runtime_owner_id, "supervisor-instance-1");
-    assert_eq!(durable.lifecycle_intent_action, "stop");
-    assert_eq!(durable.lifecycle_intent_status, "unconfirmed");
+    assert_eq!(durable.lifecycle_intent_action, AgentLifecycleAction::Stop);
+    assert_eq!(
+        durable.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::Unconfirmed
+    );
     assert!(matches!(
         store
             .prepare_agent_start(&principal, "replacement-start", &payload)
@@ -568,8 +575,11 @@ async fn assert_ambiguous_owner_was_retained(store: &SqliteStore) {
         .unwrap_or_else(|error| panic!("decode retained ambiguous session: {error}"));
     assert_eq!(retained.runtime_handle_id, "runtime-before-ambiguous-stop");
     assert_eq!(retained.runtime_owner_id, "supervisor-instance-1");
-    assert_eq!(retained.lifecycle_intent_action, "stop");
-    assert_eq!(retained.lifecycle_intent_status, "unconfirmed");
+    assert_eq!(retained.lifecycle_intent_action, AgentLifecycleAction::Stop);
+    assert_eq!(
+        retained.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::Unconfirmed
+    );
     assert_eq!(
         retained.public.last_error_code,
         "runtime_authority_uncertain"

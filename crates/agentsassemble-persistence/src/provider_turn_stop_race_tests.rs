@@ -1,4 +1,4 @@
-use agentsassemble_domain::ParticipantRole;
+use agentsassemble_domain::{AgentLifecycleAction, AgentLifecycleIntentStatus, ParticipantRole};
 use chrono::Utc;
 use serde_json::json;
 
@@ -106,10 +106,13 @@ async fn runtime_gone_checkpoint_yields_to_an_inflight_stop_owner() {
     );
     assert!(execution.requeue_finalized);
     let checkpointed_session = stored_session(&store).await;
-    assert_eq!(checkpointed_session.lifecycle_intent_action, "stop");
+    assert_eq!(
+        checkpointed_session.lifecycle_intent_action,
+        AgentLifecycleAction::Stop
+    );
     assert_eq!(
         checkpointed_session.lifecycle_intent_status,
-        "effect_applied"
+        AgentLifecycleIntentStatus::EffectApplied
     );
     assert_eq!(
         checkpointed_session.public.active_turn_id,
@@ -208,6 +211,9 @@ async fn runtime_gone_rejects_a_stop_intent_without_its_exact_reservation() {
     assert_eq!(execution.phase, crate::ProviderTurnExecutionPhase::Running);
     assert!(!execution.requeue_finalized);
     let unchanged = stored_session(&store).await;
-    assert_eq!(unchanged.lifecycle_intent_status, "effect_inflight");
+    assert_eq!(
+        unchanged.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::EffectInflight
+    );
     assert_eq!(count_events_containing(&store, "operator_stop").await, 0);
 }

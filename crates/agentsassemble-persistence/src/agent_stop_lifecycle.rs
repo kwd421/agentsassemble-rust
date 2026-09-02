@@ -1,8 +1,8 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, RoomEvent,
-    canonical_payload_hash, redact_persisted_diagnostic_text,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, DurableAgentSession,
+    ParticipantStatus, RoomEvent, canonical_payload_hash, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -91,19 +91,20 @@ impl SqliteStore {
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
         if !lifecycle_intent_is_empty(&session) {
-            require_matching_operation(&session, "stop", &operation_id)?;
-            if session.lifecycle_intent_status == "effect_applied" {
+            require_matching_operation(&session, AgentLifecycleAction::Stop, &operation_id)?;
+            if session.lifecycle_intent_status == AgentLifecycleIntentStatus::EffectApplied {
                 transaction.commit().await?;
                 return Ok(AgentStopPlan::Finalize);
             }
-            if session.lifecycle_intent_status == "prepared" {
+            if session.lifecycle_intent_status == AgentLifecycleIntentStatus::Prepared {
                 let effect = stop_effect(&session)?;
                 transaction.commit().await?;
                 return Ok(AgentStopPlan::Stop(effect));
             }
             if matches!(
-                session.lifecycle_intent_status.as_str(),
-                "effect_inflight" | "unconfirmed"
+                session.lifecycle_intent_status,
+                AgentLifecycleIntentStatus::EffectInflight
+                    | AgentLifecycleIntentStatus::Unconfirmed
             ) {
                 return Err(unresolved_effect());
             }
@@ -112,9 +113,9 @@ impl SqliteStore {
                 "Stored provider stop intent is invalid.",
             ));
         }
-        "stop".clone_into(&mut session.lifecycle_intent_action);
+        session.lifecycle_intent_action = AgentLifecycleAction::Stop;
         session.lifecycle_intent_id.clone_from(&operation_id);
-        "prepared".clone_into(&mut session.lifecycle_intent_status);
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let effect = stop_effect(&session)?;
@@ -135,21 +136,22 @@ impl SqliteStore {
     ) -> Result<(), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let mut session = load_session(&mut transaction, room_id, session_id).await?;
-        let expected_status = if session.lifecycle_intent_status == "effect_applied" {
-            "effect_applied"
-        } else {
-            "effect_inflight"
-        };
+        let expected_status =
+            if session.lifecycle_intent_status == AgentLifecycleIntentStatus::EffectApplied {
+                AgentLifecycleIntentStatus::EffectApplied
+            } else {
+                AgentLifecycleIntentStatus::EffectInflight
+            };
         require_intent(
             &session,
-            STOP,
+            AgentLifecycleAction::Stop,
             operation_id,
             expected_status,
             "stale_stop_confirmation",
         )?;
         crate::provider_turn_stop::terminalize_confirmed_stop_turn(&mut transaction, &session)
             .await?;
-        "effect_applied".clone_into(&mut session.lifecycle_intent_status);
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectApplied;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         transaction.commit().await?;
@@ -174,9 +176,9 @@ impl SqliteStore {
         let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
         require_intent(
             &session,
-            STOP,
+            AgentLifecycleAction::Stop,
             operation_id,
-            "effect_inflight",
+            AgentLifecycleIntentStatus::EffectInflight,
             "stale_stop_confirmation",
         )?;
         let active_turn = active_turn_authority(&session).map_err(|_| invalid_turn_queue())?;
@@ -201,7 +203,7 @@ impl SqliteStore {
         }
         session.public.last_error_code = error_code.to_owned();
         session.public.recovery_required = true;
-        "unconfirmed".clone_into(&mut session.lifecycle_intent_status);
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::Unconfirmed;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let mut participant =
@@ -258,9 +260,9 @@ impl SqliteStore {
         let operation_id = lifecycle_operation_id(principal, request_id, STOP);
         require_intent(
             &session,
-            "stop",
+            AgentLifecycleAction::Stop,
             &operation_id,
-            "effect_applied",
+            AgentLifecycleIntentStatus::EffectApplied,
             "stale_stop_confirmation",
         )?;
         let reservation = LifecycleReservation::new(

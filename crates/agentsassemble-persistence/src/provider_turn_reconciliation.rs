@@ -1,6 +1,9 @@
 use std::collections::HashSet;
 
-use agentsassemble_domain::{DurableAgentSession, ParticipantStatus, has_visible_text};
+use agentsassemble_domain::{
+    AgentLifecycleAction, AgentLifecycleIntentStatus, DurableAgentSession, ParticipantStatus,
+    has_visible_text,
+};
 use chrono::{SecondsFormat, Utc};
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -398,7 +401,7 @@ impl SqliteStore {
             crate::provider_turn_stop::terminalize_confirmed_stop_turn(&mut transaction, &session)
                 .await?;
             let mut session = session;
-            "effect_applied".clone_into(&mut session.lifecycle_intent_status);
+            session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectApplied;
             session.public.updated_at = Utc::now();
             save_session(&mut transaction, &session).await?;
             transaction.commit().await?;
@@ -437,10 +440,12 @@ async fn stop_effect_is_confirmed_by_runtime_gone(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<bool, PersistenceError> {
-    if session.lifecycle_intent_action != "stop"
+    if session.lifecycle_intent_action != AgentLifecycleAction::Stop
         || !matches!(
-            session.lifecycle_intent_status.as_str(),
-            "effect_inflight" | "unconfirmed" | "effect_applied"
+            session.lifecycle_intent_status,
+            AgentLifecycleIntentStatus::EffectInflight
+                | AgentLifecycleIntentStatus::Unconfirmed
+                | AgentLifecycleIntentStatus::EffectApplied
         )
     {
         return Ok(false);

@@ -1,3 +1,4 @@
+use agentsassemble_domain::AgentLifecycleIntentStatus;
 use sqlx::Row;
 
 use crate::{
@@ -73,8 +74,11 @@ impl SqliteStore {
                 continue;
             };
             if matches!(
-                candidate.session.lifecycle_intent_status.as_str(),
-                "prepared" | "effect_inflight" | "unconfirmed" | "effect_applied"
+                candidate.session.lifecycle_intent_status,
+                AgentLifecycleIntentStatus::Prepared
+                    | AgentLifecycleIntentStatus::EffectInflight
+                    | AgentLifecycleIntentStatus::Unconfirmed
+                    | AgentLifecycleIntentStatus::EffectApplied
             ) && candidate.reservation.is_some()
             {
                 candidates.push(candidate);

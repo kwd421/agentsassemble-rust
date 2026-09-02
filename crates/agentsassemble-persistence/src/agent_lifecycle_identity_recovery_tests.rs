@@ -1,3 +1,4 @@
+use agentsassemble_domain::AgentLifecycleIntentStatus;
 use serde_json::{Value, json};
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan};
@@ -148,7 +149,10 @@ async fn unconfirmed_start_rejects_a_substituted_runtime_identity() {
         .pop()
         .unwrap_or_else(|| panic!("identity-bound start lost its candidate"));
     assert_eq!(current.session.runtime_handle_id, "authorized-runtime");
-    assert_eq!(current.session.lifecycle_intent_status, "effect_inflight");
+    assert_eq!(
+        current.session.lifecycle_intent_status,
+        AgentLifecycleIntentStatus::EffectInflight
+    );
 }
 
 #[tokio::test]

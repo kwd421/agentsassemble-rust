@@ -108,7 +108,8 @@ fn stale_provider_turn() -> PersistenceError {
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::{
-        AgentSession, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
+        AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession,
+        CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
     };
     use chrono::Utc;
 
@@ -176,9 +177,9 @@ mod tests {
             active_source_event_id: String::new(),
             input_up_to_event_id: String::new(),
             input_up_to_seq: 0,
-            lifecycle_intent_action: String::new(),
+            lifecycle_intent_action: AgentLifecycleAction::None,
             lifecycle_intent_id: String::new(),
-            lifecycle_intent_status: String::new(),
+            lifecycle_intent_status: AgentLifecycleIntentStatus::None,
         };
         assert!(active_turn_authority(&session).is_err());
         "idle".clone_into(&mut session.public.runtime_status);

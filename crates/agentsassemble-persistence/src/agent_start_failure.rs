@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, RoomEvent, canonical_payload_hash, redact_persisted_diagnostic_text,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, RoomEvent,
+    canonical_payload_hash, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -76,7 +77,7 @@ impl SqliteStore {
             command_action,
             reservation_phase,
             prepared_result_json,
-            "prepared",
+            AgentLifecycleIntentStatus::Prepared,
             false,
         )
         .await
@@ -188,7 +189,7 @@ impl SqliteStore {
             command_action,
             reservation_phase,
             prepared_result_json,
-            "effect_inflight",
+            AgentLifecycleIntentStatus::EffectInflight,
             true,
         )
         .await
@@ -207,7 +208,7 @@ impl SqliteStore {
         command_action: &'static str,
         reservation_phase: &str,
         prepared_result_json: &str,
-        expected_status: &str,
+        expected_status: AgentLifecycleIntentStatus,
         clear_runtime_identity: bool,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
@@ -215,7 +216,7 @@ impl SqliteStore {
         let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
         require_intent(
             &session,
-            START,
+            AgentLifecycleAction::Start,
             operation_id,
             expected_status,
             "stale_start_confirmation",
@@ -300,9 +301,9 @@ impl SqliteStore {
         let mut session = load_session(&mut transaction, &principal.room_id, agent_id).await?;
         require_intent(
             &session,
-            START,
+            AgentLifecycleAction::Start,
             operation_id,
-            "effect_inflight",
+            AgentLifecycleIntentStatus::EffectInflight,
             "stale_start_confirmation",
         )?;
         if runtime_handle_id.is_empty()
@@ -328,7 +329,7 @@ impl SqliteStore {
         }
         session.public.last_error_code = error_code.to_owned();
         session.public.recovery_required = true;
-        "unconfirmed".clone_into(&mut session.lifecycle_intent_status);
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::Unconfirmed;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let error = append_error_event(

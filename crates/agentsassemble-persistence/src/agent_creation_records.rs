@@ -1,9 +1,9 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
-    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantRole,
-    ParticipantStatus, RoomEvent,
+    Actor, AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession, AgentSessionDraft,
+    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
+    ParticipantRole, ParticipantStatus, RoomEvent,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -42,9 +42,9 @@ pub(crate) async fn create_or_reuse_agent_records(
                 && session.runtime_profile_key == draft.runtime_profile_key
                 && participant.owner_id == principal.participant_id =>
         {
-            if !session.lifecycle_intent_action.is_empty()
+            if !session.lifecycle_intent_action.is_none()
                 || !session.lifecycle_intent_id.is_empty()
-                || !session.lifecycle_intent_status.is_empty()
+                || !session.lifecycle_intent_status.is_none()
             {
                 return Err(rejected(
                     "operation_in_progress",
@@ -180,9 +180,9 @@ fn new_durable_session(public: AgentSession, draft: &AgentSessionDraft) -> Durab
         active_source_event_id: String::new(),
         input_up_to_event_id: String::new(),
         input_up_to_seq: 0,
-        lifecycle_intent_action: String::new(),
+        lifecycle_intent_action: AgentLifecycleAction::None,
         lifecycle_intent_id: String::new(),
-        lifecycle_intent_status: String::new(),
+        lifecycle_intent_status: AgentLifecycleIntentStatus::None,
     }
 }
 
@@ -271,9 +271,9 @@ fn prepare_start(session: &mut DurableAgentSession, operation_id: &str) {
     session.public.last_error.clear();
     session.public.last_error_code.clear();
     session.public.recovery_required = false;
-    "start".clone_into(&mut session.lifecycle_intent_action);
+    session.lifecycle_intent_action = AgentLifecycleAction::Start;
     operation_id.clone_into(&mut session.lifecycle_intent_id);
-    "prepared".clone_into(&mut session.lifecycle_intent_status);
+    session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
     session.public.updated_at = Utc::now();
 }
 

@@ -1,6 +1,9 @@
 use std::time::Duration;
 
-use agentsassemble_domain::{CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession};
+use agentsassemble_domain::{
+    AgentLifecycleAction, AgentLifecycleIntentStatus, CURRENT_RUNTIME_PROFILE_VERSION,
+    DurableAgentSession,
+};
 
 use crate::{
     runtime::ProviderRuntimeObservation,
@@ -89,12 +92,14 @@ fn empty_pre_effect_authority(session: &DurableAgentSession) -> bool {
         && session.runtime_handle_id.is_empty()
         && session.runtime_owner_id.is_empty()
         && session.runtime_lease_token.is_empty()
-        && session.lifecycle_intent_action == "start"
-        && session.lifecycle_intent_status == "prepared"
+        && session.lifecycle_intent_action == AgentLifecycleAction::Start
+        && session.lifecycle_intent_status == AgentLifecycleIntentStatus::Prepared
 }
 
 #[cfg(all(test, unix))]
 mod tests {
+    use agentsassemble_domain::{AgentLifecycleAction, AgentLifecycleIntentStatus};
+
     use super::{classify_previous_runtime, observe_previous_runtime};
     use crate::{
         runtime::ProviderRuntimeObservation, runtime_lease::HeldRuntimeLease,
@@ -223,8 +228,8 @@ mod tests {
         session.runtime_handle_id.clear();
         session.runtime_owner_id.clear();
         session.runtime_lease_token.clear();
-        session.lifecycle_intent_action = "start".to_owned();
-        session.lifecycle_intent_status = "prepared".to_owned();
+        session.lifecycle_intent_action = AgentLifecycleAction::Start;
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
         assert_eq!(
             classify_previous_runtime(
                 &session,
