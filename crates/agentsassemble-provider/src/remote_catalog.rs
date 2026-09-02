@@ -130,25 +130,15 @@ fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
         return None;
     }
 
-    let mut metadata = BTreeMap::from([
-        ("selection_kind".to_owned(), json!("exact")),
-        ("relation_scope".to_owned(), json!("global")),
-        (
-            "compatibility_evidence".to_owned(),
-            json!("provider_catalog"),
+    let mut metadata = BTreeMap::from([(
+        "vision".to_owned(),
+        json!(
+            input_modalities.iter().any(|value| value == "image")
+                || tool_providers.iter().any(|provider| {
+                    provider.get("vision").and_then(Value::as_bool) == Some(true)
+                })
         ),
-        ("tools".to_owned(), json!(true)),
-        (
-            "vision".to_owned(),
-            json!(
-                input_modalities.iter().any(|value| value == "image")
-                    || tool_providers
-                        .iter()
-                        .any(|provider| provider.get("vision").and_then(Value::as_bool)
-                            == Some(true))
-            ),
-        ),
-    ]);
+    )]);
     if let Some(family) = model_family(&model_id) {
         metadata.insert("family".to_owned(), json!(family));
     }
@@ -407,6 +397,11 @@ mod tests {
             options[1].metadata["reasoning_efforts"],
             json!(["high", "low"])
         );
+        for key in ["selection_kind", "compatibility_evidence", "tools"] {
+            assert!(!options[0].metadata.contains_key(key));
+        }
+        assert!(!options[0].metadata.contains_key("relation_scope"));
+        assert_eq!(options[1].metadata["relation_scope"], json!("per_model"));
     }
 
     #[test]
