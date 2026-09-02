@@ -518,6 +518,10 @@ async fn reusable_identity_replaces_only_its_session_and_preserves_room_authorit
     );
     let participant_id = first.result().agent_id.clone();
     let first_bearer = first.session_bearer().to_owned();
+    assert_eq!(
+        first.result().guide["session"]["rejoin"],
+        "This session cannot be renewed after it expires; ask the host for a new invite link."
+    );
     set_room_authority(&store, &participant_id).await;
 
     let signed_two = [0x44; 32];

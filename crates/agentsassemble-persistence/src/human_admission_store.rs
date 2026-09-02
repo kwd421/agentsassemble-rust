@@ -560,21 +560,11 @@ async fn admission_result(
         room_label: settings.label,
         room_topic: settings.topic,
         room_created_at: room.created_at,
-        guide: human_usage_guide(
-            &invite.room_id,
-            participant_id,
-            &profile.display_name,
-            invite.is_reusable(),
-        ),
+        guide: human_usage_guide(&invite.room_id, participant_id, &profile.display_name),
     })
 }
 
-fn human_usage_guide(
-    room_id: &str,
-    participant_id: &str,
-    display_name: &str,
-    reusable: bool,
-) -> Value {
+fn human_usage_guide(room_id: &str, participant_id: &str, display_name: &str) -> Value {
     json!({
         "welcome": format!(
             "You joined room '{room_id}' as '{display_name}' ({participant_id}). Your identity is enforced by the room session."
@@ -587,11 +577,7 @@ fn human_usage_guide(
         "etiquette": [],
         "session": {
             "expires_in_seconds": 3600,
-            "rejoin": if reusable {
-                "This invite link is reusable; if your session expires, join again with the same link."
-            } else {
-                "This invite was single-use; ask the host for a new link if your session expires."
-            }
+            "rejoin": "This session cannot be renewed after it expires; ask the host for a new invite link."
         }
     })
 }
