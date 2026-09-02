@@ -1378,17 +1378,20 @@ timeouts, response/tool bounds, and the separate strict SSRF owner for user-chos
 Custom API endpoints. Keep `.no_proxy()` only if an explicit credential/proxy
 policy and operating evidence justify it.
 
-### D-05 — runtime handle contains a parsed but unused identity
+### D-05 — runtime handle contained a parsed but unused identity
 
-Disposition: `Simplify narrowly`; Phase 1.
+Disposition: `Completed at c76bb46 and d88edf9`; Phase 1.
 
-`runtime_handle.rs` encodes boot identity, launch token, and another random UUID;
-the parser validates then discards the last UUID, while the generation-unique
-launch token is also stored separately. Remove only that suffix in the clean
-current schema. Preserve platform/boot/token proof, the independently adoptable
-owner ID, and execution/effect `(handle, owner, token)` stale-CAS snapshots. A new
-cross-repository authority type is not approved unless it demonstrably reduces
-state, comparisons, and glue.
+`runtime_handle.rs` previously encoded boot identity, launch token, and another
+random UUID. The parser validated then discarded the last UUID while the
+generation-unique launch token was also stored separately. Runtime-v6 removes only
+that suffix and its generation. Platform/boot/token proof, the independently
+adoptable owner ID, durable marker cross-checks, and execution/effect
+`(handle, owner, token)` stale-CAS snapshots remain at their existing owners. The
+strict decoder rejects v5 and trailing data, and current schema 57 rejects schema 56
+without a migration or compatibility path. This removes one UUID generation and 37
+ASCII bytes from each encoded live handle; no workload-level performance improvement
+is claimed and no cross-repository authority type was introduced.
 
 ### D-06 — recovery and staging mechanisms are justified, exact cadence/cost is not
 

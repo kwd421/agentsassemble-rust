@@ -1034,6 +1034,21 @@ contracts, findings, or verification journals.
   real provider run was added. OpenCode's pre-stop native abort/disconnect result
   handling remains an explicit F-03 review boundary rather than being declared safe
   by this construction slice.
+- Completed D-05 at `c76bb46` and `d88edf9`. The runtime-handle codec no longer
+  generates, stores, parses, and discards a second random UUID. Runtime-v6 uses the
+  already authoritative launch token as its sole generation identity and retains the
+  Unix boot hash, platform distinction, separately adoptable supervisor owner, durable
+  lease token, marker cross-checks, and `(handle, owner, token)` stale-CAS snapshots.
+  The strict decoder rejects runtime-v5, cross-platform encodings, and trailing data;
+  current schema 57 rejects schema 56 without migration, compatibility, or fallback
+  code. The directly observed reduction is one UUID generation and 37 ASCII bytes per
+  encoded live handle, not a claimed workload-level speedup. Twelve focused
+  handle/absence/lease/recovery tests, all 203 provider tests, all 243 persistence
+  tests, workspace check, warning-denied Clippy, formatting, diff, architecture,
+  policy, and source-structure gates pass. Windows codec behavior is covered by the
+  platform-neutral unit branch; no Windows binary or real provider ran. The change
+  adds no state, abstraction, polling, retry, heartbeat, timer, silent failure, or
+  background task and does not expand any file's responsibility.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
