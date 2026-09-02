@@ -191,8 +191,8 @@ impl ClaudeSdkRuntime {
         self.room_portal.finish_turn(request)
     }
 
-    pub(crate) fn abort_observation(&mut self) {
-        let _ = self.room_portal.end_observation();
+    pub(crate) fn abort_observation(&mut self) -> Result<(), RoomPortalError> {
+        self.room_portal.end_observation()
     }
 
     pub(crate) const fn requires_restart(&self) -> bool {

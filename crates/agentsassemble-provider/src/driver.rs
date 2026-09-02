@@ -55,7 +55,9 @@ pub(crate) trait ProviderDriver: Send {
             "The provider runtime has no server-owned room portal.",
         ))
     }
-    fn abort_room_observation(&mut self) {}
+    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
+        Ok(())
+    }
     fn requires_restart(&self) -> bool {
         false
     }

@@ -161,8 +161,8 @@ impl ProviderDriver for GrokAcpDriver {
             .map_err(portal_error)
     }
 
-    fn abort_room_observation(&mut self) {
-        self.runtime.abort_observation();
+    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
+        self.runtime.abort_observation().map_err(portal_error)
     }
 
     fn requires_restart(&self) -> bool {

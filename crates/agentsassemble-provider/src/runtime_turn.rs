@@ -268,12 +268,20 @@ async fn run_driver_turn(
     owner_id: &str,
     exact_interruption: &CancellationToken,
 ) -> OwnedTurnResult {
+    let mut abort_requires_restart = false;
     let result = match require_live_driver(driver, cancellation, handle_id, owner_id).await {
         Ok(()) => {
             if request.room_observation.is_some()
                 && let Err(error) = driver.begin_room_observation(request)
             {
-                Err(ProviderAdapterError::safe(error))
+                Err(with_aborted_room_observation(
+                    driver,
+                    request,
+                    ProviderAdapterError::safe(error),
+                    handle_id,
+                    owner_id,
+                    &mut abort_requires_restart,
+                ))
             } else {
                 let sent = tokio::select! {
                     biased;
@@ -288,20 +296,39 @@ async fn run_driver_turn(
                 };
                 match sent {
                     Ok(completed) => finish_completed_turn(
-                        driver, session, request, completed, handle_id, owner_id,
+                        driver,
+                        session,
+                        request,
+                        completed,
+                        handle_id,
+                        owner_id,
+                        &mut abort_requires_restart,
                     ),
                     Err(error) if error.code == "provider_turn_interrupted" => {
-                        driver.abort_room_observation();
-                        Err(ProviderAdapterError::safe(error))
+                        Err(with_aborted_room_observation(
+                            driver,
+                            request,
+                            ProviderAdapterError::safe(error),
+                            handle_id,
+                            owner_id,
+                            &mut abort_requires_restart,
+                        ))
                     }
                     Err(error) => {
                         let effect_uncertain = driver.turn_failure_effect_uncertain();
-                        driver.abort_room_observation();
-                        Err(if effect_uncertain {
+                        let error = if effect_uncertain {
                             ProviderAdapterError::uncertain(error, handle_id, owner_id)
                         } else {
                             ProviderAdapterError::safe(error)
-                        })
+                        };
+                        Err(with_aborted_room_observation(
+                            driver,
+                            request,
+                            error,
+                            handle_id,
+                            owner_id,
+                            &mut abort_requires_restart,
+                        ))
                     }
                 }
             }
@@ -310,7 +337,27 @@ async fn run_driver_turn(
     };
     OwnedTurnResult {
         result,
-        requires_restart: driver.requires_restart(),
+        requires_restart: abort_requires_restart || driver.requires_restart(),
+    }
+}
+
+fn with_aborted_room_observation(
+    driver: &mut dyn ProviderDriver,
+    request: &ProviderTurnRequest,
+    original: ProviderAdapterError,
+    handle_id: &str,
+    owner_id: &str,
+    abort_requires_restart: &mut bool,
+) -> ProviderAdapterError {
+    if request.room_observation.is_none() {
+        return original;
+    }
+    match driver.abort_room_observation() {
+        Ok(()) => original,
+        Err(error) => {
+            *abort_requires_restart = true;
+            ProviderAdapterError::uncertain(error, handle_id, owner_id)
+        }
     }
 }
 
@@ -355,6 +402,7 @@ fn finish_completed_turn(
     mut completed: ProviderTurnCompleted,
     handle_id: &str,
     owner_id: &str,
+    abort_requires_restart: &mut bool,
 ) -> Result<ProviderTurnCompleted, ProviderAdapterError> {
     if completed.turn_id != request.turn_id
         || completed.provider_turn_id.is_empty()
@@ -363,22 +411,36 @@ fn finish_completed_turn(
         || completed.provider_turn_id.chars().any(char::is_control)
         || !valid_provider_session_transition(session, completed.provider_session_id.as_deref())
     {
-        driver.abort_room_observation();
-        return Err(ProviderAdapterError::uncertain(
+        let error = ProviderAdapterError::uncertain(
             DriverError::new(
                 "provider_protocol_invalid",
                 "The provider returned invalid turn or session authority.",
             ),
             handle_id,
             owner_id,
+        );
+        return Err(with_aborted_room_observation(
+            driver,
+            request,
+            error,
+            handle_id,
+            owner_id,
+            abort_requires_restart,
         ));
     }
     if request.room_observation.is_some() {
         completed.outcome = match driver.finish_room_observation(request) {
             Ok(outcome) => outcome,
             Err(error) => {
-                driver.abort_room_observation();
-                return Err(ProviderAdapterError::uncertain(error, handle_id, owner_id));
+                let error = ProviderAdapterError::uncertain(error, handle_id, owner_id);
+                return Err(with_aborted_room_observation(
+                    driver,
+                    request,
+                    error,
+                    handle_id,
+                    owner_id,
+                    abort_requires_restart,
+                ));
             }
         };
     }

@@ -461,10 +461,11 @@ impl ProviderDriver for RemoteOpenAiDriver {
             .map_err(|_| PORTAL_UNAVAILABLE)
     }
 
-    fn abort_room_observation(&mut self) {
+    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
         if let Some(portal) = self.portal.as_ref() {
-            let _ = portal.end_observation();
+            portal.end_observation().map_err(|_| PORTAL_UNAVAILABLE)?;
         }
+        Ok(())
     }
 
     fn requires_restart(&self) -> bool {

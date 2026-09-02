@@ -763,8 +763,10 @@ impl ProviderDriver for OpenCodeDriver {
             .map_err(portal_driver_error)
     }
 
-    fn abort_room_observation(&mut self) {
-        let _ = self.room_portal.end_observation();
+    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
+        self.room_portal
+            .end_observation()
+            .map_err(portal_driver_error)
     }
 
     fn requires_restart(&self) -> bool {

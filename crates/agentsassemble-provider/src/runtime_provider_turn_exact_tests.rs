@@ -10,8 +10,8 @@ use tokio::sync::Barrier;
 
 use super::{
     DriverError, DriverFactory, DriverFuture, ProviderAdapter, ProviderDriver,
-    ProviderRuntimeObservation, ProviderSessionAttachment, ProviderTurnCompleted,
-    ProviderTurnRequest,
+    ProviderRoomObservation, ProviderRuntimeObservation, ProviderSessionAttachment,
+    ProviderTurnCompleted, ProviderTurnRequest,
     provider_turn_tests::{active_session, requests, stop_and_release, turn_fixture},
     tests::fixture_session,
 };
@@ -27,9 +27,14 @@ struct PanicAfterIoDriver {
     stops: Arc<AtomicUsize>,
 }
 
-struct DefinitiveFailureFactory;
+#[derive(Default)]
+struct DefinitiveFailureFactory {
+    abort_failure_stops: Option<Arc<AtomicUsize>>,
+}
 
-struct DefinitiveFailureDriver;
+struct DefinitiveFailureDriver {
+    abort_failure_stops: Option<Arc<AtomicUsize>>,
+}
 
 impl DriverFactory for DefinitiveFailureFactory {
     fn launch<'a>(
@@ -37,7 +42,10 @@ impl DriverFactory for DefinitiveFailureFactory {
         _session: &'a agentsassemble_domain::DurableAgentSession,
         _runtime_lease: &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
-        Box::pin(async { Ok(Box::new(DefinitiveFailureDriver) as Box<dyn ProviderDriver>) })
+        let driver = DefinitiveFailureDriver {
+            abort_failure_stops: self.abort_failure_stops.clone(),
+        };
+        Box::pin(async move { Ok(Box::new(driver) as Box<dyn ProviderDriver>) })
     }
 }
 
@@ -74,7 +82,26 @@ impl ProviderDriver for DefinitiveFailureDriver {
     }
 
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
+        if let Some(stops) = self.abort_failure_stops.as_ref() {
+            stops.fetch_add(1, Ordering::SeqCst);
+        }
         Box::pin(async { Ok(()) })
+    }
+
+    fn begin_room_observation(
+        &mut self,
+        _request: &ProviderTurnRequest,
+    ) -> Result<(), DriverError> {
+        Ok(())
+    }
+
+    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
+        self.abort_failure_stops.as_ref().map_or(Ok(()), |_| {
+            Err(DriverError::new(
+                "room_portal_unavailable",
+                "The server-owned provider room portal is unavailable.",
+            ))
+        })
     }
 
     fn turn_failure_effect_uncertain(&self) -> bool {
@@ -258,7 +285,7 @@ async fn definitive_driver_failure_does_not_quarantine_or_discard_the_runtime() 
     let directory = tempfile::tempdir()
         .unwrap_or_else(|error| panic!("create definitive-failure fixture: {error}"));
     let session = fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
-    let adapter = ProviderAdapter::with_factory(Arc::new(DefinitiveFailureFactory));
+    let adapter = ProviderAdapter::with_factory(Arc::new(DefinitiveFailureFactory::default()));
     let started = adapter
         .start(&session)
         .await
@@ -287,12 +314,66 @@ async fn definitive_driver_failure_does_not_quarantine_or_discard_the_runtime() 
 }
 
 #[tokio::test]
+async fn failed_observation_abort_stops_instead_of_reusing_the_runtime() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create abort-failure fixture: {error}"));
+    let session = fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let stops = Arc::new(AtomicUsize::new(0));
+    let adapter = ProviderAdapter::with_factory(Arc::new(DefinitiveFailureFactory {
+        abort_failure_stops: Some(Arc::clone(&stops)),
+    }));
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start abort-failure fixture: {error}"));
+    let active = active_session(&session, &started, "abort-failure-room-turn");
+    let request = ProviderTurnRequest {
+        turn_id: "abort-failure-room-turn".to_owned(),
+        turn_generation: 1,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        input: "Fail after beginning a room observation.".to_owned(),
+        room_observation: Some(ProviderRoomObservation {
+            session_id: active.public.session_id.clone(),
+            input_up_to_seq: 1,
+            view: "Room: test\n#1 Human: fail safely".to_owned(),
+            attachment_ids: Vec::new(),
+            attachment_ingress: None,
+            allowed_agent_ids: Vec::new(),
+            tabletop_tools: false,
+            room_tool_ingress: None,
+        }),
+    };
+
+    let Err(error) = adapter.send_turn(&active, &request).await else {
+        panic!("failed observation abort must fail closed");
+    };
+    assert_eq!(error.code, "room_portal_unavailable");
+    assert!(error.runtime_stopped);
+    assert_eq!(error.runtime_lease_token, started.runtime_lease_token);
+    assert_eq!(stops.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        adapter.observe(&active).await,
+        ProviderRuntimeObservation::Gone
+    );
+    adapter
+        .release_confirmed_stop(
+            &active.public.room_id,
+            &active.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await;
+}
+
+#[tokio::test]
 async fn driver_without_retained_interrupt_capability_is_rejected_before_control() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()
         .unwrap_or_else(|error| panic!("create interrupt-capability fixture: {error}"));
     let session = fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
-    let adapter = ProviderAdapter::with_factory(Arc::new(DefinitiveFailureFactory));
+    let adapter = ProviderAdapter::with_factory(Arc::new(DefinitiveFailureFactory::default()));
     let started = adapter
         .start(&session)
         .await

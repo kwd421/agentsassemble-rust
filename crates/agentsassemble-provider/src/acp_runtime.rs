@@ -184,9 +184,13 @@ impl AcpRuntime {
         self.room_portal.finish_turn(request)
     }
 
-    pub(crate) fn abort_observation(&mut self) {
-        let _ = self.client.set_room_observation_active(false);
-        let _ = self.room_portal.end_observation();
+    pub(crate) fn abort_observation(&mut self) -> Result<(), RoomPortalError> {
+        let protocol = self
+            .client
+            .set_room_observation_active(false)
+            .map_err(|_| RoomPortalError::Authority);
+        let portal = self.room_portal.end_observation();
+        protocol.and(portal)
     }
 }
 
