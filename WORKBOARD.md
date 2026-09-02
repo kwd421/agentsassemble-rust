@@ -990,6 +990,26 @@ contracts, findings, or verification journals.
   pass. Antigravity remains non-startable without a native receipt. No timer, polling,
   heartbeat, automatic retry, fallback, background cleanup, real provider run, or
   measured performance claim was added.
+- Completed the resident-runtime RoomPortal stop portion of F-03 at `a5e4ff7`;
+  provider-construction failure teardown remains open. Previously `Drop` cancelled
+  and aborted only the listener task without awaiting it, while accepted connection
+  tasks were detached, so a driver could report process stop before private bearer
+  authority had an exact task-termination receipt. The common Portal owner now tracks
+  accepted connections in a `JoinSet`, reaps completed entries in the event-driven
+  accept flow, and explicitly cancels and joins the accept owner plus every connection.
+  Codex, OpenCode, Claude Agent SDK, shared Cursor/Grok ACP, Antigravity, and the
+  remote API family include this result in their existing stop outcome. The remote
+  rmcp client's existing two-second close timeout becomes persistent
+  cleanup-unconfirmed state rather than false success on a later stop. The accepted
+  cost is at most one join entry per admitted connection under the existing hard
+  eight-connection bound. A real TCP regression proves shutdown drains an accepted
+  idle connection and closes the listener before it returns; all 201 provider tests,
+  warning-denied provider Clippy, formatting, diff, architecture, policy, and source-
+  structure gates pass. No production polling, retry, fallback, heartbeat, cleanup
+  timer, background sweeper, credential exposure, real provider run, or measured
+  performance claim was added. Files over 500 lines retain one existing provider or
+  Portal state/invariant owner; splitting this stop call would add state-transfer and
+  error-forwarding interfaces without separating a change reason.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop

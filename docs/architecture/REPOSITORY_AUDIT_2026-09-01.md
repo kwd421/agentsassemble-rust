@@ -226,6 +226,16 @@ installation. `Drop` remains only a final fail-closed attempt. Antigravity is st
 non-startable without a native attachment/completion receipt, and explicit portal
 teardown remains open under F-03.
 
+RoomPortal stop correction `a5e4ff7` closes the resident-runtime teardown portion.
+The common loopback server now owns accepted connections in a bounded `JoinSet`,
+reaps completed entries in the accept flow, and on explicit shutdown cancels and
+joins the accept owner plus every accepted connection before returning success.
+Codex, OpenCode, Claude Agent SDK, Cursor/Grok ACP, Antigravity, and the shared remote
+API runtime all include that result in their existing stop outcome. A timed-out
+remote rmcp client remains cleanup-unconfirmed instead of becoming successful on a
+later stop. Portal cleanup after a failure during provider construction remains open
+under F-03; `Drop` is still the last best effort for that path.
+
 ### F-04 — signed capabilities advertised actions that did not exist
 
 Disposition: `Closed through 7b2168f; both manual reviewers approved`; high
