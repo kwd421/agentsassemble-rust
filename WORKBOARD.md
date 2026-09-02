@@ -1072,6 +1072,18 @@ contracts, findings, or verification journals.
   allocation- and I/O-neutral, introduces no generic executable framework, state,
   timer, polling, retry, fallback, or performance claim, and leaves every modified
   source file below the 500-line structure warning.
+- Completed the lifecycle-intent portion of C-11 at `dcfc03d`. Domain enums now own
+  the exact empty, start/stop, prepared, effect-inflight, unconfirmed, and
+  effect-applied vocabulary while preserving the existing serialized strings.
+  Lifecycle preparation, effect authorization, reservation matching, reconciliation,
+  provider observation, cleanup, and failure mapping remain at their previous owners;
+  no generic state machine or second transition authority was introduced. The one
+  serialization-contract test, all 243 persistence tests, focused provider recovery
+  and server reconciliation tests, warning-denied Clippy, formatting, architecture,
+  policy, source-structure, and diff gates pass. There is no storage migration,
+  compatibility path, new task/state/timer/poll/retry/fallback, or performance claim.
+  Public Agent Session status, runtime-status, and turn-phase vocabulary remain in
+  C-11; this slice does not claim the finding closed.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop

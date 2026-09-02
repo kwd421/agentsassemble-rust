@@ -1243,8 +1243,8 @@ the plan and must not become a half-live compatibility surface.
 
 ### C-11 — Agent Session state vocabulary is repeated as strings
 
-Disposition: `Consolidate vocabulary; Keep transition authorities separate`;
-medium drift risk.
+Disposition: `Lifecycle intent vocabulary completed at dcfc03d; public session/runtime/turn
+vocabulary remains`; medium drift risk.
 
 `model.rs:306,362-364`, `agent_lifecycle.rs:158-168,301-318`,
 `agent_reconciliation.rs:307-340,525-669`, `agent_reconciliation_recovery.rs:47-68,116-132,284-288`,
@@ -1255,6 +1255,17 @@ turn transitions with `room_turn_scheduler.rs`/`turn_authority.rs`, and
 reconciliation classification with its recovery owner. Provider observation,
 orchestration, transactions, side effects, and error mapping also remain at their
 boundaries; no generic state-machine framework is approved.
+
+The lifecycle-intent action and status are now finite domain enums. Their serialized
+values remain exactly the existing empty-string, `start`/`stop`, and lifecycle-phase
+strings, so durable rows and public projections do not acquire a migration or
+compatibility path. Lifecycle preparation, effect authorization, reconciliation,
+reservation matching, cleanup, and failure mapping still execute at their previous
+owners; only the repeated vocabulary moved. One serialization-contract test, all 243
+persistence tests, the focused provider recovery and server reconciliation tests,
+warning-denied Clippy, and architecture/diff gates pass. The change adds no state,
+task, timer, polling, retry, fallback, or performance claim. Public Agent Session
+status, runtime status, and turn-phase vocabulary remain for the next C-11 slice.
 
 ### C-12 — Agent Session row encoding and entity row writes repeat
 
