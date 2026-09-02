@@ -17,7 +17,6 @@ mod codex_identity;
 mod configuration;
 mod credential_provider;
 mod credentials;
-#[path = "remote_openai.rs"]
 mod deepseek;
 mod driver;
 mod filesystem;
@@ -38,6 +37,8 @@ mod process;
 mod profile;
 mod registration;
 mod remote_https;
+mod remote_openai;
+mod remote_openai_spec;
 mod room_attachment;
 mod room_portal;
 mod room_portal_mcp;

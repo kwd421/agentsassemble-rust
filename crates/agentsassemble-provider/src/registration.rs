@@ -16,7 +16,7 @@ use crate::{
     catalog::{discover_antigravity, discover_codex, discover_deepseek, discover_opencode},
     codex::CodexDriver,
     credentials::ProviderCredentialStore,
-    deepseek::{DeepSeekDriver, deepseek_credential_error},
+    deepseek,
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
     opencode::OpenCodeDriver,
@@ -369,8 +369,8 @@ fn launch_deepseek<'a>(
             .credentials
             .secret(ProviderCredentialId::DeepSeek)
             .await
-            .map_err(|error| DriverLaunchError::safe(deepseek_credential_error(error)))?;
-        let driver = DeepSeekDriver::launch(factory.credentials.clone()).await?;
+            .map_err(|error| DriverLaunchError::safe(deepseek::credential_error(error)))?;
+        let driver = deepseek::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

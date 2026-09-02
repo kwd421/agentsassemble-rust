@@ -1,9 +1,10 @@
 use agentsassemble_domain::RoomRandomResult;
 use serde_json::json;
 
-use super::{DeepSeekDriver, RoomObservationStart, assistant_value, validate_completion};
+use super::{RemoteOpenAiDriver, RoomObservationStart, assistant_value, validate_completion};
 use crate::{
     credentials::ProviderCredentialStore,
+    deepseek::DEEPSEEK_SPEC,
     openai_stream::{AssistantMessage, OpenAiStreamCompletion, ToolCall, ToolFunction},
     room_portal::{ProviderRoomToolIngress, ProviderRoomToolResult},
 };
@@ -33,9 +34,9 @@ fn thinking_tool_transaction_preserves_exact_authority() {
         },
         usage: None,
     };
-    assert!(validate_completion(&response, "deepseek-v4-flash").is_ok());
+    assert!(validate_completion(&response, "deepseek-v4-flash", &DEEPSEEK_SPEC).is_ok());
     let message = &response.message;
-    let replay = assistant_value(message);
+    let replay = assistant_value(message, DEEPSEEK_SPEC.retain_reasoning);
     assert_eq!(replay["role"], "assistant");
     assert_eq!(replay["content"], "");
     assert_eq!(replay["reasoning_content"], "private reasoning");
@@ -43,9 +44,10 @@ fn thinking_tool_transaction_preserves_exact_authority() {
 
 #[tokio::test]
 async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
-    let mut driver = DeepSeekDriver::launch(ProviderCredentialStore::production())
-        .await
-        .unwrap_or_else(|error| panic!("launch in-process portal: {error}"));
+    let mut driver =
+        RemoteOpenAiDriver::launch(&DEEPSEEK_SPEC, ProviderCredentialStore::production())
+            .await
+            .unwrap_or_else(|error| panic!("launch in-process portal: {error}"));
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(1);
     driver
         .portal
@@ -148,7 +150,8 @@ fn incomplete_or_inconsistent_completion_cannot_enter_room_tools() {
     assert!(
         validate_completion(
             &fixture("tool_calls", "deepseek-v4-flash"),
-            "deepseek-v4-flash"
+            "deepseek-v4-flash",
+            &DEEPSEEK_SPEC,
         )
         .is_ok()
     );
@@ -159,6 +162,6 @@ fn incomplete_or_inconsistent_completion_cannot_enter_room_tools() {
         fixture("stop", "deepseek-v4-flash"),
         fixture("tool_calls", "substituted-model"),
     ] {
-        assert!(validate_completion(&response, "deepseek-v4-flash").is_err());
+        assert!(validate_completion(&response, "deepseek-v4-flash", &DEEPSEEK_SPEC).is_err());
     }
 }

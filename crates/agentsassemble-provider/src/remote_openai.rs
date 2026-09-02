@@ -13,52 +13,20 @@ use rmcp::{
 use serde_json::{Map, Value, json};
 
 use crate::{
-    ProviderCredentialId,
-    credentials::{ProviderCredential, ProviderCredentialError, ProviderCredentialStore},
+    credentials::{ProviderCredential, ProviderCredentialStore},
     driver::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
     },
-    openai_stream::{
-        AssistantMessage, OpenAiStreamCompletion, OpenAiStreamError, ToolCall, send_chat_completion,
-    },
+    openai_stream::{AssistantMessage, OpenAiStreamCompletion, ToolCall, send_chat_completion},
     remote_https::fixed_endpoint_client,
+    remote_openai_spec::{RemoteOpenAiSpec, provider_error},
     room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
 };
 
-pub(crate) const fn deepseek_credential_error(error: ProviderCredentialError) -> DriverError {
-    match error {
-        ProviderCredentialError::MissingSecret => DriverError::new(
-            "provider_credential_missing",
-            "A DeepSeek API credential is required.",
-        ),
-        ProviderCredentialError::InvalidSecret => DriverError::new(
-            "provider_credential_invalid",
-            "The configured DeepSeek credential is invalid.",
-        ),
-        ProviderCredentialError::SecureStoreUnavailable => DriverError::new(
-            "secure_store_unavailable",
-            "The secure credential store is unavailable.",
-        ),
-    }
-}
-
-const CHAT_COMPLETIONS_URL: &str = "https://api.deepseek.com/chat/completions";
 const MAX_TOOL_RESULT_BYTES: usize = 128 * 1024;
 const MAX_TOOL_ROUNDS: usize = 16;
 const PORTAL_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
-const INVALID_RESPONSE: DriverError = DriverError::new(
-    "provider_protocol_invalid",
-    "DeepSeek returned an invalid bounded response.",
-);
-const INVALID_TOOL_CALL: DriverError = DriverError::new(
-    "provider_tool_call_invalid",
-    "DeepSeek returned an invalid room-tool call.",
-);
-const API_UNAVAILABLE: DriverError = DriverError::new(
-    "provider_api_unavailable",
-    "The DeepSeek API request did not complete.",
-);
 const PORTAL_UNAVAILABLE: DriverError = DriverError::new(
     "room_portal_unavailable",
     "The server-owned room portal is unavailable.",
@@ -66,8 +34,9 @@ const PORTAL_UNAVAILABLE: DriverError = DriverError::new(
 
 type PortalClient = RunningService<RoleClient, ()>;
 
-pub(crate) struct DeepSeekDriver {
-    api: DeepSeekApi,
+pub(crate) struct RemoteOpenAiDriver {
+    spec: &'static RemoteOpenAiSpec,
+    api: RemoteOpenAiApi,
     portal: Option<RoomPortal>,
     portal_client: Option<PortalClient>,
     tools: Vec<Tool>,
@@ -78,7 +47,8 @@ pub(crate) struct DeepSeekDriver {
     portal_failed: bool,
 }
 
-struct DeepSeekApi {
+struct RemoteOpenAiApi {
+    spec: &'static RemoteOpenAiSpec,
     client: Client,
     endpoint: Url,
 }
@@ -89,8 +59,11 @@ struct ExecutedTool {
     terminal: bool,
 }
 
-impl DeepSeekDriver {
-    pub(crate) async fn launch(credentials: ProviderCredentialStore) -> Result<Self, DriverError> {
+impl RemoteOpenAiDriver {
+    pub(crate) async fn launch(
+        spec: &'static RemoteOpenAiSpec,
+        credentials: ProviderCredentialStore,
+    ) -> Result<Self, DriverError> {
         let portal = RoomPortal::create().await.map_err(|_| PORTAL_UNAVAILABLE)?;
         let portal_client = ().serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(portal.endpoint())
@@ -103,7 +76,8 @@ impl DeepSeekDriver {
             .map_err(|_| PORTAL_UNAVAILABLE)?;
         validate_tool_catalog(&tools)?;
         Ok(Self {
-            api: DeepSeekApi::new()?,
+            spec,
+            api: RemoteOpenAiApi::new(spec)?,
             portal: Some(portal),
             portal_client: Some(portal_client),
             tools,
@@ -124,9 +98,9 @@ impl DeepSeekDriver {
         self.validate_session(session)?;
         let credential = self
             .credentials
-            .secret(ProviderCredentialId::DeepSeek)
+            .secret(self.spec.credential)
             .await
-            .map_err(deepseek_credential_error)?;
+            .map_err(|error| self.spec.credential_error(error))?;
         let observation = request.room_observation.as_ref();
         let tools =
             observation.map(|observation| api_tools(&self.tools, observation.tabletop_tools));
@@ -136,27 +110,32 @@ impl DeepSeekDriver {
                 .api
                 .complete(session, &credential, &messages, tools.as_deref())
                 .await?;
-            validate_completion(&response, &session.public.model)?;
+            validate_completion(&response, &session.public.model, self.spec)?;
             let provider_turn_id = response.id.clone();
             let mut message = response.message;
             if message.tool_calls.is_empty() {
                 if observation.is_some() {
-                    return Err(DriverError::new(
+                    return Err(provider_error(
                         "provider_room_action_missing",
-                        "DeepSeek ended without the required room action.",
+                        self.spec.errors.room_action_missing,
                     ));
                 }
                 let content = message
                     .content
                     .as_deref()
                     .and_then(canonical_content)
-                    .ok_or(INVALID_RESPONSE)?;
+                    .ok_or_else(|| {
+                        provider_error(
+                            "provider_protocol_invalid",
+                            self.spec.errors.invalid_response,
+                        )
+                    })?;
                 return Ok(completed(request, provider_turn_id, content));
             }
             if round == MAX_TOOL_ROUNDS {
-                return Err(DriverError::new(
+                return Err(provider_error(
                     "provider_tool_round_limit",
-                    "DeepSeek exceeded the bounded room-tool rounds.",
+                    self.spec.errors.tool_round_limit,
                 ));
             }
             let forced_read = round == 0 && observation.is_some();
@@ -167,17 +146,20 @@ impl DeepSeekDriver {
                     .find(|call| call.function.name == "read_discussion")
                     .cloned()
                     .ok_or_else(|| {
-                        DriverError::new(
+                        provider_error(
                             "provider_room_read_missing",
-                            "DeepSeek did not perform the required room read.",
+                            self.spec.errors.room_read_missing,
                         )
                     })?;
                 message.tool_calls = vec![read.clone()];
                 let executed = self.execute_tool(read, false).await?;
                 if executed.terminal {
-                    return Err(INVALID_RESPONSE);
+                    return Err(provider_error(
+                        "provider_protocol_invalid",
+                        self.spec.errors.invalid_response,
+                    ));
                 }
-                messages.push(assistant_value(&message));
+                messages.push(assistant_value(&message, self.spec.retain_reasoning));
                 messages.push(tool_value(&executed));
                 continue;
             }
@@ -193,7 +175,7 @@ impl DeepSeekDriver {
                 }
             }
             message.tool_calls = executed.iter().map(|item| item.call.clone()).collect();
-            messages.push(assistant_value(&message));
+            messages.push(assistant_value(&message, self.spec.retain_reasoning));
             messages.extend(executed.iter().map(tool_value));
             if executed.last().is_some_and(|item| item.terminal) {
                 return Ok(completed(
@@ -203,7 +185,10 @@ impl DeepSeekDriver {
                 ));
             }
         }
-        Err(INVALID_RESPONSE)
+        Err(provider_error(
+            "provider_protocol_invalid",
+            self.spec.errors.invalid_response,
+        ))
     }
     async fn execute_tool(
         &mut self,
@@ -211,10 +196,18 @@ impl DeepSeekDriver {
         random_tools: bool,
     ) -> Result<ExecutedTool, DriverError> {
         if !crate::room_portal::is_available_provider_tool(&call.function.name, random_tools) {
-            return Err(INVALID_TOOL_CALL);
+            return Err(provider_error(
+                "provider_tool_call_invalid",
+                self.spec.errors.invalid_tool_call,
+            ));
         }
         let arguments = serde_json::from_str::<Map<String, Value>>(&call.function.arguments)
-            .map_err(|_| INVALID_TOOL_CALL)?;
+            .map_err(|_| {
+                provider_error(
+                    "provider_tool_call_invalid",
+                    self.spec.errors.invalid_tool_call,
+                )
+            })?;
         let terminal_action = crate::room_portal::is_terminal_provider_tool(&call.function.name);
         let replay_unsafe = crate::room_portal::is_replay_unsafe_provider_tool(&call.function.name);
         let previous_effect_uncertain = self.turn_effect_uncertain;
@@ -237,7 +230,7 @@ impl DeepSeekDriver {
         let terminal = terminal_action && result.is_error != Some(true);
         Ok(ExecutedTool {
             call,
-            result: tool_result_text(&result)?,
+            result: tool_result_text(&result, self.spec)?,
             terminal,
         })
     }
@@ -245,21 +238,21 @@ impl DeepSeekDriver {
     fn validate_session(&self, session: &DurableAgentSession) -> Result<(), DriverError> {
         if self.stopped
             || self.attached_session_id.as_deref() != Some(&session.public.session_id)
-            || session.public.provider_kind != "deepseek_api"
+            || session.public.provider_kind != self.spec.provider_kind
             || session.public.runtime_kind != "api"
             || session.public.transport != "https"
             || session.public.permission_mode != "meeting_read_only"
         {
-            return Err(DriverError::new(
+            return Err(provider_error(
                 "provider_session_mismatch",
-                "DeepSeek runtime authority does not match the Agent Session.",
+                self.spec.errors.session_mismatch,
             ));
         }
         Ok(())
     }
 }
 
-impl ProviderDriver for DeepSeekDriver {
+impl ProviderDriver for RemoteOpenAiDriver {
     fn attach_session<'a>(
         &'a mut self,
         session: &'a DurableAgentSession,
@@ -268,21 +261,25 @@ impl ProviderDriver for DeepSeekDriver {
             if self.stopped || self.portal_failed {
                 return Err(PORTAL_UNAVAILABLE);
             }
-            let provider_session_id = format!("deepseek-{}", session.public.session_id);
+            let provider_session_id = format!(
+                "{}-{}",
+                self.spec.credential.as_str(),
+                session.public.session_id
+            );
             if !session.provider_session_id.is_empty()
                 && session.provider_session_id != provider_session_id
             {
-                return Err(DriverError::new(
+                return Err(provider_error(
                     "provider_session_mismatch",
-                    "DeepSeek session authority changed after attachment.",
+                    self.spec.errors.session_changed,
                 ));
             }
             match self.attached_session_id.as_deref() {
                 Some(attached) if attached == session.public.session_id => {}
                 Some(_) => {
-                    return Err(DriverError::new(
+                    return Err(provider_error(
                         "provider_session_mismatch",
-                        "DeepSeek driver is already bound to another Agent Session.",
+                        self.spec.errors.already_bound,
                     ));
                 }
                 None => {
@@ -312,9 +309,9 @@ impl ProviderDriver for DeepSeekDriver {
     ) -> DriverFuture<'a, Result<(), DriverError>> {
         Box::pin(async move {
             if self.turn_effect_uncertain {
-                Err(DriverError::new(
+                Err(provider_error(
                     "provider_turn_interrupt_uncertain",
-                    "The DeepSeek room action may have completed before interruption.",
+                    self.spec.errors.interrupt_uncertain,
                 ))
             } else {
                 Ok(())
@@ -351,7 +348,12 @@ impl ProviderDriver for DeepSeekDriver {
     }
 
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
-        let observation = request.room_observation.as_ref().ok_or(INVALID_RESPONSE)?;
+        let observation = request.room_observation.as_ref().ok_or_else(|| {
+            provider_error(
+                "provider_protocol_invalid",
+                self.spec.errors.invalid_response,
+            )
+        })?;
         self.portal
             .as_ref()
             .ok_or(PORTAL_UNAVAILABLE)?
@@ -375,7 +377,12 @@ impl ProviderDriver for DeepSeekDriver {
         &mut self,
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnOutcome, DriverError> {
-        let observation = request.room_observation.as_ref().ok_or(INVALID_RESPONSE)?;
+        let observation = request.room_observation.as_ref().ok_or_else(|| {
+            provider_error(
+                "provider_protocol_invalid",
+                self.spec.errors.invalid_response,
+            )
+        })?;
         self.portal
             .as_ref()
             .ok_or(PORTAL_UNAVAILABLE)?
@@ -398,11 +405,17 @@ impl ProviderDriver for DeepSeekDriver {
     }
 }
 
-impl DeepSeekApi {
-    fn new() -> Result<Self, DriverError> {
-        let client = fixed_endpoint_client().map_err(|_| API_UNAVAILABLE)?;
-        let endpoint = Url::parse(CHAT_COMPLETIONS_URL).map_err(|_| API_UNAVAILABLE)?;
-        Ok(Self { client, endpoint })
+impl RemoteOpenAiApi {
+    fn new(spec: &'static RemoteOpenAiSpec) -> Result<Self, DriverError> {
+        let unavailable =
+            || provider_error("provider_api_unavailable", spec.errors.api_unavailable);
+        let client = fixed_endpoint_client().map_err(|_| unavailable())?;
+        let endpoint = Url::parse(spec.endpoint).map_err(|_| unavailable())?;
+        Ok(Self {
+            spec,
+            client,
+            endpoint,
+        })
     }
 
     async fn complete(
@@ -412,26 +425,23 @@ impl DeepSeekApi {
         messages: &[Value],
         tools: Option<&[Value]>,
     ) -> Result<OpenAiStreamCompletion, DriverError> {
-        let mut payload = json!({
-            "model": session.public.model,
-            "messages": messages,
-            "thinking": {"type": if session.public.variant == "non_thinking" { "disabled" } else { "enabled" }},
-            "reasoning_effort": session.public.reasoning_effort,
-            "max_tokens": session.public.max_output_tokens,
-            "stream": true,
-            "stream_options": {"include_usage": true},
-        });
-        if let Some(tools) = tools {
-            payload["tools"] = Value::Array(tools.to_vec());
-        }
-        let body = serde_json::to_vec(&payload).map_err(|_| INVALID_RESPONSE)?;
-        let request = self
+        let payload = (self.spec.request_payload)(session, messages, tools);
+        let body = serde_json::to_vec(&payload).map_err(|_| {
+            provider_error(
+                "provider_protocol_invalid",
+                self.spec.errors.invalid_response,
+            )
+        })?;
+        let mut request = self
             .client
             .post(self.endpoint.clone())
             .bearer_auth(credential.expose());
+        for (name, value) in self.spec.headers {
+            request = request.header(*name, *value);
+        }
         send_chat_completion(request, body)
             .await
-            .map_err(deepseek_stream_error)
+            .map_err(|error| self.spec.stream_error(error))
     }
 }
 
@@ -469,20 +479,31 @@ fn validate_tool_catalog(tools: &[Tool]) -> Result<(), DriverError> {
 fn validate_completion(
     response: &OpenAiStreamCompletion,
     expected_model: &str,
+    spec: &RemoteOpenAiSpec,
 ) -> Result<(), DriverError> {
     if response.model != expected_model {
-        return Err(INVALID_RESPONSE);
+        return Err(provider_error(
+            "provider_protocol_invalid",
+            spec.errors.invalid_response,
+        ));
     }
     let has_tools = !response.message.tool_calls.is_empty();
     if (has_tools && response.finish_reason != "tool_calls")
         || (!has_tools && response.finish_reason != "stop")
     {
-        return Err(INVALID_RESPONSE);
+        return Err(provider_error(
+            "provider_protocol_invalid",
+            spec.errors.invalid_response,
+        ));
     }
     Ok(())
 }
 
-fn tool_result_text(result: &CallToolResult) -> Result<String, DriverError> {
+fn tool_result_text(
+    result: &CallToolResult,
+    spec: &RemoteOpenAiSpec,
+) -> Result<String, DriverError> {
+    let invalid = || provider_error("provider_tool_call_invalid", spec.errors.invalid_tool_call);
     let text = if result.is_error == Some(true) {
         "{\"ok\":false,\"error\":{\"code\":\"room_tool_rejected\"}}".to_owned()
     } else {
@@ -493,20 +514,23 @@ fn tool_result_text(result: &CallToolResult) -> Result<String, DriverError> {
             .collect::<Option<Vec<_>>>()
             .map(|parts| parts.join("\n"))
             .filter(|text| !text.is_empty())
-            .ok_or(INVALID_TOOL_CALL)?
+            .ok_or_else(invalid)?
     };
     (text.len() <= MAX_TOOL_RESULT_BYTES)
         .then_some(text)
-        .ok_or(INVALID_TOOL_CALL)
+        .ok_or_else(invalid)
 }
 
-fn assistant_value(message: &AssistantMessage) -> Value {
-    json!({
+fn assistant_value(message: &AssistantMessage, retain_reasoning: bool) -> Value {
+    let mut value = json!({
         "role": "assistant",
         "content": message.content.as_deref().unwrap_or_default(),
-        "reasoning_content": message.reasoning_content,
         "tool_calls": message.tool_calls,
-    })
+    });
+    if retain_reasoning {
+        value["reasoning_content"] = json!(message.reasoning_content);
+    }
+    value
 }
 
 fn tool_value(executed: &ExecutedTool) -> Value {
@@ -537,27 +561,6 @@ fn completed(
 fn canonical_content(value: &str) -> Option<String> {
     let value = value.trim();
     (!value.is_empty() && value.chars().count() <= 12_000).then(|| value.to_owned())
-}
-
-const fn deepseek_stream_error(error: OpenAiStreamError) -> DriverError {
-    match error {
-        OpenAiStreamError::ContextLimit => DriverError::new(
-            "provider_context_limit",
-            "The bounded DeepSeek request context is too large.",
-        ),
-        OpenAiStreamError::CredentialRejected => DriverError::new(
-            "provider_credential_rejected",
-            "DeepSeek rejected the configured credential.",
-        ),
-        OpenAiStreamError::RateLimited => DriverError::new(
-            "provider_rate_limited",
-            "DeepSeek rate-limited the request.",
-        ),
-        OpenAiStreamError::ResponseTooLarge | OpenAiStreamError::InvalidResponse => {
-            INVALID_RESPONSE
-        }
-        OpenAiStreamError::Http | OpenAiStreamError::Transport => API_UNAVAILABLE,
-    }
 }
 
 #[cfg(test)]
