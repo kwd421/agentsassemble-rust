@@ -448,6 +448,10 @@ Correction substage:
 
 - Implement participant kick, room close/archive/delete, host claim where retained,
   and exact settings/lifecycle controls through the canonical command owner.
+- Resolve C-09 before adding more room settings: prove a retained non-deferred
+  consumer for `activity_plugin` or remove the future-only field through one clean
+  schema change. RimWorld's deferred status is not a consumer and does not justify a
+  generic extension bag.
 - Keep HTTP alternatives only where they serve a distinct bounded integration;
   browser live commands remain WebSocket-owned.
 - Exit: advertised permissions intersect implemented actions and survive

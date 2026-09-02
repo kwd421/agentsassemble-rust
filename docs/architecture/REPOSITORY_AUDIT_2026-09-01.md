@@ -1146,7 +1146,7 @@ speculative plugin framework.
 ### C-09 — future-only activity-plugin state occupies the live room contract
 
 Disposition: `Remove unless a retained current flow is proven`; low current cost,
-medium schema/ownership debt.
+medium schema/ownership debt; Phase 4 room settings, not a provider prerequisite.
 
 `RoomSettings.activity_plugin` crosses domain parsing, public settings, persistence,
 HTTP preferences, generated TypeScript, frontend parsing, and tests, but the general
@@ -1322,7 +1322,8 @@ state, comparisons, and glue.
 
 ### D-06 — recovery and staging mechanisms are justified, exact cadence/cost is not
 
-Disposition: `Keep mechanism; Measure cadence and scan`; Phase 0B.
+Disposition: `Keep mechanism; Measure cadence and scan`; Phase 1 provider-runtime
+hardening.
 
 The runtime reconciler owns a real post-checkpoint owner-loss window and scans only
 unresolved/blocking rows, but no evidence makes one second uniquely correct.
@@ -1502,7 +1503,7 @@ This table routes findings; it does not add another contract layer.
 | C-06 | Codex config owner | 1 | RoomPortal exposes endpoint/capability data; no Codex CLI syntax remains there |
 | C-07 | master/architecture/spec/exposure/verification owners | 0A | each document owns one concern and current statuses/baselines agree |
 | C-08 | provider registration/operation descriptor | 0B | no provider-name UI policy can advertise an absent server operation |
-| C-09 | room-settings owner | 0B | prove a current non-deferred consumer or remove `activity_plugin` cleanly |
+| C-09 | room-settings owner | 4 | prove a current non-deferred consumer or remove `activity_plugin` cleanly |
 | C-10 | frontend production graph | 0B | dead/deferred backup code cannot mount, import behavior, poll, or imply a route |
 | C-11 | domain vocabulary plus existing lifecycle/turn/reconciliation owners | 1 | finite serialized states have one owner while each transition authority, effect, and error remains local |
 | C-12 | entity-specific persistence row owners | Phase 1 and prerequisite to next affected mutation | exact row primitives remove codec/SQL drift without generic repositories or moved authorization |
@@ -1513,7 +1514,7 @@ This table routes findings; it does not add another contract layer.
 | D-03 | human-session target authorization | 0B | one bounded-header session authorization per HTTP operation, no bearer disclosure; desktop/socket tickets unchanged |
 | D-04 | DeepSeek fixed-host HTTP client | 1 | ordinary TLS client passes fixed-host tests; Custom API SSRF policy remains separate |
 | D-05 | provider runtime handle codec | 1 | discarded suffix absent; boot/token/owner and stale-CAS regressions pass |
-| D-06 | reconciliation and guardian staging | 0B | idle/recovery/start-stop measurements justify any cadence/bound change |
+| D-06 | reconciliation and guardian staging | 1 | idle/recovery/start-stop measurements justify any cadence/bound change |
 | D-07 | human-invite token claims | 5 | each retained claim has a current consumer or is removed |
 | K-01 | four asset lifecycle owners plus physical ceiling | keep | replacement/reference/expiry tests retain exact deletion and occupancy behavior |
 | K-02 | each independent trust boundary | keep | share values only; boundary-specific fail-closed errors remain |
