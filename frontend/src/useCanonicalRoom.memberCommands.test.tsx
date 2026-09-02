@@ -86,6 +86,7 @@ describe("useCanonicalRoom member commands", () => {
         tool_mode: "chat",
         ordered_exclude_previous_speaker: true,
         channels: [],
+        activity_plugin: "",
       },
       participants: [{ ...updatedParticipant, role: "agent" }],
       agent_sessions: [],

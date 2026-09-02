@@ -123,7 +123,10 @@ describe("canonical participant event projection", () => {
   });
 
   it("rejects a joined event that does not carry its room-owned participant state", () => {
-    const malformed = { ...joinedEvent(), participant: undefined } as RoomEvent;
+    const malformed = {
+      ...joinedEvent(),
+      participant: undefined,
+    } as unknown as RoomEvent;
     expect(() => applyParticipantEvents([], [malformed])).toThrow(/참가자 투영/);
   });
 

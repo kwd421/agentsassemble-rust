@@ -127,8 +127,11 @@ export function agentSessionUpdatesFromEvents(
   incoming: RoomEvent[],
 ): RoomAgentSession[] {
   return incoming.flatMap((event) => {
-    if (event.type === "agent_session_state" && event.agent_session) {
-      return [event.agent_session];
+    const agentSession = (
+      event as unknown as { agent_session?: RoomAgentSession }
+    ).agent_session;
+    if (event.type === "agent_session_state" && agentSession) {
+      return [agentSession];
     }
     if (event.type === "agent_session_created") {
       return [agentCreationProjectionFromEvent(event).agentSession];

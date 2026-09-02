@@ -1,5 +1,5 @@
 import type { VoiceParticipant } from "./room";
-import type { RoomEvent as GeneratedRoomEvent } from "../types/generatedRoomEvent";
+import type { RoomEvent as GeneratedRoomEvent } from "../types/generated/RoomEvent";
 import {
   uploadMessageAttachment,
   type LobbyAttachmentRef,

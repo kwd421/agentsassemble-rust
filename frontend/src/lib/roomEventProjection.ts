@@ -1,4 +1,4 @@
-import type { LobbyEvent, RoomEvent } from "../api";
+import type { LobbyAttachmentRef, LobbyEvent, RoomEvent } from "../api";
 import { resolveAttachmentReference } from "./attachmentReference";
 import { isVoteTransitionKind } from "./voteEventKind";
 
@@ -24,25 +24,66 @@ type ProjectionOptions = {
   >;
 };
 
-function actor(event: RoomEvent) {
+type TimelineRoomEvent = Pick<
+  RoomEvent,
+  | "actor"
+  | "actor_id"
+  | "actor_type"
+  | "content"
+  | "created_at"
+  | "display_name"
+  | "id"
+  | "message_kind"
+  | "participant_id"
+  | "participant_type"
+  | "room_id"
+  | "seq"
+  | "type"
+> & {
+  activity_detail?: string;
+  activity_id?: string;
+  activity_kind?: string;
+  activity_title?: string;
+  attachments?: LobbyAttachmentRef[];
+  avatar_image_url?: string;
+  category?: string;
+  edited_at?: string;
+  message_deleted?: boolean;
+  metadata?: { source_event_id?: string };
+  phase?: string;
+  provider_kind?: string;
+  role?: string;
+  source_event_id?: string;
+  status?: string;
+  target_agent_id?: string;
+  target_event_id?: string;
+  turn_id?: string;
+  vote_deadline_at?: string;
+  vote_duration_seconds?: number;
+  vote_id?: string;
+  vote_options?: string[];
+  vote_question?: string;
+};
+
+function actor(event: TimelineRoomEvent) {
   return {
     id: String(event.actor?.participant_id || event.participant_id || event.actor_id || ""),
     type: String(event.actor?.participant_type || event.participant_type || event.actor_type || ""),
   };
 }
 
-function progressParticipantId(event: RoomEvent) {
+function progressParticipantId(event: TimelineRoomEvent) {
   return String(event.participant_id || actor(event).id);
 }
 
-function timelineKey(event: RoomEvent, actorId: string) {
+function timelineKey(event: TimelineRoomEvent, actorId: string) {
   if (event.turn_id) return String(event.turn_id);
   const sourceEventId = String(event.source_event_id || event.metadata?.source_event_id || "");
   return sourceEventId && actorId ? `source:${sourceEventId}:actor:${actorId}` : String(event.id);
 }
 
 function speakerIdentity(
-  event: RoomEvent,
+  event: TimelineRoomEvent,
   actorId: string,
   viewerParticipantId: string,
   participantProfiles: NonNullable<ProjectionOptions["participantProfiles"]>,
@@ -76,7 +117,8 @@ export function projectRoomEventsToTimeline(
   const participantProfiles = options.participantProfiles || {};
   const displayResourceBase = String(options.displayResourceBase || "");
 
-  events.forEach((event) => {
+  events.forEach((roomEvent) => {
+    const event = roomEvent as unknown as TimelineRoomEvent;
     if (!event.id) return;
     const eventActor = actor(event);
     const key = timelineKey(event, eventActor.id);
@@ -285,8 +327,9 @@ export function projectRoomEventsToTimeline(
 }
 
 export function projectRoomEventProgress(
-  event: RoomEvent
+  roomEvent: RoomEvent
 ): AgentSessionProgress | null | undefined {
+  const event = roomEvent as unknown as TimelineRoomEvent;
   const phase = String(event.phase || "");
   if (event.type === "activity_delta" && event.category === "compaction") {
     if (event.status === "completed") return null;

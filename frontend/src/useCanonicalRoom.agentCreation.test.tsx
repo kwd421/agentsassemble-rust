@@ -89,12 +89,16 @@ function createdAgentEvent(
       created_at: CREATED_AT,
       updated_at: CREATED_AT,
     },
-  } as RoomEvent;
+  } as unknown as RoomEvent;
+}
+
+function projectedSession(event: RoomEvent): RoomAgentSession {
+  return (event as unknown as { agent_session: RoomAgentSession }).agent_session;
 }
 
 function currentSession(): RoomAgentSession {
   return {
-    ...createdAgentEvent().agent_session!,
+    ...projectedSession(createdAgentEvent()),
     runtime_status: "idle",
     enabled: true,
   };
@@ -140,6 +144,7 @@ function snapshot(
       tool_mode: "chat",
       ordered_exclude_previous_speaker: true,
       channels: [],
+      activity_plugin: "",
     },
     participants,
     agent_sessions: sessions,
@@ -204,12 +209,12 @@ describe("useCanonicalRoom agent creation projection", () => {
         ...event(3, "agent_session_state"),
         participant_id: "opencode-stopped",
         agent_session: {
-          ...created.agent_session!,
+          ...projectedSession(created),
           runtime_status: "error",
           last_error: "provider start failed",
           last_error_code: "provider_start_failed",
         },
-      }])
+      }] as unknown as RoomEvent[])
     );
     expect(result.current.participants).toHaveLength(1);
     expect(result.current.agentSessions[0]).toMatchObject({
@@ -255,8 +260,8 @@ describe("useCanonicalRoom agent creation projection", () => {
     await waitFor(() => expect(test.openSocket).toHaveBeenCalledOnce());
     act(() => test.handlers()?.onRoomSnapshot?.(snapshot(), "http://127.0.0.1:43123"));
     const created = createdAgentEvent();
-    created.agent_session!.persona_card_id = "Archive-Guide";
-    created.agent_session!.persona_card = {
+    projectedSession(created).persona_card_id = "Archive-Guide";
+    projectedSession(created).persona_card = {
       id: "Archive-Guide",
       display_name: "Archive Guide",
       asset_kind: "card",
@@ -278,7 +283,7 @@ describe("useCanonicalRoom agent creation projection", () => {
 
   it("rejects a persona summary that does not match its durable selection", () => {
     const created = createdAgentEvent();
-    created.agent_session!.persona_card_id = "Archive-Guide";
+    projectedSession(created).persona_card_id = "Archive-Guide";
 
     expect(() => agentCreationProjectionFromEvent(created)).toThrow(
       "agent_session_created 이벤트의 생성 투영이 올바르지 않습니다."

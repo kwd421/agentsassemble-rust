@@ -26,7 +26,7 @@ function event(sequence: number, type: string, content = ""): RoomEvent {
     actor: { participant_id: "codex", participant_type: "agent" },
     display_name: "Codex",
     content,
-  };
+  } as unknown as RoomEvent;
 }
 
 function session(status = "idle"): RoomAgentSession {
@@ -64,6 +64,7 @@ function rawRoomSettings(
     tool_mode: "chat",
     ordered_exclude_previous_speaker: true,
     channels: [],
+    activity_plugin: "",
   };
 }
 
@@ -286,7 +287,10 @@ describe("useCanonicalRoom", () => {
       })
     );
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
-    const stale = { ...event(4, "agent_session_state"), agent_session: session("idle") };
+    const stale = {
+      ...event(4, "agent_session_state"),
+      agent_session: session("idle"),
+    } as unknown as RoomEvent;
 
     act(() => handlers?.onRoomSnapshot?.(
       snapshot([stale], "initial", [session("stopped")]),
@@ -349,7 +353,10 @@ describe("useCanonicalRoom", () => {
       handlers?.onRoomEvents?.([
         event(4, "message_delta", "world"),
         event(5, "message_final", "hello world"),
-        { ...event(6, "agent_session_state"), agent_session: session("busy") },
+        {
+          ...event(6, "agent_session_state"),
+          agent_session: session("busy"),
+        } as unknown as RoomEvent,
       ])
     );
 
@@ -446,7 +453,7 @@ describe("useCanonicalRoom", () => {
           display_name: "Makima",
           avatar_image_url: "/api/attachments/makima-avatar?view=1",
           role: "director",
-        },
+        } as unknown as RoomEvent,
       ])
     );
 
@@ -466,7 +473,7 @@ describe("useCanonicalRoom", () => {
           participant_id: "codex",
           display_name: "Makima",
           avatar_image_url: "",
-        },
+        } as unknown as RoomEvent,
       ])
     );
 
@@ -500,7 +507,7 @@ describe("useCanonicalRoom", () => {
           ...event(1, eventType),
           turn_id: undefined,
           participant_id: "codex",
-        },
+        } as unknown as RoomEvent,
       ]);
       initial.participants = [
         {
@@ -528,7 +535,7 @@ describe("useCanonicalRoom", () => {
             ...event(2, eventType),
             turn_id: undefined,
             participant_id: "codex",
-          },
+          } as unknown as RoomEvent,
         ])
       );
 

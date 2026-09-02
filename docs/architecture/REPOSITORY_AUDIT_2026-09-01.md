@@ -624,7 +624,12 @@ Implementation plan and evidence:
 1. Remove the orphan `generatedRoomEvent.ts` and make live, history, and search use
    the real `ts-rs` `RoomEvent`/`PublicRoomSettings` output. Dynamic event extras stay
    local to the boundary that understands them; no replacement global event union is
-   introduced.
+   introduced. Completed: the 101-line generated-looking duplicate and its separate
+   Python-generator claim are gone; timeline-only extras now have a local projection
+   while search, history, live sequencing, and participant-event validation retain
+   their existing runtime rejection owners. This is a type-ownership correction, not
+   a claimed runtime optimization: generated bindings, the production build, and 83
+   focused event/settings/boundary tests pass without a fallback or default value.
 2. Replace the handwritten provider catalog interfaces with aliases of the generated
    types and one socket-local finite validator. Keep `interactive`, which current Rust
    really serializes. Remove `work_harness_available`, `custom_endpoint`,

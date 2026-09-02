@@ -2,7 +2,7 @@ import { requestDesktopMessageSearchReadTicket } from "../lib/desktopBridge";
 import { canonicalRoomId } from "../lib/canonicalRoomId";
 import { assertExactKeys, strictRecord } from "../lib/strictJsonContract";
 import { isUnicodeScalarString } from "../lib/unicodeScalarString";
-import type { RoomEvent } from "../types/generatedRoomEvent";
+import type { RoomEvent } from "../types/generated/RoomEvent";
 import { MAX_MESSAGE_ATTACHMENTS_PER_EVENT } from "../types/generated/MESSAGE_ATTACHMENTS_WIRE";
 import { MAX_MESSAGE_EVENT_ID_BYTES } from "../types/generated/MESSAGE_PINS_WIRE";
 import {
