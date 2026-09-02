@@ -16,7 +16,7 @@ const HOST_SURFACE = {
 
 const HTTP_BASE_URL = "http://127.0.0.1:49157";
 
-describe("DeepSeek credential HTTP authority", () => {
+describe("provider credential HTTP authority", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
@@ -103,6 +103,26 @@ describe("DeepSeek credential HTTP authority", () => {
     );
     expect(invoke).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it("routes Cerebras through its isolated credential account", async () => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce(HOST_SURFACE)
+      .mockResolvedValueOnce(ticket("f"));
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi.fn().mockResolvedValueOnce(statusResponse("missing"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDesktopHostProductSurface();
+    await expect(fetchProviderCredentialStatus("cerebras")).resolves.toEqual({
+      configured: false,
+      source: "missing",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${HTTP_BASE_URL}/api/provider-credentials/cerebras`,
+      expect.any(Object)
+    );
   });
 
   it("rejects browser credential operations before network dispatch", async () => {

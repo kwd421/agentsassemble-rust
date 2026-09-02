@@ -10,16 +10,20 @@ export interface ProviderCredentialStatus {
   source: "keyring" | "missing";
 }
 
-const DEEPSEEK_CREDENTIAL_PATH = "/api/provider-credentials/deepseek";
+const CREDENTIAL_PATHS: Readonly<Record<string, string>> = {
+  deepseek: "/api/provider-credentials/deepseek",
+  cerebras: "/api/provider-credentials/cerebras",
+};
 
 function credentialPath(providerId: string): string {
-  if (providerId !== "deepseek") {
+  const path = CREDENTIAL_PATHS[providerId];
+  if (!path) {
     throw new Error(`Unsupported API credential provider: ${providerId}`);
   }
   if (!isDesktopWebview()) {
     throw new Error("Provider credential controls require the desktop Rust runtime.");
   }
-  return DEEPSEEK_CREDENTIAL_PATH;
+  return path;
 }
 
 function providerCredentialStatus(value: unknown): ProviderCredentialStatus {

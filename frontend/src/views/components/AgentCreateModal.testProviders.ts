@@ -111,7 +111,7 @@ export function cerebrasProvider(): NativeCliProviderAvailability {
     display_name: "Cerebras",
     provider_kind: "cerebras_api",
     default_model: "gpt-oss-120b",
-    credential_available: false,
+    credential_available: true,
   };
 }
 

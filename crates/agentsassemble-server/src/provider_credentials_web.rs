@@ -49,6 +49,9 @@ registered_routes! {
         private "/api/provider-credentials/deepseek" => get(deepseek_status)
             .post(set_deepseek)
             .delete(delete_deepseek),
+        private "/api/provider-credentials/cerebras" => get(cerebras_status)
+            .post(set_cerebras)
+            .delete(delete_cerebras),
     }
 }
 
@@ -56,21 +59,60 @@ async fn deepseek_status(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
-    authorize(&state, request.headers()).await?;
-    ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
-        .await
-        .map_err(ProviderCredentialHttpError::from_body)?;
-    Ok(Json(
-        state
-            .provider_credentials
-            .status(ProviderCredentialId::DeepSeek)
-            .await?,
-    ))
+    credential_status(state, request, ProviderCredentialId::DeepSeek).await
 }
 
 async fn set_deepseek(
     State(state): State<AppState>,
     request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    set_credential(state, request, ProviderCredentialId::DeepSeek).await
+}
+
+async fn delete_deepseek(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    delete_credential(state, request, ProviderCredentialId::DeepSeek).await
+}
+
+async fn cerebras_status(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    credential_status(state, request, ProviderCredentialId::Cerebras).await
+}
+
+async fn set_cerebras(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    set_credential(state, request, ProviderCredentialId::Cerebras).await
+}
+
+async fn delete_cerebras(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    delete_credential(state, request, ProviderCredentialId::Cerebras).await
+}
+
+async fn credential_status(
+    state: AppState,
+    request: Request,
+    provider: ProviderCredentialId,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    authorize(&state, request.headers()).await?;
+    ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
+        .await
+        .map_err(ProviderCredentialHttpError::from_body)?;
+    Ok(Json(state.provider_credentials.status(provider).await?))
+}
+
+async fn set_credential(
+    state: AppState,
+    request: Request,
+    provider: ProviderCredentialId,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
     authorize(&state, request.headers()).await?;
     let request: SetCredentialRequest = decode_json_body(request, MAX_CREDENTIAL_BODY_BYTES)
@@ -79,25 +121,21 @@ async fn set_deepseek(
     Ok(Json(
         state
             .provider_credentials
-            .set(ProviderCredentialId::DeepSeek, &request.api_key)
+            .set(provider, &request.api_key)
             .await?,
     ))
 }
 
-async fn delete_deepseek(
-    State(state): State<AppState>,
+async fn delete_credential(
+    state: AppState,
     request: Request,
+    provider: ProviderCredentialId,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
     authorize(&state, request.headers()).await?;
     ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
         .await
         .map_err(ProviderCredentialHttpError::from_body)?;
-    Ok(Json(
-        state
-            .provider_credentials
-            .delete(ProviderCredentialId::DeepSeek)
-            .await?,
-    ))
+    Ok(Json(state.provider_credentials.delete(provider).await?))
 }
 
 async fn authorize(

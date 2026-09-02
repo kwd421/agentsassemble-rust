@@ -131,6 +131,21 @@ async fn tcp_boundary_authenticates_before_body_and_keeps_secrets_out_of_errors(
     server.stop().await;
 }
 
+#[tokio::test]
+async fn cerebras_credential_route_requires_operator_authority() {
+    let server = start().await;
+    let response = Client::new()
+        .get(format!(
+            "{}/api/provider-credentials/cerebras",
+            server.base_url
+        ))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("reach Cerebras credential boundary: {error}"));
+    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    server.stop().await;
+}
+
 async fn start() -> RunningServer {
     let store = SqliteStore::open("sqlite::memory:")
         .await

@@ -10,6 +10,7 @@ mod antigravity_unix;
 mod antigravity_windows;
 mod catalog;
 mod catalog_service;
+mod cerebras;
 mod codex;
 #[cfg(unix)]
 mod codex_code_mode_host;
@@ -36,6 +37,7 @@ mod opencode_startup;
 mod process;
 mod profile;
 mod registration;
+mod remote_catalog;
 mod remote_https;
 mod remote_openai;
 mod remote_openai_spec;

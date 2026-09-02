@@ -631,7 +631,7 @@ describe("AgentCreateModal", () => {
     expect((await screen.findByLabelText("API 키") as HTMLInputElement).value).toBe("");
   });
 
-  it("does not expose credentials for an API provider without a Rust operation", async () => {
+  it("uses the implemented credential operation advertised by an API provider", async () => {
     render(
       <AgentCreateModal
         open
@@ -648,8 +648,8 @@ describe("AgentCreateModal", () => {
     await userEvent.click(
       screen.getByRole("listitem", { name: "Cerebras" })
     );
-    expect(screen.queryByLabelText("API 키")).toBeNull();
-    expect(apiMocks.fetchProviderCredentialStatus).not.toHaveBeenCalledWith("cerebras");
+    expect(await screen.findByLabelText("API 키")).toBeTruthy();
+    expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("cerebras");
     expect(apiMocks.setProviderCredential).not.toHaveBeenCalled();
   });
 

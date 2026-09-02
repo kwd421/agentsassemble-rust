@@ -13,7 +13,11 @@ use crate::antigravity::AntigravityDriver;
 use crate::guardian::GuardianLaunch;
 use crate::{
     ProviderCredentialId,
-    catalog::{discover_antigravity, discover_codex, discover_deepseek, discover_opencode},
+    catalog::{
+        discover_antigravity, discover_cerebras, discover_codex, discover_deepseek,
+        discover_opencode,
+    },
+    cerebras,
     codex::CodexDriver,
     credentials::ProviderCredentialStore,
     deepseek,
@@ -114,11 +118,28 @@ pub(crate) static DEEPSEEK_PROVIDER: ProviderRegistration = ProviderRegistration
     launch: launch_deepseek,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 4] = [
+pub(crate) static CEREBRAS_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "cerebras",
+    display_name: "Cerebras",
+    provider_kind: "cerebras_api",
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    credential_available: true,
+    discover: discover_cerebras_registered,
+    launch: launch_cerebras,
+};
+
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 5] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
     &DEEPSEEK_PROVIDER,
+    &CEREBRAS_PROVIDER,
 ];
 
 pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistration] {
@@ -177,6 +198,13 @@ fn discover_deepseek_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_deepseek(provider, cancellation))
+}
+
+fn discover_cerebras_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(discover_cerebras(provider, cancellation))
 }
 
 pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderAvailability {
@@ -371,6 +399,22 @@ fn launch_deepseek<'a>(
             .await
             .map_err(|error| DriverLaunchError::safe(deepseek::credential_error(error)))?;
         let driver = deepseek::launch(factory.credentials.clone()).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_cerebras<'a>(
+    factory: &'a ProductionDriverFactory,
+    _session: &'a DurableAgentSession,
+    _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        factory
+            .credentials
+            .secret(ProviderCredentialId::Cerebras)
+            .await
+            .map_err(|error| DriverLaunchError::safe(cerebras::credential_error(error)))?;
+        let driver = cerebras::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }
