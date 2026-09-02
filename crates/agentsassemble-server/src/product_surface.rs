@@ -140,6 +140,10 @@ mod tests {
             registered_route_exposure(HttpMethod::Delete, "/api/provider-credentials/openrouter"),
             Some(RouteExposure::Private)
         );
+        assert_eq!(
+            registered_route_exposure(HttpMethod::Delete, "/api/provider-credentials/vercel"),
+            Some(RouteExposure::Private)
+        );
         assert!(registered_route_path("/api/room-invite/join"));
         assert!(!registered_route_path("/api/not-registered"));
     }

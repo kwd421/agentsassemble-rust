@@ -13,6 +13,7 @@ import {
   ollamaProvider,
   openCodeProvider,
   openRouterProvider,
+  vercelProvider,
 } from "./AgentCreateModal.testProviders";
 import {
   chooseProviderControl,
@@ -671,6 +672,27 @@ describe("AgentCreateModal", () => {
     await userEvent.click(screen.getByRole("listitem", { name: "OpenRouter" }));
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("openrouter");
+  });
+
+  it("uses Vercel AI Gateway's implemented credential operation", async () => {
+    render(
+      <AgentCreateModal
+        open
+        meetingId="room-a"
+        roomLabel="Room A"
+        catalogRevision="cat-vercel"
+        providers={[vercelProvider()]}
+        onClose={() => undefined}
+        onCreate={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
+    await userEvent.click(
+      screen.getByRole("listitem", { name: "Vercel AI Gateway" })
+    );
+    expect(await screen.findByLabelText("API 키")).toBeTruthy();
+    expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("vercel");
   });
 
   it("keeps credential deletion retryable when the secure store rejects it", async () => {

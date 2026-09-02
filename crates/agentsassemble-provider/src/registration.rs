@@ -15,7 +15,7 @@ use crate::{
     ProviderCredentialId,
     catalog::{
         discover_antigravity, discover_cerebras, discover_codex, discover_deepseek,
-        discover_opencode, discover_openrouter,
+        discover_opencode, discover_openrouter, discover_vercel,
     },
     cerebras,
     codex::CodexDriver,
@@ -26,6 +26,7 @@ use crate::{
     opencode::OpenCodeDriver,
     openrouter,
     runtime_lease::HeldRuntimeLease,
+    vercel,
 };
 
 pub(crate) type ProviderDiscoveryFuture<'a> =
@@ -151,13 +152,30 @@ pub(crate) static OPENROUTER_PROVIDER: ProviderRegistration = ProviderRegistrati
     launch: launch_openrouter,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 6] = [
+pub(crate) static VERCEL_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "vercel",
+    display_name: "Vercel AI Gateway",
+    provider_kind: "vercel_ai_gateway",
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    credential_available: true,
+    discover: discover_vercel_registered,
+    launch: launch_vercel,
+};
+
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 7] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
     &DEEPSEEK_PROVIDER,
     &CEREBRAS_PROVIDER,
     &OPENROUTER_PROVIDER,
+    &VERCEL_PROVIDER,
 ];
 
 pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistration] {
@@ -230,6 +248,13 @@ fn discover_openrouter_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_openrouter(provider, cancellation))
+}
+
+fn discover_vercel_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(discover_vercel(provider, cancellation))
 }
 
 pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderAvailability {
@@ -456,6 +481,22 @@ fn launch_openrouter<'a>(
             .await
             .map_err(|error| DriverLaunchError::safe(openrouter::credential_error(error)))?;
         let driver = openrouter::launch(factory.credentials.clone()).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_vercel<'a>(
+    factory: &'a ProductionDriverFactory,
+    _session: &'a DurableAgentSession,
+    _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        factory
+            .credentials
+            .secret(ProviderCredentialId::Vercel)
+            .await
+            .map_err(|error| DriverLaunchError::safe(vercel::credential_error(error)))?;
+        let driver = vercel::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

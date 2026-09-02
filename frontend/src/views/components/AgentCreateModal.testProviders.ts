@@ -126,6 +126,17 @@ export function openRouterProvider(): NativeCliProviderAvailability {
   };
 }
 
+export function vercelProvider(): NativeCliProviderAvailability {
+  return {
+    ...deepSeekProvider(),
+    id: "vercel",
+    display_name: "Vercel AI Gateway",
+    provider_kind: "vercel_ai_gateway",
+    default_model: "openai/gpt-5.4-mini",
+    credential_available: true,
+  };
+}
+
 export function ollamaProvider(): NativeCliProviderAvailability {
   return {
     ...deepSeekProvider(),

@@ -20,7 +20,9 @@ use crate::{
     selection::{ProviderSelection, ProviderSelectionError},
 };
 
-const MAX_PUBLIC_CATALOG_BYTES: usize = 48 * 1024;
+// The complete public catalog must leave a quarter of the 256 KiB WebSocket
+// frame for room metadata; oversized catalogs fail closed before publication.
+const MAX_PUBLIC_CATALOG_BYTES: usize = 192 * 1024;
 
 #[derive(Clone)]
 pub struct ProviderCatalogService {

@@ -55,6 +55,9 @@ registered_routes! {
         private "/api/provider-credentials/openrouter" => get(openrouter_status)
             .post(set_openrouter)
             .delete(delete_openrouter),
+        private "/api/provider-credentials/vercel" => get(vercel_status)
+            .post(set_vercel)
+            .delete(delete_vercel),
     }
 }
 
@@ -119,6 +122,27 @@ async fn delete_openrouter(
     request: Request,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
     delete_credential(state, request, ProviderCredentialId::OpenRouter).await
+}
+
+async fn vercel_status(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    credential_status(state, request, ProviderCredentialId::Vercel).await
+}
+
+async fn set_vercel(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    set_credential(state, request, ProviderCredentialId::Vercel).await
+}
+
+async fn delete_vercel(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    delete_credential(state, request, ProviderCredentialId::Vercel).await
 }
 
 async fn credential_status(

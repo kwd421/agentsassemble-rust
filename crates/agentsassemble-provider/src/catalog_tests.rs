@@ -2,8 +2,8 @@ use agentsassemble_domain::{ProviderAvailability, ProviderCatalog, ProviderContr
 use tokio_util::sync::CancellationToken;
 
 use super::{
-    FilesystemFailure, MAX_PROVIDER_OPTIONS, ProbeFailure, await_filesystem, failed_provider,
-    incomplete_provider, opencode_models, ready_provider,
+    FilesystemFailure, MAX_PROVIDER_BYTES, MAX_PROVIDER_OPTIONS, ProbeFailure, await_filesystem,
+    failed_provider, incomplete_provider, opencode_models, ready_provider,
 };
 
 #[tokio::test]
@@ -56,6 +56,26 @@ fn failed_and_oversized_catalogs_cannot_remain_startable() {
         "opencode/model-0",
     ));
     let bounded = ready_provider(provider, "opencode/model-0".to_owned(), controls);
+    assert!(!bounded.startable);
+    assert_eq!(bounded.discovery_error_code, "model_catalog_too_large");
+}
+
+#[test]
+fn oversized_provider_projection_cannot_remain_startable() {
+    let mut option = super::option("model", "Model");
+    option.metadata.insert(
+        "untrusted".to_owned(),
+        serde_json::json!("x".repeat(MAX_PROVIDER_BYTES)),
+    );
+    let controls = vec![super::control(
+        "model",
+        "Model",
+        "select",
+        vec![option],
+        "model",
+    )];
+
+    let bounded = ready_provider(fixture_provider(), "model".to_owned(), controls);
     assert!(!bounded.startable);
     assert_eq!(bounded.discovery_error_code, "model_catalog_too_large");
 }
@@ -218,7 +238,7 @@ fn fixed_catalogs_are_bounded_before_publication() {
         status: "ready".to_owned(),
         catalog_revision: "oversized".to_owned(),
         discovered_at: String::new(),
-        providers: vec![provider],
+        providers: vec![provider.clone(), provider.clone(), provider],
     })
     .snapshot();
     assert_eq!(snapshot.status, "failed");

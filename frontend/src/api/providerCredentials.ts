@@ -14,6 +14,7 @@ const CREDENTIAL_PATHS: Readonly<Record<string, string>> = {
   deepseek: "/api/provider-credentials/deepseek",
   cerebras: "/api/provider-credentials/cerebras",
   openrouter: "/api/provider-credentials/openrouter",
+  vercel: "/api/provider-credentials/vercel",
 };
 
 function credentialPath(providerId: string): string {

@@ -65,6 +65,7 @@ mod test_support;
 mod unix_custody;
 #[cfg(unix)]
 mod unix_process_tree;
+mod vercel;
 
 pub use catalog_service::ProviderCatalogService;
 pub use credential_provider::ProviderCredentialId;

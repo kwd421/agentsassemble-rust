@@ -15,9 +15,12 @@ use crate::{
     openrouter,
     process::{ProbeFailure, probe},
     remote_catalog::{RemoteCatalogError, fetch_gateway_model_options},
+    vercel,
 };
 
-const MAX_PROVIDER_BYTES: usize = 16 * 1024;
+// The current Vercel tool-capable projection is about 99 KiB. This remains
+// beneath both this per-provider authority and the outer WebSocket frame bound.
+const MAX_PROVIDER_BYTES: usize = 128 * 1024;
 const MAX_PROVIDER_OPTIONS: usize = 256;
 const MAX_OPTION_VALUE_BYTES: usize = 128;
 const MAX_OPTION_LABEL_BYTES: usize = 256;
@@ -300,6 +303,34 @@ pub(crate) async fn discover_openrouter(
         );
     }
     let default_model = preferred_model(&models, "openai/gpt-4.1-mini");
+    ready_provider(
+        provider,
+        default_model.clone(),
+        vec![
+            control("model", "모델", "combobox", models, &default_model),
+            remote_output_token_control(),
+            permission_control(false),
+        ],
+    )
+}
+
+pub(crate) async fn discover_vercel(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
+    let models = match fetch_gateway_model_options(vercel::CATALOG_ENDPOINT, cancellation).await {
+        Ok(models) => models,
+        Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
+    };
+    if models.is_empty() {
+        return unavailable_provider(
+            provider,
+            true,
+            "no_supported_models",
+            "Vercel AI Gateway returned no text models with room-tool support",
+        );
+    }
+    let default_model = preferred_model(&models, "openai/gpt-5.4-mini");
     ready_provider(
         provider,
         default_model.clone(),

@@ -1,6 +1,8 @@
-use std::{path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 
-use agentsassemble_domain::ProviderCatalog;
+use agentsassemble_domain::{
+    ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
+};
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES;
 use agentsassemble_provider::ProviderCatalogService;
@@ -505,8 +507,80 @@ async fn websocket_snapshot_is_bound_to_the_private_ticket_scope_and_finite_curs
     server.stop().await;
 }
 
+#[tokio::test]
+async fn websocket_snapshot_carries_one_large_provider_catalog_projection() {
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
+    let database_url = format!(
+        "sqlite://{}",
+        directory.path().join("runtime.sqlite3").display()
+    );
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("open test store: {error}"));
+    bootstrap(&store).await;
+    let server = start_server(store, None, large_provider_catalog()).await;
+    let mut socket = connect(&server.base_url, &server.state, "general").await;
+    subscribe(&mut socket, 0).await;
+    let snapshot = receive_json(&mut socket).await;
+    let encoded = serde_json::to_vec(&snapshot)
+        .unwrap_or_else(|error| panic!("encode large-catalog snapshot: {error}"));
+
+    assert!(encoded.len() <= MAX_ROOM_SOCKET_MESSAGE_BYTES);
+    assert_eq!(
+        snapshot["provider_catalog"]["providers"][0]["controls"][0]["options"]
+            .as_array()
+            .map(Vec::len),
+        Some(229)
+    );
+    assert!(snapshot.get("available_providers").is_none());
+    server.stop().await;
+}
+
 async fn start(store: SqliteStore) -> RunningServer {
     start_server(store, None, ProviderCatalog::default()).await
+}
+
+fn large_provider_catalog() -> ProviderCatalog {
+    let options = (0..229)
+        .map(|index| ProviderControlOption {
+            value: format!("owner/model-{index}"),
+            label: format!("Model {index}"),
+            metadata: BTreeMap::from([("description".to_owned(), json!("x".repeat(256)))]),
+        })
+        .collect();
+    ProviderCatalog {
+        status: "ready".to_owned(),
+        catalog_revision: "large-provider-catalog".to_owned(),
+        discovered_at: String::new(),
+        providers: vec![ProviderAvailability {
+            id: "vercel".to_owned(),
+            display_name: "Vercel AI Gateway".to_owned(),
+            provider_kind: "vercel_ai_gateway".to_owned(),
+            runtime_kind: "api".to_owned(),
+            catalog_group: "api".to_owned(),
+            workspace_required: false,
+            connection_kind: "native_cli_bridge".to_owned(),
+            executable: String::new(),
+            executable_identity: String::new(),
+            default_model: "owner/model-0".to_owned(),
+            interactive: true,
+            startable: true,
+            available: true,
+            discovery_status: "ready".to_owned(),
+            catalog_source: "discovered".to_owned(),
+            discovery_error_code: String::new(),
+            discovery_error: String::new(),
+            credential_available: true,
+            controls: vec![ProviderControl {
+                key: "model".to_owned(),
+                label: "Model".to_owned(),
+                kind: "combobox".to_owned(),
+                options,
+                default_value: "owner/model-0".to_owned(),
+            }],
+        }],
+    }
 }
 
 async fn start_with_frontend(store: SqliteStore, frontend: PathBuf) -> RunningServer {
