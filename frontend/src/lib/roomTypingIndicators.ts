@@ -1,8 +1,7 @@
-import type { LiveAgent, RoomAgentSession, RoomMember } from "../api";
+import type { RoomAgentSession, RoomMember } from "../api";
 import type { AgentSessionProgress } from "./roomEventProjection";
 
 type RoomTypingIndicatorsOptions = {
-  agents: LiveAgent[];
   members: RoomMember[];
   sessions: RoomAgentSession[];
   progress: AgentSessionProgress | null;
@@ -18,7 +17,6 @@ export type RoomTypingIndicator = {
 };
 
 export function roomTypingIndicators({
-  agents,
   members,
   sessions,
   progress,
@@ -85,35 +83,6 @@ export function roomTypingIndicators({
       );
     }
   });
-  agents.forEach((agent) => {
-    const session = sessionByParticipant.get(agent.agent_id);
-    if (agent.status === "working" && sessionCanShowTyping(session)) {
-      add(
-        agent.agent_id,
-        agent.display_name || agent.agent_id,
-        session?.active_turn_id,
-        session?.provider_kind || agent.provider_kind,
-        "typing",
-        members.find((member) => member.participant_id === agent.agent_id)?.role || ""
-      );
-    }
-  });
-  members.forEach((member) => {
-    const session = sessionByParticipant.get(member.participant_id);
-    if (member.thinking && sessionCanShowTyping(session)) {
-      add(
-        member.participant_id,
-        session
-          ? session.display_name || member.participant_id
-          : member.display_name || member.participant_id,
-        session?.active_turn_id,
-        session ? session.provider_kind : member.provider_kind,
-        "typing",
-        member.role
-      );
-    }
-  });
-
   if (activeProgress) {
     const session = sessions.find(
       (candidate) => candidate.participant_id === activeProgress.participantId
@@ -127,7 +96,7 @@ export function roomTypingIndicators({
         ? session.display_name || activeProgress.participantId
         : participant?.display_name || activeProgress.displayName,
       activeProgress.turnId,
-      session ? session.provider_kind : participant?.provider_kind || "",
+      session?.provider_kind || "",
       activeProgress.activity,
       participant?.role || ""
     );
@@ -141,7 +110,7 @@ export function roomTypingNames(options: RoomTypingIndicatorsOptions): string[] 
 }
 
 function sessionCanShowTyping(session: RoomAgentSession | undefined, turnId = "") {
-  if (!session?.runtime_status) return true;
+  if (!session?.runtime_status) return false;
   if (session.runtime_status !== "busy") return false;
   return !turnId || !session.active_turn_id || session.active_turn_id === turnId;
 }

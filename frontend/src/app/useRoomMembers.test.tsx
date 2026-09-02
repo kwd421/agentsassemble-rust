@@ -3,6 +3,7 @@ import { Hash } from "lucide-react";
 import { describe, expect, it } from "vitest";
 import type { RoomMember } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
+import { participantFixture } from "../test/participant";
 import { useRoomMembers } from "./useRoomMembers";
 
 const room: RoomDockItem = {
@@ -16,19 +17,11 @@ const room: RoomDockItem = {
   tone: "fresh",
 };
 
-const participant: RoomMember = {
-  meeting_id: room.meetingId,
+const participant: RoomMember = participantFixture({
+  room_id: room.meetingId,
   participant_id: "operator-local",
   display_name: "Canonical Operator",
-  role: "human",
-  participant_type: "human",
-  provider_kind: "manual",
-  connection_kind: "browser",
-  status: "joined",
-  source: "test",
-  created_at: "2026-08-25T00:00:00Z",
-  updated_at: "2026-08-25T00:00:00Z",
-};
+});
 
 describe("useRoomMembers", () => {
   it("projects only the active room's canonical WebSocket participants", () => {

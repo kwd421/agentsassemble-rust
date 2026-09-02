@@ -22,6 +22,9 @@ export function participantTypeMeta(type: string): ParticipantTypeMeta {
   if (type === "human") {
     return { label: "사람", detail: "브라우저/초대 사용자", icon: User, tone: "human" };
   }
+  if (type === "agent") {
+    return { label: "에이전트", detail: "Agent Session", icon: Bot, tone: "subscription" };
+  }
   if (type === "subscription_ai") {
     return { label: "구독형 AI", detail: "Claude · Codex · Cursor · Antigravity", icon: Bot, tone: "subscription" };
   }

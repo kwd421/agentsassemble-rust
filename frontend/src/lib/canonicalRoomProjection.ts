@@ -79,7 +79,6 @@ export function canonicalParticipantProfiles(
         participant.avatar_image_url,
         displayResourceBase,
       ),
-      providerKind: participant.provider_kind,
       role: participant.role,
     };
   });
@@ -137,55 +136,26 @@ export function agentSessionUpdatesFromEvents(
   });
 }
 
-export function normalizeRoomParticipant(
-  participant: RoomMember,
-  roomId: string,
-): RoomMember {
-  if (!isParticipantRole(participant.role)) {
-    throw new Error("Room participant has an unsupported canonical role.");
-  }
-  return {
-    ...participant,
-    meeting_id: participant.meeting_id || roomId,
-    provider_kind: participant.provider_kind || "",
-    connection_kind: participant.connection_kind || "",
-    source:
-      participant.source ||
-      (participant.participant_type === "human" ? "room" : "agent_session"),
-    created_at: participant.created_at || "",
-    updated_at: participant.updated_at || "",
-    avatar_image_url: participant.avatar_image_url,
-  };
-}
-
 export function participantIsActive(participant: RoomMember) {
-  return !["left", "kicked"].includes(String(participant.status || ""));
+  return participant.status === "joined" || participant.status === "detached";
 }
 
 export function normalizeActiveRoomParticipants(
   participants: RoomMember[],
-  roomId: string,
 ): RoomMember[] {
-  return participants
-    .filter(participantIsActive)
-    .map((participant) => normalizeRoomParticipant(participant, roomId));
+  return participants.filter(participantIsActive);
 }
 
 export function upsertRoomParticipants(
   current: RoomMember[],
   incoming: RoomMember[],
-  roomId: string,
 ) {
   const byId = new Map(
     current.map((participant) => [participant.participant_id, participant]),
   );
-  incoming.forEach((participant) => {
-    const existing = byId.get(participant.participant_id);
-    byId.set(
-      participant.participant_id,
-      normalizeRoomParticipant({ ...existing, ...participant }, roomId),
-    );
-  });
+  incoming.forEach((participant) =>
+    byId.set(participant.participant_id, participant)
+  );
   return [...byId.values()];
 }
 
@@ -201,13 +171,13 @@ export function applyParticipantEvents(
     const participantId = String(event.participant_id || "");
     if (event.type === "agent_session_created") {
       const created = agentCreationProjectionFromEvent(event).participant;
-      byId.set(participantId, normalizeRoomParticipant(created, event.room_id));
+      byId.set(participantId, created);
       changed = true;
       continue;
     }
     if (event.type === "participant_joined") {
       const joined = joinedParticipantFromEvent(event);
-      byId.set(participantId, normalizeRoomParticipant(joined, event.room_id));
+      byId.set(participantId, joined);
       changed = true;
       continue;
     }
@@ -244,7 +214,7 @@ export function applyParticipantEvents(
       role,
       avatar_image_url:
         "avatar_image_url" in event
-          ? String(event.avatar_image_url || "") || undefined
+          ? String(event.avatar_image_url || "")
           : participant.avatar_image_url,
       updated_at: event.created_at || participant.updated_at,
     });

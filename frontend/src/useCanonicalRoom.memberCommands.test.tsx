@@ -9,6 +9,7 @@ import type {
   RoomSocketSnapshot,
 } from "./roomSocketClient";
 import { useCanonicalRoom } from "./useCanonicalRoom";
+import { participantFixture } from "./test/participant";
 
 function roleEvent(role: RoomMember["role"]): RoomEvent {
   return {
@@ -27,26 +28,28 @@ function roleEvent(role: RoomMember["role"]): RoomEvent {
 describe("useCanonicalRoom member commands", () => {
   it("updates participant roles through a correlated canonical command ACK", async () => {
     let handlers: RoomSocketHandlers | undefined;
-    const updatedParticipant: RoomMember = {
-      meeting_id: "general",
+    const updatedParticipant: RoomMember = participantFixture({
+      room_id: "general",
       participant_id: "agent-one",
       display_name: "Agent One",
       role: "reviewer",
-      participant_type: "subscription_ai",
-      provider_kind: "codex",
-      connection_kind: "agent_session",
-      status: "idle",
-      source: "agent_session",
+      participant_type: "agent",
+      status: "joined",
+      owner_id: "operator-local",
       created_at: "2026-07-10T00:00:00Z",
       updated_at: "2026-07-10T00:00:01Z",
-    };
+    });
     const command = vi.fn(async (action: string) => ({
       op: "ack",
       request_id: "role-1",
       accepted: true,
       resolution: "committed",
       action,
-      result: { participant: updatedParticipant, event: roleEvent("reviewer") },
+      result: {
+        participant: updatedParticipant,
+        event: roleEvent("reviewer"),
+        event_seq: 2,
+      },
     }) satisfies RoomCommandAck);
     const openSocket = vi.fn((_auth, _streams, nextHandlers: RoomSocketHandlers) => {
       handlers = nextHandlers;

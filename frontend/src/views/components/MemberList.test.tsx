@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import { agentSessionFixture } from "../../test/agentSession";
+import { participantFixture } from "../../test/participant";
 import MemberList from "./MemberList";
 
 
@@ -69,19 +70,16 @@ describe("MemberList component wiring", () => {
         agents={[{ ...AGENT, meeting_id: "" }]}
         agentSessions={[SESSION]}
         members={[
-          {
-            meeting_id: "room-1",
+          participantFixture({
+            room_id: "room-1",
             participant_id: "agent-1",
             display_name: "Agent One",
             role: "agent",
-            participant_type: "local",
-            provider_kind: "codex",
-            connection_kind: "agent_session",
+            participant_type: "agent",
             status: "joined",
-            source: "agent_session",
             created_at: "",
             updated_at: "",
-          },
+          }),
         ]}
         roomId="room-1"
         roomName="Room One"
@@ -167,32 +165,26 @@ describe("MemberList component wiring", () => {
 
   it("renders room-owned roles independently from agent identity", () => {
     const members: RoomMember[] = [
-      {
-        meeting_id: "room-1",
+      participantFixture({
+        room_id: "room-1",
         participant_id: "operator-local",
         display_name: "Host",
         role: "director",
         participant_type: "human",
-        provider_kind: "",
-        connection_kind: "browser",
         status: "joined",
-        source: "room",
         created_at: "",
         updated_at: "",
-      },
-      {
-        meeting_id: "room-1",
+      }),
+      participantFixture({
+        room_id: "room-1",
         participant_id: "agent-1",
         display_name: "Canonical Agent",
         role: "reviewer",
-        participant_type: "local",
-        provider_kind: "codex",
-        connection_kind: "agent_session",
+        participant_type: "agent",
         status: "joined",
-        source: "agent_session",
         created_at: "",
         updated_at: "",
-      },
+      }),
     ];
     render(
       <MemberList
@@ -237,46 +229,37 @@ describe("MemberList component wiring", () => {
 
   it("does not infer participant ownership from local runtime custody", () => {
     const members: RoomMember[] = [
-      {
-        meeting_id: "room-1",
+      participantFixture({
+        room_id: "room-1",
         participant_id: "operator-local",
         display_name: "Host",
         role: "director",
         participant_type: "human",
-        provider_kind: "",
-        connection_kind: "browser",
         status: "joined",
-        source: "",
         created_at: "",
         updated_at: "",
-      },
-      {
-        meeting_id: "room-1",
+      }),
+      participantFixture({
+        room_id: "room-1",
         participant_id: "remote-owner",
         display_name: "Remote Owner",
         role: "human",
         participant_type: "human",
-        provider_kind: "",
-        connection_kind: "browser",
         status: "joined",
-        source: "",
         created_at: "",
         updated_at: "",
-      },
-      {
-        meeting_id: "room-1",
+      }),
+      participantFixture({
+        room_id: "room-1",
         participant_id: "agent-1",
         display_name: "Participant Copy",
         role: "agent",
-        participant_type: "local",
-        provider_kind: "codex",
-        connection_kind: "agent_session",
+        participant_type: "agent",
         owner_id: "remote-owner",
         status: "joined",
-        source: "agent_session",
         created_at: "",
         updated_at: "",
-      },
+      }),
     ];
 
     render(
@@ -301,33 +284,27 @@ describe("MemberList component wiring", () => {
 
   it("does not fall back to LiveAgent ownership for a room participant", () => {
     const members: RoomMember[] = [
-      {
-        meeting_id: "room-1",
+      participantFixture({
+        room_id: "room-1",
         participant_id: "remote-owner",
         display_name: "Remote Owner",
         role: "human",
         participant_type: "human",
-        provider_kind: "",
-        connection_kind: "browser",
         status: "joined",
-        source: "",
         created_at: "",
         updated_at: "",
-      },
-      {
-        meeting_id: "room-1",
+      }),
+      participantFixture({
+        room_id: "room-1",
         participant_id: "agent-1",
         display_name: "Participant Copy",
         role: "agent",
-        participant_type: "local",
-        provider_kind: "codex",
-        connection_kind: "agent_session",
+        participant_type: "agent",
         owner_id: "",
         status: "joined",
-        source: "agent_session",
         created_at: "",
         updated_at: "",
-      },
+      }),
     ];
 
     render(
@@ -360,33 +337,27 @@ describe("MemberList component wiring", () => {
 
   it("keeps participant kind independent when roles cross presentation defaults", () => {
     const members: RoomMember[] = [
-      {
-        meeting_id: "room-1",
+      participantFixture({
+        room_id: "room-1",
         participant_id: "operator-local",
         display_name: "Human Reviewer",
         role: "reviewer",
         participant_type: "human",
-        provider_kind: "",
-        connection_kind: "browser",
         status: "joined",
-        source: "",
         created_at: "",
         updated_at: "",
-      },
-      {
-        meeting_id: "room-1",
+      }),
+      participantFixture({
+        room_id: "room-1",
         participant_id: "agent-1",
         display_name: "Agent Human Role",
         role: "human",
-        participant_type: "local",
-        provider_kind: "codex",
-        connection_kind: "agent_session",
+        participant_type: "agent",
         owner_id: "operator-local",
         status: "joined",
-        source: "",
         created_at: "",
         updated_at: "",
-      },
+      }),
     ];
 
     render(
@@ -410,32 +381,27 @@ describe("MemberList component wiring", () => {
 
   it("keeps the canonical host in the people group for an invited browser viewer", () => {
     const members: RoomMember[] = [
-      {
-        meeting_id: "room-1",
+      participantFixture({
+        room_id: "room-1",
         participant_id: "operator-local",
         display_name: "호스트",
         role: "human",
         participant_type: "human",
-        provider_kind: "",
-        connection_kind: "browser",
         status: "joined",
-        source: "room",
         created_at: "",
         updated_at: "",
-      },
-      {
-        meeting_id: "room-1",
+      }),
+      participantFixture({
+        room_id: "room-1",
         participant_id: "guest-1",
         display_name: "Guest",
         role: "human",
         participant_type: "human",
-        provider_kind: "",
-        connection_kind: "browser",
+        owner_id: "guest-1",
         status: "joined",
-        source: "invite",
         created_at: "",
         updated_at: "",
-      },
+      }),
     ];
 
     render(
@@ -469,20 +435,17 @@ describe("MemberList component wiring", () => {
         agents={[{ ...AGENT, display_name: "Live Agent Copy" }]}
         agentSessions={[canonicalSession]}
         members={[
-          {
-            meeting_id: "room-1",
+          participantFixture({
+            room_id: "room-1",
             participant_id: "agent-1",
             display_name: "Stale Participant",
             avatar_image_url: "/api/attachments/participant-avatar?view=1",
             role: "reviewer",
-            participant_type: "local",
-            provider_kind: "codex",
-            connection_kind: "agent_session",
+            participant_type: "agent",
             status: "joined",
-            source: "agent_session",
             created_at: "",
             updated_at: "",
-          },
+          }),
         ]}
         displayResourceBase="http://127.0.0.1:43123"
         roomId="room-1"

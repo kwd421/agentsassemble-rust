@@ -1,37 +1,25 @@
 import { describe, expect, it } from "vitest";
-import type { LiveAgent, RoomAgentSession, RoomMember } from "../api";
+import { agentSessionFixture } from "../test/agentSession";
+import { participantFixture } from "../test/participant";
 import { roomTypingIndicators, roomTypingNames } from "./roomTypingIndicators";
 
-const member: RoomMember = {
-  meeting_id: "room-a",
+const member = participantFixture({
+  room_id: "room-a",
   participant_id: "agent-a",
   display_name: "Agent A",
   role: "agent",
-  participant_type: "subscription_ai",
-  provider_kind: "codex",
-  connection_kind: "agent_session",
-  status: "working",
-  source: "agent_session",
-  created_at: "2026-07-12T00:00:00Z",
-  updated_at: "2026-07-12T00:00:00Z",
-};
-const agent: LiveAgent = {
-  agent_id: "agent-a",
-  display_name: "Agent A",
-  status: "working",
-  provider_kind: "codex",
-  connection_kind: "agent_session",
-  engagement_mode: "agent_session",
-  meeting_id: "room-a",
-  last_seen_at: "",
-  last_reply_at: "",
-  sandbox_enforcement: "read-only",
-  capabilities: [],
-};
-const session = {
+  participant_type: "agent",
+  owner_id: "operator-local",
+});
+const session = agentSessionFixture({
+  room_id: "room-a",
+  session_id: "agent-a",
   participant_id: "agent-a",
   display_name: "Agent A",
-} as RoomAgentSession;
+  runtime_status: "busy",
+  active_turn_id: "turn-a",
+  provider_kind: "codex",
+});
 const progress = {
   participantId: "agent-a",
   displayName: "Agent A",
@@ -41,24 +29,14 @@ const progress = {
 };
 
 describe("roomTypingNames", () => {
-  it("deduplicates working and thinking roster signals", () => {
+  it("derives one typing signal from the busy Agent Session", () => {
     expect(
-      roomTypingNames({
-        agents: [agent],
-        members: [{ ...member, thinking: true }],
-        sessions: [session],
-        progress: null,
-      })
+      roomTypingNames({ members: [member], sessions: [session], progress: null })
     ).toEqual(["Agent A"]);
   });
 
   it("keeps typing visible whether detailed activity is shown or hidden", () => {
-    const options = {
-      agents: [],
-      members: [member],
-      sessions: [session],
-      progress,
-    };
+    const options = { members: [member], sessions: [session], progress };
 
     expect(roomTypingNames(options)).toEqual(["Agent A"]);
     expect(
@@ -69,25 +47,9 @@ describe("roomTypingNames", () => {
     ).toEqual(["Agent A"]);
   });
 
-  it("keeps typing visible while answer output is still streaming", () => {
+  it("links a typing indicator to the current Agent Session turn", () => {
     expect(
-      roomTypingNames({
-        agents: [agent],
-        members: [{ ...member, thinking: true }],
-        sessions: [{ ...session, runtime_status: "busy", active_turn_id: "turn-a" }],
-        progress,
-      })
-    ).toEqual(["Agent A"]);
-  });
-
-  it("links a typing indicator to the participant's active turn", () => {
-    expect(
-      roomTypingIndicators({
-        agents: [agent],
-        members: [{ ...member, thinking: true }],
-        sessions: [{ ...session, runtime_status: "busy", active_turn_id: "turn-a" }],
-        progress,
-      })
+      roomTypingIndicators({ members: [member], sessions: [session], progress })
     ).toEqual([
       {
         participantId: "agent-a",
@@ -100,12 +62,11 @@ describe("roomTypingNames", () => {
     ]);
   });
 
-  it("replaces the generic typing state while the active provider compacts context", () => {
+  it("replaces the generic typing state while the provider compacts context", () => {
     expect(
       roomTypingIndicators({
-        agents: [agent],
         members: [{ ...member, role: "director" }],
-        sessions: [{ ...session, runtime_status: "busy", active_turn_id: "turn-a" }],
+        sessions: [session],
         progress: { ...progress, activity: "compacting" },
       })
     ).toMatchObject([
@@ -120,8 +81,7 @@ describe("roomTypingNames", () => {
   it("does not revive a stopped session from stale turn progress", () => {
     expect(
       roomTypingNames({
-        agents: [{ ...agent, status: "working" }],
-        members: [{ ...member, thinking: true }],
+        members: [member],
         sessions: [{ ...session, runtime_status: "stopped", active_turn_id: "" }],
         progress,
       })
@@ -131,8 +91,7 @@ describe("roomTypingNames", () => {
   it("uses Agent Session identity before participant or progress labels", () => {
     expect(
       roomTypingNames({
-        agents: [],
-        members: [{ ...member, display_name: "Makima", thinking: true }],
+        members: [{ ...member, display_name: "Makima" }],
         sessions: [{ ...session, display_name: "Antigravity CLI" }],
         progress: { ...progress, displayName: "Antigravity CLI" },
       })

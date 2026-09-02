@@ -291,7 +291,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         }
         let snapshotParticipants: RoomMember[];
         try {
-          snapshotParticipants = normalizeActiveRoomParticipants(snapshot.participants || [], roomId);
+          snapshotParticipants = normalizeActiveRoomParticipants(snapshot.participants || []);
         } catch {
           const error = new RoomSocketSayError(
             "The server returned an invalid participant role; reconnecting.",
@@ -528,7 +528,6 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           [roomId]: upsertRoomParticipants(
             previous[roomId] || [],
             [updatedParticipant],
-            roomId
           ),
         }));
       }
@@ -579,7 +578,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       }
       setParticipantsByRoom((previous) => ({
         ...previous,
-        [roomId]: upsertRoomParticipants(previous[roomId] || [], [participant], roomId),
+        [roomId]: upsertRoomParticipants(previous[roomId] || [], [participant]),
       }));
     },
     [requireCurrentProjectionSocket, roomId]

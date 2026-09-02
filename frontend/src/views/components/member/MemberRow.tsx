@@ -161,13 +161,7 @@ export default function MemberRow({
           {entry.statusLabel && (
             <span
               className="dc-member-status-chip preserve-words"
-              data-state={
-                entry.member?.status === "pending"
-                  ? "attention"
-                  : entry.active
-                    ? "active"
-                    : "idle"
-              }
+              data-state={entry.active ? "active" : "idle"}
             >
               {entry.statusLabel}
             </span>

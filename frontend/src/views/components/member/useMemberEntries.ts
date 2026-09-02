@@ -60,7 +60,7 @@ export function useMemberEntries({
       owner: true,
       active: viewerMember ? memberActive(viewerMember) : true,
       muted: Boolean(viewerMember?.muted),
-      meetingId: String(viewerMember?.meeting_id || ""),
+      meetingId: viewerMember.room_id,
       ownerId: viewerEntryId,
       ownerDisplayName: viewerDisplayName,
       avatarImage: resolveAttachmentReference(
@@ -133,7 +133,7 @@ export function useMemberEntries({
         owner: false,
         active: agentSession ? agentSessionIsPresent(runtimeStatus) : isActive(agent),
         muted: mutedById.get(agent.agent_id) ?? false,
-        meetingId: String(member?.meeting_id || agent.meeting_id || ""),
+        meetingId: member?.room_id || agent.meeting_id || "",
         ownerId: ownerId || undefined,
         ownerDisplayName,
         agentDisplayName,
@@ -157,20 +157,8 @@ export function useMemberEntries({
         const agentSession = sessionByParticipantId.get(member.participant_id);
         const role = memberRole(member);
         const typeMeta = participantTypeMeta(member.participant_type);
-        const fullDetail = [
-          typeMeta.label,
-          member.provider_kind,
-          member.connection_kind,
-          member.source === "friend_invite" ? "친구 초대" : "",
-        ]
-          .filter(Boolean)
-          .join(" · ");
-        const detail = [
-          typeMeta.label,
-          member.source === "friend_invite" ? "친구 초대" : "",
-        ]
-          .filter(Boolean)
-          .join(" · ");
+        const fullDetail = typeMeta.label;
+        const detail = typeMeta.label;
         const ownerId =
           member.participant_type === "human"
             ? member.participant_id
@@ -201,7 +189,7 @@ export function useMemberEntries({
             ? agentSessionIsPresent(agentSession.runtime_status || agentSession.status)
             : memberActive(member),
           muted: Boolean(member.muted),
-          meetingId: String(member.meeting_id || ""),
+          meetingId: member.room_id,
           ownerId: ownerId || undefined,
           ownerDisplayName: String(
             memberById.get(String(member.owner_id || ""))?.display_name ||
@@ -214,9 +202,7 @@ export function useMemberEntries({
           avatarReference: agentSession
             ? undefined
             : member.avatar_image_url,
-          providerKind: String(
-            agentSession ? agentSession.provider_kind : member.provider_kind || ""
-          ),
+          providerKind: agentSession?.provider_kind,
           icon: ROLE_OPTIONS.find((option) => option.id === role)?.icon || typeMeta.icon,
         } satisfies MemberEntry;
       });

@@ -13,6 +13,7 @@ import type {
   RoomSocketSnapshot,
 } from "./roomSocketClient";
 import { useCanonicalRoom } from "./useCanonicalRoom";
+import { participantFixture } from "./test/participant";
 import { agentSessionFixture } from "./test/agentSession";
 
 function event(sequence: number, type: string, content = ""): RoomEvent {
@@ -419,20 +420,17 @@ describe("useCanonicalRoom", () => {
       event(1, "message_final", "hello"),
     ]);
     initial.participants = [
-      {
-        meeting_id: "general",
+      participantFixture({
+        room_id: "general",
         participant_id: "codex",
         display_name: "Antigravity CLI",
         avatar_image_url: "/api/attachments/old-avatar?view=1",
         role: "agent",
-        participant_type: "local",
-        provider_kind: "antigravity_live_session",
-        connection_kind: "native_cli_bridge",
+        participant_type: "agent",
         status: "joined",
-        source: "agent_session",
         created_at: "",
         updated_at: "",
-      },
+      }),
     ];
 
     act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
@@ -510,19 +508,16 @@ describe("useCanonicalRoom", () => {
         } as unknown as RoomEvent,
       ]);
       initial.participants = [
-        {
-          meeting_id: "general",
+        participantFixture({
+          room_id: "general",
           participant_id: "codex",
           display_name: "Codex",
           role: "agent",
-          participant_type: "local",
-          provider_kind: "codex_live_session",
-          connection_kind: "native_cli_bridge",
+          participant_type: "agent",
           status: "joined",
-          source: "agent_session",
           created_at: "",
           updated_at: "",
-        },
+        }),
       ];
       act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
       expect(result.current.participants.map((participant) => participant.participant_id)).toEqual([
@@ -578,20 +573,17 @@ describe("useCanonicalRoom", () => {
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
     const initial = snapshot([event(1, "message_final", "hello")]);
     initial.participants = [
-      {
-        meeting_id: "general",
+      participantFixture({
+        room_id: "general",
         participant_id: "codex",
         display_name: "Luna",
-        avatar_image_url: undefined,
+        avatar_image_url: "",
         role: "agent",
-        participant_type: "local",
-        provider_kind: "",
-        connection_kind: "native_cli_bridge",
+        participant_type: "agent",
         status: "joined",
-        source: "agent_session",
         created_at: "",
         updated_at: "",
-      },
+      }),
     ];
 
     act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
@@ -604,20 +596,17 @@ describe("useCanonicalRoom", () => {
 
   it("keeps Agent Session identity across a valid configure ACK and later history", async () => {
     let handlers: RoomSocketHandlers | undefined;
-    const participant: RoomMember = {
-      meeting_id: "general",
+    const participant: RoomMember = participantFixture({
+      room_id: "general",
       participant_id: "codex",
       display_name: "Antigravity CLI",
       avatar_image_url: "",
       role: "agent",
-      participant_type: "local",
-      provider_kind: "",
-      connection_kind: "native_cli_bridge",
+      participant_type: "agent",
       status: "joined",
-      source: "agent_session",
       created_at: "",
       updated_at: "2026-07-10T00:00:04Z",
-    };
+    });
     const updatedSession = {
       ...session("stopped"),
       model: "gpt-5.6-terra",

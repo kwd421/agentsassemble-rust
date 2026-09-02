@@ -1,24 +1,20 @@
 import { describe, expect, it } from "vitest";
 import type { RoomAgentSession, RoomMember } from "../api";
 import { agentSessionFixture } from "../test/agentSession";
+import { participantFixture } from "../test/participant";
 import { agentSessionMemberToLiveAgent } from "./appModel";
 
 describe("agentSessionMemberToLiveAgent", () => {
   it("takes identity from the Agent Session and membership from the room participant", () => {
-    const member = {
-      meeting_id: "room-1",
+    const member = participantFixture({
+      room_id: "room-1",
       participant_id: "agent-1",
       display_name: "Stale Participant",
       avatar_image_url: "/participant-avatar",
       role: "reviewer",
-      participant_type: "local",
-      provider_kind: "stale-provider",
-      connection_kind: "stale-connection",
+      participant_type: "agent",
       status: "joined",
-      source: "agent_session",
-      created_at: "",
-      updated_at: "",
-    } satisfies RoomMember;
+    }) satisfies RoomMember;
     const session: RoomAgentSession = agentSessionFixture({
       room_id: "room-1",
       session_id: "agent-1",
@@ -35,12 +31,11 @@ describe("agentSessionMemberToLiveAgent", () => {
     expect(agentSessionMemberToLiveAgent(member, session)).toMatchObject({
       agent_id: "agent-1",
       display_name: "Session Makima",
-      avatar_image_url: undefined,
       provider_kind: "codex_live_session",
       connection_kind: "native_cli_bridge",
       session_id: "agent-1",
       meeting_id: "room-1",
-      status: "joined",
+      status: "offline",
     });
   });
 });

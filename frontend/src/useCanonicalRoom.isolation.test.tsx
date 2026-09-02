@@ -35,16 +35,15 @@ function rawRoomSettings(): RoomSocketSnapshot["room_settings"] {
 
 function participant(participantId: string, role: RoomMember["role"]): RoomMember {
   return {
-    meeting_id: "general",
+    room_id: "general",
     participant_id: participantId,
     display_name: participantId,
     avatar_image_url: "/api/attachments/avatar-123?view=1",
     role,
     participant_type: "human",
-    provider_kind: "",
-    connection_kind: "browser",
     status: "joined",
-    source: "invite",
+    owner_id: participantId,
+    muted: false,
     created_at: "",
     updated_at: "",
   };

@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import { DEFAULT_ROOM_APPEARANCE } from "../../lib/roomAppearance";
 import { agentSessionFixture } from "../../test/agentSession";
+import { participantFixture } from "../../test/participant";
 import MobileRoomInfoPanel from "./MobileRoomInfoPanel";
 
 const AGENT: LiveAgent = {
@@ -33,20 +34,17 @@ const SESSION: RoomAgentSession = agentSessionFixture({
   connection_kind: "agent_session",
 });
 
-const STALE_MEMBER: RoomMember = {
-  meeting_id: "room-1",
+const STALE_MEMBER: RoomMember = participantFixture({
+  room_id: "room-1",
   participant_id: "agent-1",
   display_name: "Stale Participant",
   avatar_image_url: "/api/attachments/participant-avatar?view=1",
   role: "reviewer",
-  participant_type: "local",
-  provider_kind: "antigravity_live_session",
-  connection_kind: "agent_session",
+  participant_type: "agent",
   status: "joined",
-  source: "agent_session",
   created_at: "",
   updated_at: "",
-};
+});
 
 afterEach(cleanup);
 
@@ -79,19 +77,16 @@ describe("MobileRoomInfoPanel", () => {
   });
 
   it("does not group a room participant by stale LiveAgent ownership", () => {
-    const remoteOwner: RoomMember = {
-      meeting_id: "room-1",
+    const remoteOwner: RoomMember = participantFixture({
+      room_id: "room-1",
       participant_id: "remote-owner",
       display_name: "Remote Owner",
       role: "human",
       participant_type: "human",
-      provider_kind: "",
-      connection_kind: "browser",
       status: "joined",
-      source: "",
       created_at: "",
       updated_at: "",
-    };
+    });
     render(
       <MobileRoomInfoPanel
         room={{ id: "room-1", label: "Room One", meetingId: "room-1", topic: "" }}
@@ -122,33 +117,27 @@ describe("MobileRoomInfoPanel", () => {
   });
 
   it("keeps participant kind independent from its mutable room role", () => {
-    const remoteOwner: RoomMember = {
-      meeting_id: "room-1",
+    const remoteOwner: RoomMember = participantFixture({
+      room_id: "room-1",
       participant_id: "remote-owner",
       display_name: "Remote Owner",
       role: "human",
       participant_type: "human",
-      provider_kind: "",
-      connection_kind: "browser",
       status: "joined",
-      source: "",
       created_at: "",
       updated_at: "",
-    };
-    const crossRoleAgent: RoomMember = {
-      meeting_id: "room-1",
+    });
+    const crossRoleAgent: RoomMember = participantFixture({
+      room_id: "room-1",
       participant_id: "agent-cross-role",
       display_name: "Cross Role Agent",
       role: "human",
-      participant_type: "local",
-      provider_kind: "codex",
-      connection_kind: "agent_session",
+      participant_type: "agent",
       owner_id: "remote-owner",
       status: "joined",
-      source: "agent_session",
       created_at: "",
       updated_at: "",
-    };
+    });
 
     render(
       <MobileRoomInfoPanel

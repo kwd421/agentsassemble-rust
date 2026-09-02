@@ -31,7 +31,7 @@ export interface LiveAgent {
   status: string;
   provider_kind: string;
   connection_kind?: string;
-  engagement_mode: string;
+  engagement_mode?: string;
   meeting_id: string;
   session_id?: string;
   model_id?: string;
@@ -40,8 +40,8 @@ export interface LiveAgent {
   process_group_id?: string;
   live_agent_config_path?: string;
   workspace_path?: string;
-  last_seen_at: string;
-  last_reply_at: string;
+  last_seen_at?: string;
+  last_reply_at?: string;
   last_observed_event_id?: string;
   last_observed_live_event_id?: string;
   poll_interval?: number;
@@ -64,14 +64,14 @@ export interface LiveAgent {
   provider_persistent?: boolean;
   execution_summary?: string;
   tool_loop_unverified_reason?: string;
-  sandbox_enforcement: string;
+  sandbox_enforcement?: string;
   admission_status?: string;
   host_approved_binding?: boolean;
   binding_role_id?: string;
   binding_permission_profile_id?: string;
   binding_join_mode?: string;
   binding_conflicts?: string[];
-  capabilities: string[];
+  capabilities?: string[];
 }
 
 export interface LocalResourceProcess {

@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { agentSessionFixture } from "../../test/agentSession";
+import { participantFixture } from "../../test/participant";
 import RoomConnectionPanel from "./RoomConnectionPanel";
 
 afterEach(cleanup);
@@ -49,21 +50,18 @@ function agent(status = "online"): LiveAgent {
   };
 }
 
-function member(status = "attached"): RoomMember {
-  return {
-    meeting_id: "general",
+function member(status: RoomMember["status"] = "joined"): RoomMember {
+  return participantFixture({
+    room_id: "general",
     participant_id: "codex",
     display_name: "Codex Spark",
     role: "agent",
-    participant_type: "subscription_ai",
-    provider_kind: "codex_live_session",
-    connection_kind: "native_cli_bridge",
+    participant_type: "agent",
     owner_id: "operator-local",
     status,
-    source: "agent_session",
     created_at: "2026-07-11T00:00:00Z",
     updated_at: "2026-07-11T00:00:00Z",
-  };
+  });
 }
 
 const agentControlCapability = { "agent.control": true };
@@ -209,19 +207,16 @@ describe("RoomConnectionPanel", () => {
   });
 
   it("uses the canonical viewer member as the single human self row", () => {
-    const viewerMember: RoomMember = {
-      meeting_id: "general",
+    const viewerMember: RoomMember = participantFixture({
+      room_id: "general",
       participant_id: "operator-local",
       display_name: "호스트",
       role: "human",
       participant_type: "human",
-      provider_kind: "",
-      connection_kind: "agent_session",
       status: "joined",
-      source: "agent_session",
       created_at: "2026-07-11T00:00:00Z",
       updated_at: "2026-07-11T00:00:00Z",
-    };
+    });
 
     render(
       <RoomConnectionPanel
@@ -244,7 +239,7 @@ describe("RoomConnectionPanel", () => {
       <RoomConnectionPanel
         room={room}
         agents={[agent("offline")]}
-        members={[member("stopped")]}
+        members={[member()]}
         agentSessions={[session]}
         capabilities={agentControlCapability}
         onAgentControl={onAgentControl}
@@ -486,7 +481,7 @@ describe("RoomConnectionPanel", () => {
       <RoomConnectionPanel
         room={room}
         agents={[agent("offline")]}
-        members={[member("stopped")]}
+        members={[member()]}
         agentSessions={[session]}
         capabilities={agentControlCapability}
         availableProviders={[codexProvider()]}
@@ -535,7 +530,7 @@ describe("RoomConnectionPanel", () => {
       <RoomConnectionPanel
         room={room}
         agents={[agent("offline")]}
-        members={[member("stopped")]}
+        members={[member()]}
         agentSessions={[initialSession]}
         capabilities={agentControlCapability}
         availableProviders={[provider]}
@@ -552,7 +547,7 @@ describe("RoomConnectionPanel", () => {
       <RoomConnectionPanel
         room={room}
         agents={[agent("offline")]}
-        members={[member("stopped")]}
+        members={[member()]}
         agentSessions={[
           {
             ...initialSession,
@@ -589,7 +584,7 @@ describe("RoomConnectionPanel", () => {
       <RoomConnectionPanel
         room={room}
         agents={[agent("offline")]}
-        members={[member("stopped")]}
+        members={[member()]}
         agentSessions={[session]}
         capabilities={agentControlCapability}
         availableProviders={[codexProvider()]}
@@ -636,7 +631,7 @@ describe("RoomConnectionPanel", () => {
       <RoomConnectionPanel
         room={room}
         agents={[agent("offline")]}
-        members={[member("stopped")]}
+        members={[member()]}
         agentSessions={[session]}
         capabilities={agentControlCapability}
         availableProviders={[provider]}
@@ -669,7 +664,7 @@ describe("RoomConnectionPanel", () => {
       <RoomConnectionPanel
         room={room}
         agents={[agent("offline")]}
-        members={[member("stopped")]}
+        members={[member()]}
         agentSessions={[session]}
         capabilities={agentControlCapability}
         availableProviders={[codexProvider()]}

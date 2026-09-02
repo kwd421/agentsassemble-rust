@@ -96,38 +96,37 @@ export function channelLastReadSummary(setting?: ChannelSettings): string {
 
 export function agentSessionMemberToLiveAgent(
   member: RoomMember,
-  session?: RoomAgentSession
+  session: RoomAgentSession
 ): LiveAgent {
+  const status = session.runtime_status === "busy" ||
+    session.runtime_status === "starting" ||
+    session.runtime_status === "stopping"
+    ? "working"
+    : session.runtime_status === "idle"
+      ? "online"
+      : session.runtime_status === "paused" || session.runtime_status === "available"
+        ? "idle"
+        : session.runtime_status === "error"
+          ? "error"
+          : "offline";
   return {
     agent_id: member.participant_id,
-    display_name: session
-      ? session.display_name || member.participant_id
-      : member.display_name || member.participant_id,
-    avatar_image_url: session ? undefined : member.avatar_image_url,
+    display_name: session.display_name,
     owner_id: member.owner_id,
-    created_by: member.created_by,
-    status: member.thinking ? "working" : member.status || member.session_status || "online",
-    provider_kind: session
-      ? session.provider_kind
-      : member.provider_kind || "agent_session",
-    connection_kind: session
-      ? session.connection_kind
-      : member.connection_kind || "agent_session",
-    engagement_mode: member.engagement_mode || "agent_session",
-    meeting_id: member.meeting_id,
-    session_id: session ? session.session_id : member.session_id || member.participant_id,
-    model_id: session ? session.model : member.model_id,
-    effort: session ? session.reasoning_effort : member.effort,
-    speed: session ? session.service_tier : undefined,
+    owner_participant_id: member.owner_id,
+    status,
+    provider_kind: session.provider_kind,
+    connection_kind: session.connection_kind,
+    meeting_id: member.room_id,
+    session_id: session.session_id,
+    model_id: session.model,
+    effort: session.reasoning_effort,
+    speed: session.service_tier,
     fast_mode: ["fast", "priority"].includes(
-      String(session?.service_tier || "").toLowerCase()
+      session.service_tier.toLowerCase()
     ),
-    permission_option: member.permission_option,
-    sandbox_enforcement: member.sandbox_enforcement || "",
-    join_semantics: member.join_semantics || "agent_session",
-    execution_mode: member.execution_mode || "agent_session_app_server",
-    last_seen_at: member.last_seen_at || member.updated_at,
-    last_reply_at: member.updated_at,
-    capabilities: [],
+    permission_option: session.permission_mode,
+    persona_card_id: session.persona_card_id,
+    execution_mode: session.execution_harness,
   };
 }

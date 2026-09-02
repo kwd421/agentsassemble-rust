@@ -340,7 +340,7 @@ function creationParticipantBecomesJoined(created: RoomMember, joined: RoomMembe
     created.status === "detached" &&
     joined.status === "joined" &&
     [
-      "meeting_id",
+      "room_id",
       "participant_id",
       "display_name",
       "avatar_image_url",
@@ -505,22 +505,7 @@ function participantFromEvent(
   ) {
     throw new Error(`${event.type} 이벤트의 참가자 투영이 올바르지 않습니다.`);
   }
-  return {
-    meeting_id: participant.room_id as string,
-    participant_id: participant.participant_id as string,
-    display_name: participant.display_name as string,
-    avatar_image_url: participant.avatar_image_url as string,
-    role: participant.role as RoomMember["role"],
-    participant_type: participant.participant_type as RoomMember["participant_type"],
-    provider_kind: "",
-    connection_kind: "",
-    owner_id: participant.owner_id as string,
-    status: participant.status as string,
-    muted: participant.muted as boolean,
-    source: participant.participant_type === "human" ? "room" : "agent_session",
-    created_at: participant.created_at as string,
-    updated_at: participant.updated_at as string,
-  };
+  return participant as unknown as RoomMember;
 }
 
 export function joinedParticipantFromEvent(event: RoomEvent): RoomMember {

@@ -1,5 +1,5 @@
 import type { RoomAppearance } from "../lib/roomAppearance";
-import type { ParticipantRole } from "../types/generated/ParticipantRole";
+import type { Participant } from "../types/generated/Participant";
 import {
   fetchDesktopRoomPreferences,
   isDesktopWebview,
@@ -105,35 +105,7 @@ export interface ServerRoomsResponse {
 
 export type ParticipantType = "human" | "subscription_ai" | "api" | "local" | "remote" | "unknown";
 
-export interface RoomMember {
-  meeting_id: string;
-  participant_id: string;
-  display_name: string;
-  avatar_image_url?: string;
-  role: ParticipantRole;
-  participant_type: ParticipantType;
-  provider_kind: string;
-  connection_kind: string;
-  session_id?: string;
-  owner_id?: string;
-  created_by?: string;
-  model_id?: string;
-  effort?: string;
-  sandbox_enforcement?: string;
-  permission_option?: string;
-  runtime_sharing_policy?: string;
-  engagement_mode?: string;
-  execution_mode?: string;
-  join_semantics?: string;
-  session_status?: string;
-  thinking?: boolean;
-  status: string;
-  muted?: boolean;
-  source: string;
-  created_at: string;
-  updated_at: string;
-  last_seen_at?: string;
-}
+export type RoomMember = Participant;
 
 export interface VoiceParticipant {
   participantId: string;

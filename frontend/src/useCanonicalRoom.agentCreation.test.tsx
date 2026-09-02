@@ -106,15 +106,15 @@ function currentSession(): RoomAgentSession {
 
 function currentParticipant(): RoomMember {
   return {
-    meeting_id: "general",
+    room_id: "general",
     participant_id: "opencode-stopped",
     display_name: "OpenCode",
-    participant_type: "unknown",
+    avatar_image_url: "",
+    participant_type: "agent",
     role: "agent",
-    provider_kind: "opencode",
-    connection_kind: "native_cli_bridge",
     status: "joined",
-    source: "agent_session",
+    owner_id: "operator-local",
+    muted: false,
     created_at: CREATED_AT,
     updated_at: CREATED_AT,
   };

@@ -49,20 +49,15 @@ export function useAgentPresentation({
   const sendAgentConfigure = canonicalRoom.sendAgentConfigure;
   const sendParticipantMute = canonicalRoom.sendParticipantMute;
   const sendParticipantRole = canonicalRoom.sendParticipantRole;
-  const sessionByParticipantId = new Map(
-    activeRoomAgentSessions.map((session) => [session.participant_id, session])
+  const participantById = new Map(
+    activeRoomMembers.map((member) => [member.participant_id, member])
   );
-  const agents: LiveAgent[] = activeRoomMembers
-    .filter(
-      (member) =>
-        member.source === "agent_session" && member.participant_type !== "human"
-    )
-    .map((member) =>
-      agentSessionMemberToLiveAgent(
-        member,
-        sessionByParticipantId.get(member.participant_id)
-      )
-    );
+  const agents: LiveAgent[] = activeRoomAgentSessions.flatMap((session) => {
+    const member = participantById.get(session.participant_id);
+    return member?.participant_type === "agent"
+      ? [agentSessionMemberToLiveAgent(member, session)]
+      : [];
+  });
   const scopedAgents = agents.filter((agent) => roomHasAgent(activeRoom, agent));
   const scopedViewerParticipantId = guestSession?.agentId || "operator-local";
   const changeAgentActivityVisibility = useCallback(
@@ -94,12 +89,11 @@ export function useAgentPresentation({
   const typingIndicators = useMemo(
     () =>
       roomTypingIndicators({
-        agents: scopedAgents,
         members: activeRoomMembers,
         sessions: activeRoomAgentSessions,
         progress: canonicalRoom.agentSessionProgress,
       }),
-    [canonicalRoom.agentSessionProgress, activeRoomAgentSessions, activeRoomMembers, scopedAgents]
+    [canonicalRoom.agentSessionProgress, activeRoomAgentSessions, activeRoomMembers]
   );
 
   return {

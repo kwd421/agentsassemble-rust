@@ -204,7 +204,7 @@ function buildMobileMembers({
           member.avatar_image_url,
           displayResourceBase
         ),
-        providerKind: member.provider_kind,
+        providerKind: undefined,
         app: member.participant_type !== "human",
         ownerId:
           member.participant_type === "human"

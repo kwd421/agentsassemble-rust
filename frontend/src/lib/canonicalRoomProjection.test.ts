@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 
 import type { LobbyEvent, RoomAgentSession, RoomEvent, RoomMember } from "../api";
 import { agentSessionFixture } from "../test/agentSession";
+import { participantFixture } from "../test/participant";
 import {
   applyCanonicalParticipantProfiles,
   applyParticipantEvents,
@@ -80,13 +81,14 @@ describe("canonical participant event projection", () => {
   });
 
   it("projects Agent identity from its session and room role from its participant", () => {
-    const participant = {
+    const participant = participantFixture({
+      room_id: "general",
       participant_id: "agent-one",
       display_name: "stale participant name",
       avatar_image_url: "/api/attachments/stale-avatar?view=1",
-      provider_kind: "stale-provider",
       role: "reviewer",
-    } as RoomMember;
+      participant_type: "agent",
+    }) satisfies RoomMember;
     const session: RoomAgentSession = agentSessionFixture({
       participant_id: "agent-one",
       display_name: "Session identity",
@@ -112,11 +114,11 @@ describe("canonical participant event projection", () => {
   it("inserts a newly joined participant from the complete sequenced event", () => {
     expect(applyParticipantEvents([], [joinedEvent()])).toEqual([
       expect.objectContaining({
-        meeting_id: "general",
+        room_id: "general",
         participant_id: "agent-one",
         display_name: "Codex",
+        participant_type: "agent",
         status: "joined",
-        source: "agent_session",
       }),
     ]);
   });
@@ -140,7 +142,7 @@ describe("canonical participant event projection", () => {
     expect(() => applyParticipantEvents([], [malformed])).toThrow(/참가자 투영/);
   });
 
-  it("derives presentation source from participant kind rather than room role", () => {
+  it("preserves participant kind independently from its mutable room role", () => {
     const original = joinedEvent() as RoomEvent & {
       participant: Record<string, unknown>;
     };
@@ -161,7 +163,6 @@ describe("canonical participant event projection", () => {
         participant_id: "human-one",
         participant_type: "human",
         role: "director",
-        source: "room",
       }),
     ]);
   });
