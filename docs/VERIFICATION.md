@@ -6048,3 +6048,46 @@ public TCP acquisition and terminal-response barriers, the existing trust and pe
 lifetime owners, the separate HTTP and WebSocket policies, the stated pre-header
 residual limit, and the absence of new fallback, polling, heartbeat, timer, retry,
 compatibility, placeholder, or swallowed-failure behavior.
+
+### F-09 canonical human admission and terminal expiry: 2026-09-02
+
+Current-original commit `d504647` sends exact `participantType: "human"` from the
+reachable browser flow, and the Rust frontend's durable admission intent has the same
+fixed value. The previous Rust denylist admitted every unknown cleaned token as a
+human despite no current consumer. Commit `0e38579` makes exact lowercase `human`
+the sole human-browser value after the existing bounded cleaner; AgentBridge and
+provider participant kinds remain separate. Commit `cae8d64` removes the false
+same-link renewal guide, and `e76cda7` removes the frontend's unsupported 60-second
+early-expiry skew while narrowing its request type to the real human-only contract.
+
+The focused human-admission suite passes 14 tests, the exact reusable-identity guide
+test passes, and the room-session frontend suite passes 4 tests. Production frontend
+build and the original CSS cascade gate pass. After the active target exceeded the
+24 GiB maintenance ceiling at 25,833,922,560 bytes, explicit `make artifact-prune`
+removed 29,044 regenerable files and 24.8 GiB with no Cargo or Tauri work active. A
+cold complete `/usr/bin/time -l make verify` then passes every repository gate in
+473.32 seconds with 2,396,831,744-byte maximum RSS: 97 frontend files/622 tests, 25
+desktop tests, 56 domain tests, 242 persistence tests, 160 provider tests, 88 server
+tests, and the complete TCP/WebSocket integration suites. These are validation and
+artifact-lifecycle costs, not product runtime claims.
+
+Daybreaker found two Low documentation-contract duplicates in the pushed source
+range: guide duration repeated `3600` outside the `SESSION_TTL` owner, and the startup
+E2E fixture still said to use the same invite. Correction `9821433` derives the guide
+duration from the existing owner, adds a direct assertion, and makes the fixture use
+the terminal-expiry/new-invite text. The focused persistence regression, production
+frontend build/CSS gate, and correctly configured startup Playwright boundary all
+pass; the latter runs 10 tests. Daybreaker manually approves individual `9821433`,
+exact `e76cda7..9821433`, complete F-09 `820e427..9821433`, and HEAD `9821433` at
+`C0/H0/M0/L0`. Critical-web Pro independently approves individual `0e38579` and
+`e76cda7` at `C0/H0/M0/L0`, revises `cae8d64` at `C0/H0/M0/L1` for the two guide
+projections above, and revises requested exact/cumulative `820e427..e76cda7` and that
+HEAD snapshot at `C0/H0/M0/L2` for the projection Low plus stale current-state
+workboard/audit text. Commit `9821433` and the current closure documentation correct
+those findings; correction cross-review remains pending and no final F-09 closure is
+claimed yet. No schema, SQL, session transition, timer, polling, heartbeat, retry,
+fallback, compatibility shim, placeholder, fake authority, or dummy route was added.
+The final warm complete verification after `9821433` also passes every gate in
+249.21 seconds with 2,401,419,264-byte maximum RSS; it retains the current build cache
+and is 224.11 seconds faster than the preceding cold run. This comparison measures
+verification-cache cost only.

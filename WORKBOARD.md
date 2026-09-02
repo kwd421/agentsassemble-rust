@@ -213,10 +213,18 @@ contracts, findings, or verification journals.
   pass. Critical-web Pro and Daybreaker Blue High each approve individual
   `c184739`, documentation correction `c47dbbb`, exact `952fa96..c47dbbb`, and
   HEAD `c47dbbb` at `C0/H0/M0/L0` with no actionable finding.
-- Active task: F-09 human invite guide and accepted client kinds. Verify current
-  reachable clients before changing the finite admission set, and align the guide
-  with the durable terminal expiry/reuse transition. Do not retain aliases merely
-  for compatibility or change the authority owner to make documentation pass.
+- Active task: F-09 human invite guide and accepted client kinds. Current-original
+  commit `d504647` and the Rust frontend each send only exact `human`; source commits
+  `0e38579`, `cae8d64`, and `e76cda7` therefore remove the unknown-token coercion,
+  align the guide with terminal session expiry, and remove the frontend's 60-second
+  early-expiry skew. Daybreaker's two Low findings are corrected in `9821433`: the
+  guide derives its duration from the session-TTL owner and the startup E2E fixture
+  no longer advertises same-invite renewal. Daybreaker approves the complete
+  `820e427..9821433` range and HEAD at `C0/H0/M0/L0`. Critical-web Pro independently
+  revises the requested `e76cda7` snapshot at `C0/H0/M0/L2` for those two projections
+  and stale current-state documentation. Commit `9821433` plus the current closure
+  documentation correct those findings; correction cross-review remains pending, so
+  F-09 is not yet closed.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the

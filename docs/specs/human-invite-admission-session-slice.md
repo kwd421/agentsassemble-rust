@@ -199,15 +199,15 @@ nonempty it must match the durable invite room. Each text value follows the orig
 room cleaner—replace CR/LF with spaces, trim, truncate by Unicode scalar count, trim
 again—with limits 128/128/32/64/128 in the order above. Tabs and repeated internal
 spaces are not collapsed and no Unicode normalization is introduced. The cleaned
-request participant-type token is hashed before the human-only authority decision,
-so accepted aliases do not silently merge distinct retry payloads. The original
-browser join treats only `agent`, `ai`, `bot`, `subscription_ai`, `api`, `local`,
-`remote`, and `unknown` as known nonhuman values. Tokens such as `browser`, `people`,
-or any other cleaned unknown token therefore retain the original human coercion,
-while their distinct cleaned input remains in the payload hash. A syntactically
-invalid avatar reference canonicalizes to absent; a syntactically valid reference
-hashes its attachment ID even when later optional custody lookup omits it. Absence is
-byte `0x00`; presence is `0x01` followed by the framed ID. The vector
+request participant-type token must be exact lowercase `human`; outer whitespace is
+removed by the existing cleaner, while aliases, unknown values, and provider/agent
+kinds are rejected before a prepared admission or payload hash exists. The reachable
+original frontend at `d504647` and the Rust frontend are the two current browser
+consumers and both send that exact value. External AgentBridge admission remains a
+separate owner and is not widened or narrowed by this human-browser boundary. A
+syntactically invalid avatar reference canonicalizes to absent; a syntactically valid
+reference hashes its attachment ID even when later optional custody lookup omits it.
+Absence is byte `0x00`; presence is `0x01` followed by the framed ID. The vector
 `general`, `홍길동\tGuest`, `human`, `Host`, `client-α`, and `avatar_1234` hashes to
 `243c9e5901c07a27c4bd10abc081a1e6283e6a3f14c5c7a996d010a2ea375e65`.
 
@@ -295,6 +295,10 @@ admission commits the relevant expiry transition and new session together.
 Preflight remains read-only and rejects time-expired rows without depending on that
 materialization. Ticket exchange, WebSocket validation, and all target units also
 reject time-expired rows immediately; cleanup is never required for authorization.
+The official frontend derives presentation expiry from the exact server `expires_at`
+boundary without an early renewal skew. The result guide derives its displayed
+seconds from the same `SESSION_TTL` owner and states that terminal expiry requires a
+new host-issued invite rather than promising same-key renewal.
 
 After bounded envelope validation, the admission route submits one request to the
 existing bounded `RoomRuntime` writer. Queue acceptance transfers custody to the
