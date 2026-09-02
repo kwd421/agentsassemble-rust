@@ -40,6 +40,13 @@ fn opencode_catalog_accepts_only_managed_valid_namespaces() {
 #[test]
 fn failed_and_oversized_catalogs_cannot_remain_startable() {
     let provider = fixture_provider();
+    let cleanup = failed_provider(provider.clone(), ProbeFailure::CleanupUnconfirmed);
+    assert!(!cleanup.available);
+    assert_eq!(
+        cleanup.discovery_error_code,
+        "model_discovery_cleanup_failed"
+    );
+
     let failed = failed_provider(provider.clone(), ProbeFailure::CatalogTooLarge);
     assert!(!failed.startable);
     assert!(failed.default_model.is_empty());

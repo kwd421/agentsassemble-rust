@@ -1,8 +1,34 @@
-use std::time::Duration;
+use std::{future::Future, io, pin::Pin, process::ExitStatus, time::Duration};
 
+use process_wrap::tokio::ChildWrapper;
 use tokio_util::sync::CancellationToken;
 
-use super::{PROVIDER_ENVIRONMENT, ProbeFailure, probe};
+use super::{PROVIDER_ENVIRONMENT, ProbeFailure, probe, terminate_probe_tree};
+
+#[derive(Debug)]
+struct UnconfirmedCleanup;
+
+impl ChildWrapper for UnconfirmedCleanup {
+    fn inner(&self) -> &dyn ChildWrapper {
+        self
+    }
+
+    fn inner_mut(&mut self) -> &mut dyn ChildWrapper {
+        self
+    }
+
+    fn into_inner(self: Box<Self>) -> Box<dyn ChildWrapper> {
+        self
+    }
+
+    fn start_kill(&mut self) -> io::Result<()> {
+        Err(io::Error::other("synthetic signal failure"))
+    }
+
+    fn wait(&mut self) -> Pin<Box<dyn Future<Output = io::Result<ExitStatus>> + Send + '_>> {
+        Box::pin(async { Err(io::Error::other("synthetic wait failure")) })
+    }
+}
 
 #[test]
 fn probe_environment_has_no_credential_names() {
@@ -12,6 +38,14 @@ fn probe_environment_has_no_credential_names() {
             .any(|marker| name.contains(marker))
             && !name.starts_with("AGENTSASSEMBLE_")
     }));
+}
+
+#[tokio::test]
+async fn unconfirmed_probe_cleanup_is_a_distinct_failure() {
+    assert_eq!(
+        terminate_probe_tree(&mut UnconfirmedCleanup).await,
+        Err(ProbeFailure::CleanupUnconfirmed)
+    );
 }
 
 #[tokio::test]

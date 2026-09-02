@@ -44,6 +44,7 @@ pub(crate) enum ProbeFailure {
     Failed,
     Cancelled,
     CatalogTooLarge,
+    CleanupUnconfirmed,
 }
 
 pub(crate) async fn probe(
@@ -87,7 +88,7 @@ pub(crate) async fn probe_with_timeout(
         Err(_) => return Err(ProbeFailure::Failed),
     };
     let (Some(stdout), Some(stderr)) = (child.stdout().take(), child.stderr().take()) else {
-        terminate_probe_tree(child.as_mut()).await;
+        terminate_probe_tree(child.as_mut()).await?;
         return Err(ProbeFailure::Failed);
     };
     let collected = tokio::select! {
@@ -96,14 +97,22 @@ pub(crate) async fn probe_with_timeout(
             tokio::try_join!(read_limited(stdout), read_limited(stderr), child.wait())
         })) => Some(collected),
     };
-    let outcome = match collected {
-        None => Err(ProbeFailure::Cancelled),
-        Some(Ok(Ok(output))) => Ok(output),
-        Some(Ok(Err(_))) => Err(ProbeFailure::Malformed),
-        Some(Err(_)) => Err(ProbeFailure::Timeout),
+    let output = match collected {
+        Some(Ok(Ok(output))) => output,
+        None => {
+            terminate_probe_tree(child.as_mut()).await?;
+            return Err(ProbeFailure::Cancelled);
+        }
+        Some(Ok(Err(_))) => {
+            terminate_probe_tree(child.as_mut()).await?;
+            return Err(ProbeFailure::Malformed);
+        }
+        Some(Err(_)) => {
+            terminate_probe_tree(child.as_mut()).await?;
+            return Err(ProbeFailure::Timeout);
+        }
     };
-    terminate_probe_tree(child.as_mut()).await;
-    let (stdout, stderr, status) = outcome?;
+    let (stdout, stderr, status) = output;
     if !status.success() {
         let diagnostic = String::from_utf8_lossy(&stderr).to_lowercase();
         return Err(
@@ -153,9 +162,14 @@ async fn read_limited<R: AsyncRead + Unpin>(mut reader: R) -> io::Result<Vec<u8>
     }
 }
 
-async fn terminate_probe_tree(child: &mut dyn process_wrap::tokio::ChildWrapper) {
-    let _ = Box::into_pin(child.kill()).await;
-    let _ = child.wait().await;
+async fn terminate_probe_tree(
+    child: &mut dyn process_wrap::tokio::ChildWrapper,
+) -> Result<(), ProbeFailure> {
+    let _signal = child.start_kill();
+    match tokio::time::timeout(PROBE_TIMEOUT, child.wait()).await {
+        Ok(Ok(_)) => Ok(()),
+        Ok(Err(_)) | Err(_) => Err(ProbeFailure::CleanupUnconfirmed),
+    }
 }
 
 #[cfg(all(test, unix))]

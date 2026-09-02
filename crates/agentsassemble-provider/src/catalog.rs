@@ -463,6 +463,11 @@ pub(crate) fn failed_provider(
             "provider model catalog exceeded its bounded authority",
             true,
         ),
+        ProbeFailure::CleanupUnconfirmed => (
+            "model_discovery_cleanup_failed",
+            "provider model discovery process cleanup could not be confirmed",
+            false,
+        ),
     };
     unavailable_provider(provider, available, code, message)
 }
