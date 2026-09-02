@@ -1287,13 +1287,14 @@ crate.
 
 ### C-14 — Codex bundle identity meaning is duplicated
 
-Disposition: `Consolidate pure identity only`; low TOCTOU drift risk.
+Disposition: `Completed at 133749a`; low TOCTOU drift risk.
 
 `filesystem_authority.rs:142-153` and `codex_executable.rs:15,205-206` independently
-spell the native bundle identity and companion name. Share that pure meaning at the current Codex
-owner. Canonicalization, open-handle identity, commit-time revalidation, launch-time
-binding, and staging protect different reachable races and must remain separate. No
-generic executable-manifest framework is needed.
+spelled the native bundle identity and companion name. One domain-owned pure pair now
+defines that Codex meaning for persistence, provider, and integration fixtures.
+Canonicalization, open-handle identity, commit-time revalidation, launch-time binding,
+and staging still protect different reachable races at their prior owners. No generic
+executable-manifest framework, new state, or cross-boundary I/O was introduced.
 
 ## Defensive-complexity findings
 

@@ -1059,6 +1059,19 @@ contracts, findings, or verification journals.
   gates. The change removes only two duplicate literals and adds no state, allocation,
   task, timer, polling, retry, fallback, or performance claim. C-13's distinct human
   browser-credential and session-bearer items remain routed to Phase 5.
+- Completed C-14 at `133749a`. One domain-owned pure Codex function now defines the
+  two-member bundle identity, and one pure platform function owns the required
+  `codex-code-mode-host` filename. Persistence commit-time revalidation, provider
+  discovery and launch-time binding, open-file byte identity, staging, and server
+  integration fixtures call that meaning without moving their distinct TOCTOU or
+  lifecycle boundaries. Repository-wide current-source search leaves the bundle kind
+  and companion filenames at that single owner. Three domain identity tests, one
+  persistence revalidation test, four provider bundle tests, and all twelve server
+  Agent Session boundary tests pass, with workspace check, warning-denied Clippy,
+  formatting, diff, architecture, policy, and source-structure gates. The change is
+  allocation- and I/O-neutral, introduces no generic executable framework, state,
+  timer, polling, retry, fallback, or performance claim, and leaves every modified
+  source file below the 500-line structure warning.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
