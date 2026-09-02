@@ -20,7 +20,7 @@ const GUARDIAN_FLAG: &str = "--agentsassemble-provider-guardian";
 const ANCHOR_FLAG: &str = "--agentsassemble-provider-anchor";
 const LAUNCHER_FLAG: &str = "--agentsassemble-provider-launcher";
 const READY_PREFIX: &str = "AGENTSASSEMBLE_PROVIDER_ANCHOR=";
-const PROVIDER_READY_PREFIX: &str = "AGENTSASSEMBLE_PROVIDER_READY=";
+pub(crate) const PROVIDER_READY_PREFIX: &str = "AGENTSASSEMBLE_PROVIDER_READY=";
 const MAX_HELPER_OUTPUT_BYTES: usize = 8 * 1024;
 const MAX_PROVIDER_MANIFEST_BYTES: usize = 256 * 1024;
 const TEST_MODE_ENV: &str = "AGENTSASSEMBLE_INTERNAL_GUARDIAN_MODE";

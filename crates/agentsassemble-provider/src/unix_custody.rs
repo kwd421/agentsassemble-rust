@@ -14,7 +14,10 @@ use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::{
     filesystem::BoundExecutable,
-    guardian::{GuardianCleanupFailure, GuardianLaunch, ProviderForkPolicy, ProviderLaunchConfig},
+    guardian::{
+        GuardianCleanupFailure, GuardianLaunch, PROVIDER_READY_PREFIX, ProviderForkPolicy,
+        ProviderLaunchConfig,
+    },
     guardian_health, guardian_lifetime,
     launch_error::DriverLaunchError,
     runtime::DriverError,
@@ -28,7 +31,6 @@ const HELPER_TIMEOUT: Duration = Duration::from_secs(5);
 const FAILED_START_CLEANUP_TIMEOUT: Duration = Duration::from_secs(7);
 const MAX_HELPER_LINE_BYTES: usize = 1024;
 const MAX_HELPER_LINES: usize = 32;
-const READY_PREFIX: &str = "AGENTSASSEMBLE_PROVIDER_READY=";
 #[cfg(any(target_os = "linux", target_os = "android"))]
 const MAX_PROCESS_STAT_BYTES: u64 = 4 * 1024;
 
@@ -508,7 +510,7 @@ async fn read_ready(
             .await
             .ok_or_else(custody_error)?
             .map_err(|_| custody_error())?;
-        if let Some(value) = line.strip_prefix(READY_PREFIX) {
+        if let Some(value) = line.strip_prefix(PROVIDER_READY_PREFIX) {
             let Some((anchor, provider)) = value.split_once(':') else {
                 return Err(custody_error());
             };

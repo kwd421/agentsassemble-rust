@@ -654,7 +654,7 @@ async fn read_guardian_ready(
             }
             if let Some(identities) = line
                 .trim()
-                .strip_prefix("AGENTSASSEMBLE_PROVIDER_READY=")
+                .strip_prefix(crate::guardian::PROVIDER_READY_PREFIX)
                 .and_then(|value| value.split_once(':'))
                 .and_then(|(anchor, provider)| {
                     Some((anchor.parse::<u32>().ok()?, provider.parse::<u32>().ok()?))
