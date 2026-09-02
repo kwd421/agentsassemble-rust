@@ -793,9 +793,53 @@ invariant remains cohesive and extraction would expose private matchers plus glu
 The correction adds no task, state owner, timer, polling, heartbeat, retry, fallback,
 compatibility path, cache, or framework. Focused Agent Session tests pass 12 cases; the
 production build and approved original CSS cascade pass. Fresh complete verification
-passes all repository gates in 164.23 seconds with 776,175,616-byte maximum RSS. Final
-Pro and Daybreaker re-review of the latest pushed correction remains pending, so no
-approval is claimed for `a01502f` or its containing range.
+passes all repository gates in 164.23 seconds with 776,175,616-byte maximum RSS.
+
+Daybreaker's next manual review found one Low at the same create/start boundary: the
+browser allowed a final session with `provider_session_active=false`, although both
+successful Rust initialization and reuse return through one `started()` producer that
+sets it true. Correction `fc229c0` adds only that known producer fact and a negative
+fixture; it does not reproduce the lifecycle state machine. Fresh complete verification
+passes all gates in 165.14 seconds with 784,351,232-byte maximum RSS. Critical-web Pro
+and Daybreaker Blue High each manually approve individual `fc229c0`, exact
+`f09e919..fc229c0`, correction `a01502f..fc229c0`, cumulative F-11
+`dff4b65..fc229c0`, and HEAD `fc229c0` at `C0/H0/M0/L0`.
+
+The Participant half is implemented in three independent local commits pending pushed
+manual cross-review. `4fc06a0` closes a reachable post-commit disconnect: role mutation
+returned a durable event but omitted `result.event_seq`, while the strict browser ACK
+requires their equality. The persistence owner now returns the committed sequence, and
+an actual TCP/WebSocket test proves exact replay returns the same result without
+republishing. `2f8ebbb` makes snapshot and role/mute/leave ACK admission require the
+exact generated Participant shape, unique participant IDs, and one-to-one Agent Session
+binding. This rejects a malformed or conflicting authenticated body before it becomes a
+second browser authority. `c40fe55` aliases `RoomMember` to generated `Participant`,
+removes provider/runtime/source/session fields and partial merges from the room owner,
+and derives provider identity, lifecycle, and typing only from the bound Agent Session.
+It removes the producerless participant `thinking` route and 468 lines of duplicate or
+fabricated projection/test state.
+
+The new validation cost is bounded admission work over the already admitted snapshot
+and command ACK; no background task or repeated scan is added. The presentation path
+uses the existing participant/session identity join and makes no throughput claim. Room
+role/join/mute/membership, Agent Session identity/lifecycle, endpoint-specific errors,
+durable replay, and fail-closed rejection are preserved. No default wire state, task,
+timer, polling, heartbeat, retry, fallback, compatibility path, cache, trait, or future
+configuration layer is introduced. At 552 lines `participantEventContract.ts` and at
+516 lines `roomSocketValidation.ts` both cross the 500-line inspection signal but remain
+below the 800-line strong split signal; inspection keeps them because the former owns
+sequenced participant/create-transition invariants and the latter owns socket-envelope
+admission. Moving their private exact-key/matcher state across that boundary would add
+public glue rather than separate a second state or lifecycle owner.
+
+The three commits contain 68, 265, and 713 changed lines. Focused Participant/roster
+tests pass 69 cases, the production TypeScript/Vite build and original CSS gate pass,
+and all 99 frontend files/652 tests pass. Fresh complete `make verify` passes desktop,
+Rust unit, real TCP/WebSocket boundaries, generated bindings, warning-denied Clippy,
+policy, structure, diff, CSS, and artifact gates in 257.28 seconds with
+1,839,890,432-byte maximum RSS. The observed production JavaScript asset is 820.01 kB;
+neither it nor the verification measurements are claimed as an optimization. Final Pro
+and Daybreaker approval of this pushed Participant batch is not yet claimed.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,
