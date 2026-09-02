@@ -15,6 +15,7 @@ mod antigravity_unix;
 #[cfg(windows)]
 mod antigravity_windows;
 mod catalog;
+mod catalog_service;
 mod codex;
 #[cfg(unix)]
 mod codex_code_mode_host;
@@ -64,6 +65,7 @@ mod unix_custody;
 #[cfg(unix)]
 mod unix_process_tree;
 
+pub use catalog_service::ProviderCatalogService;
 pub use credentials::{
     ProviderCredentialError, ProviderCredentialSource, ProviderCredentialStatus,
     ProviderCredentialStore,
@@ -71,7 +73,6 @@ pub use credentials::{
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
 pub use profile::runtime_profile_key;
-pub use registration::ProviderCatalogService;
 pub use room_attachment::{
     ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,
     ProviderAttachmentReadIngress,
