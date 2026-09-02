@@ -415,6 +415,21 @@ contracts, findings, or verification journals.
   `3229fbe`, exact correction `5badabe..3229fbe`, full correction
   `62d58b9..3229fbe`, cumulative plan `1c5b37e..3229fbe`, HEAD, and master-plan
   completeness at `C0/H0/M0/L0` with no actionable finding.
+- Implemented pending Phase 1 whole-phase review: F-01 Antigravity transcript removal.
+  Commit `bddd08e` makes an installed client visibly available but non-startable with
+  stable `provider_native_receipt_unavailable`, removes transcript-derived session and
+  completion promotion, the launch nonce, active 100 ms transcript polling, and the
+  now-pointless model probe. Commit `617efee` moves the retired transcript-correlated
+  turn path unchanged under root `deprecated/`, outside every build/runtime edge.
+  Commit `bd8074c` closes the separate existing-durable-session entry by rejecting
+  launch safely before executable binding, RoomPortal creation, hook installation, or
+  PTY/ConPTY spawn. PTY/ConPTY custody, managed workspace hooks, and the persistent
+  non-print command remain; dormant I/O and hook-receipt methods have narrow lint
+  expectations rather than a module-wide exception. The prior path enumerated and
+  sorted up to 20 provider-history candidates every 100 ms and could allocate/read a
+  2 MiB tail; those costs and provider-private-history reads are gone. Focused tests,
+  all 151 provider tests, Clippy with warnings denied, formatting, architecture/policy
+  gates, and diff checks pass. No Antigravity turn or Phase 1 completion is claimed.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop

@@ -197,7 +197,7 @@ silently redefined as Gemini CLI.
 | Provider | Verified original transport | Audited Rust state | Required target |
 | --- | --- | --- | --- |
 | Codex | persistent `app-server --stdio` | implemented; completion aliases/inference reopened | exact current app-server protocol, Codex-owned CLI config, no heuristic fallback |
-| Antigravity | persistent PTY/ConPTY plus hooks | implemented with forbidden transcript polling | keep PTY/ConPTY and hooks; remove transcript and print completely; exact native signal or explicit incomplete |
+| Antigravity | persistent PTY/ConPTY plus hooks | transcript path retired; explicitly unavailable | PTY/ConPTY and hooks remain; exact native attachment/completion receipt is still required before start |
 | Grok | official ACP stdio | absent | implement the ACP registration, catalog/selection, lifecycle, turn, failure, cancellation, and stop contracts; client/login absence affects availability and real-run evidence only |
 | Claude | persistent Claude Code terminal/hook path | absent | use Claude Agent SDK as directed; no old transcript or print path |
 | Cursor | persistent Cursor terminal/room portal | absent | implement the verified reachable registration, lifecycle, turn, failure, and stop contracts; missing client capability is an explicit runtime-unavailable state, not a substitute for static implementation |

@@ -152,9 +152,24 @@ runtime, or fallback connection. An exact native signal may replace it; otherwis
 Antigravity turn completion remains explicitly incomplete. Terminal silence, print
 mode, scraping, or another provider is not an acceptable replacement.
 
-The corrected architecture and Agent Session draft now mark this implementation as
-historical/forbidden rather than current authority. Code removal and real-flow
-evidence remain required before the finding closes.
+Implemented in `bddd08e`, `617efee`, and `bd8074c`; Phase 1 review remains pending.
+The provider catalog now distinguishes a missing executable from an installed but
+non-startable Antigravity client, and the launch boundary rejects the latter safely
+before executable binding, RoomPortal creation, hook installation, or PTY/ConPTY
+spawn. No pending session ID or completion is promoted without a native receipt.
+
+The retired transcript, transcript-correlated prompt, and terminal-screen permission
+path live only under the root `deprecated/` boundary with no module, feature, test,
+runtime, or fallback connection. The prior active turn polled every 100 ms, repeatedly
+enumerated and sorted up to 20 provider-history candidates, and could read a 2 MiB
+tail; those CPU, disk, allocation, provider-private-history, and duplicate-authority
+costs are absent. Catalog discovery also no longer launches `agy models` when the
+provider cannot satisfy the start contract. PTY/ConPTY process custody and managed
+workspace hooks remain compiled, and the exact persistent command still excludes
+print mode. Focused Antigravity/catalog tests, all 151 provider tests, Clippy with
+warnings denied, formatting, the architecture/policy gates, and diff checks pass.
+No end-to-end Antigravity turn is claimed; it remains explicitly incomplete until a
+native attachment/completion receipt exists.
 
 ### F-02 — Codex and OpenCode have multiple completion authorities
 
