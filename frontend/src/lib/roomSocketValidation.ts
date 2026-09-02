@@ -132,8 +132,16 @@ function publicRoomSettingsMatch(left: unknown, right: unknown): boolean {
   });
 }
 
-export function participantProjectionIsValid(event: RoomEvent): boolean {
+export function eventProjectionIsValid(event: RoomEvent): boolean {
   try {
+    if (
+      event.type === "room_settings_updated" &&
+      !publicRoomSettingsIsValid(
+        (event as unknown as Record<string, unknown>).room_settings
+      )
+    ) {
+      return false;
+    }
     if (event.type === "participant_joined") joinedParticipantFromEvent(event);
     if (event.type === "agent_session_created") agentCreationProjectionFromEvent(event);
     if (event.type === "agent_session_state") {
@@ -198,7 +206,7 @@ export function publicRoomEventIsValid(value: unknown, expectedRoomId: string): 
     ) &&
     isSequence(value.seq) &&
     value.seq > 0 &&
-    participantProjectionIsValid(value as unknown as RoomEvent)
+    eventProjectionIsValid(value as unknown as RoomEvent)
   );
 }
 

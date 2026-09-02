@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { commandAckResultIsValid } from "./roomSocketValidation";
+import {
+  commandAckResultIsValid,
+  publicRoomEventIsValid,
+} from "./roomSocketValidation";
 
 function settings(label = "General") {
   return {
@@ -59,4 +62,26 @@ describe("room settings command ACK validation", () => {
       "operator-local",
     )).toBe(false);
   });
+});
+
+describe("room settings event validation", () => {
+  it("accepts the exact generated settings projection", () => {
+    expect(publicRoomEventIsValid(
+      result(settings(), settings()).event,
+      "general",
+    )).toBe(true);
+  });
+
+  it.each(["missing field", "extra field"] as const)(
+    "rejects a %s in a standalone settings event",
+    (conflict) => {
+      const projection = settings() as Record<string, unknown>;
+      if (conflict === "missing field") delete projection.activity_plugin;
+      else projection.legacy_label = "General";
+      expect(publicRoomEventIsValid(
+        result(projection, settings()).event,
+        "general",
+      )).toBe(false);
+    },
+  );
 });
