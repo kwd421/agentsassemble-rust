@@ -936,6 +936,19 @@ contracts, findings, or verification journals.
   transcript, print, cache, background task, or credential state was added. The central
   registration owner is now 833 lines; the prior strong-warning review still applies
   because this one declarative entry added no second state flow or independent owner.
+- Completed pending Phase 1 whole-phase review: Codex exact terminal completion at
+  `16ebb1f`. The audited driver could convert a final message followed by thread-idle
+  into success after a one-second grace timer, before the provider supplied its
+  terminal success or failure. The Codex turn owner now accepts only the exact
+  `turn/completed` receipt; final-message, item-completed, and thread-status events
+  remain nonterminal. This removes the grace timer and inferred-completion state
+  without changing the three-minute read-inactivity bound, cancellation, output
+  bounds, or RoomPortal publication authority. The change removes 42 net lines and
+  adds no polling, retry, fallback, heartbeat, background task, or silent failure.
+  The exact receipt predicate rejects the three former inference inputs, the real
+  turn fixture still completes through one `turn/completed`, and all 197 provider
+  tests, warning-denied provider Clippy, formatting, diff, architecture, and source-
+  structure gates pass. No real provider turn was run for this correction.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
