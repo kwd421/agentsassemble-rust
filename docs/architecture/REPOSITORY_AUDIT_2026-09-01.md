@@ -805,8 +805,8 @@ and Daybreaker Blue High each manually approve individual `fc229c0`, exact
 `f09e919..fc229c0`, correction `a01502f..fc229c0`, cumulative F-11
 `dff4b65..fc229c0`, and HEAD `fc229c0` at `C0/H0/M0/L0`.
 
-The Participant half is implemented in three independent local commits pending pushed
-manual cross-review. `4fc06a0` closes a reachable post-commit disconnect: role mutation
+The Participant half is implemented in three independent pushed commits under manual
+cross-review. `4fc06a0` closes a reachable post-commit disconnect: role mutation
 returned a durable event but omitted `result.event_seq`, while the strict browser ACK
 requires their equality. The persistence owner now returns the committed sequence, and
 an actual TCP/WebSocket test proves exact replay returns the same result without
@@ -838,8 +838,29 @@ and all 99 frontend files/652 tests pass. Fresh complete `make verify` passes de
 Rust unit, real TCP/WebSocket boundaries, generated bindings, warning-denied Clippy,
 policy, structure, diff, CSS, and artifact gates in 257.28 seconds with
 1,839,890,432-byte maximum RSS. The observed production JavaScript asset is 820.01 kB;
-neither it nor the verification measurements are claimed as an optimization. Final Pro
-and Daybreaker approval of this pushed Participant batch is not yet claimed.
+neither it nor the verification measurements are claimed as an optimization.
+
+Daybreaker's initial review approves `4fc06a0` and `2f8ebbb` but returns
+`REVISE — C0/H0/M0/L1` for `c40fe55`, documentation `fccf024`, exact
+`fc229c0..fccf024`, cumulative F-11 `dff4b65..fccf024`, and HEAD. The valid Low is an
+obsolete compatibility owner outside the first searched projection paths:
+`api/room.ts` still declared legacy `subscription_ai/api/local/remote/unknown`
+Participant kinds, `participantTypes.ts` retained their unreachable options and display
+branches, and `roomMentionables.ts` could infer Agent membership/provider presentation
+from its own partial member shape. Correction `b4739ce` removes those types and branches,
+accepts exact room Participants in mention projection, enumerates only room members,
+uses the bound Agent Session projection only for Agent presentation, and fails closed on
+an impossible type or missing Agent projection. It adds no new abstraction, compatibility
+route, fallback, timer, polling, heartbeat, retry, state, or policy owner.
+
+The correction changes 108 lines and removes 22 net lines. Focused mention/roster/socket
+tests pass 27 cases, all 99 frontend files/652 tests pass, and the TypeScript/Vite build
+plus original CSS gate pass with an observed 818.72 kB JavaScript asset. Fresh complete
+`make verify` passes desktop, Rust unit, actual TCP/WebSocket boundaries, generated
+bindings, warning-denied Clippy, policy, structure, diff, CSS, and artifact gates in
+164.73 seconds with 769,294,336-byte maximum RSS. No performance improvement is claimed.
+Pro's original-batch result and both reviewers' correction verdicts remain pending, so
+final approval is not claimed.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,
