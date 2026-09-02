@@ -444,6 +444,19 @@ contracts, findings, or verification journals.
   Phase 1 SSRF boundary. All 150 provider tests, Clippy with warnings denied, formatting,
   architecture/policy gates, and diff checks pass. No remote-provider implementation or
   performance gain is claimed by this refactor.
+- Implemented pending Phase 1 whole-phase review: canonical RoomPortal provider-tool
+  projection at `59785ed`. The DeepSeek adapter previously repeated eleven tool names,
+  terminal-action classification, and replay-unsafe classification outside the MCP
+  contract owner, and it silently omitted the existing bounded `read_attachment` tool.
+  The RoomPortal contract now owns the exact twelve-name inventory plus tabletop,
+  terminal, and replay-safety predicates; DeepSeek filters the actual MCP descriptors
+  through those predicates and can invoke `read_attachment` only through the existing
+  observation-bound attachment authority. Provider-specific wire formatting remains in
+  the adapter. No new tool, permission, state, retry, fallback, polling, or timer was
+  added. All 151 provider tests, focused policy/DeepSeek tests, Clippy with warnings
+  denied, formatting, architecture/policy gates, and diff checks pass. No throughput or
+  allocation improvement is claimed; the change removes a concrete cross-provider drift
+  source before the remote API family is connected.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
