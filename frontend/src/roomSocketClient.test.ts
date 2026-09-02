@@ -664,7 +664,7 @@ describe("bounded canonical room socket", () => {
     handle.close();
   });
 
-  it("rejects snapshot provider aliases that disagree with the catalog owner", async () => {
+  it("rejects the retired duplicate provider alias outside the snapshot contract", async () => {
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets } = openHarness({
       onError: (error) => {
@@ -674,9 +674,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    (frames.snap as unknown as Record<string, unknown>).available_providers = [
-      providerAvailability(),
-    ];
+    (frames.snap as unknown as Record<string, unknown>).available_providers = [];
     sockets[0].receive(frames.receipt);
     sockets[0].receive(frames.snap);
 

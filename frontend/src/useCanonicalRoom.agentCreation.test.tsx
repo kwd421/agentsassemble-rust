@@ -156,7 +156,6 @@ function snapshot(
     resume_gap: false,
     snapshot_mode: "initial",
     provider_catalog: { status: "ready", catalog_revision: "catalog-1", providers: [] },
-    available_providers: [],
     capabilities: { "agent.control": true },
   };
 }

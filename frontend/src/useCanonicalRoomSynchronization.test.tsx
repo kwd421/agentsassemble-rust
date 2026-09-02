@@ -70,7 +70,6 @@ function snapshot(events: RoomEvent[]): RoomSocketSnapshot {
       catalog_revision: "cat-test",
       providers: [],
     },
-    available_providers: [],
     capabilities: { "message.send": true },
   };
 }

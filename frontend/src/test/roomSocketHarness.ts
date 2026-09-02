@@ -113,7 +113,6 @@ function snapshot(cursor: number) {
     resume_gap: false,
     snapshot_mode: "initial",
     provider_catalog: { status: "ready", catalog_revision: "cat-1", providers: [] },
-    available_providers: [],
     capabilities: CAPABILITIES,
   };
 }

@@ -357,7 +357,6 @@ where
         has_more_before: snapshot_data.has_more_before,
         resume_gap: snapshot_data.resume_gap,
         snapshot_mode: snapshot_data.snapshot_mode,
-        available_providers: provider_catalog.providers.clone(),
         provider_catalog,
         capabilities: principal.capabilities.clone(),
     };

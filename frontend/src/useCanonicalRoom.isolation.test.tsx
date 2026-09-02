@@ -94,7 +94,6 @@ function snapshot({
       catalog_revision: "catalog-1",
       providers: [],
     },
-    available_providers: [],
     capabilities,
   };
 }

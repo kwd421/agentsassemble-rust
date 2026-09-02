@@ -101,7 +101,6 @@ describe("useCanonicalRoom member commands", () => {
       resume_gap: false,
       snapshot_mode: "initial",
       provider_catalog: { status: "ready", catalog_revision: "cat-test", providers: [] },
-      available_providers: [],
       capabilities: { "room.manage": true },
     } satisfies RoomSocketSnapshot;
     act(() => handlers?.onRoomSnapshot?.(snapshot, "http://127.0.0.1:43123"));

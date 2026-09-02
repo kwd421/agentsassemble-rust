@@ -2,7 +2,6 @@
 import type { AgentSession } from "./AgentSession.js";
 import type { CapabilitySet } from "./CapabilitySet.js";
 import type { Participant } from "./Participant.js";
-import type { ProviderAvailability } from "./ProviderAvailability.js";
 import type { ProviderCatalog } from "./ProviderCatalog.js";
 import type { PublicRoomSettings } from "./PublicRoomSettings.js";
 import type { Room } from "./Room.js";
@@ -10,4 +9,4 @@ import type { RoomEvent } from "./RoomEvent.js";
 import type { SnapshotMode } from "./SnapshotMode.js";
 import type { JsonValue } from "./serde_json/JsonValue.js";
 
-export type RoomSnapshot = { stream: string, room: Room, room_settings: PublicRoomSettings, participants: Array<Participant>, agent_sessions: Array<AgentSession>, active_turns: Array<JsonValue>, events: Array<RoomEvent>, oldest_seq: number, last_seq: number, has_more_before: boolean, resume_gap: boolean, snapshot_mode: SnapshotMode, provider_catalog: ProviderCatalog, available_providers: Array<ProviderAvailability>, capabilities: CapabilitySet, };
+export type RoomSnapshot = { stream: string, room: Room, room_settings: PublicRoomSettings, participants: Array<Participant>, agent_sessions: Array<AgentSession>, active_turns: Array<JsonValue>, events: Array<RoomEvent>, oldest_seq: number, last_seq: number, has_more_before: boolean, resume_gap: boolean, snapshot_mode: SnapshotMode, provider_catalog: ProviderCatalog, capabilities: CapabilitySet, };

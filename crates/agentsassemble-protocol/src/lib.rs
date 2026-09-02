@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    AgentSession, CapabilitySet, Participant, ProviderAvailability, ProviderCatalog,
-    PublicRoomSettings, Room, RoomEvent, SnapshotMode,
+    AgentSession, CapabilitySet, Participant, ProviderCatalog, PublicRoomSettings, Room, RoomEvent,
+    SnapshotMode,
 };
 pub use agentsassemble_domain::{
     MAX_ATTACHMENT_BYTES, MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
@@ -323,7 +323,6 @@ pub struct RoomSnapshot {
     pub resume_gap: bool,
     pub snapshot_mode: SnapshotMode,
     pub provider_catalog: ProviderCatalog,
-    pub available_providers: Vec<ProviderAvailability>,
     pub capabilities: CapabilitySet,
 }
 

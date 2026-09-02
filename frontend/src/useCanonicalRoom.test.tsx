@@ -92,7 +92,6 @@ function snapshot(
       catalog_revision: "cat-test",
       providers: [],
     },
-    available_providers: [],
     capabilities: { "message.send": true, "agent.control": true },
   } satisfies RoomSocketSnapshot;
 }

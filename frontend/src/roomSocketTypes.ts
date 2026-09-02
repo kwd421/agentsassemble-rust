@@ -89,7 +89,6 @@ export interface RoomSocketSnapshot {
   resume_gap: boolean;
   snapshot_mode: "initial" | "resume" | "gap";
   provider_catalog: ProviderCatalogSnapshot;
-  available_providers: NativeCliProviderAvailability[];
   capabilities: Record<string, boolean>;
 }
 

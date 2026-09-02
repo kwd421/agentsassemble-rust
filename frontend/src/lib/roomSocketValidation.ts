@@ -4,6 +4,7 @@ import type { Actor } from "../types/generated/Actor";
 import type { PublicRoomSettings } from "../types/generated/PublicRoomSettings";
 import type { RoomAppearance } from "../types/generated/RoomAppearance";
 import type { RoomChannel } from "../types/generated/RoomChannel";
+import type { RoomSnapshot } from "../types/generated/RoomSnapshot";
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreateAckProjectionsAreCoherent,
@@ -60,6 +61,24 @@ const GENERATED_CHANNEL_KEYS = [
 ] as const;
 const CHANNEL_KEYS: ExactGeneratedKeys<RoomChannel, typeof GENERATED_CHANNEL_KEYS> =
   GENERATED_CHANNEL_KEYS;
+const GENERATED_SNAPSHOT_KEYS = [
+  "stream",
+  "room",
+  "room_settings",
+  "participants",
+  "agent_sessions",
+  "active_turns",
+  "events",
+  "oldest_seq",
+  "last_seq",
+  "has_more_before",
+  "resume_gap",
+  "snapshot_mode",
+  "provider_catalog",
+  "capabilities",
+] as const;
+const SNAPSHOT_KEYS: ExactGeneratedKeys<RoomSnapshot, typeof GENERATED_SNAPSHOT_KEYS> =
+  GENERATED_SNAPSHOT_KEYS;
 const ROOM_EVENT_OPTIONAL_STRING_KEYS = [
   "participant_id",
   "participant_type",
@@ -382,6 +401,16 @@ export function snapshotValidationError(
     currentLastSeq,
   }: { expectedRoomId: string; currentLastSeq: number }
 ): RoomSocketSayError | null {
+  if (isRecord(value)) {
+    try {
+      assertExactKeys(value, ["op", ...SNAPSHOT_KEYS], "room snapshot");
+    } catch {
+      return new RoomSocketSayError(
+        "Room snapshot did not match the canonical browser schema; reconnecting.",
+        "snapshot_schema_invalid"
+      );
+    }
+  }
   if (
     !isRecord(value) ||
     value.op !== "snapshot" ||
@@ -394,9 +423,6 @@ export function snapshotValidationError(
     !Array.isArray(value.active_turns) ||
     !Array.isArray(value.events) ||
     !providerCatalogIsValid(value.provider_catalog) ||
-    !Array.isArray(value.available_providers) ||
-    JSON.stringify(value.available_providers) !==
-      JSON.stringify(value.provider_catalog.providers) ||
     !isRecord(value.capabilities) ||
     typeof value.has_more_before !== "boolean" ||
     typeof value.resume_gap !== "boolean"
