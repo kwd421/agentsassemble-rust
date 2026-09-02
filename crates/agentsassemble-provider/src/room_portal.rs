@@ -501,6 +501,10 @@ impl RoomPortal {
         self.server.is_running()
     }
 
+    pub(crate) async fn shutdown(&mut self) -> Result<(), RoomPortalError> {
+        self.server.shutdown().await
+    }
+
     pub(crate) fn bearer_token(&self) -> &str {
         self.server.bearer_token()
     }

@@ -37,11 +37,26 @@ const PORTAL_UNAVAILABLE: DriverError = DriverError::new(
 
 type PortalClient = RunningService<RoleClient, ()>;
 
+enum PortalClientState {
+    Active(PortalClient),
+    Closed,
+    CleanupUnconfirmed,
+}
+
+impl PortalClientState {
+    const fn active(&self) -> Option<&PortalClient> {
+        match self {
+            Self::Active(client) => Some(client),
+            Self::Closed | Self::CleanupUnconfirmed => None,
+        }
+    }
+}
+
 pub(crate) struct RemoteOpenAiDriver {
     spec: &'static RemoteOpenAiSpec,
     api: RemoteOpenAiApi,
     portal: Option<RoomPortal>,
-    portal_client: Option<PortalClient>,
+    portal_client: PortalClientState,
     tools: Vec<Tool>,
     credentials: ProviderCredentialStore,
     attached_session_id: Option<String>,
@@ -155,7 +170,7 @@ impl RemoteOpenAiDriver {
             spec,
             api,
             portal: Some(portal),
-            portal_client: Some(portal_client),
+            portal_client: PortalClientState::Active(portal_client),
             tools,
             credentials,
             attached_session_id: None,
@@ -297,7 +312,7 @@ impl RemoteOpenAiDriver {
         if replay_unsafe {
             self.turn_effect_uncertain = true;
         }
-        let client = self.portal_client.as_ref().ok_or(PORTAL_UNAVAILABLE)?;
+        let client = self.portal_client.active().ok_or(PORTAL_UNAVAILABLE)?;
         let result = client
             .call_tool(
                 CallToolRequestParams::new(call.function.name.clone()).with_arguments(arguments),
@@ -419,7 +434,7 @@ impl ProviderDriver for RemoteOpenAiDriver {
             Ok(!self.stopped
                 && !self.portal_failed
                 && self.portal.as_ref().is_some_and(RoomPortal::is_running)
-                && self.portal_client.is_some())
+                && self.portal_client.active().is_some())
         })
     }
 
@@ -427,18 +442,33 @@ impl ProviderDriver for RemoteOpenAiDriver {
         Box::pin(async move {
             self.stopped = true;
             self.attached_session_id = None;
-            let closed = if let Some(client) = self.portal_client.as_mut() {
-                client
-                    .close_with_timeout(PORTAL_CLOSE_TIMEOUT)
-                    .await
-                    .map_err(|_| PORTAL_UNAVAILABLE)?
-                    .is_some()
-            } else {
-                true
+            let client = match std::mem::replace(&mut self.portal_client, PortalClientState::Closed)
+            {
+                PortalClientState::Active(mut client) => {
+                    match client.close_with_timeout(PORTAL_CLOSE_TIMEOUT).await {
+                        Ok(Some(_)) => Ok(()),
+                        Ok(None) => {
+                            self.portal_client = PortalClientState::CleanupUnconfirmed;
+                            Err(PORTAL_UNAVAILABLE)
+                        }
+                        Err(_) => Err(PORTAL_UNAVAILABLE),
+                    }
+                }
+                PortalClientState::CleanupUnconfirmed => {
+                    self.portal_client = PortalClientState::CleanupUnconfirmed;
+                    Err(PORTAL_UNAVAILABLE)
+                }
+                PortalClientState::Closed => Ok(()),
             };
-            self.portal_client = None;
-            self.portal = None;
-            closed.then_some(()).ok_or(PORTAL_UNAVAILABLE)
+            let portal = if let Some(portal) = self.portal.as_mut() {
+                portal.shutdown().await.map_err(|_| PORTAL_UNAVAILABLE)
+            } else {
+                Ok(())
+            };
+            if portal.is_ok() {
+                self.portal = None;
+            }
+            client.and(portal)
         })
     }
 

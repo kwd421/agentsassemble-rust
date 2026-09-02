@@ -14,6 +14,7 @@ use rmcp::{
     },
 };
 use serde_json::{Map, json};
+use tokio::io::AsyncReadExt;
 
 use crate::room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal};
 use crate::room_portal_mcp_transport::{
@@ -377,6 +378,44 @@ async fn loopback_mcp_hides_capability_path_and_bounds_request_bodies() {
         .unwrap_or_else(|error| panic!("send oversized MCP body: {error}"));
     assert_eq!(oversized.status(), reqwest::StatusCode::PAYLOAD_TOO_LARGE);
     drop(idle_connections);
+}
+
+#[tokio::test]
+async fn explicit_shutdown_waits_for_accepted_connections() {
+    let mut portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("create shutdown portal fixture: {error}"));
+    let endpoint = reqwest::Url::parse(portal.endpoint())
+        .unwrap_or_else(|error| panic!("parse shutdown portal endpoint: {error}"));
+    let address = format!(
+        "{}:{}",
+        endpoint.host_str().unwrap_or("127.0.0.1"),
+        endpoint.port().unwrap_or_default()
+    );
+    let mut idle = tokio::net::TcpStream::connect(&address)
+        .await
+        .unwrap_or_else(|error| panic!("open shutdown connection: {error}"));
+    tokio::time::timeout(Duration::from_secs(1), async {
+        while portal.active_connection_count() != 1 {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("portal did not accept shutdown connection"));
+
+    tokio::time::timeout(Duration::from_secs(1), portal.shutdown())
+        .await
+        .unwrap_or_else(|_| panic!("portal shutdown did not complete"))
+        .unwrap_or_else(|error| panic!("shut down portal: {error}"));
+
+    assert!(!portal.is_running());
+    assert_eq!(portal.active_connection_count(), 0);
+    let mut byte = [0_u8; 1];
+    let closed = tokio::time::timeout(Duration::from_secs(1), idle.read(&mut byte))
+        .await
+        .unwrap_or_else(|_| panic!("accepted portal connection remained open"));
+    assert!(matches!(closed, Ok(0) | Err(_)));
+    assert!(tokio::net::TcpStream::connect(&address).await.is_err());
 }
 
 async fn call_tool(

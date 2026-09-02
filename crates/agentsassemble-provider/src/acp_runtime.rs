@@ -153,15 +153,20 @@ impl AcpRuntime {
     pub(crate) async fn stop(&mut self) -> Result<(), DriverError> {
         self.client.shutdown().await;
         #[cfg(unix)]
-        self.process_group.stop().await?;
+        let process = self.process_group.stop().await;
         #[cfg(not(unix))]
-        tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill()))
+        let process = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill()))
             .await
-            .map_err(|_| stop_error())?
-            .map_err(|_| stop_error())?;
+            .map_err(|_| stop_error())
+            .and_then(|stopped| stopped.map_err(|_| stop_error()));
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
-        Ok(())
+        let portal = self
+            .room_portal
+            .shutdown()
+            .await
+            .map_err(|_| room_portal_unavailable());
+        process.and(portal)
     }
 
     pub(crate) fn begin_observation(

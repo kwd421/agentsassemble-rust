@@ -23,7 +23,7 @@ use subtle::ConstantTimeEq;
 use tokio::{
     net::TcpListener,
     sync::{OwnedSemaphorePermit, Semaphore},
-    task::JoinHandle,
+    task::{JoinHandle, JoinSet},
 };
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -48,7 +48,7 @@ pub(super) struct PortalServer {
     endpoint: String,
     bearer_token: String,
     cancellation: CancellationToken,
-    task: JoinHandle<()>,
+    task: Option<JoinHandle<Result<(), RoomPortalError>>>,
     #[cfg(test)]
     connections: Arc<ConnectionRegistry>,
 }
@@ -89,7 +89,7 @@ impl PortalServer {
             endpoint,
             bearer_token,
             cancellation,
-            task,
+            task: Some(task),
             #[cfg(test)]
             connections,
         })
@@ -104,7 +104,16 @@ impl PortalServer {
     }
 
     pub(super) fn is_running(&self) -> bool {
-        !self.cancellation.is_cancelled() && !self.task.is_finished()
+        !self.cancellation.is_cancelled()
+            && self.task.as_ref().is_some_and(|task| !task.is_finished())
+    }
+
+    pub(super) async fn shutdown(&mut self) -> Result<(), RoomPortalError> {
+        self.cancellation.cancel();
+        let Some(task) = self.task.take() else {
+            return Ok(());
+        };
+        task.await.map_err(|_| RoomPortalError::Mcp)?
     }
 
     #[cfg(test)]
@@ -116,7 +125,9 @@ impl PortalServer {
 impl Drop for PortalServer {
     fn drop(&mut self) {
         self.cancellation.cancel();
-        self.task.abort();
+        if let Some(task) = self.task.as_ref() {
+            task.abort();
+        }
     }
 }
 
@@ -127,17 +138,25 @@ async fn run_server(
     service: PortalHttpService,
     connections: Arc<ConnectionRegistry>,
     cancellation: CancellationToken,
-) {
+) -> Result<(), RoomPortalError> {
     let connection_admission = Arc::new(Semaphore::new(MAX_PORTAL_CONNECTIONS));
     let request_admission = Arc::new(Semaphore::new(MAX_PORTAL_REQUESTS));
+    let mut connection_tasks = JoinSet::new();
     loop {
+        while let Some(completed) = connection_tasks.try_join_next() {
+            completed.map_err(|_| RoomPortalError::Mcp)?;
+        }
         let accepted = tokio::select! {
-            () = cancellation.cancelled() => return,
+            () = cancellation.cancelled() => break,
+            completed = connection_tasks.join_next(), if !connection_tasks.is_empty() => {
+                if matches!(completed, Some(Err(_))) {
+                    return Err(RoomPortalError::Mcp);
+                }
+                continue;
+            }
             accepted = listener.accept() => accepted,
         };
-        let Ok((stream, peer)) = accepted else {
-            return;
-        };
+        let (stream, peer) = accepted.map_err(|_| RoomPortalError::Mcp)?;
         if !peer.ip().is_loopback() {
             continue;
         }
@@ -162,7 +181,7 @@ async fn run_server(
         let request_admission = request_admission.clone();
         let request_connections = connections.clone();
         let connection_cancellation = cancellation.child_token();
-        tokio::spawn(async move {
+        connection_tasks.spawn(async move {
             let connection = async move {
                 let _permit = permit;
                 let _lease = connection_lease;
@@ -194,6 +213,10 @@ async fn run_server(
             let _ = Abortable::new(connection, abort_registration).await;
         });
     }
+    while let Some(completed) = connection_tasks.join_next().await {
+        completed.map_err(|_| RoomPortalError::Mcp)?;
+    }
+    Ok(())
 }
 
 async fn admit_connection(

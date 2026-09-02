@@ -449,26 +449,33 @@ impl CodexDriver {
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
         #[cfg(unix)]
-        self.process_group.stop().await?;
+        let process = self.process_group.stop().await;
         #[cfg(not(unix))]
         let stopped = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill())).await;
         #[cfg(not(unix))]
-        let stopped = stopped.map_err(|_| {
-            DriverError::new(
-                "provider_stop_unconfirmed",
-                "The Codex app-server exceeded its shutdown deadline.",
-            )
-        })?;
-        #[cfg(not(unix))]
-        stopped.map_err(|_| {
-            DriverError::new(
-                "provider_stop_unconfirmed",
-                "The Codex app-server shutdown could not be confirmed.",
-            )
-        })?;
+        let process = stopped
+            .map_err(|_| {
+                DriverError::new(
+                    "provider_stop_unconfirmed",
+                    "The Codex app-server exceeded its shutdown deadline.",
+                )
+            })
+            .and_then(|stopped| {
+                stopped.map_err(|_| {
+                    DriverError::new(
+                        "provider_stop_unconfirmed",
+                        "The Codex app-server shutdown could not be confirmed.",
+                    )
+                })
+            });
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
-        Ok(())
+        let portal = self
+            .room_portal
+            .shutdown()
+            .await
+            .map_err(portal_driver_error);
+        process.and(portal)
     }
 }
 

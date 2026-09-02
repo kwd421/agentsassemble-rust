@@ -174,7 +174,12 @@ impl ClaudeSdkRuntime {
             .map_err(|_| stop_error());
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
-        protocol.and(process)
+        let portal = self
+            .room_portal
+            .shutdown()
+            .await
+            .map_err(|_| room_portal_unavailable());
+        protocol.and(process).and(portal)
     }
 
     pub(crate) fn begin_observation(

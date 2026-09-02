@@ -605,19 +605,22 @@ impl OpenCodeDriver {
                 .await;
         }
         #[cfg(unix)]
-        self.process_group.stop().await?;
+        let process = self.process_group.stop().await;
         #[cfg(not(unix))]
-        {
-            tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill()))
-                .await
-                .map_err(|_| stop_error())?
-                .map_err(|_| stop_error())?;
-        }
+        let process = tokio::time::timeout(STOP_TIMEOUT, Box::into_pin(self.child.kill()))
+            .await
+            .map_err(|_| stop_error())
+            .and_then(|stopped| stopped.map_err(|_| stop_error()));
         self.stdout_task.abort();
         self.stderr_task.abort();
         let _ = (&mut self.stdout_task).await;
         let _ = (&mut self.stderr_task).await;
-        Ok(())
+        let portal = self
+            .room_portal
+            .shutdown()
+            .await
+            .map_err(portal_driver_error);
+        process.and(portal)
     }
 
     fn poison<T>(&mut self, error: DriverError) -> Result<T, DriverError> {

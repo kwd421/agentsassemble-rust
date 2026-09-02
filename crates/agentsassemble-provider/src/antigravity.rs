@@ -80,7 +80,7 @@ async fn prepare(session: &DurableAgentSession) -> Result<PreparedAntigravity, D
 
 pub(crate) struct AntigravityDriver {
     terminal: Box<dyn AntigravityTerminal>,
-    _room_portal: RoomPortal,
+    room_portal: RoomPortal,
     terminal_helper: Option<RoomPortalTerminalHelper>,
     hook: Option<AntigravityHookRegistration>,
 }
@@ -187,7 +187,7 @@ impl AntigravityDriver {
     ) -> Self {
         Self {
             terminal,
-            _room_portal: room_portal,
+            room_portal,
             terminal_helper: Some(terminal_helper),
             hook: Some(hook),
         }
@@ -200,7 +200,10 @@ impl AntigravityDriver {
         }
         self.hook.take();
         self.terminal_helper.take();
-        Ok(())
+        self.room_portal
+            .shutdown()
+            .await
+            .map_err(portal_driver_error)
     }
 }
 
