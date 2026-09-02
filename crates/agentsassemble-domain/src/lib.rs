@@ -1,4 +1,5 @@
 mod asset;
+mod canonical_json;
 mod command;
 mod diagnostic;
 mod identity;

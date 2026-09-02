@@ -593,7 +593,7 @@ fn optional_typed<T: for<'de> Deserialize<'de>>(
 ///
 /// Returns the serialization error if a settings field cannot be encoded.
 pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, serde_json::Error> {
-    let canonical = serde_json::to_vec(&serde_json::to_value(settings)?)?;
+    let canonical = crate::canonical_json::encode(&serde_json::to_value(settings)?);
     let revision = format!("room-settings-v1-{:x}", Sha256::digest(canonical));
     Ok(PublicRoomSettings {
         settings_revision: revision,

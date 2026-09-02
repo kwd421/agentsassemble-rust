@@ -112,7 +112,7 @@ pub(crate) fn parse_attachment_ids(value: Option<&Value>) -> Result<Vec<String>,
 
 #[must_use]
 pub fn canonical_payload_hash(payload: &Value) -> String {
-    let canonical = canonical_json(payload);
+    let canonical = crate::canonical_json::encode(payload);
     format!("{:x}", Sha256::digest(canonical.as_bytes()))
 }
 
@@ -234,51 +234,6 @@ pub(crate) fn require_active_write_participant(
         return Err(CommandRejection::new("muted", "This participant is muted."));
     }
     Ok(())
-}
-
-fn canonical_json(value: &Value) -> String {
-    match value {
-        Value::Null => "null".to_owned(),
-        Value::Bool(value) => value.to_string(),
-        Value::Number(value) => value.to_string(),
-        Value::String(value) => encode_json_string(value),
-        Value::Array(values) => {
-            let items = values.iter().map(canonical_json).collect::<Vec<_>>();
-            format!("[{}]", items.join(","))
-        }
-        Value::Object(values) => {
-            let entries = values
-                .iter()
-                .map(|(key, value)| {
-                    format!("{}:{}", encode_json_string(key), canonical_json(value))
-                })
-                .collect::<Vec<_>>();
-            format!("{{{}}}", entries.join(","))
-        }
-    }
-}
-
-fn encode_json_string(value: &str) -> String {
-    let mut encoded = String::with_capacity(value.len() + 2);
-    encoded.push('"');
-    for character in value.chars() {
-        match character {
-            '"' => encoded.push_str("\\\""),
-            '\\' => encoded.push_str("\\\\"),
-            '\u{08}' => encoded.push_str("\\b"),
-            '\u{0c}' => encoded.push_str("\\f"),
-            '\n' => encoded.push_str("\\n"),
-            '\r' => encoded.push_str("\\r"),
-            '\t' => encoded.push_str("\\t"),
-            character if character <= '\u{1f}' => {
-                use std::fmt::Write as _;
-                let _ = write!(encoded, "\\u{:04x}", u32::from(character));
-            }
-            character => encoded.push(character),
-        }
-    }
-    encoded.push('"');
-    encoded
 }
 
 #[cfg(test)]
