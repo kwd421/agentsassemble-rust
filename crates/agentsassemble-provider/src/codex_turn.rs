@@ -10,7 +10,6 @@ use crate::room_portal::ProviderTurnOutcome;
 use crate::runtime::{DriverError, ProviderTurnCompleted, ProviderTurnRequest};
 
 const TURN_INACTIVITY_TIMEOUT: Duration = Duration::from_mins(3);
-const INFERRED_COMPLETION_GRACE: Duration = Duration::from_secs(1);
 const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
 const MAX_PROVIDER_TURN_IDS: usize = 4_096;
 const MAX_FINAL_MESSAGE_CHARS: usize = 12_000;
@@ -41,7 +40,6 @@ struct ActiveTurn {
     delta_chars: usize,
     final_content: Option<String>,
     last_progress: Instant,
-    inferred_completion_at: Option<Instant>,
 }
 
 struct CompletedTurn {
@@ -187,7 +185,6 @@ async fn start_turn(
         delta_chars: 0,
         final_content: None,
         last_progress: Instant::now(),
-        inferred_completion_at: None,
     });
     Ok(())
 }
@@ -198,20 +195,15 @@ async fn read_turn(
     configured_model: &str,
 ) -> Result<ProviderTurnCompleted, DriverError> {
     loop {
-        let (turn_id, deadline, inference_deadline) = {
+        let (turn_id, deadline) = {
             let active = driver
                 .turn_state
                 .active
                 .as_ref()
                 .ok_or_else(turn_unconfirmed)?;
-            let inactivity = active.last_progress + TURN_INACTIVITY_TIMEOUT;
-            let deadline = active
-                .inferred_completion_at
-                .map_or(inactivity, |inferred| inferred.min(inactivity));
             (
                 active.provider_turn_id.clone(),
-                deadline,
-                active.inferred_completion_at,
+                active.last_progress + TURN_INACTIVITY_TIMEOUT,
             )
         };
         let message = tokio::time::timeout_at(
@@ -222,9 +214,6 @@ async fn read_turn(
         let message = match message {
             Ok(Ok(message)) => message,
             Ok(Err(error)) => return poison(driver, error),
-            Err(_) if inference_deadline.is_some_and(|value| value <= Instant::now()) => {
-                return finish_turn(driver);
-            }
             Err(_) => return poison(driver, turn_timeout()),
         };
         let Some(method) = message.get("method").and_then(Value::as_str) else {
@@ -243,6 +232,9 @@ async fn read_turn(
             .as_mut()
             .ok_or_else(turn_unconfirmed)?;
         active.last_progress = Instant::now();
+        if has_terminal_completion_receipt(method) {
+            return finish_turn(driver);
+        }
         match method {
             "agent_message/delta"
             | "agent-message/delta"
@@ -258,10 +250,6 @@ async fn read_turn(
             "item/completed" if completed_agent_message(&message) => {
                 record_final(active, &message);
             }
-            "thread/status/changed" if active.final_content.is_some() && thread_idle(&message) => {
-                active.inferred_completion_at = Some(Instant::now() + INFERRED_COMPLETION_GRACE);
-            }
-            "turn/completed" => return finish_turn(driver),
             "turn/error" | "error" => return poison(driver, turn_failed()),
             "command_execution/request_approval"
             | "file_change/request_approval"
@@ -269,6 +257,10 @@ async fn read_turn(
             _ => {}
         }
     }
+}
+
+fn has_terminal_completion_receipt(method: &str) -> bool {
+    method == "turn/completed"
 }
 
 async fn next_matching_notification(
@@ -498,14 +490,6 @@ fn completed_agent_message(message: &Value) -> bool {
     nested(message, &["params", "item", "type"]).and_then(Value::as_str) == Some("agentMessage")
 }
 
-fn thread_idle(message: &Value) -> bool {
-    let status = nested(message, &["params", "thread", "status"])
-        .or_else(|| nested(message, &["params", "status"]));
-    status.is_some_and(|value| {
-        value.as_str() == Some("idle") || value.get("type").and_then(Value::as_str) == Some("idle")
-    })
-}
-
 fn finish_turn(driver: &mut CodexDriver) -> Result<ProviderTurnCompleted, DriverError> {
     let Some(active) = driver.turn_state.active.take() else {
         return poison(driver, turn_unconfirmed());
@@ -625,4 +609,17 @@ const fn output_missing() -> DriverError {
         "provider_turn_output_missing",
         "The Codex provider turn completed without a final message.",
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::has_terminal_completion_receipt;
+
+    #[test]
+    fn completion_requires_the_exact_terminal_receipt() {
+        assert!(has_terminal_completion_receipt("turn/completed"));
+        assert!(!has_terminal_completion_receipt("agent_message/completed"));
+        assert!(!has_terminal_completion_receipt("item/completed"));
+        assert!(!has_terminal_completion_receipt("thread/status/changed"));
+    }
 }

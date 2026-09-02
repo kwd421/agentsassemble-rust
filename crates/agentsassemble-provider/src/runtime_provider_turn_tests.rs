@@ -78,45 +78,6 @@ async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
 }
 
 #[tokio::test]
-async fn codex_turn_infers_completion_after_final_message_and_thread_idle() {
-    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
-    let directory = tempfile::tempdir()
-        .unwrap_or_else(|error| panic!("create inferred provider-turn fixture: {error}"));
-    let transcript = directory.path().join("requests.jsonl");
-    let script = turn_fixture(
-        &transcript,
-        "",
-        "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
-        concat!(
-            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"idle answer\"}}'\n",
-            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"thread/status/changed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"status\":{\"type\":\"idle\"}}}'\n",
-        ),
-    );
-    let session = fixture_session(directory.path(), &script).await;
-    let adapter = ProviderAdapter::new();
-    let started = adapter
-        .start(&session)
-        .await
-        .unwrap_or_else(|error| panic!("start inferred provider-turn fixture: {error}"));
-    let active = active_session(&session, &started, "room-turn-1");
-    let completed = adapter
-        .send_turn(
-            &active,
-            &ProviderTurnRequest {
-                turn_id: "room-turn-1".to_owned(),
-                turn_generation: 1,
-                execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
-                input: "Finish when the thread becomes idle.".to_owned(),
-                room_observation: None,
-            },
-        )
-        .await
-        .unwrap_or_else(|error| panic!("infer provider turn completion: {error}"));
-    assert_message(&completed, "idle answer");
-    stop_and_release(&adapter, &active, &started).await;
-}
-
-#[tokio::test]
 async fn nullable_hook_turn_identity_does_not_poison_an_active_turn() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()
