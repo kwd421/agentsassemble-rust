@@ -129,8 +129,10 @@ impl ProviderSelection {
         validate_model_relation(provider, &model, "service_tiers", &service_tier)?;
         let variant = selected_value(provider, "variant", input.variant)?;
         let permission_mode = selected_value(provider, "permission_mode", input.permission_mode)?;
-        let execution_harness = input.execution_harness.unwrap_or_default();
-        if !execution_harness.is_empty() && execution_harness != "builtin" {
+        let execution_harness = input
+            .execution_harness
+            .unwrap_or_else(|| "builtin".to_owned());
+        if execution_harness != "builtin" {
             return Err(ProviderSelectionError::new(
                 "unsupported_control",
                 "Alternate execution harnesses are not available in this runtime slice.",
@@ -200,7 +202,7 @@ impl ProviderSelection {
             reasoning_effort,
             service_tier,
             variant,
-            execution_harness: "builtin".to_owned(),
+            execution_harness,
             permission_mode,
             max_output_tokens,
             catalog_revision: revision,
@@ -455,6 +457,42 @@ mod tests {
         );
         assert!(!first.runtime_profile_key.is_empty());
         assert!(!first.workspace_identity.is_empty());
+    }
+
+    #[tokio::test]
+    async fn builtin_api_selection_does_not_invent_a_workspace_requirement() {
+        let mut authority = catalog();
+        let provider = &mut authority.providers[0];
+        provider.id = "deepseek".to_owned();
+        provider.display_name = "DeepSeek".to_owned();
+        provider.provider_kind = "deepseek_api".to_owned();
+        provider.runtime_kind = "api".to_owned();
+        provider.catalog_group = "api".to_owned();
+        provider.workspace_required = false;
+        provider.executable.clear();
+        provider.executable_identity.clear();
+
+        let selected = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "create-deepseek",
+            &json!({
+                "provider_id": "deepseek",
+                "catalog_revision": "catalog-1",
+                "display_name": "DeepSeek",
+                "workspace": "",
+                "model": "gpt-5.6-terra",
+                "reasoning_effort": "medium",
+                "permission_mode": "meeting_read_only"
+            }),
+            &authority,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("select workspace-free API provider: {error}"));
+
+        assert_eq!(selected.execution_harness, "builtin");
+        assert!(selected.workspace.is_empty());
+        assert!(selected.workspace_identity.is_empty());
     }
 
     #[tokio::test]
