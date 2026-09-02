@@ -474,6 +474,22 @@ contracts, findings, or verification journals.
   Focused fragmented/truncated stream tests, all 153 provider tests, Clippy with warnings
   denied, formatting, architecture/policy gates, and diff checks pass. Real-provider and
   phase-wide integration evidence remain open.
+- Implemented pending Phase 1 whole-phase review: provider credential account ownership
+  at `80d667d`. The composition-owned secure store previously embedded the DeepSeek
+  account name and exposed DeepSeek-specific forwarding methods, which would require
+  copying the same keyring backend for each retained remote API provider. One exact
+  credential-account enum now selects isolated keyring accounts for DeepSeek, Cerebras,
+  OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom API while one
+  semaphore still serializes the blocking platform store. DeepSeek keeps its existing
+  `deepseek` account, public route, validation bounds, no-prompt status query, and
+  fail-closed missing/invalid/store-unavailable behavior; its provider-specific error
+  wording moved to the DeepSeek adapter. No additional provider, credential route,
+  frontend state, retry, fallback, polling, timer, or cache was exposed. The provider
+  account-isolation test proves that deleting one credential cannot delete another;
+  all 155 provider tests, the real TCP credential boundary, Clippy with warnings denied,
+  formatting, architecture/policy gates, and diff checks pass. This is a duplication and
+  secret-collision prevention boundary, not a measured CPU, memory, latency, or disk
+  improvement.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
