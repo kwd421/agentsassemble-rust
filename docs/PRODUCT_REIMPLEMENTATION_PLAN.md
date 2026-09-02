@@ -187,7 +187,9 @@ entries. The older scripted-meeting adapter registry is not part of this list.
 Neither is the separately labelled legacy one-shot API CLI/catalog. Stored-profile
 compatibility branches for older Grok/Claude/transport shapes are evidence to omit,
 not provider behavior to port. The Agent Session catalog below is the only parity
-inventory.
+inventory. Review suggestions for Gemini CLI, Qwen CLI, or Goose ACP do not widen
+it: none is a verified reachable entry in this baseline, and Antigravity is not
+silently redefined as Gemini CLI.
 
 | Provider | Verified original transport | Audited Rust state | Required target |
 | --- | --- | --- | --- |
@@ -325,6 +327,12 @@ Correction substage:
 
 ### Phase 1 — provider contract and process correctness
 
+- Build Phase 1 breadth-first. First establish the complete sixteen-provider
+  acceptance matrix and the smallest shared registration, selection, start,
+  ordinary-turn, visible-failure, and stop contracts. Remove from the four current
+  providers only false or unsafe behavior that blocks those shared contracts; do
+  not finish every cancellation, cleanup, performance, or UX refinement there while
+  the other retained providers remain structurally absent.
 - Remove Antigravity transcript code from the production graph. If retained as the
   requested historical copy, keep it only in a non-build `deprecated/` boundary
   with no module/import/feature/test/runtime/fallback connection.
@@ -357,18 +365,20 @@ Correction substage:
   platform, boot, lease generation, independently adoptable owner, and stale-CAS
   snapshots. Introduce a larger authority type only if it reduces actual state and
   glue after measurement.
-- After correcting Codex, Antigravity, OpenCode, and DeepSeek, implement Claude
-  through the official Agent SDK, then the OpenAI-compatible remote family
+- Connect every retained provider to the real basic Phase 1 contract: Claude
+  through the official Agent SDK; the OpenAI-compatible remote family
   (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom
-  API), local Ollama/LM Studio, and the remaining original native providers
+  API); local Ollama/LM Studio; and the remaining original native providers
   (Cursor, Freebuff, and Grok when its official ACP client is installed).
 - Extract a shared remote HTTPS/SSE mechanism only from demonstrated duplication;
   endpoints, credentials, catalogs, model controls, completion signals, and
   provider-session identity remain provider-owned.
-- Verify each available provider through ordinary and long-running room turns,
-  authorized tool use, cancellation/stop, restart, explicit failure, and exact
-  process/resource cleanup. An unavailable client remains unavailable rather than
-  being simulated or replaced.
+- Once that real breadth exists, harden the whole available-provider matrix for
+  cancellation/interruption, restart/reconnect, long-running turns, authorized tool
+  use, ambiguous completion/effects, explicit failure, and exact process/resource
+  cleanup. Only then perform provider-specific performance and UX refinement backed
+  by observed cost or failure evidence. An unavailable client remains truthfully
+  unavailable rather than being simulated or replaced.
 - Exit: each enabled provider has exactly one completion/session authority and a
   visible failure/uncertainty contract, the retained original provider inventory is
   implemented or truthfully unavailable, and no scraping, transcript, print,
@@ -501,9 +511,21 @@ storage/external protocol, acceptance, and verification. Each change is the
 smallest independently buildable, verifiable, rollbackable commit under 1,000
 changed lines. Do not wait for 500 LOC before separating responsibilities: a mixed
 owner is split as soon as it appears, while a cohesive owner is not mechanically
-cut to satisfy a count. Batch accumulation, push timing, and review timing are owned
-only by the active `Standing project workflow` in `AGENTS.md`. This plan neither
-restates nor reinterprets those thresholds.
+cut to satisfy a count.
+
+Execute a phase like a coherent build, not a sequence of isolated obsessions. First
+fix the phase-wide dependency skeleton, owners, and acceptance matrix. Then implement
+the smallest shared mechanisms and connect one complete vertical user flow for each
+phase target in dependency order. Only after that breadth exists, harden and verify
+the phase as a whole. Do not keep polishing, optimizing, or adding speculative defense
+to one provider or feature while sibling targets remain structurally absent. A slice
+that meets its declared phase contract is left alone unless concrete evidence reopens
+it.
+
+Intermediate commits and pushes do not trigger external review by count. After one
+complete phase passes its real flows and affected gates, cross-review every individual
+phase commit, the cumulative phase range, final HEAD, and resulting product behavior.
+A correction required by that review is pushed and re-reviewed before the phase closes.
 
 When that workflow invokes review, the request covers individual commits and the
 cumulative range. Requests
@@ -514,11 +536,13 @@ or in-scope threat and compare the smallest fail-closed alternative; future risk
 the word security alone is not approval evidence. Findings and final disposition
 are recorded without copying full review prose into multiple product documents.
 
-The reviewers have distinct primary duties. Critical-web Pro reviews the complete
-inventory, original-to-Rust coverage, phase placement, observable product behavior,
-SSoT/DDD boundaries, and overimplementation. Daybreaker Blue High manually reviews
-the actual source and diff for authorization, async/process/TCP/WebSocket failure
-paths, lifecycle cleanup, polling/timers, fallback, and swallowed failure. Both may
-report cross-cutting ownership or duplication defects, but a diff approval never
-proves the master plan complete. The implementing agent independently verifies the
-original entry point, owner, transition, failure semantics, and real UI flow.
+The reviewers have distinct primary duties. Critical-web remains on Pro for every
+phase and reviews the complete inventory, original-to-Rust coverage, phase placement,
+observable product behavior, SSoT/DDD boundaries, and overimplementation. Daybreak
+Blue at `xhigh` manually reviews the actual source and diff for authorization,
+async/process/TCP/WebSocket failure paths, lifecycle cleanup, polling/timers,
+fallback, and swallowed failure. Very-high web review is not used. Both reviewers
+inspect the complete phase and may report cross-cutting ownership or duplication
+defects, but a diff approval never proves plan or phase completeness. The implementing
+agent independently verifies the original entry point, owner, transition, failure
+semantics, and real UI flow.

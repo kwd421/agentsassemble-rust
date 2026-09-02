@@ -12,6 +12,19 @@ contracts, findings, or verification journals.
 
 - Phase: plan correction, then Phase 1 provider-first implementation. No product
   implementation starts until this documentation correction is reviewed.
+- Current phase execution: establish the whole phase's dependency skeleton and
+  acceptance matrix first, implement the smallest shared owners, connect one complete
+  vertical flow for every target in dependency order, then harden and verify the phase
+  as a whole. Do not keep polishing or defensively expanding one provider/feature while
+  sibling targets remain structurally absent. Once a slice meets its phase contract,
+  move to the next dependency unless concrete evidence reopens it.
+- Current review cadence: complete and verify one whole implementation phase, then
+  request one thorough cross-review of every individual commit in that phase, its
+  cumulative range, final HEAD, and resulting product flow. Critical-web stays on
+  Pro; the source/security reviewer uses Daybreak Blue at `xhigh`. Do not switch the
+  web reviewer to very-high. Review-required corrections are re-reviewed before the
+  phase closes. This latest user direction replaces the earlier per-batch external
+  review cadence; independent sub-1,000-line commits remain mandatory.
 - Completed: D-01 at `a7949bd`; the uncalled HTTP challenge/ticket bootstrap and
   startup secret are absent, while private-control and admitted-human socket ticket
   issuance remain.
@@ -353,12 +366,23 @@ contracts, findings, or verification journals.
   existing bounds and explicit failure semantics; measurements may inform a later product
   decision but do not pre-authorize a limit.
 - Next production work: Phase 1 provider-first completion.
-  - First close the current Codex, Antigravity, OpenCode, and DeepSeek authority,
-    completion, cancellation, and cleanup gaps.
-  - Then implement Claude through the official Agent SDK; the remote API family
+  - First establish the full sixteen-provider acceptance matrix and the smallest
+    common registration, selection, start, ordinary-turn, visible-failure, and stop
+    contracts. On Codex, Antigravity, OpenCode, and DeepSeek, remove only false or
+    unsafe behavior that blocks that shared foundation; do not polish one provider
+    while the rest of the retained structure is absent.
+  - Then connect every retained provider to that real basic contract: Claude through
+    the official Agent SDK; the remote API family
     (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom API);
     Ollama and LM Studio; and the remaining original native providers Cursor, Freebuff,
     and Grok when its official ACP client is available.
+  - After breadth exists, harden cancellation/interruption, restart/reconnect,
+    long-running turns, authorized tool use, ambiguous completion/effects, explicit
+    failure, and exact cleanup across the entire available-provider matrix. Only then
+    perform evidence-backed provider-specific performance or UX refinement.
+  - Reject Gemini CLI, Qwen CLI, and Goose ACP as review-driven scope expansion. They
+    are absent from the verified reachable sixteen-provider baseline; Antigravity is
+    not Gemini CLI, and reviewer suggestions do not add product scope.
   - Share only proven-identical transport, decoding, bounds, secret handling, redaction,
     cancellation, and cleanup mechanisms. Endpoints, credentials, catalogs, model
     controls, session identity, completion receipts, permissions, and lifecycle semantics
@@ -374,9 +398,10 @@ contracts, findings, or verification journals.
     profile/modal stacking, and current Agent Add composition; import the missing
     behavior instead of replacing the current UI with an older tree.
   - Critical-web Pro owns whole-plan, product-parity, coverage, phase, SSoT/DDD, and
-    overimplementation review. Daybreaker Blue High owns manual source/diff security,
+    overimplementation review. Daybreak Blue `xhigh` owns manual source/diff security,
     async/process/TCP/WebSocket, polling/timer/fallback, swallowed-failure, and cleanup
-    review. A diff approval is not approval of plan completeness.
+    review. Each completed phase receives both reviews; a diff approval is not approval
+    of plan completeness.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
