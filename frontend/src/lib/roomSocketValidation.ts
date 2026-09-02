@@ -11,6 +11,7 @@ import {
   agentSessionIsValid,
   agentSessionStateProjectionIsCoherent,
   joinedParticipantFromEvent,
+  participantIsValid,
 } from "./participantEventContract";
 import { isParticipantRole } from "./participantRole";
 import { providerCatalogIsValid } from "./providerCatalogContract";
@@ -286,14 +287,19 @@ export function commandAckResultIsValid(
     return roomHistoryResultIsValid(payload, result, expectedRoomId);
   }
   if (action === "participant.role.update") {
-    const participant = isRecord(result.participant) ? result.participant : null;
+    const participant = participantIsValid(result.participant, expectedRoomId)
+      ? result.participant
+      : null;
     return Boolean(
+      hasDurableEvent &&
       participant &&
       event &&
       participant.participant_id === payload.participant_id &&
       participant.role === payload.role &&
       event.type === "participant_updated" &&
       event.participant_id === payload.participant_id &&
+      event.participant_type === participant.participant_type &&
+      event.display_name === participant.display_name &&
       event.role === payload.role
     );
   }
@@ -305,7 +311,9 @@ export function commandAckResultIsValid(
     );
   }
   if (action === "participant.mute") {
-    const participant = isRecord(result.participant) ? result.participant : null;
+    const participant = participantIsValid(result.participant, expectedRoomId)
+      ? result.participant
+      : null;
     return Boolean(
       hasDurableEvent &&
       participant &&
@@ -313,11 +321,15 @@ export function commandAckResultIsValid(
       participant.participant_id === payload.participant_id &&
       participant.muted === Boolean(payload.muted) &&
       event.participant_id === payload.participant_id &&
+      event.participant_type === participant.participant_type &&
+      event.display_name === participant.display_name &&
       event.muted === payload.muted
     );
   }
   if (action === "participant.leave") {
-    const participant = isRecord(result.participant) ? result.participant : null;
+    const participant = participantIsValid(result.participant, expectedRoomId)
+      ? result.participant
+      : null;
     return Boolean(
       hasDurableEvent &&
       participant &&
@@ -325,7 +337,9 @@ export function commandAckResultIsValid(
       participant.participant_id === expectedParticipantId &&
       participant.status === "left" &&
       event?.type === "participant_left" &&
-      event.participant_id === expectedParticipantId
+      event.participant_id === expectedParticipantId &&
+      event.participant_type === participant.participant_type &&
+      event.display_name === participant.display_name
     );
   }
   if (action.startsWith("agent.")) {
@@ -413,13 +427,31 @@ export function snapshotValidationError(
     );
   }
   const sequences: number[] = [];
+  const participantIds = new Set<string>();
+  const agentParticipantIds = new Set<string>();
+  for (const participant of value.participants) {
+    if (
+      !participantIsValid(participant, expectedRoomId) ||
+      participantIds.has(participant.participant_id)
+    ) {
+      return new RoomSocketSayError(
+        "Room snapshot contained an invalid Participant projection; reconnecting.",
+        "snapshot_participant_invalid"
+      );
+    }
+    participantIds.add(participant.participant_id);
+    if (participant.participant_type === "agent") {
+      agentParticipantIds.add(participant.participant_id);
+    }
+  }
   const sessionIds = new Set<string>();
   const sessionParticipantIds = new Set<string>();
   for (const session of value.agent_sessions) {
     if (
       !agentSessionIsValid(session, expectedRoomId) ||
       sessionIds.has(session.session_id) ||
-      sessionParticipantIds.has(session.participant_id)
+      sessionParticipantIds.has(session.participant_id) ||
+      !agentParticipantIds.has(session.participant_id)
     ) {
       return new RoomSocketSayError(
         "Room snapshot contained an invalid Agent Session projection; reconnecting.",
@@ -428,6 +460,16 @@ export function snapshotValidationError(
     }
     sessionIds.add(session.session_id);
     sessionParticipantIds.add(session.participant_id);
+  }
+  if (
+    [...agentParticipantIds].some(
+      (participantId) => !sessionParticipantIds.has(participantId)
+    )
+  ) {
+    return new RoomSocketSayError(
+      "Room snapshot contained an Agent participant without its session; reconnecting.",
+      "snapshot_agent_session_invalid"
+    );
   }
   for (const event of value.events) {
     if (

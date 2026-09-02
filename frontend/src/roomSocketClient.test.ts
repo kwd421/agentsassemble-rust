@@ -18,7 +18,19 @@ function leaveAck(
   mutate: (result: Record<string, unknown>) => void = () => {}
 ) {
   const result: Record<string, unknown> = {
-    participant: { room_id: "general", participant_id: "operator-local", status: "left" },
+    participant: {
+      room_id: "general",
+      participant_id: "operator-local",
+      display_name: "Operator",
+      avatar_image_url: "",
+      participant_type: "human",
+      status: "left",
+      role: "human",
+      owner_id: "operator-local",
+      muted: false,
+      created_at: "2026-08-25T00:00:00Z",
+      updated_at: "2026-08-25T00:00:01Z",
+    },
     event: {
       v: 1,
       id: "leave-event-1",
@@ -28,6 +40,8 @@ function leaveAck(
       type: "participant_left",
       actor: { participant_id: "operator-local", participant_type: "human" },
       participant_id: "operator-local",
+      participant_type: "human",
+      display_name: "Operator",
     },
     event_seq: 1,
   };

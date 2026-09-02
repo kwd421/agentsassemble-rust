@@ -26,6 +26,8 @@ const PARTICIPANT_KEYS: ExactGeneratedKeys<
   Participant,
   typeof GENERATED_PARTICIPANT_KEYS
 > = GENERATED_PARTICIPANT_KEYS;
+const PARTICIPANT_TYPES = ["human", "agent"] as const;
+const PARTICIPANT_STATUSES = ["joined", "left", "kicked", "exported", "detached"] as const;
 
 const GENERATED_AGENT_SESSION_KEYS = [
   "room_id",
@@ -212,12 +214,30 @@ function exactParticipant(
     ) ||
     typeof participant.muted !== "boolean" ||
     !isParticipantRole(participant.role) ||
+    !PARTICIPANT_TYPES.includes(
+      participant.participant_type as (typeof PARTICIPANT_TYPES)[number]
+    ) ||
+    !PARTICIPANT_STATUSES.includes(
+      participant.status as (typeof PARTICIPANT_STATUSES)[number]
+    ) ||
     !participant.room_id ||
     !participant.participant_id
   ) {
     throw new Error(invalidMessage);
   }
   return participant;
+}
+
+export function participantIsValid(
+  value: unknown,
+  expectedRoomId = "",
+): value is Participant {
+  try {
+    const participant = exactParticipant(value, "Participant", "Participant");
+    return !expectedRoomId || participant.room_id === expectedRoomId;
+  } catch {
+    return false;
+  }
 }
 
 function personaProjectionsMatch(left: unknown, right: unknown): boolean {

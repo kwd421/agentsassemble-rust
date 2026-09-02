@@ -25,7 +25,7 @@ function joinedEvent(): RoomEvent {
       participant_id: "agent-one",
       display_name: "Codex",
       avatar_image_url: "",
-      participant_type: "subscription_ai",
+      participant_type: "agent",
       status: "joined",
       role: "agent",
       owner_id: "operator-local-user",
