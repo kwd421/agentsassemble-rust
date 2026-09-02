@@ -5,37 +5,36 @@ import {
   mentionQueryAtCursor,
 } from "./mentionComposerModel";
 import { roomMentionables } from "./roomMentionables";
+import { agentSessionFixture } from "../test/agentSession";
 import { participantFixture } from "../test/participant";
 
 describe("roomMentionables", () => {
   it("shows one display-name option per participant instead of a second id option", () => {
     const mentionables = roomMentionables({
       displayResourceBase: "http://127.0.0.1:43123",
-        viewerParticipantId: "operator-local",
-        agents: [
-          {
-            agent_id: "codex-codex-gpt-5.6-luna",
-            display_name: "Luna — 플레이어",
-            avatar_image_url: "/api/attachments/luna-avatar?view=1",
-            owner_id: "operator-local",
-            provider_kind: "codex_live_session",
-          },
-        ],
-        members: [
-          participantFixture({
-            participant_id: "operator-local",
-            display_name: "SeiNel",
-            participant_type: "human",
-          }),
-          participantFixture({
-            participant_id: "codex-codex-gpt-5.6-luna",
-            display_name: "Stale Participant",
-            avatar_image_url: "/api/attachments/stale-avatar?view=1",
-            owner_id: "operator-local",
-            participant_type: "agent",
-          }),
-        ],
-      });
+      viewerParticipantId: "operator-local",
+      sessions: [
+        agentSessionFixture({
+          participant_id: "codex-codex-gpt-5.6-luna",
+          display_name: "Luna — 플레이어",
+          provider_kind: "codex_live_session",
+        }),
+      ],
+      members: [
+        participantFixture({
+          participant_id: "operator-local",
+          display_name: "SeiNel",
+          participant_type: "human",
+        }),
+        participantFixture({
+          participant_id: "codex-codex-gpt-5.6-luna",
+          display_name: "Stale Participant",
+          avatar_image_url: "/api/attachments/stale-avatar?view=1",
+          owner_id: "operator-local",
+          participant_type: "agent",
+        }),
+      ],
+    });
 
     expect(mentionables).toEqual([
       {
@@ -48,7 +47,7 @@ describe("roomMentionables", () => {
       {
         token: "codex-codex-gpt-5.6-luna",
         label: "Luna — 플레이어",
-        avatarImage: "http://127.0.0.1:43123/api/attachments/luna-avatar?view=1",
+        avatarImage: undefined,
         participantKind: "agent",
         providerKind: "codex_live_session",
         detail: "SeiNel의 에이전트",
@@ -68,10 +67,16 @@ describe("roomMentionables", () => {
       roomMentionables({
         displayResourceBase: "http://127.0.0.1:43123",
         viewerParticipantId: "host",
-        agents: [
-          { agent_id: "alpha", display_name: "동일 이름" },
-          { agent_id: "bravo", display_name: "동일 이름" },
-          { agent_id: "charlie" },
+        sessions: [
+          agentSessionFixture({
+            participant_id: "alpha",
+            display_name: "동일 이름",
+          }),
+          agentSessionFixture({
+            participant_id: "bravo",
+            display_name: "동일 이름",
+          }),
+          agentSessionFixture({ participant_id: "charlie", display_name: "" }),
         ],
         members: [
           participantFixture({ participant_id: "alpha", participant_type: "agent" }),
@@ -91,7 +96,12 @@ describe("roomMentionables", () => {
     const mentionable = roomMentionables({
       displayResourceBase: "http://127.0.0.1:43123",
       viewerParticipantId: "host",
-      agents: [{ agent_id: "sol-dm", display_name: "Sol — 던전 마스터" }],
+      sessions: [
+        agentSessionFixture({
+          participant_id: "sol-dm",
+          display_name: "Sol — 던전 마스터",
+        }),
+      ],
       members: [
         participantFixture({ participant_id: "sol-dm", participant_type: "agent" }),
       ],
@@ -118,11 +128,11 @@ describe("roomMentionables", () => {
     const mentionable = roomMentionables({
       displayResourceBase: "",
       viewerParticipantId: "host",
-      agents: [
-        {
-          agent_id: "agent-1",
+      sessions: [
+        agentSessionFixture({
+          participant_id: "agent-1",
           display_name: "Agent One",
-        },
+        }),
       ],
       members: [
         participantFixture({

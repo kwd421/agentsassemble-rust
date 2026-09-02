@@ -1,15 +1,6 @@
-import type { RoomMember } from "../api";
+import type { RoomAgentSession, RoomMember } from "../api";
 import type { Mentionable } from "./mentionComposerModel";
 import { resolveAttachmentReference } from "./attachmentReference";
-
-type AgentMentionIdentity = {
-  agent_id: string;
-  display_name?: string;
-  avatar_image_url?: string;
-  owner_id?: string;
-  owner_display_name?: string;
-  provider_kind?: string;
-};
 
 function clean(value: unknown) {
   return String(value || "").trim();
@@ -17,17 +8,19 @@ function clean(value: unknown) {
 
 export function roomMentionables({
   viewerParticipantId,
-  agents,
+  sessions,
   members,
   displayResourceBase,
 }: {
   viewerParticipantId: string;
-  agents: AgentMentionIdentity[];
+  sessions: RoomAgentSession[];
   members: RoomMember[];
   displayResourceBase: string;
 }): Mentionable[] {
   const viewerId = clean(viewerParticipantId);
-  const agentById = new Map(agents.map((agent) => [clean(agent.agent_id), agent]));
+  const sessionByParticipantId = new Map(
+    sessions.map((session) => [clean(session.participant_id), session])
+  );
   const memberById = new Map(members.map((member) => [clean(member.participant_id), member]));
   const participantIds = new Map<string, string>();
 
@@ -44,10 +37,10 @@ export function roomMentionables({
   );
   const displayNameCounts = new Map<string, number>();
   participantIds.forEach((participantId) => {
-    const agent = agentById.get(participantId);
+    const session = sessionByParticipantId.get(participantId);
     const displayName = clean(
-      agent
-        ? agent.display_name
+      session
+        ? session.display_name
         : memberById.get(participantId)?.display_name
     );
     const key = displayName.toLowerCase();
@@ -62,13 +55,13 @@ export function roomMentionables({
     ) {
       throw new Error("Room mention participant has an unsupported canonical type.");
     }
-    const agent = member.participant_type === "agent"
-      ? agentById.get(participantId)
+    const session = member.participant_type === "agent"
+      ? sessionByParticipantId.get(participantId)
       : undefined;
-    if (member.participant_type === "agent" && !agent) {
+    if (member.participant_type === "agent" && !session) {
       throw new Error("Room mention agent is missing its canonical Agent Session projection.");
     }
-    const displayName = clean(agent ? agent.display_name : member.display_name);
+    const displayName = clean(session ? session.display_name : member.display_name);
     const uniqueDisplayName =
       displayName && displayNameCounts.get(displayName.toLowerCase()) === 1;
     const participantKind = member.participant_type;
@@ -81,12 +74,11 @@ export function roomMentionables({
         : displayName
           ? `${displayName} · ${participantId}`
           : participantId,
-      avatarImage: resolveAttachmentReference(
-        agent ? agent.avatar_image_url : member.avatar_image_url,
-        displayResourceBase
-      ),
+      avatarImage: session
+        ? undefined
+        : resolveAttachmentReference(member.avatar_image_url, displayResourceBase),
       participantKind,
-      providerKind: clean(agent?.provider_kind) || undefined,
+      providerKind: clean(session?.provider_kind) || undefined,
       detail:
         participantKind === "agent"
           ? ownerDisplayName

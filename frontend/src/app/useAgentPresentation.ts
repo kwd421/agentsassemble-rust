@@ -74,14 +74,14 @@ export function useAgentPresentation({
     () =>
       roomMentionables({
         viewerParticipantId: scopedViewerParticipantId,
-        agents: scopedAgents,
+        sessions: activeRoomAgentSessions,
         members: activeRoomMembers,
         displayResourceBase: canonicalRoom.displayResourceBase,
       }),
     [
       activeRoomMembers,
+      activeRoomAgentSessions,
       canonicalRoom.displayResourceBase,
-      scopedAgents,
       scopedViewerParticipantId,
     ]
   );
