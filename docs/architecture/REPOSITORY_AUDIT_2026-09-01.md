@@ -1005,7 +1005,7 @@ exist; do not widen or commonize the human route.
 ### F-19 — active frontend and domain input limits drift
 
 Disposition: `Fix policy ownership before further settings UI`; low correctness/UX
-impact.
+impact; Phase 4 room settings, not a provider prerequisite.
 
 The room label owner accepts 128 characters in `room_settings.rs:12`, while the
 active settings UI silently slices to 80 in `RoomSettingsModal.tsx:203`. Channel and
@@ -1039,7 +1039,8 @@ fallback, polling path, or generic search framework.
 
 ### C-01 — participant JSON load/save SQL mechanism is repeated
 
-Disposition: `Consolidate narrowly`; medium drift risk.
+Disposition: `Consolidate narrowly`; medium drift risk; Phase 4 before the first
+participant mutation, not a provider prerequisite.
 
 The exact `SELECT participant_json` and `UPDATE participants SET participant_json`
 mechanism is repeated across `authority.rs`, `agent_lifecycle.rs`,
@@ -1493,9 +1494,9 @@ This table routes findings; it does not add another contract layer.
 | F-16 | room socket/catalog subscription owner | 0B | closed watch terminates/disables once and a focused regression proves no spin |
 | F-17 | OpenCode SSE decoder | 1 | malformed `data:` fails immediately; valid comments and split chunks still pass |
 | F-18 | invite controller and admission surfaces | 0B, 7 | old host-token path is absent; human flow remains exact; bridge controls stay unavailable until Phase 7 |
-| F-19 | domain settings/profile contract exporter | 0B | active UI hints match the decided product limit or document an intentional narrower UX bound; server remains authoritative |
+| F-19 | domain settings/profile contract exporter | 4 | active UI hints match the decided product limit or document an intentional narrower UX bound; server remains authoritative |
 | F-20 | message-search exposure plus custom-channel search owner | 0B and custom-channel slice | lobby-only search is labelled as lobby/current scope until a real room-wide union exists; no fallback merge |
-| C-01 | persistence participant codec | 0B prerequisite to next participant mutation | exact load/save primitive checks cardinality; authorization/transitions stay local |
+| C-01 | persistence participant codec | 4, before first participant mutation | exact load/save primitive checks cardinality; authorization/transitions stay local |
 | C-02 | protocol exporter/snapshot decoder | 0B | capabilities have one generated owner and no parallel permissions digest |
 | C-03 | provider-turn envelope contract | 1 | semantic constants/predicates have one owner while every trust boundary still validates |
 | C-04 | domain profile-reference predicate | 3 | persistence reuses format predicate but retains existence/lifecycle checks |

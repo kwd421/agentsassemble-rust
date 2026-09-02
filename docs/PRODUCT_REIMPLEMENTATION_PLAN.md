@@ -446,8 +446,16 @@ Correction substage:
 
 ### Phase 4 — room lifecycle and moderation
 
+- Resolve C-01 before the phase's first participant mutation by consolidating only
+  the transaction-scoped participant row load/save mechanism. Authorization and
+  state transitions remain with their existing domain owners; do not introduce a
+  generic repository.
 - Implement participant kick, room close/archive/delete, host claim where retained,
   and exact settings/lifecycle controls through the canonical command owner.
+- Resolve F-19 with the room-settings work: decide the reachable room-label policy,
+  keep server validation authoritative, and derive the matching UI hint from the
+  existing contract exporter. Do not add a form-schema framework or pull later
+  custom-channel/profile work into this phase merely because some numbers match.
 - Resolve C-09 before adding more room settings: prove a retained non-deferred
   consumer for `activity_plugin` or remove the future-only field through one clean
   schema change. RimWorld's deferred status is not a consumer and does not justify a
