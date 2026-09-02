@@ -237,21 +237,23 @@ contracts, findings, or verification journals.
 - Active task: F-11 frontend wire-contract generation ownership. Establish the Rust
   protocol generator as the one semantic wire owner without replacing boundary-
   specific finite decoders with a universal handwritten schema.
-- Build-artifact lifecycle correction is complete through `35a418c`. macOS uses
+- Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
   desktop shell shares the repository Cargo target. Routine complete verification
   performs non-destructive checks before and after the build. It fails closed if an
-  obsolete desktop target exists or the active cache exceeds the measured 24 GiB
+  obsolete desktop target exists or the active cache exceeds the measured 18 GiB
   ceiling; only explicit `make artifact-prune` maintenance invokes Cargo clean, so
   verification cannot race-delete another Cargo/Tauri operation. Unix accounting
   deduplicates hard links and uses allocated blocks; platforms without that metadata
   use logical bytes and never collapse zero file identities. Cargo incremental output
   is disabled after its measured owner alone reached 8.10 GiB and repeatedly pushed
   the active target over the maintenance ceiling. The current retained cache occupies
-  14,836,060 allocated KiB, contains neither incremental data nor `.rcgu.o` files,
-  passes complete verification in 432.17 seconds, and serves an immediate all-target
-  workspace check in 0.26 seconds.
+  14,836,060 allocated KiB after complete verification and 14.63 GiB after subsequent
+  focused rebuilding, contains neither incremental data nor `.rcgu.o` files, passes
+  complete verification in 432.17 seconds, and serves an immediate all-target
+  workspace check in 0.26 seconds. The 18 GiB ceiling retains about 3.4 GiB of
+  measured source/profile variance rather than the obsolete 20.6 GiB cache basis.
   Critical ChatGPT Pro and Daybreaker Blue High independently found the portable-test
   and redundant-scan defects; `537c1b9` closes both. Each reviewer approved that
   correction, exact `42f0af5..537c1b9`, complete correction

@@ -6105,7 +6105,7 @@ nonincremental profile before removing the old profile also failed closed at
 an insufficient disk ceiling. With no Cargo or Tauri process active, explicit
 `make artifact-prune` removed only the shared regenerable target. Cargo incremental
 output is now disabled at the existing build owner; dependency and binary outputs,
-packed macOS source-debug information, the 24 GiB gate, and explicit-only destructive
+packed macOS source-debug information and explicit-only destructive
 maintenance remain unchanged.
 
 From the clean profile, `/usr/bin/time -l make verify` passes all architecture,
@@ -6117,6 +6117,13 @@ next unchanged workspace build still reuses the retained cache. The trade-off is
 whole-crate recompilation after editing a local crate instead of keeping large
 intra-crate incremental objects; no product runtime behavior, deletion automation,
 timer, polling, retry, fallback, or swallowed failure was introduced.
+
+Focused provider rebuilding after that complete run raised the retained cache to
+14.63 GiB. The previous 24 GiB gate still cited an obsolete 20.6 GiB current-cache
+basis, so manual review correctly rejected that rationale. The current 18 GiB gate
+keeps about 3.4 GiB above the largest observed nonincremental cache for deterministic
+source/profile variance. The correction changes no cleanup trigger or deletion
+behavior: routine checks remain non-destructive and only explicit maintenance cleans.
 
 ### F-10 single DeepSeek credential authority: 2026-09-02
 

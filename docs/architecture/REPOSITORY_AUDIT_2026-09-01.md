@@ -1358,7 +1358,10 @@ was added. After one explicit full maintenance clean, complete verification pass
 immediate workspace all-target `cargo check` completes in 0.26 seconds. The accepted
 trade-off is rebuilding a changed local crate without Cargo's intra-crate incremental
 objects while preserving the fast unchanged-workspace cache and the existing packed
-source-debugging contract.
+source-debugging contract. Subsequent focused provider rebuilding raised the retained
+cache to 14.63 GiB. The active ceiling is therefore 18 GiB: about 3.4 GiB above the
+largest current-profile observation, replacing the obsolete 20.6 GiB rationale while
+retaining deterministic source/profile variance.
 
 ## Current verdict and exit
 
