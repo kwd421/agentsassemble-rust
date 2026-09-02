@@ -316,6 +316,9 @@ impl SqliteStore {
         prepared_result["start"] = start_result;
         prepared_result["events"] = serde_json::to_value(&committed_events)?;
         prepared_result["event"] = serde_json::to_value(committed_events.last())?;
+        prepared_result["event_seq"] = committed_events
+            .last()
+            .map_or(Value::Null, |event| Value::from(event.seq));
         let outcome = store_result(
             &mut transaction,
             principal,

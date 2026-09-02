@@ -220,20 +220,26 @@ function exactParticipant(
   return participant;
 }
 
+function personaProjectionsMatch(left: unknown, right: unknown): boolean {
+  if (left === null || right === null) return left === right;
+  try {
+    const leftPersona = strictRecord(left, "Agent Session persona");
+    const rightPersona = strictRecord(right, "Agent Session persona");
+    return GENERATED_PERSONA_SUMMARY_KEYS.every(
+      (key) => leftPersona[key] === rightPersona[key]
+    );
+  } catch {
+    return false;
+  }
+}
+
 export function agentSessionProjectionsMatch(left: unknown, right: unknown): boolean {
   try {
     const leftSession = exactAgentSession(left, "Agent Session", "Agent Session");
     const rightSession = exactAgentSession(right, "Agent Session", "Agent Session");
     return AGENT_SESSION_KEYS.every((key) => {
       if (key !== "persona_card") return leftSession[key] === rightSession[key];
-      if (leftSession[key] === null || rightSession[key] === null) {
-        return leftSession[key] === rightSession[key];
-      }
-      const leftPersona = strictRecord(leftSession[key], "Agent Session persona");
-      const rightPersona = strictRecord(rightSession[key], "Agent Session persona");
-      return GENERATED_PERSONA_SUMMARY_KEYS.every(
-        (personaKey) => leftPersona[personaKey] === rightPersona[personaKey]
-      );
+      return personaProjectionsMatch(leftSession[key], rightSession[key]);
     });
   } catch {
     return false;
@@ -247,6 +253,154 @@ export function participantProjectionsMatch(left: unknown, right: unknown): bool
     return PARTICIPANT_KEYS.every(
       (key) => leftParticipant[key] === rightParticipant[key]
     );
+  } catch {
+    return false;
+  }
+}
+
+function eventIdentityMatches(left: unknown, right: unknown): boolean {
+  if (!left || !right || typeof left !== "object" || typeof right !== "object") {
+    return false;
+  }
+  const leftEvent = left as Record<string, unknown>;
+  const rightEvent = right as Record<string, unknown>;
+  return ["id", "seq", "room_id", "type"].every(
+    (key) => leftEvent[key] === rightEvent[key]
+  );
+}
+
+function creationStartSessionsMatch(initial: unknown, prepared: unknown): boolean {
+  try {
+    const initialSession = exactAgentSession(initial, "Agent Session", "Agent Session");
+    const preparedSession = exactAgentSession(prepared, "Agent Session", "Agent Session");
+    const transitionKeys = new Set(["runtime_status", "enabled", "updated_at"]);
+    return (
+      initialSession.status === "available" &&
+      initialSession.runtime_status === "stopped" &&
+      initialSession.enabled === false &&
+      preparedSession.status === "available" &&
+      preparedSession.runtime_status === "starting" &&
+      preparedSession.enabled === true &&
+      AGENT_SESSION_KEYS.every((key) => {
+        if (transitionKeys.has(key)) return true;
+        if (key !== "persona_card") return initialSession[key] === preparedSession[key];
+        return personaProjectionsMatch(initialSession[key], preparedSession[key]);
+      })
+    );
+  } catch {
+    return false;
+  }
+}
+
+function creationParticipantBecomesJoined(created: RoomMember, joined: RoomMember): boolean {
+  return (
+    created.status === "detached" &&
+    joined.status === "joined" &&
+    [
+      "meeting_id",
+      "participant_id",
+      "display_name",
+      "avatar_image_url",
+      "participant_type",
+      "role",
+      "owner_id",
+      "muted",
+      "created_at",
+    ].every(
+      (key) =>
+        created[key as keyof RoomMember] === joined[key as keyof RoomMember]
+    )
+  );
+}
+
+export function agentCreateAckProjectionsAreCoherent(
+  payload: Record<string, unknown>,
+  result: Record<string, unknown>,
+): boolean {
+  try {
+    if (result.status !== "created" || !Array.isArray(result.events)) return false;
+    const events = result.events as RoomEvent[];
+    const createdEvent = events[0];
+    if (
+      !createdEvent ||
+      createdEvent.type !== "agent_session_created" ||
+      events.some((event, index) => index > 0 && event.seq !== events[index - 1].seq + 1)
+    ) {
+      return false;
+    }
+    const created = agentCreationProjectionFromEvent(createdEvent);
+    if (
+      !participantProjectionsMatch(result.participant, createdEvent.participant) ||
+      !eventIdentityMatches(result.event, events.at(-1))
+    ) {
+      return false;
+    }
+
+    const startRequested = payload.start === true || payload.start_now === true;
+    if (!startRequested) {
+      return (
+        events.length === 1 &&
+        !("start" in result) &&
+        agentSessionProjectionsMatch(result.agent_session, createdEvent.agent_session) &&
+        agentSessionProjectionsMatch(
+          (result.event as Record<string, unknown>).agent_session,
+          createdEvent.agent_session,
+        ) &&
+        participantProjectionsMatch(
+          (result.event as Record<string, unknown>).participant,
+          createdEvent.participant,
+        )
+      );
+    }
+
+    if (
+      events.length !== 4 ||
+      events[1].type !== "participant_joined" ||
+      events[2].type !== "session_attached" ||
+      events[3].type !== "agent_session_state" ||
+      !creationStartSessionsMatch(result.agent_session, createdEvent.agent_session)
+    ) {
+      return false;
+    }
+    const joined = joinedParticipantFromEvent(events[1]);
+    const finalSession = (events[3] as unknown as Record<string, unknown>).agent_session;
+    const start = exactEventRecord(
+      result.start,
+      ["agent_session", "runtime_reused", "events", "event"],
+      "agent.create 시작 투영이 없습니다.",
+      "agent.create 시작 투영이 올바르지 않습니다.",
+    );
+    if (
+      !creationParticipantBecomesJoined(created.participant, joined) ||
+      events[2].participant_id !== created.participant.participant_id ||
+      events[3].participant_id !== created.participant.participant_id ||
+      typeof start.runtime_reused !== "boolean" ||
+      !Array.isArray(start.events) ||
+      start.events.length !== 3 ||
+      !start.events.every((event, index) => eventIdentityMatches(event, events[index + 1])) ||
+      !eventIdentityMatches(start.event, events[3]) ||
+      !participantProjectionsMatch(
+        (start.events[0] as Record<string, unknown>).participant,
+        (events[1] as unknown as Record<string, unknown>).participant,
+      ) ||
+      !agentSessionProjectionsMatch(
+        (start.events[2] as Record<string, unknown>).agent_session,
+        finalSession,
+      ) ||
+      !agentSessionProjectionsMatch(start.agent_session, finalSession) ||
+      !agentSessionProjectionsMatch(
+        (start.event as Record<string, unknown>).agent_session,
+        finalSession,
+      ) ||
+      !agentSessionProjectionsMatch(
+        (result.event as Record<string, unknown>).agent_session,
+        finalSession,
+      )
+    ) {
+      return false;
+    }
+    const final = exactAgentSession(finalSession, "Agent Session", "Agent Session");
+    return final.runtime_status === "idle" && final.enabled === true;
   } catch {
     return false;
   }

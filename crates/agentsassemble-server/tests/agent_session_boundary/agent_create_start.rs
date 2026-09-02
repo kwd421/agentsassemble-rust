@@ -50,6 +50,11 @@ async fn create_with_start_is_one_command_with_original_nested_result_and_replay
         created["result"]["events"][0]["agent_session"]["enabled"],
         true
     );
+    assert_eq!(created["result"]["event"]["type"], "agent_session_state");
+    assert_eq!(
+        created["result"]["event_seq"],
+        created["result"]["event"]["seq"]
+    );
     send_create(&mut socket, "create-and-start", &payload).await;
     let replay = receive_json(&mut socket).await;
     assert_eq!(replay["op"], "ack");

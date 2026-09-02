@@ -6,7 +6,7 @@ use agentsassemble_domain::{
     stable_identity_hash,
 };
 use same_file::Handle;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::{
     AgentCreateStartPlan, AgentRuntimeStarted, AgentStartPlan, PersistenceError,
@@ -158,6 +158,17 @@ fn assert_completed_create_start(commit: &crate::AgentCreateStartCommit) {
         "agent_session_created"
     );
     assert_eq!(commit.outcome.events, commit.committed_events);
+    assert_eq!(
+        commit.outcome.result["event_seq"],
+        commit
+            .committed_events
+            .last()
+            .map_or(Value::Null, |event| Value::from(event.seq))
+    );
+    assert_eq!(
+        commit.outcome.result["event"]["seq"],
+        commit.outcome.result["event_seq"]
+    );
     assert_eq!(commit.newly_committed_events, commit.committed_events[1..]);
     assert!(
         commit
