@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { LobbyEvent, RoomAgentSession, RoomEvent, RoomMember } from "../api";
+import { agentSessionFixture } from "../test/agentSession";
 import {
   applyCanonicalParticipantProfiles,
   applyParticipantEvents,
@@ -86,12 +87,11 @@ describe("canonical participant event projection", () => {
       provider_kind: "stale-provider",
       role: "reviewer",
     } as RoomMember;
-    const session = {
+    const session: RoomAgentSession = agentSessionFixture({
       participant_id: "agent-one",
       display_name: "Session identity",
-      avatar_image_url: "/api/attachments/agent-avatar?view=1",
       provider_kind: "codex_live_session",
-    } as RoomAgentSession;
+    });
 
     expect(
       canonicalParticipantProfiles(
@@ -102,8 +102,7 @@ describe("canonical participant event projection", () => {
     ).toEqual({
       "agent-one": {
         displayName: "Session identity",
-        avatarImageUrl:
-          "http://127.0.0.1:8080/api/attachments/agent-avatar?view=1",
+        avatarImageUrl: undefined,
         providerKind: "codex_live_session",
         role: "reviewer",
       },

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RoomAgentSession, RoomMember } from "../api";
+import { agentSessionFixture } from "../test/agentSession";
 import { agentSessionMemberToLiveAgent } from "./appModel";
 
 describe("agentSessionMemberToLiveAgent", () => {
@@ -18,26 +19,23 @@ describe("agentSessionMemberToLiveAgent", () => {
       created_at: "",
       updated_at: "",
     } satisfies RoomMember;
-    const session = {
+    const session: RoomAgentSession = agentSessionFixture({
       room_id: "room-1",
       session_id: "agent-1",
       participant_id: "agent-1",
       display_name: "Session Makima",
-      avatar_image_url: "/session-avatar",
       status: "stopped",
       runtime_status: "stopped",
       enabled: false,
       provider_kind: "codex_live_session",
       runtime_kind: "codex_app_server",
       connection_kind: "native_cli_bridge",
-      persona_card_id: "",
-      persona_card: null,
-    } satisfies RoomAgentSession;
+    });
 
     expect(agentSessionMemberToLiveAgent(member, session)).toMatchObject({
       agent_id: "agent-1",
       display_name: "Session Makima",
-      avatar_image_url: "/session-avatar",
+      avatar_image_url: undefined,
       provider_kind: "codex_live_session",
       connection_kind: "native_cli_bridge",
       session_id: "agent-1",

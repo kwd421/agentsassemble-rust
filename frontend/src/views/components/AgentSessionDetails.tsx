@@ -39,26 +39,8 @@ export function agentSessionPresenceStatus(status?: string) {
   return "offline";
 }
 
-function latencySummary(session: RoomAgentSession) {
-  const latency = session.latency || {};
-  const first =
-    typeof latency.ttfo_ms === "number" ? `${Math.round(latency.ttfo_ms)}ms first output` : "";
-  const total =
-    typeof latency.total_turn_ms === "number" ? `${Math.round(latency.total_turn_ms)}ms total` : "";
-  return [first, total].filter(Boolean).join(" · ");
-}
-
 function providerSessionContinuity(session: RoomAgentSession) {
-  const structuredSession =
-    session.transport === "acp_stdio" ||
-    session.provider_session_load_supported ||
-    session.provider_session_reused ||
-    session.provider_session_resume_failed;
-  if (!structuredSession) return "";
-  if (session.provider_session_resume_failed) return "provider session 재개 실패";
-  if (!session.provider_session_active && session.provider_session_load_supported) {
-    return "provider session 재개 대기";
-  }
+  if (!session.provider_session_active && !session.provider_session_reused) return "";
   if (!session.provider_session_active) return "provider session 비활성";
   if (session.provider_session_reused) return "provider session 이어짐";
   return "provider session 활성";
@@ -115,8 +97,7 @@ export default function AgentSessionDetails({
   const [settingsBusy, setSettingsBusy] = useState(false);
   const status = session.runtime_status;
   const hasRunBefore = Boolean(
-    session.started_at ||
-      session.turn_count ||
+    session.turn_count ||
       session.last_seen_event_id
   );
   const canStart =
@@ -168,7 +149,6 @@ export default function AgentSessionDetails({
   }, [
     provider,
     session.session_id,
-    session.runtime_profile_key,
     session.model,
     session.reasoning_effort,
     session.service_tier,
@@ -300,8 +280,6 @@ export default function AgentSessionDetails({
         session={session}
         activityVisible={activityVisible}
         onActivityVisibilityChange={onActivityVisibilityChange}
-        onConfigure={onConfigure}
-        onStatus={setActionStatus}
       />
       {onControl && (
         <div className="dc-member-session-actions" aria-label={`${session.display_name} 세션 제어`}>
@@ -361,48 +339,9 @@ export default function AgentSessionDetails({
       {actionStatus && <p className="dc-member-session-status preserve-words">{actionStatus}</p>}
       <details className="dc-room-runtime-diagnostics preserve-words">
         <summary>고급 진단</summary>
-        {session.runtime_profile_key && <p>profile {session.runtime_profile_key}</p>}
-        {session.message_source && (
-          <p>
-            message {session.message_source}
-            {session.message_source_strict ? " · strict" : ""}
-          </p>
-        )}
-        <p>{latencySummary(session) || `turns ${session.turn_count || 0}`}</p>
+        <p>turns {session.turn_count}</p>
         <p>cursor {session.last_seen_event_id || "none"}</p>
-        <p>
-          input {session.provider_visible_chars || 0} chars · {session.provider_visible_event_count || 0} events
-        </p>
-        <p>
-          stderr {session.stderr_byte_count || 0} bytes · warnings {session.stderr_warning_count || 0}
-        </p>
-        {Boolean(session.notification_drop_count) && (
-          <p className="dc-room-play-error">protocol drops {session.notification_drop_count}</p>
-        )}
-        {Boolean(session.adapter_activity_invalid_count) && (
-          <p className="dc-room-play-error">
-            invalid activity reports {session.adapter_activity_invalid_count}
-          </p>
-        )}
         {continuity && <p>{continuity}</p>}
-        {typeof session.yolo_mode === "boolean" && (
-          <p>approval {session.yolo_mode ? "unsafe always-approve" : session.approval_policy || "restricted"}</p>
-        )}
-        {Boolean(session.permission_request_count) && (
-          <p>
-            permissions denied {session.permission_denied_count || 0}/{session.permission_request_count}
-          </p>
-        )}
-        {Boolean(session.denied_permission_names?.length) && (
-          <p className="dc-room-play-error">
-            denied: {session.denied_permission_names?.join(", ")}
-          </p>
-        )}
-        {session.context_error_detected && <p className="dc-room-play-error">context error detected</p>}
-        {session.provider_session_resume_error && (
-          <p className="dc-room-play-error">{session.provider_session_resume_error}</p>
-        )}
-        {session.last_error && <p className="dc-room-play-error">{session.last_error}</p>}
       </details>
     </section>
   );

@@ -88,7 +88,7 @@ export function useMemberEntries({
       const agentDisplayName = String(
         canonicalIdentity.display_name || agent.agent_id
       ).trim();
-      const avatarReference = canonicalIdentity.avatar_image_url;
+      const avatarReference = agentSession ? undefined : agent.avatar_image_url;
       const avatarImage = resolveAttachmentReference(
         avatarReference,
         displayResourceBase
@@ -208,11 +208,11 @@ export function useMemberEntries({
               ""
           ).trim() || undefined,
           avatarImage: resolveAttachmentReference(
-            agentSession ? agentSession.avatar_image_url : member.avatar_image_url,
+            agentSession ? undefined : member.avatar_image_url,
             displayResourceBase
           ),
           avatarReference: agentSession
-            ? agentSession.avatar_image_url
+            ? undefined
             : member.avatar_image_url,
           providerKind: String(
             agentSession ? agentSession.provider_kind : member.provider_kind || ""

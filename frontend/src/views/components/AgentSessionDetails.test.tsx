@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
+import { agentSessionFixture } from "../../test/agentSession";
 import AgentSessionDetails from "./AgentSessionDetails";
 
 const personaApi = vi.hoisted(() => ({
@@ -35,8 +36,8 @@ beforeEach(() => {
 });
 
 describe("AgentSessionDetails diagnostics", () => {
-  it("shows which provider permissions were denied", () => {
-    const session: RoomAgentSession = {
+  it("shows only diagnostics owned by the current Agent Session contract", () => {
+    const session: RoomAgentSession = agentSessionFixture({
       room_id: "room-1",
       session_id: "session-1",
       participant_id: "agent-1",
@@ -47,18 +48,23 @@ describe("AgentSessionDetails diagnostics", () => {
       provider_kind: "grok_acp",
       runtime_kind: "acp",
       connection_kind: "agent_session",
-      persona_card_id: "",
-      persona_card: null,
-      permission_request_count: 2,
-      permission_denied_count: 2,
-      denied_permission_names: ["shell.execute", "files.write"],
-    };
+      turn_count: 2,
+      last_seen_event_id: "event-2",
+      last_error: "provider unavailable",
+    });
 
     render(<AgentSessionDetails session={session} />);
     fireEvent.click(screen.getByText("고급 진단"));
 
-    expect(screen.getByText(/shell\.execute/)).toBeTruthy();
-    expect(screen.getByText(/files\.write/)).toBeTruthy();
+    expect(screen.getByText("turns 2")).toBeTruthy();
+    expect(screen.getByText("cursor event-2")).toBeTruthy();
+    expect(
+      screen.getByText(
+        (_, element) =>
+          element?.tagName === "P" &&
+          element.textContent === "오류 원인 · provider unavailable"
+      )
+    ).toBeTruthy();
   });
 
   it("replaces the applied bot card on a stopped API session", async () => {
@@ -80,7 +86,7 @@ describe("AgentSessionDetails diagnostics", () => {
       credential_available: true,
       controls: [],
     };
-    const session: RoomAgentSession = {
+    const session: RoomAgentSession = agentSessionFixture({
       room_id: "room-1",
       session_id: "session-1",
       participant_id: "agent-1",
@@ -103,7 +109,7 @@ describe("AgentSessionDetails diagnostics", () => {
         tag_count: 0,
         thumbnail_url: "",
       },
-    };
+    });
 
     render(
       <AgentSessionDetails

@@ -16,7 +16,7 @@ const PARTICIPANT_KEYS = [
   "updated_at",
 ] as const;
 
-const AGENT_SESSION_KEYS = [
+const GENERATED_AGENT_SESSION_KEYS = [
   "room_id",
   "session_id",
   "participant_id",
@@ -55,7 +55,17 @@ const AGENT_SESSION_KEYS = [
   "provider_session_reused",
   "created_at",
   "updated_at",
-] as const;
+] as const satisfies readonly (keyof RoomAgentSession)[];
+
+type ExactGeneratedKeys<
+  Value,
+  Keys extends readonly (keyof Value)[],
+> = Exclude<keyof Value, Keys[number]> extends never ? Keys : never;
+
+const AGENT_SESSION_KEYS: ExactGeneratedKeys<
+  RoomAgentSession,
+  typeof GENERATED_AGENT_SESSION_KEYS
+> = GENERATED_AGENT_SESSION_KEYS;
 
 const AGENT_SESSION_BOOLEAN_KEYS = [
   "enabled",
@@ -72,6 +82,17 @@ const AGENT_SESSION_INTEGER_KEYS = [
   "bootstrap_cutoff_seq",
   "turn_count",
 ] as const;
+
+const AGENT_SESSION_STRING_KEYS = AGENT_SESSION_KEYS.filter(
+  (key) =>
+    key !== "persona_card" &&
+    !AGENT_SESSION_BOOLEAN_KEYS.includes(
+      key as (typeof AGENT_SESSION_BOOLEAN_KEYS)[number]
+    ) &&
+    !AGENT_SESSION_INTEGER_KEYS.includes(
+      key as (typeof AGENT_SESSION_INTEGER_KEYS)[number]
+    )
+);
 
 const PERSONA_SUMMARY_KEYS = [
   "id",
@@ -137,6 +158,51 @@ function exactEventRecord(
   return record;
 }
 
+function exactAgentSession(
+  value: unknown,
+  missingMessage: string,
+  invalidMessage: string,
+): Record<string, unknown> {
+  const session = exactEventRecord(
+    value,
+    AGENT_SESSION_KEYS,
+    missingMessage,
+    invalidMessage,
+  );
+  if (
+    AGENT_SESSION_STRING_KEYS.some((key) => typeof session[key] !== "string") ||
+    AGENT_SESSION_BOOLEAN_KEYS.some((key) => typeof session[key] !== "boolean") ||
+    AGENT_SESSION_INTEGER_KEYS.some(
+      (key) => !Number.isSafeInteger(session[key]) || Number(session[key]) < 0
+    ) ||
+    !session.session_id ||
+    !personaSummaryMatches(session.persona_card, session.persona_card_id as string)
+  ) {
+    throw new Error(invalidMessage);
+  }
+  return session;
+}
+
+export function agentSessionIsValid(
+  value: unknown,
+  expectedRoomId = "",
+  expectedParticipantId = "",
+): value is RoomAgentSession {
+  try {
+    const session = exactAgentSession(
+      value,
+      "Agent Session 투영이 없습니다.",
+      "Agent Session 투영이 올바르지 않습니다.",
+    );
+    return (
+      (!expectedRoomId || session.room_id === expectedRoomId) &&
+      (!expectedParticipantId || session.participant_id === expectedParticipantId)
+    );
+  } catch {
+    return false;
+  }
+}
+
 function participantFromEvent(
   event: RoomEvent,
   expectedStatus: "joined" | "detached"
@@ -188,32 +254,18 @@ export function agentCreationProjectionFromEvent(event: RoomEvent): {
 } {
   const eventRecord = event as unknown as Record<string, unknown>;
   const participant = participantFromEvent(event, "detached");
-  const session = exactEventRecord(
+  const session = exactAgentSession(
     eventRecord.agent_session,
-    AGENT_SESSION_KEYS,
     "agent_session_created 이벤트에 Agent Session 투영이 없습니다.",
     "agent_session_created 이벤트의 Agent Session 투영이 올바르지 않습니다."
   );
-  const stringKeys = AGENT_SESSION_KEYS.filter(
-    (key) =>
-      key !== "persona_card" &&
-      !AGENT_SESSION_BOOLEAN_KEYS.includes(key as (typeof AGENT_SESSION_BOOLEAN_KEYS)[number]) &&
-      !AGENT_SESSION_INTEGER_KEYS.includes(key as (typeof AGENT_SESSION_INTEGER_KEYS)[number])
-  );
   if (
-    stringKeys.some((key) => typeof session[key] !== "string") ||
-    AGENT_SESSION_BOOLEAN_KEYS.some((key) => typeof session[key] !== "boolean") ||
-    AGENT_SESSION_INTEGER_KEYS.some(
-      (key) => !Number.isSafeInteger(session[key]) || Number(session[key]) < 0
-    ) ||
-    !session.session_id ||
     session.room_id !== event.room_id ||
     session.session_id !== eventRecord.session_id ||
     session.session_id !== session.participant_id ||
     session.participant_id !== event.participant_id ||
     session.participant_id !== participant.participant_id ||
     session.provider_kind !== eventRecord.provider_kind ||
-    !personaSummaryMatches(session.persona_card, session.persona_card_id as string) ||
     session.display_name !== participant.display_name ||
     session.display_name !== event.display_name ||
     event.participant_type !== "agent" ||

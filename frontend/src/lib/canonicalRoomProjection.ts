@@ -87,10 +87,7 @@ export function canonicalParticipantProfiles(
     if (!session.participant_id) return;
     profiles[session.participant_id] = {
       displayName: session.display_name,
-      avatarImageUrl: resolveAttachmentReference(
-        session.avatar_image_url,
-        displayResourceBase,
-      ),
+      avatarImageUrl: undefined,
       providerKind: session.provider_kind,
       role: profiles[session.participant_id]?.role,
     };

@@ -286,7 +286,7 @@ describe("useCanonicalRoom agent creation projection", () => {
     projectedSession(created).persona_card_id = "Archive-Guide";
 
     expect(() => agentCreationProjectionFromEvent(created)).toThrow(
-      "agent_session_created 이벤트의 생성 투영이 올바르지 않습니다."
+      "agent_session_created 이벤트의 Agent Session 투영이 올바르지 않습니다."
     );
   });
 

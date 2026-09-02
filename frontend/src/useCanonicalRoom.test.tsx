@@ -13,6 +13,7 @@ import type {
   RoomSocketSnapshot,
 } from "./roomSocketClient";
 import { useCanonicalRoom } from "./useCanonicalRoom";
+import { agentSessionFixture } from "./test/agentSession";
 
 function event(sequence: number, type: string, content = ""): RoomEvent {
   return {
@@ -30,7 +31,7 @@ function event(sequence: number, type: string, content = ""): RoomEvent {
 }
 
 function session(status = "idle"): RoomAgentSession {
-  return {
+  return agentSessionFixture({
     room_id: "general",
     session_id: "session-codex",
     participant_id: "codex",
@@ -41,9 +42,7 @@ function session(status = "idle"): RoomAgentSession {
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli",
     connection_kind: "native_cli_bridge",
-    persona_card_id: "",
-    persona_card: null,
-  };
+  });
 }
 
 function rawRoomSettings(

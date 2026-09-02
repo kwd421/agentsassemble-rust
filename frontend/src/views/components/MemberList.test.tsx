@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
+import { agentSessionFixture } from "../../test/agentSession";
 import MemberList from "./MemberList";
 
 
@@ -19,7 +20,7 @@ const AGENT: LiveAgent = {
   capabilities: [],
 };
 
-const SESSION: RoomAgentSession = {
+const SESSION: RoomAgentSession = agentSessionFixture({
   room_id: "room-1",
   session_id: "session-1",
   participant_id: "agent-1",
@@ -30,9 +31,7 @@ const SESSION: RoomAgentSession = {
   provider_kind: "codex",
   runtime_kind: "codex_app_server",
   connection_kind: "agent_session",
-  persona_card_id: "",
-  persona_card: null,
-};
+});
 
 afterEach(() => {
   cleanup();
@@ -463,7 +462,6 @@ describe("MemberList component wiring", () => {
     const canonicalSession = {
       ...SESSION,
       display_name: "Session Makima",
-      avatar_image_url: "/api/attachments/session-avatar?view=1",
       provider_kind: "antigravity_live_session",
     };
     render(
@@ -496,9 +494,10 @@ describe("MemberList component wiring", () => {
 
     const canonicalRow = screen.getByText("Session Makima").closest("[role='button']");
     expect(canonicalRow).not.toBeNull();
+    expect(canonicalRow?.querySelector(".dc-member-avatar-image")).toBeNull();
     expect(
-      canonicalRow?.querySelector(".dc-member-avatar-image")?.getAttribute("src")
-    ).toBe("http://127.0.0.1:43123/api/attachments/session-avatar?view=1");
+      canonicalRow?.querySelector(".dc-provider-logo")?.getAttribute("data-provider-brand")
+    ).toBe("antigravity");
     expect(
       (screen.getByRole("combobox", {
         name: "Session Makima 역할",
@@ -509,15 +508,11 @@ describe("MemberList component wiring", () => {
 
   it("keeps profile mutation unavailable until an Agent profile owner exists", () => {
     const onAgentConfigure = vi.fn().mockResolvedValue(undefined);
-    const sessionWithAvatar = {
-      ...SESSION,
-      avatar_image_url: "/api/attachments/agent-avatar?view=1",
-    };
 
     render(
       <MemberList
         agents={[AGENT]}
-        agentSessions={[sessionWithAvatar]}
+        agentSessions={[SESSION]}
         displayResourceBase="http://127.0.0.1:43123"
         roomId="room-1"
         roomName="Room One"
@@ -529,8 +524,7 @@ describe("MemberList component wiring", () => {
     expect(
       screen.getByText("Agent One").closest("[role='button']")
         ?.querySelector(".dc-member-avatar-image")
-        ?.getAttribute("src")
-    ).toBe("http://127.0.0.1:43123/api/attachments/agent-avatar?view=1");
+    ).toBeNull();
     fireEvent.click(screen.getByText("Agent One"));
     const dialog = screen.getByRole("dialog", { name: "Agent One" });
     expect(within(dialog).queryByRole("textbox", { name: "표시 이름" })).toBeNull();

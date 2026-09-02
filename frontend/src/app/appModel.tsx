@@ -103,7 +103,7 @@ export function agentSessionMemberToLiveAgent(
     display_name: session
       ? session.display_name || member.participant_id
       : member.display_name || member.participant_id,
-    avatar_image_url: session ? session.avatar_image_url : member.avatar_image_url,
+    avatar_image_url: session ? undefined : member.avatar_image_url,
     owner_id: member.owner_id,
     created_by: member.created_by,
     status: member.thinking ? "working" : member.status || member.session_status || "online",

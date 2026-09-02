@@ -3,6 +3,7 @@ import { RoomSocketSayError } from "../roomSocketTypes";
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreationProjectionFromEvent,
+  agentSessionIsValid,
   joinedParticipantFromEvent,
 } from "./participantEventContract";
 import { isParticipantRole } from "./participantRole";
@@ -21,6 +22,18 @@ export function participantProjectionIsValid(event: RoomEvent): boolean {
   try {
     if (event.type === "participant_joined") joinedParticipantFromEvent(event);
     if (event.type === "agent_session_created") agentCreationProjectionFromEvent(event);
+    if (event.type === "agent_session_state") {
+      const eventRecord = event as unknown as Record<string, unknown>;
+      if (
+        !agentSessionIsValid(
+          eventRecord.agent_session,
+          event.room_id,
+          String(event.participant_id || ""),
+        )
+      ) {
+        return false;
+      }
+    }
     if (
       event.type === "participant_updated" &&
       "role" in event &&
@@ -185,10 +198,10 @@ export function commandAckResultIsValid(
       event.participant_id === expectedParticipantId
     );
   }
-  if (action === "agent.create" || action === "agent.configure") {
-    return isRecord(result.agent_session);
+  if (action.startsWith("agent.")) {
+    const expectedAgentId = action === "agent.create" ? "" : String(payload.agent_id || "");
+    return agentSessionIsValid(result.agent_session, expectedRoomId, expectedAgentId);
   }
-  if (action.startsWith("agent.")) return isRecord(result.agent_session);
   if (action === "room.vote.summary") {
     return voteSummaryResultIsValid(payload, result);
   }
@@ -247,6 +260,22 @@ export function snapshotValidationError(
     );
   }
   const sequences: number[] = [];
+  const sessionIds = new Set<string>();
+  const sessionParticipantIds = new Set<string>();
+  for (const session of value.agent_sessions) {
+    if (
+      !agentSessionIsValid(session, expectedRoomId) ||
+      sessionIds.has(session.session_id) ||
+      sessionParticipantIds.has(session.participant_id)
+    ) {
+      return new RoomSocketSayError(
+        "Room snapshot contained an invalid Agent Session projection; reconnecting.",
+        "snapshot_agent_session_invalid"
+      );
+    }
+    sessionIds.add(session.session_id);
+    sessionParticipantIds.add(session.participant_id);
+  }
   for (const event of value.events) {
     if (
       !publicRoomEventIsValid(event, expectedRoomId)

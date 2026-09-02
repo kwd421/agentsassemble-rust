@@ -648,12 +648,31 @@ Implementation plan and evidence:
    conflicting authorities before projection. Production build and all 622 frontend
    tests pass; no wire-size or speculative throughput improvement is claimed.
 3. Derive the browser Agent Session and room-member projection from generated
-   `AgentSession` and `Participant`. Reuse one exact Participant/Agent Session field
-   schema for snapshot and event rejection, while history pagination, search context,
-   live sequencing, catalog update, and command ACKs keep separate error semantics.
-   Remove copied session diagnostics, `share_activity`, legacy participant kinds, and
-   the independent member `thinking` signal because no current Rust producer owns
-   them. The local viewer-only activity-visibility preference remains a UI projection.
+   `AgentSession` and `Participant`. These are two commits rather than one mechanical
+   type cleanup: an Agent Session owns runtime identity and lifecycle, while a
+   Participant owns room role, join state, mute state, and room membership. Reuse one
+   exact schema per generated owner for snapshot and event rejection, while history
+   pagination, search context, live sequencing, catalog update, and command ACKs keep
+   separate error semantics.
+
+   The Agent Session half is complete. `RoomAgentSession` now aliases the generated
+   Rust type, one compile-time exact key list backs snapshot/live-event validation,
+   and agent command acknowledgements reject partial or extra session projections.
+   The producerless HTTP resume endpoint, `share_activity`, copied latency/profile/
+   stderr/protocol counters, and the session-avatar fallback are removed. Activity
+   visibility remains a local viewer preference; an Agent Session without a future
+   Agent-profile owner displays its provider identity instead of borrowing the room
+   participant avatar. This removes duplicate state and false controls rather than
+   claiming a runtime speedup. Generated bindings were unchanged after export; the
+   production build, 86 focused tests, and all 624 frontend tests pass. The current
+   815.99 kB production JavaScript asset is recorded only as an observed build result,
+   not attributed to this ownership correction. No retry, timer, polling path,
+   fallback, compatibility decoder, or new abstraction was added.
+
+   The Participant half remains the next independent change. It will remove legacy
+   participant kinds and the independent member `thinking` signal only after room-
+   owned role/join/mute semantics are derived from generated `Participant` and proven
+   through the real snapshot/event paths.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,

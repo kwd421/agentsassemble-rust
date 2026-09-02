@@ -11,6 +11,7 @@ import {
   receiveServerFrame,
   sentClientFrame,
 } from "./test/roomSocketHarness";
+import { agentSessionFixture } from "./test/agentSession";
 
 function leaveAck(
   requestId: unknown,
@@ -213,6 +214,67 @@ describe("bounded canonical room socket", () => {
     await vi.waitFor(() => expect(sockets).toHaveLength(2));
     sockets[1].open();
     expect(sockets[1].sent[0]).toMatchObject({ resume_from_seq: 0 });
+    handle.close();
+  });
+
+  it("rejects a partial Agent Session in the snapshot", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    (frames.snap as unknown as Record<string, unknown>).agent_sessions = [
+      { session_id: "partial-session" },
+    ];
+    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.snap);
+
+    await vi.waitFor(() =>
+      expect(errors.at(-1)?.category).toBe("snapshot_agent_session_invalid")
+    );
+    expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it("rejects an Agent Session state event outside the generated contract", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = openHarness({
+      onError: (error) => {
+        if (error instanceof RoomSocketSayError) errors.push(error);
+      },
+    });
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    sockets[0].receive(frames.receipt);
+    sockets[0].receiveRaw(frames.rawSnapshot);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+
+    receiveServerFrame(sockets[0], {
+      op: "event",
+      stream: "room_events",
+      events: [
+        {
+          ...event(1),
+          type: "agent_session_state",
+          participant_id: "agent-test",
+          agent_session: {
+            ...agentSessionFixture({ room_id: "general" }),
+            share_activity: true,
+          },
+        },
+      ],
+      latest_seq: 1,
+    });
+
+    await vi.waitFor(() =>
+      expect(errors.at(-1)?.category).toBe("event_schema_invalid")
+    );
+    expect(handle.ready()).toBe(false);
     handle.close();
   });
 

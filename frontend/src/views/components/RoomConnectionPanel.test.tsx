@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
+import { agentSessionFixture } from "../../test/agentSession";
 import RoomConnectionPanel from "./RoomConnectionPanel";
 
 afterEach(cleanup);
@@ -16,7 +17,7 @@ const room = {
 };
 
 function agentSession(status: string): RoomAgentSession {
-  return {
+  return agentSessionFixture({
     room_id: "general",
     session_id: "session-codex",
     participant_id: "codex",
@@ -27,9 +28,7 @@ function agentSession(status: string): RoomAgentSession {
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli",
     connection_kind: "native_cli_bridge",
-    persona_card_id: "",
-    persona_card: null,
-  };
+  });
 }
 
 function agent(status = "online"): LiveAgent {
@@ -347,24 +346,14 @@ describe("RoomConnectionPanel", () => {
     expect((screen.getByTitle("세션 재개") as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it("shows bounded runtime diagnostics without provider ids or raw stderr", () => {
+  it("shows only runtime diagnostics owned by the Agent Session contract", () => {
     const session = {
       ...agentSession("idle"),
-      transport: "acp_stdio",
-      runtime_profile_key: "profile-4c21",
-      message_source: "grok_acp",
-      message_source_strict: true,
-      provider_visible_chars: 418,
-      provider_visible_event_count: 3,
-      stderr_byte_count: 65540,
-      stderr_warning_count: 17,
-      notification_drop_count: 2,
-      adapter_activity_invalid_count: 3,
+      turn_count: 4,
+      last_seen_event_id: "event-4",
       provider_session_active: true,
       provider_session_reused: true,
-      provider_session_id: "must-not-render",
-      stderr_tail: "secret terminal warning",
-    } as RoomAgentSession & { provider_session_id: string; stderr_tail: string };
+    };
 
     render(
       <RoomConnectionPanel
@@ -377,15 +366,9 @@ describe("RoomConnectionPanel", () => {
 
     openAgentDetails();
 
-    expect(screen.getByText("profile profile-4c21")).toBeTruthy();
-    expect(screen.getByText("message grok_acp · strict")).toBeTruthy();
-    expect(screen.getByText("input 418 chars · 3 events")).toBeTruthy();
-    expect(screen.getByText("stderr 65540 bytes · warnings 17")).toBeTruthy();
-    expect(screen.getByText("protocol drops 2")).toBeTruthy();
-    expect(screen.getByText("invalid activity reports 3")).toBeTruthy();
+    expect(screen.getByText("turns 4")).toBeTruthy();
+    expect(screen.getByText("cursor event-4")).toBeTruthy();
     expect(screen.getByText("provider session 이어짐")).toBeTruthy();
-    expect(screen.queryByText("must-not-render")).toBeNull();
-    expect(screen.queryByText("secret terminal warning")).toBeNull();
   });
 
   it("does not claim that PTY providers lack a provider session", () => {
@@ -543,7 +526,6 @@ describe("RoomConnectionPanel", () => {
     const provider = codexProvider();
     const initialSession = {
       ...agentSession("stopped"),
-      runtime_profile_key: "profile-test",
       model: "gpt-current",
       reasoning_effort: "low",
       service_tier: "default",

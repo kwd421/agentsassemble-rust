@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { LiveAgent, RoomAgentSession, RoomMember } from "../../api";
 import { DEFAULT_ROOM_APPEARANCE } from "../../lib/roomAppearance";
+import { agentSessionFixture } from "../../test/agentSession";
 import MobileRoomInfoPanel from "./MobileRoomInfoPanel";
 
 const AGENT: LiveAgent = {
@@ -19,7 +20,7 @@ const AGENT: LiveAgent = {
   capabilities: [],
 };
 
-const SESSION: RoomAgentSession = {
+const SESSION: RoomAgentSession = agentSessionFixture({
   room_id: "room-1",
   session_id: "session-1",
   participant_id: "agent-1",
@@ -30,9 +31,7 @@ const SESSION: RoomAgentSession = {
   provider_kind: "codex",
   runtime_kind: "codex_app_server",
   connection_kind: "agent_session",
-  persona_card_id: "",
-  persona_card: null,
-};
+});
 
 const STALE_MEMBER: RoomMember = {
   meeting_id: "room-1",
