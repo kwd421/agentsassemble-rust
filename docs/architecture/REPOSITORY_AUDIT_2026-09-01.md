@@ -573,17 +573,25 @@ Daybreaker Blue High each approve the individual corrections, exact
 
 ### F-10 — DeepSeek keyring-to-environment priority is an unapproved fallback shape
 
-Disposition: `Decide and model explicitly`; low security/product impact.
+Disposition: `Resolved by 2f0177b`; low security/product impact.
 
-`credentials.rs:207-263` captures `DEEPSEEK_API_KEY` and uses it when the keyring is
-missing; delete at `credentials.rs:285-295` removes only the keyring entry. The UI
-does expose the source and does not offer delete for environment credentials, and
-a keyring error does not fall through. That limits the current security impact but
-still leaves two credential owners with priority semantics.
+Current-original `d5046473` confirms that `ProviderSecretStore` prefers the platform
+keyring and then reads `DEEPSEEK_API_KEY`. The first Rust cutover preserved that
+priority, while the reachable copied control exposed only status, secure set, and
+secure delete; it had no environment-source selection or revoke operation. Deleting
+the keyring item could therefore reveal a second authority the same UI could not
+remove.
 
-Either remove the environment source or model it as an explicitly selected,
-immutable launch source with clear revoke/restart semantics. Do not retain it as an
-implicit convenience fallback.
+Commit `2f0177b` removes the environment capture at the credential-store owner and
+the retired response value at the strict frontend boundary. Keyring absence now
+means `missing`, deletion becomes visibly missing, and a later provider turn fails
+with the existing credential-missing result. The installed-store error continues to
+fail closed rather than being confused with absence. This chooses the smaller of the
+two audited dispositions: no source-selection state, launch-source abstraction,
+compatibility decoder, schema, SQL, cache, task, timer, polling, retry, or fallback
+was added. The 559-line credential file remains one cohesive backend/store/error and
+test owner; splitting it would expose its private backend state without separating a
+second invariant.
 
 ### F-11 — frontend wire-contract generation has two owners
 

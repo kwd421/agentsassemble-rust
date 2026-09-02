@@ -6117,3 +6117,34 @@ next unchanged workspace build still reuses the retained cache. The trade-off is
 whole-crate recompilation after editing a local crate instead of keeping large
 intra-crate incremental objects; no product runtime behavior, deletion automation,
 timer, polling, retry, fallback, or swallowed failure was introduced.
+
+### F-10 single DeepSeek credential authority: 2026-09-02
+
+Read-only comparison against current-original `d5046473` confirms its real
+`ProviderSecretStore` prefers the `AgentsAssemble`/provider keyring item and then an
+environment variable. The copied Rust UI has no environment-source selector or
+revoke operation, so keyring deletion previously exposed credential material that
+the same control could not remove. Source commit `2f0177b` removes that implicit
+second owner: production reads only the platform keyring, the public status is the
+closed `keyring | missing` pair, deletion returns missing, and the frontend rejects
+the retired source value before it enters state.
+
+The six focused provider credential tests pass, including secure-store round-trip,
+terminal deletion, absent-backend behavior, validation, metadata-only macOS status,
+and fail-closed installed-store errors. The four frontend credential tests pass and
+pin fresh operator authority for status/set/delete, terminal delete projection,
+retired-source rejection, and secret-field rejection. The real credential HTTP TCP
+boundary passes without reading or mutating a user keyring item. Repository-wide
+production-source search finds no remaining `DEEPSEEK_API_KEY`, environment-secret
+field, environment enum variant, or frontend environment source contract.
+
+The clean `/usr/bin/time -l make verify` run containing the source correction passes
+97 frontend files/622 tests, 25 desktop tests, all 160 provider tests, 242 persistence
+tests, 88 server tests, every real TCP/WebSocket integration suite, warning-denied
+Clippy, diff, architecture, and artifact gates in 432.17 seconds with
+1,846,460,416-byte maximum RSS. The existing secret length, blocking-OS-call
+serialization, per-turn snapshot, metadata-only status, private/no-store response,
+and installed-store failure contracts remain. No schema, SQL, provider process,
+real credential mutation, source-selection framework, task, timer, polling,
+heartbeat, retry, compatibility path, fallback, placeholder, or swallowed failure
+was added.

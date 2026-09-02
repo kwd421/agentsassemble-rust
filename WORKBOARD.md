@@ -228,11 +228,16 @@ contracts, findings, or verification journals.
   individual corrections, exact `9821433..0fd931d`, full correction
   `e76cda7..0fd931d`, cumulative F-09 `820e427..0fd931d`, and HEAD `0fd931d` at
   `C0/H0/M0/L0` with no actionable finding.
-- Active task: F-10 DeepSeek credential-source authority. Remove the implicit
-  keyring-to-environment priority only at the existing credential-store and strict
-  frontend response boundaries; deletion must become visibly missing. Do not add a
-  source-selection framework, compatibility path, fallback, or second authority.
-- Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
+- Completed: F-10 DeepSeek credential-source authority in `2f0177b`. Current-original
+  `d5046473` really prioritizes the keyring and then `DEEPSEEK_API_KEY`, but the
+  reachable control exposes no environment-source selection or revoke authority.
+  The Rust owner therefore has one keyring source, deletion becomes visibly missing,
+  and the strict frontend rejects the retired response value. No source-selection
+  framework, compatibility path, fallback, or second authority was added.
+- Active task: F-11 frontend wire-contract generation ownership. Establish the Rust
+  protocol generator as the one semantic wire owner without replacing boundary-
+  specific finite decoders with a universal handwritten schema.
+- Build-artifact lifecycle correction is complete through `35a418c`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
   desktop shell shares the repository Cargo target. Routine complete verification
@@ -241,10 +246,12 @@ contracts, findings, or verification journals.
   ceiling; only explicit `make artifact-prune` maintenance invokes Cargo clean, so
   verification cannot race-delete another Cargo/Tauri operation. Unix accounting
   deduplicates hard links and uses allocated blocks; platforms without that metadata
-  use logical bytes and never collapse zero file identities. The packed warm cache
-  occupies 20.668 GiB physically, contains zero `.rcgu.o` files and 33 dSYM bundles,
-  leaves the obsolete desktop target absent, and passes a packed cold build/test run
-  plus the final warm complete verification in 822.72 and 315.16 seconds respectively.
+  use logical bytes and never collapse zero file identities. Cargo incremental output
+  is disabled after its measured owner alone reached 8.10 GiB and repeatedly pushed
+  the active target over the maintenance ceiling. The current retained cache occupies
+  14,836,060 allocated KiB, contains neither incremental data nor `.rcgu.o` files,
+  passes complete verification in 432.17 seconds, and serves an immediate all-target
+  workspace check in 0.26 seconds.
   Critical ChatGPT Pro and Daybreaker Blue High independently found the portable-test
   and redundant-scan defects; `537c1b9` closes both. Each reviewer approved that
   correction, exact `42f0af5..537c1b9`, complete correction
