@@ -4,6 +4,7 @@ import { roomDockIdentity, roomFromGuestSession } from "./roomDockModel";
 import {
   loadRoomGuestSession,
   persistRoomGuestSession,
+  roomGuestSessionExpired,
   roomGuestSessionFromJoinPayload,
 } from "./roomGuestSession";
 
@@ -84,6 +85,17 @@ describe("guest room projection", () => {
         Object.defineProperty(window, "localStorage", originalStorage);
       }
     }
+  });
+
+  it("keeps a session active until its exact server expiry", () => {
+    const expiresAt = Date.parse(joinResponse.expires_at);
+
+    expect(
+      roomGuestSessionExpired({ expiresAt: joinResponse.expires_at }, expiresAt - 1)
+    ).toBe(false);
+    expect(
+      roomGuestSessionExpired({ expiresAt: joinResponse.expires_at }, expiresAt)
+    ).toBe(true);
   });
 
   it("rejects a session write that durable storage cannot read back", () => {

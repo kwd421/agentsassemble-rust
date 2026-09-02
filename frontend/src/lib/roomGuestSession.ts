@@ -186,11 +186,6 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
   }
 }
 
-// A guest session token lives ~1h server-side. Treat it as expired a minute
-// early so we re-join (reusable invite + device token = stable identity)
-// instead of firing a doomed request with a token about to die.
-const GUEST_SESSION_EXPIRY_SKEW_MS = 60_000;
-
 export function roomGuestSessionExpired(
   session: Pick<RoomGuestSession, "expiresAt"> | null | undefined,
   now: number = Date.now()
@@ -198,7 +193,7 @@ export function roomGuestSessionExpired(
   if (!session) return true;
   const expiresAt = Date.parse(session.expiresAt || "");
   if (Number.isNaN(expiresAt)) return true;
-  return expiresAt - GUEST_SESSION_EXPIRY_SKEW_MS <= now;
+  return expiresAt <= now;
 }
 
 export function loadRoomGuestSession(): RoomGuestSession | null {
