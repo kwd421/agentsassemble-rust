@@ -34,7 +34,7 @@ describe("DeepSeek credential HTTP authority", () => {
       .fn()
       .mockResolvedValueOnce(statusResponse("missing"))
       .mockResolvedValueOnce(statusResponse("keyring"))
-      .mockResolvedValueOnce(statusResponse("environment"));
+      .mockResolvedValueOnce(statusResponse("missing"));
     vi.stubGlobal("fetch", fetchMock);
 
     await requestDesktopHostProductSurface();
@@ -46,8 +46,8 @@ describe("DeepSeek credential HTTP authority", () => {
       setProviderCredential("deepseek", "sentinel-provider-value")
     ).resolves.toEqual({ configured: true, source: "keyring" });
     await expect(deleteProviderCredential("deepseek")).resolves.toEqual({
-      configured: true,
-      source: "environment",
+      configured: false,
+      source: "missing",
     });
 
     expect(invoke).toHaveBeenNthCalledWith(1, "host_product_surface");
@@ -123,27 +123,39 @@ describe("DeepSeek credential HTTP authority", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("rejects response fields outside the public metadata contract", async () => {
+  it("rejects retired sources and fields outside the public metadata contract", async () => {
     const invoke = vi
       .fn()
       .mockResolvedValueOnce(HOST_SURFACE)
-      .mockResolvedValueOnce(ticket("d"));
+      .mockResolvedValueOnce(ticket("d"))
+      .mockResolvedValueOnce(ticket("e"));
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     vi.stubGlobal(
       "fetch",
-      vi.fn().mockResolvedValueOnce(
-        new Response(
-          JSON.stringify({
-            configured: true,
-            source: "keyring",
-            api_key: "must-not-cross-the-response-boundary",
-          }),
-          { status: 200, headers: { "Content-Type": "application/json" } }
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({ configured: true, source: "environment" }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
         )
-      )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              configured: true,
+              source: "keyring",
+              api_key: "must-not-cross-the-response-boundary",
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } }
+          )
+        )
     );
 
     await requestDesktopHostProductSurface();
+    await expect(fetchProviderCredentialStatus("deepseek")).rejects.toThrow(
+      "Provider credential status is invalid."
+    );
     await expect(fetchProviderCredentialStatus("deepseek")).rejects.toThrow(
       "Provider credential status is invalid."
     );
@@ -158,7 +170,7 @@ function ticket(character: string) {
   };
 }
 
-function statusResponse(source: "keyring" | "environment" | "missing") {
+function statusResponse(source: "keyring" | "missing") {
   return new Response(
     JSON.stringify({ configured: source !== "missing", source }),
     { status: 200, headers: { "Content-Type": "application/json" } }

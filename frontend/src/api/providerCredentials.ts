@@ -7,7 +7,7 @@ import { isDesktopWebview } from "../lib/desktopBridge";
 
 export interface ProviderCredentialStatus {
   configured: boolean;
-  source: "keyring" | "environment" | "missing";
+  source: "keyring" | "missing";
 }
 
 const DEEPSEEK_CREDENTIAL_PATH = "/api/provider-credentials/deepseek";
@@ -34,7 +34,7 @@ function providerCredentialStatus(value: unknown): ProviderCredentialStatus {
     keys[1] !== "source" ||
     typeof record.configured !== "boolean" ||
     typeof record.source !== "string" ||
-    !new Set(["keyring", "environment", "missing"]).has(record.source) ||
+    !new Set(["keyring", "missing"]).has(record.source) ||
     record.configured !== (record.source !== "missing")
   ) {
     throw new Error("Provider credential status is invalid.");

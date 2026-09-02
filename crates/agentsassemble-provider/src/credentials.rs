@@ -16,7 +16,6 @@ use security_framework_sys::base::errSecItemNotFound;
 
 const SERVICE_NAME: &str = "AgentsAssemble";
 const DEEPSEEK_ACCOUNT: &str = "deepseek";
-const DEEPSEEK_ENVIRONMENT: &str = "DEEPSEEK_API_KEY";
 const MIN_SECRET_CHARS: usize = 8;
 const MAX_SECRET_CHARS: usize = 8_192;
 
@@ -24,7 +23,6 @@ const MAX_SECRET_CHARS: usize = 8_192;
 #[serde(rename_all = "lowercase")]
 pub enum ProviderCredentialSource {
     Keyring,
-    Environment,
     Missing,
 }
 
@@ -175,7 +173,6 @@ fn native_store_available() -> Result<BackendAvailability<()>, ProviderCredentia
 #[derive(Clone)]
 pub struct ProviderCredentialStore {
     backend: Arc<dyn CredentialBackend>,
-    environment_secret: Arc<str>,
     access: Arc<Semaphore>,
 }
 
@@ -207,12 +204,8 @@ pub(crate) const fn deepseek_credential_error(error: ProviderCredentialError) ->
 impl ProviderCredentialStore {
     #[must_use]
     pub fn production() -> Self {
-        let environment_secret = std::env::var(DEEPSEEK_ENVIRONMENT)
-            .ok()
-            .map_or_else(String::new, |value| value.trim().to_owned());
         Self {
             backend: Arc::new(NativeCredentialBackend),
-            environment_secret: environment_secret.into(),
             access: Arc::new(Semaphore::new(1)),
         }
     }
@@ -230,11 +223,7 @@ impl ProviderCredentialStore {
                 ProviderCredentialSource::Keyring,
             )),
             BackendAvailability::Available(false) | BackendAvailability::Absent => Ok(
-                ProviderCredentialStatus::from_source(if self.environment_secret.is_empty() {
-                    ProviderCredentialSource::Missing
-                } else {
-                    ProviderCredentialSource::Environment
-                }),
+                ProviderCredentialStatus::from_source(ProviderCredentialSource::Missing),
             ),
         }
     }
@@ -252,13 +241,8 @@ impl ProviderCredentialStore {
             BackendAvailability::Available(Some(secret)) => {
                 validated_secret(&secret).map(DeepSeekCredential)
             }
-            BackendAvailability::Available(None) | BackendAvailability::Absent
-                if self.environment_secret.is_empty() =>
-            {
-                Err(ProviderCredentialError::MissingSecret)
-            }
             BackendAvailability::Available(None) | BackendAvailability::Absent => {
-                validated_secret(&self.environment_secret).map(DeepSeekCredential)
+                Err(ProviderCredentialError::MissingSecret)
             }
         }
     }
@@ -282,7 +266,7 @@ impl ProviderCredentialStore {
         }
     }
 
-    /// Deletes only the secure-store `DeepSeek` credential. An environment credential remains.
+    /// Deletes the secure-store `DeepSeek` credential.
     ///
     /// # Errors
     ///
@@ -424,21 +408,20 @@ mod tests {
         }
     }
 
-    fn store(backend: Arc<TestBackend>, environment: &str) -> ProviderCredentialStore {
+    fn store(backend: Arc<TestBackend>) -> ProviderCredentialStore {
         ProviderCredentialStore {
             backend,
-            environment_secret: Arc::from(environment),
             access: Arc::new(tokio::sync::Semaphore::new(1)),
         }
     }
 
     #[tokio::test]
-    async fn secure_store_precedes_environment_and_delete_reveals_environment() {
+    async fn secure_store_round_trip_and_delete_becomes_missing() {
         let backend = Arc::new(TestBackend::default());
-        let store = store(Arc::clone(&backend), "environment-secret");
+        let store = store(Arc::clone(&backend));
         assert_eq!(
             store.deepseek_status().await.map(|status| status.source),
-            Ok(ProviderCredentialSource::Environment)
+            Ok(ProviderCredentialSource::Missing)
         );
 
         let status = store
@@ -466,29 +449,30 @@ mod tests {
             .delete_deepseek()
             .await
             .unwrap_or_else(|error| panic!("delete secret: {error}"));
-        assert_eq!(deleted.source, ProviderCredentialSource::Environment);
-        assert_eq!(
-            store
-                .deepseek_secret()
-                .await
-                .map(|secret| secret.expose().to_owned()),
-            Ok("environment-secret".to_owned())
-        );
+        assert_eq!(deleted.source, ProviderCredentialSource::Missing);
+        assert!(matches!(
+            store.deepseek_secret().await,
+            Err(ProviderCredentialError::MissingSecret)
+        ));
     }
 
     #[tokio::test]
-    async fn missing_backend_allows_environment_read_but_rejects_secure_write() {
+    async fn missing_backend_reports_missing_and_rejects_secure_write() {
         let backend = Arc::new(TestBackend::default());
         backend
             .state
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .absent = true;
-        let store = store(backend, "environment-secret");
+        let store = store(backend);
         assert_eq!(
             store.deepseek_status().await.map(|status| status.source),
-            Ok(ProviderCredentialSource::Environment)
+            Ok(ProviderCredentialSource::Missing)
         );
+        assert!(matches!(
+            store.deepseek_secret().await,
+            Err(ProviderCredentialError::MissingSecret)
+        ));
         assert_eq!(
             store.set_deepseek("secure-secret").await,
             Err(ProviderCredentialError::SecureStoreUnavailable)
@@ -503,7 +487,7 @@ mod tests {
             .lock()
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .fail = true;
-        let store = store(backend, "environment-secret");
+        let store = store(backend);
         assert_eq!(
             store.deepseek_status().await,
             Err(ProviderCredentialError::SecureStoreUnavailable)
@@ -525,12 +509,12 @@ mod tests {
     #[tokio::test]
     async fn runtime_secret_distinguishes_missing_and_invalid_authority() {
         let backend = Arc::new(TestBackend::default());
-        let missing_store = store(Arc::clone(&backend), "");
+        let missing_store = store(Arc::clone(&backend));
         assert!(matches!(
             missing_store.deepseek_secret().await,
             Err(ProviderCredentialError::MissingSecret)
         ));
-        let store = store(Arc::clone(&backend), "environment-secret");
+        let store = store(Arc::clone(&backend));
         {
             let mut state = backend
                 .state

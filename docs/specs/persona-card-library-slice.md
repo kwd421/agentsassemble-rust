@@ -272,23 +272,24 @@ provider tests, warning-denied provider Clippy, and the architecture gates. No r
 Computer Use resource, Deep Scan, or other automated security scan ran for this structural change.
 
 The first remote-API prerequisite owns only the currently required `DeepSeek` credential rather
-than introducing a generic credential/provider framework. The verified original status contract
-prefers the `AgentsAssemble`/`deepseek` platform-keyring item, reports only
-`keyring | environment | missing`, permits `DEEPSEEK_API_KEY` only when no secure item exists, and
-never falls back to the environment after an installed secure store fails. Set validates a trimmed
-8--8,192-character secret, and delete removes only the secure item so an environment credential may
-become visible again. No public route, event, log, fixture, or serialized model exposes the secret.
-The registered DeepSeek driver resolves one stable secret at the start of each assigned turn, so a
-later turn observes an exact secure-item replacement or deletion without retaining credential bytes
-for the runtime lifetime; an already submitted turn keeps its per-turn credential snapshot.
+than introducing a generic credential/provider framework. The verified original prioritized the
+`AgentsAssemble`/`deepseek` platform-keyring item and otherwise read `DEEPSEEK_API_KEY`; the first
+Rust cutover preserved that priority as an implicit fallback. F-10 removes that second authority
+because the reachable control has no source selection or environment-revoke operation: production
+now reads only the platform keyring and reports only `keyring | missing`. Set validates a trimmed
+8--8,192-character secret, and delete makes the credential visibly missing. No public route, event,
+log, fixture, or serialized model exposes the secret. The registered DeepSeek driver resolves one
+stable secret at the start of each assigned turn, so a later turn observes an exact secure-item
+replacement or deletion without retaining credential bytes for the runtime lifetime; an already
+submitted turn keeps its per-turn credential snapshot.
 
 The implementation uses maintained `keyring` 4.1.6 with its v1 platform stores instead of owning
 Keychain, Credential Manager, Secret Service, encryption, or persistence code. The macOS status
 path uses `security-framework` 3.7.0 item search without requesting data, attributes, or references.
 Inspection of the
 dependency showed that `Entry::new` collapses every store-initialization error into
-`NoDefaultStore`; treating that result as an absent backend would silently turn a locked or failed
-installed store into an environment fallback. The owner therefore checks `Entry::store_status`
+`NoDefaultStore`; treating that result as an absent backend would silently report a locked or failed
+installed store as missing. The owner therefore checks `Entry::store_status`
 first and accepts only its documented `Invalid("platform", ...)` result as platform absence; every
 other initialization or access error is the stable `secure_store_unavailable` failure. On macOS,
 the exact search is restricted to the same User/login keychain selected by the v1 store.
@@ -296,7 +297,7 @@ the exact search is restricted to the same User/login keychain selected by the v
 The metadata-only query still had a concrete interaction threat: Security.framework's default item
 search policy permits authentication UI, so a protected matching item could display a prompt during
 status. Skipping protected items was rejected because that would misclassify a present secure item as
-absent and activate the environment fallback. Process-global interaction disabling was also rejected
+absent. Process-global interaction disabling was also rejected
 because concurrent keychain users could observe the temporary global state. The query now requests
 fail-on-authentication-UI through a safe `security-framework` method pinned at exact public fork
 commit `85407d113b978b27728e162c8485c11e233c3e3e`, based on release 3.7.0. Only
@@ -335,16 +336,16 @@ Tokio's maintained blocking pool serialize them; the permit moves into the block
 caller cancellation cannot admit an overlapping operation while the first OS call still runs. The
 accepted cost is one blocking task and one semaphore acquisition per status/set/delete operation,
 plus target-specific lockfile dependencies from the maintained cross-platform crate. No production
-CPU, memory, disk, or latency improvement is claimed. Fake-backend tests prove precedence, deletion,
-unsupported-store behavior, validation bounds, and fail-closed installed-store errors without
-reading or writing a real credential. All 136 provider tests, warning-denied provider Clippy,
-formatting, whitespace, architecture, and source-growth gates passed.
+CPU, memory, disk, or latency improvement is claimed. Fake-backend tests prove keyring round-trip,
+terminal deletion, unsupported-store behavior, validation bounds, and fail-closed installed-store
+errors without reading or writing a real credential. All 136 provider tests, warning-denied provider
+Clippy, formatting, whitespace, architecture, and source-growth gates passed.
 
 The private DeepSeek credential HTTP owner now exposes the reachable metadata-only status,
 secure-store set, and secure-store delete operations through one route. Each request consumes a
 fresh exact local server-operator ticket before reading its body; responses are private/no-store and
 serialize only `configured` plus `source`. The route owns only transport admission and stable HTTP
-error projection. Secret length, trimming, secure-store precedence, deletion, and fail-closed
+error projection. Secret length, trimming, single-keyring ownership, deletion, and fail-closed
 backend behavior remain in `ProviderCredentialStore`, with no second provider registry, credential
 trait, cache, retry, or fallback.
 
@@ -450,8 +451,9 @@ current slice is reopened only for the separate D-04 fixed-host network-policy d
   real missing-item metadata lookup without creating or deleting a Keychain item.
 - A later manual source review found that this metadata query still inherited Security.framework's
   UI-allowed default. Commit `2492ccc` makes noninteraction explicit without treating a protected
-  item as absent or changing the environment fallback contract. The critical web session and
-  Daybreaker Blue High rechecked the current credential owner outside the diff while reviewing
+  item as absent or changing the then-current keyring/environment priority. F-10 later removes that
+  implicit fallback at the credential owner. The critical web session and Daybreaker Blue High
+  rechecked the then-current credential owner outside the diff while reviewing
   cumulative `85994a5..4cc5c29`; both returned `APPROVE — C0 H0 M0 L0`. No automated security scan
   was used.
 - The critical web session and Daybreaker Blue High manually reviewed pushed range
