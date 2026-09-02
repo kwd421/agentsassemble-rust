@@ -15,7 +15,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{CursorAcpClient, MAX_PROTOCOL_LINE_BYTES};
+use super::{AcpClient, MAX_PROTOCOL_LINE_BYTES};
 
 #[tokio::test]
 async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
@@ -87,7 +87,7 @@ async fn durable_session_load_accepts_the_exact_uncategorized_model_option() {
         .unwrap_or_else(|error| panic!("join ACP fixture: {error}"));
 }
 
-async fn fixture(cancel_prompt: bool) -> (CursorAcpClient, JoinHandle<()>, oneshot::Receiver<()>) {
+async fn fixture(cancel_prompt: bool) -> (AcpClient, JoinHandle<()>, oneshot::Receiver<()>) {
     let (client_input, fixture_input) = tokio::io::duplex(MAX_PROTOCOL_LINE_BYTES);
     let (fixture_output, client_output) = tokio::io::duplex(MAX_PROTOCOL_LINE_BYTES);
     let (prompt_seen_sender, prompt_seen) = oneshot::channel();
@@ -97,7 +97,7 @@ async fn fixture(cancel_prompt: bool) -> (CursorAcpClient, JoinHandle<()>, onesh
         cancel_prompt,
         prompt_seen_sender,
     ));
-    let client = CursorAcpClient::connect(client_input, client_output)
+    let client = AcpClient::connect(client_input, client_output)
         .await
         .unwrap_or_else(|error| panic!("connect ACP fixture: {:?}", error.error));
     (client, task, prompt_seen)

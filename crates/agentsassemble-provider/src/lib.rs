@@ -1,3 +1,4 @@
+mod acp_client;
 #[cfg(any(unix, windows))]
 mod antigravity;
 #[cfg(any(unix, windows))]
@@ -20,7 +21,6 @@ mod credential_provider;
 mod credentials;
 mod cursor;
 mod cursor_acp;
-mod cursor_acp_protocol;
 mod custom_api;
 mod deepseek;
 mod driver;

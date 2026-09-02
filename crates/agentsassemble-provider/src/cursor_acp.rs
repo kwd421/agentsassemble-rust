@@ -15,8 +15,8 @@ use tokio::{
 #[cfg(not(unix))]
 use crate::process::sanitize_environment;
 use crate::{
+    acp_client::AcpClient,
     cursor::effective_model,
-    cursor_acp_protocol::CursorAcpClient,
     driver::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -39,7 +39,7 @@ pub(crate) struct CursorAcpDriver {
     _executable_guard: BoundExecutable,
     #[cfg(unix)]
     process_group: UnixProcessCustody,
-    protocol: CursorAcpClient,
+    protocol: AcpClient,
     stderr_task: JoinHandle<()>,
     room_portal: RoomPortal,
 }
@@ -63,7 +63,7 @@ impl CursorAcpDriver {
         )
         .await?;
         let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
-        let protocol = CursorAcpClient::connect(pipes.stdin, pipes.stdout).await?;
+        let protocol = AcpClient::connect(pipes.stdin, pipes.stdout).await?;
         Ok(Self {
             process_group,
             _executable_guard: executable,
@@ -100,7 +100,7 @@ impl CursorAcpDriver {
         let stdout = child.stdout().take().ok_or_else(protocol_error)?;
         let stderr = child.stderr().take().ok_or_else(protocol_error)?;
         let stderr_task = tokio::spawn(drain_stderr(stderr));
-        let protocol = CursorAcpClient::connect(stdin, stdout).await?;
+        let protocol = AcpClient::connect(stdin, stdout).await?;
         Ok(Self {
             child,
             _executable_guard: executable,

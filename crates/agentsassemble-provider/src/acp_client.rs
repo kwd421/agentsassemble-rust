@@ -60,7 +60,7 @@ pub(super) struct AcpTurn {
     pub(super) output: String,
 }
 
-pub(super) struct CursorAcpClient {
+pub(super) struct AcpClient {
     shutdown: CancellationToken,
     closed: Arc<AtomicBool>,
     task: JoinHandle<()>,
@@ -72,7 +72,7 @@ pub(super) struct CursorAcpClient {
     poisoned: bool,
 }
 
-impl CursorAcpClient {
+impl AcpClient {
     pub(super) async fn connect<I, O>(stdin: I, stdout: O) -> Result<Self, DriverLaunchError>
     where
         I: tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -129,7 +129,7 @@ impl CursorAcpClient {
         if !self.capabilities.mcp_capabilities.http {
             return self.poison(DriverError::new(
                 "provider_capability_missing",
-                "Cursor ACP does not support the required HTTP MCP transport.",
+                "The ACP provider does not support the required HTTP MCP transport.",
             ));
         }
         let reused = !existing_session_id.is_empty();
@@ -137,7 +137,7 @@ impl CursorAcpClient {
             if !self.capabilities.load_session {
                 return self.poison(DriverError::new(
                     "provider_session_restore_unsupported",
-                    "Cursor ACP cannot restore the durable provider session.",
+                    "The ACP provider cannot restore the durable provider session.",
                 ));
             }
             let id = SessionId::new(existing_session_id.to_owned());
@@ -228,7 +228,7 @@ impl CursorAcpClient {
         } else {
             self.poison(DriverError::new(
                 "provider_turn_interrupt_unconfirmed",
-                "Cursor ACP did not confirm cancellation of the exact turn.",
+                "The ACP provider did not confirm cancellation of the exact turn.",
             ))
         }
     }
@@ -254,7 +254,7 @@ impl CursorAcpClient {
         if self.active_turn.is_some() {
             return Err(DriverError::new(
                 "provider_request_in_progress",
-                "A Cursor ACP turn is already active.",
+                "An ACP provider turn is already active.",
             ));
         }
         {
@@ -334,7 +334,7 @@ impl CursorAcpClient {
             self.poisoned = true;
             return Err(DriverError::new(
                 "provider_protocol_overflow",
-                "Cursor ACP response exceeded its bounded output authority.",
+                "The ACP provider response exceeded its bounded output authority.",
             ));
         }
         state.active_turn_id = None;
@@ -354,13 +354,13 @@ impl CursorAcpClient {
         let Some(option) = models.next() else {
             return self.poison(DriverError::new(
                 "provider_model_unconfirmed",
-                "Cursor ACP did not expose its selected model authority.",
+                "The ACP provider did not expose its selected model authority.",
             ));
         };
         if models.next().is_some() || !select_contains(&option.kind, model) {
             return self.poison(DriverError::new(
                 "provider_model_unconfirmed",
-                "Cursor ACP did not advertise the selected model.",
+                "The ACP provider did not advertise the selected model.",
             ));
         }
         if selected_value(&option.kind) == Some(model) {
@@ -387,7 +387,7 @@ impl CursorAcpClient {
         } else {
             self.poison(DriverError::new(
                 "provider_model_unconfirmed",
-                "Cursor ACP did not confirm the selected model.",
+                "The ACP provider did not confirm the selected model.",
             ))
         }
     }
@@ -398,7 +398,7 @@ impl CursorAcpClient {
     }
 }
 
-impl Drop for CursorAcpClient {
+impl Drop for AcpClient {
     fn drop(&mut self) {
         self.shutdown.cancel();
         self.task.abort();
@@ -558,10 +558,10 @@ where
 const fn protocol_error() -> DriverError {
     DriverError::new(
         "provider_protocol_invalid",
-        "Cursor ACP returned an invalid protocol message.",
+        "The ACP provider returned an invalid protocol message.",
     )
 }
 
 #[cfg(test)]
-#[path = "cursor_acp_protocol_tests.rs"]
+#[path = "acp_client_tests.rs"]
 mod tests;
