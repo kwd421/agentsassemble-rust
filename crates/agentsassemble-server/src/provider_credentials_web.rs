@@ -61,6 +61,9 @@ registered_routes! {
         private "/api/provider-credentials/llmgateway" => get(llm_gateway_status)
             .post(set_llm_gateway)
             .delete(delete_llm_gateway),
+        private "/api/provider-credentials/tokenrouter" => get(tokenrouter_status)
+            .post(set_tokenrouter)
+            .delete(delete_tokenrouter),
     }
 }
 
@@ -167,6 +170,27 @@ async fn delete_llm_gateway(
     request: Request,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
     delete_credential(state, request, ProviderCredentialId::LlmGateway).await
+}
+
+async fn tokenrouter_status(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    credential_status(state, request, ProviderCredentialId::TokenRouter).await
+}
+
+async fn set_tokenrouter(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    set_credential(state, request, ProviderCredentialId::TokenRouter).await
+}
+
+async fn delete_tokenrouter(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    delete_credential(state, request, ProviderCredentialId::TokenRouter).await
 }
 
 async fn credential_status(

@@ -62,6 +62,7 @@ mod selection;
 mod selection_input;
 #[cfg(test)]
 mod test_support;
+mod tokenrouter;
 #[cfg(unix)]
 mod unix_custody;
 #[cfg(unix)]

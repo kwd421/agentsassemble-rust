@@ -96,8 +96,8 @@ describe("provider credential HTTP authority", () => {
       "Unsupported API credential provider: opencode"
     );
     await expect(
-      setProviderCredential("tokenrouter", "sentinel-provider-value")
-    ).rejects.toThrow("Unsupported API credential provider: tokenrouter");
+      setProviderCredential("custom_api", "sentinel-provider-value")
+    ).rejects.toThrow("Unsupported API credential provider: custom_api");
     await expect(deleteProviderCredential("custom_api")).rejects.toThrow(
       "Unsupported API credential provider: custom_api"
     );
@@ -181,6 +181,26 @@ describe("provider credential HTTP authority", () => {
     });
     expect(fetchMock).toHaveBeenCalledWith(
       `${HTTP_BASE_URL}/api/provider-credentials/llmgateway`,
+      expect.any(Object)
+    );
+  });
+
+  it("routes TokenRouter through its isolated credential account", async () => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce(HOST_SURFACE)
+      .mockResolvedValueOnce(ticket("6"));
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const fetchMock = vi.fn().mockResolvedValueOnce(statusResponse("missing"));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await requestDesktopHostProductSurface();
+    await expect(fetchProviderCredentialStatus("tokenrouter")).resolves.toEqual({
+      configured: false,
+      source: "missing",
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      `${HTTP_BASE_URL}/api/provider-credentials/tokenrouter`,
       expect.any(Object)
     );
   });

@@ -148,6 +148,17 @@ export function llmGatewayProvider(): NativeCliProviderAvailability {
   };
 }
 
+export function tokenRouterProvider(): NativeCliProviderAvailability {
+  return {
+    ...deepSeekProvider(),
+    id: "tokenrouter",
+    display_name: "TokenRouter",
+    provider_kind: "tokenrouter_api",
+    default_model: "",
+    credential_available: true,
+  };
+}
+
 export function ollamaProvider(): NativeCliProviderAvailability {
   return {
     ...deepSeekProvider(),

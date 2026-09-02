@@ -15,7 +15,8 @@ use crate::{
     ProviderCredentialId,
     catalog::{
         discover_antigravity, discover_cerebras, discover_codex, discover_deepseek,
-        discover_llm_gateway, discover_opencode, discover_openrouter, discover_vercel,
+        discover_llm_gateway, discover_opencode, discover_openrouter, discover_tokenrouter,
+        discover_vercel,
     },
     cerebras,
     codex::CodexDriver,
@@ -27,7 +28,7 @@ use crate::{
     opencode::OpenCodeDriver,
     openrouter,
     runtime_lease::HeldRuntimeLease,
-    vercel,
+    tokenrouter, vercel,
 };
 
 pub(crate) type ProviderDiscoveryFuture<'a> =
@@ -185,7 +186,23 @@ pub(crate) static LLM_GATEWAY_PROVIDER: ProviderRegistration = ProviderRegistrat
     launch: launch_llm_gateway,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 8] = [
+pub(crate) static TOKENROUTER_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "tokenrouter",
+    display_name: tokenrouter::DISPLAY_NAME,
+    provider_kind: tokenrouter::PROVIDER_KIND,
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    credential_available: true,
+    discover: discover_tokenrouter_registered,
+    launch: launch_tokenrouter,
+};
+
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 9] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
@@ -194,6 +211,7 @@ static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 8] = [
     &OPENROUTER_PROVIDER,
     &VERCEL_PROVIDER,
     &LLM_GATEWAY_PROVIDER,
+    &TOKENROUTER_PROVIDER,
 ];
 
 pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistration] {
@@ -280,6 +298,13 @@ fn discover_llm_gateway_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_llm_gateway(provider, cancellation))
+}
+
+fn discover_tokenrouter_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(discover_tokenrouter(provider, cancellation))
 }
 
 pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderAvailability {
@@ -538,6 +563,22 @@ fn launch_llm_gateway<'a>(
             .await
             .map_err(|error| DriverLaunchError::safe(llm_gateway::credential_error(error)))?;
         let driver = llm_gateway::launch(factory.credentials.clone()).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_tokenrouter<'a>(
+    factory: &'a ProductionDriverFactory,
+    _session: &'a DurableAgentSession,
+    _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        factory
+            .credentials
+            .secret(ProviderCredentialId::TokenRouter)
+            .await
+            .map_err(|error| DriverLaunchError::safe(tokenrouter::credential_error(error)))?;
+        let driver = tokenrouter::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

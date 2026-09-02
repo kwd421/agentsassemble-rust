@@ -14,6 +14,7 @@ import {
   ollamaProvider,
   openCodeProvider,
   openRouterProvider,
+  tokenRouterProvider,
   vercelProvider,
 } from "./AgentCreateModal.testProviders";
 import {
@@ -713,6 +714,25 @@ describe("AgentCreateModal", () => {
     await userEvent.click(screen.getByRole("listitem", { name: "LLM Gateway" }));
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("llmgateway");
+  });
+
+  it("uses TokenRouter's implemented credential operation", async () => {
+    render(
+      <AgentCreateModal
+        open
+        meetingId="room-a"
+        roomLabel="Room A"
+        catalogRevision="cat-tokenrouter"
+        providers={[tokenRouterProvider()]}
+        onClose={() => undefined}
+        onCreate={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
+    await userEvent.click(screen.getByRole("listitem", { name: "TokenRouter" }));
+    expect(await screen.findByLabelText("API 키")).toBeTruthy();
+    expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("tokenrouter");
   });
 
   it("keeps credential deletion retryable when the secure store rejects it", async () => {

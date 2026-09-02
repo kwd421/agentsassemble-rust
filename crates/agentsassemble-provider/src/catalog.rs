@@ -14,8 +14,8 @@ use crate::{
     filesystem::{FilesystemFailure, resolve_codex_executable, resolve_executable},
     llm_gateway, openrouter,
     process::{ProbeFailure, probe},
-    remote_catalog::{RemoteCatalogError, fetch_gateway_model_options},
-    vercel,
+    remote_catalog::{RemoteCatalogError, fetch_gateway_model_options, fetch_public_catalog},
+    tokenrouter, vercel,
 };
 
 // The current Vercel and LLM Gateway tool-capable projections are about 75 KiB
@@ -325,6 +325,27 @@ pub(crate) async fn discover_llm_gateway(
     .await
 }
 
+pub(crate) async fn discover_tokenrouter(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
+    let payload = match fetch_public_catalog(tokenrouter::CATALOG_ENDPOINT, cancellation).await {
+        Ok(payload) => payload,
+        Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
+    };
+    let models = match tokenrouter::model_options(&payload) {
+        Ok(models) => models,
+        Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
+    };
+    ready_gateway(
+        provider,
+        models,
+        tokenrouter::DISPLAY_NAME,
+        tokenrouter::PREFERRED_MODEL,
+        None,
+    )
+}
+
 async fn discover_gateway(
     provider: ProviderAvailability,
     cancellation: &CancellationToken,
@@ -337,6 +358,16 @@ async fn discover_gateway(
         Ok(models) => models,
         Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
     };
+    ready_gateway(provider, models, display_name, preferred, provider_control)
+}
+
+fn ready_gateway(
+    provider: ProviderAvailability,
+    models: Vec<ProviderControlOption>,
+    display_name: &str,
+    preferred: &str,
+    provider_control: Option<ProviderControl>,
+) -> ProviderAvailability {
     if models.is_empty() {
         return unavailable_provider(
             provider,

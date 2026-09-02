@@ -94,6 +94,12 @@ pub(crate) fn gateway_model_options(
         .iter()
         .filter_map(gateway_model_option)
         .collect::<Vec<_>>();
+    bound_catalog_options(options)
+}
+
+pub(crate) fn bound_catalog_options(
+    options: Vec<ProviderControlOption>,
+) -> Result<Vec<ProviderControlOption>, RemoteCatalogError> {
     if options.len() > MAX_CATALOG_MODELS {
         return Err(RemoteCatalogError::TooLarge);
     }
@@ -110,7 +116,7 @@ pub(crate) async fn fetch_gateway_model_options(
 
 fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
     let entry = entry.as_object()?;
-    let model_id = bounded_text(entry.get("id")?, 128)?;
+    let model_id = bounded_catalog_text(entry.get("id")?, 128)?;
     let supported = text_set(entry.get("supported_parameters"))
         .into_iter()
         .chain(text_set(entry.get("supported_features")))
@@ -139,7 +145,7 @@ fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
                 })
         ),
     )]);
-    if let Some(family) = model_family(&model_id) {
+    if let Some(family) = catalog_model_family(&model_id) {
         metadata.insert("family".to_owned(), json!(family));
     }
     let context = positive_u64(entry.get("context_length"))
@@ -181,7 +187,7 @@ fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
         value: model_id.clone(),
         label: entry
             .get("name")
-            .and_then(|value| bounded_text(value, 256))
+            .and_then(|value| bounded_catalog_text(value, 256))
             .unwrap_or(model_id),
         metadata,
     })
@@ -259,11 +265,11 @@ fn text_set(value: Option<&Value>) -> Vec<String> {
         .and_then(Value::as_array)
         .into_iter()
         .flatten()
-        .filter_map(|value| bounded_text(value, 64))
+        .filter_map(|value| bounded_catalog_text(value, 64))
         .collect()
 }
 
-fn bounded_text(value: &Value, max_bytes: usize) -> Option<String> {
+pub(crate) fn bounded_catalog_text(value: &Value, max_bytes: usize) -> Option<String> {
     let value = value.as_str()?.trim();
     (!value.is_empty() && value.len() <= max_bytes && !value.chars().any(char::is_control))
         .then(|| value.to_owned())
@@ -283,7 +289,7 @@ fn truthy(value: Option<&Value>) -> bool {
     })
 }
 
-fn model_family(model_id: &str) -> Option<String> {
+pub(crate) fn catalog_model_family(model_id: &str) -> Option<String> {
     let (owner, _) = model_id.split_once('/')?;
     Some(
         owner
