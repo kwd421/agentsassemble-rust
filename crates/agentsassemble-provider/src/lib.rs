@@ -3,12 +3,6 @@ mod antigravity;
 #[cfg(any(unix, windows))]
 mod antigravity_hook;
 #[cfg(any(unix, windows))]
-mod antigravity_prompt;
-#[cfg(any(unix, windows))]
-mod antigravity_terminal;
-#[cfg(any(unix, windows))]
-mod antigravity_transcript;
-#[cfg(any(unix, windows))]
 mod antigravity_transport;
 #[cfg(unix)]
 mod antigravity_unix;

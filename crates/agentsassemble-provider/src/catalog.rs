@@ -18,6 +18,10 @@ const MAX_PROVIDER_BYTES: usize = 16 * 1024;
 const MAX_PROVIDER_OPTIONS: usize = 256;
 const MAX_OPTION_VALUE_BYTES: usize = 128;
 const MAX_OPTION_LABEL_BYTES: usize = 256;
+pub(crate) const ANTIGRAVITY_NATIVE_RECEIPT_ERROR_CODE: &str =
+    "provider_native_receipt_unavailable";
+pub(crate) const ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE: &str =
+    "Antigravity has no approved native attachment and completion receipt.";
 
 async fn provider_executable(
     program: &str,
@@ -127,48 +131,10 @@ pub(crate) async fn discover_antigravity(
     };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
-    let output = match Box::pin(probe(&executable, &["models"], cancellation)).await {
-        Ok(output) => output,
-        Err(error) => return failed_provider(provider, error),
-    };
-    let mut grouped = BTreeMap::<String, Vec<String>>::new();
-    for line in output.lines() {
-        let id = line.split('\t').next().unwrap_or_default().trim();
-        if id.is_empty() || id.starts_with("Fetching ") {
-            continue;
-        }
-        let (model, effort) = split_effort(id);
-        if !model.is_empty() {
-            let values = grouped.entry(model).or_default();
-            if !effort.is_empty() && !values.contains(&effort) {
-                values.push(effort);
-            }
-        }
-    }
-    let mut models = Vec::new();
-    let mut efforts = vec![option("", "기본")];
-    for (model, model_efforts) in &grouped {
-        for effort in model_efforts {
-            push_unique(&mut efforts, option(effort, &title_case(effort)));
-        }
-        let mut metadata = BTreeMap::new();
-        metadata.insert("relation_scope".to_owned(), json!("per_model"));
-        metadata.insert("reasoning_efforts".to_owned(), json!(model_efforts));
-        models.push(ProviderControlOption {
-            value: model.clone(),
-            label: model.clone(),
-            metadata,
-        });
-    }
-    let default_model = preferred_model(&models, "gemini-3.6-flash");
-    ready_provider(
+    incomplete_provider(
         provider,
-        default_model.clone(),
-        vec![
-            control("model", "모델", "combobox", models, &default_model),
-            control("reasoning_effort", "추론 강도", "select", efforts, "medium"),
-            permission_control(true),
-        ],
+        ANTIGRAVITY_NATIVE_RECEIPT_ERROR_CODE,
+        ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE,
     )
 }
 
@@ -305,10 +271,7 @@ fn ready_provider(
     provider
 }
 
-fn failed_provider(
-    mut provider: ProviderAvailability,
-    failure: ProbeFailure,
-) -> ProviderAvailability {
+fn failed_provider(provider: ProviderAvailability, failure: ProbeFailure) -> ProviderAvailability {
     let (code, message, available) = match failure {
         ProbeFailure::Missing => ("command_missing", "configured command missing", false),
         ProbeFailure::Timeout => ("model_discovery_timeout", "model discovery timed out", true),
@@ -338,6 +301,23 @@ fn failed_provider(
             true,
         ),
     };
+    unavailable_provider(provider, available, code, message)
+}
+
+fn incomplete_provider(
+    provider: ProviderAvailability,
+    code: &str,
+    message: &str,
+) -> ProviderAvailability {
+    unavailable_provider(provider, true, code, message)
+}
+
+fn unavailable_provider(
+    mut provider: ProviderAvailability,
+    available: bool,
+    code: &str,
+    message: &str,
+) -> ProviderAvailability {
     provider.available = available;
     provider.startable = false;
     provider.default_model.clear();
@@ -401,15 +381,6 @@ fn preferred_model(options: &[ProviderControlOption], preferred: &str) -> String
         .iter()
         .find(|option| option.value == preferred)
         .map_or_else(String::new, |option| option.value.clone())
-}
-
-fn split_effort(value: &str) -> (String, String) {
-    for effort in ["low", "medium", "high"] {
-        if let Some(model) = value.strip_suffix(&format!("-{effort}")) {
-            return (model.to_owned(), effort.to_owned());
-        }
-    }
-    (value.to_owned(), String::new())
 }
 
 fn title_case(value: &str) -> String {

@@ -119,6 +119,10 @@ impl RoomPortalTerminalHelper {
         })
     }
 
+    #[expect(
+        dead_code,
+        reason = "Antigravity turn prompts stay dormant until an exact native receipt exists"
+    )]
     pub(crate) fn command_prefix(&self) -> &str {
         &self.command_prefix
     }
@@ -139,12 +143,20 @@ impl RoomPortalTerminalHelper {
         ]
     }
 
+    #[expect(
+        dead_code,
+        reason = "Antigravity turn cleanup stays dormant until an exact native receipt exists"
+    )]
     pub(crate) fn reset_turn_state(&self) -> Result<(), RoomPortalError> {
         hook::reset_approval(self.executable.directory())
             .map_err(|_| RoomPortalError::Authority)?;
         reset_media_directory(self.executable.directory())
     }
 
+    #[expect(
+        dead_code,
+        reason = "Antigravity hook receipts stay dormant until an exact native receipt exists"
+    )]
     pub(crate) fn take_hook_approval(&self) -> Result<Option<HookApproval>, RoomPortalError> {
         hook::take_approval(self.executable.directory()).map_err(|_| RoomPortalError::Authority)
     }

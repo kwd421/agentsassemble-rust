@@ -10,6 +10,13 @@ use super::safe_room_command;
 
 const APPROVAL_FILE: &str = "room-hook-approval";
 const MAX_HOOK_INPUT_BYTES: u64 = 64 * 1024;
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Antigravity hook receipts stay dormant until an exact native receipt exists"
+    )
+)]
 const MAX_APPROVAL_BYTES: u64 = 32;
 const MAX_PATH_BYTES: usize = 4096;
 
@@ -27,6 +34,13 @@ impl HookApproval {
         }
     }
 
+    #[cfg_attr(
+        not(test),
+        expect(
+            dead_code,
+            reason = "Antigravity hook receipts stay dormant until an exact native receipt exists"
+        )
+    )]
     fn decode(encoded: &[u8]) -> Option<Self> {
         match encoded {
             b"run_command\n" => Some(Self::RunCommand),
@@ -92,6 +106,13 @@ pub(super) fn run_post_hook(directory: &Path) -> Result<(), &'static str> {
         .map_err(|_| "hook response could not be written")
 }
 
+#[cfg_attr(
+    not(test),
+    expect(
+        dead_code,
+        reason = "Antigravity hook receipts stay dormant until an exact native receipt exists"
+    )
+)]
 pub(super) fn take_approval(directory: &Path) -> std::io::Result<Option<HookApproval>> {
     let path = directory.join(APPROVAL_FILE);
     let file = match File::open(&path) {

@@ -39,6 +39,10 @@ pub(crate) async fn spawn_terminal(
 
 struct UnixAntigravityTerminal {
     process_group: UnixProcessCustody,
+    #[expect(
+        dead_code,
+        reason = "PTY I/O stays dormant until Antigravity exposes an exact native turn receipt"
+    )]
     terminal: AsyncFd<std::os::fd::OwnedFd>,
     #[cfg(not(any(target_os = "linux", target_os = "android")))]
     _executable_guard: BoundExecutable,
@@ -108,6 +112,10 @@ impl Drop for UnixAntigravityTerminal {
     }
 }
 
+#[expect(
+    dead_code,
+    reason = "PTY reads stay dormant until Antigravity exposes an exact native turn receipt"
+)]
 const fn runtime_exited() -> DriverError {
     DriverError::new(
         "provider_runtime_exited",
@@ -115,6 +123,10 @@ const fn runtime_exited() -> DriverError {
     )
 }
 
+#[expect(
+    dead_code,
+    reason = "PTY I/O stays dormant until Antigravity exposes an exact native turn receipt"
+)]
 const fn terminal_error() -> DriverError {
     DriverError::new(
         "provider_transport_failed",
