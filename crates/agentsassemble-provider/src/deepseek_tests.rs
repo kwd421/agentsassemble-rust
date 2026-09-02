@@ -3,7 +3,7 @@ use serde_json::json;
 
 use super::{
     AssistantMessage, CompletionResponse, DeepSeekDriver, RoomObservationStart, ToolCall,
-    ToolFunction, allowed_tool, assistant_value, validate_completion, validate_tool_calls,
+    ToolFunction, assistant_value, validate_completion, validate_tool_calls,
 };
 use crate::{
     credentials::ProviderCredentialStore,
@@ -48,16 +48,6 @@ fn thinking_tool_transaction_preserves_exact_authority() {
     assert_eq!(replay["role"], "assistant");
     assert_eq!(replay["content"], "");
     assert_eq!(replay["reasoning_content"], "private reasoning");
-    assert!(allowed_tool("read_discussion", false));
-    assert!(allowed_tool("search_messages", false));
-    assert!(allowed_tool("read_message_context", false));
-    assert!(allowed_tool("create_vote", false));
-    assert!(allowed_tool("cast_vote", false));
-    assert!(allowed_tool("withdraw_vote", false));
-    assert!(allowed_tool("close_vote", false));
-    assert!(!allowed_tool("read_attachment", true));
-    assert!(!allowed_tool("roll_dice", false));
-    assert!(allowed_tool("roll_dice", true));
 }
 
 #[tokio::test]

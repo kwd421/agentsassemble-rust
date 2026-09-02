@@ -16,6 +16,11 @@ use crate::room_attachment::{ProviderAttachmentReadIngress, valid_observation_at
 use crate::room_portal_mcp_transport::PortalServer;
 #[cfg(any(unix, windows))]
 use crate::room_portal_terminal::RoomPortalTerminalHelper;
+pub(crate) use crate::room_portal_tool_contract::{
+    CAST_VOTE_TOOL, CLOSE_VOTE_TOOL, CREATE_VOTE_TOOL, PROVIDER_ROOM_TOOL_NAMES,
+    WITHDRAW_VOTE_TOOL, is_available_provider_tool, is_replay_unsafe_provider_tool,
+    is_terminal_provider_tool, is_vote_tool,
+};
 
 #[path = "room_portal_attachment_budget.rs"]
 mod attachment_budget;
@@ -34,21 +39,6 @@ const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_AGENT_IDS: usize = 64;
 pub(super) const MAX_MESSAGE_CHARS: usize = 12_000;
 const MAX_ROOM_TOOL_RESULTS: usize = 32;
-pub(crate) const CREATE_VOTE_TOOL: &str = "create_vote";
-pub(crate) const CAST_VOTE_TOOL: &str = "cast_vote";
-pub(crate) const WITHDRAW_VOTE_TOOL: &str = "withdraw_vote";
-pub(crate) const CLOSE_VOTE_TOOL: &str = "close_vote";
-pub(crate) const VOTE_TOOL_NAMES: [&str; 4] = [
-    CREATE_VOTE_TOOL,
-    CAST_VOTE_TOOL,
-    WITHDRAW_VOTE_TOOL,
-    CLOSE_VOTE_TOOL,
-];
-
-pub(crate) fn is_vote_tool(name: &str) -> bool {
-    VOTE_TOOL_NAMES.contains(&name)
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderTurnOutcome {
     Message {

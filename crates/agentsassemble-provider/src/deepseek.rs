@@ -239,17 +239,13 @@ impl DeepSeekDriver {
         call: ToolCall,
         random_tools: bool,
     ) -> Result<ExecutedTool, DriverError> {
-        if !allowed_tool(&call.function.name, random_tools) {
+        if !crate::room_portal::is_available_provider_tool(&call.function.name, random_tools) {
             return Err(INVALID_TOOL_CALL);
         }
         let arguments = serde_json::from_str::<Map<String, Value>>(&call.function.arguments)
             .map_err(|_| INVALID_TOOL_CALL)?;
-        let terminal_action = matches!(
-            call.function.name.as_str(),
-            "publish_message" | "decline_to_speak"
-        ) || crate::room_portal::is_vote_tool(&call.function.name);
-        let replay_unsafe =
-            terminal_action || matches!(call.function.name.as_str(), "roll_dice" | "choose_random");
+        let terminal_action = crate::room_portal::is_terminal_provider_tool(&call.function.name);
+        let replay_unsafe = crate::room_portal::is_replay_unsafe_provider_tool(&call.function.name);
         let previous_effect_uncertain = self.turn_effect_uncertain;
         if replay_unsafe {
             self.turn_effect_uncertain = true;
@@ -503,7 +499,9 @@ async fn bounded_body(response: reqwest::Response) -> Result<Vec<u8>, DriverErro
 fn api_tools(tools: &[Tool], random_tools: bool) -> Vec<Value> {
     tools
         .iter()
-        .filter(|tool| allowed_tool(tool.name.as_ref(), random_tools))
+        .filter(|tool| {
+            crate::room_portal::is_available_provider_tool(tool.name.as_ref(), random_tools)
+        })
         .map(|tool| {
             json!({
                 "type": "function",
@@ -517,38 +515,16 @@ fn api_tools(tools: &[Tool], random_tools: bool) -> Vec<Value> {
         .collect()
 }
 
-fn allowed_tool(name: &str, random_tools: bool) -> bool {
-    crate::room_portal::is_vote_tool(name)
-        || matches!(
-            name,
-            "read_discussion"
-                | "search_messages"
-                | "read_message_context"
-                | "publish_message"
-                | "decline_to_speak"
-        )
-        || (random_tools && matches!(name, "roll_dice" | "choose_random"))
-}
-
 fn validate_tool_catalog(tools: &[Tool]) -> Result<(), DriverError> {
     let names = tools
         .iter()
         .map(|tool| tool.name.as_ref())
         .collect::<HashSet<_>>();
-    [
-        "read_discussion",
-        "search_messages",
-        "read_message_context",
-        "publish_message",
-        "decline_to_speak",
-        "roll_dice",
-        "choose_random",
-    ]
-    .into_iter()
-    .chain(crate::room_portal::VOTE_TOOL_NAMES)
-    .all(|name| names.contains(name))
-    .then_some(())
-    .ok_or(PORTAL_UNAVAILABLE)
+    crate::room_portal::PROVIDER_ROOM_TOOL_NAMES
+        .into_iter()
+        .all(|name| names.contains(name))
+        .then_some(())
+        .ok_or(PORTAL_UNAVAILABLE)
 }
 
 fn validate_completion(
