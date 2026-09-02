@@ -134,12 +134,18 @@ pub(super) fn validate_runtime_variant(
     reasoning_effort: &str,
     service_tier: &str,
 ) -> Result<(), ProviderSelectionError> {
-    let model_option = provider
+    let Some(model_control) = provider
         .controls
         .iter()
         .find(|control| control.key == "model")
-        .and_then(|control| control.options.iter().find(|option| option.value == model));
-    let Some(model_option) = model_option else {
+    else {
+        return Ok(());
+    };
+    let Some(model_option) = model_control
+        .options
+        .iter()
+        .find(|option| option.value == model)
+    else {
         return Err(ProviderSelectionError::new(
             "catalog_inconsistent",
             format!("Provider {} has no selected model authority.", provider.id),
