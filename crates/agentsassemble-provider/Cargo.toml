@@ -5,6 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+agent-client-protocol.workspace = true
 agentsassemble-domain = { path = "../agentsassemble-domain" }
 base64.workspace = true
 bytes.workspace = true
