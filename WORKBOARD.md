@@ -237,7 +237,7 @@ contracts, findings, or verification journals.
   web Pro and Daybreaker Blue High each manually approve corrected full batch
   `b5b0f6a..dff4b65` and HEAD `dff4b65` at `C0/H0/M0/L0`; the shared initial Low was
   only the obsolete build-cache ceiling basis corrected by `dff4b65`.
-- Active task: F-11 frontend wire-contract generation ownership.
+- Completed: F-11 frontend wire-contract generation ownership.
   - Definition: the Rust protocol exporter is the one semantic owner for room event,
     room settings, provider catalog, snapshot, Participant, and Agent Session wire
     values. Endpoint-local runtime decoders continue to own trust-boundary rejection.
@@ -338,7 +338,28 @@ contracts, findings, or verification journals.
     build/CSS, and all 652 frontend tests pass. Fresh complete `make verify` passes every
     frontend, desktop, Rust, real TCP/WebSocket, generated-binding, Clippy, policy,
     structure, diff, CSS, and artifact gate in 164.79 seconds with 778,829,824-byte
-    maximum RSS. Both correction re-reviews remain pending, so F-11 stays open.
+    maximum RSS. Daybreaker Blue High and critical-web Pro each approve individual
+    `2a53349` and `5ae8b34`, exact correction `58f0f8b..5ae8b34`, corrected Participant
+    batch `4fc06a0..5ae8b34`, cumulative F-11 `dff4b65..5ae8b34`, and HEAD `5ae8b34`
+    at `C0/H0/M0/L0` with no actionable finding.
+- Active task: F-12 DeepSeek complete-turn time and cost ownership.
+  - Evidence: one turn currently permits an initial completion plus sixteen tool rounds,
+    while each fixed-host response can read for three minutes. The finite composition can
+    occupy about 51 minutes and repeatedly applies the selected per-request output ceiling.
+    Current-original `d5046473` instead has a 180-second inactivity deadline reset by
+    meaningful provider/tool progress; it is not a complete wall-clock or cost budget.
+  - Measurement: use only official DeepSeek Flash through the real packaged room flow.
+    Measure an ordinary read/publish turn and a deliberate multi-tool search/context turn;
+    this does not restore v0 research depth, research steering, or scripted meetings.
+  - Owner: keep one complete deadline and cumulative API-usage budget inside the DeepSeek
+    driver. Use the official response `usage` values as billing truth, preserve the selected
+    turn-level output limit across tool rounds, and make post-dispatch ambiguity explicit.
+  - Non-goals: no provider-usage UI, dynamic-pricing framework, generic provider budget
+    trait, retry/fallback, new periodic task, or configurable future-provider layer.
+  - Acceptance: measured limits retain both real flows, timeout and usage exhaustion are
+    cancellable and fail closed without repeating a paid request, secrets/provider-private
+    content never enter logs or fixtures, focused contract tests and complete verification
+    pass, and packaged verification resources are removed when that run ends.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
