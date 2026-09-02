@@ -505,6 +505,37 @@ contracts, findings, or verification journals.
   the exact DeepSeek request-profile regression, Clippy with warnings denied, formatting,
   architecture/source-policy gates, and diff checks pass. The refactor removes the imminent
   copy boundary for the retained remote family but claims no measured resource improvement.
+- Implemented pending Phase 1 whole-phase review: Cerebras API vertical at `e8793c3`.
+  The registered `cerebras_api` path now owns its exact public catalog endpoint,
+  completion endpoint, `X-Cerebras-Version-Patch: 2` header, `gpt-oss-120b`
+  preference, reasoning/output controls, provider-specific errors, and isolated
+  keyring account. One exact private credential route is authorized before reading
+  its bounded body, and the copied Agent-add flow exposes it only because the Rust
+  registration now advertises that implemented operation. The provider uses the
+  existing bounded remote SSE/tool runtime rather than a second execution state
+  machine.
+  The current original's gateway catalogs share one schema and projection function;
+  a new 408-line common owner therefore performs only that proven-identical public
+  HTTPS fetch, size/model bounds, cancellation, and model-option projection while
+  provider policy remains in the Cerebras module. The retained one-request limits
+  are the original 1 MiB response and 256 raw models, with an eight-second catalog
+  deadline. They bound an untrusted public response before allocation/projection;
+  no retry, fallback, polling, heartbeat, cache, background task, or response-body
+  disclosure was added. On 2026-09-03 the real endpoint returned two compatible
+  models including the preferred model and its advertised tool/reasoning/context/
+  pricing metadata. Unlike the original, catalog failure or an absent compatible
+  preferred model never substitutes the static manifest: failure is visible and
+  non-startable, while a valid catalog without the preference requires explicit
+  model selection.
+  The commit changes 779 lines, its largest new owner is 408 lines, and the existing
+  618-line catalog file remains one public selection-authority flow after the 500-line
+  structure review. Repository-wide searches found no second Cerebras endpoint,
+  header, credential path, catalog-bound, or execution owner. Focused provider,
+  frontend, credential-TCP, and Clippy checks pass; a fresh complete `make verify`
+  passes all frontend, desktop, Rust unit/integration, real TCP/WebSocket,
+  generated-binding, Clippy, policy, structure, diff, CSS, and artifact gates. No
+  Cerebras key was available for an authorized real completion, so real-turn evidence
+  remains explicitly open for the Phase 1 provider matrix rather than being simulated.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
