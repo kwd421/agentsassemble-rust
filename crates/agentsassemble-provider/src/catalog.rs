@@ -250,75 +250,66 @@ pub(crate) async fn discover_cerebras(
     provider: ProviderAvailability,
     cancellation: &CancellationToken,
 ) -> ProviderAvailability {
-    let models = match fetch_gateway_model_options(cerebras::CATALOG_ENDPOINT, cancellation).await {
-        Ok(models) => models,
-        Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
-    };
-    if models.is_empty() {
-        return unavailable_provider(
-            provider,
-            true,
-            "no_supported_models",
-            "Cerebras returned no text models with room-tool support",
-        );
-    }
-    let default_model = preferred_model(&models, "gpt-oss-120b");
-    ready_provider(
+    discover_gateway(
         provider,
-        default_model.clone(),
-        vec![
-            control("model", "모델", "combobox", models, &default_model),
-            control(
-                "reasoning_effort",
-                "추론 강도",
-                "select",
-                vec![
-                    option("low", "Low"),
-                    option("medium", "Medium"),
-                    option("high", "High"),
-                ],
-                "low",
-            ),
-            remote_output_token_control(),
-            permission_control(false),
-        ],
+        cancellation,
+        cerebras::CATALOG_ENDPOINT,
+        "Cerebras",
+        "gpt-oss-120b",
+        Some(control(
+            "reasoning_effort",
+            "추론 강도",
+            "select",
+            vec![
+                option("low", "Low"),
+                option("medium", "Medium"),
+                option("high", "High"),
+            ],
+            "low",
+        )),
     )
+    .await
 }
 
 pub(crate) async fn discover_openrouter(
     provider: ProviderAvailability,
     cancellation: &CancellationToken,
 ) -> ProviderAvailability {
-    let models = match fetch_gateway_model_options(openrouter::CATALOG_ENDPOINT, cancellation).await
-    {
-        Ok(models) => models,
-        Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
-    };
-    if models.is_empty() {
-        return unavailable_provider(
-            provider,
-            true,
-            "no_supported_models",
-            "OpenRouter returned no text models with room-tool support",
-        );
-    }
-    let default_model = preferred_model(&models, "openai/gpt-4.1-mini");
-    ready_provider(
+    discover_gateway(
         provider,
-        default_model.clone(),
-        vec![
-            control("model", "모델", "combobox", models, &default_model),
-            remote_output_token_control(),
-            permission_control(false),
-        ],
+        cancellation,
+        openrouter::CATALOG_ENDPOINT,
+        "OpenRouter",
+        "openai/gpt-4.1-mini",
+        None,
     )
+    .await
 }
 
 pub(crate) async fn discover_vercel(
     provider: ProviderAvailability,
     cancellation: &CancellationToken,
 ) -> ProviderAvailability {
-    let models = match fetch_gateway_model_options(vercel::CATALOG_ENDPOINT, cancellation).await {
+    discover_gateway(
+        provider,
+        cancellation,
+        vercel::CATALOG_ENDPOINT,
+        "Vercel AI Gateway",
+        "openai/gpt-5.4-mini",
+        None,
+    )
+    .await
+}
+
+async fn discover_gateway(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+    endpoint: &'static str,
+    display_name: &str,
+    preferred: &str,
+    provider_control: Option<ProviderControl>,
+) -> ProviderAvailability {
+    let models = match fetch_gateway_model_options(endpoint, cancellation).await {
         Ok(models) => models,
         Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
     };
@@ -327,19 +318,14 @@ pub(crate) async fn discover_vercel(
             provider,
             true,
             "no_supported_models",
-            "Vercel AI Gateway returned no text models with room-tool support",
+            &format!("{display_name} returned no text models with room-tool support"),
         );
     }
-    let default_model = preferred_model(&models, "openai/gpt-5.4-mini");
-    ready_provider(
-        provider,
-        default_model.clone(),
-        vec![
-            control("model", "모델", "combobox", models, &default_model),
-            remote_output_token_control(),
-            permission_control(false),
-        ],
-    )
+    let default_model = preferred_model(&models, preferred);
+    let mut controls = vec![control("model", "모델", "combobox", models, &default_model)];
+    controls.extend(provider_control);
+    controls.extend([remote_output_token_control(), permission_control(false)]);
+    ready_provider(provider, default_model.clone(), controls)
 }
 
 const fn remote_catalog_failure(error: RemoteCatalogError) -> ProbeFailure {
