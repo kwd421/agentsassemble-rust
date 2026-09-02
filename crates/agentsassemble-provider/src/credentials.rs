@@ -10,7 +10,9 @@ use crate::driver::DriverError;
 #[cfg(target_os = "macos")]
 use security_framework::item::{ItemClass, ItemSearchOptions};
 #[cfg(target_os = "macos")]
-use security_framework::os::macos::keychain::{SecKeychain, SecPreferencesDomain};
+use security_framework::os::macos::keychain::{
+    KeychainUserInteractionLock, SecKeychain, SecPreferencesDomain,
+};
 #[cfg(target_os = "macos")]
 use security_framework_sys::base::errSecItemNotFound;
 
@@ -91,6 +93,8 @@ impl CredentialBackend for NativeCredentialBackend {
     }
 
     fn read(&self) -> Result<BackendAvailability<Option<String>>, ProviderCredentialError> {
+        #[cfg(target_os = "macos")]
+        let _interaction = macos_disable_keychain_ui()?;
         let BackendAvailability::Available(entry) = native_entry()? else {
             return Ok(BackendAvailability::Absent);
         };
@@ -102,6 +106,8 @@ impl CredentialBackend for NativeCredentialBackend {
     }
 
     fn set(&self, secret: &str) -> Result<BackendAvailability<()>, ProviderCredentialError> {
+        #[cfg(target_os = "macos")]
+        let _interaction = macos_disable_keychain_ui()?;
         let BackendAvailability::Available(entry) = native_entry()? else {
             return Ok(BackendAvailability::Absent);
         };
@@ -112,6 +118,8 @@ impl CredentialBackend for NativeCredentialBackend {
     }
 
     fn delete(&self) -> Result<BackendAvailability<()>, ProviderCredentialError> {
+        #[cfg(target_os = "macos")]
+        let _interaction = macos_disable_keychain_ui()?;
         let BackendAvailability::Available(entry) = native_entry()? else {
             return Ok(BackendAvailability::Absent);
         };
@@ -137,6 +145,12 @@ fn macos_keyring_item_exists(
         .account(account)
         .fail_on_authentication_ui(true);
     macos_item_exists_from_search(query.search().map(|_| ()))
+}
+
+#[cfg(target_os = "macos")]
+fn macos_disable_keychain_ui() -> Result<KeychainUserInteractionLock, ProviderCredentialError> {
+    SecKeychain::disable_user_interaction()
+        .map_err(|_| ProviderCredentialError::SecureStoreUnavailable)
 }
 
 #[cfg(target_os = "macos")]

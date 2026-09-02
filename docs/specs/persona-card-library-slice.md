@@ -297,14 +297,27 @@ the exact search is restricted to the same User/login keychain selected by the v
 The metadata-only query still had a concrete interaction threat: Security.framework's default item
 search policy permits authentication UI, so a protected matching item could display a prompt during
 status. Skipping protected items was rejected because that would misclassify a present secure item as
-absent. Process-global interaction disabling was also rejected
-because concurrent keychain users could observe the temporary global state. The query now requests
+absent. The query therefore requests
 fail-on-authentication-UI through a safe `security-framework` method pinned at exact public fork
 commit `85407d113b978b27728e162c8485c11e233c3e3e`, based on release 3.7.0. Only
 `errSecItemNotFound` means absent; interaction-required, authentication, keychain, and all other
 errors fail closed. Apple's underlying value is deprecated in favor of an `LAContext` with
 `interactionNotAllowed`, but the maintained crate has no safe compatible context bridge; the pinned
 release patch is the smaller auditable boundary until one exists.
+
+Packaged verification later exposed a distinct secret-access failure: reading an existing login-
+keychain item whose ACL required interaction blocked the owned server inside Security.framework for
+more than ten minutes. The status query's per-request noninteraction flag cannot govern
+`keyring`'s separate secret read, and `skip_authenticated_items` still entered the blocking read on
+this host. A direct `LAContext` bridge would require new application-side unsafe code and was
+rejected by the repository gate. The existing maintained `security-framework` dependency instead
+provides a safe RAII interaction lock, so macOS read, set, and delete now disable Keychain UI only
+for their blocking call and restore it when the guard drops. This process-wide scope is accepted at
+the current owner because repository-wide inspection finds no other server Keychain user and
+`ProviderCredentialStore` already serializes every credential operation with one semaphore whose
+permit remains held through cancellation. A protected or unavailable item therefore fails visibly
+instead of opening UI or hanging, without a second store, compatibility path, timeout worker,
+retry, or fallback.
 
 The direct pin leaves the registry copy used by `keyring` and TLS alongside the patched direct copy.
 That duplication increased the measured debug server binary from 118,258,392 to 118,263,160 bytes
@@ -340,6 +353,16 @@ CPU, memory, disk, or latency improvement is claimed. Fake-backend tests prove k
 terminal deletion, unsupported-store behavior, validation bounds, and fail-closed installed-store
 errors without reading or writing a real credential. All 136 provider tests, warning-denied provider
 Clippy, formatting, whitespace, architecture, and source-growth gates passed.
+
+The macOS correction was verified through an isolated packaged identifier and temporary service
+name without printing or persisting the supplied API secret outside Keychain. The previously
+blocking protected item failed visibly in about two seconds and left the UI responsive. The isolated
+item then completed set, status/read through two real official Flash room turns, and terminal delete;
+the exact app and owned server processes stopped cleanly and its Application Support, cache, bundle,
+and diagnostic samples were removed from their live locations. Before the turns, desktop/server RSS
+was 121,440/30,864 KiB; after one rejected observation plus successful two- and four-request turns it
+was 133,040/34,800 KiB. Application Support grew from 556 to 696 KiB and the 104-KiB cache did not
+grow. These are bounded verification observations, not a claimed production optimization.
 
 The private DeepSeek credential HTTP owner now exposes the reachable metadata-only status,
 secure-store set, and secure-store delete operations through one route. Each request consumes a
