@@ -12,8 +12,9 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     cerebras,
     filesystem::{FilesystemFailure, resolve_codex_executable, resolve_executable},
+    openrouter,
     process::{ProbeFailure, probe},
-    remote_catalog::{RemoteCatalogError, fetch_public_catalog, gateway_model_options},
+    remote_catalog::{RemoteCatalogError, fetch_gateway_model_options},
 };
 
 const MAX_PROVIDER_BYTES: usize = 16 * 1024;
@@ -236,16 +237,7 @@ pub(crate) async fn discover_deepseek(
                 ],
                 "thinking",
             ),
-            control(
-                "max_output_tokens",
-                "최대 응답 길이",
-                "select",
-                [1_024_u32, 2_048, 4_096, 8_192, 16_384]
-                    .into_iter()
-                    .map(|value| option(&value.to_string(), &format!("{value} 토큰")))
-                    .collect(),
-                "4096",
-            ),
+            remote_output_token_control(),
             permission_control(false),
         ],
     )
@@ -255,11 +247,7 @@ pub(crate) async fn discover_cerebras(
     provider: ProviderAvailability,
     cancellation: &CancellationToken,
 ) -> ProviderAvailability {
-    let payload = match fetch_public_catalog(cerebras::CATALOG_ENDPOINT, cancellation).await {
-        Ok(payload) => payload,
-        Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
-    };
-    let models = match gateway_model_options(&payload) {
+    let models = match fetch_gateway_model_options(cerebras::CATALOG_ENDPOINT, cancellation).await {
         Ok(models) => models,
         Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
     };
@@ -288,16 +276,36 @@ pub(crate) async fn discover_cerebras(
                 ],
                 "low",
             ),
-            control(
-                "max_output_tokens",
-                "최대 응답 길이",
-                "select",
-                [1_024_u32, 2_048, 4_096, 8_192, 16_384]
-                    .into_iter()
-                    .map(|value| option(&value.to_string(), &format!("{value} 토큰")))
-                    .collect(),
-                "4096",
-            ),
+            remote_output_token_control(),
+            permission_control(false),
+        ],
+    )
+}
+
+pub(crate) async fn discover_openrouter(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
+    let models = match fetch_gateway_model_options(openrouter::CATALOG_ENDPOINT, cancellation).await
+    {
+        Ok(models) => models,
+        Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
+    };
+    if models.is_empty() {
+        return unavailable_provider(
+            provider,
+            true,
+            "no_supported_models",
+            "OpenRouter returned no text models with room-tool support",
+        );
+    }
+    let default_model = preferred_model(&models, "openai/gpt-4.1-mini");
+    ready_provider(
+        provider,
+        default_model.clone(),
+        vec![
+            control("model", "모델", "combobox", models, &default_model),
+            remote_output_token_control(),
             permission_control(false),
         ],
     )
@@ -424,6 +432,19 @@ fn permission_control(workspace_write: bool) -> ProviderControl {
         "select",
         options,
         "meeting_read_only",
+    )
+}
+
+fn remote_output_token_control() -> ProviderControl {
+    control(
+        "max_output_tokens",
+        "최대 응답 길이",
+        "select",
+        [1_024_u32, 2_048, 4_096, 8_192, 16_384]
+            .into_iter()
+            .map(|value| option(&value.to_string(), &format!("{value} 토큰")))
+            .collect(),
+        "4096",
     )
 }
 

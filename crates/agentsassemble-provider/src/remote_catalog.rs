@@ -96,6 +96,14 @@ pub(crate) fn gateway_model_options(
     Ok(entries.iter().filter_map(gateway_model_option).collect())
 }
 
+pub(crate) async fn fetch_gateway_model_options(
+    endpoint: &'static str,
+    cancellation: &CancellationToken,
+) -> Result<Vec<ProviderControlOption>, RemoteCatalogError> {
+    let payload = fetch_public_catalog(endpoint, cancellation).await?;
+    gateway_model_options(&payload)
+}
+
 fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
     let entry = entry.as_object()?;
     let model_id = bounded_text(entry.get("id")?, 128)?;

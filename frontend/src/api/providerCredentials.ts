@@ -13,6 +13,7 @@ export interface ProviderCredentialStatus {
 const CREDENTIAL_PATHS: Readonly<Record<string, string>> = {
   deepseek: "/api/provider-credentials/deepseek",
   cerebras: "/api/provider-credentials/cerebras",
+  openrouter: "/api/provider-credentials/openrouter",
 };
 
 function credentialPath(providerId: string): string {

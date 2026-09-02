@@ -15,7 +15,7 @@ use crate::{
     ProviderCredentialId,
     catalog::{
         discover_antigravity, discover_cerebras, discover_codex, discover_deepseek,
-        discover_opencode,
+        discover_opencode, discover_openrouter,
     },
     cerebras,
     codex::CodexDriver,
@@ -24,6 +24,7 @@ use crate::{
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
     opencode::OpenCodeDriver,
+    openrouter,
     runtime_lease::HeldRuntimeLease,
 };
 
@@ -134,12 +135,29 @@ pub(crate) static CEREBRAS_PROVIDER: ProviderRegistration = ProviderRegistration
     launch: launch_cerebras,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 5] = [
+pub(crate) static OPENROUTER_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "openrouter",
+    display_name: "OpenRouter",
+    provider_kind: "openrouter_api",
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    credential_available: true,
+    discover: discover_openrouter_registered,
+    launch: launch_openrouter,
+};
+
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 6] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
     &DEEPSEEK_PROVIDER,
     &CEREBRAS_PROVIDER,
+    &OPENROUTER_PROVIDER,
 ];
 
 pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistration] {
@@ -205,6 +223,13 @@ fn discover_cerebras_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_cerebras(provider, cancellation))
+}
+
+fn discover_openrouter_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(discover_openrouter(provider, cancellation))
 }
 
 pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderAvailability {
@@ -415,6 +440,22 @@ fn launch_cerebras<'a>(
             .await
             .map_err(|error| DriverLaunchError::safe(cerebras::credential_error(error)))?;
         let driver = cerebras::launch(factory.credentials.clone()).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_openrouter<'a>(
+    factory: &'a ProductionDriverFactory,
+    _session: &'a DurableAgentSession,
+    _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        factory
+            .credentials
+            .secret(ProviderCredentialId::OpenRouter)
+            .await
+            .map_err(|error| DriverLaunchError::safe(openrouter::credential_error(error)))?;
+        let driver = openrouter::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

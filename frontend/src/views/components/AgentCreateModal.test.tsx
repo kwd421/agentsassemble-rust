@@ -12,6 +12,7 @@ import {
   lmStudioProvider,
   ollamaProvider,
   openCodeProvider,
+  openRouterProvider,
 } from "./AgentCreateModal.testProviders";
 import {
   chooseProviderControl,
@@ -651,6 +652,25 @@ describe("AgentCreateModal", () => {
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("cerebras");
     expect(apiMocks.setProviderCredential).not.toHaveBeenCalled();
+  });
+
+  it("uses OpenRouter's implemented credential operation", async () => {
+    render(
+      <AgentCreateModal
+        open
+        meetingId="room-a"
+        roomLabel="Room A"
+        catalogRevision="cat-openrouter"
+        providers={[openRouterProvider()]}
+        onClose={() => undefined}
+        onCreate={vi.fn()}
+      />
+    );
+
+    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
+    await userEvent.click(screen.getByRole("listitem", { name: "OpenRouter" }));
+    expect(await screen.findByLabelText("API 키")).toBeTruthy();
+    expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("openrouter");
   });
 
   it("keeps credential deletion retryable when the secure store rejects it", async () => {

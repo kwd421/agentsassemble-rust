@@ -115,6 +115,17 @@ export function cerebrasProvider(): NativeCliProviderAvailability {
   };
 }
 
+export function openRouterProvider(): NativeCliProviderAvailability {
+  return {
+    ...deepSeekProvider(),
+    id: "openrouter",
+    display_name: "OpenRouter",
+    provider_kind: "openrouter_api",
+    default_model: "",
+    credential_available: true,
+  };
+}
+
 export function ollamaProvider(): NativeCliProviderAvailability {
   return {
     ...deepSeekProvider(),

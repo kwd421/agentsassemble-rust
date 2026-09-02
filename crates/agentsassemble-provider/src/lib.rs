@@ -34,6 +34,7 @@ mod opencode;
 mod opencode_protocol;
 mod opencode_sse;
 mod opencode_startup;
+mod openrouter;
 mod process;
 mod profile;
 mod registration;

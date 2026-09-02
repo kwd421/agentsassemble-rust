@@ -52,6 +52,9 @@ registered_routes! {
         private "/api/provider-credentials/cerebras" => get(cerebras_status)
             .post(set_cerebras)
             .delete(delete_cerebras),
+        private "/api/provider-credentials/openrouter" => get(openrouter_status)
+            .post(set_openrouter)
+            .delete(delete_openrouter),
     }
 }
 
@@ -95,6 +98,27 @@ async fn delete_cerebras(
     request: Request,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
     delete_credential(state, request, ProviderCredentialId::Cerebras).await
+}
+
+async fn openrouter_status(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    credential_status(state, request, ProviderCredentialId::OpenRouter).await
+}
+
+async fn set_openrouter(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    set_credential(state, request, ProviderCredentialId::OpenRouter).await
+}
+
+async fn delete_openrouter(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    delete_credential(state, request, ProviderCredentialId::OpenRouter).await
 }
 
 async fn credential_status(
