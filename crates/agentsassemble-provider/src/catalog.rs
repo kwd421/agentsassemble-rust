@@ -12,14 +12,14 @@ use tokio_util::sync::CancellationToken;
 use crate::{
     cerebras,
     filesystem::{FilesystemFailure, resolve_codex_executable, resolve_executable},
-    openrouter,
+    llm_gateway, openrouter,
     process::{ProbeFailure, probe},
     remote_catalog::{RemoteCatalogError, fetch_gateway_model_options},
     vercel,
 };
 
-// The current Vercel tool-capable projection is about 99 KiB. This remains
-// beneath both this per-provider authority and the outer WebSocket frame bound.
+// The current Vercel and LLM Gateway tool-capable projections are about 75 KiB
+// each. They remain beneath this authority and the outer WebSocket frame bound.
 const MAX_PROVIDER_BYTES: usize = 128 * 1024;
 const MAX_PROVIDER_OPTIONS: usize = 256;
 const MAX_OPTION_VALUE_BYTES: usize = 128;
@@ -297,6 +297,30 @@ pub(crate) async fn discover_vercel(
         "Vercel AI Gateway",
         "openai/gpt-5.4-mini",
         None,
+    )
+    .await
+}
+
+pub(crate) async fn discover_llm_gateway(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderAvailability {
+    discover_gateway(
+        provider,
+        cancellation,
+        llm_gateway::CATALOG_ENDPOINT,
+        llm_gateway::DISPLAY_NAME,
+        llm_gateway::PREFERRED_MODEL,
+        Some(control(
+            "reasoning_effort",
+            "추론 강도",
+            "select",
+            llm_gateway::REASONING_EFFORTS
+                .into_iter()
+                .map(|(value, label)| option(value, label))
+                .collect(),
+            "",
+        )),
     )
     .await
 }

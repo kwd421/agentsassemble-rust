@@ -15,7 +15,7 @@ use crate::{
     ProviderCredentialId,
     catalog::{
         discover_antigravity, discover_cerebras, discover_codex, discover_deepseek,
-        discover_opencode, discover_openrouter, discover_vercel,
+        discover_llm_gateway, discover_opencode, discover_openrouter, discover_vercel,
     },
     cerebras,
     codex::CodexDriver,
@@ -23,6 +23,7 @@ use crate::{
     deepseek,
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
+    llm_gateway,
     opencode::OpenCodeDriver,
     openrouter,
     runtime_lease::HeldRuntimeLease,
@@ -168,7 +169,23 @@ pub(crate) static VERCEL_PROVIDER: ProviderRegistration = ProviderRegistration {
     launch: launch_vercel,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 7] = [
+pub(crate) static LLM_GATEWAY_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "llmgateway",
+    display_name: llm_gateway::DISPLAY_NAME,
+    provider_kind: llm_gateway::PROVIDER_KIND,
+    runtime_kind: "api",
+    transport: "https",
+    catalog_group: "api",
+    workspace_required: false,
+    connection_kind: "native_cli_bridge",
+    executable_required: false,
+    probe_executable: "",
+    credential_available: true,
+    discover: discover_llm_gateway_registered,
+    launch: launch_llm_gateway,
+};
+
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 8] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
@@ -176,6 +193,7 @@ static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 7] = [
     &CEREBRAS_PROVIDER,
     &OPENROUTER_PROVIDER,
     &VERCEL_PROVIDER,
+    &LLM_GATEWAY_PROVIDER,
 ];
 
 pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistration] {
@@ -255,6 +273,13 @@ fn discover_vercel_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_vercel(provider, cancellation))
+}
+
+fn discover_llm_gateway_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(discover_llm_gateway(provider, cancellation))
 }
 
 pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderAvailability {
@@ -497,6 +522,22 @@ fn launch_vercel<'a>(
             .await
             .map_err(|error| DriverLaunchError::safe(vercel::credential_error(error)))?;
         let driver = vercel::launch(factory.credentials.clone()).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_llm_gateway<'a>(
+    factory: &'a ProductionDriverFactory,
+    _session: &'a DurableAgentSession,
+    _runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        factory
+            .credentials
+            .secret(ProviderCredentialId::LlmGateway)
+            .await
+            .map_err(|error| DriverLaunchError::safe(llm_gateway::credential_error(error)))?;
+        let driver = llm_gateway::launch(factory.credentials.clone()).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

@@ -134,7 +134,7 @@ async fn tcp_boundary_authenticates_before_body_and_keeps_secrets_out_of_errors(
 #[tokio::test]
 async fn remote_api_credential_routes_require_operator_authority() {
     let server = start().await;
-    for provider in ["cerebras", "openrouter", "vercel"] {
+    for provider in ["cerebras", "openrouter", "vercel", "llmgateway"] {
         let response = Client::new()
             .get(format!(
                 "{}/api/provider-credentials/{provider}",

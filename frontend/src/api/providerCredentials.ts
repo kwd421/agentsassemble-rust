@@ -15,6 +15,7 @@ const CREDENTIAL_PATHS: Readonly<Record<string, string>> = {
   cerebras: "/api/provider-credentials/cerebras",
   openrouter: "/api/provider-credentials/openrouter",
   vercel: "/api/provider-credentials/vercel",
+  llmgateway: "/api/provider-credentials/llmgateway",
 };
 
 function credentialPath(providerId: string): string {

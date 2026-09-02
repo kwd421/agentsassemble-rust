@@ -137,6 +137,17 @@ export function vercelProvider(): NativeCliProviderAvailability {
   };
 }
 
+export function llmGatewayProvider(): NativeCliProviderAvailability {
+  return {
+    ...deepSeekProvider(),
+    id: "llmgateway",
+    display_name: "LLM Gateway",
+    provider_kind: "llm_gateway_api",
+    default_model: "gpt-oss-120b",
+    credential_available: true,
+  };
+}
+
 export function ollamaProvider(): NativeCliProviderAvailability {
   return {
     ...deepSeekProvider(),

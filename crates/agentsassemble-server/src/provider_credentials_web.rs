@@ -58,6 +58,9 @@ registered_routes! {
         private "/api/provider-credentials/vercel" => get(vercel_status)
             .post(set_vercel)
             .delete(delete_vercel),
+        private "/api/provider-credentials/llmgateway" => get(llm_gateway_status)
+            .post(set_llm_gateway)
+            .delete(delete_llm_gateway),
     }
 }
 
@@ -143,6 +146,27 @@ async fn delete_vercel(
     request: Request,
 ) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
     delete_credential(state, request, ProviderCredentialId::Vercel).await
+}
+
+async fn llm_gateway_status(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    credential_status(state, request, ProviderCredentialId::LlmGateway).await
+}
+
+async fn set_llm_gateway(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    set_credential(state, request, ProviderCredentialId::LlmGateway).await
+}
+
+async fn delete_llm_gateway(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<ProviderCredentialStatus>, ProviderCredentialHttpError> {
+    delete_credential(state, request, ProviderCredentialId::LlmGateway).await
 }
 
 async fn credential_status(

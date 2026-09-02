@@ -28,6 +28,7 @@ mod guardian_health;
 #[cfg(unix)]
 mod guardian_lifetime;
 mod launch_error;
+mod llm_gateway;
 mod loopback_http;
 mod openai_stream;
 mod opencode;
