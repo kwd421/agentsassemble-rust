@@ -14,6 +14,11 @@ contracts, findings, or verification journals.
 - Phase: plan correction, finite Phase 0B prerequisite closure (F-14 and F-16),
   then Phase 1 provider-first implementation. No product implementation starts
   until this documentation correction is reviewed.
+- Historical Phase 0B labels are not a serial global gate. D-06 executes with Phase 1
+  runtime measurement/hardening; D-07 executes with Phase 5 human admission; split
+  F-18/F-20 work remains with its already named external-admission/custom-channel
+  owners. Reordering does not waive a finding; its owning phase cannot exit before
+  the finding is closed or evidence-deferred.
 - Current phase execution: establish the whole phase's dependency skeleton and
   acceptance matrix first, implement the smallest shared owners, connect one complete
   vertical flow for every target in dependency order, then harden and verify the phase

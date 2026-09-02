@@ -338,17 +338,18 @@ Correction substage:
   listener, retry, timer, or fallback.
 - Make closed provider-catalog authority terminal instead of busy-spinning each
   connected room socket.
-- Prove a current finite consumer for every fixed human-invite token claim and remove
-  unconsumed self-description; retain the room/server/lineage/scope/expiry and
-  credential bindings that admission actually verifies.
+- Route the human-invite token self-description audit to Phase 5, where its finite
+  clients and admission owner can prove each consumer or remove the unconsumed claim.
+  It is not a provider-foundation prerequisite.
 - Measure the one-second unresolved-runtime reconciliation cadence before changing
   it; retain its recovery state machine and change only a cadence with observed
   idle cost and recovery-latency evidence.
-- Exit Phase 0: every Fix, Consolidate, and defensive-complexity decision assigned to
-  Phase 0—including D-07 Unknown—is implemented or explicitly deferred with evidence;
-  its focused tests and affected repository gates pass; the master inventory,
-  audit register, exposure map, architecture,
-  active slice, and workboard agree on the resulting current behavior.
+- Phase 0B is no longer a serial global exit gate. Its completed corrections remain
+  recorded in the workboard; only the still-live F-14 and F-16 boundaries gate Phase 1.
+  D-06 joins Phase 1's provider-runtime measurement/hardening owner, D-07 moves to
+  Phase 5 human admission, and split findings such as F-18/F-20 remain with their
+  already named later product owners. Reordering never silently closes or waives a
+  finding: its focused tests and affected gates must pass before that owning phase exits.
 
 ### Phase 1 — provider contract and process correctness
 
@@ -456,6 +457,10 @@ Correction substage:
 
 - Finish account status, Google challenge/connect/delete, native handoff, recovery,
   friends, host, and operator-pairing flows that remain in the retained product.
+- Resolve D-07 at the human-invite credential owner: prove a finite current consumer
+  for every fixed signed-token claim or remove the unconsumed self-description while
+  retaining room/server/lineage/scope/expiry and credential bindings actually checked
+  by admission.
 - Preserve distinct local operator, admitted human, and central identity owners.
 - Restore the original invitation flows but refine rough presentation with the
   existing frontend design system and Discord-like interaction conventions. Human

@@ -1333,7 +1333,8 @@ cadence or bound; do not replace them with an unproven fallback.
 
 ### D-07 — invite self-description claims have no proven consumer
 
-Disposition: `Unknown; prove or remove`; Phase 0B.
+Disposition: `Unknown; prove or remove`; Phase 5 human admission. It does not gate
+the provider foundation.
 
 The signed human-invite token contains fixed descriptive claims such as
 `host_verifies`. Room, server, lineage, scope, expiry, and credential binding have
@@ -1513,7 +1514,7 @@ This table routes findings; it does not add another contract layer.
 | D-04 | DeepSeek fixed-host HTTP client | 1 | ordinary TLS client passes fixed-host tests; Custom API SSRF policy remains separate |
 | D-05 | provider runtime handle codec | 1 | discarded suffix absent; boot/token/owner and stale-CAS regressions pass |
 | D-06 | reconciliation and guardian staging | 0B | idle/recovery/start-stop measurements justify any cadence/bound change |
-| D-07 | human-invite token claims | 0B | each retained claim has a current consumer or is removed |
+| D-07 | human-invite token claims | 5 | each retained claim has a current consumer or is removed |
 | K-01 | four asset lifecycle owners plus physical ceiling | keep | replacement/reference/expiry tests retain exact deletion and occupancy behavior |
 | K-02 | each independent trust boundary | keep | share values only; boundary-specific fail-closed errors remain |
 | K-03 | reconciliation/publication/socket operation owners | keep/measure | cadence, cap, cancellation, cost, and visible exhaustion remain documented |
