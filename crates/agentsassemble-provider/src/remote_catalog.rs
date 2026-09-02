@@ -164,16 +164,16 @@ fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
             .iter()
             .any(|provider| provider.get("reasoning").and_then(Value::as_bool) == Some(true));
     metadata.insert("reasoning".to_owned(), json!(reasoning));
-    let reasoning_efforts = tool_providers
+    let advertised_reasoning_efforts = tool_providers
         .iter()
         .flat_map(|provider| text_set(provider.get("reasoning_efforts")))
         .collect::<std::collections::BTreeSet<_>>();
-    if !reasoning_efforts.is_empty() {
+    if !advertised_reasoning_efforts.is_empty() {
+        let reasoning_efforts = std::iter::once(String::new())
+            .chain(advertised_reasoning_efforts)
+            .collect::<Vec<_>>();
         metadata.insert("relation_scope".to_owned(), json!("per_model"));
-        metadata.insert(
-            "reasoning_efforts".to_owned(),
-            json!(reasoning_efforts.into_iter().collect::<Vec<_>>()),
-        );
+        metadata.insert("reasoning_efforts".to_owned(), json!(reasoning_efforts));
     }
     project_display_metadata(&mut metadata, entry, context);
 
@@ -395,7 +395,7 @@ mod tests {
         assert_eq!(options[1].metadata["vision"], json!(true));
         assert_eq!(
             options[1].metadata["reasoning_efforts"],
-            json!(["high", "low"])
+            json!(["", "high", "low"])
         );
         for key in ["selection_kind", "compatibility_evidence", "tools"] {
             assert!(!options[0].metadata.contains_key(key));

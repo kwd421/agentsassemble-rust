@@ -63,28 +63,29 @@ pub(super) fn validate_model_relation(
     }
 
     if selected.is_empty() {
-        let advertises_nonempty_values = provider
+        let allowed = provider
             .controls
             .iter()
             .find(|control| control.key == "model")
             .and_then(|control| control.options.iter().find(|option| option.value == model))
             .and_then(|option| option.metadata.get(relation))
-            .and_then(Value::as_array)
-            .is_some_and(|allowed| {
-                allowed
+            .and_then(Value::as_array);
+        return match allowed {
+            Some(allowed) if allowed.iter().any(|value| value.as_str() == Some("")) => Ok(()),
+            Some(allowed)
+                if allowed
                     .iter()
-                    .any(|value| value.as_str().is_some_and(|value| !value.is_empty()))
-            });
-        return if advertises_nonempty_values {
-            Err(ProviderSelectionError::new(
-                "unsupported_control",
-                format!(
-                    "Provider {} model {model} does not support an empty {relation} value.",
-                    provider.id
-                ),
-            ))
-        } else {
-            Ok(())
+                    .any(|value| value.as_str().is_some_and(|value| !value.is_empty())) =>
+            {
+                Err(ProviderSelectionError::new(
+                    "unsupported_control",
+                    format!(
+                        "Provider {} model {model} does not support an empty {relation} value.",
+                        provider.id
+                    ),
+                ))
+            }
+            _ => Ok(()),
         };
     }
 
@@ -115,9 +116,6 @@ pub(super) fn validate_model_relation(
         }
         return Ok(());
     };
-    if selected.is_empty() && allowed.is_empty() {
-        return Ok(());
-    }
     if allowed.iter().any(|value| value.as_str() == Some(selected)) {
         return Ok(());
     }

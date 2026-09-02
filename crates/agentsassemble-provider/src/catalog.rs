@@ -594,7 +594,7 @@ fn controls_are_consistent(default_model: &str, controls: &[ProviderControl]) ->
             return relation_scope != Some("per_model");
         };
         if control.default_value.is_empty() {
-            return allowed.is_empty();
+            return allowed.is_empty() || allowed.iter().any(|value| value.as_str() == Some(""));
         }
         allowed
             .iter()

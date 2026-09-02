@@ -747,6 +747,23 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("empty relation should allow empty effort: {error}"));
         assert!(selected.reasoning_effort.is_empty());
+
+        authority.providers[0].controls[0].options[0]
+            .metadata
+            .insert(
+                "reasoning_efforts".to_owned(),
+                json!(["", "medium", "high"]),
+            );
+        let selected = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "explicit-empty-effort-allowed",
+            &payload,
+            &authority,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("explicit empty relation should allow omission: {error}"));
+        assert!(selected.reasoning_effort.is_empty());
     }
 
     #[tokio::test]
