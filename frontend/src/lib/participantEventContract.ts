@@ -288,6 +288,32 @@ function creationStartSessionsMatch(initial: unknown, prepared: unknown): boolea
   }
 }
 
+function creationStartedSessionMatches(prepared: unknown, final: unknown): boolean {
+  try {
+    const preparedSession = exactAgentSession(prepared, "Agent Session", "Agent Session");
+    const finalSession = exactAgentSession(final, "Agent Session", "Agent Session");
+    const transitionKeys = new Set([
+      "status",
+      "runtime_status",
+      "provider_session_active",
+      "provider_session_reused",
+      "updated_at",
+    ]);
+    return (
+      finalSession.status === "attached" &&
+      finalSession.runtime_status === "idle" &&
+      finalSession.enabled === true &&
+      AGENT_SESSION_KEYS.every((key) => {
+        if (transitionKeys.has(key)) return true;
+        if (key !== "persona_card") return preparedSession[key] === finalSession[key];
+        return personaProjectionsMatch(preparedSession[key], finalSession[key]);
+      })
+    );
+  } catch {
+    return false;
+  }
+}
+
 function creationParticipantBecomesJoined(created: RoomMember, joined: RoomMember): boolean {
   return (
     created.status === "detached" &&
@@ -395,8 +421,7 @@ export function agentCreateAckProjectionsAreCoherent(
     ) {
       return false;
     }
-    const final = exactAgentSession(finalSession, "Agent Session", "Agent Session");
-    return final.runtime_status === "idle" && final.enabled === true;
+    return creationStartedSessionMatches(created.agentSession, finalSession);
   } catch {
     return false;
   }
@@ -416,6 +441,27 @@ export function agentSessionIsValid(
     return (
       (!expectedRoomId || session.room_id === expectedRoomId) &&
       (!expectedParticipantId || session.participant_id === expectedParticipantId)
+    );
+  } catch {
+    return false;
+  }
+}
+
+export function agentSessionStateProjectionIsCoherent(event: RoomEvent): boolean {
+  try {
+    const eventRecord = event as unknown as Record<string, unknown>;
+    const session = exactAgentSession(
+      eventRecord.agent_session,
+      "Agent Session 투영이 없습니다.",
+      "Agent Session 투영이 올바르지 않습니다.",
+    );
+    return (
+      eventRecord.participant_type === "agent" &&
+      session.room_id === event.room_id &&
+      session.participant_id === eventRecord.participant_id &&
+      session.session_id === eventRecord.session_id &&
+      session.runtime_status === eventRecord.runtime_status &&
+      session.display_name === eventRecord.display_name
     );
   } catch {
     return false;

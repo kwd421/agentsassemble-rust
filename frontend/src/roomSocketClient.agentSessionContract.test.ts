@@ -103,6 +103,7 @@ function creationStartRecords() {
   };
   const finalSession = {
     ...preparedSession,
+    status: "attached",
     runtime_status: "idle",
     updated_at: "2026-08-25T00:00:04Z",
   };
@@ -145,6 +146,46 @@ describe("Agent Session socket contract", () => {
           room_id: "general",
           participant_id: "agent-test",
         }),
+      }],
+      latest_seq: 1,
+    });
+
+    await vi.waitFor(() =>
+      expect(errors.at(-1)?.category).toBe("event_schema_invalid")
+    );
+    expect(handle.ready()).toBe(false);
+    handle.close();
+  });
+
+  it.each([
+    ["session identity", { session_id: "other-session" }],
+    ["runtime status", { runtime_status: "busy" }],
+    ["display identity", { display_name: "Conflicting Agent" }],
+    ["participant kind", { participant_type: "human" }],
+  ])("rejects a state event with conflicting %s", async (_label, conflict) => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = await openReadyHarness(errors);
+    const session = agentSessionFixture({
+      room_id: "general",
+      session_id: "agent-test",
+      participant_id: "agent-test",
+      display_name: "Agent Test",
+      runtime_status: "idle",
+    });
+
+    receiveServerFrame(sockets[0], {
+      op: "event",
+      stream: "room_events",
+      events: [{
+        ...event(1),
+        type: "agent_session_state",
+        participant_id: session.participant_id,
+        participant_type: "agent",
+        session_id: session.session_id,
+        runtime_status: session.runtime_status,
+        display_name: session.display_name,
+        agent_session: session,
+        ...conflict,
       }],
       latest_seq: 1,
     });
@@ -303,4 +344,50 @@ describe("Agent Session socket contract", () => {
       handle.close();
     },
   );
+
+  it("rejects a create-and-start ACK outside the committed lifecycle state", async () => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = await openReadyHarness(errors);
+    void handle.command("agent.create", {
+      provider_id: "codex",
+      start: true,
+    }).catch(() => {});
+    await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+    const command = sentClientFrame(sockets[0]);
+    const { participant, initialSession, events, start } = creationStartRecords();
+    const invalidSession = {
+      ...(events[3] as Record<string, unknown>).agent_session as Record<string, unknown>,
+      status: "available",
+      model: "conflicting-model",
+    };
+    const invalidFinal = { ...events[3], agent_session: invalidSession };
+    const invalidEvents = [...events.slice(0, 3), invalidFinal];
+    receiveServerFrame(sockets[0], {
+      op: "ack",
+      accepted: true,
+      resolution: "committed",
+      request_id: command.request_id,
+      action: "agent.create",
+      result: {
+        status: "created",
+        participant,
+        agent_session: initialSession,
+        start: {
+          ...start,
+          agent_session: invalidSession,
+          events: invalidEvents.slice(1),
+          event: invalidFinal,
+        },
+        events: invalidEvents,
+        event: invalidFinal,
+        event_seq: 4,
+      },
+    });
+
+    await vi.waitFor(() =>
+      expect(errors.at(-1)?.category).toBe("ack_contract_invalid")
+    );
+    expect(handle.ready()).toBe(false);
+    handle.close();
+  });
 });

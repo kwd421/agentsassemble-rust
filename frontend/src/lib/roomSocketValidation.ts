@@ -9,6 +9,7 @@ import {
   agentCreateAckProjectionsAreCoherent,
   agentCreationProjectionFromEvent,
   agentSessionIsValid,
+  agentSessionStateProjectionIsCoherent,
   joinedParticipantFromEvent,
 } from "./participantEventContract";
 import { isParticipantRole } from "./participantRole";
@@ -144,21 +145,10 @@ export function eventProjectionIsValid(event: RoomEvent): boolean {
     }
     if (event.type === "participant_joined") joinedParticipantFromEvent(event);
     if (event.type === "agent_session_created") agentCreationProjectionFromEvent(event);
-    if (event.type === "agent_session_state") {
-      const eventRecord = event as unknown as Record<string, unknown>;
-      const participantId = eventRecord.participant_id;
-      if (
-        typeof participantId !== "string" ||
-        !participantId ||
-        !agentSessionIsValid(
-          eventRecord.agent_session,
-          event.room_id,
-          participantId,
-        )
-      ) {
-        return false;
-      }
-    }
+    if (
+      event.type === "agent_session_state" &&
+      !agentSessionStateProjectionIsCoherent(event)
+    ) return false;
     if (
       event.type === "participant_updated" &&
       "role" in event &&
