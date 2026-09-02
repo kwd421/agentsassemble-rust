@@ -5,7 +5,7 @@ complete; its Phase 0A finding inventory is approved at reviewed content checkpo
 `9711232`. Product implementation remains paused. This record owns findings and
 dispositions, not product contracts or the implementation sequence; the corrected
 provider-first sequence in `docs/PRODUCT_REIMPLEMENTATION_PLAN.md` supersedes the
-old finding-number route and is pending manual documentation cross-review.
+old finding-number route and is approved by manual documentation cross-review.
 
 Audited baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`, Rust
 `8a5f75a`. User-owned working-tree changes in `AGENTS.md` and `.agents/` were not

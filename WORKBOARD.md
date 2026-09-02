@@ -2,8 +2,8 @@
 
 Status: The Phase 0A source/duplication/defensive-complexity inventory at
 `9711232` remains reviewed historical evidence. Its finding-number order is not
-the production roadmap. The corrected provider-first plan is active pending its
-manual documentation cross-review. Before Phase 1, the two confirmed live Phase 0B
+the production roadmap. The corrected provider-first plan is approved and active.
+Before Phase 1, the two confirmed live Phase 0B
 prerequisites F-14 and F-16 must close without expanding into unrelated polishing.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating product
@@ -11,9 +11,9 @@ contracts, findings, or verification journals.
 
 ## Active work
 
-- Phase: plan correction, finite Phase 0B prerequisite closure (F-14 and F-16),
-  then Phase 1 provider-first implementation. No product implementation starts
-  until this documentation correction is reviewed.
+- Phase: finite Phase 0B prerequisite closure (F-14 and F-16), then Phase 1
+  provider-first implementation. The documentation correction is reviewed; no
+  product implementation is part of this closure.
 - Historical Phase 0B labels are not a serial global gate. D-06 executes with Phase 1
   runtime measurement/hardening; D-07 executes with Phase 5 human admission; split
   F-18/F-20 work remains with its already named external-admission/custom-channel
