@@ -1171,9 +1171,11 @@ calls, and unimported
 contain routes, timers, permissions, or protocol vocabulary that no Rust surface
 owns. Their presence caused both false parity claims and repeated polling reviews.
 
-Keep source only when a named retained phase owns it and the entry point is safely
-gated. Remove otherwise; deferred product work belongs in plans and history, not a
-half-live compatibility surface.
+Keep current source when a named retained phase owns it, or when the user has
+explicitly deferred that product and the production graph proves it cannot mount,
+request, poll, heartbeat, or imply parity. Remove ownerless non-deferred source;
+dormant source existence alone is not removal authority. Deferred status belongs in
+the plan and must not become a half-live compatibility surface.
 
 ### C-11 — Agent Session state vocabulary is repeated as strings
 
