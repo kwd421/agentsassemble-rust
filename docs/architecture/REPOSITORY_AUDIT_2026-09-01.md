@@ -756,6 +756,25 @@ its exact parsing internals or add cross-file glue, so the warning does not just
 mechanical split. Both corrections remain subject to final Pro and Daybreaker re-review;
 no final approval is claimed.
 
+Daybreaker's next source review found a reachable Medium omitted by the frontend-only
+fixture: `room_settings.rs` returned the committed event but not its `event_seq`, while
+the strict ACK admission above requires both projections. This was not a reason to relax
+the browser contract. Correction `6c799f5` adds the sequence at the persistence owner and
+an actual TCP/WebSocket settings-update test that proves the ACK sequence equals the
+published event and that an exact duplicate request replays the same result without a
+second event. The first full gate passed all product tests but rejected an enlarged
+scheduler scenario under the existing Clippy function-size rule. Follow-up `06c7139`
+moves the result/replay invariant into its own focused persistence test; it adds no
+production state or abstraction.
+
+The correction adds no task, timer, polling, heartbeat, retry, fallback, compatibility
+path, or second policy owner. It preserves room authorization, settings validation,
+durable ordering, idempotent replay, and endpoint-local rejection. Fresh complete
+verification passes all frontend, desktop, Rust unit, real TCP/WebSocket, generated,
+Clippy, diff, architecture, policy, CSS, and artifact gates in 197.35 seconds with
+1,295,138,816-byte maximum RSS. Final correction re-review remains pending, so no final
+approval is recorded.
+
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,
 alternate harnesses, Agent profile mutation, voice, and Mafia remain separate future

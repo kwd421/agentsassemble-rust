@@ -287,8 +287,15 @@ contracts, findings, or verification journals.
     that the settings root was already closed. Corrections `98a9af9` and `a8583f0`
     respectively bind complete duplicate event projections and require exact settings in
     the shared live/history/snapshot event validator. Complete verification passes in
-    164.33 seconds with 791,937,024-byte maximum RSS. Final correction re-reviews remain
-    pending, so F-11 is not closed.
+    164.33 seconds with 791,937,024-byte maximum RSS. Daybreaker's correction review
+    then found one real Medium: Rust settings persistence omitted `result.event_seq`
+    even though the strict browser ACK contract requires it, so a reachable settings
+    update would disconnect after commit. `6c799f5` emits the committed event sequence
+    from the persistence owner and proves exact duplicate replay through the actual TCP
+    boundary. `06c7139` keeps that replay invariant in its own focused test after the
+    first full gate exposed test-function overgrowth; it changes no product behavior.
+    Fresh complete verification passes in 197.35 seconds with 1,295,138,816-byte maximum
+    RSS. Final correction re-reviews remain pending, so F-11 is not closed.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
