@@ -12,10 +12,11 @@ use crate::antigravity::AntigravityDriver;
 #[cfg(unix)]
 use crate::guardian::GuardianLaunch;
 use crate::{
+    ProviderCredentialId,
     catalog::{discover_antigravity, discover_codex, discover_deepseek, discover_opencode},
     codex::CodexDriver,
-    credentials::{ProviderCredentialStore, deepseek_credential_error},
-    deepseek::DeepSeekDriver,
+    credentials::ProviderCredentialStore,
+    deepseek::{DeepSeekDriver, deepseek_credential_error},
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
     opencode::OpenCodeDriver,
@@ -366,7 +367,7 @@ fn launch_deepseek<'a>(
     Box::pin(async move {
         factory
             .credentials
-            .deepseek_secret()
+            .secret(ProviderCredentialId::DeepSeek)
             .await
             .map_err(|error| DriverLaunchError::safe(deepseek_credential_error(error)))?;
         let driver = DeepSeekDriver::launch(factory.credentials.clone()).await?;

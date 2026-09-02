@@ -13,7 +13,8 @@ use rmcp::{
 use serde_json::{Map, Value, json};
 
 use crate::{
-    credentials::{DeepSeekCredential, ProviderCredentialStore, deepseek_credential_error},
+    ProviderCredentialId,
+    credentials::{ProviderCredential, ProviderCredentialError, ProviderCredentialStore},
     driver::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -24,6 +25,23 @@ use crate::{
     remote_https::fixed_endpoint_client,
     room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
 };
+
+pub(crate) const fn deepseek_credential_error(error: ProviderCredentialError) -> DriverError {
+    match error {
+        ProviderCredentialError::MissingSecret => DriverError::new(
+            "provider_credential_missing",
+            "A DeepSeek API credential is required.",
+        ),
+        ProviderCredentialError::InvalidSecret => DriverError::new(
+            "provider_credential_invalid",
+            "The configured DeepSeek credential is invalid.",
+        ),
+        ProviderCredentialError::SecureStoreUnavailable => DriverError::new(
+            "secure_store_unavailable",
+            "The secure credential store is unavailable.",
+        ),
+    }
+}
 
 const CHAT_COMPLETIONS_URL: &str = "https://api.deepseek.com/chat/completions";
 const MAX_TOOL_RESULT_BYTES: usize = 128 * 1024;
@@ -106,7 +124,7 @@ impl DeepSeekDriver {
         self.validate_session(session)?;
         let credential = self
             .credentials
-            .deepseek_secret()
+            .secret(ProviderCredentialId::DeepSeek)
             .await
             .map_err(deepseek_credential_error)?;
         let observation = request.room_observation.as_ref();
@@ -390,7 +408,7 @@ impl DeepSeekApi {
     async fn complete(
         &self,
         session: &DurableAgentSession,
-        credential: &DeepSeekCredential,
+        credential: &ProviderCredential,
         messages: &[Value],
         tools: Option<&[Value]>,
     ) -> Result<OpenAiStreamCompletion, DriverError> {

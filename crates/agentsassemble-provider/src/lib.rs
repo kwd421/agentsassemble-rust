@@ -15,6 +15,7 @@ mod codex;
 mod codex_code_mode_host;
 mod codex_identity;
 mod configuration;
+mod credential_provider;
 mod credentials;
 mod deepseek;
 mod driver;
@@ -61,6 +62,7 @@ mod unix_custody;
 mod unix_process_tree;
 
 pub use catalog_service::ProviderCatalogService;
+pub use credential_provider::ProviderCredentialId;
 pub use credentials::{
     ProviderCredentialError, ProviderCredentialSource, ProviderCredentialStatus,
     ProviderCredentialStore,

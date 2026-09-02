@@ -1,4 +1,6 @@
-use agentsassemble_provider::{ProviderCredentialError, ProviderCredentialStatus};
+use agentsassemble_provider::{
+    ProviderCredentialError, ProviderCredentialId, ProviderCredentialStatus,
+};
 use axum::{
     Json, Router,
     extract::{Request, State},
@@ -58,7 +60,12 @@ async fn deepseek_status(
     ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
         .await
         .map_err(ProviderCredentialHttpError::from_body)?;
-    Ok(Json(state.provider_credentials.deepseek_status().await?))
+    Ok(Json(
+        state
+            .provider_credentials
+            .status(ProviderCredentialId::DeepSeek)
+            .await?,
+    ))
 }
 
 async fn set_deepseek(
@@ -72,7 +79,7 @@ async fn set_deepseek(
     Ok(Json(
         state
             .provider_credentials
-            .set_deepseek(&request.api_key)
+            .set(ProviderCredentialId::DeepSeek, &request.api_key)
             .await?,
     ))
 }
@@ -85,7 +92,12 @@ async fn delete_deepseek(
     ensure_empty_body(request, MAX_EMPTY_BODY_BYTES)
         .await
         .map_err(ProviderCredentialHttpError::from_body)?;
-    Ok(Json(state.provider_credentials.delete_deepseek().await?))
+    Ok(Json(
+        state
+            .provider_credentials
+            .delete(ProviderCredentialId::DeepSeek)
+            .await?,
+    ))
 }
 
 async fn authorize(
