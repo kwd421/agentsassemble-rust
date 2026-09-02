@@ -22,6 +22,7 @@ use tokio_util::sync::CancellationToken;
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
 const PUBLIC_AUTHORITY: &str = "public.example.test";
 const PROXY_SECRET: &str = "manual-ingress-proxy-secret-000000001";
+const HELD_PUBLIC_BODY_BYTES: usize = 256;
 
 struct RunningServer {
     address: SocketAddr,
@@ -287,6 +288,15 @@ async fn classified_public_saturation_preserves_one_local_http_connection() {
     let public_connections =
         join_all((0..127).map(|_| open_public_body_connection(server.address))).await;
 
+    let authority = server.address.to_string();
+    let local = request(
+        server.address,
+        "GET /healthz HTTP/1.1",
+        &format!("Host: {authority}\r\n"),
+    )
+    .await;
+    assert!(local.starts_with("HTTP/1.1 200"), "{local}");
+
     let public_overload = request(
         server.address,
         "GET /api/server-info HTTP/1.1",
@@ -298,16 +308,12 @@ async fn classified_public_saturation_preserves_one_local_http_connection() {
         "classified public traffic consumed the local reserve: {public_overload}"
     );
 
-    let authority = server.address.to_string();
-    let local = request(
-        server.address,
-        "GET /healthz HTTP/1.1",
-        &format!("Host: {authority}\r\n"),
+    join_all(
+        public_connections
+            .into_iter()
+            .map(complete_public_body_connection),
     )
     .await;
-    assert!(local.starts_with("HTTP/1.1 200"), "{local}");
-
-    drop(public_connections);
     let public_after_release = request(
         server.address,
         "GET /api/server-info HTTP/1.1",
@@ -325,7 +331,7 @@ async fn open_public_body_connection(address: SocketAddr) -> TcpStream {
     socket
         .write_all(
             format!(
-                "POST /api/server-info/challenge HTTP/1.1\r\n{}Origin: https://directory.example\r\nContent-Type: application/json\r\nContent-Length: 256\r\nExpect: 100-continue\r\nConnection: close\r\n\r\n",
+                "POST /api/server-info/challenge HTTP/1.1\r\n{}Origin: https://directory.example\r\nContent-Type: application/json\r\nContent-Length: {HELD_PUBLIC_BODY_BYTES}\r\nExpect: 100-continue\r\nConnection: close\r\n\r\n",
                 public_headers()
             )
             .as_bytes(),
@@ -337,6 +343,23 @@ async fn open_public_body_connection(address: SocketAddr) -> TcpStream {
         .unwrap_or_else(|_| panic!("public 100-continue barrier timed out"));
     assert!(response.starts_with("HTTP/1.1 100 Continue"), "{response}");
     socket
+}
+
+async fn complete_public_body_connection(mut socket: TcpStream) {
+    let mut body = br#"{"challenge":"AAAAAAAAAAAAAAAAAAAAAA"}"#.to_vec();
+    body.resize(HELD_PUBLIC_BODY_BYTES, b' ');
+    socket
+        .write_all(&body)
+        .await
+        .unwrap_or_else(|error| panic!("complete public body: {error}"));
+    let mut response = Vec::new();
+    socket
+        .read_to_end(&mut response)
+        .await
+        .unwrap_or_else(|error| panic!("read public terminal response: {error}"));
+    let response = String::from_utf8(response)
+        .unwrap_or_else(|error| panic!("public terminal response is not UTF-8: {error}"));
+    assert!(response.starts_with("HTTP/1.1 200"), "{response}");
 }
 
 async fn read_response_head(socket: &mut TcpStream) -> String {
