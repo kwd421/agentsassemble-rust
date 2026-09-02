@@ -25,6 +25,22 @@ async fn mode_transitions_preserve_delivery_kind_and_ambient_parallelism() {
     )
     .await
     .unwrap_or_else(|error| panic!("switch to ambient: {error}"));
+    assert_eq!(
+        ambient_settings.result["event_seq"],
+        json!(ambient_settings.event.seq)
+    );
+    let ambient_replay = update_mode(
+        &store,
+        &principal,
+        "settings-ambient",
+        &initial_revision,
+        "ambient",
+    )
+    .await
+    .unwrap_or_else(|error| panic!("replay ambient settings: {error}"));
+    assert!(ambient_replay.deduplicated);
+    assert_eq!(ambient_replay.result, ambient_settings.result);
+    assert_eq!(ambient_replay.event.seq, ambient_settings.event.seq);
 
     let Err(stale) = update_mode(
         &store,

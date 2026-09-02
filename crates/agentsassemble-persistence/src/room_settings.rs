@@ -85,7 +85,11 @@ impl SqliteStore {
             next_sequence(&mut transaction, &principal.room_id).await?,
             now,
         );
-        let result = json!({"room_settings": public, "event": event});
+        let result = json!({
+            "room_settings": public,
+            "event": event,
+            "event_seq": event.seq,
+        });
         sqlx::query("UPDATE rooms SET room_json = ?, settings_json = ? WHERE room_id = ?")
             .bind(serde_json::to_string(&room)?)
             .bind(serde_json::to_string(&next)?)
