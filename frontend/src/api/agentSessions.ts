@@ -9,6 +9,7 @@ export interface FrontendLiveAgentCreateRequest {
   catalogRevision?: string;
   displayName: string;
   workspacePath: string;
+  providerEndpoint?: string;
   modelId?: string;
   reasoningEffort?: string;
   serviceTier?: string;

@@ -139,6 +139,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
               catalog_revision: request.catalogRevision || "",
               display_name: request.displayName,
               workspace: request.workspacePath,
+              provider_endpoint: request.providerEndpoint || "",
               model: request.modelId || "",
               reasoning_effort: request.reasoningEffort || "",
               service_tier: request.serviceTier || "",

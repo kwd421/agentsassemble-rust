@@ -17,6 +17,7 @@ const CREDENTIAL_PATHS: Readonly<Record<string, string>> = {
   vercel: "/api/provider-credentials/vercel",
   llmgateway: "/api/provider-credentials/llmgateway",
   tokenrouter: "/api/provider-credentials/tokenrouter",
+  custom_api: "/api/provider-credentials/custom_api",
 };
 
 function credentialPath(providerId: string): string {

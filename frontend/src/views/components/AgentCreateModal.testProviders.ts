@@ -159,6 +159,34 @@ export function tokenRouterProvider(): NativeCliProviderAvailability {
   };
 }
 
+export function customApiProvider(): NativeCliProviderAvailability {
+  return {
+    ...deepSeekProvider(),
+    id: "custom_api",
+    display_name: "Custom API",
+    provider_kind: "custom_openai_api",
+    default_model: "",
+    custom_endpoint: true,
+    custom_model: true,
+    controls: [
+      {
+        key: "max_output_tokens",
+        label: "최대 응답 길이",
+        kind: "select",
+        default_value: "4096",
+        options: [{ value: "4096", label: "4,096 토큰" }],
+      },
+      {
+        key: "permission_mode",
+        label: "권한",
+        kind: "select",
+        default_value: "meeting_read_only",
+        options: [{ value: "meeting_read_only", label: "읽기 전용" }],
+      },
+    ],
+  };
+}
+
 export function ollamaProvider(): NativeCliProviderAvailability {
   return {
     ...deepSeekProvider(),
