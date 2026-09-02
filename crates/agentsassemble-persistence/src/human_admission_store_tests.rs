@@ -4,7 +4,7 @@ use agentsassemble_domain::{
 use chrono::{DateTime, Duration, Utc};
 use sqlx::Row;
 
-use super::derive_session_bearer;
+use super::{SESSION_TTL, derive_session_bearer};
 use crate::{
     HumanAdmissionCommit, HumanAdmissionDecision, HumanAdmissionInput, HumanAdmissionRejection,
     HumanInviteCredentialEvidence, PersistenceError, PreparedHumanAdmission, SqliteStore,
@@ -521,6 +521,10 @@ async fn reusable_identity_replaces_only_its_session_and_preserves_room_authorit
     assert_eq!(
         first.result().guide["session"]["rejoin"],
         "This session cannot be renewed after it expires; ask the host for a new invite link."
+    );
+    assert_eq!(
+        first.result().guide["session"]["expires_in_seconds"].as_i64(),
+        Some(SESSION_TTL.num_seconds())
     );
     set_room_authority(&store, &participant_id).await;
 

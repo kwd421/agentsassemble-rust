@@ -576,7 +576,7 @@ fn human_usage_guide(room_id: &str, participant_id: &str, display_name: &str) ->
         ],
         "etiquette": [],
         "session": {
-            "expires_in_seconds": 3600,
+            "expires_in_seconds": SESSION_TTL.num_seconds(),
             "rejoin": "This session cannot be renewed after it expires; ask the host for a new invite link."
         }
     })

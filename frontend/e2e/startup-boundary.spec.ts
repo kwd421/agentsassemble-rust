@@ -59,7 +59,11 @@ async function admittedPayload(
       welcome: "Welcome",
       how_to: [],
       etiquette: [],
-      session: { expires_in_seconds: 3600, rejoin: "Use the same invite." },
+      session: {
+        expires_in_seconds: 3600,
+        rejoin:
+          "This session cannot be renewed after it expires; ask the host for a new invite link.",
+      },
     },
     server_id: "11111111-1111-4111-8111-111111111111",
     authority_lineage_id: "22222222-2222-4222-8222-222222222222",
