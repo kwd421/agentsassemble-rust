@@ -517,17 +517,31 @@ real provider operation owner. Do not add dummy routes.
 
 ### F-08 — one global HTTP connection budget may let public traffic starve local control
 
-Disposition: `Measure, then Fix or Keep`; medium availability unknown.
+Disposition: `Fixed at c0cb3e2; review pending`; medium availability impact.
 
-`web.rs:327,345` takes one global 128-connection semaphore before ingress trust is
-classified. `http_transport.rs:24-70` bounds headers, buffers, and absolute
-connection lifetime, and public proxy requests reach the same loopback listener.
-No focused TCP test currently proves that public saturation preserves local
-operator/control capacity.
+The prior owner admitted 128 connections before ingress classification with no
+public partition. In the controlled counterfactual, 128 trusted-public requests could
+all remain active; the 128th received 200, consuming the final total permit until a
+connection released it. Each request used the real manual-public proxy headers and
+the server's `100 Continue` response as a barrier while its body remained incomplete.
+This establishes reachable contention without treating it as an unbounded remote
+exploit.
 
-Run a controlled real TCP/proxy boundary test. If contention is reproducible, use
-the smallest owner-level public budget or reserved local capacity; do not add a
-speculative listener framework. This is not yet a proven remote exploit.
+Commit `c0cb3e2` moves both HTTP limits and rejection observation into
+`http_admission.rs`. The existing total remains 128. After canonical ingress trust,
+each classified-public connection retains one of 127 public permits for its lifetime.
+At the real TCP boundary, 127 active public body requests make the next public request
+return 503 while a local `/healthz` request returns 200; releasing those connections
+lets public admission return 200 again. The trust decision remains solely in
+`ingress_trust.rs`.
+
+This is deliberately a partition inside the existing resource ceiling: it adds one
+semaphore, one optional public permit and connection-owned synchronization state, but
+no sockets, tasks, buffers, listener, polling, heartbeat, retry, timer, or fallback.
+Before full headers exist, traffic is still unclassified and can occupy all 128 total
+permits for the existing three-second header deadline. That residual limit is
+explicit; the correction guarantees progress under stable classified-public
+saturation, not absolute pre-classification DoS prevention.
 
 ### F-09 — human invite guide and accepted aliases need current-client proof
 
@@ -1165,7 +1179,7 @@ This table routes findings; it does not add another contract layer.
 | F-05 | frontend composition/product-surface gate | 0B | normal startup/room use issues no request or timer for an absent/deferred owner |
 | F-06 | Agent Session projection/profile owner | 3 | roster, timeline, search, restart, and editor obey Agent/participant SSoTs |
 | F-07 | provider registration/operation descriptor | 0B and 1 | Phase 0B gates false UI operations; Phase 1 closes provider-native operations and exact model selection |
-| F-08 | HTTP admission/transport owner | 0B | controlled TCP saturation records whether local control progresses; design changes only on reproduced contention |
+| F-08 | HTTP admission/transport owner | 0B | closed at `c0cb3e2`; 127 classified-public body requests retain one local total slot, excess public receives 503, and release restores public admission |
 | F-09 | human admission owner | 0B | guide matches expiry/reuse state and only proven current client kinds are accepted |
 | F-10 | provider credential store | 1 | one explicit credential source with visible revoke/restart behavior |
 | F-11 | Rust protocol exporter plus endpoint decoders | 0B | generated semantic types/constants are shared; snapshot/live/history/search/request envelopes, bounds, errors, and strict rejection remain endpoint-local |

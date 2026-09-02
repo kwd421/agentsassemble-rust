@@ -458,13 +458,23 @@ transcript verifies under the pinned Ed25519 key. A self-consistent response sig
 a substituted loopback key therefore fails before any registration request reaches the
 central directory.
 
-The local HTTP/WebSocket adapter has explicit resource budgets: admission is
-bounded immediately after TCP accept, incomplete HTTP headers and request bodies
-have real deadlines, and a consumed one-use ticket must atomically acquire a
-process-wide WebSocket lease before HTTP 101. The active-only lease owner currently
-admits at most 128 connections globally, eight for one principal, and 64 for one
-room; F-08 requires real TCP evidence before changing that shared budget. Checked
-process-local generation IDs prevent stale release from freeing a replacement.
+The local HTTP/WebSocket adapter has explicit resource budgets. HTTP admission is
+bounded at 128 connections immediately after TCP accept. After the existing ingress
+owner classifies a request, a trusted-public connection must also retain one of 127
+public permits for its connection lifetime; local traffic consumes only the total
+budget. Stable classified-public saturation therefore leaves one total slot, returns
+503 to excess public traffic, and does not raise the socket, task, header-buffer, or
+body-buffer ceiling. Trust is unknown before complete headers, so 128 incomplete
+connections can still occupy the total budget for the existing three-second header
+deadline. The public partition is not claimed as an absolute pre-classification DoS
+boundary, and no second listener, trust decision, retry, timer, or fallback exists.
+Non-upgrade HTTP responses already close the connection. Request bodies retain their
+real deadline.
+
+A consumed one-use ticket must atomically acquire a process-wide WebSocket lease
+before HTTP 101. The active-only lease owner admits at most 128 connections globally,
+eight for one principal, and 64 for one room. Checked process-local generation IDs
+prevent stale release from freeing a replacement.
 Product frames stop at 256 KiB, the first finite subscription has a ten-second
 deadline, and the raw governor owns message, byte, and control-frame windows.
 Binary frames are rejected. The audited baseline additionally wraps every frame in

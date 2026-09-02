@@ -5994,3 +5994,42 @@ documentation correction addresses that single shared Low. Critical-web Pro and
 Daybreaker each then manually approve individual `e13210f`, corrected exact
 `67303e0..e13210f`, and HEAD `e13210f` at `C0/H0/M0/L0` with no actionable
 finding.
+
+### F-08 classified-public HTTP capacity: 2026-09-02
+
+The measured prior owner had one 128-connection HTTP semaphore and no classified-
+public partition. A controlled counterfactual with the public ceiling also at 128
+kept 128 valid manual-public requests active and returned 200 to the 128th request,
+so no total permit remained until release. The test uses exact public proxy headers,
+an `Expect: 100-continue` request, and the server's real `100 Continue` response as
+the synchronization barrier; it does not sleep or inspect a semaphore.
+
+Source commit `c0cb3e2` keeps the total ceiling at 128 and adds a 127-connection
+classified-public ceiling at the existing ingress-trust boundary. With 127 public
+request bodies active, the next public request returns 503, an exact local
+`/healthz` request returns 200, and public admission returns 200 after the held
+connections are dropped. `cargo test -p agentsassemble-server --test
+ingress_boundary` passes all 6 real TCP cases in 0.11 seconds, and `cargo test -p
+agentsassemble-server --tests` passes every server unit, TCP, WebSocket, and lifecycle
+suite. Server all-target Clippy, architecture/source-growth, policy, and diff gates
+pass.
+
+The change adds no listener, socket, task, request buffer, retry, polling, heartbeat,
+timer, fallback, or duplicate trust rule. One additional semaphore is shared by the
+server, and a classified-public connection retains one permit in its existing
+connection-owned admission state. The existing 128 socket/task ceiling, three-second
+header deadline, ten-second body deadline, 30-second absolute connection lifetime,
+and non-upgrade `Connection: close` owner remain. Before headers are complete, all
+connections are unclassified and can still occupy the total ceiling for the header
+deadline; no stronger claim is made.
+
+The first complete verification attempt failed closed before compilation because the
+active Cargo target occupied 25,846,026,240 bytes, above the repository's measured
+24 GiB maintenance ceiling. With no repository Cargo or Tauri build active, explicit
+`make artifact-prune` removed 28,157 regenerable files and 24.7 GiB. A cold
+`/usr/bin/time -l make verify` then passes every repository gate in 456.61 seconds:
+97 frontend files/621 tests, 25 desktop tests, 160 provider tests, 242 persistence
+tests, 88 server tests, and the complete domain, protocol, TCP, and WebSocket suites.
+Its maximum resident-set report is 2,415,034,368 bytes, and the retained next-build
+target is 21 GiB. These are validation and artifact-lifecycle costs, not runtime
+latency or memory claims. Manual cross-review of `c0cb3e2` is pending.

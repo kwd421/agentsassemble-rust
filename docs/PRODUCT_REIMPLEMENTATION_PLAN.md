@@ -247,8 +247,10 @@ Correction substage:
   trust-boundary error handling remain independent.
 - Remove the room-command request-ID compatibility fallback and use the existing
   secure fail-closed browser identity primitive.
-- Decide the public TCP capacity finding through a controlled boundary test before
-  changing the listener design.
+- Close F-08 at the existing HTTP admission owner: controlled TCP evidence supports
+  a 127-connection trusted-public partition inside the unchanged 128-connection
+  total ceiling. Keep pre-header classification limits explicit; do not add a second
+  listener, retry, timer, or fallback.
 - Make closed provider-catalog authority terminal instead of busy-spinning each
   connected room socket.
 - Prove a current finite consumer for every fixed human-invite token claim and remove

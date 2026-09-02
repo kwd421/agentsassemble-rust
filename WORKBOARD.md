@@ -138,7 +138,7 @@ contracts, findings, or verification journals.
   F-06 `8903445..7566d3f`, and HEAD `7566d3f` at `C0/H0/M0/L0`; `e912e75` alone
   retains its historical L1. The complete Agent profile mutation/asset owner remains
   open.
-- Active task: F-07 provider operation exposure. Independent commits `582a02e`,
+- Completed: F-07 provider operation exposure. Independent commits `582a02e`,
   `edfb7c5`, and `c890a9a` make the Rust registration descriptor the credential-
   operation exposure owner, remove the absent catalog-refresh request, and remove the
   absent provider-usage request/state. Codex, Antigravity, and OpenCode no longer expose
@@ -200,6 +200,15 @@ contracts, findings, or verification journals.
   `e13210f`. Each then approves individual `e13210f`, corrected exact
   `67303e0..e13210f`, and HEAD `e13210f` at `C0/H0/M0/L0`. No broader
   provider-completion claim is made.
+- Active task: F-08 HTTP admission capacity. Source commit `c0cb3e2` retains the
+  128-connection total ceiling and adds a 127-connection budget only after the
+  existing ingress owner classifies a connection as trusted public. A real TCP
+  request-body barrier proves one local health request progresses while 127 public
+  connections are active, the next public request receives 503, and public admission
+  resumes after release. Pre-header sockets remain unclassified and can occupy all
+  total permits for the existing three-second header deadline; this is an explicit
+  residual limit, not a hidden fallback. Complete verification passes; manual source
+  review has not yet been requested.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
