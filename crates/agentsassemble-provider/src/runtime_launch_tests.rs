@@ -303,6 +303,7 @@ async fn post_spawn_pre_anchor_cancellation_requires_the_guardian_receipt() {
         .unwrap_or_else(|error| panic!("bind delayed guardian harness: {error}"));
     let adapter = ProviderAdapter::with_factory(Arc::new(ProductionDriverFactory {
         credentials: crate::ProviderCredentialStore::production(),
+        state_root: None,
         guardian: Some(guardian),
     }));
     let pending_adapter = adapter.clone();

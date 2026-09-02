@@ -1,4 +1,5 @@
 use crate::{
+    acp_client::AcpPermissionPolicy,
     acp_runtime::AcpRuntime,
     cursor::effective_model,
     driver::{
@@ -24,8 +25,15 @@ impl CursorAcpDriver {
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
-        let runtime =
-            AcpRuntime::spawn(session, runtime_lease, guardian, &["acp".to_owned()], &[]).await?;
+        let runtime = AcpRuntime::spawn(
+            session,
+            runtime_lease,
+            guardian,
+            &["acp".to_owned()],
+            &[],
+            AcpPermissionPolicy::Reject,
+        )
+        .await?;
         Ok(Self { runtime })
     }
 
@@ -37,7 +45,13 @@ impl CursorAcpDriver {
             "Provider processes are unsupported on this platform.",
         )
         .into());
-        let runtime = AcpRuntime::spawn(session, &["acp".to_owned()], &[]).await?;
+        let runtime = AcpRuntime::spawn(
+            session,
+            &["acp".to_owned()],
+            &[],
+            AcpPermissionPolicy::Reject,
+        )
+        .await?;
         Ok(Self { runtime })
     }
 }

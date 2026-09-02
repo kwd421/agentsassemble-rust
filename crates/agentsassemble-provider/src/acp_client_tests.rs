@@ -15,7 +15,7 @@ use tokio::{
     task::JoinHandle,
 };
 
-use super::{AcpClient, MAX_PROTOCOL_LINE_BYTES};
+use super::{AcpClient, AcpPermissionPolicy, MAX_PROTOCOL_LINE_BYTES};
 
 #[tokio::test]
 async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
@@ -97,7 +97,7 @@ async fn fixture(cancel_prompt: bool) -> (AcpClient, JoinHandle<()>, oneshot::Re
         cancel_prompt,
         prompt_seen_sender,
     ));
-    let client = AcpClient::connect(client_input, client_output)
+    let client = AcpClient::connect(client_input, client_output, AcpPermissionPolicy::Reject)
         .await
         .unwrap_or_else(|error| panic!("connect ACP fixture: {:?}", error.error));
     (client, task, prompt_seen)

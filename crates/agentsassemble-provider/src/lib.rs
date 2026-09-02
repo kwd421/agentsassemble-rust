@@ -26,6 +26,8 @@ mod custom_api;
 mod deepseek;
 mod driver;
 mod filesystem;
+mod grok;
+mod grok_acp;
 #[cfg(unix)]
 mod guardian;
 #[cfg(unix)]

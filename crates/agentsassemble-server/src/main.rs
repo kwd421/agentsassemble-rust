@@ -95,10 +95,11 @@ async fn main() -> anyhow::Result<()> {
             signal.cancel();
         }
     });
-    let mut state = AppState::local(
+    let mut state = AppState::local_with_provider_state_root(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
         ProviderCatalogService::discovering(),
+        database_state_root(&database_path)?,
     )
     .await?;
     state = configure_startup_surface(

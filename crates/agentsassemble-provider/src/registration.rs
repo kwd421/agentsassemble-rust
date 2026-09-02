@@ -1,8 +1,10 @@
-#[cfg(unix)]
-use std::path::Path;
 #[cfg(windows)]
 use std::sync::Arc;
-use std::{future::Future, pin::Pin};
+use std::{
+    future::Future,
+    path::{Path, PathBuf},
+    pin::Pin,
+};
 
 use agentsassemble_domain::{DurableAgentSession, ProviderAvailability};
 use tokio_util::sync::CancellationToken;
@@ -25,6 +27,8 @@ use crate::{
     cursor_acp::CursorAcpDriver,
     custom_api, deepseek,
     driver::{DriverError, DriverFuture, ProviderDriver},
+    grok,
+    grok_acp::GrokAcpDriver,
     launch_error::DriverLaunchError,
     llm_gateway, lm_studio, ollama,
     opencode::OpenCodeDriver,
@@ -143,6 +147,23 @@ pub(crate) static CURSOR_PROVIDER: ProviderRegistration = ProviderRegistration {
     configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_cursor_registered,
     launch: launch_cursor,
+};
+
+pub(crate) static GROK_PROVIDER: ProviderRegistration = ProviderRegistration {
+    id: "grok",
+    display_name: "Grok",
+    provider_kind: "grok_live_session",
+    runtime_kind: "live_cli",
+    transport: "acp_stdio",
+    catalog_group: "harness",
+    workspace_required: true,
+    connection_kind: "native_cli_bridge",
+    executable_required: true,
+    probe_executable: "grok",
+    credential_available: false,
+    configuration_authority: ProviderConfigurationAuthority::Catalog,
+    discover: discover_grok_registered,
+    launch: launch_grok,
 };
 
 pub(crate) static DEEPSEEK_PROVIDER: ProviderRegistration = ProviderRegistration {
@@ -264,11 +285,12 @@ pub(crate) static CUSTOM_API_PROVIDER: ProviderRegistration = ProviderRegistrati
     launch: launch_custom_api,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 13] = [
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 14] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
     &CURSOR_PROVIDER,
+    &GROK_PROVIDER,
     &DEEPSEEK_PROVIDER,
     &CEREBRAS_PROVIDER,
     &OPENROUTER_PROVIDER,
@@ -336,6 +358,13 @@ fn discover_cursor_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(cursor::discover(provider, cancellation))
+}
+
+fn discover_grok_registered(
+    provider: ProviderAvailability,
+    cancellation: &CancellationToken,
+) -> ProviderDiscoveryFuture<'_> {
+    Box::pin(grok::discover(provider, cancellation))
 }
 
 fn discover_deepseek_registered(
@@ -423,6 +452,7 @@ pub(crate) trait DriverFactory: Send + Sync {
 
 pub(crate) struct ProductionDriverFactory {
     pub(crate) credentials: ProviderCredentialStore,
+    pub(crate) state_root: Option<PathBuf>,
     #[cfg(unix)]
     pub(crate) guardian: Option<GuardianLaunch>,
     #[cfg(windows)]
@@ -445,6 +475,7 @@ impl ProductionDriverFactory {
         .and_then(|executable| GuardianLaunch::production(&executable).ok());
         Self {
             credentials,
+            state_root: None,
             #[cfg(unix)]
             guardian,
             #[cfg(windows)]
@@ -454,10 +485,17 @@ impl ProductionDriverFactory {
         }
     }
 
+    pub(crate) fn at_state_root(credentials: ProviderCredentialStore, state_root: &Path) -> Self {
+        let mut factory = Self::local(credentials);
+        factory.state_root = Some(state_root.to_path_buf());
+        factory
+    }
+
     #[cfg(unix)]
     pub(crate) fn with_guardian(executable: &Path) -> Self {
         Self {
             credentials: ProviderCredentialStore::production(),
+            state_root: None,
             guardian: GuardianLaunch::production(executable).ok(),
         }
     }
@@ -586,6 +624,32 @@ fn launch_cursor<'a>(
         .await?;
         #[cfg(not(unix))]
         let driver = CursorAcpDriver::spawn(session).await?;
+        Ok(Box::new(driver) as Box<dyn ProviderDriver>)
+    })
+}
+
+fn launch_grok<'a>(
+    factory: &'a ProductionDriverFactory,
+    session: &'a DurableAgentSession,
+    runtime_lease: &'a HeldRuntimeLease,
+) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+    Box::pin(async move {
+        let state_root = factory.state_root.as_deref().ok_or_else(|| {
+            DriverLaunchError::safe(DriverError::new(
+                "provider_state_unavailable",
+                "Private Grok provider state is unavailable.",
+            ))
+        })?;
+        #[cfg(unix)]
+        let driver = GrokAcpDriver::spawn(
+            session,
+            runtime_lease,
+            factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
+            state_root,
+        )
+        .await?;
+        #[cfg(not(unix))]
+        let driver = GrokAcpDriver::spawn(session, state_root).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
 }

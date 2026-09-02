@@ -1,6 +1,4 @@
-#[cfg(unix)]
-use std::path::Path;
-use std::{collections::HashMap, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
 
 use agentsassemble_domain::DurableAgentSession;
 use thiserror::Error;
@@ -208,6 +206,18 @@ impl ProviderAdapter {
     #[must_use]
     pub fn with_credentials(credentials: ProviderCredentialStore) -> Self {
         Self::with_factory(Arc::new(ProductionDriverFactory::local(credentials)))
+    }
+
+    #[doc(hidden)]
+    #[must_use]
+    pub fn with_credentials_and_state_root(
+        credentials: ProviderCredentialStore,
+        state_root: &Path,
+    ) -> Self {
+        Self::with_factory(Arc::new(ProductionDriverFactory::at_state_root(
+            credentials,
+            state_root,
+        )))
     }
 
     /// Builds an adapter whose Unix custody helpers re-execute an exact host binary.

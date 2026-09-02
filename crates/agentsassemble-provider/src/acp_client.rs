@@ -1,4 +1,5 @@
 use std::{
+    collections::HashMap,
     io,
     sync::{
         Arc, Mutex,
@@ -29,24 +30,42 @@ use tokio_util::{
     sync::CancellationToken,
 };
 
+use crate::room_portal_tool_contract::PROVIDER_ROOM_TOOL_NAMES;
 use crate::{driver::DriverError, launch_error::DriverLaunchError};
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
 const MAX_RESPONSE_BYTES: usize = 128 * 1024;
+type ProtocolReady = (ConnectionTo<Agent>, AgentCapabilities, Option<String>);
 
 #[derive(Default)]
 struct ProtocolState {
+    permission_policy: AcpPermissionPolicy,
+    room_observation_active: bool,
     session_id: Option<SessionId>,
     active_turn_id: Option<String>,
+    active_tools: HashMap<String, String>,
     output: String,
     output_overflow: bool,
+}
+
+#[derive(Clone, Copy, Default)]
+pub(crate) enum AcpPermissionPolicy {
+    #[default]
+    Reject,
+    RoomTools,
 }
 
 struct ActiveTurn {
     turn_id: String,
     completion: watch::Receiver<Option<Result<StopReason, DriverError>>>,
     task: Option<JoinHandle<()>>,
+}
+
+struct OpenedSession {
+    attachment: AcpAttachment,
+    id: SessionId,
+    options: Option<Vec<SessionConfigOption>>,
 }
 
 pub(super) struct AcpAttachment {
@@ -66,6 +85,7 @@ pub(super) struct AcpClient {
     task: JoinHandle<()>,
     connection: ConnectionTo<Agent>,
     capabilities: AgentCapabilities,
+    initialized_model_id: Option<String>,
     state: Arc<Mutex<ProtocolState>>,
     attached_session_id: Option<SessionId>,
     active_turn: Option<ActiveTurn>,
@@ -73,12 +93,19 @@ pub(super) struct AcpClient {
 }
 
 impl AcpClient {
-    pub(super) async fn connect<I, O>(stdin: I, stdout: O) -> Result<Self, DriverLaunchError>
+    pub(super) async fn connect<I, O>(
+        stdin: I,
+        stdout: O,
+        permission_policy: AcpPermissionPolicy,
+    ) -> Result<Self, DriverLaunchError>
     where
         I: tokio::io::AsyncWrite + Unpin + Send + 'static,
         O: tokio::io::AsyncRead + Unpin + Send + 'static,
     {
-        let state = Arc::new(Mutex::new(ProtocolState::default()));
+        let state = Arc::new(Mutex::new(ProtocolState {
+            permission_policy,
+            ..ProtocolState::default()
+        }));
         let shutdown = CancellationToken::new();
         let closed = Arc::new(AtomicBool::new(false));
         let (ready_sender, ready_receiver) = oneshot::channel();
@@ -94,7 +121,7 @@ impl AcpClient {
             Ok(Ok(ready)) => ready,
             Ok(Err(_)) | Err(_) => Err(DriverLaunchError::uncertain(protocol_error())),
         };
-        let (connection, capabilities) = match ready {
+        let (connection, capabilities, initialized_model_id) = match ready {
             Ok(ready) => ready,
             Err(error) => {
                 shutdown.cancel();
@@ -109,6 +136,7 @@ impl AcpClient {
             task,
             connection,
             capabilities,
+            initialized_model_id,
             state,
             attached_session_id: None,
             active_turn: None,
@@ -123,66 +151,32 @@ impl AcpClient {
         server: McpServer,
         model: &str,
     ) -> Result<AcpAttachment, DriverError> {
-        if self.attached_session_id.is_some() || self.active_turn.is_some() {
-            return Err(protocol_error());
-        }
-        if !self.capabilities.mcp_capabilities.http {
+        let opened = self
+            .open_session(workspace, existing_session_id, server)
+            .await?;
+        self.select_model(&opened.id, opened.options, model).await?;
+        self.bind_session(opened.id)?;
+        Ok(opened.attachment)
+    }
+
+    pub(super) async fn attach_process_model(
+        &mut self,
+        workspace: &str,
+        existing_session_id: &str,
+        server: McpServer,
+        model: &str,
+    ) -> Result<AcpAttachment, DriverError> {
+        if self.initialized_model_id.as_deref() != Some(model) {
             return self.poison(DriverError::new(
-                "provider_capability_missing",
-                "The ACP provider does not support the required HTTP MCP transport.",
+                "provider_model_unconfirmed",
+                "The ACP provider did not confirm the process-selected model.",
             ));
         }
-        let reused = !existing_session_id.is_empty();
-        let (session_id, options) = if reused {
-            if !self.capabilities.load_session {
-                return self.poison(DriverError::new(
-                    "provider_session_restore_unsupported",
-                    "The ACP provider cannot restore the durable provider session.",
-                ));
-            }
-            let id = SessionId::new(existing_session_id.to_owned());
-            let Ok(response) = self
-                .connection
-                .send_request(
-                    LoadSessionRequest::new(id.clone(), workspace).mcp_servers(vec![server]),
-                )
-                .block_task()
-                .await
-            else {
-                return self.poison(protocol_error());
-            };
-            (id, response.config_options)
-        } else {
-            let Ok(response) = self
-                .connection
-                .send_request(NewSessionRequest::new(workspace).mcp_servers(vec![server]))
-                .block_task()
-                .await
-            else {
-                return self.poison(protocol_error());
-            };
-            (response.session_id, response.config_options)
-        };
-        let encoded_session_id = session_id.to_string();
-        if encoded_session_id.is_empty()
-            || encoded_session_id.len() > 200
-            || encoded_session_id.trim() != encoded_session_id
-            || encoded_session_id.chars().any(char::is_control)
-        {
-            return self.poison(protocol_error());
-        }
-        self.select_model(&session_id, options, model).await?;
-        {
-            let Ok(mut state) = self.state.lock() else {
-                return self.poison(protocol_error());
-            };
-            state.session_id = Some(session_id.clone());
-        }
-        self.attached_session_id = Some(session_id);
-        Ok(AcpAttachment {
-            session_id: encoded_session_id,
-            reused,
-        })
+        let opened = self
+            .open_session(workspace, existing_session_id, server)
+            .await?;
+        self.bind_session(opened.id)?;
+        Ok(opened.attachment)
     }
 
     pub(super) async fn prompt(
@@ -241,6 +235,13 @@ impl AcpClient {
         self.poisoned || self.is_closed()
     }
 
+    pub(super) fn set_room_observation_active(&self, active: bool) -> Result<(), DriverError> {
+        self.state
+            .lock()
+            .map(|mut state| state.room_observation_active = active)
+            .map_err(|_| protocol_error())
+    }
+
     pub(super) async fn shutdown(&mut self) {
         self.shutdown.cancel();
         self.task.abort();
@@ -262,6 +263,7 @@ impl AcpClient {
                 return self.poison(protocol_error());
             };
             state.active_turn_id = Some(turn_id.to_owned());
+            state.active_tools.clear();
             state.output.clear();
             state.output_overflow = false;
         }
@@ -330,6 +332,7 @@ impl AcpClient {
         };
         if state.active_turn_id.as_deref() != Some(turn_id) || state.output_overflow {
             state.active_turn_id = None;
+            state.active_tools.clear();
             state.output.clear();
             self.poisoned = true;
             return Err(DriverError::new(
@@ -338,7 +341,83 @@ impl AcpClient {
             ));
         }
         state.active_turn_id = None;
+        state.active_tools.clear();
         Ok(std::mem::take(&mut state.output))
+    }
+
+    async fn open_session(
+        &mut self,
+        workspace: &str,
+        existing_session_id: &str,
+        server: McpServer,
+    ) -> Result<OpenedSession, DriverError> {
+        if self.attached_session_id.is_some() || self.active_turn.is_some() {
+            return Err(protocol_error());
+        }
+        if !self.capabilities.mcp_capabilities.http {
+            return self.poison(DriverError::new(
+                "provider_capability_missing",
+                "The ACP provider does not support the required HTTP MCP transport.",
+            ));
+        }
+        let reused = !existing_session_id.is_empty();
+        let (id, options) = if reused {
+            if !self.capabilities.load_session {
+                return self.poison(DriverError::new(
+                    "provider_session_restore_unsupported",
+                    "The ACP provider cannot restore the durable provider session.",
+                ));
+            }
+            let id = SessionId::new(existing_session_id.to_owned());
+            let Ok(response) = self
+                .connection
+                .send_request(
+                    LoadSessionRequest::new(id.clone(), workspace).mcp_servers(vec![server]),
+                )
+                .block_task()
+                .await
+            else {
+                return self.poison(protocol_error());
+            };
+            (id, response.config_options)
+        } else {
+            let Ok(response) = self
+                .connection
+                .send_request(NewSessionRequest::new(workspace).mcp_servers(vec![server]))
+                .block_task()
+                .await
+            else {
+                return self.poison(protocol_error());
+            };
+            (response.session_id, response.config_options)
+        };
+        let encoded = id.to_string();
+        if encoded.is_empty()
+            || encoded.len() > 200
+            || encoded.trim() != encoded
+            || encoded.chars().any(char::is_control)
+        {
+            return self.poison(protocol_error());
+        }
+        Ok(OpenedSession {
+            attachment: AcpAttachment {
+                session_id: encoded,
+                reused,
+            },
+            id,
+            options,
+        })
+    }
+
+    fn bind_session(&mut self, session_id: SessionId) -> Result<(), DriverError> {
+        {
+            let Ok(mut state) = self.state.lock() else {
+                return self.poison(protocol_error());
+            };
+            state.session_id = Some(session_id.clone());
+        }
+        self.attached_session_id = Some(session_id);
+        Ok(())
     }
 
     async fn select_model(
@@ -411,7 +490,7 @@ fn spawn_protocol<I, O>(
     state: Arc<Mutex<ProtocolState>>,
     shutdown: CancellationToken,
     closed: Arc<AtomicBool>,
-    ready: oneshot::Sender<Result<(ConnectionTo<Agent>, AgentCapabilities), DriverLaunchError>>,
+    ready: oneshot::Sender<Result<ProtocolReady, DriverLaunchError>>,
 ) -> JoinHandle<()>
 where
     I: tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -452,7 +531,8 @@ where
                     .await;
                 match initialized {
                     Ok(initialized) if initialized.protocol_version == ProtocolVersion::V1 => {
-                        let _ = ready.send(Ok((connection, initialized.agent_capabilities)));
+                        let model = initialized_model_id(initialized.meta.as_ref());
+                        let _ = ready.send(Ok((connection, initialized.agent_capabilities, model)));
                     }
                     _ => {
                         let _ = ready.send(Err(DriverLaunchError::safe(protocol_error())));
@@ -475,15 +555,28 @@ fn record_notification(state: &Mutex<ProtocolState>, notification: SessionNotifi
     {
         return;
     }
-    if let SessionUpdate::AgentMessageChunk(chunk) = notification.update
-        && let ContentBlock::Text(text) = chunk.content
-    {
-        if state.output.len().saturating_add(text.text.len()) > MAX_RESPONSE_BYTES {
-            state.output_overflow = true;
-            state.output.clear();
-        } else if !state.output_overflow {
-            state.output.push_str(&text.text);
+    match notification.update {
+        SessionUpdate::AgentMessageChunk(chunk) => {
+            if let ContentBlock::Text(text) = chunk.content {
+                if state.output.len().saturating_add(text.text.len()) > MAX_RESPONSE_BYTES {
+                    state.output_overflow = true;
+                    state.output.clear();
+                } else if !state.output_overflow {
+                    state.output.push_str(&text.text);
+                }
+            }
         }
+        SessionUpdate::ToolCall(tool) => record_tool_identity(
+            &mut state.active_tools,
+            tool.tool_call_id.to_string(),
+            tool.raw_input.as_ref(),
+        ),
+        SessionUpdate::ToolCallUpdate(tool) => record_tool_identity(
+            &mut state.active_tools,
+            tool.tool_call_id.to_string(),
+            tool.fields.raw_input.as_ref(),
+        ),
+        _ => {}
     }
 }
 
@@ -497,16 +590,38 @@ fn permission_response(
     if state.session_id.as_ref() != Some(&request.session_id) || state.active_turn_id.is_none() {
         return RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled);
     }
-    let selected = request
-        .options
-        .iter()
-        .find(|option| option.kind == PermissionOptionKind::RejectOnce)
-        .or_else(|| {
-            request
-                .options
-                .iter()
-                .find(|option| option.kind == PermissionOptionKind::RejectAlways)
-        });
+    let requested_tool = request
+        .tool_call
+        .fields
+        .raw_input
+        .as_ref()
+        .and_then(room_tool_identity);
+    let cached_tool = state
+        .active_tools
+        .get(&request.tool_call.tool_call_id.to_string())
+        .map(String::as_str);
+    let allow = matches!(state.permission_policy, AcpPermissionPolicy::RoomTools)
+        && state.room_observation_active
+        && requested_tool.is_some()
+        && cached_tool != Some("")
+        && cached_tool.is_none_or(|cached| Some(cached) == requested_tool);
+    let selected = if allow {
+        request
+            .options
+            .iter()
+            .find(|option| option.kind == PermissionOptionKind::AllowOnce)
+    } else {
+        request
+            .options
+            .iter()
+            .find(|option| option.kind == PermissionOptionKind::RejectOnce)
+            .or_else(|| {
+                request
+                    .options
+                    .iter()
+                    .find(|option| option.kind == PermissionOptionKind::RejectAlways)
+            })
+    };
     selected.map_or_else(
         || RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled),
         |option| {
@@ -515,6 +630,44 @@ fn permission_response(
             ))
         },
     )
+}
+
+fn record_tool_identity(
+    active_tools: &mut HashMap<String, String>,
+    tool_call_id: String,
+    raw_input: Option<&serde_json::Value>,
+) {
+    let Some(tool) = raw_input.and_then(room_tool_identity) else {
+        return;
+    };
+    match active_tools.entry(tool_call_id) {
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            entry.insert(tool.to_owned());
+        }
+        std::collections::hash_map::Entry::Occupied(mut entry) if entry.get() != tool => {
+            entry.insert(String::new());
+        }
+        std::collections::hash_map::Entry::Occupied(_) => {}
+    }
+}
+
+fn room_tool_identity(raw_input: &serde_json::Value) -> Option<&str> {
+    let name = raw_input.get("tool_name")?.as_str()?;
+    let bare = name
+        .strip_prefix("agentsassemble_room__")
+        .or_else(|| name.strip_prefix("agentsassemble_room_"))
+        .unwrap_or(name);
+    PROVIDER_ROOM_TOOL_NAMES.contains(&bare).then_some(bare)
+}
+
+fn initialized_model_id(
+    meta: Option<&serde_json::Map<String, serde_json::Value>>,
+) -> Option<String> {
+    let model = meta?.get("modelState")?.get("currentModelId")?.as_str()?;
+    (!model.is_empty()
+        && model.len() <= crate::catalog::MAX_OPTION_VALUE_BYTES
+        && !model.chars().any(char::is_control))
+    .then(|| model.to_owned())
 }
 
 fn select_contains(kind: &SessionConfigKind, model: &str) -> bool {

@@ -70,6 +70,32 @@ impl AppState {
         .await
     }
 
+    /// Builds the production local runtime with provider state beside the database.
+    ///
+    /// # Errors
+    ///
+    /// Rejects missing or malformed persistent host identity state.
+    pub async fn local_with_provider_state_root(
+        store: SqliteStore,
+        tickets: TicketStore,
+        provider_catalog: ProviderCatalogService,
+        state_root: &Path,
+    ) -> Result<Self, AppStateBuildError> {
+        let provider_credentials = ProviderCredentialStore::production();
+        let provider_adapter = ProviderAdapter::with_credentials_and_state_root(
+            provider_credentials.clone(),
+            state_root,
+        );
+        Self::local_with_provider_dependencies(
+            store,
+            tickets,
+            provider_catalog,
+            provider_adapter,
+            provider_credentials,
+        )
+        .await
+    }
+
     /// Builds a local runtime with the database-bound central host identity.
     ///
     /// # Errors

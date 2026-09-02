@@ -15,7 +15,7 @@ use tokio::{
 #[cfg(not(unix))]
 use crate::process::sanitize_environment;
 use crate::{
-    acp_client::AcpClient,
+    acp_client::{AcpClient, AcpPermissionPolicy},
     driver::{DriverError, ProviderTurnRequest},
     filesystem::{BoundExecutable, bind_executable_with_children},
     launch_error::DriverLaunchError,
@@ -48,6 +48,7 @@ impl AcpRuntime {
         guardian: &GuardianLaunch,
         arguments: &[String],
         environment: &[(String, String)],
+        permission_policy: AcpPermissionPolicy,
     ) -> Result<Self, DriverLaunchError> {
         let executable = bind(session).await?;
         let room_portal = create_room_portal().await?;
@@ -61,7 +62,7 @@ impl AcpRuntime {
         )
         .await?;
         let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
-        let client = AcpClient::connect(pipes.stdin, pipes.stdout).await?;
+        let client = AcpClient::connect(pipes.stdin, pipes.stdout, permission_policy).await?;
         Ok(Self {
             process_group,
             _executable_guard: executable,
@@ -76,6 +77,7 @@ impl AcpRuntime {
         session: &DurableAgentSession,
         arguments: &[String],
         environment: &[(String, String)],
+        permission_policy: AcpPermissionPolicy,
     ) -> Result<Self, DriverLaunchError> {
         #[cfg(not(any(unix, windows)))]
         return Err(DriverError::new(
@@ -114,7 +116,7 @@ impl AcpRuntime {
             .take()
             .ok_or_else(|| DriverLaunchError::uncertain(protocol_error()))?;
         let stderr_task = tokio::spawn(drain_stderr(stderr));
-        let client = AcpClient::connect(stdin, stdout).await?;
+        let client = AcpClient::connect(stdin, stdout, permission_policy).await?;
         Ok(Self {
             child,
             _executable_guard: executable,
@@ -182,7 +184,10 @@ impl AcpRuntime {
             allowed_agent_ids: &observation.allowed_agent_ids,
             tabletop_tools: observation.tabletop_tools,
             tool_ingress: observation.room_tool_ingress.clone(),
-        })
+        })?;
+        self.client
+            .set_room_observation_active(true)
+            .map_err(|_| RoomPortalError::Authority)
     }
 
     pub(crate) fn finish_observation(
@@ -193,11 +198,15 @@ impl AcpRuntime {
             .room_observation
             .as_ref()
             .ok_or(RoomPortalError::Observation)?;
+        self.client
+            .set_room_observation_active(false)
+            .map_err(|_| RoomPortalError::Authority)?;
         self.room_portal
             .finish_observation(&request.turn_id, observation.input_up_to_seq)
     }
 
     pub(crate) fn abort_observation(&mut self) {
+        let _ = self.client.set_room_observation_active(false);
         let _ = self.room_portal.end_observation();
     }
 }
