@@ -7,8 +7,10 @@ import type { RoomChannel } from "../types/generated/RoomChannel";
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreationProjectionFromEvent,
+  agentSessionProjectionsMatch,
   agentSessionIsValid,
   joinedParticipantFromEvent,
+  participantProjectionsMatch,
 } from "./participantEventContract";
 import { isParticipantRole } from "./participantRole";
 import { providerCatalogIsValid } from "./providerCatalogContract";
@@ -137,11 +139,14 @@ export function participantProjectionIsValid(event: RoomEvent): boolean {
     if (event.type === "agent_session_created") agentCreationProjectionFromEvent(event);
     if (event.type === "agent_session_state") {
       const eventRecord = event as unknown as Record<string, unknown>;
+      const participantId = eventRecord.participant_id;
       if (
+        typeof participantId !== "string" ||
+        !participantId ||
         !agentSessionIsValid(
           eventRecord.agent_session,
           event.room_id,
-          String(event.participant_id || ""),
+          participantId,
         )
       ) {
         return false;
@@ -327,7 +332,14 @@ export function commandAckResultIsValid(
     );
   }
   if (action.startsWith("agent.")) {
-    const expectedAgentId = action === "agent.create" ? "" : String(payload.agent_id || "");
+    if (action === "agent.create") {
+      if (!hasDurableEvent || event?.type !== "agent_session_created") return false;
+      return (
+        agentSessionProjectionsMatch(result.agent_session, event.agent_session) &&
+        participantProjectionsMatch(result.participant, event.participant)
+      );
+    }
+    const expectedAgentId = String(payload.agent_id || "");
     return agentSessionIsValid(result.agent_session, expectedRoomId, expectedAgentId);
   }
   if (action === "room.vote.summary") {

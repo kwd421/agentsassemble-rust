@@ -1,8 +1,15 @@
 import type { RoomAgentSession, RoomEvent, RoomMember } from "../api";
+import type { AgentSession } from "../types/generated/AgentSession";
+import type { Participant } from "../types/generated/Participant";
+import type { PersonaAssetSummary } from "../types/generated/PersonaAssetSummary";
 import { isParticipantRole } from "./participantRole";
-import { assertExactKeys, strictRecord } from "./strictJsonContract";
+import {
+  assertExactKeys,
+  strictRecord,
+  type ExactGeneratedKeys,
+} from "./strictJsonContract";
 
-const PARTICIPANT_KEYS = [
+const GENERATED_PARTICIPANT_KEYS = [
   "room_id",
   "participant_id",
   "display_name",
@@ -14,7 +21,11 @@ const PARTICIPANT_KEYS = [
   "muted",
   "created_at",
   "updated_at",
-] as const;
+] as const satisfies readonly (keyof Participant)[];
+const PARTICIPANT_KEYS: ExactGeneratedKeys<
+  Participant,
+  typeof GENERATED_PARTICIPANT_KEYS
+> = GENERATED_PARTICIPANT_KEYS;
 
 const GENERATED_AGENT_SESSION_KEYS = [
   "room_id",
@@ -55,15 +66,10 @@ const GENERATED_AGENT_SESSION_KEYS = [
   "provider_session_reused",
   "created_at",
   "updated_at",
-] as const satisfies readonly (keyof RoomAgentSession)[];
-
-type ExactGeneratedKeys<
-  Value,
-  Keys extends readonly (keyof Value)[],
-> = Exclude<keyof Value, Keys[number]> extends never ? Keys : never;
+] as const satisfies readonly (keyof AgentSession)[];
 
 const AGENT_SESSION_KEYS: ExactGeneratedKeys<
-  RoomAgentSession,
+  AgentSession,
   typeof GENERATED_AGENT_SESSION_KEYS
 > = GENERATED_AGENT_SESSION_KEYS;
 
@@ -104,7 +110,11 @@ const PERSONA_SUMMARY_KEYS = [
   "ignored_feature_count",
   "tag_count",
   "thumbnail_url",
-] as const;
+] as const satisfies readonly (keyof PersonaAssetSummary)[];
+const GENERATED_PERSONA_SUMMARY_KEYS: ExactGeneratedKeys<
+  PersonaAssetSummary,
+  typeof PERSONA_SUMMARY_KEYS
+> = PERSONA_SUMMARY_KEYS;
 
 function personaSummaryMatches(value: unknown, personaCardId: string): boolean {
   if (value === null) return personaCardId === "";
@@ -113,7 +123,7 @@ function personaSummaryMatches(value: unknown, personaCardId: string): boolean {
   try {
     persona = exactEventRecord(
       value,
-      PERSONA_SUMMARY_KEYS,
+      GENERATED_PERSONA_SUMMARY_KEYS,
       "Agent Session 페르소나 투영이 없습니다.",
       "Agent Session 페르소나 투영이 올바르지 않습니다."
     );
@@ -175,12 +185,71 @@ function exactAgentSession(
     AGENT_SESSION_INTEGER_KEYS.some(
       (key) => !Number.isSafeInteger(session[key]) || Number(session[key]) < 0
     ) ||
+    !session.room_id ||
     !session.session_id ||
+    !session.participant_id ||
     !personaSummaryMatches(session.persona_card, session.persona_card_id as string)
   ) {
     throw new Error(invalidMessage);
   }
   return session;
+}
+
+function exactParticipant(
+  value: unknown,
+  missingMessage: string,
+  invalidMessage: string,
+): Record<string, unknown> {
+  const participant = exactEventRecord(
+    value,
+    PARTICIPANT_KEYS,
+    missingMessage,
+    invalidMessage,
+  );
+  if (
+    PARTICIPANT_KEYS.filter((key) => key !== "muted").some(
+      (key) => typeof participant[key] !== "string"
+    ) ||
+    typeof participant.muted !== "boolean" ||
+    !isParticipantRole(participant.role) ||
+    !participant.room_id ||
+    !participant.participant_id
+  ) {
+    throw new Error(invalidMessage);
+  }
+  return participant;
+}
+
+export function agentSessionProjectionsMatch(left: unknown, right: unknown): boolean {
+  try {
+    const leftSession = exactAgentSession(left, "Agent Session", "Agent Session");
+    const rightSession = exactAgentSession(right, "Agent Session", "Agent Session");
+    return AGENT_SESSION_KEYS.every((key) => {
+      if (key !== "persona_card") return leftSession[key] === rightSession[key];
+      if (leftSession[key] === null || rightSession[key] === null) {
+        return leftSession[key] === rightSession[key];
+      }
+      const leftPersona = strictRecord(leftSession[key], "Agent Session persona");
+      const rightPersona = strictRecord(rightSession[key], "Agent Session persona");
+      return GENERATED_PERSONA_SUMMARY_KEYS.every(
+        (personaKey) => leftPersona[personaKey] === rightPersona[personaKey]
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
+export function participantProjectionsMatch(left: unknown, right: unknown): boolean {
+  try {
+    const leftParticipant = exactParticipant(left, "Participant", "Participant");
+    const rightParticipant = exactParticipant(right, "Participant", "Participant");
+    return PARTICIPANT_KEYS.every(
+      (key) => leftParticipant[key] === rightParticipant[key]
+    );
+  } catch {
+    return false;
+  }
 }
 
 export function agentSessionIsValid(
@@ -207,19 +276,12 @@ function participantFromEvent(
   event: RoomEvent,
   expectedStatus: "joined" | "detached"
 ): RoomMember {
-  const participant = exactEventRecord(
+  const participant = exactParticipant(
     (event as unknown as Record<string, unknown>).participant,
-    PARTICIPANT_KEYS,
     `${event.type} 이벤트에 참가자 투영이 없습니다.`,
     `${event.type} 이벤트의 참가자 투영이 올바르지 않습니다.`
   );
   if (
-    PARTICIPANT_KEYS.filter((key) => key !== "muted").some(
-      (key) => typeof participant[key] !== "string"
-    ) ||
-    typeof participant.muted !== "boolean" ||
-    !isParticipantRole(participant.role) ||
-    !participant.participant_id ||
     participant.participant_id !== event.participant_id ||
     participant.room_id !== event.room_id ||
     participant.status !== expectedStatus
