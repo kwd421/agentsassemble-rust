@@ -17,6 +17,7 @@ mod codex_identity;
 mod configuration;
 mod credential_provider;
 mod credentials;
+#[path = "remote_openai.rs"]
 mod deepseek;
 mod driver;
 mod filesystem;
