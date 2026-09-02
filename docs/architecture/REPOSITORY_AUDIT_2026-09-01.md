@@ -517,7 +517,7 @@ real provider operation owner. Do not add dummy routes.
 
 ### F-08 — one global HTTP connection budget may let public traffic starve local control
 
-Disposition: `Fixed at c0cb3e2; evidence corrected at c184739; review pending`;
+Disposition: `Closed at c0cb3e2; evidence corrected at c184739; reviewed through c47dbbb`;
 medium availability impact.
 
 The prior owner admitted 128 connections before ingress classification with no
@@ -537,6 +537,11 @@ and reading every terminal TCP response lets public admission return 200 again. 
 trust decision remains solely in `ingress_trust.rs`. Correction `c184739` makes that
 release observation deterministic instead of treating client-socket drop as proof
 that the server had already released the permit.
+
+Critical-web Pro and Daybreaker Blue High each manually approve individual
+`c184739`, documentation correction `c47dbbb`, exact `952fa96..c47dbbb`, and
+HEAD `c47dbbb` at `C0/H0/M0/L0`. Neither found a new authority, lifecycle,
+resource, fallback, polling, retry, or structural issue in the corrected range.
 
 This is deliberately a partition inside the existing resource ceiling: it adds one
 semaphore, one optional public permit and connection-owned synchronization state, but

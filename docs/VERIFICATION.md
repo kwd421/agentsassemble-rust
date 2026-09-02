@@ -6038,6 +6038,13 @@ active Cargo target occupied 25,846,026,240 bytes, above the repository's measur
 tests, 88 server tests, and the complete domain, protocol, TCP, and WebSocket suites.
 Its maximum resident-set report is 2,415,034,368 bytes, and the retained next-build
 target is 21 GiB. These are validation and artifact-lifecycle costs, not runtime
-latency or memory claims. Daybreaker revised `c0cb3e2`, `14b3ac6`, exact
-`952fa96..14b3ac6`, and HEAD `14b3ac6` at `C0/H0/M0/L1` only for the teardown
-barrier above; critical-web Pro review of that pushed range remains in progress.
+latency or memory claims. Daybreaker and critical-web Pro each revised `c0cb3e2`,
+`14b3ac6`, exact `952fa96..14b3ac6`, and HEAD `14b3ac6` at `C0/H0/M0/L1`
+only for the teardown barrier above. After `c184739` and documentation correction
+`c47dbbb`, each manual source reviewer approves individual `c184739`, individual
+`c47dbbb`, corrected exact `952fa96..c47dbbb`, and HEAD `c47dbbb` at
+`C0/H0/M0/L0` with no actionable finding. The reviewers explicitly confirmed the
+public TCP acquisition and terminal-response barriers, the existing trust and permit-
+lifetime owners, the separate HTTP and WebSocket policies, the stated pre-header
+residual limit, and the absence of new fallback, polling, heartbeat, timer, retry,
+compatibility, placeholder, or swallowed-failure behavior.

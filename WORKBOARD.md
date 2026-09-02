@@ -200,7 +200,7 @@ contracts, findings, or verification journals.
   `e13210f`. Each then approves individual `e13210f`, corrected exact
   `67303e0..e13210f`, and HEAD `e13210f` at `C0/H0/M0/L0`. No broader
   provider-completion claim is made.
-- Active task: F-08 HTTP admission capacity. Source commit `c0cb3e2` retains the
+- Completed: F-08 HTTP admission capacity. Source commit `c0cb3e2` retains the
   128-connection total ceiling and adds a 127-connection budget only after the
   existing ingress owner classifies a connection as trusted public. A real TCP
   request-body barrier proves one local health request progresses while 127 public
@@ -210,7 +210,13 @@ contracts, findings, or verification journals.
   three-second header deadline; this is an explicit residual limit, not a hidden
   fallback. Correction `c184739` replaces the initial client-drop teardown with those
   terminal-response barriers. Complete verification and focused correction gates
-  pass; manual correction review is pending.
+  pass. Critical-web Pro and Daybreaker Blue High each approve individual
+  `c184739`, documentation correction `c47dbbb`, exact `952fa96..c47dbbb`, and
+  HEAD `c47dbbb` at `C0/H0/M0/L0` with no actionable finding.
+- Active task: F-09 human invite guide and accepted client kinds. Verify current
+  reachable clients before changing the finite admission set, and align the guide
+  with the durable terminal expiry/reuse transition. Do not retain aliases merely
+  for compatibility or change the authority owner to make documentation pass.
 - Build-artifact lifecycle correction is complete through `537c1b9`. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
