@@ -861,6 +861,54 @@ contracts, findings, or verification journals.
   timing, or failure semantics. All 191 provider tests and warning-denied provider
   Clippy pass; no performance improvement beyond removed duplicate allocation/copy code
   is claimed.
+- Implemented pending Phase 1 whole-phase review: Claude official Agent SDK vertical
+  through `60c8bff`, `6bee248`, `8c256dd`, `c83c9f2`, `6a35424`, `436fc04`, and
+  `d557a0d`. Read-only comparison against original `d5046473` found a persistent
+  Claude Code PTY/ConPTY path whose turn authority depended on hooks, transcript
+  observation, terminal parsing, and print-like output capture. The Rust path instead
+  bundles the exact maintained `@anthropic-ai/claude-agent-sdk` `0.3.258` ESM runtime
+  and a 328-line newline-JSON bridge; none of the old transcript, print, terminal
+  scraping, compatibility, or second-prompt paths is connected to the build.
+  The bridge accepts one canonical-v4 Agent Session and one turn at a time, verifies
+  the SDK init receipt against the exact session, working directory, selected model,
+  effort, fast state, permission mode, and sole private RoomPortal MCP server, and
+  accepts success only when the final result repeats the exact session/turn/model and
+  reports no queued turn. RoomPortal read-only tools are the only advertised tools and
+  every permission request outside their exact names fails closed. Protocol lines are
+  capped at 256 KiB and assistant output at 128 KiB; initialization and shutdown
+  handshakes have ten-second bounds, while ordinary long turns have no invented total
+  timeout. Native cancellation/interrupt is not advertised because an exact SDK receipt
+  has not yet been proven; typed observation-abort and cleanup outcomes remain explicit
+  whole-matrix Phase 1 work rather than a simulated success.
+  A static, no-prompt probe of installed Claude Code `2.1.231` returned the current
+  exact catalog `claude-fable-5` and `claude-sonnet-5`. The preferred Haiku model was
+  absent, so creation requires explicit selection rather than substituting an arbitrary
+  default. That probe completed in 1.24 seconds with 0.48 seconds user CPU, 0.29 seconds
+  system CPU, and 398,524,416-byte reported maximum resident size. The 11,728-byte
+  bridge and 1,513,260-byte SDK module are bounded bundle inputs. The installed Claude
+  executable is 294,720,528 bytes; measurements exposed that macOS and Windows were
+  copying it a second time after it was already byte-verified and privately bound.
+  `d557a0d` reuses that protected bound path on those platforms, while Linux/Android
+  retain one private companion because a Node child cannot use the sealed parent
+  memfd path. A no-prompt catalog probe through a renamed `provider` hardlink proves
+  the macOS child path remains executable. This removes one per-session 281 MiB copy
+  without changing executable identity, process custody, room authority, or failure
+  semantics.
+  Unix process-group/guardian custody and Windows Job Object custody both own Node,
+  Claude, RoomPortal, pipes, stderr drainage, and bounded shutdown. Windows source was
+  added and native macOS compilation remains clean, but the corrected Rust Windows
+  cross-compile stopped in dependency `aws-lc-sys` before project code because the
+  host lacks `x86_64-w64-mingw32-gcc`; Windows compile and runtime evidence therefore
+  remain unknown, not approved. All 195 provider tests passed after the receipt slice;
+  after the platform and copy changes the focused three Rust Claude tests, three Node
+  bridge tests, warning-denied provider Clippy, formatting, diff, architecture, policy,
+  and source-structure gates pass. No real Claude prompt or provider turn was run.
+  The 832-line `registration.rs` is a strong split candidate and was reviewed: it still
+  owns one declarative provider table and its matching launch dispatch, while splitting
+  now would add state transfer, interfaces, and glue without separating an independent
+  invariant. It will be revisited if another owner or change reason enters. Repository-
+  wide checks found no new polling, heartbeat, retry, fallback, transcript, print, or
+  silently swallowed failure.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
