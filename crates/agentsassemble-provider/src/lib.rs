@@ -1,4 +1,5 @@
 mod acp_client;
+mod acp_runtime;
 #[cfg(any(unix, windows))]
 mod antigravity;
 #[cfg(any(unix, windows))]
