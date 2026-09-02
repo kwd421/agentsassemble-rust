@@ -4,8 +4,8 @@
   "version": "0.1.0",
   "identifier": "app.agentsassemble.rust",
   "build": {
-    "beforeDevCommand": "npm --prefix ../frontend run build",
-    "beforeBuildCommand": "npm --prefix ../frontend run build",
+    "beforeDevCommand": "npm --prefix ../provider-runtime ci --omit=optional --ignore-scripts && npm --prefix ../frontend run build",
+    "beforeBuildCommand": "npm --prefix ../provider-runtime ci --omit=optional --ignore-scripts && npm --prefix ../frontend run build",
     "frontendDist": "../../frontend/dist"
   },
   "app": {
@@ -29,7 +29,9 @@
     "targets": "all",
     "externalBin": ["binaries/agentsassemble-server"],
     "resources": {
-      "../../frontend/dist/": "frontend/"
+      "../../frontend/dist/": "frontend/",
+      "../../provider-runtime/claude-agent-sdk-bridge.mjs": "provider-runtime/claude-agent-sdk-bridge.mjs",
+      "../../provider-runtime/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs": "provider-runtime/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs"
     }
   }
 }

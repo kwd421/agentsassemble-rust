@@ -288,11 +288,12 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
     make_private_directory(&data_root)
         .map_err(|error| format!("cannot secure {}: {error}", data_root.display()))?;
     let executable = sidecar_executable(app)?;
-    let frontend = app
+    let resources = app
         .path()
         .resource_dir()
-        .map_err(|error| format!("cannot resolve bundled frontend directory: {error}"))?
-        .join("frontend");
+        .map_err(|error| format!("cannot resolve bundled resource directory: {error}"))?;
+    let frontend = resources.join("frontend");
+    let provider_runtime = resources.join("provider-runtime");
     let database = data_root.join("runtime.sqlite3");
     let stdout_path = data_root.join("runtime.stdout.log");
     let stderr_path = data_root.join("runtime.stderr.log");
@@ -308,6 +309,7 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
         .arg("--frontend")
         .arg(&frontend)
         .arg("--desktop-native-registration")
+        .env("AGENTSASSEMBLE_PROVIDER_RUNTIME", &provider_runtime)
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
