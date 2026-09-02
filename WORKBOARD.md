@@ -457,6 +457,23 @@ contracts, findings, or verification journals.
   denied, formatting, architecture/policy gates, and diff checks pass. No throughput or
   allocation improvement is claimed; the change removes a concrete cross-provider drift
   source before the remote API family is connected.
+- Implemented pending Phase 1 whole-phase review: bounded OpenAI-compatible SSE at
+  `2dc39cd`. The previous DeepSeek path requested a non-streaming response, retained the
+  complete raw body up to 4 MiB, and then allocated a second decoded response even though
+  the verified original flow used SSE. One 490-line transport/decoder owner now uses the
+  maintained `eventsource-stream` framing parser, consumes reqwest chunks under the same
+  4 MiB raw-response and request-context bounds, joins at most sixteen uniquely identified
+  bounded tool calls, normalizes credential/rate-limit/HTTP/transport failures without
+  response-body disclosure, and retains normalized token usage. It performs no reconnect,
+  retry, fallback, heartbeat, or total-turn timeout. DeepSeek now requests streaming with
+  usage, preserves its exact model/Thinking/tool-round/output contracts, and accepts a turn
+  only after an explicit SSE `[DONE]` plus a compatible finish reason; EOF never infers
+  completion. The existing reqwest read timeout resets on every successful read, so valid
+  long-running work is not narrowed to a three-minute whole-turn deadline. The raw-body
+  double allocation is removed, but no measured memory or latency improvement is claimed.
+  Focused fragmented/truncated stream tests, all 153 provider tests, Clippy with warnings
+  denied, formatting, architecture/policy gates, and diff checks pass. Real-provider and
+  phase-wide integration evidence remain open.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
