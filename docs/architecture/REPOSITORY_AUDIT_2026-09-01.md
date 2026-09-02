@@ -1337,6 +1337,21 @@ work. Both reviewers approved `537c1b9`, exact correction `42f0af5..537c1b9`,
 complete correction `9d02acf..537c1b9`, full batch `9a4b5f6..537c1b9`, cumulative
 `8903445..537c1b9`, and HEAD `537c1b9` at `C0/H0/M0/L0` with no actionable finding.
 
+Later complete verification exposed a remaining growth owner rather than a capacity
+shortage: `target/debug/incremental` alone occupied 8.10 GiB and the retained target
+again crossed the 24 GiB maintenance ceiling at 26,162,495,488 bytes. A trial profile
+change without first removing the old profile produced a 29,214,638,080-byte mixed
+cache, confirming that stale and current build profiles must not coexist. The build
+owner now disables Cargo incremental output while retaining dependency and binary
+artifacts; no timer, background cleanup, classifier, fallback, or automatic deletion
+was added. After one explicit full maintenance clean, complete verification passes in
+432.17 seconds with 1,846,460,416-byte maximum RSS. The retained target occupies
+14,836,060 allocated KiB, contains no incremental data and no `.rcgu.o` files, and an
+immediate workspace all-target `cargo check` completes in 0.26 seconds. The accepted
+trade-off is rebuilding a changed local crate without Cargo's intra-crate incremental
+objects while preserving the fast unchanged-workspace cache and the existing packed
+source-debugging contract.
+
 ## Current verdict and exit
 
 Verdict: `APPROVE` for the Phase 0A inventory, dispositions, ownership map, and

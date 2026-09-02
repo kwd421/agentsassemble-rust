@@ -6095,3 +6095,25 @@ The final warm complete verification after `9821433` also passes every gate in
 249.21 seconds with 2,401,419,264-byte maximum RSS; it retains the current build cache
 and is 224.11 seconds faster than the preceding cold run. This comparison measures
 verification-cache cost only.
+
+### Active build-cache owner: 2026-09-02
+
+A later provider-focused build found 8.10 GiB under `target/debug/incremental`; the
+complete verification cache then failed closed at 26,162,495,488 bytes. Testing the
+nonincremental profile before removing the old profile also failed closed at
+29,214,638,080 bytes, which identifies coexisting build-profile outputs rather than
+an insufficient disk ceiling. With no Cargo or Tauri process active, explicit
+`make artifact-prune` removed only the shared regenerable target. Cargo incremental
+output is now disabled at the existing build owner; dependency and binary outputs,
+packed macOS source-debug information, the 24 GiB gate, and explicit-only destructive
+maintenance remain unchanged.
+
+From the clean profile, `/usr/bin/time -l make verify` passes all architecture,
+frontend, desktop, Rust, real TCP/WebSocket, warning-denied Clippy, diff, and artifact
+gates in 432.17 seconds with 1,846,460,416-byte maximum RSS. It retains 14,836,060
+allocated KiB, zero bytes of incremental data, and zero `.rcgu.o` files. An immediate
+`cargo check --workspace --all-targets` completes in 0.26 seconds, proving that the
+next unchanged workspace build still reuses the retained cache. The trade-off is
+whole-crate recompilation after editing a local crate instead of keeping large
+intra-crate incremental objects; no product runtime behavior, deletion automation,
+timer, polling, retry, fallback, or swallowed failure was introduced.

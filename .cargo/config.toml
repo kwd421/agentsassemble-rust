@@ -1,2 +1,5 @@
+[build]
+incremental = false
+
 [target.'cfg(target_os = "macos")']
 rustflags = ["-C", "split-debuginfo=packed"]
