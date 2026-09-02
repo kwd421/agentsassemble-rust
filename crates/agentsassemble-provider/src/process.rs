@@ -51,6 +51,15 @@ pub(crate) async fn probe(
     args: &[&str],
     cancellation: &CancellationToken,
 ) -> Result<String, ProbeFailure> {
+    probe_with_timeout(program, args, PROBE_TIMEOUT, cancellation).await
+}
+
+pub(crate) async fn probe_with_timeout(
+    program: &str,
+    args: &[&str],
+    timeout: Duration,
+    cancellation: &CancellationToken,
+) -> Result<String, ProbeFailure> {
     if cancellation.is_cancelled() {
         return Err(ProbeFailure::Cancelled);
     }
@@ -83,7 +92,7 @@ pub(crate) async fn probe(
     };
     let collected = tokio::select! {
         () = cancellation.cancelled() => None,
-        collected = Box::pin(tokio::time::timeout(PROBE_TIMEOUT, async {
+        collected = Box::pin(tokio::time::timeout(timeout, async {
             tokio::try_join!(read_limited(stdout), read_limited(stderr), child.wait())
         })) => Some(collected),
     };

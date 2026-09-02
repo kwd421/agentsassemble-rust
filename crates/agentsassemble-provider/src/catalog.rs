@@ -22,14 +22,14 @@ use crate::{
 // each. They remain beneath this authority and the outer WebSocket frame bound.
 const MAX_PROVIDER_BYTES: usize = 128 * 1024;
 const MAX_PROVIDER_OPTIONS: usize = 256;
-const MAX_OPTION_VALUE_BYTES: usize = 128;
+pub(crate) const MAX_OPTION_VALUE_BYTES: usize = 128;
 const MAX_OPTION_LABEL_BYTES: usize = 256;
 pub(crate) const ANTIGRAVITY_NATIVE_RECEIPT_ERROR_CODE: &str =
     "provider_native_receipt_unavailable";
 pub(crate) const ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE: &str =
     "Antigravity has no approved native attachment and completion receipt.";
 
-async fn provider_executable(
+pub(crate) async fn provider_executable(
     program: &str,
     cancellation: &CancellationToken,
 ) -> Result<(String, String), ProbeFailure> {
@@ -410,7 +410,7 @@ const fn remote_catalog_failure(error: RemoteCatalogError) -> ProbeFailure {
     }
 }
 
-fn ready_provider(
+pub(crate) fn ready_provider(
     mut provider: ProviderAvailability,
     default_model: String,
     controls: Vec<ProviderControl>,
@@ -432,7 +432,10 @@ fn ready_provider(
     provider
 }
 
-fn failed_provider(provider: ProviderAvailability, failure: ProbeFailure) -> ProviderAvailability {
+pub(crate) fn failed_provider(
+    provider: ProviderAvailability,
+    failure: ProbeFailure,
+) -> ProviderAvailability {
     let (code, message, available) = match failure {
         ProbeFailure::Missing => ("command_missing", "configured command missing", false),
         ProbeFailure::Timeout => ("model_discovery_timeout", "model discovery timed out", true),
@@ -473,7 +476,7 @@ fn incomplete_provider(
     unavailable_provider(provider, true, code, message)
 }
 
-fn unavailable_provider(
+pub(crate) fn unavailable_provider(
     mut provider: ProviderAvailability,
     available: bool,
     code: &str,
@@ -493,7 +496,7 @@ fn malformed_provider(provider: ProviderAvailability) -> ProviderAvailability {
     failed_provider(provider, ProbeFailure::Malformed)
 }
 
-fn control(
+pub(crate) fn control(
     key: &str,
     label: &str,
     kind: &str,
@@ -509,7 +512,7 @@ fn control(
     }
 }
 
-fn permission_control(workspace_write: bool) -> ProviderControl {
+pub(crate) fn permission_control(workspace_write: bool) -> ProviderControl {
     let mut options = vec![option("meeting_read_only", "방 읽기 전용")];
     if workspace_write {
         options.push(option("workspace_write", "작업 폴더 쓰기"));
@@ -536,7 +539,7 @@ fn remote_output_token_control() -> ProviderControl {
     )
 }
 
-fn option(value: &str, label: &str) -> ProviderControlOption {
+pub(crate) fn option(value: &str, label: &str) -> ProviderControlOption {
     ProviderControlOption {
         value: value.to_owned(),
         label: label.to_owned(),

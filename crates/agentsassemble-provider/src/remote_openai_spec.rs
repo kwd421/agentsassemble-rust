@@ -8,9 +8,6 @@ use crate::{
 
 #[derive(Clone, Copy)]
 pub(crate) struct RemoteOpenAiErrors {
-    pub(crate) credential_required: &'static str,
-    pub(crate) credential_invalid: &'static str,
-    pub(crate) credential_rejected: &'static str,
     pub(crate) context_limit: &'static str,
     pub(crate) rate_limited: &'static str,
     pub(crate) invalid_response: &'static str,
@@ -26,7 +23,7 @@ pub(crate) struct RemoteOpenAiErrors {
 }
 
 pub(crate) struct RemoteOpenAiSpec {
-    pub(crate) credential: ProviderCredentialId,
+    pub(crate) authentication: RemoteOpenAiAuthentication,
     pub(crate) provider_kind: &'static str,
     pub(crate) endpoint: RemoteOpenAiEndpoint,
     pub(crate) headers: &'static [(&'static str, &'static str)],
@@ -35,23 +32,55 @@ pub(crate) struct RemoteOpenAiSpec {
     pub(crate) errors: RemoteOpenAiErrors,
 }
 
+#[derive(Clone, Copy)]
+pub(crate) enum RemoteOpenAiAuthentication {
+    Bearer {
+        credential: ProviderCredentialId,
+        required: &'static str,
+        invalid: &'static str,
+        rejected: &'static str,
+    },
+    Unauthenticated,
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum RemoteOpenAiEndpoint {
     Fixed(&'static str),
+    FixedLoopback(&'static str),
     AgentSession,
 }
 
+impl RemoteOpenAiEndpoint {
+    pub(crate) const fn transport(self) -> &'static str {
+        match self {
+            Self::Fixed(_) | Self::AgentSession => "https",
+            Self::FixedLoopback(_) => "http",
+        }
+    }
+}
+
 impl RemoteOpenAiSpec {
+    pub(crate) const fn credential_id(&self) -> Option<ProviderCredentialId> {
+        match self.authentication {
+            RemoteOpenAiAuthentication::Bearer { credential, .. } => Some(credential),
+            RemoteOpenAiAuthentication::Unauthenticated => None,
+        }
+    }
+
     pub(crate) const fn credential_error(&self, error: ProviderCredentialError) -> DriverError {
+        let RemoteOpenAiAuthentication::Bearer {
+            required, invalid, ..
+        } = self.authentication
+        else {
+            return provider_error("provider_protocol_invalid", self.errors.invalid_response);
+        };
         match error {
-            ProviderCredentialError::MissingSecret => provider_error(
-                "provider_credential_missing",
-                self.errors.credential_required,
-            ),
-            ProviderCredentialError::InvalidSecret => provider_error(
-                "provider_credential_invalid",
-                self.errors.credential_invalid,
-            ),
+            ProviderCredentialError::MissingSecret => {
+                provider_error("provider_credential_missing", required)
+            }
+            ProviderCredentialError::InvalidSecret => {
+                provider_error("provider_credential_invalid", invalid)
+            }
             ProviderCredentialError::SecureStoreUnavailable => provider_error(
                 "secure_store_unavailable",
                 "The secure credential store is unavailable.",
@@ -64,10 +93,14 @@ impl RemoteOpenAiSpec {
             OpenAiStreamError::ContextLimit => {
                 provider_error("provider_context_limit", self.errors.context_limit)
             }
-            OpenAiStreamError::CredentialRejected => provider_error(
-                "provider_credential_rejected",
-                self.errors.credential_rejected,
-            ),
+            OpenAiStreamError::CredentialRejected => match self.authentication {
+                RemoteOpenAiAuthentication::Bearer { rejected, .. } => {
+                    provider_error("provider_credential_rejected", rejected)
+                }
+                RemoteOpenAiAuthentication::Unauthenticated => {
+                    provider_error("provider_api_unavailable", self.errors.api_unavailable)
+                }
+            },
             OpenAiStreamError::RateLimited => {
                 provider_error("provider_rate_limited", self.errors.rate_limited)
             }

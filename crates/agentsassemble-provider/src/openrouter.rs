@@ -5,7 +5,9 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+    },
 };
 
 // The public endpoint currently contains more entries than the bounded public
@@ -15,7 +17,12 @@ pub(crate) const CATALOG_ENDPOINT: &str =
     "https://openrouter.ai/api/v1/models?supported_parameters=tools&sort=most-popular&limit=32";
 
 pub(crate) static OPENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
-    credential: ProviderCredentialId::OpenRouter,
+    authentication: RemoteOpenAiAuthentication::Bearer {
+        credential: ProviderCredentialId::OpenRouter,
+        required: "An OpenRouter API credential is required.",
+        invalid: "The configured OpenRouter credential is invalid.",
+        rejected: "OpenRouter rejected the configured credential.",
+    },
     provider_kind: "openrouter_api",
     endpoint: RemoteOpenAiEndpoint::Fixed("https://openrouter.ai/api/v1/chat/completions"),
     headers: &[
@@ -25,9 +32,6 @@ pub(crate) static OPENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     request_payload,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
-        credential_required: "An OpenRouter API credential is required.",
-        credential_invalid: "The configured OpenRouter credential is invalid.",
-        credential_rejected: "OpenRouter rejected the configured credential.",
         context_limit: "The bounded OpenRouter request context is too large.",
         rate_limited: "OpenRouter rate-limited the request.",
         invalid_response: "OpenRouter returned an invalid bounded response.",

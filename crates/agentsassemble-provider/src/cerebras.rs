@@ -5,23 +5,27 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+    },
 };
 
 pub(crate) const CATALOG_ENDPOINT: &str =
     "https://api.cerebras.ai/public/v1/models?format=openrouter";
 
 pub(crate) static CEREBRAS_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
-    credential: ProviderCredentialId::Cerebras,
+    authentication: RemoteOpenAiAuthentication::Bearer {
+        credential: ProviderCredentialId::Cerebras,
+        required: "A Cerebras API credential is required.",
+        invalid: "The configured Cerebras credential is invalid.",
+        rejected: "Cerebras rejected the configured credential.",
+    },
     provider_kind: "cerebras_api",
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.cerebras.ai/v1/chat/completions"),
     headers: &[("X-Cerebras-Version-Patch", "2")],
     request_payload,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
-        credential_required: "A Cerebras API credential is required.",
-        credential_invalid: "The configured Cerebras credential is invalid.",
-        credential_rejected: "Cerebras rejected the configured credential.",
         context_limit: "The bounded Cerebras request context is too large.",
         rate_limited: "Cerebras rate-limited the request.",
         invalid_response: "Cerebras returned an invalid bounded response.",

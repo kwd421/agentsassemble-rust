@@ -5,22 +5,26 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+    },
 };
 
 pub(crate) const CATALOG_ENDPOINT: &str = "https://ai-gateway.vercel.sh/v1/models";
 
 pub(crate) static VERCEL_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
-    credential: ProviderCredentialId::Vercel,
+    authentication: RemoteOpenAiAuthentication::Bearer {
+        credential: ProviderCredentialId::Vercel,
+        required: "A Vercel AI Gateway credential is required.",
+        invalid: "The configured Vercel AI Gateway credential is invalid.",
+        rejected: "Vercel AI Gateway rejected the configured credential.",
+    },
     provider_kind: "vercel_ai_gateway",
     endpoint: RemoteOpenAiEndpoint::Fixed("https://ai-gateway.vercel.sh/v1/chat/completions"),
     headers: &[],
     request_payload,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
-        credential_required: "A Vercel AI Gateway credential is required.",
-        credential_invalid: "The configured Vercel AI Gateway credential is invalid.",
-        credential_rejected: "Vercel AI Gateway rejected the configured credential.",
         context_limit: "The bounded Vercel AI Gateway request context is too large.",
         rate_limited: "Vercel AI Gateway rate-limited the request.",
         invalid_response: "Vercel AI Gateway returned an invalid bounded response.",

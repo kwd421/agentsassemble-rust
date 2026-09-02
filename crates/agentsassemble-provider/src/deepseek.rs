@@ -5,20 +5,24 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+    },
 };
 
 pub(crate) static DEEPSEEK_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
-    credential: ProviderCredentialId::DeepSeek,
+    authentication: RemoteOpenAiAuthentication::Bearer {
+        credential: ProviderCredentialId::DeepSeek,
+        required: "A DeepSeek API credential is required.",
+        invalid: "The configured DeepSeek credential is invalid.",
+        rejected: "DeepSeek rejected the configured credential.",
+    },
     provider_kind: "deepseek_api",
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.deepseek.com/chat/completions"),
     headers: &[],
     request_payload,
     retain_reasoning: true,
     errors: RemoteOpenAiErrors {
-        credential_required: "A DeepSeek API credential is required.",
-        credential_invalid: "The configured DeepSeek credential is invalid.",
-        credential_rejected: "DeepSeek rejected the configured credential.",
         context_limit: "The bounded DeepSeek request context is too large.",
         rate_limited: "DeepSeek rate-limited the request.",
         invalid_response: "DeepSeek returned an invalid bounded response.",

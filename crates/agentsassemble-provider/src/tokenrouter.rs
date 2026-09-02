@@ -10,7 +10,9 @@ use crate::{
         RemoteCatalogError, bound_catalog_options, bounded_catalog_text, catalog_model_family,
     },
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+    },
 };
 
 pub(crate) const DISPLAY_NAME: &str = "TokenRouter";
@@ -20,16 +22,18 @@ pub(crate) const CATALOG_ENDPOINT: &str =
     "https://tokenrouter-backend-api.tokenrouter.com/backend-api/api/pricing?sort_type=5";
 
 pub(crate) static TOKENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
-    credential: ProviderCredentialId::TokenRouter,
+    authentication: RemoteOpenAiAuthentication::Bearer {
+        credential: ProviderCredentialId::TokenRouter,
+        required: "A TokenRouter credential is required.",
+        invalid: "The configured TokenRouter credential is invalid.",
+        rejected: "TokenRouter rejected the configured credential.",
+    },
     provider_kind: PROVIDER_KIND,
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.tokenrouter.com/v1/chat/completions"),
     headers: &[],
     request_payload,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
-        credential_required: "A TokenRouter credential is required.",
-        credential_invalid: "The configured TokenRouter credential is invalid.",
-        credential_rejected: "TokenRouter rejected the configured credential.",
         context_limit: "The bounded TokenRouter request context is too large.",
         rate_limited: "TokenRouter rate-limited the request.",
         invalid_response: "TokenRouter returned an invalid bounded response.",

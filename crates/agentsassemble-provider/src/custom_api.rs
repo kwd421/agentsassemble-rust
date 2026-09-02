@@ -10,7 +10,9 @@ use crate::{
     driver::DriverError,
     remote_https::{custom_endpoint_client, public_unicast},
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+    },
 };
 
 pub(crate) const DISPLAY_NAME: &str = "Custom API";
@@ -18,16 +20,18 @@ pub(crate) const PROVIDER_KIND: &str = "custom_openai_api";
 const COMPLETION_SUFFIX: &str = "/chat/completions";
 
 pub(crate) static CUSTOM_API_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
-    credential: ProviderCredentialId::CustomApi,
+    authentication: RemoteOpenAiAuthentication::Bearer {
+        credential: ProviderCredentialId::CustomApi,
+        required: "A Custom API credential is required.",
+        invalid: "The configured Custom API credential is invalid.",
+        rejected: "Custom API rejected the configured credential.",
+    },
     provider_kind: PROVIDER_KIND,
     endpoint: RemoteOpenAiEndpoint::AgentSession,
     headers: &[],
     request_payload,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
-        credential_required: "A Custom API credential is required.",
-        credential_invalid: "The configured Custom API credential is invalid.",
-        credential_rejected: "Custom API rejected the configured credential.",
         context_limit: "The bounded Custom API request context is too large.",
         rate_limited: "Custom API rate-limited the request.",
         invalid_response: "Custom API returned an invalid bounded response.",

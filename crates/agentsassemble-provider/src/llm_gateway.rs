@@ -5,7 +5,9 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     driver::DriverError,
     remote_openai::RemoteOpenAiDriver,
-    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec},
+    remote_openai_spec::{
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+    },
 };
 
 pub(crate) const DISPLAY_NAME: &str = "LLM Gateway";
@@ -24,16 +26,18 @@ pub(crate) const REASONING_EFFORTS: [(&str, &str); 8] = [
 ];
 
 pub(crate) static LLM_GATEWAY_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
-    credential: ProviderCredentialId::LlmGateway,
+    authentication: RemoteOpenAiAuthentication::Bearer {
+        credential: ProviderCredentialId::LlmGateway,
+        required: "An LLM Gateway credential is required.",
+        invalid: "The configured LLM Gateway credential is invalid.",
+        rejected: "LLM Gateway rejected the configured credential.",
+    },
     provider_kind: PROVIDER_KIND,
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.llmgateway.io/v1/chat/completions"),
     headers: &[],
     request_payload,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
-        credential_required: "An LLM Gateway credential is required.",
-        credential_invalid: "The configured LLM Gateway credential is invalid.",
-        credential_rejected: "LLM Gateway rejected the configured credential.",
         context_limit: "The bounded LLM Gateway request context is too large.",
         rate_limited: "LLM Gateway rate-limited the request.",
         invalid_response: "LLM Gateway returned an invalid bounded response.",

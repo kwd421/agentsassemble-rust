@@ -24,7 +24,7 @@ use crate::{
     custom_api, deepseek,
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
-    llm_gateway,
+    llm_gateway, lm_studio, ollama,
     opencode::OpenCodeDriver,
     openrouter,
     runtime_lease::HeldRuntimeLease,
@@ -33,9 +33,9 @@ use crate::{
 
 pub(crate) type ProviderDiscoveryFuture<'a> =
     Pin<Box<dyn Future<Output = ProviderAvailability> + Send + 'a>>;
-type ProviderDiscovery =
+pub(crate) type ProviderDiscovery =
     for<'a> fn(ProviderAvailability, &'a CancellationToken) -> ProviderDiscoveryFuture<'a>;
-type ProviderLaunch =
+pub(crate) type ProviderLaunch =
     for<'a> fn(
         &'a ProductionDriverFactory,
         &'a DurableAgentSession,
@@ -71,8 +71,8 @@ pub(crate) struct ProviderRegistration {
     pub(crate) probe_executable: &'static str,
     pub(crate) credential_available: bool,
     pub(crate) configuration_authority: ProviderConfigurationAuthority,
-    discover: ProviderDiscovery,
-    launch: ProviderLaunch,
+    pub(crate) discover: ProviderDiscovery,
+    pub(crate) launch: ProviderLaunch,
 }
 
 pub(crate) static CODEX_PROVIDER: ProviderRegistration = ProviderRegistration {
@@ -245,7 +245,7 @@ pub(crate) static CUSTOM_API_PROVIDER: ProviderRegistration = ProviderRegistrati
     launch: launch_custom_api,
 };
 
-static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 10] = [
+static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 12] = [
     &CODEX_PROVIDER,
     &ANTIGRAVITY_PROVIDER,
     &OPENCODE_PROVIDER,
@@ -256,6 +256,8 @@ static PROVIDER_REGISTRATIONS: [&ProviderRegistration; 10] = [
     &LLM_GATEWAY_PROVIDER,
     &TOKENROUTER_PROVIDER,
     &CUSTOM_API_PROVIDER,
+    &ollama::PROVIDER,
+    &lm_studio::PROVIDER,
 ];
 
 pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistration] {

@@ -18,9 +18,12 @@ use crate::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
     },
+    local_openai::fixed_loopback_completion,
     openai_stream::{AssistantMessage, OpenAiStreamCompletion, ToolCall, send_chat_completion},
     remote_https::fixed_endpoint_client,
-    remote_openai_spec::{RemoteOpenAiEndpoint, RemoteOpenAiSpec, provider_error},
+    remote_openai_spec::{
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiSpec, provider_error,
+    },
     room_portal::{ProviderTurnOutcome, RoomObservationStart, RoomPortal},
 };
 
@@ -65,16 +68,29 @@ impl RemoteOpenAiDriver {
         spec: &'static RemoteOpenAiSpec,
         credentials: ProviderCredentialStore,
     ) -> Result<Self, DriverError> {
-        let RemoteOpenAiEndpoint::Fixed(endpoint) = spec.endpoint else {
-            return Err(provider_error(
-                "provider_api_unavailable",
-                spec.errors.api_unavailable,
-            ));
+        let (client, endpoint) = match (spec.endpoint, spec.authentication) {
+            (RemoteOpenAiEndpoint::Fixed(endpoint), RemoteOpenAiAuthentication::Bearer { .. }) => {
+                let client = fixed_endpoint_client().map_err(|_| {
+                    provider_error("provider_api_unavailable", spec.errors.api_unavailable)
+                })?;
+                let endpoint = Url::parse(endpoint).map_err(|_| {
+                    provider_error("provider_api_unavailable", spec.errors.api_unavailable)
+                })?;
+                (client, endpoint)
+            }
+            (
+                RemoteOpenAiEndpoint::FixedLoopback(endpoint),
+                RemoteOpenAiAuthentication::Unauthenticated,
+            ) => fixed_loopback_completion(endpoint).map_err(|_| {
+                provider_error("provider_api_unavailable", spec.errors.api_unavailable)
+            })?,
+            _ => {
+                return Err(provider_error(
+                    "provider_api_unavailable",
+                    spec.errors.api_unavailable,
+                ));
+            }
         };
-        let client = fixed_endpoint_client()
-            .map_err(|_| provider_error("provider_api_unavailable", spec.errors.api_unavailable))?;
-        let endpoint = Url::parse(endpoint)
-            .map_err(|_| provider_error("provider_api_unavailable", spec.errors.api_unavailable))?;
         Self::launch_with_api(
             spec,
             credentials,
@@ -95,7 +111,12 @@ impl RemoteOpenAiDriver {
         client: Client,
         endpoint: Url,
     ) -> Result<Self, DriverError> {
-        if spec.endpoint != RemoteOpenAiEndpoint::AgentSession {
+        if spec.endpoint != RemoteOpenAiEndpoint::AgentSession
+            || !matches!(
+                spec.authentication,
+                RemoteOpenAiAuthentication::Bearer { .. }
+            )
+        {
             return Err(provider_error(
                 "provider_api_unavailable",
                 spec.errors.api_unavailable,
@@ -151,11 +172,7 @@ impl RemoteOpenAiDriver {
     ) -> Result<ProviderTurnCompleted, DriverError> {
         self.turn_effect_uncertain = false;
         self.validate_session(session)?;
-        let credential = self
-            .credentials
-            .secret(self.spec.credential)
-            .await
-            .map_err(|error| self.spec.credential_error(error))?;
+        let credential = self.load_credential().await?;
         let observation = request.room_observation.as_ref();
         let tools =
             observation.map(|observation| api_tools(&self.tools, observation.tabletop_tools));
@@ -163,7 +180,7 @@ impl RemoteOpenAiDriver {
         for round in 0..=MAX_TOOL_ROUNDS {
             let response = self
                 .api
-                .complete(session, &credential, &messages, tools.as_deref())
+                .complete(session, credential.as_ref(), &messages, tools.as_deref())
                 .await?;
             validate_completion(&response, &session.public.model, self.spec)?;
             let provider_turn_id = response.id.clone();
@@ -245,6 +262,17 @@ impl RemoteOpenAiDriver {
             self.spec.errors.invalid_response,
         ))
     }
+
+    async fn load_credential(&self) -> Result<Option<ProviderCredential>, DriverError> {
+        let Some(credential) = self.spec.credential_id() else {
+            return Ok(None);
+        };
+        self.credentials
+            .secret(credential)
+            .await
+            .map(Some)
+            .map_err(|error| self.spec.credential_error(error))
+    }
     async fn execute_tool(
         &mut self,
         call: ToolCall,
@@ -292,7 +320,7 @@ impl RemoteOpenAiDriver {
 
     fn validate_session(&self, session: &DurableAgentSession) -> Result<(), DriverError> {
         let endpoint_matches = match self.spec.endpoint {
-            RemoteOpenAiEndpoint::Fixed(_) => {
+            RemoteOpenAiEndpoint::Fixed(_) | RemoteOpenAiEndpoint::FixedLoopback(_) => {
                 session.provider_endpoint.is_empty()
                     && self.api.session_endpoint_authority.is_none()
             }
@@ -306,7 +334,7 @@ impl RemoteOpenAiDriver {
             || self.attached_session_id.as_deref() != Some(&session.public.session_id)
             || session.public.provider_kind != self.spec.provider_kind
             || session.public.runtime_kind != "api"
-            || session.public.transport != "https"
+            || session.public.transport != self.spec.endpoint.transport()
             || session.public.permission_mode != "meeting_read_only"
             || !endpoint_matches
         {
@@ -328,11 +356,11 @@ impl ProviderDriver for RemoteOpenAiDriver {
             if self.stopped || self.portal_failed {
                 return Err(PORTAL_UNAVAILABLE);
             }
-            let provider_session_id = format!(
-                "{}-{}",
-                self.spec.credential.as_str(),
-                session.public.session_id
-            );
+            let namespace = self
+                .spec
+                .credential_id()
+                .map_or(self.spec.provider_kind, |credential| credential.as_str());
+            let provider_session_id = format!("{namespace}-{}", session.public.session_id);
             if !session.provider_session_id.is_empty()
                 && session.provider_session_id != provider_session_id
             {
@@ -476,7 +504,7 @@ impl RemoteOpenAiApi {
     async fn complete(
         &self,
         session: &DurableAgentSession,
-        credential: &ProviderCredential,
+        credential: Option<&ProviderCredential>,
         messages: &[Value],
         tools: Option<&[Value]>,
     ) -> Result<OpenAiStreamCompletion, DriverError> {
@@ -487,10 +515,19 @@ impl RemoteOpenAiApi {
                 self.spec.errors.invalid_response,
             )
         })?;
-        let mut request = self
-            .client
-            .post(self.endpoint.clone())
-            .bearer_auth(credential.expose());
+        let mut request = self.client.post(self.endpoint.clone());
+        match (self.spec.authentication, credential) {
+            (RemoteOpenAiAuthentication::Bearer { .. }, Some(credential)) => {
+                request = request.bearer_auth(credential.expose());
+            }
+            (RemoteOpenAiAuthentication::Unauthenticated, None) => {}
+            _ => {
+                return Err(provider_error(
+                    "provider_protocol_invalid",
+                    self.spec.errors.invalid_response,
+                ));
+            }
+        }
         for (name, value) in self.spec.headers {
             request = request.header(*name, *value);
         }
