@@ -221,6 +221,18 @@ Alternate Codex/Claude/OpenCode/Pi harness installation over API/local models is
 separate deferred experiment. It does not justify an abstraction or compatibility
 path in the core provider implementation now.
 
+Provider transport and external admission are orthogonal boundaries. An ordinary
+resident Agent Session uses its selected provider driver. Later,
+`assemble room attend --provider <id>` reuses an available driver under the separate
+AgentBridge invite, admission, participant, and process-custody owner; the CLI does
+not turn that bridge into a resident-session alias. Conversely,
+`assemble room connector-mcp` and its remote transport never select or launch a
+provider: an already-running supported AI app/CLI session calls the Room Connector's
+join/read/say/wait/leave tools. That connector MCP is also distinct from the private
+RoomPortal MCP used to expose bounded room tools to a resident provider. Sharing the
+MCP library or tool schemas must not merge their principals, credentials, permissions,
+state, or lifecycle.
+
 The Agent Add surface keeps the current retained Rust frontend's
 `Harness` / `API` / `Local` grouping during provider cutover. Older
 `Subscription` naming is not the target contract for this surface. These groups

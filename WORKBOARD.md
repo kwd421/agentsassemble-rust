@@ -388,6 +388,12 @@ contracts, findings, or verification journals.
   - Reject Gemini CLI, Qwen CLI, and Goose ACP as review-driven scope expansion. They
     are absent from the verified reachable sixteen-provider baseline; Antigravity is
     not Gemini CLI, and reviewer suggestions do not add product scope.
+  - Keep provider execution separate from later external admission. `assemble room
+    attend --provider` launches an available driver under its own AgentBridge owner;
+    `assemble room connector-mcp` launches no model/provider and lets an already-running
+    AI app/CLI session use current-session room tools. Room Connector MCP and the
+    resident provider's private RoomPortal MCP may share libraries/schemas, never
+    principals, credentials, permissions, state, or lifecycle.
   - Share only proven-identical transport, decoding, bounds, secret handling, redaction,
     cancellation, and cleanup mechanisms. Endpoints, credentials, catalogs, model
     controls, session identity, completion receipts, permissions, and lifecycle semantics
