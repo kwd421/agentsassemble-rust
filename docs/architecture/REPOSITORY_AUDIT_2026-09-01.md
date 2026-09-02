@@ -750,11 +750,11 @@ verification passes all 98 frontend files/640 tests, 25 desktop tests, all Rust 
 real TCP/WebSocket suites, generated bindings, warning-denied Clippy, diff, structure,
 policy, CSS, and artifact gates in 164.33 seconds with 791,937,024-byte maximum RSS. The
 production JavaScript artifact is 820.38 kB and is recorded only as an observation.
-`participantEventContract.ts` is now exactly 500 lines: it still owns one cohesive
-Participant/Agent Session/create-ACK transition invariant, while splitting would expose
-its exact parsing internals or add cross-file glue, so the warning does not justify a
-mechanical split. Both corrections remain subject to final Pro and Daybreaker re-review;
-no final approval is claimed.
+At reviewed HEAD `f7c1277`, `participantEventContract.ts` was exactly 500 lines and
+owned one cohesive Participant/Agent Session/create-ACK boundary invariant. Splitting
+would expose its exact parsing internals or add cross-file glue, so the warning alone did
+not justify a mechanical split. Both corrections remained subject to final Pro and
+Daybreaker re-review; no final approval was claimed.
 
 Daybreaker's next source review found a reachable Medium omitted by the frontend-only
 fixture: `room_settings.rs` returned the committed event but not its `event_seq`, while
@@ -774,6 +774,28 @@ verification passes all frontend, desktop, Rust unit, real TCP/WebSocket, genera
 Clippy, diff, architecture, policy, CSS, and artifact gates in 197.35 seconds with
 1,295,138,816-byte maximum RSS. Final correction re-review remains pending, so no final
 approval is recorded.
+
+Daybreaker manually approves individual `6c799f5`, `06c7139`, and `07007c8`, exact
+`f7c1277..07007c8`, cumulative `dff4b65..07007c8`, and HEAD `07007c8` at
+`C0/H0/M0/L0`. Pro's completed review of the preceding `f7c1277` HEAD found one further
+Low: `agent_session_state` could disagree with its nested Agent Session on duplicated
+session, runtime, display, or participant identity, and create/start could repeat one
+internally consistent but producer-impossible final session across every event copy.
+
+Correction `a01502f` compares those state-event aliases to the already exact nested
+Agent Session and checks the narrow fresh-start transition from the created event's
+prepared session to `status=attached`, `runtime_status=idle`, and `enabled=true`, while
+requiring all non-transition fields to remain unchanged. It deliberately does not copy
+the full Rust lifecycle state machine. The owner file is now 546 lines, above the
+500-line inspection signal but below the 800-line strong split signal; its one boundary
+invariant remains cohesive and extraction would expose private matchers plus glue.
+
+The correction adds no task, state owner, timer, polling, heartbeat, retry, fallback,
+compatibility path, cache, or framework. Focused Agent Session tests pass 12 cases; the
+production build and approved original CSS cascade pass. Fresh complete verification
+passes all repository gates in 164.23 seconds with 776,175,616-byte maximum RSS. Final
+Pro and Daybreaker re-review of the latest pushed correction remains pending, so no
+approval is claimed for `a01502f` or its containing range.
 
 No frontend provider-request consumer remains after the reviewed F-04 removal, so
 this correction verifies its absence instead of recreating it. Custom providers,

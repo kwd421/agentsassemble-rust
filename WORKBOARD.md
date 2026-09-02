@@ -295,7 +295,16 @@ contracts, findings, or verification journals.
     boundary. `06c7139` keeps that replay invariant in its own focused test after the
     first full gate exposed test-function overgrowth; it changes no product behavior.
     Fresh complete verification passes in 197.35 seconds with 1,295,138,816-byte maximum
-    RSS. Final correction re-reviews remain pending, so F-11 is not closed.
+    RSS. Daybreaker approves individual `6c799f5`, `06c7139`, `07007c8`, exact
+    `f7c1277..07007c8`, cumulative `dff4b65..07007c8`, and HEAD `07007c8` at
+    `C0/H0/M0/L0`. Pro's completed `f7c1277` review found one additional Low: a
+    state event could disagree with its nested Agent Session on session/runtime/display
+    identity, and a create/start final session could avoid the producer's attached state
+    while duplicating the same false projection everywhere. `a01502f` binds only those
+    duplicated producer fields and the known fresh-start transition; it does not copy the
+    lifecycle state machine into the browser. Fresh complete verification passes in
+    164.23 seconds with 776,175,616-byte maximum RSS. Final correction re-reviews remain
+    pending, so F-11 is not closed.
 - Build-artifact lifecycle uses the `35a418c` nonincremental profile. macOS uses
   packed debug information, eliminating Cargo's
   unpacked per-unit object copies while retaining source DWARF in dSYM bundles; the
