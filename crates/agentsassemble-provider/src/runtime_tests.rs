@@ -478,7 +478,7 @@ async fn codex_staged_bundle_outlives_stopped_launcher_readiness() {
 
 pub(super) async fn code_mode_host_fixture(root: &Path) -> (DurableAgentSession, PathBuf, PathBuf) {
     let executable = root.join("codex");
-    let companion = root.join("codex-code-mode-host");
+    let companion = root.join(agentsassemble_domain::codex_code_mode_host_name());
     let arguments_report = root.join("provider-arguments");
     let host_pid_report = root.join("code-mode-host-pid");
     let provider_script = format!(

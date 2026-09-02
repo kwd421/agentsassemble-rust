@@ -25,7 +25,10 @@ pub use command::{
     require_message_write_authority,
 };
 pub use diagnostic::{redact_persisted_diagnostic, redact_persisted_diagnostic_text};
-pub use identity::{stable_bundle_identity, stable_content_identity, stable_identity_hash};
+pub use identity::{
+    codex_bundle_identity, codex_code_mode_host_name, stable_bundle_identity,
+    stable_content_identity, stable_identity_hash,
+};
 pub use message_attachments::{
     MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES, MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS,
     MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX,

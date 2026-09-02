@@ -1,6 +1,8 @@
 use std::{fs::File, path::Path};
 
-use agentsassemble_domain::{stable_bundle_identity, stable_content_identity};
+use agentsassemble_domain::{
+    codex_bundle_identity, codex_code_mode_host_name, stable_content_identity,
+};
 use same_file::Handle;
 
 pub fn write_codex_bundle(root: &Path, fixture: &[u8]) -> (String, String) {
@@ -9,11 +11,7 @@ pub fn write_codex_bundle(root: &Path, fixture: &[u8]) -> (String, String) {
     } else {
         "provider-fixture"
     });
-    let companion = root.join(if cfg!(windows) {
-        "codex-code-mode-host.exe"
-    } else {
-        "codex-code-mode-host"
-    });
+    let companion = root.join(codex_code_mode_host_name());
     write_executable(&executable, fixture);
     #[cfg(unix)]
     write_executable(
@@ -27,8 +25,7 @@ pub fn write_codex_bundle(root: &Path, fixture: &[u8]) -> (String, String) {
         .unwrap_or_else(|error| panic!("resolve test executable: {error}"));
     let main_identity = executable_identity(&executable);
     let companion_identity = executable_identity(&companion);
-    let bundle_identity =
-        stable_bundle_identity("codex-native", &[&main_identity, &companion_identity]);
+    let bundle_identity = codex_bundle_identity(&main_identity, &companion_identity);
     (executable.to_string_lossy().into_owned(), bundle_identity)
 }
 

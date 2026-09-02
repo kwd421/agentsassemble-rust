@@ -7,7 +7,8 @@ use std::{
 };
 
 use agentsassemble_domain::{
-    AgentSessionDraft, stable_bundle_identity, stable_content_identity, stable_identity_hash,
+    AgentSessionDraft, codex_bundle_identity, codex_code_mode_host_name, stable_content_identity,
+    stable_identity_hash,
 };
 use same_file::Handle;
 use tokio::sync::{Semaphore, oneshot};
@@ -138,20 +139,16 @@ fn runtime_executable_identity(provider_kind: &str, executable: &Path) -> io::Re
     let companion = executable
         .parent()
         .ok_or_else(|| io::Error::other("Codex executable directory is unavailable"))?
-        .join(if cfg!(windows) {
-            "codex-code-mode-host.exe"
-        } else {
-            "codex-code-mode-host"
-        });
+        .join(codex_code_mode_host_name());
     if companion.canonicalize()? != companion {
         return Err(io::Error::other(
             "Codex code-mode host authority is not canonical",
         ));
     }
     let companion_identity = open_executable_identity(&companion)?;
-    Ok(stable_bundle_identity(
-        "codex-native",
-        &[&executable_identity, &companion_identity],
+    Ok(codex_bundle_identity(
+        &executable_identity,
+        &companion_identity,
     ))
 }
 
@@ -251,11 +248,9 @@ mod tests {
         let executable = root
             .path()
             .join(if cfg!(windows) { "codex.exe" } else { "codex" });
-        let companion = root.path().join(if cfg!(windows) {
-            "codex-code-mode-host.exe"
-        } else {
-            "codex-code-mode-host"
-        });
+        let companion = root
+            .path()
+            .join(agentsassemble_domain::codex_code_mode_host_name());
         write_executable(&executable, b"codex-main");
         write_executable(&companion, b"codex-host");
         let executable = executable

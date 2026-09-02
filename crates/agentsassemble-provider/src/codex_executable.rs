@@ -5,14 +5,14 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use agentsassemble_domain::{stable_bundle_identity, stable_content_identity};
+use agentsassemble_domain::{
+    codex_bundle_identity, codex_code_mode_host_name, stable_content_identity,
+};
 use same_file::Handle;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 
 use super::{BoundExecutable, FilesystemFailure};
-
-const CODEX_COMPANION: &str = "codex-code-mode-host";
 
 pub(crate) fn codex_code_mode_host_path(
     executable: &BoundExecutable,
@@ -33,7 +33,7 @@ pub(crate) fn codex_code_mode_host_path(
     let path = Path::new(executable.launch_path())
         .parent()
         .ok_or_else(|| io::Error::other("Codex bundle directory is unavailable"))?
-        .join(codex_companion_name());
+        .join(codex_code_mode_host_name());
     let staged = Handle::from_path(&path)?;
     let held = Handle::from_file(executable.companion_files[0].try_clone()?)?;
     if staged != held {
@@ -132,7 +132,10 @@ fn codex_executable_identity_sync(path: &Path) -> io::Result<String> {
         open_codex_bundle(path)?;
     let executable_identity = stable_content_identity(&executable_handle, &mut executable)?;
     let companion_identity = stable_content_identity(&companion_handle, &mut companion)?;
-    Ok(bundle_identity(&executable_identity, &companion_identity))
+    Ok(codex_bundle_identity(
+        &executable_identity,
+        &companion_identity,
+    ))
 }
 
 fn bind_codex_executable_sync(path: &Path, expected_identity: &str) -> io::Result<BoundExecutable> {
@@ -140,7 +143,7 @@ fn bind_codex_executable_sync(path: &Path, expected_identity: &str) -> io::Resul
         open_codex_bundle(path)?;
     let executable_identity = stable_content_identity(&executable_handle, &mut executable)?;
     let companion_identity = stable_content_identity(&companion_handle, &mut companion)?;
-    if bundle_identity(&executable_identity, &companion_identity) != expected_identity {
+    if codex_bundle_identity(&executable_identity, &companion_identity) != expected_identity {
         return Err(io::Error::other("Codex executable bundle identity changed"));
     }
     executable.rewind()?;
@@ -179,7 +182,7 @@ fn open_codex_bundle(path: &Path) -> io::Result<(File, Handle, File, Handle)> {
     let companion_path = canonical
         .parent()
         .ok_or_else(|| io::Error::other("Codex executable directory is unavailable"))?
-        .join(codex_companion_name());
+        .join(codex_code_mode_host_name());
     let companion_canonical = companion_path.canonicalize()?;
     if companion_canonical != companion_path || !super::is_executable_file(&companion_canonical)? {
         return Err(io::Error::other(
@@ -202,10 +205,6 @@ fn open_codex_bundle(path: &Path) -> io::Result<(File, Handle, File, Handle)> {
     Ok((executable, executable_handle, companion, companion_handle))
 }
 
-fn bundle_identity(executable_identity: &str, companion_identity: &str) -> String {
-    stable_bundle_identity("codex-native", &[executable_identity, companion_identity])
-}
-
 #[cfg(unix)]
 fn stage_codex_bundle(
     mut executable: File,
@@ -217,7 +216,7 @@ fn stage_codex_bundle(
 ) -> io::Result<BoundExecutable> {
     let (executable, launch_path, staging) =
         super::stage_private_executable(&mut executable, executable_handle, executable_identity)?;
-    let companion_path = staging.path().join(codex_companion_name());
+    let companion_path = staging.path().join(codex_code_mode_host_name());
     let mut staged_companion = OpenOptions::new()
         .create_new(true)
         .read(true)
@@ -239,14 +238,6 @@ fn stage_codex_bundle(
         #[cfg(any(target_os = "linux", target_os = "android"))]
         inherited_executable_fd: false,
     })
-}
-
-fn codex_companion_name() -> &'static str {
-    if cfg!(windows) {
-        "codex-code-mode-host.exe"
-    } else {
-        CODEX_COMPANION
-    }
 }
 
 fn codex_native_layout() -> Option<(&'static str, &'static str, &'static str)> {
@@ -295,7 +286,7 @@ mod tests {
         let executable = directory.join(if cfg!(windows) { "codex.exe" } else { "codex" });
         make_executable(&executable, b"native-codex");
         make_executable(
-            &directory.join(super::codex_companion_name()),
+            &directory.join(super::codex_code_mode_host_name()),
             b"native-code-mode-host",
         );
         executable
@@ -319,7 +310,7 @@ mod tests {
         let native = native_dir.join(binary);
         make_executable(&native, b"native-codex");
         make_executable(
-            &native_dir.join(super::codex_companion_name()),
+            &native_dir.join(super::codex_code_mode_host_name()),
             b"native-code-mode-host",
         );
         let resolved = super::resolve_codex_entry(&entry)
@@ -342,7 +333,7 @@ mod tests {
         let first = super::codex_executable_identity_sync(&executable)
             .unwrap_or_else(|error| panic!("identify bundle: {error}"));
         make_executable(
-            &root.path().join(super::codex_companion_name()),
+            &root.path().join(super::codex_code_mode_host_name()),
             b"changed-code-mode-host",
         );
         let changed = super::codex_executable_identity_sync(&executable)
@@ -385,7 +376,7 @@ mod tests {
         let companion = Path::new(bound.launch_path())
             .parent()
             .unwrap_or_else(|| panic!("staged provider parent missing"))
-            .join(super::codex_companion_name());
+            .join(super::codex_code_mode_host_name());
         assert_eq!(
             std::fs::read(companion)
                 .unwrap_or_else(|error| panic!("read staged companion: {error}")),

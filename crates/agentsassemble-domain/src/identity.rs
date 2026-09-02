@@ -116,6 +116,20 @@ pub fn stable_bundle_identity(bundle_kind: &str, members: &[&str]) -> String {
     format!("bundle-identity-v1-{:x}", digest.finalize())
 }
 
+#[must_use]
+pub fn codex_bundle_identity(executable_identity: &str, companion_identity: &str) -> String {
+    stable_bundle_identity("codex-native", &[executable_identity, companion_identity])
+}
+
+#[must_use]
+pub const fn codex_code_mode_host_name() -> &'static str {
+    if cfg!(windows) {
+        "codex-code-mode-host.exe"
+    } else {
+        "codex-code-mode-host"
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{stable_bundle_identity, stable_content_identity, stable_identity_hash};
@@ -146,14 +160,14 @@ mod tests {
 
     #[test]
     fn bundle_identity_binds_kind_order_and_every_member() {
-        let first = stable_bundle_identity("codex-native", &["main", "host"]);
+        let first = stable_bundle_identity("bundle-kind", &["main", "host"]);
         assert_eq!(
             first,
-            stable_bundle_identity("codex-native", &["main", "host"])
+            stable_bundle_identity("bundle-kind", &["main", "host"])
         );
         assert_ne!(
             first,
-            stable_bundle_identity("codex-native", &["host", "main"])
+            stable_bundle_identity("bundle-kind", &["host", "main"])
         );
         assert_ne!(first, stable_bundle_identity("other", &["main", "host"]));
     }
