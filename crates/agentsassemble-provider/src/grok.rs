@@ -161,3 +161,7 @@ pub(crate) fn valid_model_id(value: &str) -> bool {
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || b"._-".contains(&byte))
 }
+
+#[cfg(test)]
+#[path = "grok_tests.rs"]
+mod tests;

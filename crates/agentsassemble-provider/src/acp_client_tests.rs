@@ -3,23 +3,29 @@ use agent_client_protocol::schema::{
     v1::{
         AgentCapabilities, ContentBlock, ContentChunk, HttpHeader, InitializeResponse,
         LoadSessionResponse, McpCapabilities, McpServer, McpServerHttp, NewSessionResponse,
-        PromptResponse, SessionConfigOption, SessionConfigOptionCategory,
-        SessionConfigSelectOption, SessionNotification, SessionUpdate,
-        SetSessionConfigOptionResponse, StopReason, TextContent,
+        PermissionOption, PermissionOptionKind, PromptResponse, RequestPermissionOutcome,
+        RequestPermissionRequest, SessionConfigOption, SessionConfigOptionCategory,
+        SessionConfigSelectOption, SessionId, SessionNotification, SessionUpdate,
+        SetSessionConfigOptionResponse, StopReason, TextContent, ToolCallUpdate,
+        ToolCallUpdateFields,
     },
 };
 use serde_json::{Value, json};
+use std::sync::Mutex;
 use tokio::{
     io::{AsyncBufReadExt, AsyncWriteExt, BufReader, DuplexStream},
     sync::oneshot,
     task::JoinHandle,
 };
 
-use super::{AcpClient, AcpPermissionPolicy, MAX_PROTOCOL_LINE_BYTES};
+use super::{
+    AcpClient, AcpPermissionPolicy, MAX_PROTOCOL_LINE_BYTES, ProtocolState, permission_response,
+    record_tool_identity,
+};
 
 #[tokio::test]
 async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
-    let (mut client, fixture, _prompt_seen) = fixture(false).await;
+    let (mut client, fixture_task, _prompt_seen) = fixture(false).await;
     let attached = client
         .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
         .await
@@ -36,7 +42,7 @@ async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
     assert_eq!(turn.output, "Hello from Cursor");
     assert!(!client.requires_restart());
     client.shutdown().await;
-    fixture
+    fixture_task
         .await
         .unwrap_or_else(|error| panic!("join ACP fixture: {error}"));
 }
@@ -68,7 +74,7 @@ async fn cancellation_waits_for_the_exact_acp_cancelled_receipt() {
 
 #[tokio::test]
 async fn durable_session_load_accepts_the_exact_uncategorized_model_option() {
-    let (mut client, fixture, _prompt_seen) = fixture(false).await;
+    let (mut client, fixture_task, _prompt_seen) = fixture(false).await;
     let attached = client
         .attach(
             "/tmp",
@@ -82,9 +88,85 @@ async fn durable_session_load_accepts_the_exact_uncategorized_model_option() {
     assert!(attached.reused);
     assert!(!client.requires_restart());
     client.shutdown().await;
-    fixture
+    fixture_task
         .await
         .unwrap_or_else(|error| panic!("join ACP fixture: {error}"));
+}
+
+#[tokio::test]
+async fn process_selected_model_must_match_before_session_creation() {
+    let (mut client, fixture_task, _prompt_seen) = fixture(false).await;
+    let attached = client
+        .attach_process_model("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
+        .await
+        .unwrap_or_else(|error| panic!("attach process-selected ACP model: {error}"));
+    assert_eq!(attached.session_id, "cursor-session");
+    client.shutdown().await;
+    fixture_task
+        .await
+        .unwrap_or_else(|error| panic!("join ACP fixture: {error}"));
+
+    let (mut client, fixture_task, _prompt_seen) = fixture(false).await;
+    let Err(error) = client
+        .attach_process_model("/tmp", "", mcp_server(), "different-model")
+        .await
+    else {
+        panic!("accepted mismatched process-selected model");
+    };
+    assert_eq!(error.code, "provider_model_unconfirmed");
+    assert!(client.requires_restart());
+    client.shutdown().await;
+    fixture_task
+        .await
+        .unwrap_or_else(|error| panic!("join ACP fixture: {error}"));
+}
+
+#[test]
+fn room_tool_permission_requires_exact_active_bound_authority() {
+    let state = Mutex::new(ProtocolState {
+        permission_policy: AcpPermissionPolicy::RoomTools,
+        room_observation_active: true,
+        session_id: Some(SessionId::new("session")),
+        active_turn_id: Some("turn".to_owned()),
+        ..ProtocolState::default()
+    });
+    let request = permission_request("call", "agentsassemble_room__read_discussion");
+    assert_selected(&permission_response(&state, &request), "allow");
+
+    state
+        .lock()
+        .unwrap_or_else(|_| panic!("lock protocol state"))
+        .room_observation_active = false;
+    assert_selected(&permission_response(&state, &request), "reject");
+
+    state
+        .lock()
+        .unwrap_or_else(|_| panic!("lock protocol state"))
+        .room_observation_active = true;
+    let impostor = permission_request("call", "read_discussion_backup");
+    assert_selected(&permission_response(&state, &impostor), "reject");
+
+    let mut locked = state
+        .lock()
+        .unwrap_or_else(|_| panic!("lock protocol state"));
+    record_tool_identity(
+        &mut locked.active_tools,
+        "call".to_owned(),
+        Some(&json!({"tool_name": "read_discussion"})),
+    );
+    record_tool_identity(
+        &mut locked.active_tools,
+        "call".to_owned(),
+        Some(&json!({"tool_name": "publish_message"})),
+    );
+    drop(locked);
+    assert_selected(&permission_response(&state, &request), "reject");
+
+    state
+        .lock()
+        .unwrap_or_else(|_| panic!("lock protocol state"))
+        .permission_policy = AcpPermissionPolicy::Reject;
+    assert_selected(&permission_response(&state, &request), "reject");
 }
 
 async fn fixture(cancel_prompt: bool) -> (AcpClient, JoinHandle<()>, oneshot::Receiver<()>) {
@@ -119,16 +201,7 @@ async fn run_fixture(
         let id = message.get("id").cloned();
         match method {
             "initialize" => {
-                respond(
-                    &mut output,
-                    id,
-                    InitializeResponse::new(ProtocolVersion::V1).agent_capabilities(
-                        AgentCapabilities::new()
-                            .load_session(true)
-                            .mcp_capabilities(McpCapabilities::new().http(true)),
-                    ),
-                )
-                .await;
+                respond(&mut output, id, initialize_response()).await;
             }
             "session/new" => {
                 assert_eq!(
@@ -220,6 +293,20 @@ fn model_option(current: &str) -> SessionConfigOption {
     .category(SessionConfigOptionCategory::Model)
 }
 
+fn initialize_response() -> InitializeResponse {
+    let meta = serde_json::Map::from_iter([(
+        "modelState".to_owned(),
+        json!({"currentModelId": "gpt-5.6-sol-high-fast"}),
+    )]);
+    InitializeResponse::new(ProtocolVersion::V1)
+        .agent_capabilities(
+            AgentCapabilities::new()
+                .load_session(true)
+                .mcp_capabilities(McpCapabilities::new().http(true)),
+        )
+        .meta(meta)
+}
+
 fn uncategorized_model_option() -> SessionConfigOption {
     SessionConfigOption::select(
         "model",
@@ -237,6 +324,27 @@ fn mcp_server() -> McpServer {
         McpServerHttp::new("agentsassemble_room", "http://127.0.0.1:1/mcp")
             .headers(vec![HttpHeader::new("Authorization", "Bearer test")]),
     )
+}
+
+fn permission_request(call_id: &str, tool_name: &str) -> RequestPermissionRequest {
+    RequestPermissionRequest::new(
+        "session",
+        ToolCallUpdate::new(
+            call_id.to_owned(),
+            ToolCallUpdateFields::new().raw_input(json!({"tool_name": tool_name})),
+        ),
+        vec![
+            PermissionOption::new("allow", "Allow once", PermissionOptionKind::AllowOnce),
+            PermissionOption::new("reject", "Reject once", PermissionOptionKind::RejectOnce),
+        ],
+    )
+}
+
+fn assert_selected(response: &super::RequestPermissionResponse, option_id: &str) {
+    let RequestPermissionOutcome::Selected(selected) = &response.outcome else {
+        panic!("permission response did not select an option");
+    };
+    assert_eq!(selected.option_id.to_string(), option_id);
 }
 
 async fn respond(output: &mut DuplexStream, id: Option<Value>, result: impl serde::Serialize) {

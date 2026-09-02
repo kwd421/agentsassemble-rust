@@ -335,3 +335,7 @@ const fn portal_error(error: RoomPortalError) -> DriverError {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "grok_acp_tests.rs"]
+mod tests;
