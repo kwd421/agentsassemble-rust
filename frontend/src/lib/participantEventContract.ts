@@ -258,15 +258,11 @@ export function participantProjectionsMatch(left: unknown, right: unknown): bool
   }
 }
 
-function eventIdentityMatches(left: unknown, right: unknown): boolean {
+function eventProjectionsMatch(left: unknown, right: unknown): boolean {
   if (!left || !right || typeof left !== "object" || typeof right !== "object") {
     return false;
   }
-  const leftEvent = left as Record<string, unknown>;
-  const rightEvent = right as Record<string, unknown>;
-  return ["id", "seq", "room_id", "type"].every(
-    (key) => leftEvent[key] === rightEvent[key]
-  );
+  return JSON.stringify(left) === JSON.stringify(right);
 }
 
 function creationStartSessionsMatch(initial: unknown, prepared: unknown): boolean {
@@ -331,7 +327,7 @@ export function agentCreateAckProjectionsAreCoherent(
     const created = agentCreationProjectionFromEvent(createdEvent);
     if (
       !participantProjectionsMatch(result.participant, createdEvent.participant) ||
-      !eventIdentityMatches(result.event, events.at(-1))
+      !eventProjectionsMatch(result.event, events.at(-1))
     ) {
       return false;
     }
@@ -377,8 +373,8 @@ export function agentCreateAckProjectionsAreCoherent(
       typeof start.runtime_reused !== "boolean" ||
       !Array.isArray(start.events) ||
       start.events.length !== 3 ||
-      !start.events.every((event, index) => eventIdentityMatches(event, events[index + 1])) ||
-      !eventIdentityMatches(start.event, events[3]) ||
+      !start.events.every((event, index) => eventProjectionsMatch(event, events[index + 1])) ||
+      !eventProjectionsMatch(start.event, events[3]) ||
       !participantProjectionsMatch(
         (start.events[0] as Record<string, unknown>).participant,
         (events[1] as unknown as Record<string, unknown>).participant,

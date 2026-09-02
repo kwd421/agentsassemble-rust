@@ -249,4 +249,58 @@ describe("Agent Session socket contract", () => {
       handle.close();
     },
   );
+
+  it.each(["nested event", "final event"] as const)(
+    "rejects a create-and-start ACK with a conflicting %s projection",
+    async (conflict) => {
+      const errors: RoomSocketSayError[] = [];
+      const { handle, sockets } = await openReadyHarness(errors);
+      void handle.command("agent.create", {
+        provider_id: "codex",
+        start: true,
+      }).catch(() => {});
+      await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
+      const command = sentClientFrame(sockets[0]);
+      const { participant, initialSession, events, start } = creationStartRecords();
+      const conflictingStart = conflict === "nested event"
+        ? {
+            ...start,
+            events: start.events.map((event, index) =>
+              index === 1 ? { ...event, display_name: "Conflicting Agent" } : event
+            ),
+          }
+        : start;
+      const finalEvent = conflict === "final event"
+        ? {
+            ...events[3],
+            actor: {
+              participant_id: "conflicting-actor",
+              participant_type: "human",
+            },
+          }
+        : events[3];
+      receiveServerFrame(sockets[0], {
+        op: "ack",
+        accepted: true,
+        resolution: "committed",
+        request_id: command.request_id,
+        action: "agent.create",
+        result: {
+          status: "created",
+          participant,
+          agent_session: initialSession,
+          start: conflictingStart,
+          events,
+          event: finalEvent,
+          event_seq: 4,
+        },
+      });
+
+      await vi.waitFor(() =>
+        expect(errors.at(-1)?.category).toBe("ack_contract_invalid")
+      );
+      expect(handle.ready()).toBe(false);
+      handle.close();
+    },
+  );
 });
