@@ -127,3 +127,48 @@ pub(super) fn validate_model_relation(
         ),
     ))
 }
+
+pub(super) fn validate_runtime_variant(
+    provider: &ProviderAvailability,
+    model: &str,
+    reasoning_effort: &str,
+    service_tier: &str,
+) -> Result<(), ProviderSelectionError> {
+    let model_option = provider
+        .controls
+        .iter()
+        .find(|control| control.key == "model")
+        .and_then(|control| control.options.iter().find(|option| option.value == model));
+    let Some(model_option) = model_option else {
+        return Err(ProviderSelectionError::new(
+            "catalog_inconsistent",
+            format!("Provider {} has no selected model authority.", provider.id),
+        ));
+    };
+    let Some(variants) = model_option.metadata.get("runtime_variants") else {
+        return Ok(());
+    };
+    let Some(variants) = variants.as_array() else {
+        return Err(ProviderSelectionError::new(
+            "catalog_inconsistent",
+            format!("Provider {} has malformed runtime variants.", provider.id),
+        ));
+    };
+    let matches = variants.iter().any(|variant| {
+        variant.as_object().is_some_and(|variant| {
+            variant.get("reasoning_effort").and_then(Value::as_str) == Some(reasoning_effort)
+                && variant.get("service_tier").and_then(Value::as_str) == Some(service_tier)
+                && variant.len() == 2
+        })
+    });
+    if matches {
+        return Ok(());
+    }
+    Err(ProviderSelectionError::new(
+        "unsupported_control",
+        format!(
+            "Provider {} model {model} does not support the selected runtime variant.",
+            provider.id
+        ),
+    ))
+}

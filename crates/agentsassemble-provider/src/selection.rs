@@ -12,7 +12,7 @@ use crate::selection_input::SelectionInput;
 
 #[path = "selection_controls.rs"]
 mod controls;
-use controls::{selected_u32, selected_value, validate_model_relation};
+use controls::{selected_u32, selected_value, validate_model_relation, validate_runtime_variant};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderSelection {
@@ -135,6 +135,7 @@ impl ProviderSelection {
         validate_model_relation(provider, &model, "reasoning_efforts", &reasoning_effort)?;
         let service_tier = selected_value(provider, "service_tier", input.service_tier)?;
         validate_model_relation(provider, &model, "service_tiers", &service_tier)?;
+        validate_runtime_variant(provider, &model, &reasoning_effort, &service_tier)?;
         let variant = selected_value(provider, "variant", input.variant)?;
         let permission_mode = selected_value(provider, "permission_mode", input.permission_mode)?;
         let execution_harness = input
@@ -607,6 +608,83 @@ mod tests {
         let mut cleared = selected.clone();
         cleared.persona_card_id.clear();
         assert_ne!(selected.runtime_profile_key, cleared.profile_key());
+    }
+
+    #[tokio::test]
+    async fn runtime_variant_requires_an_advertised_effort_and_tier_pair() {
+        let workspace =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create workspace: {error}"));
+        let mut authority = catalog();
+        authority.providers[0].controls[0].options[0]
+            .metadata
+            .insert(
+                "runtime_variants".to_owned(),
+                json!([
+                    {"reasoning_effort": "medium", "service_tier": "default"},
+                    {"reasoning_effort": "high", "service_tier": "priority"}
+                ]),
+            );
+        let payload = json!({
+            "provider_id": "codex",
+            "catalog_revision": "catalog-1",
+            "display_name": "Terra",
+            "workspace": workspace.path(),
+            "model": "gpt-5.6-terra",
+            "reasoning_effort": "medium",
+            "service_tier": "priority"
+        });
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "unsupported-pair",
+            &payload,
+            &authority,
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("unsupported pair must fail"));
+        assert_eq!(error.code, "unsupported_control");
+
+        let mut supported = payload;
+        supported["reasoning_effort"] = json!("high");
+        ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "supported-pair",
+            &supported,
+            &authority,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("advertised pair must pass: {error}"));
+    }
+
+    #[tokio::test]
+    async fn malformed_runtime_variant_authority_fails_closed() {
+        let workspace =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create workspace: {error}"));
+        let mut authority = catalog();
+        authority.providers[0].controls[0].options[0]
+            .metadata
+            .insert("runtime_variants".to_owned(), json!({"unexpected": true}));
+        let error = ProviderSelection::from_catalog(
+            "general",
+            "operator-local-user",
+            "malformed-variants",
+            &json!({
+                "provider_id": "codex",
+                "catalog_revision": "catalog-1",
+                "display_name": "Terra",
+                "workspace": workspace.path(),
+                "model": "gpt-5.6-terra",
+                "reasoning_effort": "medium",
+                "service_tier": "default"
+            }),
+            &authority,
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("malformed variants must fail"));
+        assert_eq!(error.code, "catalog_inconsistent");
     }
 
     #[tokio::test]
