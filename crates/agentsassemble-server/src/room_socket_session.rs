@@ -1,13 +1,13 @@
 use std::time::Duration;
 
-use agentsassemble_domain::public_event_for_principal;
+use agentsassemble_domain::{ProviderCatalog, public_event_for_principal};
 use agentsassemble_persistence::HumanSessionAuthorization;
 use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandResolution, ProtocolError, RoomAction, ServerFrame,
 };
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::StreamExt;
-use tokio::sync::broadcast;
+use tokio::sync::{broadcast, watch};
 
 use crate::{
     AppState,
@@ -245,17 +245,22 @@ pub(crate) async fn run(
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
                 }
             }
-            changed = catalog_updates.changed() => {
-                if changed.is_err() {
-                    continue;
-                }
+            catalog = receive_catalog_update(&mut catalog_updates) => {
+                let Some(catalog) = catalog else { return; };
                 let frame = ServerFrame::ProviderCatalogUpdated {
-                    catalog: catalog_updates.borrow_and_update().clone(),
+                    catalog,
                 };
                 if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
             }
         }
     }
+}
+
+async fn receive_catalog_update(
+    updates: &mut watch::Receiver<ProviderCatalog>,
+) -> Option<ProviderCatalog> {
+    updates.changed().await.ok()?;
+    Some(updates.borrow_and_update().clone())
 }
 
 async fn wait_for_session_expiry(expires_at: Option<chrono::DateTime<chrono::Utc>>) {
@@ -331,10 +336,21 @@ mod tests {
 
     use agentsassemble_domain::{ProviderCatalog, UserProfilePatch};
     use agentsassemble_provider::ProviderCatalogService;
-    use tokio::sync::broadcast;
+    use tokio::sync::{broadcast, watch};
 
-    use super::{receive_revocation, session_remains_authorized_after_revocation_signal};
+    use super::{
+        receive_catalog_update, receive_revocation,
+        session_remains_authorized_after_revocation_signal,
+    };
     use crate::{AppState, TicketStore, ticket_tests::HumanSessionFixture};
+
+    #[tokio::test]
+    async fn closed_catalog_watch_ends_the_subscription() {
+        let (sender, mut updates) = watch::channel(ProviderCatalog::default());
+        drop(sender);
+
+        assert!(receive_catalog_update(&mut updates).await.is_none());
+    }
 
     #[tokio::test]
     async fn lagged_revocations_revalidate_and_closed_notification_fails_closed() {

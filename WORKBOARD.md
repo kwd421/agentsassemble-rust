@@ -12,8 +12,8 @@ contracts, findings, or verification journals.
 ## Active work
 
 - Phase: finite Phase 0B prerequisite closure (F-14 and F-16), then Phase 1
-  provider-first implementation. The documentation correction is reviewed; no
-  product implementation is part of this closure.
+  provider-first implementation. Both prerequisite implementations and the complete
+  local gate are finished; Phase 0B awaits its one whole-phase external cross-review.
 - Historical Phase 0B labels are not a serial global gate. D-06 executes with Phase 1
   runtime measurement/hardening; D-07 executes with Phase 5 human admission; split
   F-18/F-20 work remains with its already named external-admission/custom-channel
@@ -46,6 +46,16 @@ contracts, findings, or verification journals.
   tests, the production TypeScript/Vite build, and the copied CSS gate pass. This
   removes a concrete replay-identity downgrade without adding state, retry, fallback,
   polling, or a broader identifier abstraction.
+- Completed: F-16. A closed provider-catalog watch now ends its affected room socket
+  session once instead of immediately re-entering the select loop. The catalog service
+  is the sender owner, so closure is terminal authority loss rather than a recoverable
+  empty update; shutdown, event ordering, and normal catalog-push behavior are unchanged.
+  A deterministic closed-channel regression proves the production receiver returns its
+  terminal state without a timer. This removes the concrete zero-wait CPU spin while
+  adding no polling, retry, fallback source, or persistent state. Fresh complete
+  `make verify` passes the frontend, desktop, Rust, real TCP/WebSocket, generated-binding,
+  Clippy, policy, structure, diff, CSS, and artifact gates in 198.50 seconds with
+  1,750,450,176-byte maximum RSS.
 - Completed: D-01 at `a7949bd`; the uncalled HTTP challenge/ticket bootstrap and
   startup secret are absent, while private-control and admitted-human socket ticket
   issuance remain.
