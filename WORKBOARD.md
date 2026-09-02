@@ -662,6 +662,44 @@ contracts, findings, or verification journals.
   structure, diff, CSS, and artifact gates in 258.66 seconds with 1,806,270,464-byte
   maximum RSS. No LLM Gateway credential was available for an authorized real
   completion, so real-turn evidence remains explicitly open for the Phase 1 matrix.
+- Implemented pending Phase 1 whole-phase review: TokenRouter API vertical at
+  `9009cd9`. The registered `tokenrouter_api` path owns the verified original
+  completion endpoint, public pricing-catalog endpoint and schema, isolated keyring
+  account, `moonshotai/kimi-k3-free` preference, 4,096-token output ceiling, request
+  shape, and provider-specific visible failures. The public projection accepts only
+  bounded `Text` entries whose endpoint types include `openai` and enabled groups
+  include `default`; the common catalog owner supplies only the identical HTTPS fetch,
+  compatible-model ceiling, and ready-state transition. The private credential route
+  authorizes before reading its bounded body, and Agent Add exposes that operation only
+  from the registered Rust capability.
+  The original kept a bundled same-provider model when public discovery failed. That
+  fallback is not product semantics in the Rust target: discovery failure remains
+  visible and non-startable, and a valid catalog missing the historical preference is
+  ready with no selected model until the user explicitly chooses one. The production
+  endpoint was dynamic during measurement: an initial 62,895-byte response held 134
+  raw entries and the compatible count changed from 74 to 75 between observations, so
+  no exact count is encoded as policy. The production Rust path projected 75 compatible
+  models at the recorded observation and produced a complete nine-provider catalog of
+  184,420 bytes under the 192 KiB aggregate and 256 KiB WebSocket frame ceilings.
+  Network-dependent measurement code and its temporary response were removed.
+  TokenRouter's pricing payload does not expose a sufficiently verified, stable dollar
+  schema for the current UI contract, so the adapter does not infer `free` from a model
+  name or publish uncertain prices. The original's bounded provider-error-body
+  classification, including its TokenRouter exhausted-quota distinction, remains an
+  explicit phase-wide normalized-failure hardening item; this breadth-first slice
+  exposes failures but does not claim that final error-code parity yet.
+  Repository-wide searches found no second TokenRouter endpoint, credential route,
+  catalog policy, runtime owner, retry, fallback, polling, heartbeat, timer, cache, or
+  swallowed catalog failure. The 208-line provider module is the largest new owner.
+  The existing 711-line catalog and 592-line registration files remain respectively one
+  public catalog state-transition owner and one declarative registration/launch table
+  after the 500-line structure review; splitting either now would add forwarding
+  interfaces without separating state or an invariant. A fresh complete `make verify`
+  passes all 99 frontend files/662 tests, desktop, Rust unit/integration, real
+  TCP/WebSocket, generated-binding, Clippy, policy, structure, diff, CSS, and artifact
+  gates in 190.51 seconds with 770,097,152-byte maximum RSS. No TokenRouter credential
+  was available for an authorized real completion, so real-turn evidence remains open
+  for the Phase 1 matrix rather than being simulated.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
