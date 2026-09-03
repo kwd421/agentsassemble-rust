@@ -88,7 +88,9 @@ describe("ProviderControlSelect", () => {
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
     await userEvent.click(screen.getByRole("button", { name: "무료 모델만 보기" }));
     const results = screen.getByRole("listbox", { name: "모델" });
-    expect(within(results).getByRole("option", { name: "Free Model Free" })).toBeTruthy();
+    expect(
+      within(results).getByRole("option", { name: "Free Model Free 무료" })
+    ).toBeTruthy();
     expect(within(results).getByRole("option", { name: "Free Tier Model Free tier" })).toBeTruthy();
     expect(within(results).queryByRole("option", { name: "Paid Model" })).toBeNull();
   });
@@ -144,7 +146,11 @@ describe("ProviderControlSelect", () => {
 
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
     expect(screen.queryByText("Reasoning")).toBeNull();
-    await userEvent.hover(screen.getByRole("option", { name: /Reasoner/ }));
+    await userEvent.hover(
+      screen.getByRole("option", {
+        name: "Reasoner Reasoning Context 128,000 · 입력 $0.55/M · 출력 $2.19/M",
+      })
+    );
 
     const detail = document.querySelector(".dc-agent-model-details-popover");
     expect(detail).toBeTruthy();

@@ -181,7 +181,7 @@ fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
         metadata.insert("relation_scope".to_owned(), json!("per_model"));
         metadata.insert("reasoning_efforts".to_owned(), json!(reasoning_efforts));
     }
-    project_display_metadata(&mut metadata, entry, context);
+    project_display_metadata(&mut metadata, entry);
 
     Some(ProviderControlOption {
         value: model_id.clone(),
@@ -196,11 +196,7 @@ fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
 fn project_display_metadata(
     metadata: &mut BTreeMap<String, Value>,
     entry: &serde_json::Map<String, Value>,
-    context: Option<u64>,
 ) {
-    let mut description = context
-        .map(|context| vec![format!("Context {}", grouped_number(context))])
-        .unwrap_or_default();
     if let Some(pricing) = entry.get("pricing").and_then(Value::as_object) {
         let input_price = pricing
             .get("prompt")
@@ -224,22 +220,8 @@ fn project_display_metadata(
                 "paid"
             }),
         );
-        if pricing_is_free(pricing) {
-            description.push("무료".to_owned());
-        } else {
-            if let Some(price) = input_price {
-                description.push(format!("입력 ${price}/M"));
-            }
-            if let Some(price) = output_price {
-                description.push(format!("출력 ${price}/M"));
-            }
-        }
     } else if entry.get("free").and_then(Value::as_bool) == Some(true) {
         metadata.insert("pricing".to_owned(), json!("free"));
-        description.push("무료".to_owned());
-    }
-    if !description.is_empty() {
-        metadata.insert("description".to_owned(), json!(description.join(" · ")));
     }
 }
 
@@ -337,18 +319,6 @@ fn price_per_million(value: &Value) -> Option<String> {
     )
 }
 
-fn grouped_number(value: u64) -> String {
-    let digits = value.to_string();
-    let mut grouped = String::with_capacity(digits.len() + digits.len() / 3);
-    for (index, byte) in digits.bytes().enumerate() {
-        if index > 0 && (digits.len() - index).is_multiple_of(3) {
-            grouped.push(',');
-        }
-        grouped.push(char::from(byte));
-    }
-    grouped
-}
-
 #[cfg(test)]
 mod tests {
     use serde_json::json;
@@ -394,10 +364,7 @@ mod tests {
             options[0].metadata["output_price_per_million"],
             json!("1.49")
         );
-        assert_eq!(
-            options[0].metadata["description"],
-            json!("Context 131,072 · 입력 $0.99/M · 출력 $1.49/M")
-        );
+        assert!(!options[0].metadata.contains_key("description"));
         assert_eq!(options[1].metadata["vision"], json!(true));
         assert_eq!(
             options[1].metadata["reasoning_efforts"],

@@ -1,4 +1,5 @@
 import type { ProviderControlOption } from "../../roomSocketClient";
+import { providerControlOptionDescription } from "./providerModelOptions";
 
 export default function ProviderControlOptionContent({
   option,
@@ -12,10 +13,7 @@ export default function ProviderControlOptionContent({
   pricingOnly?: boolean;
 }) {
   const badges = pricingOnly ? pricingBadges(option) : optionBadges(option);
-  const description =
-    showDescription && typeof option.metadata?.description === "string"
-      ? option.metadata.description.trim()
-      : "";
+  const description = showDescription ? providerControlOptionDescription(option) : "";
   return (
     <span className="dc-agent-select-option-content">
       <span className="dc-agent-select-option-copy">
@@ -46,17 +44,11 @@ export function providerControlOptionEffect(option?: ProviderControlOption): str
 }
 
 export function providerControlOptionHasDescription(option: ProviderControlOption): boolean {
-  return (
-    typeof option.metadata?.description === "string" &&
-    Boolean(option.metadata.description.trim())
-  );
+  return Boolean(providerControlOptionDescription(option));
 }
 
 export function providerControlOptionAccessibleName(option: ProviderControlOption): string {
-  const description =
-    typeof option.metadata?.description === "string"
-      ? option.metadata.description.trim()
-      : "";
+  const description = providerControlOptionDescription(option);
   return [option.label, ...optionBadges(option), description].filter(Boolean).join(" ");
 }
 

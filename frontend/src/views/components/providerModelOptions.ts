@@ -42,7 +42,7 @@ export function filterProviderControlOptions(
       option.value,
       metadata.group,
       metadata.family,
-      metadata.description,
+      providerControlOptionDescription(option),
     ]
       .filter((value): value is string => typeof value === "string")
       .join(" ")
@@ -70,6 +70,36 @@ export function groupProviderControlOptions(
 
 export function isFreeProviderOption(option: ProviderControlOption): boolean {
   return ["free", "free_tier"].includes(String(option.metadata?.pricing || ""));
+}
+
+export function providerControlOptionDescription(
+  option: ProviderControlOption
+): string {
+  const metadata = option.metadata || {};
+  if (typeof metadata.description === "string" && metadata.description.trim()) {
+    return metadata.description.trim();
+  }
+  const description: string[] = [];
+  if (
+    typeof metadata.context_length === "number" &&
+    Number.isFinite(metadata.context_length) &&
+    metadata.context_length > 0
+  ) {
+    description.push(`Context ${metadata.context_length.toLocaleString("en-US")}`);
+  }
+  if (metadata.pricing === "free") {
+    description.push("무료");
+  } else {
+    addPrice(description, "입력", metadata.input_price_per_million);
+    addPrice(description, "출력", metadata.output_price_per_million);
+  }
+  return description.join(" · ");
+}
+
+function addPrice(description: string[], label: string, price: unknown) {
+  if (typeof price === "string" && price.trim()) {
+    description.push(`${label} $${price.trim()}/M`);
+  }
 }
 
 function modelFamily(option: ProviderControlOption): string {
