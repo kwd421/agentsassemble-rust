@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, ClientKind,
-    DurableAgentSession, clean_identifier, stable_identity_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AuthenticatedPrincipal,
+    ClientKind, DurableAgentSession, clean_identifier, stable_identity_hash,
 };
 use serde_json::Value;
 
@@ -141,10 +141,8 @@ pub(crate) fn lifecycle_intent_is_empty(session: &DurableAgentSession) -> bool {
 }
 
 pub(crate) fn agent_stop_requires_cleanup(session: &DurableAgentSession) -> bool {
-    !matches!(
-        session.public.runtime_status.as_str(),
-        "stopped" | "available"
-    ) || !session.runtime_handle_id.is_empty()
+    session.public.runtime_status != AgentRuntimeStatus::Stopped
+        || !session.runtime_handle_id.is_empty()
         || !session.runtime_owner_id.is_empty()
         || !session.runtime_lease_token.is_empty()
         || !lifecycle_intent_is_empty(session)

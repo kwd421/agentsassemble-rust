@@ -1,4 +1,6 @@
-use agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID;
+use agentsassemble_domain::{
+    AgentRuntimeStatus, AgentSessionStatus, LOCAL_OPERATOR_PARTICIPANT_ID,
+};
 use serde_json::json;
 
 use super::{
@@ -102,7 +104,7 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
         .unwrap_or_else(|error| panic!("finalize retained runtime interrupt: {error}"));
     assert!(finalized.next_assignments.is_empty());
     let retained = stored_session(&store).await;
-    assert_eq!(retained.public.runtime_status, "idle");
+    assert_eq!(retained.public.runtime_status, AgentRuntimeStatus::Idle);
     assert!(!retained.runtime_handle_id.is_empty());
     assert_eq!(retained.pending_inputs.len(), 1);
     assert!(retained.inflight_inputs.is_empty());
@@ -618,8 +620,8 @@ async fn blocking_turn_is_reconciled_before_lifecycle_and_exact_gone_detaches() 
     assert_eq!(execution.phase, crate::ProviderTurnExecutionPhase::Failed);
     assert!(execution.requeue_finalized);
     let session = stored_session(&store).await;
-    assert_eq!(session.public.status, "detached");
-    assert_eq!(session.public.runtime_status, "stopped");
+    assert_eq!(session.public.status, AgentSessionStatus::Detached);
+    assert_eq!(session.public.runtime_status, AgentRuntimeStatus::Stopped);
     assert!(session.runtime_handle_id.is_empty());
     assert!(session.provider_session_id.is_empty());
     assert_eq!(session.pending_inputs.len(), 1);

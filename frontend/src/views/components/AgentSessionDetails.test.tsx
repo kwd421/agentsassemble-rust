@@ -91,7 +91,7 @@ describe("AgentSessionDetails diagnostics", () => {
       session_id: "session-1",
       participant_id: "agent-1",
       display_name: "Guide",
-      status: "stopped",
+      status: "available",
       runtime_status: "stopped",
       enabled: false,
       provider_kind: "deepseek_api",

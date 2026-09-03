@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSessionDraft, AuthenticatedPrincipal,
-    CURRENT_RUNTIME_PROFILE_VERSION, ClientKind, DurableAgentSession, Participant,
-    canonical_payload_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionDraft,
+    AgentSessionStatus, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, ClientKind,
+    DurableAgentSession, Participant, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -129,8 +129,8 @@ fn apply_draft(
     draft: &AgentSessionDraft,
     persona_card: Option<Box<agentsassemble_domain::PersonaAssetSummary>>,
 ) {
-    "available".clone_into(&mut session.public.status);
-    "stopped".clone_into(&mut session.public.runtime_status);
+    session.public.status = AgentSessionStatus::Available;
+    session.public.runtime_status = AgentRuntimeStatus::Stopped;
     session.public.enabled = false;
     session.public.model.clone_from(&draft.model);
     session
@@ -208,8 +208,10 @@ fn required_agent_id(payload: &Value) -> Result<String, PersistenceError> {
 fn require_stopped_profile(session: &DurableAgentSession) -> Result<(), PersistenceError> {
     let stopped = !session.public.enabled
         && matches!(
-            session.public.runtime_status.as_str(),
-            "" | "available" | "stopped" | "error" | "disconnected"
+            session.public.runtime_status,
+            AgentRuntimeStatus::Stopped
+                | AgentRuntimeStatus::Error
+                | AgentRuntimeStatus::Disconnected
         )
         && session.public.active_turn_id.is_empty()
         && session.runtime_handle_id.is_empty()

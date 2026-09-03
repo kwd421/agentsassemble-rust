@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession,
-    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
+    AgentSessionStatus, AgentTurnPhase, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
 };
 use chrono::{DateTime, Utc};
 
@@ -21,8 +21,8 @@ pub(crate) fn durable_session(
             session_id: session_id.to_owned(),
             participant_id: session_id.to_owned(),
             display_name: display_name.to_owned(),
-            status: "available".to_owned(),
-            runtime_status: "starting".to_owned(),
+            status: AgentSessionStatus::Available,
+            runtime_status: AgentRuntimeStatus::Starting,
             enabled: true,
             provider_kind: provider_kind.to_owned(),
             runtime_kind: "live_cli".to_owned(),
@@ -47,7 +47,7 @@ pub(crate) fn durable_session(
             bootstrap_cutoff_seq: 0,
             turn_count: 0,
             active_turn_id: String::new(),
-            turn_phase: String::new(),
+            turn_phase: AgentTurnPhase::None,
             last_error: String::new(),
             last_error_code: String::new(),
             recovery_required: false,

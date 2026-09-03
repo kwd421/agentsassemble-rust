@@ -1,8 +1,9 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, DurableAgentSession,
-    ParticipantStatus, RoomEvent, canonical_payload_hash, redact_persisted_diagnostic_text,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AgentTurnPhase, AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, RoomEvent,
+    canonical_payload_hash, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -185,16 +186,16 @@ impl SqliteStore {
         if !active_turn {
             session.pending_inputs = merged_turn_queue(&session)?;
             session.inflight_inputs.clear();
-            "disconnected".clone_into(&mut session.public.runtime_status);
+            session.public.runtime_status = AgentRuntimeStatus::Disconnected;
             session.public.provider_session_active = false;
             session.public.provider_session_reused = false;
             session.public.active_turn_id.clear();
-            session.public.turn_phase.clear();
+            session.public.turn_phase = AgentTurnPhase::None;
             session.active_source_event_id.clear();
             session.input_up_to_event_id.clear();
             session.input_up_to_seq = 0;
         }
-        "unavailable".clone_into(&mut session.public.status);
+        session.public.status = AgentSessionStatus::Unavailable;
         session.public.enabled = false;
         session.public.last_error =
             redact_persisted_diagnostic_text(message, PUBLIC_LIFECYCLE_ERROR_LIMIT);
@@ -316,12 +317,12 @@ async fn detach_confirmed_session(
 ) -> Result<Vec<RoomEvent>, PersistenceError> {
     session.pending_inputs = merged_turn_queue(session)?;
     session.inflight_inputs.clear();
-    "detached".clone_into(&mut session.public.status);
+    session.public.status = AgentSessionStatus::Detached;
     session.public.enabled = false;
-    "stopped".clone_into(&mut session.public.runtime_status);
+    session.public.runtime_status = AgentRuntimeStatus::Stopped;
     session.public.provider_session_active = false;
     session.public.active_turn_id.clear();
-    session.public.turn_phase.clear();
+    session.public.turn_phase = AgentTurnPhase::None;
     session.active_source_event_id.clear();
     session.input_up_to_event_id.clear();
     session.input_up_to_seq = 0;

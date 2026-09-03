@@ -1,3 +1,4 @@
+use agentsassemble_domain::AgentRuntimeStatus;
 use serde_json::json;
 
 use crate::{AgentStartPlan, AgentStopPlan};
@@ -57,7 +58,7 @@ async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() 
     let mut session = load_session(&mut transaction, "general", AGENT_ID)
         .await
         .unwrap_or_else(|error| panic!("load running session: {error}"));
-    session.public.runtime_status = "idle".to_owned();
+    session.public.runtime_status = AgentRuntimeStatus::Idle;
     session.public.enabled = true;
     session.runtime_handle_id = "owned-runtime".to_owned();
     session.runtime_owner_id = "owned-supervisor".to_owned();

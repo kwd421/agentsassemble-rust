@@ -8,7 +8,7 @@ export function agentSessionFixture(
     session_id: "session-test",
     participant_id: "agent-test",
     display_name: "Agent Test",
-    status: "stopped",
+    status: "available",
     runtime_status: "stopped",
     enabled: false,
     provider_kind: "codex_live_session",

@@ -17,14 +17,18 @@ const room = {
   tone: "default",
 };
 
-function agentSession(status: string): RoomAgentSession {
+function agentSession(runtimeStatus: RoomAgentSession["runtime_status"]): RoomAgentSession {
   return agentSessionFixture({
     room_id: "general",
     session_id: "session-codex",
     participant_id: "codex",
     display_name: "Codex Spark",
-    status,
-    runtime_status: status,
+    status: runtimeStatus === "stopped"
+      ? "detached"
+      : runtimeStatus === "error"
+        ? "error"
+        : "attached",
+    runtime_status: runtimeStatus,
     enabled: true,
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli",

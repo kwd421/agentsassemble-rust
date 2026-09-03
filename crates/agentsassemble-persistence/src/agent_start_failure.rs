@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, RoomEvent,
-    canonical_payload_hash, redact_persisted_diagnostic_text,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AuthenticatedPrincipal, RoomEvent, canonical_payload_hash, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -236,9 +236,9 @@ impl SqliteStore {
                 && session.runtime_owner_id.is_empty()
                 && session.runtime_lease_token.is_empty())
         {
-            "unavailable".clone_into(&mut session.public.status);
+            session.public.status = AgentSessionStatus::Unavailable;
             session.public.enabled = false;
-            "error".clone_into(&mut session.public.runtime_status);
+            session.public.runtime_status = AgentRuntimeStatus::Error;
             session.public.provider_session_active = false;
         }
         session.public.last_error =
@@ -317,9 +317,9 @@ impl SqliteStore {
                     .to_owned(),
             });
         }
-        "unavailable".clone_into(&mut session.public.status);
+        session.public.status = AgentSessionStatus::Unavailable;
         session.public.enabled = false;
-        "disconnected".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Disconnected;
         session.public.provider_session_active = false;
         session.public.provider_session_reused = false;
         session.public.last_error =

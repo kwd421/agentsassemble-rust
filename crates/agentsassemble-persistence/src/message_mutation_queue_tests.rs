@@ -1,4 +1,6 @@
-use agentsassemble_domain::{RoomInputDeliveryKind, RoomSettings, public_settings};
+use agentsassemble_domain::{
+    AgentRuntimeStatus, AgentSessionStatus, RoomInputDeliveryKind, RoomSettings, public_settings,
+};
 use serde_json::json;
 
 use super::{AGENT_ID, authority, event_types, fixture, running_authority, stored_session};
@@ -97,8 +99,11 @@ async fn deletion_removes_only_pending_ordered_and_ambient_inputs_atomically() {
     );
     assert!(commit.next_assignments.is_empty());
     let final_session = stored_session(&store).await;
-    assert_eq!(final_session.public.status, "attached");
-    assert_eq!(final_session.public.runtime_status, "idle");
+    assert_eq!(final_session.public.status, AgentSessionStatus::Attached);
+    assert_eq!(
+        final_session.public.runtime_status,
+        AgentRuntimeStatus::Idle
+    );
     assert!(final_session.pending_inputs.is_empty());
 }
 

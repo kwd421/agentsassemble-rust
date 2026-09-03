@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, DurableAgentSession, Participant,
-    QueuedRoomInput, RoomInputDeliveryKind,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, DurableAgentSession,
+    Participant, QueuedRoomInput, RoomInputDeliveryKind,
 };
 use serde_json::{Value, json};
 
@@ -118,7 +118,10 @@ async fn live_looking_start_requires_supervisor_confirmation_before_success() {
     };
     assert_eq!(reconcile.session.runtime_handle_id, "owned-runtime");
     assert_eq!(reconcile.session.runtime_owner_id, "supervisor-instance-1");
-    assert_eq!(reconcile.session.public.runtime_status, "idle");
+    assert_eq!(
+        reconcile.session.public.runtime_status,
+        AgentRuntimeStatus::Idle
+    );
 }
 
 #[tokio::test]
@@ -410,7 +413,7 @@ async fn pending_request_identity_cannot_be_rebound_to_another_agent() {
     .unwrap_or_else(|error| panic!("read untouched second session: {error}"));
     let untouched: DurableAgentSession = serde_json::from_str(&encoded)
         .unwrap_or_else(|error| panic!("decode untouched second session: {error}"));
-    assert_eq!(untouched.public.runtime_status, "stopped");
+    assert_eq!(untouched.public.runtime_status, AgentRuntimeStatus::Stopped);
     assert!(untouched.lifecycle_intent_id.is_empty());
     let reservation_count = sqlx::query_scalar::<_, i64>(
         "SELECT COUNT(*) FROM lifecycle_command_reservations WHERE request_id = 'shared-request' AND session_id = ? AND operation_id = ?",

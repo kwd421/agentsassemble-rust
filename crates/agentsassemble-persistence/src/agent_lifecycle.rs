@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal,
-    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantStatus,
-    canonical_payload_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
+    ParticipantStatus, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -153,13 +153,16 @@ impl SqliteStore {
             save_session(&mut transaction, &session).await?;
             operation_id
         } else {
-            "available".clone_into(&mut session.public.status);
+            session.public.status = AgentSessionStatus::Available;
             session.public.enabled = true;
             if !matches!(
-                session.public.runtime_status.as_str(),
-                "starting" | "idle" | "busy" | "paused"
+                session.public.runtime_status,
+                AgentRuntimeStatus::Starting
+                    | AgentRuntimeStatus::Idle
+                    | AgentRuntimeStatus::Busy
+                    | AgentRuntimeStatus::Paused
             ) {
-                "starting".clone_into(&mut session.public.runtime_status);
+                session.public.runtime_status = AgentRuntimeStatus::Starting;
             }
             session.public.last_error.clear();
             session.public.last_error_code.clear();
@@ -432,15 +435,15 @@ pub(crate) fn apply_runtime_started(
     session: &mut DurableAgentSession,
     started: &AgentRuntimeStarted,
 ) {
-    "attached".clone_into(&mut session.public.status);
+    session.public.status = AgentSessionStatus::Attached;
     session.public.enabled = true;
     if !started.runtime_reused
         || !matches!(
-            session.public.runtime_status.as_str(),
-            "idle" | "busy" | "paused"
+            session.public.runtime_status,
+            AgentRuntimeStatus::Idle | AgentRuntimeStatus::Busy | AgentRuntimeStatus::Paused
         )
     {
-        "idle".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Idle;
     }
     session.public.provider_session_active = started.provider_session_active;
     session.public.provider_session_reused = started.provider_session_reused;

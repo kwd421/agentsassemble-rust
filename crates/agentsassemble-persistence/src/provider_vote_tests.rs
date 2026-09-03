@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    MAX_VOTE_BALLOTS_PER_POLL, Participant, ParticipantRole, ParticipantStatus, VoteCommand,
+    AgentRuntimeStatus, AgentSessionStatus, MAX_VOTE_BALLOTS_PER_POLL, Participant,
+    ParticipantRole, ParticipantStatus, VoteCommand,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -62,8 +63,8 @@ async fn closed_vote_rejection_terminalizes_the_exact_provider_turn() {
     assert_eq!(commit.events[1].extra["reason_code"], json!("vote_closed"));
     assert!(commit.next_assignments.is_empty());
     let session = stored_session(&store).await;
-    assert_eq!(session.public.status, "attached");
-    assert_eq!(session.public.runtime_status, "idle");
+    assert_eq!(session.public.status, AgentSessionStatus::Attached);
+    assert_eq!(session.public.runtime_status, AgentRuntimeStatus::Idle);
     assert!(!session.public.recovery_required);
     assert!(session.public.active_turn_id.is_empty());
     assert_eq!(

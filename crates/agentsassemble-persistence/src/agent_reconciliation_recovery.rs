@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, DurableAgentSession,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AgentTurnPhase, DurableAgentSession,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -65,9 +66,9 @@ async fn reject_abandoned_in_transaction(
         && session.runtime_owner_id.is_empty()
         && session.runtime_lease_token.is_empty()
     {
-        "unavailable".clone_into(&mut session.public.status);
+        session.public.status = AgentSessionStatus::Unavailable;
         session.public.enabled = false;
-        "error".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Error;
         session.public.provider_session_active = false;
         session.public.provider_session_reused = false;
     }
@@ -214,9 +215,9 @@ pub(crate) async fn apply_live_reconciliation(
             )?;
             session.runtime_handle_id.clone_from(handle_id);
             session.runtime_owner_id.clone_from(new_owner_id);
-            "available".clone_into(&mut session.public.status);
+            session.public.status = AgentSessionStatus::Available;
             session.public.enabled = true;
-            "starting".clone_into(&mut session.public.runtime_status);
+            session.public.runtime_status = AgentRuntimeStatus::Starting;
             session.public.provider_session_active = false;
             session.public.last_error.clear();
             session.public.last_error_code.clear();
@@ -312,9 +313,9 @@ async fn reject_recovered_start(
         RECOVERED_START_MESSAGE,
     )
     .await?;
-    "unavailable".clone_into(&mut session.public.status);
+    session.public.status = AgentSessionStatus::Unavailable;
     session.public.enabled = false;
-    "error".clone_into(&mut session.public.runtime_status);
+    session.public.runtime_status = AgentRuntimeStatus::Error;
     session.public.provider_session_active = false;
     session.public.provider_session_reused = false;
     RECOVERED_START_MESSAGE.clone_into(&mut session.public.last_error);
@@ -357,13 +358,13 @@ async fn finalize_recovered_stop(
     )
     .map_err(|_| invalid_stored_authority())?;
     session.inflight_inputs.clear();
-    "detached".clone_into(&mut session.public.status);
+    session.public.status = AgentSessionStatus::Detached;
     session.public.enabled = false;
-    "stopped".clone_into(&mut session.public.runtime_status);
+    session.public.runtime_status = AgentRuntimeStatus::Stopped;
     session.public.provider_session_active = false;
     session.public.provider_session_reused = false;
     session.public.active_turn_id.clear();
-    session.public.turn_phase.clear();
+    session.public.turn_phase = AgentTurnPhase::None;
     session.active_source_event_id.clear();
     session.input_up_to_event_id.clear();
     session.input_up_to_seq = 0;

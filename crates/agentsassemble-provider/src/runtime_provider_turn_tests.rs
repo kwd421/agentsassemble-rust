@@ -1,5 +1,6 @@
 use std::{path::Path, time::Duration};
 
+use agentsassemble_domain::{AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase};
 use serde_json::Value;
 
 use super::{ProviderAdapter, ProviderRuntimeStarted, ProviderTurnRequest, tests::fixture_session};
@@ -556,11 +557,11 @@ pub(super) fn active_session(
     turn_id: &str,
 ) -> agentsassemble_domain::DurableAgentSession {
     let mut active = session.clone();
-    "attached".clone_into(&mut active.public.status);
-    "busy".clone_into(&mut active.public.runtime_status);
+    active.public.status = AgentSessionStatus::Attached;
+    active.public.runtime_status = AgentRuntimeStatus::Busy;
     active.public.provider_session_active = true;
     turn_id.clone_into(&mut active.public.active_turn_id);
-    "thinking".clone_into(&mut active.public.turn_phase);
+    active.public.turn_phase = AgentTurnPhase::Thinking;
     active
         .provider_session_id
         .clone_from(&started.provider_session_id);

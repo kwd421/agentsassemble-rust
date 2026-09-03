@@ -20,7 +20,10 @@ mod room_turn;
 mod text;
 mod vote;
 
-pub use agent_session_state::{AgentLifecycleAction, AgentLifecycleIntentStatus};
+pub use agent_session_state::{
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AgentTurnPhase,
+};
 pub use asset::MAX_ATTACHMENT_BYTES;
 pub use command::{
     CommandRejection, MessageSend, canonical_payload_hash, prepare_message_event,

@@ -104,7 +104,7 @@ export function agentSessionMemberToLiveAgent(
     ? "working"
     : session.runtime_status === "idle"
       ? "online"
-      : session.runtime_status === "paused" || session.runtime_status === "available"
+      : session.runtime_status === "paused"
         ? "idle"
         : session.runtime_status === "error"
           ? "error"

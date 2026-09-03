@@ -1,8 +1,9 @@
 use std::collections::{HashMap, HashSet};
 
 use agentsassemble_domain::{
-    DurableAgentSession, Participant, ParticipantRole, ParticipantStatus, QueuedRoomInput, Room,
-    RoomEvent, RoomInputDeliveryKind, RoomSettings,
+    AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, DurableAgentSession, Participant,
+    ParticipantRole, ParticipantStatus, QueuedRoomInput, Room, RoomEvent, RoomInputDeliveryKind,
+    RoomSettings,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -323,8 +324,11 @@ fn route_session_is_eligible(session: &DurableAgentSession, participant: &Partic
     participant.status == ParticipantStatus::Joined
         && !participant.muted
         && session.public.enabled
-        && session.public.status == "attached"
-        && matches!(session.public.runtime_status.as_str(), "idle" | "busy")
+        && session.public.status == AgentSessionStatus::Attached
+        && matches!(
+            session.public.runtime_status,
+            AgentRuntimeStatus::Idle | AgentRuntimeStatus::Busy
+        )
         && session.public.provider_session_active
         && session.lifecycle_intent_action.is_none()
 }
@@ -391,8 +395,8 @@ async fn valid_pending_inputs(
 
 fn session_is_assignable(session: &DurableAgentSession) -> bool {
     session.public.enabled
-        && session.public.status == "attached"
-        && session.public.runtime_status == "idle"
+        && session.public.status == AgentSessionStatus::Attached
+        && session.public.runtime_status == AgentRuntimeStatus::Idle
         && session.public.provider_session_active
         && session.public.active_turn_id.is_empty()
         && session.inflight_inputs.is_empty()
@@ -434,8 +438,8 @@ async fn prepare_assignment(
         )
     })?;
     session.schedule_requested = false;
-    "busy".clone_into(&mut session.public.runtime_status);
-    "thinking".clone_into(&mut session.public.turn_phase);
+    session.public.runtime_status = AgentRuntimeStatus::Busy;
+    session.public.turn_phase = AgentTurnPhase::Thinking;
     session.public.active_turn_id.clone_from(&turn_id);
     session.inflight_inputs.clone_from(&inflight);
     session.pending_inputs.drain(..inflight.len());

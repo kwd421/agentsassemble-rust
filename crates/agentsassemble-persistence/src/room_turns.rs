@@ -1,7 +1,8 @@
 use agentsassemble_domain::{
-    Actor, AuthenticatedPrincipal, DurableAgentSession, InviteScope, MessageSend, Participant,
-    RoomEvent, RoomInputDeliveryKind, VoteCommand, canonical_payload_hash, clean_message,
-    has_visible_text, prepare_message_event, redact_persisted_diagnostic_text,
+    Actor, AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, AuthenticatedPrincipal,
+    DurableAgentSession, InviteScope, MessageSend, Participant, RoomEvent, RoomInputDeliveryKind,
+    VoteCommand, canonical_payload_hash, clean_message, has_visible_text, prepare_message_event,
+    redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -501,9 +502,9 @@ impl SqliteStore {
             )
         })?;
         session.inflight_inputs.clear();
-        "error".clone_into(&mut session.public.status);
-        "error".clone_into(&mut session.public.runtime_status);
-        session.public.turn_phase.clear();
+        session.public.status = AgentSessionStatus::Error;
+        session.public.runtime_status = AgentRuntimeStatus::Error;
+        session.public.turn_phase = AgentTurnPhase::None;
         session.public.active_turn_id.clear();
         session.public.last_error = message;
         session.public.last_error_code = code.to_owned();
@@ -688,9 +689,9 @@ fn apply_provider_session_transition(
 }
 
 fn complete_session_state(session: &mut DurableAgentSession, input_event_id: &str, input_seq: i64) {
-    "attached".clone_into(&mut session.public.status);
-    "idle".clone_into(&mut session.public.runtime_status);
-    session.public.turn_phase.clear();
+    session.public.status = AgentSessionStatus::Attached;
+    session.public.runtime_status = AgentRuntimeStatus::Idle;
+    session.public.turn_phase = AgentTurnPhase::None;
     session.public.active_turn_id.clear();
     input_event_id.clone_into(&mut session.public.last_seen_event_id);
     session.public.last_seen_seq = input_seq;

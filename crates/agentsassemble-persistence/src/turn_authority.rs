@@ -1,4 +1,6 @@
-use agentsassemble_domain::DurableAgentSession;
+use agentsassemble_domain::{
+    AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, DurableAgentSession,
+};
 use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
@@ -19,8 +21,14 @@ pub(crate) fn active_turn_authority(
         return Err(InvalidTurnAuthority);
     }
     let active = !session.public.active_turn_id.is_empty()
-        && matches!(session.public.runtime_status.as_str(), "busy" | "stopping")
-        && matches!(session.public.turn_phase.as_str(), "thinking" | "streaming")
+        && matches!(
+            session.public.runtime_status,
+            AgentRuntimeStatus::Busy | AgentRuntimeStatus::Stopping
+        )
+        && matches!(
+            session.public.turn_phase,
+            AgentTurnPhase::Thinking | AgentTurnPhase::Streaming
+        )
         && !session.inflight_inputs.is_empty()
         && session
             .inflight_inputs
@@ -29,8 +37,8 @@ pub(crate) fn active_turn_authority(
         && session.active_source_event_id == session.input_up_to_event_id
         && session.input_up_to_seq > 0;
     let clear = session.public.active_turn_id.is_empty()
-        && session.public.runtime_status != "busy"
-        && session.public.turn_phase.is_empty()
+        && session.public.runtime_status != AgentRuntimeStatus::Busy
+        && session.public.turn_phase.is_none()
         && session.inflight_inputs.is_empty()
         && session.active_source_event_id.is_empty()
         && session.input_up_to_event_id.is_empty()
@@ -56,8 +64,8 @@ pub(crate) async fn require_provider_room_tool_authority(
         || session.turn_generation != turn_generation
         || turn_generation == 0
         || Uuid::parse_str(execution_id).is_err()
-        || session.public.status != "attached"
-        || session.public.runtime_status != "busy"
+        || session.public.status != AgentSessionStatus::Attached
+        || session.public.runtime_status != AgentRuntimeStatus::Busy
         || !session.public.enabled
         || !session.public.provider_session_active
         || session.public.process_ownership != "server"
@@ -108,8 +116,8 @@ fn stale_provider_turn() -> PersistenceError {
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::{
-        AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession,
-        CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
+        AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
+        AgentSessionStatus, AgentTurnPhase, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
     };
     use chrono::Utc;
 
@@ -124,8 +132,8 @@ mod tests {
                 session_id: "agent-1".to_owned(),
                 participant_id: "agent-1".to_owned(),
                 display_name: "Agent".to_owned(),
-                status: "attached".to_owned(),
-                runtime_status: "busy".to_owned(),
+                status: AgentSessionStatus::Attached,
+                runtime_status: AgentRuntimeStatus::Busy,
                 enabled: true,
                 provider_kind: "test".to_owned(),
                 runtime_kind: "test".to_owned(),
@@ -150,7 +158,7 @@ mod tests {
                 bootstrap_cutoff_seq: 0,
                 turn_count: 0,
                 active_turn_id: String::new(),
-                turn_phase: String::new(),
+                turn_phase: AgentTurnPhase::None,
                 last_error: String::new(),
                 last_error_code: String::new(),
                 recovery_required: false,
@@ -182,7 +190,7 @@ mod tests {
             lifecycle_intent_status: AgentLifecycleIntentStatus::None,
         };
         assert!(active_turn_authority(&session).is_err());
-        "idle".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Idle;
         assert_eq!(active_turn_authority(&session), Ok(false));
     }
 }

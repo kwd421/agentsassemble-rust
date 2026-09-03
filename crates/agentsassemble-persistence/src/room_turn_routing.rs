@@ -119,8 +119,8 @@ fn is_alias_separator(character: char) -> bool {
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::{
-        AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession,
-        CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
+        AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
+        AgentSessionStatus, AgentTurnPhase, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
     };
     use chrono::Utc;
 
@@ -159,8 +159,8 @@ mod tests {
                 session_id: id.to_owned(),
                 participant_id: id.to_owned(),
                 display_name: display_name.to_owned(),
-                status: "attached".to_owned(),
-                runtime_status: "idle".to_owned(),
+                status: AgentSessionStatus::Attached,
+                runtime_status: AgentRuntimeStatus::Idle,
                 enabled: true,
                 provider_kind: "test".to_owned(),
                 runtime_kind: "test".to_owned(),
@@ -185,7 +185,7 @@ mod tests {
                 bootstrap_cutoff_seq: 0,
                 turn_count: 0,
                 active_turn_id: String::new(),
-                turn_phase: String::new(),
+                turn_phase: AgentTurnPhase::None,
                 last_error: String::new(),
                 last_error_code: String::new(),
                 recovery_required: false,

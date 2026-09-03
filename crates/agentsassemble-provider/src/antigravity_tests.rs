@@ -1,4 +1,4 @@
-use agentsassemble_domain::DurableAgentSession;
+use agentsassemble_domain::{AgentRuntimeStatus, DurableAgentSession};
 
 use super::{command_arguments, require_native_receipt};
 use crate::test_support::durable_session;
@@ -12,8 +12,7 @@ fn session() -> DurableAgentSession {
         "gemini-3.6-flash",
         "pty",
     );
-    session.public.status = "stopped".to_owned();
-    session.public.runtime_status = "stopped".to_owned();
+    session.public.runtime_status = AgentRuntimeStatus::Stopped;
     session.public.enabled = false;
     session.public.reasoning_effort = "medium".to_owned();
     session.public.catalog_revision = "catalog".to_owned();

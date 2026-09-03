@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, canonical_payload_hash,
+    AgentRuntimeStatus, AgentSessionStatus, AuthenticatedPrincipal, DurableAgentSession,
+    ParticipantStatus, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -178,8 +179,8 @@ fn require_busy_session(
 ) -> Result<(), PersistenceError> {
     if session.public.session_id != agent_id
         || session.public.participant_id != agent_id
-        || session.public.status != "attached"
-        || session.public.runtime_status != "busy"
+        || session.public.status != AgentSessionStatus::Attached
+        || session.public.runtime_status != AgentRuntimeStatus::Busy
         || !session.public.enabled
         || !session.public.provider_session_active
         || session.provider_session_id.is_empty()

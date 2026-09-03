@@ -1,4 +1,7 @@
-use agentsassemble_domain::{DurableAgentSession, ParticipantStatus, RoomInputDeliveryKind};
+use agentsassemble_domain::{
+    AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, DurableAgentSession, ParticipantStatus,
+    RoomInputDeliveryKind,
+};
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Row, Sqlite, Transaction};
@@ -501,9 +504,9 @@ pub(crate) async fn finalize_proven_no_effect_task_death(
     )
     .map_err(|_| invalid_execution())?;
     session.inflight_inputs.clear();
-    "error".clone_into(&mut session.public.status);
-    "error".clone_into(&mut session.public.runtime_status);
-    session.public.turn_phase.clear();
+    session.public.status = AgentSessionStatus::Error;
+    session.public.runtime_status = AgentRuntimeStatus::Error;
+    session.public.turn_phase = AgentTurnPhase::None;
     session.public.active_turn_id.clear();
     "Provider turn ownership ended before provider I/O was authorized."
         .clone_into(&mut session.public.last_error);
@@ -593,9 +596,9 @@ pub(crate) async fn terminalize_ordinary_execution(
         || session.public.session_id != authority.session_id
         || session.public.active_turn_id != authority.turn_id
         || session.turn_generation != authority.turn_generation
-        || session.public.status != "attached"
+        || session.public.status != AgentSessionStatus::Attached
         || !session.public.enabled
-        || session.public.runtime_status != "busy"
+        || session.public.runtime_status != AgentRuntimeStatus::Busy
         || !session.public.provider_session_active
         || !lifecycle_intent_is_empty(session)
         || session.runtime_handle_id != authority.runtime_handle_id

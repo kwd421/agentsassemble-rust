@@ -1,3 +1,4 @@
+use agentsassemble_domain::{AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase};
 use chrono::Utc;
 use sqlx::{Sqlite, Transaction};
 
@@ -79,9 +80,9 @@ impl SqliteStore {
         )
         .map_err(|_| invalid_effect())?;
         session.inflight_inputs.clear();
-        "attached".clone_into(&mut session.public.status);
-        "idle".clone_into(&mut session.public.runtime_status);
-        session.public.turn_phase.clear();
+        session.public.status = AgentSessionStatus::Attached;
+        session.public.runtime_status = AgentRuntimeStatus::Idle;
+        session.public.turn_phase = AgentTurnPhase::None;
         session.public.active_turn_id.clear();
         if expected.cause == ProviderTurnInterruptCause::AgentInterrupt {
             INTERRUPTED_MESSAGE.clone_into(&mut session.public.last_error);

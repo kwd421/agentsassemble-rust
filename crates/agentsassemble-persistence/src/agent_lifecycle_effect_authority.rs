@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, DurableAgentSession,
-    canonical_payload_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AuthenticatedPrincipal, DurableAgentSession, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -47,13 +47,16 @@ pub(crate) fn authorize_start_effect(
     runtime_handle_id.clone_into(&mut session.runtime_handle_id);
     runtime_owner_id.clone_into(&mut session.runtime_owner_id);
     runtime_lease_token.clone_into(&mut session.runtime_lease_token);
-    "available".clone_into(&mut session.public.status);
+    session.public.status = AgentSessionStatus::Available;
     session.public.enabled = true;
     if !matches!(
-        session.public.runtime_status.as_str(),
-        "starting" | "idle" | "busy" | "paused"
+        session.public.runtime_status,
+        AgentRuntimeStatus::Starting
+            | AgentRuntimeStatus::Idle
+            | AgentRuntimeStatus::Busy
+            | AgentRuntimeStatus::Paused
     ) {
-        "starting".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Starting;
     }
     session.public.last_error.clear();
     session.public.last_error_code.clear();
@@ -199,7 +202,7 @@ impl SqliteStore {
             "stale_stop_authorization",
         )?;
         let effect = stop_effect(&session)?;
-        "stopping".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Stopping;
         session.public.enabled = false;
         session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectInflight;
         session.public.updated_at = Utc::now();

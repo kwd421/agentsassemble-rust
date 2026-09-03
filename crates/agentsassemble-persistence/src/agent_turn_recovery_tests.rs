@@ -1,4 +1,4 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, DurableAgentSession};
+use agentsassemble_domain::{AgentRuntimeStatus, AuthenticatedPrincipal, DurableAgentSession};
 use serde_json::{Value, json};
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, SqliteStore, tests::fixture};
@@ -235,7 +235,7 @@ async fn uncertain_provider_result_publishes_one_recovery_required_session_state
         session.public.last_error_code,
         "provider_turn_recovery_required"
     );
-    assert_eq!(session.public.runtime_status, "busy");
+    assert_eq!(session.public.runtime_status, AgentRuntimeStatus::Busy);
     assert_eq!(session.public.active_turn_id, assignment.turn_id);
 
     let execution = store

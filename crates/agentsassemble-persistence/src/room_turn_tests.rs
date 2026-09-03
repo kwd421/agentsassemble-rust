@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantRole, QueuedRoomInput,
-    RoomInputDeliveryKind,
+    AgentRuntimeStatus, AgentSessionStatus, AuthenticatedPrincipal, CapabilitySet, ClientKind,
+    DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantRole,
+    QueuedRoomInput, RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -344,8 +344,8 @@ async fn provider_failure_restores_input_and_clears_active_authority() {
     );
 
     let stored = stored_session(&store).await;
-    assert_eq!(stored.public.status, "error");
-    assert_eq!(stored.public.runtime_status, "error");
+    assert_eq!(stored.public.status, AgentSessionStatus::Error);
+    assert_eq!(stored.public.runtime_status, AgentRuntimeStatus::Error);
     assert!(stored.public.active_turn_id.is_empty());
     assert!(stored.active_source_event_id.is_empty());
     assert!(stored.input_up_to_event_id.is_empty());
@@ -400,8 +400,8 @@ async fn inconsistent_turn_or_provider_cursor_authority_fails_the_message_transa
 async fn stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_prefix() {
     let (store, principal, _directory) = fixture().await;
     let mut stopped = stored_session(&store).await;
-    "unavailable".clone_into(&mut stopped.public.status);
-    "stopped".clone_into(&mut stopped.public.runtime_status);
+    stopped.public.status = AgentSessionStatus::Unavailable;
+    stopped.public.runtime_status = AgentRuntimeStatus::Stopped;
     stopped.public.enabled = false;
     stopped.public.provider_session_active = false;
     save_stored_session(&store, &stopped).await;
@@ -424,8 +424,8 @@ async fn stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_
     assert_eq!(input_ids(&queued.pending_inputs), event_ids);
 
     let mut attached = queued;
-    "attached".clone_into(&mut attached.public.status);
-    "idle".clone_into(&mut attached.public.runtime_status);
+    attached.public.status = AgentSessionStatus::Attached;
+    attached.public.runtime_status = AgentRuntimeStatus::Idle;
     attached.public.enabled = true;
     attached.public.provider_session_active = true;
     save_stored_session(&store, &attached).await;
@@ -493,8 +493,8 @@ async fn final_body_mention_routes_to_the_named_agent() {
 async fn character_bound_defers_whole_messages_instead_of_advancing_past_them() {
     let (store, principal, _directory) = fixture().await;
     let mut stopped = stored_session(&store).await;
-    "unavailable".clone_into(&mut stopped.public.status);
-    "stopped".clone_into(&mut stopped.public.runtime_status);
+    stopped.public.status = AgentSessionStatus::Unavailable;
+    stopped.public.runtime_status = AgentRuntimeStatus::Stopped;
     stopped.public.enabled = false;
     stopped.public.provider_session_active = false;
     save_stored_session(&store, &stopped).await;
@@ -520,8 +520,8 @@ async fn character_bound_defers_whole_messages_instead_of_advancing_past_them() 
         .await
         .unwrap_or_else(|error| panic!("queue second bounded input: {error}"));
     let mut attached = stored_session(&store).await;
-    "attached".clone_into(&mut attached.public.status);
-    "idle".clone_into(&mut attached.public.runtime_status);
+    attached.public.status = AgentSessionStatus::Attached;
+    attached.public.runtime_status = AgentRuntimeStatus::Idle;
     attached.public.enabled = true;
     attached.public.provider_session_active = true;
     save_stored_session(&store, &attached).await;

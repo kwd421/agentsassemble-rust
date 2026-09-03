@@ -1,9 +1,10 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession, AgentSessionDraft,
-    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
-    ParticipantRole, ParticipantStatus, RoomEvent,
+    Actor, AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
+    AgentSessionDraft, AgentSessionStatus, AgentTurnPhase, AuthenticatedPrincipal,
+    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantRole,
+    ParticipantStatus, RoomEvent,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -108,8 +109,8 @@ async fn create_agent_records(
         session_id: draft.agent_id.clone(),
         participant_id: draft.agent_id.clone(),
         display_name: draft.display_name.clone(),
-        status: "available".to_owned(),
-        runtime_status: "stopped".to_owned(),
+        status: AgentSessionStatus::Available,
+        runtime_status: AgentRuntimeStatus::Stopped,
         enabled: false,
         provider_kind: draft.provider_kind.clone(),
         runtime_kind: draft.runtime_kind.clone(),
@@ -134,7 +135,7 @@ async fn create_agent_records(
         bootstrap_cutoff_seq: last_message_seq,
         turn_count: 0,
         active_turn_id: String::new(),
-        turn_phase: String::new(),
+        turn_phase: AgentTurnPhase::None,
         last_error: String::new(),
         last_error_code: String::new(),
         recovery_required: false,
@@ -265,8 +266,8 @@ fn base_result(session: &AgentSession, participant: &Participant, events: &[Room
 }
 
 fn prepare_start(session: &mut DurableAgentSession, operation_id: &str) {
-    "available".clone_into(&mut session.public.status);
-    "starting".clone_into(&mut session.public.runtime_status);
+    session.public.status = AgentSessionStatus::Available;
+    session.public.runtime_status = AgentRuntimeStatus::Starting;
     session.public.enabled = true;
     session.public.last_error.clear();
     session.public.last_error_code.clear();

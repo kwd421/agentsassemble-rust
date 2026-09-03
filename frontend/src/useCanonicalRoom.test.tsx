@@ -31,14 +31,16 @@ function event(sequence: number, type: string, content = ""): RoomEvent {
   } as unknown as RoomEvent;
 }
 
-function session(status = "idle"): RoomAgentSession {
+function session(
+  runtimeStatus: RoomAgentSession["runtime_status"] = "idle"
+): RoomAgentSession {
   return agentSessionFixture({
     room_id: "general",
     session_id: "session-codex",
     participant_id: "codex",
     display_name: "Codex",
-    status,
-    runtime_status: status,
+    status: runtimeStatus === "stopped" ? "detached" : "attached",
+    runtime_status: runtimeStatus,
     enabled: true,
     provider_kind: "codex_live_session",
     runtime_kind: "live_cli",

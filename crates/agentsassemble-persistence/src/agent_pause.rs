@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, canonical_payload_hash,
+    AgentRuntimeStatus, AgentSessionStatus, AuthenticatedPrincipal, DurableAgentSession,
+    ParticipantStatus, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -128,7 +129,7 @@ impl SqliteStore {
             return Ok(AgentResidentPlan::Outcome(Box::new(outcome)));
         }
         let session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        if resume && session.public.runtime_status != "paused" {
+        if resume && session.public.runtime_status != AgentRuntimeStatus::Paused {
             transaction.commit().await?;
             return Ok(AgentResidentPlan::ProviderLaunch);
         }
@@ -136,7 +137,11 @@ impl SqliteStore {
             &mut transaction,
             &session,
             &agent_id,
-            if resume { "paused" } else { "idle" },
+            if resume {
+                AgentRuntimeStatus::Paused
+            } else {
+                AgentRuntimeStatus::Idle
+            },
             !resume,
         )
         .await?;
@@ -176,10 +181,17 @@ impl SqliteStore {
             return Ok(outcome);
         }
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        require_resident_state(&mut transaction, &session, &agent_id, "idle", true).await?;
+        require_resident_state(
+            &mut transaction,
+            &session,
+            &agent_id,
+            AgentRuntimeStatus::Idle,
+            true,
+        )
+        .await?;
         require_matching_runtime(&session, runtime)?;
         session.public.enabled = false;
-        "paused".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Paused;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let event = append_state_event(&mut transaction, principal, &session.public).await?;
@@ -237,7 +249,7 @@ impl SqliteStore {
             return Ok(Some(outcome));
         }
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        if session.public.runtime_status != "paused" {
+        if session.public.runtime_status != AgentRuntimeStatus::Paused {
             transaction.commit().await?;
             return Ok(None);
         }
@@ -255,10 +267,17 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(Some(outcome));
         }
-        require_resident_state(&mut transaction, &session, &agent_id, "paused", false).await?;
+        require_resident_state(
+            &mut transaction,
+            &session,
+            &agent_id,
+            AgentRuntimeStatus::Paused,
+            false,
+        )
+        .await?;
         require_matching_runtime(&session, runtime)?;
         session.public.enabled = true;
-        "idle".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Idle;
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let event = append_state_event(&mut transaction, principal, &session.public).await?;
@@ -315,7 +334,7 @@ async fn require_resident_state(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     session: &DurableAgentSession,
     agent_id: &str,
-    runtime_status: &str,
+    runtime_status: AgentRuntimeStatus,
     enabled: bool,
 ) -> Result<(), PersistenceError> {
     let participant = load_participant(
@@ -329,7 +348,7 @@ async fn require_resident_state(
         && participant.room_id == session.public.room_id
         && participant.participant_id == agent_id
         && participant.status == ParticipantStatus::Joined
-        && session.public.status == "attached"
+        && session.public.status == AgentSessionStatus::Attached
         && session.public.runtime_status == runtime_status
         && session.public.enabled == enabled
         && session.public.provider_session_active

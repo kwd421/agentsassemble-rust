@@ -1,3 +1,4 @@
+use agentsassemble_domain::AgentRuntimeStatus;
 use serde_json::json;
 
 use crate::{AgentResidentPlan, AgentResidentRuntime, PersistenceError};
@@ -28,7 +29,10 @@ async fn resident_pause_and_resume_preserve_identity_queue_and_replay() {
     assert_eq!(paused.result["process_preserved"], true);
     let paused_session = stored_session(&store).await;
     assert!(!paused_session.public.enabled);
-    assert_eq!(paused_session.public.runtime_status, "paused");
+    assert_eq!(
+        paused_session.public.runtime_status,
+        AgentRuntimeStatus::Paused
+    );
     assert_eq!(runtime_identity(&paused_session), original_identity);
 
     let replay = store
@@ -72,7 +76,10 @@ async fn resident_pause_and_resume_preserve_identity_queue_and_replay() {
     assert_eq!(resumed.result["process_reused"], true);
     let before_assignment = stored_session(&store).await;
     assert!(before_assignment.public.enabled);
-    assert_eq!(before_assignment.public.runtime_status, "idle");
+    assert_eq!(
+        before_assignment.public.runtime_status,
+        AgentRuntimeStatus::Idle
+    );
     assert_eq!(runtime_identity(&before_assignment), original_identity);
 
     let assignment = store
@@ -116,7 +123,7 @@ async fn pause_rejects_incomplete_or_active_runtime_authority() {
 
     let mut active = incomplete;
     active.runtime_lease_token = "lease-generation-1".to_owned();
-    active.public.runtime_status = "busy".to_owned();
+    active.public.runtime_status = AgentRuntimeStatus::Busy;
     save_stored_session(&store, &active).await;
     assert_invalid_state(
         &store

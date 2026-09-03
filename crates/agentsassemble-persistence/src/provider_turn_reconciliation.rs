@@ -1,8 +1,8 @@
 use std::collections::HashSet;
 
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, DurableAgentSession, ParticipantStatus,
-    has_visible_text,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AgentTurnPhase, DurableAgentSession, ParticipantStatus, has_visible_text,
 };
 use chrono::{SecondsFormat, Utc};
 use sqlx::{Row, Sqlite, Transaction};
@@ -580,13 +580,13 @@ async fn finalize_runtime_gone_session(
     )
     .map_err(|_| invalid_reconciliation())?;
     session.inflight_inputs.clear();
-    "detached".clone_into(&mut session.public.status);
-    "stopped".clone_into(&mut session.public.runtime_status);
+    session.public.status = AgentSessionStatus::Detached;
+    session.public.runtime_status = AgentRuntimeStatus::Stopped;
     session.public.enabled = false;
     session.public.provider_session_active = false;
     session.public.provider_session_reused = false;
     session.public.active_turn_id.clear();
-    session.public.turn_phase.clear();
+    session.public.turn_phase = AgentTurnPhase::None;
     session.provider_session_id.clear();
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();

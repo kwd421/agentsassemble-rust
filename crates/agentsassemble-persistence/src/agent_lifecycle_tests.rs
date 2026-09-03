@@ -1,8 +1,8 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession, AuthenticatedPrincipal,
-    CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantRole, ParticipantStatus,
-    QueuedRoomInput, RoomInputDeliveryKind,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
+    AgentSessionStatus, AgentTurnPhase, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION,
+    CapabilitySet, ClientKind, DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
+    Participant, ParticipantRole, ParticipantStatus, QueuedRoomInput, RoomInputDeliveryKind,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -64,8 +64,8 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
             session_id: AGENT_ID.to_owned(),
             participant_id: AGENT_ID.to_owned(),
             display_name: "Terra".to_owned(),
-            status: "available".to_owned(),
-            runtime_status: "stopped".to_owned(),
+            status: AgentSessionStatus::Available,
+            runtime_status: AgentRuntimeStatus::Stopped,
             enabled: false,
             provider_kind: "codex_live_session".to_owned(),
             runtime_kind: "live_cli".to_owned(),
@@ -90,7 +90,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
             bootstrap_cutoff_seq: 0,
             turn_count: 0,
             active_turn_id: String::new(),
-            turn_phase: String::new(),
+            turn_phase: AgentTurnPhase::None,
             last_error: String::new(),
             last_error_code: String::new(),
             recovery_required: false,
@@ -160,7 +160,10 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     };
     assert!(effect.operation_id.starts_with("identity-v1-"));
     assert_ne!(effect.operation_id, "start-lifecycle");
-    assert_eq!(effect.session.public.runtime_status, "starting");
+    assert_eq!(
+        effect.session.public.runtime_status,
+        AgentRuntimeStatus::Starting
+    );
     assert_eq!(
         effect.session.lifecycle_intent_status,
         AgentLifecycleIntentStatus::Prepared
@@ -426,7 +429,10 @@ async fn unversioned_runtime_profile_fails_before_a_start_effect() {
         .snapshot("general", 0, 10)
         .await
         .unwrap_or_else(|error| panic!("snapshot rejected session: {error}"));
-    assert_eq!(snapshot.agent_sessions[0].runtime_status, "stopped");
+    assert_eq!(
+        snapshot.agent_sessions[0].runtime_status,
+        AgentRuntimeStatus::Stopped
+    );
 
     let mut unsupported: serde_json::Value = serde_json::from_str(&encoded)
         .unwrap_or_else(|error| panic!("decode current session document: {error}"));
@@ -481,7 +487,7 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
         .await
         .unwrap_or_else(|error| panic!("snapshot ambiguous stop: {error}"));
     let session = &snapshot.agent_sessions[0];
-    assert_eq!(session.runtime_status, "disconnected");
+    assert_eq!(session.runtime_status, AgentRuntimeStatus::Disconnected);
     assert_eq!(session.last_error_code, "runtime_stop_unconfirmed");
     assert!(session.recovery_required);
     assert!(!session.provider_session_active);
@@ -722,7 +728,7 @@ async fn startup_reconciliation_retains_ambiguous_runtime_authority() {
         .await
         .unwrap_or_else(|error| panic!("snapshot restart: {error}"));
     let session = &snapshot.agent_sessions[0];
-    assert_eq!(session.runtime_status, "disconnected");
+    assert_eq!(session.runtime_status, AgentRuntimeStatus::Disconnected);
     assert_eq!(session.last_error_code, "runtime_authority_uncertain");
     assert!(session.recovery_required);
     let encoded = sqlx::query_scalar::<_, String>(

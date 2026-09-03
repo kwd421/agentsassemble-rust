@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use ts_rs::TS;
 
-use crate::{AgentLifecycleAction, AgentLifecycleIntentStatus};
+use crate::{
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AgentTurnPhase,
+};
 use uuid::Uuid;
 
 use crate::{QueuedRoomInput, persona::PersonaAssetSummary};
@@ -323,8 +326,8 @@ pub struct AgentSession {
     pub session_id: String,
     pub participant_id: String,
     pub display_name: String,
-    pub status: String,
-    pub runtime_status: String,
+    pub status: AgentSessionStatus,
+    pub runtime_status: AgentRuntimeStatus,
     pub enabled: bool,
     pub provider_kind: String,
     pub runtime_kind: String,
@@ -349,7 +352,7 @@ pub struct AgentSession {
     pub bootstrap_cutoff_seq: i64,
     pub turn_count: u64,
     pub active_turn_id: String,
-    pub turn_phase: String,
+    pub turn_phase: AgentTurnPhase,
     pub last_error: String,
     pub last_error_code: String,
     pub recovery_required: bool,

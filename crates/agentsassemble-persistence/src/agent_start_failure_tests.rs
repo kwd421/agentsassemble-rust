@@ -1,4 +1,4 @@
-use agentsassemble_domain::{AgentSession, AuthenticatedPrincipal};
+use agentsassemble_domain::{AgentRuntimeStatus, AgentSession, AuthenticatedPrincipal};
 use serde_json::{Value, json};
 
 use super::{AgentRuntimeStarted, AgentStartPlan};
@@ -134,7 +134,7 @@ async fn assert_terminal_start_failure(
 }
 
 fn assert_failed_projection(session: &AgentSession) {
-    assert_eq!(session.runtime_status, "error");
+    assert_eq!(session.runtime_status, AgentRuntimeStatus::Error);
     assert_eq!(session.last_error_code, "runtime_start_failed");
     assert_eq!(session.last_error, "[local path]\n[redacted]");
     assert!(!session.last_error.contains("alice"));

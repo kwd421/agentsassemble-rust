@@ -1,6 +1,7 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AuthenticatedPrincipal, DurableAgentSession,
-    Participant, ParticipantStatus, Room, RoomStatus, canonical_payload_hash,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
+    AgentTurnPhase, AuthenticatedPrincipal, DurableAgentSession, Participant, ParticipantStatus,
+    Room, RoomStatus, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -11,13 +12,13 @@ use crate::{
     turn_authority::active_turn_authority, turn_queue::merge_room_inputs,
 };
 
-const ACTIVE_RUNTIME_STATES: [&str; 6] = [
-    "starting",
-    "idle",
-    "busy",
-    "paused",
-    "recovering",
-    "stopping",
+const ACTIVE_RUNTIME_STATES: [AgentRuntimeStatus; 6] = [
+    AgentRuntimeStatus::Starting,
+    AgentRuntimeStatus::Idle,
+    AgentRuntimeStatus::Busy,
+    AgentRuntimeStatus::Paused,
+    AgentRuntimeStatus::Recovering,
+    AgentRuntimeStatus::Stopping,
 ];
 
 #[derive(Debug, Clone)]
@@ -492,11 +493,11 @@ pub(crate) fn reconcile_observation(
             session.public.provider_session_active = false;
             if active_turn_authority(session).unwrap_or(false) {
                 merge_inflight_events(session)?;
-                "unavailable".clone_into(&mut session.public.status);
+                session.public.status = AgentSessionStatus::Unavailable;
                 session.public.enabled = false;
-                "recovering".clone_into(&mut session.public.runtime_status);
+                session.public.runtime_status = AgentRuntimeStatus::Recovering;
                 session.public.active_turn_id.clear();
-                session.public.turn_phase.clear();
+                session.public.turn_phase = AgentTurnPhase::None;
                 "A provider turn was interrupted while its runtime was adopted after restart."
                     .clone_into(&mut session.public.last_error);
                 "provider_turn_recovery_required".clone_into(&mut session.public.last_error_code);
@@ -552,12 +553,12 @@ pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, 
         session.runtime_owner_id.clear();
         session.runtime_lease_token.clear();
         session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
-        "starting".clone_into(&mut session.public.runtime_status);
+        session.public.runtime_status = AgentRuntimeStatus::Starting;
         session.public.provider_session_active = false;
         session.public.updated_at = Utc::now();
         return Ok(false);
     }
-    if ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str()) {
+    if ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status) {
         disconnect_after_restart(session)?;
         return Ok(true);
     }
@@ -606,7 +607,7 @@ fn needs_reconciliation(session: &DurableAgentSession) -> bool {
     {
         return confirmed_stop_needs_reconciliation(session);
     }
-    ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status.as_str())
+    ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status)
         || !session.runtime_handle_id.is_empty()
         || !session.runtime_owner_id.is_empty()
         || !session.runtime_lease_token.is_empty()
@@ -624,20 +625,20 @@ fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
             || session.public.provider_session_active
             || session.public.provider_session_reused
             || !session.public.active_turn_id.is_empty()
-            || !session.public.turn_phase.is_empty()
+            || !session.public.turn_phase.is_none()
             || !session.inflight_inputs.is_empty()
-            || session.public.status != "unavailable")
+            || session.public.status != AgentSessionStatus::Unavailable)
 }
 
 fn reconcile_confirmed_stop(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
     merge_inflight_events(session)?;
-    "unavailable".clone_into(&mut session.public.status);
+    session.public.status = AgentSessionStatus::Unavailable;
     session.public.enabled = false;
-    "stopping".clone_into(&mut session.public.runtime_status);
+    session.public.runtime_status = AgentRuntimeStatus::Stopping;
     session.public.provider_session_active = false;
     session.public.provider_session_reused = false;
     session.public.active_turn_id.clear();
-    session.public.turn_phase.clear();
+    session.public.turn_phase = AgentTurnPhase::None;
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
     session.runtime_lease_token.clear();
@@ -656,13 +657,13 @@ fn retain_uncertain_runtime(session: &mut DurableAgentSession) -> Result<(), Per
     ) {
         session.lifecycle_intent_status = AgentLifecycleIntentStatus::Unconfirmed;
     }
-    "unavailable".clone_into(&mut session.public.status);
+    session.public.status = AgentSessionStatus::Unavailable;
     session.public.enabled = false;
-    "disconnected".clone_into(&mut session.public.runtime_status);
+    session.public.runtime_status = AgentRuntimeStatus::Disconnected;
     session.public.provider_session_active = false;
     session.public.provider_session_reused = false;
     session.public.active_turn_id.clear();
-    session.public.turn_phase.clear();
+    session.public.turn_phase = AgentTurnPhase::None;
     session.public.recovery_required = true;
     "Provider runtime authority could not be confirmed.".clone_into(&mut session.public.last_error);
     "runtime_authority_uncertain".clone_into(&mut session.public.last_error_code);
@@ -683,13 +684,13 @@ fn disconnect_after_restart(session: &mut DurableAgentSession) -> Result<(), Per
 
 fn disconnect_common(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
     merge_inflight_events(session)?;
-    "unavailable".clone_into(&mut session.public.status);
+    session.public.status = AgentSessionStatus::Unavailable;
     session.public.enabled = false;
-    "disconnected".clone_into(&mut session.public.runtime_status);
+    session.public.runtime_status = AgentRuntimeStatus::Disconnected;
     session.public.provider_session_active = false;
     session.public.provider_session_reused = false;
     session.public.active_turn_id.clear();
-    session.public.turn_phase.clear();
+    session.public.turn_phase = AgentTurnPhase::None;
     session.public.recovery_required = true;
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();

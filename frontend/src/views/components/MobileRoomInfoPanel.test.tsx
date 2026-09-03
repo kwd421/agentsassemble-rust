@@ -26,7 +26,7 @@ const SESSION: RoomAgentSession = agentSessionFixture({
   session_id: "session-1",
   participant_id: "agent-1",
   display_name: "Agent One",
-  status: "stopped",
+  status: "available",
   runtime_status: "stopped",
   enabled: true,
   provider_kind: "codex",

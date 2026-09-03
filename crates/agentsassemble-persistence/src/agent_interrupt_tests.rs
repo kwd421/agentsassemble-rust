@@ -1,3 +1,4 @@
+use agentsassemble_domain::{AgentRuntimeStatus, AgentSessionStatus};
 use serde_json::json;
 
 use super::{AGENT_ID, event_types, fixture, input_ids, stored_session};
@@ -80,8 +81,8 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
     assert!(committed.next_assignments.is_empty());
 
     let retained = stored_session(&store).await;
-    assert_eq!(retained.public.status, "attached");
-    assert_eq!(retained.public.runtime_status, "idle");
+    assert_eq!(retained.public.status, AgentSessionStatus::Attached);
+    assert_eq!(retained.public.runtime_status, AgentRuntimeStatus::Idle);
     assert!(retained.public.enabled);
     assert_eq!(
         retained.runtime_handle_id,
@@ -212,8 +213,8 @@ async fn runtime_gone_explicit_interrupt_restores_input_without_floor_progressio
     assert!(committed.next_assignments.is_empty());
 
     let detached = stored_session(&store).await;
-    assert_eq!(detached.public.status, "detached");
-    assert_eq!(detached.public.runtime_status, "stopped");
+    assert_eq!(detached.public.status, AgentSessionStatus::Detached);
+    assert_eq!(detached.public.runtime_status, AgentRuntimeStatus::Stopped);
     assert!(!detached.public.enabled);
     assert!(detached.runtime_handle_id.is_empty());
     assert_eq!(

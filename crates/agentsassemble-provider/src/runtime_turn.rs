@@ -1,6 +1,8 @@
 use std::{collections::HashSet, panic::AssertUnwindSafe};
 
-use agentsassemble_domain::{DurableAgentSession, has_visible_text};
+use agentsassemble_domain::{
+    AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, DurableAgentSession, has_visible_text,
+};
 use futures_util::FutureExt;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -487,7 +489,10 @@ pub(super) fn validate_request(
             "The provider turn does not match durable assignment authority.",
         ));
     }
-    if !matches!(session.public.turn_phase.as_str(), "thinking" | "streaming") {
+    if !matches!(
+        session.public.turn_phase,
+        AgentTurnPhase::Thinking | AgentTurnPhase::Streaming
+    ) {
         return Err(DriverError::new(
             "provider_turn_phase_invalid",
             "The durable provider turn is not in an active phase.",
@@ -543,8 +548,11 @@ fn validate_exact_owner(
         || session.provider_session_id.is_empty()
         || !session.public.provider_session_active
         || !session.public.enabled
-        || session.public.status != "attached"
-        || !matches!(session.public.runtime_status.as_str(), "idle" | "busy")
+        || session.public.status != AgentSessionStatus::Attached
+        || !matches!(
+            session.public.runtime_status,
+            AgentRuntimeStatus::Idle | AgentRuntimeStatus::Busy
+        )
     {
         return Err(owner_mismatch(session));
     }

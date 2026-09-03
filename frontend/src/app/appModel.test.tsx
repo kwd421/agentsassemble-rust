@@ -20,7 +20,7 @@ describe("agentSessionMemberToLiveAgent", () => {
       session_id: "agent-1",
       participant_id: "agent-1",
       display_name: "Session Makima",
-      status: "stopped",
+      status: "detached",
       runtime_status: "stopped",
       enabled: false,
       provider_kind: "codex_live_session",

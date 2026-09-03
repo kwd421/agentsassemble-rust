@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
-    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSession,
-    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantRole,
-    ParticipantStatus,
+    AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
+    AgentSessionStatus, AgentTurnPhase, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
+    Participant, ParticipantRole, ParticipantStatus,
 };
 use chrono::{DateTime, Utc};
 
@@ -12,8 +12,8 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
             session_id: super::AGENT_ID.to_owned(),
             participant_id: super::AGENT_ID.to_owned(),
             display_name: "Terra".to_owned(),
-            status: "attached".to_owned(),
-            runtime_status: "idle".to_owned(),
+            status: AgentSessionStatus::Attached,
+            runtime_status: AgentRuntimeStatus::Idle,
             enabled: true,
             provider_kind: "codex_live_session".to_owned(),
             runtime_kind: "live_cli".to_owned(),
@@ -38,7 +38,7 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
             bootstrap_cutoff_seq: 0,
             turn_count: 0,
             active_turn_id: String::new(),
-            turn_phase: String::new(),
+            turn_phase: AgentTurnPhase::None,
             last_error: String::new(),
             last_error_code: String::new(),
             recovery_required: false,
