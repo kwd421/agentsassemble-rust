@@ -93,7 +93,8 @@ pub use room_turn::{
     QueuedRoomInput, RoomInputDeliveryKind, RoomRandomError, RoomRandomRequest, RoomRandomResult,
 };
 pub use text::{
-    clean_identifier, clean_message, clean_single_line, has_visible_text, validate_room_id,
+    MAX_MESSAGE_CHARACTERS, clean_identifier, clean_message, clean_single_line, has_visible_text,
+    validate_room_id,
 };
 pub use vote::{
     MAX_VOTE_BALLOTS_PER_POLL, MAX_VOTE_DURATION_SECONDS, MAX_VOTE_OPTIONS,

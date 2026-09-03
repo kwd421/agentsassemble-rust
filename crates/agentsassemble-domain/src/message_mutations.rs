@@ -4,8 +4,8 @@ use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
 
 use crate::{
-    Actor, AuthenticatedPrincipal, ClientKind, CommandRejection, Participant, RoomEvent,
-    clean_message, is_message_event_id,
+    Actor, AuthenticatedPrincipal, ClientKind, CommandRejection, MAX_MESSAGE_CHARACTERS,
+    Participant, RoomEvent, clean_message, is_message_event_id,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -31,7 +31,7 @@ impl MessageEdit {
             })?;
         Ok(Self {
             event_id,
-            content: clean_message(content, 12_000),
+            content: clean_message(content, MAX_MESSAGE_CHARACTERS),
         })
     }
 }

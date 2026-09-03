@@ -3,7 +3,7 @@ use std::collections::BTreeSet;
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID, MAX_ATTACHMENT_BYTES, MAX_MESSAGE_ATTACHMENT_CONTENT_TYPE_BYTES,
-    MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX,
+    MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_MESSAGE_CHARACTERS, MESSAGE_ATTACHMENT_DOWNLOAD_SUFFIX,
     MESSAGE_ATTACHMENT_ID_PREFIX, MESSAGE_ATTACHMENT_REFERENCE_PREFIX,
     MESSAGE_ATTACHMENT_VIEW_SUFFIX, RoomEvent, VOTE_QUESTION_CHARACTER_LIMIT,
     canonical_message_attachment_filename, clean_message, has_visible_text,
@@ -82,7 +82,10 @@ pub(crate) fn message_has_visible_payload(event: &RoomEvent) -> Result<bool, Per
 }
 
 pub(crate) fn message_visible_text(event: &RoomEvent) -> Result<String, PersistenceError> {
-    let content = clean_message(event.content.as_deref().unwrap_or_default(), 12_000);
+    let content = clean_message(
+        event.content.as_deref().unwrap_or_default(),
+        MAX_MESSAGE_CHARACTERS,
+    );
     if has_visible_text(&content) {
         return Ok(content);
     }

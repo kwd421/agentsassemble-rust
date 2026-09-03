@@ -109,7 +109,7 @@ fn oversize_failure() -> CommandFailure {
 mod tests {
     use std::collections::BTreeMap;
 
-    use agentsassemble_domain::{Actor, RoomEvent, RoomHistoryPage};
+    use agentsassemble_domain::{Actor, MAX_MESSAGE_CHARACTERS, RoomEvent, RoomHistoryPage};
 
     use super::fit_history_ack;
     use crate::room_channel::encode_server_frame;
@@ -166,7 +166,7 @@ mod tests {
     fn large_page_drops_only_earliest_events_and_fits_exact_encoder() {
         let page = RoomHistoryPage {
             events: (1..=200)
-                .map(|seq| event(seq, &"x".repeat(12_000)))
+                .map(|seq| event(seq, &"x".repeat(MAX_MESSAGE_CHARACTERS)))
                 .collect(),
             oldest_seq: 1,
             last_seq: 200,

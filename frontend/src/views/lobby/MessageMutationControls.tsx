@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 import { MoreHorizontal, Pencil, Trash2, X } from "lucide-react";
 
 import type { LobbyEvent } from "../../api";
+import { MAX_MESSAGE_CHARACTERS } from "../../types/generated/ROOM_MESSAGE_WIRE";
 
 type MutationKind = "edit" | "delete" | null;
 
@@ -159,7 +160,7 @@ export default function MessageMutationControls({
               <textarea
                 autoFocus
                 value={draft}
-                maxLength={12_000}
+                maxLength={MAX_MESSAGE_CHARACTERS}
                 disabled={busy}
                 onChange={(change) => setDraft(change.target.value)}
               />

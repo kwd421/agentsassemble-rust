@@ -1,6 +1,6 @@
 use std::{collections::HashSet, time::Duration};
 
-use agentsassemble_domain::DurableAgentSession;
+use agentsassemble_domain::{DurableAgentSession, MAX_MESSAGE_CHARACTERS};
 use reqwest::{Client, Url};
 use rmcp::{
     RoleClient, ServiceExt,
@@ -684,7 +684,7 @@ fn completed(
 
 fn canonical_content(value: &str) -> Option<String> {
     let value = value.trim();
-    (!value.is_empty() && value.chars().count() <= 12_000).then(|| value.to_owned())
+    (!value.is_empty() && value.chars().count() <= MAX_MESSAGE_CHARACTERS).then(|| value.to_owned())
 }
 
 #[cfg(test)]

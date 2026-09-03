@@ -2,6 +2,8 @@ use unicode_general_category::{GeneralCategory, get_general_category};
 
 use crate::CommandRejection;
 
+pub const MAX_MESSAGE_CHARACTERS: usize = 12_000;
+
 #[must_use]
 pub fn clean_single_line(value: &str, limit: usize) -> String {
     value

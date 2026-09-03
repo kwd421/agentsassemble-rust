@@ -7,8 +7,8 @@ use thiserror::Error;
 use uuid::Uuid;
 
 use agentsassemble_domain::{
-    MAX_ROOM_OBSERVATION_AGENT_IDS, VoteCommand, is_room_observation_agent_id,
-    is_room_observation_view,
+    MAX_MESSAGE_CHARACTERS, MAX_ROOM_OBSERVATION_AGENT_IDS, VoteCommand,
+    is_room_observation_agent_id, is_room_observation_view,
 };
 
 use crate::driver::ProviderTurnRequest;
@@ -39,7 +39,6 @@ pub use tool::{
 pub(super) const ROOM_PORTAL_TOKEN_ENV_PREFIX: &str = "AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN_";
 
 const MAX_TURN_ID_BYTES: usize = 128;
-pub(super) const MAX_MESSAGE_CHARS: usize = 12_000;
 const MAX_ROOM_TOOL_RESULTS: usize = 32;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ProviderTurnOutcome {
@@ -612,10 +611,10 @@ fn validate_turn_id(value: &str) -> Result<(), RoomPortalError> {
 }
 
 pub(super) fn canonical_message(value: &str) -> Option<String> {
-    if value.contains('\0') || value.chars().count() > MAX_MESSAGE_CHARS {
+    if value.contains('\0') || value.chars().count() > MAX_MESSAGE_CHARACTERS {
         return None;
     }
-    let value = agentsassemble_domain::clean_message(value, MAX_MESSAGE_CHARS);
+    let value = agentsassemble_domain::clean_message(value, MAX_MESSAGE_CHARACTERS);
     agentsassemble_domain::has_visible_text(&value).then_some(value)
 }
 

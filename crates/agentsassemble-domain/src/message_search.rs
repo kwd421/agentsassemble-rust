@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     RoomEvent,
-    text::{clean_trimmed_crlf_text, is_python_whitespace},
+    text::{MAX_MESSAGE_CHARACTERS, clean_trimmed_crlf_text, is_python_whitespace},
 };
 
 pub const MESSAGE_SEARCH_PAGE_SIZE: usize = 30;
@@ -11,7 +11,7 @@ pub const MESSAGE_CONTEXT_RADIUS: usize = 15;
 pub const MAX_MESSAGE_SEARCH_QUERY_CHARACTERS: usize = 200;
 pub const MAX_MESSAGE_SEARCH_CURSOR_BYTES: usize = 2_048;
 pub const MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS: usize = 128;
-pub const MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS: usize = 12_000;
+pub const MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS: usize = MAX_MESSAGE_CHARACTERS;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]

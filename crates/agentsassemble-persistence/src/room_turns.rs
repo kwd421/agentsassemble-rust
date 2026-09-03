@@ -1,8 +1,8 @@
 use agentsassemble_domain::{
     Actor, AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, AuthenticatedPrincipal,
-    DurableAgentSession, InviteScope, MessageSend, Participant, RoomEvent, RoomInputDeliveryKind,
-    VoteCommand, canonical_payload_hash, clean_message, has_visible_text, prepare_message_event,
-    redact_persisted_diagnostic_text,
+    DurableAgentSession, InviteScope, MAX_MESSAGE_CHARACTERS, MessageSend, Participant, RoomEvent,
+    RoomInputDeliveryKind, VoteCommand, canonical_payload_hash, clean_message, has_visible_text,
+    prepare_message_event, redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -233,7 +233,7 @@ impl SqliteStore {
             ..
         } = authority;
         validate_identifier(provider_turn_id, "provider_turn_invalid")?;
-        let content = clean_message(content, 12_000);
+        let content = clean_message(content, MAX_MESSAGE_CHARACTERS);
         if !has_visible_text(&content) {
             return Err(rejected(
                 "provider_turn_output_missing",

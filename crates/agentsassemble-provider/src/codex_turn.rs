@@ -1,7 +1,8 @@
 use std::{collections::HashSet, time::Duration};
 
 use agentsassemble_domain::{
-    DurableAgentSession, clean_message, has_visible_text, is_provider_turn_id,
+    DurableAgentSession, MAX_MESSAGE_CHARACTERS, clean_message, has_visible_text,
+    is_provider_turn_id,
 };
 use futures_util::StreamExt;
 use serde_json::{Value, json};
@@ -13,7 +14,6 @@ use crate::runtime::{DriverError, ProviderTurnCompleted, ProviderTurnRequest};
 
 const TURN_INACTIVITY_TIMEOUT: Duration = Duration::from_mins(3);
 const MAX_PROVIDER_TURN_IDS: usize = 4_096;
-const MAX_FINAL_MESSAGE_CHARS: usize = 12_000;
 
 pub(super) struct QueuedNotification {
     message: Value,
@@ -466,14 +466,14 @@ fn record_final(active: &mut ActiveTurn, message: &Value) {
         .or_else(|| nested(message, &["params", "content"]))
         .or_else(|| nested(message, &["params", "item", "text"]))
         .and_then(Value::as_str)
-        .map(|value| clean_message(value, MAX_FINAL_MESSAGE_CHARS))
+        .map(|value| clean_message(value, MAX_MESSAGE_CHARACTERS))
         .filter(|value| has_visible_text(value))
-        .unwrap_or_else(|| clean_message(&active.delta_content, MAX_FINAL_MESSAGE_CHARS));
+        .unwrap_or_else(|| clean_message(&active.delta_content, MAX_MESSAGE_CHARACTERS));
     active.final_content = Some(content);
 }
 
 fn append_bounded_delta(active: &mut ActiveTurn, delta: &str) {
-    let remaining = MAX_FINAL_MESSAGE_CHARS.saturating_sub(active.delta_chars);
+    let remaining = MAX_MESSAGE_CHARACTERS.saturating_sub(active.delta_chars);
     let normalized = delta
         .replace('\0', "")
         .replace("\r\n", "\n")
@@ -493,7 +493,7 @@ fn finish_turn(driver: &mut CodexDriver) -> Result<ProviderTurnCompleted, Driver
     };
     let content = active
         .final_content
-        .unwrap_or_else(|| clean_message(&active.delta_content, MAX_FINAL_MESSAGE_CHARS));
+        .unwrap_or_else(|| clean_message(&active.delta_content, MAX_MESSAGE_CHARACTERS));
     if !has_visible_text(&content) && active.request.room_observation.is_none() {
         return poison(driver, output_missing());
     }

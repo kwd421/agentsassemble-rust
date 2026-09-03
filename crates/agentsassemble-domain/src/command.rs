@@ -7,7 +7,7 @@ use sha2::{Digest, Sha256};
 use thiserror::Error;
 use uuid::Uuid;
 
-use crate::text::{clean_message, has_visible_text};
+use crate::text::{MAX_MESSAGE_CHARACTERS, clean_message, has_visible_text};
 use crate::{
     Actor, AuthenticatedPrincipal, ClientKind, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, Participant,
     ParticipantStatus, RoomEvent, is_message_attachment_id,
@@ -59,7 +59,7 @@ impl MessageSend {
         let raw = object["content"].as_str().ok_or_else(|| {
             CommandRejection::new("bad_request", "message.send content must be a string.")
         })?;
-        let content = clean_message(raw, 12_000);
+        let content = clean_message(raw, MAX_MESSAGE_CHARACTERS);
         let attachment_ids = parse_attachment_ids(object.get("attachment_ids"))?;
         if !has_visible_text(&content) && attachment_ids.is_empty() {
             return Err(CommandRejection::new(

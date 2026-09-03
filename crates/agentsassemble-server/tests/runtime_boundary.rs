@@ -1,7 +1,8 @@
 use std::{collections::BTreeMap, path::PathBuf, time::Duration};
 
 use agentsassemble_domain::{
-    ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
+    MAX_MESSAGE_CHARACTERS, ProviderAvailability, ProviderCatalog, ProviderControl,
+    ProviderControlOption,
 };
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES;
@@ -270,7 +271,7 @@ async fn snapshot_is_trimmed_to_the_websocket_message_budget() {
     let mut socket = connect(&server.base_url, &server.state, "general").await;
     subscribe(&mut socket, 0).await;
     let _ = receive_json(&mut socket).await;
-    let content = "x".repeat(12_000);
+    let content = "x".repeat(MAX_MESSAGE_CHARACTERS);
     for index in 0..32 {
         socket
             .send_json(&json!({
