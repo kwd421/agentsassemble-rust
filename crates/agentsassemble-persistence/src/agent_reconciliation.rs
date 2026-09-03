@@ -9,7 +9,8 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     PersistenceError, SqliteStore, agent_lifecycle_authority::payload_agent_id,
-    turn_authority::active_turn_authority, turn_queue::merge_room_inputs,
+    agent_session_rows::update_agent_session_row, turn_authority::active_turn_authority,
+    turn_queue::merge_room_inputs,
 };
 
 const ACTIVE_RUNTIME_STATES: [AgentRuntimeStatus; 6] = [
@@ -732,15 +733,7 @@ pub(crate) async fn save_reconciled_session(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<(), PersistenceError> {
-    let changed = sqlx::query(
-        "UPDATE agent_sessions SET session_json = ? WHERE room_id = ? AND session_id = ?",
-    )
-    .bind(serde_json::to_string(session)?)
-    .bind(&session.public.room_id)
-    .bind(&session.public.session_id)
-    .execute(&mut **transaction)
-    .await?
-    .rows_affected();
+    let changed = update_agent_session_row(transaction, session).await?;
     if changed != 1 {
         return Err(stale_candidate());
     }

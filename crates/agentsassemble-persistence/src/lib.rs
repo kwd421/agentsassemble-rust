@@ -13,6 +13,7 @@ mod agent_reconciliation;
 mod agent_reconciliation_live;
 mod agent_reconciliation_recovery;
 mod agent_reconciliation_scan;
+mod agent_session_rows;
 mod agent_sessions;
 mod agent_start_failure;
 mod agent_stop_lifecycle;

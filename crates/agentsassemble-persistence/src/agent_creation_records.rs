@@ -12,8 +12,11 @@ use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    PersistenceError, persona_library::resolve_persona_selection,
-    room_event_sequence::next_sequence, sqlite::MAX_AGENT_SESSIONS_PER_ROOM,
+    PersistenceError,
+    agent_session_rows::{load_optional_agent_session_row, update_agent_session_row},
+    persona_library::resolve_persona_selection,
+    room_event_sequence::next_sequence,
+    sqlite::MAX_AGENT_SESSIONS_PER_ROOM,
 };
 
 pub(crate) struct AgentCreationRecords {
@@ -30,7 +33,7 @@ pub(crate) async fn create_or_reuse_agent_records(
     allow_exact_reuse: bool,
 ) -> Result<AgentCreationRecords, PersistenceError> {
     let existing_session =
-        load_optional_session(transaction, &principal.room_id, &draft.agent_id).await?;
+        load_optional_agent_session_row(transaction, &principal.room_id, &draft.agent_id).await?;
     let existing_participant =
         load_optional_participant(transaction, &principal.room_id, &draft.agent_id).await?;
     match (existing_session, existing_participant) {
@@ -278,24 +281,6 @@ fn prepare_start(session: &mut DurableAgentSession, operation_id: &str) {
     session.public.updated_at = Utc::now();
 }
 
-async fn load_optional_session(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    session_id: &str,
-) -> Result<Option<DurableAgentSession>, PersistenceError> {
-    let encoded = sqlx::query_scalar::<_, String>(
-        "SELECT session_json FROM agent_sessions WHERE room_id = ? AND session_id = ?",
-    )
-    .bind(room_id)
-    .bind(session_id)
-    .fetch_optional(&mut **transaction)
-    .await?;
-    encoded
-        .map(|encoded| serde_json::from_str(&encoded))
-        .transpose()
-        .map_err(Into::into)
-}
-
 async fn load_optional_participant(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
@@ -318,15 +303,7 @@ async fn save_session(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<(), PersistenceError> {
-    let changed = sqlx::query(
-        "UPDATE agent_sessions SET session_json = ? WHERE room_id = ? AND session_id = ?",
-    )
-    .bind(serde_json::to_string(session)?)
-    .bind(&session.public.room_id)
-    .bind(&session.public.session_id)
-    .execute(&mut **transaction)
-    .await?
-    .rows_affected();
+    let changed = update_agent_session_row(transaction, session).await?;
     if changed != 1 {
         return Err(rejected("not_found", "Agent Session was not found."));
     }
