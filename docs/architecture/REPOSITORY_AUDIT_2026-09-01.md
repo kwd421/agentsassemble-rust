@@ -1243,8 +1243,7 @@ the plan and must not become a half-live compatibility surface.
 
 ### C-11 — Agent Session state vocabulary is repeated as strings
 
-Disposition: `Lifecycle intent vocabulary completed at dcfc03d; public session/runtime/turn
-vocabulary remains`; medium drift risk.
+Disposition: `Completed at dcfc03d and 307e359`; drift removed.
 
 `model.rs:306,362-364`, `agent_lifecycle.rs:158-168,301-318`,
 `agent_reconciliation.rs:307-340,525-669`, `agent_reconciliation_recovery.rs:47-68,116-132,284-288`,
@@ -1256,16 +1255,24 @@ reconciliation classification with its recovery owner. Provider observation,
 orchestration, transactions, side effects, and error mapping also remain at their
 boundaries; no generic state-machine framework is approved.
 
-The lifecycle-intent action and status are now finite domain enums. Their serialized
-values remain exactly the existing empty-string, `start`/`stop`, and lifecycle-phase
-strings, so durable rows and public projections do not acquire a migration or
-compatibility path. Lifecycle preparation, effect authorization, reconciliation,
-reservation matching, cleanup, and failure mapping still execute at their previous
-owners; only the repeated vocabulary moved. One serialization-contract test, all 243
-persistence tests, the focused provider recovery and server reconciliation tests,
-warning-denied Clippy, and architecture/diff gates pass. The change adds no state,
-task, timer, polling, retry, fallback, or performance claim. Public Agent Session
-status, runtime status, and turn-phase vocabulary remain for the next C-11 slice.
+The lifecycle-intent action/status and public session status/runtime status/turn phase
+are now finite domain enums. Their serialized values remain exactly the current
+empty-string and snake-case wire strings, and generated TypeScript unions expose the
+same contract to the browser. Existing lifecycle preparation, effect authorization,
+turn scheduling, provider observation, reconciliation, reservation matching, cleanup,
+transactions, and failure mapping still execute at their previous owners; only the
+repeated vocabulary moved. Repository-wide producer search found no current producer
+for runtime status `available` or an empty runtime status, so the old stopped-profile
+acceptance and copied browser branch were removed rather than retained as compatibility.
+The same type check exposed and corrected copied test fixtures that used `stopped` as
+a session status even though only runtime status owns that value. Current valid rows
+and wire values remain unchanged; invalid or obsolete values fail strict decoding.
+
+The one existing serialization-contract test, all workspace Rust tests, 100 frontend
+files/664 tests, 25 desktop tests, warning-denied Clippy, formatting, architecture,
+policy, source-structure, generated-binding, CSS, and diff gates pass. The change adds
+no state machine, repository abstraction, task, timer, polling, retry, heartbeat,
+fallback, silent failure, storage conversion, or performance claim.
 
 ### C-12 — Agent Session row encoding and entity row writes repeat
 

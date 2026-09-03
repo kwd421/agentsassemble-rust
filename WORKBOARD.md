@@ -1082,8 +1082,19 @@ contracts, findings, or verification journals.
   and server reconciliation tests, warning-denied Clippy, formatting, architecture,
   policy, source-structure, and diff gates pass. There is no storage migration,
   compatibility path, new task/state/timer/poll/retry/fallback, or performance claim.
-  Public Agent Session status, runtime-status, and turn-phase vocabulary remain in
-  C-11; this slice does not claim the finding closed.
+  Commit `307e359` completes C-11 by giving public Agent Session status, runtime
+  status, and turn phase the same domain ownership and generated TypeScript unions.
+  Existing lifecycle, turn, provider-observation, reconciliation, transaction, and
+  error owners still perform every transition; no state-machine or repository layer
+  was added. Repository-wide producer search fixed the copied frontend/test-only
+  invalid session status `stopped` and removed the unproducible runtime-status
+  `available` branch instead of preserving compatibility vocabulary. Current valid
+  JSON strings are unchanged, while invalid stored or boundary values fail strict
+  decoding. The one existing serialization-contract test, all workspace Rust tests,
+  100 frontend files/664 tests, 25 desktop tests, warning-denied Clippy, formatting,
+  architecture, policy, source-structure, generated-binding, CSS, and diff gates
+  pass. This is a vocabulary-owner correction, not a performance claim, and adds no
+  state, task, timer, polling, retry, heartbeat, fallback, or silent failure.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
