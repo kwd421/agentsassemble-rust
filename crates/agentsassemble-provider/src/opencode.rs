@@ -418,10 +418,7 @@ impl OpenCodeDriver {
             .map_err(|_| turn_timeout())?;
         let (prompt, events) = match joined {
             Ok(joined) => joined,
-            Err(error) => {
-                let _ = self.abort_session(&attached).await;
-                return Err(turn_transport_error(error));
-            }
+            Err(error) => return self.poison(turn_transport_error(error)),
         };
         let completed =
             Self::completed_from_response(session, request, &attached, &prompt, &events);
@@ -482,7 +479,7 @@ impl OpenCodeDriver {
             .post_json(&path, &json!({}), Duration::from_secs(5))
             .await
             .map_err(http_driver_error)?;
-        if !response.status.is_success() {
+        if !response.status.is_success() || response.value.as_bool() != Some(true) {
             return Err(provider_request_error());
         }
         Ok(())
@@ -522,20 +519,6 @@ impl OpenCodeDriver {
     }
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
-        if let Some(session_id) = self.attached_session_id.clone() {
-            let _ = self.abort_session(&session_id).await;
-        }
-        if self.mcp_registered
-            && let Ok(connection) = self.connect_owned_peer().await
-        {
-            let _ = connection
-                .post_json(
-                    &format!("/mcp/{MCP_NAME}/disconnect"),
-                    &json!({}),
-                    Duration::from_secs(2),
-                )
-                .await;
-        }
         #[cfg(unix)]
         let process = self.process_group.stop().await;
         #[cfg(not(unix))]
