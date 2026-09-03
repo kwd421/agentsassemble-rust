@@ -578,8 +578,7 @@ fn command_arguments(
         ),
     );
     config::append_mcp_isolation(&mut arguments, inherited_mcp_servers)?;
-    room_portal
-        .append_codex_config(&mut arguments)
+    config::append_room_portal(&mut arguments, room_portal)
         .map_err(|_| room_portal_unavailable())?;
     arguments.push("--stdio".to_owned());
     Ok(arguments)

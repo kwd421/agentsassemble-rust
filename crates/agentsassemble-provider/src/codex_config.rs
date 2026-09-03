@@ -1,6 +1,9 @@
 use std::{env, io, path::PathBuf, time::Duration};
 
-use crate::runtime::DriverError;
+use crate::{
+    room_portal::{RoomPortal, RoomPortalError},
+    runtime::DriverError,
+};
 
 const CONFIG_READ_TIMEOUT: Duration = Duration::from_secs(2);
 const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
@@ -49,6 +52,43 @@ pub(super) fn append_mcp_isolation(
         .join(", ");
     arguments.push("-c".to_owned());
     arguments.push(format!("mcp_servers={{ {entries} }}"));
+    Ok(())
+}
+
+pub(super) fn append_room_portal(
+    arguments: &mut Vec<String>,
+    room_portal: &RoomPortal,
+) -> Result<(), RoomPortalError> {
+    if !room_portal.is_running() {
+        return Err(RoomPortalError::Mcp);
+    }
+    let server = "mcp_servers.agentsassemble_room";
+    let endpoint =
+        serde_json::to_string(room_portal.endpoint()).map_err(|_| RoomPortalError::Authority)?;
+    let bearer_environment_name = serde_json::to_string(room_portal.bearer_environment_name())
+        .map_err(|_| RoomPortalError::Authority)?;
+    let approval = serde_json::to_string("approve").map_err(|_| RoomPortalError::Authority)?;
+    super::push_raw_config(arguments, &format!("{server}.url"), &endpoint);
+    super::push_raw_config(
+        arguments,
+        &format!("{server}.bearer_token_env_var"),
+        &bearer_environment_name,
+    );
+    super::push_raw_config(
+        arguments,
+        &format!("{server}.default_tools_approval_mode"),
+        &approval,
+    );
+    super::push_raw_config(
+        arguments,
+        "shell_environment_policy.ignore_default_excludes",
+        "false",
+    );
+    super::push_raw_config(arguments, "features.plugins", "false");
+    super::push_raw_config(arguments, "features.apps", "false");
+    super::push_raw_config(arguments, "features.shell_snapshot", "false");
+    super::push_raw_config(arguments, &format!("{server}.startup_timeout_sec"), "10");
+    super::push_raw_config(arguments, &format!("{server}.tool_timeout_sec"), "30");
     Ok(())
 }
 

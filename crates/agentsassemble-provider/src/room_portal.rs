@@ -232,42 +232,6 @@ impl RoomPortal {
         })
     }
 
-    pub(crate) fn append_codex_config(
-        &self,
-        arguments: &mut Vec<String>,
-    ) -> Result<(), RoomPortalError> {
-        self.require_server()?;
-        let server = "mcp_servers.agentsassemble_room";
-        push_codex_config(
-            arguments,
-            &format!("{server}.url"),
-            &serde_json::to_string(self.server.endpoint())
-                .map_err(|_| RoomPortalError::Authority)?,
-        );
-        push_codex_config(
-            arguments,
-            &format!("{server}.bearer_token_env_var"),
-            &serde_json::to_string(&self.bearer_environment_name)
-                .map_err(|_| RoomPortalError::Authority)?,
-        );
-        push_codex_config(
-            arguments,
-            &format!("{server}.default_tools_approval_mode"),
-            &serde_json::to_string("approve").map_err(|_| RoomPortalError::Authority)?,
-        );
-        push_codex_config(
-            arguments,
-            "shell_environment_policy.ignore_default_excludes",
-            "false",
-        );
-        push_codex_config(arguments, "features.plugins", "false");
-        push_codex_config(arguments, "features.apps", "false");
-        push_codex_config(arguments, "features.shell_snapshot", "false");
-        push_codex_config(arguments, &format!("{server}.startup_timeout_sec"), "10");
-        push_codex_config(arguments, &format!("{server}.tool_timeout_sec"), "30");
-        Ok(())
-    }
-
     pub(crate) fn provider_environment(&self) -> Vec<(String, String)> {
         vec![(
             self.bearer_environment_name.clone(),
@@ -509,7 +473,6 @@ impl RoomPortal {
         self.server.bearer_token()
     }
 
-    #[cfg(test)]
     pub(crate) fn bearer_environment_name(&self) -> &str {
         &self.bearer_environment_name
     }
@@ -633,11 +596,6 @@ fn tool_error(code: &'static str, message: impl Into<String>) -> ProviderRoomToo
         code,
         message: message.into(),
     }
-}
-
-fn push_codex_config(arguments: &mut Vec<String>, key: &str, value: &str) {
-    arguments.push("-c".to_owned());
-    arguments.push(format!("{key}={value}"));
 }
 
 fn validate_turn_id(value: &str) -> Result<(), RoomPortalError> {
