@@ -1051,16 +1051,22 @@ are the applicable evidence until sender custody changes.
 
 ### F-17 — malformed OpenCode SSE data is silently discarded
 
-Disposition: `Fix protocol failure visibility`; medium correctness/latency impact.
+Disposition: `Completed at e01f071`; Phase 1 whole-phase review pending.
 
 `opencode_sse.rs:165-179` correctly ignores non-`data:` SSE lines, but also catches
 JSON decoding failure for a `data:` line and continues. Provider protocol corruption
 can therefore be hidden as a later timeout or a different event, changing both the
 reported cause and completion behavior.
 
-Keep blank/comment/non-data SSE handling, but make malformed `data:` a stable
-provider-protocol error immediately. No retry, alternate parser, history lookup, or
-extra abstraction is needed. Verify split chunks plus one malformed data line.
+Blank/comment/non-data SSE handling remains unchanged, while a malformed complete
+`data:` line is now the stable `Protocol` error immediately instead of being discarded
+until a timeout or later event. One private complete-line function exposes the existing
+buffering boundary without creating another parser or state owner. Its one regression
+test proves a split valid line remains buffered and decoded, then malformed data fails.
+All five focused OpenCode SSE tests, provider all-target check, warning-denied provider
+Clippy, formatting, architecture/policy/source-structure, and diff gates pass. No
+retry, fallback, history lookup, polling, timer, background work, or performance claim
+was added.
 
 ### F-18 — external invite controls use an obsolete host-token client path
 

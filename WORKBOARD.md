@@ -1054,6 +1054,15 @@ contracts, findings, or verification journals.
   provider tests, provider all-target check, warning-denied Clippy, formatting,
   architecture/policy/source-structure, and diff gates pass. No real provider ran;
   F-03 is complete pending the Phase 1 whole-phase reviews.
+- Completed F-17 at `e01f071`. A malformed complete OpenCode SSE `data:` line now
+  fails immediately as protocol corruption instead of being silently discarded and
+  later surfacing as timeout or unrelated state. The existing pending-line buffer is
+  exposed through one private function solely at its real complete-line boundary;
+  one regression proves split valid input is retained and decoded before malformed
+  input fails. All five focused SSE tests, provider all-target check, warning-denied
+  Clippy, formatting, architecture/policy/source-structure, and diff gates pass. No
+  alternate parser, retry, fallback, history read, polling, timer, background work,
+  or performance claim was added. Phase 1 whole-phase review remains pending.
 - Completed D-05 at `c76bb46` and `d88edf9`. The runtime-handle codec no longer
   generates, stores, parses, and discards a second random UUID. Runtime-v6 uses the
   already authoritative launch token as its sole generation identity and retains the
