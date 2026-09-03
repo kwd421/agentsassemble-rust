@@ -1041,9 +1041,19 @@ contracts, findings, or verification journals.
   reached `aws-lc-sys` but could not compile project code because the host has no
   `x86_64-w64-mingw32-gcc`; Windows compile/runtime behavior remains unknown. No
   retry, fallback, polling, heartbeat, background cleanup, credential exposure, or
-  real provider run was added. OpenCode's pre-stop native abort/disconnect result
-  handling remains an explicit F-03 review boundary rather than being declared safe
-  by this construction slice.
+  real provider run was added.
+- Completed F-03's last reachable OpenCode boundary at `90bd91f`. Transport loss now
+  poisons the driver and enters the existing exact process-stop path instead of
+  discarding an abort result and retaining ambiguous session state. The distinct
+  runtime-preserving interrupt requires OpenCode 1.17.18's exact `true` abort response
+  and the existing idle receipt. Full stop removes the redundant best-effort native
+  abort and MCP disconnect calls: owned process-tree termination and the separately
+  awaited RoomPortal shutdown are the two complete authorities for that lifecycle.
+  This removes 17 net lines without a new result type, state, abstraction, test,
+  fallback, retry, polling, timer, heartbeat, or background work. All 203 existing
+  provider tests, provider all-target check, warning-denied Clippy, formatting,
+  architecture/policy/source-structure, and diff gates pass. No real provider ran;
+  F-03 is complete pending the Phase 1 whole-phase reviews.
 - Completed D-05 at `c76bb46` and `d88edf9`. The runtime-handle codec no longer
   generates, stores, parses, and discards a second random UUID. Runtime-v6 uses the
   already authoritative launch token as its sole generation identity and retains the

@@ -189,7 +189,7 @@ history request is responsibility cleanup, not a workload performance claim.
 
 ### F-03 — cleanup and abort failures lose authority
 
-Disposition: `Fix`; medium lifecycle/availability impact.
+Disposition: `Completed through 90bd91f`; Phase 1 whole-phase review pending.
 
 `driver.rs:40-58` makes observation abort return no result.
 `runtime_turn.rs:293-300,366,380` and provider implementations in
@@ -246,8 +246,21 @@ wrappers and registration instead of being converted back to a safe failure. The
 common helper only combines results; transport-specific process and client cleanup
 remain with their existing owners. Antigravity's current launch fails before
 preparation at its missing-native-receipt gate, so its dormant post-gate path remains
-outside this closure. OpenCode's pre-stop native abort/disconnect handling remains
-to be judged separately against exact provider-session semantics before F-03 closes.
+outside this closure.
+
+OpenCode correction `90bd91f` closes the last reachable site. An HTTP/SSE transport
+failure now poisons the driver and enters the existing exact owned-process stop path;
+it no longer sends an unconfirmed abort and then leaves the runtime reusable. The
+runtime-retaining interrupt alone calls the official 1.17.18 abort operation and now
+requires its exact `true` response plus the existing session-idle receipt. Full runtime
+stop no longer sends redundant best-effort abort and MCP-disconnect requests: confirmed
+owned-process-tree termination removes the OpenCode server and all of its work, while
+the separately awaited RoomPortal shutdown removes the local capability endpoint.
+All cleanup is still attempted through those two authoritative owners. This deletes
+17 net lines and adds no result type, state, abstraction, test, retry, fallback,
+polling, timer, heartbeat, or background work. All 203 existing provider tests,
+provider all-target check, warning-denied provider Clippy, formatting,
+architecture/policy/source-structure, and diff gates pass. No real provider ran.
 
 ### F-04 — signed capabilities advertised actions that did not exist
 
