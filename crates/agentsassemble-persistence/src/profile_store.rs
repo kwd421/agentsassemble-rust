@@ -208,11 +208,7 @@ async fn apply_profile_patch_in_transaction(
     if let Some(attachment_id) = avatar_attachment_id(&next.avatar_image_url) {
         authorize_profile_avatar(transaction, identity.user_id, attachment_id, now).await?;
     }
-    sqlx::query("UPDATE user_profiles SET profile_json = ? WHERE user_id = ?")
-        .bind(serde_json::to_string(&next)?)
-        .bind(identity.user_id)
-        .execute(&mut **transaction)
-        .await?;
+    update_profile_row(transaction, identity.user_id, &next).await?;
     if next.avatar_image_url != previous_avatar_url {
         replace_profile_avatar(
             transaction,
@@ -240,6 +236,19 @@ async fn load_profile(
     identity: ProfileIdentity<'_>,
 ) -> Result<UserProfile, PersistenceError> {
     load_profile_for_identity(transaction, identity.user_id, identity.participant_id).await
+}
+
+pub(crate) async fn update_profile_row(
+    transaction: &mut Transaction<'_, Sqlite>,
+    user_id: &str,
+    profile: &UserProfile,
+) -> Result<(), PersistenceError> {
+    sqlx::query("UPDATE user_profiles SET profile_json = ? WHERE user_id = ?")
+        .bind(serde_json::to_string(profile)?)
+        .bind(user_id)
+        .execute(&mut **transaction)
+        .await?;
+    Ok(())
 }
 
 pub(crate) async fn load_local_operator_profile(

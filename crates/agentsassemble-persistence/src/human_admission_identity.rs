@@ -5,7 +5,9 @@ use sqlx::{Row, Sqlite, Transaction};
 use crate::{
     HumanInvite, PersistenceError, PreparedHumanAdmission,
     profile_attachments::replace_profile_avatar,
-    profile_store::{ProfileIdentity, decode_bound_profile, project_profile_into_rooms},
+    profile_store::{
+        ProfileIdentity, decode_bound_profile, project_profile_into_rooms, update_profile_row,
+    },
     raster_assets::validate_stored_raster,
 };
 
@@ -152,11 +154,7 @@ pub(super) async fn persist_identity(
             .await?;
     }
     if identity.profile_changed {
-        sqlx::query("UPDATE user_profiles SET profile_json = ? WHERE user_id = ?")
-            .bind(serde_json::to_string(&identity.profile)?)
-            .bind(&identity.user_id)
-            .execute(&mut **transaction)
-            .await?;
+        update_profile_row(transaction, &identity.user_id, &identity.profile).await?;
         if identity.previous_avatar_url != identity.profile.avatar_image_url {
             replace_profile_avatar(
                 transaction,
