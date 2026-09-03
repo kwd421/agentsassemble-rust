@@ -171,21 +171,21 @@ warnings denied, formatting, the architecture/policy gates, and diff checks pass
 No end-to-end Antigravity turn is claimed; it remains explicitly incomplete until a
 native attachment/completion receipt exists.
 
-### F-02 — Codex and OpenCode have multiple completion authorities
+### F-02 — Codex and OpenCode completion authority
 
-Disposition: `Fix or explicitly approve after native-protocol proof`; medium.
+Disposition: `Completed at 16ebb1f and 9c39938`; Phase 1 whole-phase review pending.
 
-`codex_turn.rs:217-269,328-379,475-517` accepts multiple event/identity dialects,
-final/delta combinations, and a one-second final-plus-idle inference.
-`opencode.rs:415-540` uses prompt/SSE response and then an HTTP history read when direct content
-is empty. Original provenance alone does not approve either path under the current
-no-fallback rule.
-
-Verify the installed current protocols. Choose one explicit completion/session
-owner per provider. If history is the documented OpenCode primary response, model
-it as primary rather than a fallback; otherwise remove it. Keep only the exact
-current Codex event dialect or record a narrowly approved invariant with real
-evidence.
+Codex now accepts only its exact terminal `turn/completed` receipt. OpenCode 1.17.18's
+official server schema and tagged handler define `POST /session/:id/message` as the
+wait-for-response operation returning one assistant message with parts; the separate
+GET route lists session history. OpenCode therefore takes completion identity and
+content only from that POST response while SSE validates the matching request/model
+and terminal session state. Empty direct content is an explicit `provider_turn_empty`
+failure instead of a second history request. No compatibility path, retry, timer,
+state, abstraction, or test was added. The three existing focused response-decoder
+tests, provider all-target check, warning-denied provider Clippy, formatting,
+architecture/policy/source-structure, and diff gates pass. Removing the invalid-only
+history request is responsibility cleanup, not a workload performance claim.
 
 ### F-03 — cleanup and abort failures lose authority
 

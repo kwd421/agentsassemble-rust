@@ -949,6 +949,16 @@ contracts, findings, or verification journals.
   turn fixture still completes through one `turn/completed`, and all 197 provider
   tests, warning-denied provider Clippy, formatting, diff, architecture, and source-
   structure gates pass. No real provider turn was run for this correction.
+- Completed the OpenCode portion of F-02 at `9c39938`. Installed OpenCode 1.17.18's
+  official schema and tagged handler make `POST /session/:id/message` the blocking
+  assistant-message result and the GET endpoint a history listing. The Rust driver
+  now uses only the POST response for completion identity/content; SSE remains an
+  exact request/model/terminal-state cross-check. Empty direct content fails visibly
+  instead of issuing a history fallback. The change adds no test, state, abstraction,
+  polling, retry, timer, heartbeat, or compatibility path. Three existing focused
+  decoder tests, provider all-target check, warning-denied provider Clippy,
+  formatting, architecture/policy/source-structure, and diff gates pass. F-02 is
+  complete pending the Phase 1 whole-phase reviews; no real provider turn was run.
 - Completed the observation-abort portion of F-03 at `fa8fac8`; portal teardown,
   hook cleanup, and residual-process reporting remain open. Codex, OpenCode, Claude
   Agent SDK, the shared remote OpenAI runtime, and shared Cursor/Grok ACP runtime now
