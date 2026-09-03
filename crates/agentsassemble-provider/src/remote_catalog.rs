@@ -145,6 +145,7 @@ fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
                 })
         ),
     )]);
+    metadata.insert("derive_description".to_owned(), json!(true));
     if let Some(family) = catalog_model_family(&model_id) {
         metadata.insert("family".to_owned(), json!(family));
     }
@@ -365,6 +366,7 @@ mod tests {
             json!("1.49")
         );
         assert!(!options[0].metadata.contains_key("description"));
+        assert_eq!(options[0].metadata["derive_description"], json!(true));
         assert_eq!(options[1].metadata["vision"], json!(true));
         assert_eq!(
             options[1].metadata["reasoning_efforts"],

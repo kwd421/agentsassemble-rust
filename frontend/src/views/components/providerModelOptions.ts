@@ -79,6 +79,7 @@ export function providerControlOptionDescription(
   if (typeof metadata.description === "string" && metadata.description.trim()) {
     return metadata.description.trim();
   }
+  if (metadata.derive_description !== true) return "";
   const description: string[] = [];
   if (
     typeof metadata.context_length === "number" &&

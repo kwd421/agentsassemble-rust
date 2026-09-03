@@ -88,9 +88,7 @@ describe("ProviderControlSelect", () => {
     await userEvent.click(screen.getByRole("combobox", { name: "모델" }));
     await userEvent.click(screen.getByRole("button", { name: "무료 모델만 보기" }));
     const results = screen.getByRole("listbox", { name: "모델" });
-    expect(
-      within(results).getByRole("option", { name: "Free Model Free 무료" })
-    ).toBeTruthy();
+    expect(within(results).getByRole("option", { name: "Free Model Free" })).toBeTruthy();
     expect(within(results).getByRole("option", { name: "Free Tier Model Free tier" })).toBeTruthy();
     expect(within(results).queryByRole("option", { name: "Paid Model" })).toBeNull();
   });
@@ -134,6 +132,7 @@ describe("ProviderControlSelect", () => {
               output_price_per_million: "2.19",
               reasoning: true,
               vision: false,
+              derive_description: true,
               training_policy: "사용될 수 있음 · opt-out 가능",
             },
           },
