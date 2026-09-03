@@ -1105,7 +1105,13 @@ contracts, findings, or verification journals.
   owner. All 243 existing persistence tests, workspace all-target check, persistence
   warning-denied Clippy, formatting, architecture, policy, source-structure, and diff
   gates pass. This is responsibility and duplication cleanup, not a performance claim.
-  C-12's separate profile-update reuse remains open.
+  Commit `7c8eabc` closes the separate profile half by keeping row encoding/update
+  with `profile_store` and reusing it from human admission; revision checks, avatar
+  transfer/replacement, room projection, and admission transaction order remain with
+  their existing owners. Three focused existing profile/admission tests pass with
+  workspace all-target check, persistence warning-denied Clippy, formatting,
+  architecture, policy, source-structure, and diff gates. It adds no new test,
+  abstraction, state, fallback, polling, or performance claim. C-12 is complete.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop

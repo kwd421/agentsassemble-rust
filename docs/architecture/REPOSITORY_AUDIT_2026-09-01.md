@@ -1276,8 +1276,7 @@ fallback, silent failure, storage conversion, or performance claim.
 
 ### C-12 — Agent Session row encoding and entity row writes repeat
 
-Disposition: `Agent Session rows completed at a82c981; profile update reuse remains`;
-medium drift risk.
+Disposition: `Completed at a82c981 and 7c8eabc`; drift removed.
 
 Agent Session JSON selection/decoding repeats in `agent_lifecycle.rs:357-395`,
 `agent_creation_records.rs:279-332`, and `agent_reconciliation.rs:719-735`.
@@ -1297,7 +1296,16 @@ boundary. Repository-wide production search leaves the point-load and update sta
 only at this entity owner. No generic repository, trait, cache, retry, fallback, state,
 or new test was introduced. All 243 existing persistence tests, workspace all-target
 check, persistence warning-denied Clippy, formatting, architecture, policy,
-source-structure, and diff gates pass. The profile-update half remains open.
+source-structure, and diff gates pass.
+
+The profile half is also complete. `profile_store` remains the entity owner for
+profile JSON row updates, and human admission calls that exact primitive. Optimistic
+revision validation, avatar authorization and replacement, room projection, reusable
+identity resolution, and transaction ordering remain at their existing owners. Three
+focused existing profile/admission tests pass with workspace all-target check,
+persistence warning-denied Clippy, formatting, architecture, policy, source-structure,
+and diff gates. No new test, abstraction, state, fallback, polling, or performance
+claim was added.
 
 ### C-13 — identical internal wire constants have multiple producers
 
