@@ -482,25 +482,38 @@ pub(crate) struct ProductionDriverFactory {
     pub(crate) credentials: ProviderCredentialStore,
     pub(crate) state_root: Option<PathBuf>,
     #[cfg(unix)]
-    pub(crate) guardian: Option<GuardianLaunch>,
+    pub(crate) guardian: Result<Option<GuardianLaunch>, DriverError>,
     #[cfg(windows)]
-    pub(crate) companion: Option<Arc<crate::filesystem::BoundExecutable>>,
+    pub(crate) companion: Result<Arc<crate::filesystem::BoundExecutable>, DriverError>,
 }
 
 impl ProductionDriverFactory {
     pub(crate) fn local(credentials: ProviderCredentialStore) -> Self {
         #[cfg(all(unix, test))]
-        let guardian = GuardianLaunch::test_harness().ok();
+        let guardian = GuardianLaunch::test_harness()
+            .map(Some)
+            .map_err(|_| custody_binding_failed());
         #[cfg(all(unix, not(test), any(target_os = "linux", target_os = "android")))]
         let guardian = crate::guardian::reexecution_path()
-            .ok()
-            .and_then(|executable| GuardianLaunch::production(&executable).ok());
+            .map_err(|_| custody_reexecution_failed())
+            .and_then(|executable| {
+                GuardianLaunch::production(&executable)
+                    .map(Some)
+                    .map_err(|_| custody_binding_failed())
+            });
         #[cfg(all(unix, not(test), not(any(target_os = "linux", target_os = "android"))))]
-        let guardian = (std::env::var_os("AGENTSASSEMBLE_INTERNAL_SERVER_STAGED")
-            == Some("v1".into()))
-        .then(crate::guardian::reexecution_path)
-        .and_then(Result::ok)
-        .and_then(|executable| GuardianLaunch::production(&executable).ok());
+        let guardian =
+            if std::env::var_os("AGENTSASSEMBLE_INTERNAL_SERVER_STAGED") == Some("v1".into()) {
+                crate::guardian::reexecution_path()
+                    .map_err(|_| custody_reexecution_failed())
+                    .and_then(|executable| {
+                        GuardianLaunch::production(&executable)
+                            .map(Some)
+                            .map_err(|_| custody_binding_failed())
+                    })
+            } else {
+                Ok(None)
+            };
         Self {
             credentials,
             state_root: None,
@@ -508,8 +521,8 @@ impl ProductionDriverFactory {
             guardian,
             #[cfg(windows)]
             companion: crate::filesystem::bind_current_helper_executable()
-                .ok()
-                .map(Arc::new),
+                .map(Arc::new)
+                .map_err(|_| companion_binding_failed()),
         }
     }
 
@@ -524,8 +537,24 @@ impl ProductionDriverFactory {
         Self {
             credentials: ProviderCredentialStore::production(),
             state_root: None,
-            guardian: GuardianLaunch::production(executable).ok(),
+            guardian: GuardianLaunch::production(executable)
+                .map(Some)
+                .map_err(|_| custody_binding_failed()),
         }
+    }
+
+    #[cfg(unix)]
+    fn guardian(&self) -> Result<&GuardianLaunch, DriverError> {
+        self.guardian
+            .as_ref()
+            .map_err(|error| *error)?
+            .as_ref()
+            .ok_or_else(custody_unavailable)
+    }
+
+    #[cfg(windows)]
+    fn companion(&self) -> Result<&crate::filesystem::BoundExecutable, DriverError> {
+        self.companion.as_deref().map_err(|error| *error)
     }
 }
 
@@ -561,12 +590,7 @@ fn launch_codex<'a>(
     let _ = (factory, runtime_lease);
     Box::pin(async move {
         #[cfg(unix)]
-        let driver = CodexDriver::spawn(
-            session,
-            runtime_lease,
-            factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
-        )
-        .await?;
+        let driver = CodexDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
         #[cfg(not(unix))]
         let driver = CodexDriver::spawn(session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
@@ -583,26 +607,13 @@ fn launch_antigravity<'a>(
     Box::pin(async move {
         #[cfg(unix)]
         {
-            let driver = AntigravityDriver::spawn(
-                session,
-                runtime_lease,
-                factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
-            )
-            .await?;
+            let driver =
+                AntigravityDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
             Ok(Box::new(driver) as Box<dyn ProviderDriver>)
         }
         #[cfg(windows)]
         {
-            let driver = AntigravityDriver::spawn(
-                session,
-                factory.companion.as_deref().ok_or_else(|| {
-                    DriverError::new(
-                        "provider_custody_unavailable",
-                        "The private provider companion is unavailable.",
-                    )
-                })?,
-            )
-            .await?;
+            let driver = AntigravityDriver::spawn(session, factory.companion()?).await?;
             Ok(Box::new(driver) as Box<dyn ProviderDriver>)
         }
         #[cfg(not(any(unix, windows)))]
@@ -625,12 +636,8 @@ fn launch_claude<'a>(
     let _ = (factory, session, runtime_lease);
     Box::pin(async move {
         #[cfg(unix)]
-        let driver = ClaudeAgentSdkDriver::spawn(
-            session,
-            runtime_lease,
-            factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
-        )
-        .await?;
+        let driver =
+            ClaudeAgentSdkDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
         #[cfg(windows)]
         let driver = ClaudeAgentSdkDriver::spawn(session).await?;
         #[cfg(any(unix, windows))]
@@ -653,12 +660,7 @@ fn launch_opencode<'a>(
     let _ = (factory, runtime_lease);
     Box::pin(async move {
         #[cfg(unix)]
-        let driver = OpenCodeDriver::spawn(
-            session,
-            runtime_lease,
-            factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
-        )
-        .await?;
+        let driver = OpenCodeDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
         #[cfg(not(unix))]
         let driver = OpenCodeDriver::spawn(session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
@@ -674,12 +676,7 @@ fn launch_cursor<'a>(
     let _ = (factory, runtime_lease);
     Box::pin(async move {
         #[cfg(unix)]
-        let driver = CursorAcpDriver::spawn(
-            session,
-            runtime_lease,
-            factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
-        )
-        .await?;
+        let driver = CursorAcpDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
         #[cfg(not(unix))]
         let driver = CursorAcpDriver::spawn(session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
@@ -699,13 +696,8 @@ fn launch_grok<'a>(
             ))
         })?;
         #[cfg(unix)]
-        let driver = GrokAcpDriver::spawn(
-            session,
-            runtime_lease,
-            factory.guardian.as_ref().ok_or_else(custody_unavailable)?,
-            state_root,
-        )
-        .await?;
+        let driver =
+            GrokAcpDriver::spawn(session, runtime_lease, factory.guardian()?, state_root).await?;
         #[cfg(not(unix))]
         let driver = GrokAcpDriver::spawn(session, state_root).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
@@ -829,5 +821,29 @@ const fn custody_unavailable() -> DriverError {
     DriverError::new(
         "provider_custody_unavailable",
         "The provider process custody helper is unavailable.",
+    )
+}
+
+#[cfg(all(unix, not(test)))]
+const fn custody_reexecution_failed() -> DriverError {
+    DriverError::new(
+        "provider_custody_reexecution_failed",
+        "The provider process custody executable could not be resolved.",
+    )
+}
+
+#[cfg(unix)]
+const fn custody_binding_failed() -> DriverError {
+    DriverError::new(
+        "provider_custody_binding_failed",
+        "The provider process custody executable could not be bound.",
+    )
+}
+
+#[cfg(windows)]
+const fn companion_binding_failed() -> DriverError {
+    DriverError::new(
+        "provider_companion_binding_failed",
+        "The private provider companion executable could not be bound.",
     )
 }

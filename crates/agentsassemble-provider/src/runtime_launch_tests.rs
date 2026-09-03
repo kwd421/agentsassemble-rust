@@ -56,6 +56,28 @@ impl DriverFactory for NeverFactory {
     }
 }
 
+#[cfg(unix)]
+#[tokio::test]
+async fn guardian_binding_failure_reaches_provider_start() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create guardian failure fixture: {error}"));
+    let session = super::tests::fixture_session(directory.path(), "#!/bin/sh\nexit 0\n").await;
+    let adapter = ProviderAdapter::with_guardian_executable(&directory.path().join("missing"));
+
+    let Err(error) = adapter.start(&session).await else {
+        panic!("unbound guardian must prevent provider start");
+    };
+    assert_eq!(error.code, "provider_custody_binding_failed");
+    assert!(error.runtime_stopped);
+
+    drop(adapter);
+    crate::runtime_lease::cleanup_stale_runtime_lease(
+        &session.public.room_id,
+        &session.public.session_id,
+    );
+}
+
 #[test]
 #[cfg(target_os = "linux")]
 #[allow(clippy::zombie_processes)]
@@ -304,7 +326,7 @@ async fn post_spawn_pre_anchor_cancellation_requires_the_guardian_receipt() {
     let adapter = ProviderAdapter::with_factory(Arc::new(ProductionDriverFactory {
         credentials: crate::ProviderCredentialStore::production(),
         state_root: None,
-        guardian: Some(guardian),
+        guardian: Ok(Some(guardian)),
     }));
     let pending_adapter = adapter.clone();
     let pending_session = session.clone();
