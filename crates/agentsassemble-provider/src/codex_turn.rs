@@ -1,6 +1,8 @@
 use std::{collections::HashSet, time::Duration};
 
-use agentsassemble_domain::{DurableAgentSession, clean_message, has_visible_text};
+use agentsassemble_domain::{
+    DurableAgentSession, clean_message, has_visible_text, is_provider_turn_id,
+};
 use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio::time::Instant;
@@ -10,7 +12,6 @@ use crate::room_portal::ProviderTurnOutcome;
 use crate::runtime::{DriverError, ProviderTurnCompleted, ProviderTurnRequest};
 
 const TURN_INACTIVITY_TIMEOUT: Duration = Duration::from_mins(3);
-const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
 const MAX_PROVIDER_TURN_IDS: usize = 4_096;
 const MAX_FINAL_MESSAGE_CHARS: usize = 12_000;
 
@@ -439,11 +440,7 @@ fn exact_optional_id(
             continue;
         }
         let candidate = candidate.as_str().ok_or_else(invalid)?;
-        if candidate.is_empty()
-            || candidate.len() > MAX_PROVIDER_TURN_ID_BYTES
-            || candidate.trim() != candidate
-            || candidate.chars().any(char::is_control)
-        {
+        if !is_provider_turn_id(candidate) {
             return Err(invalid());
         }
         if observed.is_some_and(|value| value != candidate) {

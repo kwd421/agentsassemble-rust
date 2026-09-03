@@ -1,8 +1,9 @@
 use std::collections::{BTreeMap, HashSet};
 
 use agentsassemble_domain::{
-    DurableAgentSession, QueuedRoomInput, Room, RoomEvent, RoomInputDeliveryKind, has_visible_text,
-    render_persona_context,
+    DurableAgentSession, MAX_ROOM_OBSERVATION_AGENT_IDS, MAX_ROOM_VIEW_CHARACTERS, QueuedRoomInput,
+    Room, RoomEvent, RoomInputDeliveryKind, has_visible_text, is_provider_input,
+    is_room_observation_view, render_persona_context,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -17,7 +18,6 @@ use crate::{
 };
 
 const MAX_CONTEXT_MESSAGES: usize = 50;
-const MAX_ROOM_VIEW_CHARS: usize = 20_000;
 
 pub(super) struct PreparedRoomInput {
     pub(super) provider_input: String,
@@ -81,9 +81,7 @@ pub(super) async fn prepare_room_input(
             rendered_context,
         ),
     };
-    if room_view.chars().count() > MAX_ROOM_VIEW_CHARS
-        || provider_input.chars().count() > MAX_ROOM_VIEW_CHARS
-    {
+    if !is_room_observation_view(&room_view) || !is_provider_input(&provider_input) {
         return Err(rejected(
             "provider_turn_input_invalid",
             "The canonical room observation exceeds its provider-visible bound.",
@@ -108,14 +106,21 @@ async fn load_room_agent_ids(
     room: &Room,
     session: &DurableAgentSession,
 ) -> Result<Vec<String>, PersistenceError> {
+    let query_limit = i64::try_from(MAX_ROOM_OBSERVATION_AGENT_IDS + 1).map_err(|_| {
+        rejected(
+            "agent_session_capacity",
+            "This room exceeds its Agent Session capacity.",
+        )
+    })?;
     let rows = sqlx::query(
-        "SELECT sessions.session_id, participants.participant_json FROM agent_sessions AS sessions JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = json_extract(sessions.session_json, '$.participant_id') WHERE sessions.room_id = ? AND sessions.session_id != ? ORDER BY sessions.session_id LIMIT 65",
+        "SELECT sessions.session_id, participants.participant_json FROM agent_sessions AS sessions JOIN participants ON participants.room_id = sessions.room_id AND participants.participant_id = json_extract(sessions.session_json, '$.participant_id') WHERE sessions.room_id = ? AND sessions.session_id != ? ORDER BY sessions.session_id LIMIT ?",
     )
     .bind(&room.room_id)
     .bind(&session.public.session_id)
+    .bind(query_limit)
     .fetch_all(&mut **transaction)
     .await?;
-    if rows.len() > 64 {
+    if rows.len() > MAX_ROOM_OBSERVATION_AGENT_IDS {
         return Err(rejected(
             "agent_session_capacity",
             "This room exceeds its Agent Session capacity.",
@@ -196,7 +201,7 @@ fn bounded_pending_prefix<'a>(
         if render_room_view(room, session, room_agent_ids, &candidate_events)?
             .chars()
             .count()
-            > MAX_ROOM_VIEW_CHARS
+            > MAX_ROOM_VIEW_CHARACTERS
         {
             break;
         }
@@ -256,7 +261,7 @@ async fn load_context(
         if render_room_view(room, session, room_agent_ids, &values)?
             .chars()
             .count()
-            <= MAX_ROOM_VIEW_CHARS
+            <= MAX_ROOM_VIEW_CHARACTERS
         {
             selected = candidate;
         }

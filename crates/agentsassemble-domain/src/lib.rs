@@ -13,6 +13,7 @@ mod persona;
 mod persona_text;
 mod profile;
 mod projection;
+mod provider_turn;
 mod room_history;
 mod room_preferences;
 mod room_settings;
@@ -71,6 +72,11 @@ pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical
 pub use projection::{
     privacy_minimized_vote_transition, public_event_for_principal, public_value_for_principal,
     room_event_is_owner_only,
+};
+pub use provider_turn::{
+    MAX_PROVIDER_INPUT_CHARACTERS, MAX_PROVIDER_TURN_ID_BYTES, MAX_ROOM_OBSERVATION_AGENT_ID_BYTES,
+    MAX_ROOM_OBSERVATION_AGENT_IDS, MAX_ROOM_VIEW_BYTES, MAX_ROOM_VIEW_CHARACTERS,
+    is_provider_input, is_provider_turn_id, is_room_observation_agent_id, is_room_observation_view,
 };
 pub use room_history::{ROOM_HISTORY_MAX_EVENTS, RoomHistoryPage, RoomHistoryRequest};
 pub use room_preferences::{

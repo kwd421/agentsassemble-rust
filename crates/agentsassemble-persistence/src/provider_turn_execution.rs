@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
     AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, DurableAgentSession, ParticipantStatus,
-    RoomInputDeliveryKind,
+    RoomInputDeliveryKind, is_provider_turn_id,
 };
 use chrono::{SecondsFormat, Utc};
 use serde::{Deserialize, Serialize};
@@ -284,11 +284,7 @@ impl SqliteStore {
         authority: &ProviderTurnStartAuthority,
         provider_turn_id: &str,
     ) -> Result<(), PersistenceError> {
-        if provider_turn_id.is_empty()
-            || provider_turn_id.len() > 256
-            || provider_turn_id.trim() != provider_turn_id
-            || provider_turn_id.chars().any(char::is_control)
-        {
+        if !is_provider_turn_id(provider_turn_id) {
             return Err(invalid_execution());
         }
         let updated = sqlx::query(

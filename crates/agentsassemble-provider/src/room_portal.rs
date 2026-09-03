@@ -6,7 +6,10 @@ use std::{
 use thiserror::Error;
 use uuid::Uuid;
 
-use agentsassemble_domain::VoteCommand;
+use agentsassemble_domain::{
+    MAX_ROOM_OBSERVATION_AGENT_IDS, VoteCommand, is_room_observation_agent_id,
+    is_room_observation_view,
+};
 
 use crate::driver::ProviderTurnRequest;
 #[cfg(windows)]
@@ -35,9 +38,7 @@ pub use tool::{
 
 pub(super) const ROOM_PORTAL_TOKEN_ENV_PREFIX: &str = "AGENTSASSEMBLE_INTERNAL_ROOM_PORTAL_TOKEN_";
 
-const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
 const MAX_TURN_ID_BYTES: usize = 128;
-const MAX_AGENT_IDS: usize = 64;
 pub(super) const MAX_MESSAGE_CHARS: usize = 12_000;
 const MAX_ROOM_TOOL_RESULTS: usize = 32;
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -295,16 +296,17 @@ impl RoomPortal {
         if input_up_to_seq <= 0
             || durable_turn_generation == 0
             || Uuid::parse_str(execution_id).is_err()
-            || room_view.is_empty()
-            || room_view.len() > MAX_ROOM_VIEW_BYTES
+            || !is_room_observation_view(room_view)
             || !valid_observation_attachments(
                 room_view,
                 attachment_ids,
                 attachment_ingress.is_some(),
             )
-            || allowed_agent_ids.len() > MAX_AGENT_IDS
+            || allowed_agent_ids.len() > MAX_ROOM_OBSERVATION_AGENT_IDS
             || unique_agent_ids.len() != allowed_agent_ids.len()
-            || allowed_agent_ids.iter().any(|value| !valid_agent_id(value))
+            || allowed_agent_ids
+                .iter()
+                .any(|value| !is_room_observation_agent_id(value))
         {
             return Err(RoomPortalError::Observation);
         }
@@ -607,13 +609,6 @@ fn validate_turn_id(value: &str) -> Result<(), RoomPortalError> {
         return Err(RoomPortalError::Observation);
     }
     Ok(())
-}
-
-fn valid_agent_id(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= MAX_TURN_ID_BYTES
-        && value.trim() == value
-        && !value.chars().any(char::is_control)
 }
 
 pub(super) fn canonical_message(value: &str) -> Option<String> {

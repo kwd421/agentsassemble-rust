@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
     Actor, AuthenticatedPrincipal, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    Participant, ParticipantStatus, Room, RoomEvent, RoomSettings, RoomStatus,
+    Participant, ParticipantStatus, Room, RoomEvent, RoomSettings, RoomStatus, is_provider_turn_id,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -13,8 +13,6 @@ use crate::{
     PersistenceError, message_search_index::index_lobby_message,
     room_event_sequence::next_sequence, turn_authority::active_turn_authority,
 };
-
-const MAX_PROVIDER_TURN_ID_BYTES: usize = 128;
 
 pub(crate) fn provider_room_principal(
     session: &DurableAgentSession,
@@ -423,11 +421,7 @@ pub(crate) fn clear_active_turn_fields(session: &mut DurableAgentSession) {
 }
 
 pub(super) fn validate_identifier(value: &str, code: &'static str) -> Result<(), PersistenceError> {
-    if value.is_empty()
-        || value.len() > MAX_PROVIDER_TURN_ID_BYTES
-        || value.trim() != value
-        || value.chars().any(char::is_control)
-    {
+    if !is_provider_turn_id(value) {
         return Err(rejected(code, "Provider turn identity is invalid."));
     }
     Ok(())

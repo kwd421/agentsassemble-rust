@@ -1,7 +1,9 @@
 use std::{collections::HashSet, panic::AssertUnwindSafe};
 
 use agentsassemble_domain::{
-    AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, DurableAgentSession, has_visible_text,
+    AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, DurableAgentSession,
+    MAX_ROOM_OBSERVATION_AGENT_IDS, is_provider_input, is_provider_turn_id,
+    is_room_observation_agent_id, is_room_observation_view,
 };
 use futures_util::FutureExt;
 use tokio_util::sync::CancellationToken;
@@ -18,10 +20,6 @@ use super::{
 use crate::driver::{ProviderTurnCompleted, ProviderTurnRequest};
 
 const MAX_TURN_ID_BYTES: usize = 128;
-const MAX_PROVIDER_INPUT_CHARS: usize = 20_000;
-const MAX_ROOM_VIEW_CHARS: usize = 20_000;
-const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
-const MAX_ROOM_AGENT_IDS: usize = 64;
 
 impl ProviderAdapter {
     /// Runs one durable assigned turn through the exact owned provider session.
@@ -407,10 +405,7 @@ fn finish_completed_turn(
     abort_requires_restart: &mut bool,
 ) -> Result<ProviderTurnCompleted, ProviderAdapterError> {
     if completed.turn_id != request.turn_id
-        || completed.provider_turn_id.is_empty()
-        || completed.provider_turn_id.len() > MAX_TURN_ID_BYTES
-        || completed.provider_turn_id.trim() != completed.provider_turn_id
-        || completed.provider_turn_id.chars().any(char::is_control)
+        || !is_provider_turn_id(&completed.provider_turn_id)
         || !valid_provider_session_transition(session, completed.provider_session_id.as_deref())
     {
         let error = ProviderAdapterError::uncertain(
@@ -498,10 +493,7 @@ pub(super) fn validate_request(
             "The durable provider turn is not in an active phase.",
         ));
     }
-    if request.input.chars().count() > MAX_PROVIDER_INPUT_CHARS
-        || request.input.contains('\0')
-        || !has_visible_text(&request.input)
-    {
+    if !is_provider_input(&request.input) {
         return Err(DriverError::new(
             "provider_turn_input_invalid",
             "The provider turn input is empty or exceeds its bound.",
@@ -511,23 +503,18 @@ pub(super) fn validate_request(
         let unique_ids = observation.allowed_agent_ids.iter().collect::<HashSet<_>>();
         if observation.session_id != session.public.session_id
             || observation.input_up_to_seq <= 0
-            || observation.view.chars().count() > MAX_ROOM_VIEW_CHARS
-            || observation.view.len() > MAX_ROOM_VIEW_BYTES
-            || observation.view.contains('\0')
-            || !has_visible_text(&observation.view)
+            || !is_room_observation_view(&observation.view)
             || !valid_observation_attachments(
                 &observation.view,
                 &observation.attachment_ids,
                 observation.attachment_ingress.is_some(),
             )
-            || observation.allowed_agent_ids.len() > MAX_ROOM_AGENT_IDS
+            || observation.allowed_agent_ids.len() > MAX_ROOM_OBSERVATION_AGENT_IDS
             || unique_ids.len() != observation.allowed_agent_ids.len()
-            || observation.allowed_agent_ids.iter().any(|agent_id| {
-                agent_id.is_empty()
-                    || agent_id.len() > MAX_TURN_ID_BYTES
-                    || agent_id.trim() != agent_id
-                    || agent_id.chars().any(char::is_control)
-            })
+            || observation
+                .allowed_agent_ids
+                .iter()
+                .any(|agent_id| !is_room_observation_agent_id(agent_id))
         {
             return Err(DriverError::new(
                 "room_observation_invalid",

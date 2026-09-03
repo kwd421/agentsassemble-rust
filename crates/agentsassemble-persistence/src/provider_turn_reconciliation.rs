@@ -2,7 +2,8 @@ use std::collections::HashSet;
 
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
-    AgentTurnPhase, DurableAgentSession, ParticipantStatus, has_visible_text,
+    AgentTurnPhase, DurableAgentSession, MAX_ROOM_OBSERVATION_AGENT_IDS, ParticipantStatus,
+    is_provider_input, is_room_observation_agent_id, is_room_observation_view,
 };
 use chrono::{SecondsFormat, Utc};
 use sqlx::{Row, Sqlite, Transaction};
@@ -27,11 +28,6 @@ use crate::{
 };
 
 const SCAN_LIMIT: i64 = 64;
-const MAX_PROVIDER_INPUT_CHARS: usize = 20_000;
-const MAX_ROOM_VIEW_CHARS: usize = 20_000;
-const MAX_ROOM_VIEW_BYTES: usize = 96 * 1024;
-const MAX_ROOM_AGENT_IDS: usize = 64;
-const MAX_AUTHORITY_ID_BYTES: usize = 128;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderTurnReconciliationCursor {
@@ -657,22 +653,15 @@ async fn validate_assignment_envelope(
             .inflight_inputs
             .iter()
             .any(|input| input.delivery_kind != assignment.delivery_kind)
-        || assignment.provider_input.chars().count() > MAX_PROVIDER_INPUT_CHARS
-        || assignment.provider_input.contains('\0')
-        || !has_visible_text(&assignment.provider_input)
-        || assignment.room_view.chars().count() > MAX_ROOM_VIEW_CHARS
-        || assignment.room_view.len() > MAX_ROOM_VIEW_BYTES
-        || assignment.room_view.contains('\0')
-        || !has_visible_text(&assignment.room_view)
+        || !is_provider_input(&assignment.provider_input)
+        || !is_room_observation_view(&assignment.room_view)
         || assignment.attachment_ids != expected_attachment_ids
-        || assignment.room_agent_ids.len() > MAX_ROOM_AGENT_IDS
+        || assignment.room_agent_ids.len() > MAX_ROOM_OBSERVATION_AGENT_IDS
         || unique_agent_ids.len() != assignment.room_agent_ids.len()
-        || assignment.room_agent_ids.iter().any(|agent_id| {
-            agent_id.is_empty()
-                || agent_id.len() > MAX_AUTHORITY_ID_BYTES
-                || agent_id.trim() != agent_id
-                || agent_id.chars().any(char::is_control)
-        })
+        || assignment
+            .room_agent_ids
+            .iter()
+            .any(|agent_id| !is_room_observation_agent_id(agent_id))
     {
         return Err(invalid_reconciliation());
     }
