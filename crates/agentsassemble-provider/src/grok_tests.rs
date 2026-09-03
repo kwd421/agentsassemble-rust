@@ -12,7 +12,7 @@ fn native_catalog_excludes_custom_models_and_preserves_advertised_default() {
     )
     .unwrap_or_else(|_| panic!("parse custom model keys"));
     let catalog = parse_models(
-        "Default model: grok-4.6\n* grok-4.6\n- custom-private\n- grok-4.5\n",
+        "Default model: grok-4.6\n* grok-4.6 (default)\n- custom-private\n- grok-4.5\n",
         &custom,
     )
     .unwrap_or_else(|| panic!("parse native model catalog"));

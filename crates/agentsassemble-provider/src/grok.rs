@@ -91,7 +91,10 @@ fn parse_models(output: &str, custom_models: &BTreeSet<String>) -> Option<GrokCa
             }
             continue;
         }
-        let model = line.strip_prefix("* ").or_else(|| line.strip_prefix("- "));
+        let model = line
+            .strip_prefix("* ")
+            .map(|model| model.strip_suffix(" (default)").unwrap_or(model))
+            .or_else(|| line.strip_prefix("- "));
         if let Some(model) = model
             && valid_model_id(model)
             && !custom_models.contains(model)
