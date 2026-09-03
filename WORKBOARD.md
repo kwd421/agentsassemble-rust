@@ -1085,6 +1085,21 @@ contracts, findings, or verification journals.
   repository search leaves no Codex config syntax in `room_portal.rs`. No new test,
   state, transport abstraction, retry, fallback, polling, timer, heartbeat, background
   work, or performance claim was added. Phase 1 whole-phase review remains pending.
+- Completed C-03 at `3ab792b` and `bb25e9e`. One small domain owner now defines and
+  validates the provider input, observation view, observation Agent-ID set, provider
+  turn ID, and ordinary room-message limits. Producer, persistence recovery, adapter,
+  provider-native, RoomPortal, and frontend boundaries still revalidate or normalize
+  at their own trust edges; only the repeated policy moved. Semantically different
+  128-byte identifiers remain separate. The previously unreachable persistence-only
+  256-byte provider-turn allowance now matches the 128-byte adapter contract, and
+  RoomPortal independently rejects an invalid observation instead of relying on the
+  earlier adapter check. The copied message-edit UI reads its unchanged 12,000-character
+  limit from a Rust-generated wire constant. No new test was added. Domain 58,
+  persistence 243, and provider 205 tests, the three existing message-mutation UI
+  tests, production frontend build, workspace all-target check, warning-denied Clippy,
+  formatting, architecture/policy/source-structure, and diff gates pass. No new state,
+  generic envelope type, retry, fallback, polling, timer, heartbeat, background work,
+  or performance claim was added. Phase 1 whole-phase review remains pending.
 - Completed D-05 at `c76bb46` and `d88edf9`. The runtime-handle codec no longer
   generates, stores, parses, and discards a second random UUID. Runtime-v6 uses the
   already authoritative launch token as its sole generation identity and retains the

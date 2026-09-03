@@ -1163,20 +1163,31 @@ another ordered key list or signed projection.
 
 ### C-03 — provider-turn envelope limits are repeated
 
-Disposition: `Consolidate semantic values; Keep independent revalidation`; low.
+Disposition: `Completed at 3ab792b and bb25e9e`; Phase 1 whole-phase review pending.
 
-The 20,000-character provider input/view limits, 96-KiB encoded-view ceiling,
-64-Agent-ID cap, and several semantically distinct 128-byte identifiers repeat in
-`runtime_turn.rs`, `provider_turn_reconciliation.rs`, `room_turn_context.rs`,
-`room_portal.rs`, `codex_turn.rs`, and `room_turn_support.rs`. The 12,000-character
-message limit also repeats across live domain, persistence, provider, and RoomPortal
-boundaries. The transcript code removed by F-01 is not a shared-contract consumer.
+One small domain module now owns the provider input, room-observation view,
+observation Agent-ID set, provider turn ID, and their exact predicates. The producer,
+durable decoder/reconciliation, adapter, provider-native decoder, and RoomPortal still
+invoke those predicates independently at their distinct trust boundaries. Semantically
+different 128-byte identifiers keep separate named limits; equality of their current
+numbers did not create a generic ID policy.
 
-Put each product semantic value and calculation in one domain/contract owner.
-Do not merge unrelated identifiers into a generic `MAX_ID` merely because their
-current number matches.
-Keep validation at producer, durable decoder, adapter, and child-tool trust
-boundaries; repeated checking is not duplicated policy.
+The provider execution store had allowed a 256-byte provider turn ID even though the
+common runtime rejected it above 128 bytes before that write; the store now revalidates
+the same 128-byte product contract. RoomPortal previously checked only its local byte
+ceiling and now independently checks the complete observation-view predicate. Neither
+change narrows a reachable valid server flow because the common adapter already applied
+the same contract before either boundary.
+
+The ordinary 12,000-character room-message limit now has one separate domain owner
+used by human send/edit, search projection, persistence finalization, provider output,
+and RoomPortal. The copied message-edit UI receives that unchanged value through one
+Rust-generated wire constant. No new test was added. Domain 58, persistence 243, and
+provider 205 tests, three existing message-mutation UI tests, production frontend
+build, workspace all-target check, warning-denied Clippy, formatting,
+architecture/policy/source-structure, and diff gates pass. No generic envelope type,
+state, retry, fallback, polling, timer, heartbeat, background task, or performance
+claim was added.
 
 ### C-04 — profile attachment identifier validation is duplicated
 
