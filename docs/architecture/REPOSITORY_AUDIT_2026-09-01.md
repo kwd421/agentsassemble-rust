@@ -1276,7 +1276,8 @@ fallback, silent failure, storage conversion, or performance claim.
 
 ### C-12 — Agent Session row encoding and entity row writes repeat
 
-Disposition: `Consolidate only entity-specific primitives`; medium drift risk.
+Disposition: `Agent Session rows completed at a82c981; profile update reuse remains`;
+medium drift risk.
 
 Agent Session JSON selection/decoding repeats in `agent_lifecycle.rs:357-395`,
 `agent_creation_records.rs:279-332`, and `agent_reconciliation.rs:719-735`.
@@ -1286,6 +1287,17 @@ owner; callers keep missing/stale meaning, authorization, transitions, and trans
 scope. Reuse the existing profile update owner from admission. A room-event row insert
 may be shared only below event construction, sequence, and indexing. A generic CRUD,
 codec, or repository abstraction would be overimplementation.
+
+The Agent Session part is complete. `agent_session_rows.rs` is the one private owner
+of exact optional point-load/decode and update/encode SQL. Lifecycle, creation/reuse,
+and reconciliation keep their distinct missing, conflict, stale-CAS, transaction, and
+transition semantics and merely map the returned option or affected-row count. Creation
+still owns insert because participant plus session establishment is its atomic authority
+boundary. Repository-wide production search leaves the point-load and update statements
+only at this entity owner. No generic repository, trait, cache, retry, fallback, state,
+or new test was introduced. All 243 existing persistence tests, workspace all-target
+check, persistence warning-denied Clippy, formatting, architecture, policy,
+source-structure, and diff gates pass. The profile-update half remains open.
 
 ### C-13 — identical internal wire constants have multiple producers
 

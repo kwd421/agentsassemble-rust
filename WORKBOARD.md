@@ -1095,6 +1095,17 @@ contracts, findings, or verification journals.
   architecture, policy, source-structure, generated-binding, CSS, and diff gates
   pass. This is a vocabulary-owner correction, not a performance claim, and adds no
   state, task, timer, polling, retry, heartbeat, fallback, or silent failure.
+- Completed the Agent Session row portion of C-12 at `a82c981`. One private,
+  entity-specific persistence module now owns exact optional row decode and row update;
+  lifecycle, creation/reuse, and reconciliation callers retain their distinct missing,
+  conflict, stale-CAS, transaction, and transition meanings. The insert path remains
+  with creation because it atomically establishes participant and session authority.
+  No generic repository, trait, codec, state, cache, retry, fallback, or new test was
+  added. Repository-wide production search leaves the point-load and update SQL at one
+  owner. All 243 existing persistence tests, workspace all-target check, persistence
+  warning-denied Clippy, formatting, architecture, policy, source-structure, and diff
+  gates pass. This is responsibility and duplication cleanup, not a performance claim.
+  C-12's separate profile-update reuse remains open.
 - Next production work: Phase 1 provider-first completion.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
