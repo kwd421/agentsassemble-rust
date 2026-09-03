@@ -30,7 +30,6 @@ static WORKERS: OnceLock<Arc<Semaphore>> = OnceLock::new();
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum FilesystemFailure {
-    Busy,
     Timeout,
     Failed,
 }
@@ -289,9 +288,18 @@ where
     T: Send + 'static,
     F: FnOnce() -> io::Result<T> + Send + 'static,
 {
-    let permit = workers
-        .try_acquire_owned()
-        .map_err(|_| FilesystemFailure::Busy)?;
+    let deadline = tokio::time::Instant::now() + timeout;
+    let permit = match Arc::clone(&workers).try_acquire_owned() {
+        Ok(permit) => permit,
+        Err(tokio::sync::TryAcquireError::NoPermits) => {
+            match tokio::time::timeout_at(deadline, workers.acquire_owned()).await {
+                Ok(Ok(permit)) => permit,
+                Ok(Err(_)) => return Err(FilesystemFailure::Failed),
+                Err(_) => return Err(FilesystemFailure::Timeout),
+            }
+        }
+        Err(tokio::sync::TryAcquireError::Closed) => return Err(FilesystemFailure::Failed),
+    };
     let (sender, receiver) = oneshot::channel();
     std::thread::Builder::new()
         .name("agentsassemble-provider-fs".to_owned())
@@ -301,7 +309,7 @@ where
             let _ = sender.send(result);
         })
         .map_err(|_| FilesystemFailure::Failed)?;
-    match tokio::time::timeout(timeout, receiver).await {
+    match tokio::time::timeout_at(deadline, receiver).await {
         Ok(Ok(Ok(value))) => Ok(value),
         Ok(Ok(Err(_)) | Err(_)) => Err(FilesystemFailure::Failed),
         Err(_) => Err(FilesystemFailure::Timeout),
@@ -573,7 +581,7 @@ mod tests {
     use super::{FilesystemFailure, run_with};
 
     #[tokio::test]
-    async fn stalled_filesystem_thread_times_out_without_releasing_capacity() {
+    async fn timed_out_worker_retains_capacity_and_queued_work_resumes_after_release() {
         let workers = Arc::new(Semaphore::new(1));
         let (release_sender, release_receiver) = std::sync::mpsc::channel();
         let outcome = run_with(Arc::clone(&workers), Duration::ZERO, move || {
@@ -584,9 +592,15 @@ mod tests {
         .await;
         assert_eq!(outcome, Err(FilesystemFailure::Timeout));
         assert!(workers.try_acquire().is_err());
+
+        let queued = run_with(Arc::clone(&workers), Duration::from_secs(1), || Ok(2));
+        tokio::pin!(queued);
+        assert!(futures_util::poll!(&mut queued).is_pending());
+
         release_sender
             .send(())
             .unwrap_or_else(|error| panic!("release filesystem worker: {error}"));
+        assert_eq!(queued.await, Ok(2));
         let _permit = workers
             .acquire()
             .await

@@ -322,7 +322,6 @@ fn invalid_workspace() -> ProviderSelectionError {
 
 fn executable_validation_error(failure: FilesystemFailure) -> ProviderSelectionError {
     let message = match failure {
-        FilesystemFailure::Busy => "Provider executable validation is at capacity.",
         FilesystemFailure::Timeout => "Provider executable validation timed out.",
         FilesystemFailure::Failed => "Provider executable authority could not be reopened.",
     };

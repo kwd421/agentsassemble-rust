@@ -54,7 +54,7 @@ async fn await_filesystem<T>(
     match resolved {
         Ok(value) => Ok(value),
         Err(FilesystemFailure::Timeout) => Err(ProbeFailure::Timeout),
-        Err(FilesystemFailure::Busy | FilesystemFailure::Failed) => Err(ProbeFailure::Failed),
+        Err(FilesystemFailure::Failed) => Err(ProbeFailure::Failed),
     }
 }
 
