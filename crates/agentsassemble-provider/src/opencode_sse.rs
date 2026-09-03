@@ -162,28 +162,8 @@ async fn collect_until_idle(
             if pending.len() > MAX_EVENT_LINE_BYTES && !pending.contains(&b'\n') {
                 return Err(OpenCodeEventError::TooLarge);
             }
-            while let Some(index) = pending.iter().position(|byte| *byte == b'\n') {
-                let mut line = pending.drain(..=index).collect::<Vec<_>>();
-                while matches!(line.last(), Some(b'\n' | b'\r')) {
-                    line.pop();
-                }
-                if line.len() > MAX_EVENT_LINE_BYTES {
-                    return Err(OpenCodeEventError::TooLarge);
-                }
-                let Some(encoded) = line.strip_prefix(b"data:") else {
-                    continue;
-                };
-                let event: Value = match serde_json::from_slice(trim_ascii(encoded)) {
-                    Ok(event) => event,
-                    Err(_) => continue,
-                };
-                events += 1;
-                if events > MAX_EVENTS {
-                    return Err(OpenCodeEventError::TooLarge);
-                }
-                if state.accept(&event)? {
-                    return Ok(state.turn);
-                }
+            if accept_complete_lines(&mut pending, &mut state, &mut events)? {
+                return Ok(state.turn);
             }
         }
         Err(if state.provider_error {
@@ -194,6 +174,35 @@ async fn collect_until_idle(
     })
     .await
     .map_err(|_| OpenCodeEventError::Transport)?
+}
+
+fn accept_complete_lines(
+    pending: &mut Vec<u8>,
+    state: &mut EventState,
+    events: &mut usize,
+) -> Result<bool, OpenCodeEventError> {
+    while let Some(index) = pending.iter().position(|byte| *byte == b'\n') {
+        let mut line = pending.drain(..=index).collect::<Vec<_>>();
+        while matches!(line.last(), Some(b'\n' | b'\r')) {
+            line.pop();
+        }
+        if line.len() > MAX_EVENT_LINE_BYTES {
+            return Err(OpenCodeEventError::TooLarge);
+        }
+        let Some(encoded) = line.strip_prefix(b"data:") else {
+            continue;
+        };
+        let event = serde_json::from_slice(trim_ascii(encoded))
+            .map_err(|_| OpenCodeEventError::Protocol)?;
+        *events += 1;
+        if *events > MAX_EVENTS {
+            return Err(OpenCodeEventError::TooLarge);
+        }
+        if state.accept(&event)? {
+            return Ok(true);
+        }
+    }
+    Ok(false)
 }
 
 fn terminal_idle(event_type: &str, properties: &serde_json::Map<String, Value>) -> bool {
@@ -228,7 +237,41 @@ fn trim_ascii(mut value: &[u8]) -> &[u8] {
 mod tests {
     use serde_json::json;
 
-    use super::{EventState, OpenCodeEventError, WaitMode};
+    use super::{EventState, OpenCodeEventError, WaitMode, accept_complete_lines};
+
+    #[test]
+    fn split_data_is_buffered_but_malformed_data_fails_immediately() {
+        let encoded = format!(
+            "data: {}\n",
+            json!({
+                "type": "message.updated",
+                "properties": {
+                    "sessionID": "session-1",
+                    "info": {"id": "user-1", "role": "user"}
+                }
+            })
+        );
+        let split = encoded.len() / 2;
+        let mut pending = encoded.as_bytes()[..split].to_vec();
+        let mut state = EventState::new("session-1", WaitMode::Turn);
+        let mut events = 0;
+        assert_eq!(
+            accept_complete_lines(&mut pending, &mut state, &mut events),
+            Ok(false)
+        );
+        pending.extend_from_slice(&encoded.as_bytes()[split..]);
+        assert_eq!(
+            accept_complete_lines(&mut pending, &mut state, &mut events),
+            Ok(false)
+        );
+        assert_eq!(state.turn.request_message, "user-1");
+
+        pending.extend_from_slice(b"data: not-json\n");
+        assert_eq!(
+            accept_complete_lines(&mut pending, &mut state, &mut events),
+            Err(OpenCodeEventError::Protocol)
+        );
+    }
 
     #[test]
     fn turn_identity_ignores_other_sessions_and_pairs_parent_message() {
