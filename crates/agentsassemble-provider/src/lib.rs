@@ -59,6 +59,7 @@ mod opencode_startup;
 mod openrouter;
 mod process;
 mod profile;
+mod provider_factory;
 mod registration;
 #[cfg(test)]
 mod registration_tests;

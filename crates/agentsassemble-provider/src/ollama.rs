@@ -13,10 +13,8 @@ use crate::{
     launch_error::DriverLaunchError,
     local_openai::{model_label, request_payload},
     process::probe_with_timeout,
-    registration::{
-        ProductionDriverFactory, ProviderConfigurationAuthority, ProviderDiscoveryFuture,
-        ProviderRegistration,
-    },
+    provider_factory::ProductionDriverFactory,
+    registration::{ProviderConfigurationAuthority, ProviderDiscoveryFuture, ProviderRegistration},
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,

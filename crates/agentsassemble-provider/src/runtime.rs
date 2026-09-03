@@ -12,7 +12,7 @@ pub(crate) use crate::driver::{
 pub use crate::driver::{ProviderRoomObservation, ProviderTurnCompleted, ProviderTurnRequest};
 use crate::{
     credentials::ProviderCredentialStore,
-    registration::{DriverFactory, ProductionDriverFactory},
+    provider_factory::{DriverFactory, ProductionDriverFactory},
     runtime_authority::revalidate_runtime_authority,
     runtime_lease::HeldRuntimeLease,
 };

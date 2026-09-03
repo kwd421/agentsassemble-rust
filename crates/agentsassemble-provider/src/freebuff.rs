@@ -7,10 +7,8 @@ use crate::{
     },
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
-    registration::{
-        ProductionDriverFactory, ProviderConfigurationAuthority, ProviderDiscoveryFuture,
-        ProviderRegistration,
-    },
+    provider_factory::ProductionDriverFactory,
+    registration::{ProviderConfigurationAuthority, ProviderDiscoveryFuture, ProviderRegistration},
     runtime_lease::HeldRuntimeLease,
 };
 

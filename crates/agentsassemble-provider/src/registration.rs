@@ -1,10 +1,4 @@
-#[cfg(windows)]
-use std::sync::Arc;
-use std::{
-    future::Future,
-    path::{Path, PathBuf},
-    pin::Pin,
-};
+use std::{future::Future, pin::Pin};
 
 use agentsassemble_domain::{DurableAgentSession, ProviderAvailability};
 use tokio_util::sync::CancellationToken;
@@ -13,8 +7,6 @@ use tokio_util::sync::CancellationToken;
 use crate::antigravity::AntigravityDriver;
 #[cfg(any(unix, windows))]
 use crate::claude::ClaudeAgentSdkDriver;
-#[cfg(unix)]
-use crate::guardian::GuardianLaunch;
 use crate::{
     ProviderCredentialId,
     catalog::{
@@ -24,7 +16,6 @@ use crate::{
     },
     cerebras,
     codex::CodexDriver,
-    credentials::ProviderCredentialStore,
     cursor,
     cursor_acp::CursorAcpDriver,
     custom_api, deepseek,
@@ -35,6 +26,7 @@ use crate::{
     llm_gateway, lm_studio, ollama,
     opencode::OpenCodeDriver,
     openrouter,
+    provider_factory::{DriverFactory, ProductionDriverFactory},
     runtime_lease::HeldRuntimeLease,
     tokenrouter, vercel,
 };
@@ -470,94 +462,6 @@ pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderA
     }
 }
 
-pub(crate) trait DriverFactory: Send + Sync {
-    fn launch<'a>(
-        &'a self,
-        session: &'a DurableAgentSession,
-        runtime_lease: &'a HeldRuntimeLease,
-    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>>;
-}
-
-pub(crate) struct ProductionDriverFactory {
-    pub(crate) credentials: ProviderCredentialStore,
-    pub(crate) state_root: Option<PathBuf>,
-    #[cfg(unix)]
-    pub(crate) guardian: Result<Option<GuardianLaunch>, DriverError>,
-    #[cfg(windows)]
-    pub(crate) companion: Result<Arc<crate::filesystem::BoundExecutable>, DriverError>,
-}
-
-impl ProductionDriverFactory {
-    pub(crate) fn local(credentials: ProviderCredentialStore) -> Self {
-        #[cfg(all(unix, test))]
-        let guardian = GuardianLaunch::test_harness()
-            .map(Some)
-            .map_err(|_| custody_binding_failed());
-        #[cfg(all(unix, not(test), any(target_os = "linux", target_os = "android")))]
-        let guardian = crate::guardian::reexecution_path()
-            .map_err(|_| custody_reexecution_failed())
-            .and_then(|executable| {
-                GuardianLaunch::production(&executable)
-                    .map(Some)
-                    .map_err(|_| custody_binding_failed())
-            });
-        #[cfg(all(unix, not(test), not(any(target_os = "linux", target_os = "android"))))]
-        let guardian =
-            if std::env::var_os("AGENTSASSEMBLE_INTERNAL_SERVER_STAGED") == Some("v1".into()) {
-                crate::guardian::reexecution_path()
-                    .map_err(|_| custody_reexecution_failed())
-                    .and_then(|executable| {
-                        GuardianLaunch::production(&executable)
-                            .map(Some)
-                            .map_err(|_| custody_binding_failed())
-                    })
-            } else {
-                Ok(None)
-            };
-        Self {
-            credentials,
-            state_root: None,
-            #[cfg(unix)]
-            guardian,
-            #[cfg(windows)]
-            companion: crate::filesystem::bind_current_helper_executable()
-                .map(Arc::new)
-                .map_err(|_| companion_binding_failed()),
-        }
-    }
-
-    pub(crate) fn at_state_root(credentials: ProviderCredentialStore, state_root: &Path) -> Self {
-        let mut factory = Self::local(credentials);
-        factory.state_root = Some(state_root.to_path_buf());
-        factory
-    }
-
-    #[cfg(unix)]
-    pub(crate) fn with_guardian(executable: &Path) -> Self {
-        Self {
-            credentials: ProviderCredentialStore::production(),
-            state_root: None,
-            guardian: GuardianLaunch::production(executable)
-                .map(Some)
-                .map_err(|_| custody_binding_failed()),
-        }
-    }
-
-    #[cfg(unix)]
-    fn guardian(&self) -> Result<&GuardianLaunch, DriverError> {
-        self.guardian
-            .as_ref()
-            .map_err(|error| *error)?
-            .as_ref()
-            .ok_or_else(custody_unavailable)
-    }
-
-    #[cfg(windows)]
-    fn companion(&self) -> Result<&crate::filesystem::BoundExecutable, DriverError> {
-        self.companion.as_deref().map_err(|error| *error)
-    }
-}
-
 impl DriverFactory for ProductionDriverFactory {
     fn launch<'a>(
         &'a self,
@@ -814,36 +718,4 @@ fn launch_custom_api<'a>(
         let driver = custom_api::launch(factory.credentials.clone(), session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
     })
-}
-
-#[cfg(unix)]
-const fn custody_unavailable() -> DriverError {
-    DriverError::new(
-        "provider_custody_unavailable",
-        "The provider process custody helper is unavailable.",
-    )
-}
-
-#[cfg(all(unix, not(test)))]
-const fn custody_reexecution_failed() -> DriverError {
-    DriverError::new(
-        "provider_custody_reexecution_failed",
-        "The provider process custody executable could not be resolved.",
-    )
-}
-
-#[cfg(unix)]
-const fn custody_binding_failed() -> DriverError {
-    DriverError::new(
-        "provider_custody_binding_failed",
-        "The provider process custody executable could not be bound.",
-    )
-}
-
-#[cfg(windows)]
-const fn companion_binding_failed() -> DriverError {
-    DriverError::new(
-        "provider_companion_binding_failed",
-        "The private provider companion executable could not be bound.",
-    )
 }
