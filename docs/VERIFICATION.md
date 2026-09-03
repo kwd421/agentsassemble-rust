@@ -6190,11 +6190,11 @@ runtime owns one ACP process, one private RoomPortal, and bounded protocol/outpu
 buffers. These are code
 and deterministic verification bounds, not real-turn latency or memory measurements.
 
-No real Grok turn, credential mutation, packaged frontend, or Computer Use session
-was started. Grok/Codex Luna/OpenCode Muse Spark real-flow evidence remains open for
-the Phase 1 matrix. The existing void observation-abort result is also explicitly
-open for phase-wide typed cleanup; this section does not turn that incomplete
-contract into a passing claim.
+At this source checkpoint no real Grok turn, credential mutation, packaged frontend,
+or Computer Use session was started. The later packaged three-provider section below
+closes the authorized Grok/Codex Luna/OpenCode Muse Spark real-flow evidence. The
+existing void observation-abort result remained explicitly open here for phase-wide
+typed cleanup; this historical section does not turn that contract into a pass.
 
 ### D-06 reconciliation and executable-staging measurement: 2026-09-03
 
@@ -6230,3 +6230,89 @@ buffers; the staging scan retains at most 1,024 paths and runs only on staging
 create/drop under its existing root lock. These observed costs justify no source
 change: the one-second recovery cadence and 1,024 fail-closed cleanup bound remain,
 with no fallback sweeper, periodic cleanup, alternate state, or permanent benchmark.
+
+### Packaged provider catalog and real-turn matrix: 2026-09-03
+
+The first isolated release package exposed Grok as `model_discovery_failed` in the
+copied Agent Add UI although the exact installed `grok models` command succeeded and
+advertised `grok-4.6` as default. A temporary ignored diagnostic, removed before the
+product commits, showed that `discover_catalog` intentionally started all sixteen
+providers together while the shared blocking-filesystem owner admitted only four
+operations with `try_acquire_owned`. The first four filesystem users succeeded and
+later native/local providers failed immediately from internal capacity contention.
+
+Commit `435615e` keeps the existing four detached workers but waits for a permit
+inside the same ten-second total operation deadline. A fast path preserves zero-time
+deadline behavior when a permit is already available; timeout now covers both queue
+and execution. The existing controlled regression proves that a timed-out blocking
+worker retains its permit and one queued operation begins only after explicit release.
+There is no extra thread, queue owner, sleep, retry, polling, fallback, or unbounded
+deadline. Commit `122061e` updates the existing Grok parser fixture and owner for the
+current official `* grok-4.6 (default)` line; it does not accept an alternate legacy
+format or substitute the first model when the advertised default is present.
+
+After the contention fix, one real sixteen-provider discovery encoded to 211,175
+bytes, exceeding the unchanged 192 KiB public-catalog bound. Provider contributions
+were measured rather than guessed: Vercel AI Gateway used 75,983 bytes, LLM Gateway
+76,137, Cursor 20,675, TokenRouter 12,387, OpenRouter 10,708, and the remaining eleven
+providers together used the balance. The gateway option `description` repeated data
+already carried by `context_length`, `pricing`, and input/output price fields. Commit
+`02bb066` removes only that duplicate wire projection and derives an explicit-
+description-first display, search, and accessible summary in the existing frontend
+option owner. Removing every repeated description yielded a 173,833-byte lower-bound
+measurement, but the first complete frontend run correctly found that generic
+derivation also changed existing DeepSeek/fixture accessibility names. Commit
+`58d82f7` therefore marks only gateway options whose server-rendered summary was
+removed; other providers retain their prior explicit-or-absent description behavior.
+The final provider array measures 192,033 bytes and the complete ready catalog
+192,221 bytes, below the unchanged 196,608-byte aggregate ceiling. The per-provider
+128 KiB ceiling, all models, structured metadata, selection rules, and fail-closed
+oversized result remain. The accepted trade-off is one small projection marker and a
+deterministic presentation calculation for those options in exchange for 19,142 fewer
+provider-array bytes and a viable bounded initial snapshot without changing unrelated
+option semantics.
+
+All 205 provider tests passed in 80.52 seconds. After the scope correction, its
+focused provider regression and thirty existing Agent Add/model-selector tests pass.
+Provider all-target warning-denied Clippy, the production TypeScript/Vite build,
+and copied CSS gate also passed. The exact isolated release package
+`AgentsAssemble Phase1 Verify 903` then exercised the copied UI with
+one canonical local user, room, and private temporary workspace. In sequence:
+
+- Grok selected the installed `grok-4.6` default at Medium, created and started one
+  Agent Session, returned exact text `GROK_PHASE1_OK` for an ordinary room message,
+  returned to waiting, and reached the visible stopped state.
+- Codex selected `gpt-5.6-luna` at Low, returned exact text
+  `CODEX_LUNA_PHASE1_OK`, returned to waiting, and reached the visible stopped state.
+- OpenCode selected `opencode/muse-spark-1.2-contributor-free`, returned exact text
+  `OPENCODE_MUSE_PHASE1_OK`, returned to waiting, and reached the visible stopped
+  state.
+
+No provider/model substitute, mock, direct database mutation, transcript, print
+mode, fallback, or browser-side completion was used. After the final stop receipt,
+normal app quit removed the exact desktop/server/provider process tree. Computer Use
+was reset and only the verification identifier's Application Support, cache, WebKit,
+preferences, temporary workspace, and package bundle were deleted; unrelated
+ChatGPT/Codex processes remained running. No credential, private provider state, or
+provider-private identifier was captured in source, fixtures, or committed output.
+
+The corrected whole-workspace run then passed every functional test and frontend,
+desktop, Rust, real TCP/WebSocket, generated-binding, warning-denied Clippy, policy,
+source-structure, CSS, formatting, and diff check in 366.19 seconds with
+2,117,484,544-byte maximum RSS. The command's final non-destructive artifact check
+correctly requested maintenance because the completed Cargo cache occupied
+21,158,686,720 bytes, above the unchanged 18 GiB retention ceiling. No Cargo or Tauri
+work remained active; the repository-owned `make artifact-prune` removed only that
+reproducible target cache, and the immediate artifact check passed. This is a storage
+lifecycle result, not a functional test failure or justification to raise the ceiling.
+
+The Phase 1 exit audit finds all sixteen retained registrations once, backed by the
+existing exact-set regression. Each startable provider reaches its provider-owned
+selection/configuration and one protocol completion/session authority; Antigravity
+remains visibly non-startable because its required native receipt does not exist.
+The generated binding gate covers the one Rust-owned frontend wire contract, and the
+typed stop/abort/construction owners prevent failed cleanup from becoming reusable
+success. Current production search found no provider-history transcript, scraping,
+print execution, silent completion fallback, or ownerless reachable cleanup edge.
+Together with the authorized real matrix above, the local Phase 1 exit contract is
+satisfied pending whole-phase Critical-web Pro and Daybreak Blue `xhigh` review.

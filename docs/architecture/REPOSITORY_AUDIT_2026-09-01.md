@@ -1691,7 +1691,7 @@ This table routes findings; it does not add another contract layer.
 | K-04 | provider process custody | keep/measure | observed escape/orphan cases remain closed; scan/copy costs are recorded |
 | K-05 | guardian/effect state owners and size-warning cohort | post-parity hold | stop first; after explicit resume compare state/interface/dependency/glue count before any structural split |
 | K-06 | invite persistence mutation owner | keep | malformed counter fails closed; no second upper-bound policy without bypass evidence |
-| K-07 | provider catalog/selection | keep | untrusted discovery is bounded; missing preferred model never substitutes another |
+| K-07 | provider catalog/selection | keep | untrusted discovery is bounded; filesystem work waits inside one total deadline instead of self-failing under catalog parallelism; duplicate rendered summaries are client-derived from structured fields so the measured sixteen-provider catalog remains below its unchanged bound; missing preferred model never substitutes another |
 | K-08 | room command replay owner | keep/measure | ACK loss resolves one exact ID without duplicate mutation or infinite retry |
 | K-09 | central identity/public ingress | keep | wrong host key/origin fails before registration or proxied authority |
 | K-10 | native/sidecar startup surface | keep | mismatched builds fail once at startup without frame-level proof |

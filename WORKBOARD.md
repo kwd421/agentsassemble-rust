@@ -4,14 +4,15 @@ Status: The Phase 0A source/duplication/defensive-complexity inventory at
 `9711232` remains reviewed historical evidence. Its finding-number order is not
 the production roadmap. The corrected provider-first plan is approved and active.
 The finite Phase 0B prerequisites F-14 and F-16 and their whole-phase cross-review
-are complete. Phase 1 provider-first implementation is active.
+are complete. Phase 1 provider-first implementation is complete at the local
+candidate and awaits its whole-phase external cross-review.
 
 Purpose: route the asynchronous Rust reimplementation without duplicating product
 contracts, findings, or verification journals.
 
 ## Active work
 
-- Phase: Phase 1 provider-first implementation. The finite Phase 0B prerequisites
+- Phase: Phase 1 provider-first review candidate. The finite Phase 0B prerequisites
   and their complete local gate and whole-phase external cross-review are finished.
 - Historical Phase 0B labels are not a serial global gate. D-06 executes with Phase 1
   runtime measurement/hardening; D-07 executes with Phase 5 human admission; split
@@ -1190,7 +1191,48 @@ contracts, findings, or verification journals.
   workspace all-target check, persistence warning-denied Clippy, formatting,
   architecture, policy, source-structure, and diff gates. It adds no new test,
   abstraction, state, fallback, polling, or performance claim. C-12 is complete.
-- Next production work: Phase 1 provider-first completion.
+- Completed the packaged provider-catalog correction and authorized three-provider
+  real-turn matrix through `435615e`, `122061e`, `02bb066`, and `58d82f7`. The copied Agent Add
+  flow exposed Grok as `model_discovery_failed` even though the same installed
+  `grok models` command succeeded. A temporary removed diagnostic reproduced that
+  the sixteen concurrent discoveries exhausted the four-slot filesystem owner and
+  every later `try_acquire` failed immediately. The existing owner now queues for a
+  permit inside its unchanged ten-second total deadline; the four-worker ceiling,
+  cancellation, detached blocking-work custody, and visible timeout/failure mapping
+  remain. Current Grok output marks its default as `* grok-4.6 (default)`, so the
+  provider parser now accepts that exact official shape without broad compatibility
+  parsing. Once all providers could discover, the real catalog measured 211,175
+  bytes and correctly failed the unchanged 192 KiB publication bound. Removing only
+  duplicate server-rendered descriptions produced a 173,833-byte lower bound. The
+  first generic frontend derivation also changed unrelated DeepSeek accessibility
+  names, which the complete frontend gate caught. The correction marks only gateway
+  options whose descriptions were removed; the final provider array measures 192,033
+  bytes and its complete ready catalog 192,221 bytes. The frontend derives the
+  display/search/accessibility summary from retained structured context and
+  pricing metadata only for that current projection. No model was
+  removed, truncated, substituted, or loaded on demand, and no new state, worker,
+  timer, polling, retry, fallback, provider special case, or catalog-size exception
+  was added. All 205 provider tests and the corrected focused provider test, thirty
+  existing Agent Add/model-selector tests,
+  provider warning-denied Clippy, production frontend build, copied CSS gate, and
+  artifact gate pass. The isolated packaged UI then created, started, completed one
+  ordinary exact-response turn, and stopped `grok-4.6`, `gpt-5.6-luna`, and
+  `opencode/muse-spark-1.2-contributor-free` in sequence. The app, its owned provider
+  children, package, database/cache/WebKit data, and temporary workspace were removed
+  after verification; unrelated Codex/ChatGPT processes were not touched. The final
+  whole-workspace run passed every functional, frontend, desktop, Rust, TCP/WebSocket,
+  generated-binding, warning-denied Clippy, policy, structure, CSS, formatting, and
+  diff check in 366.19 seconds with 2,117,484,544-byte maximum RSS. Its final
+  maintenance check found the now-complete Cargo cache at 21,158,686,720 bytes, above
+  the existing 18 GiB retention ceiling; explicit repository-owned maintenance
+  removed that cache and the artifact check then passed. Phase 1's sixteen exact
+  registrations, generated frontend contract, provider-owned selection/configuration,
+  single completion/session authorities, typed cleanup, explicit unavailable states,
+  and three authorized real turns satisfy the local exit contract. No provider-history
+  transcript/scraping/print path, silent runtime fallback, or ownerless reachable
+  cleanup remains. Whole-phase external reviews remain pending; Phase 2 must not start
+  until both reviewers approve this candidate.
+- Next production work: Phase 1 whole-phase external cross-review.
   - First establish the full sixteen-provider acceptance matrix and the smallest
     common registration, selection, start, ordinary-turn, visible-failure, and stop
     contracts. On Codex, Antigravity, OpenCode, and DeepSeek, remove only false or
