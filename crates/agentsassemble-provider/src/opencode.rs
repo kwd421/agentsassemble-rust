@@ -423,9 +423,8 @@ impl OpenCodeDriver {
                 return Err(turn_transport_error(error));
             }
         };
-        let completed = self
-            .completed_from_response(session, request, &attached, prompt, events)
-            .await;
+        let completed =
+            Self::completed_from_response(session, request, &attached, &prompt, &events);
         match completed {
             Ok(completed) => {
                 self.active_turn = None;
@@ -436,18 +435,17 @@ impl OpenCodeDriver {
         }
     }
 
-    async fn completed_from_response(
-        &mut self,
+    fn completed_from_response(
         session: &DurableAgentSession,
         request: &ProviderTurnRequest,
         attached: &str,
-        prompt: JsonResponse,
-        events: OpenCodeTurnEvents,
+        prompt: &JsonResponse,
+        events: &OpenCodeTurnEvents,
     ) -> Result<ProviderTurnCompleted, DriverError> {
         if !prompt.status.is_success() {
             return Err(provider_request_error());
         }
-        let mut message = assistant_message(&prompt.value)?;
+        let message = assistant_message(&prompt.value)?;
         if message.parent_id != events.request_message {
             return Err(turn_mismatch());
         }
@@ -461,11 +459,6 @@ impl OpenCodeDriver {
             return Err(model_mismatch());
         }
         if message.content.is_empty() {
-            message.content = self
-                .assistant_text_for_parent(attached, &events.request_message, &session.public.model)
-                .await?;
-        }
-        if message.content.is_empty() {
             return Err(turn_empty());
         }
         Ok(ProviderTurnCompleted {
@@ -477,39 +470,6 @@ impl OpenCodeDriver {
                 target_agent_id: String::new(),
             },
         })
-    }
-
-    async fn assistant_text_for_parent(
-        &mut self,
-        attached: &str,
-        parent_id: &str,
-        configured_model: &str,
-    ) -> Result<String, DriverError> {
-        let path = format!("{}/message", session_path(attached)?);
-        let response = self
-            .connect_owned_peer()
-            .await?
-            .get_json(&path, REQUEST_TIMEOUT)
-            .await
-            .map_err(http_driver_error)?;
-        if !response.status.is_success() {
-            return Err(provider_request_error());
-        }
-        let messages = response.value.as_array().ok_or_else(protocol_error)?;
-        for value in messages.iter().rev() {
-            if value.pointer("/info/role").and_then(Value::as_str) != Some("assistant") {
-                continue;
-            }
-            let message = assistant_message(value)?;
-            if message.parent_id != parent_id {
-                continue;
-            }
-            if message.observed_model != configured_model {
-                return Err(model_mismatch());
-            }
-            return Ok(message.content);
-        }
-        Ok(String::new())
     }
 
     async fn abort_session(&mut self, session_id: &str) -> Result<(), DriverError> {
