@@ -1197,11 +1197,17 @@ only its supported subset and tabletop/tool-choice policy.
 
 ### C-06 — provider-neutral RoomPortal owns Codex CLI syntax
 
-Disposition: `Move to existing owner`; low coupling risk.
+Disposition: `Completed at 2b9e895`; Phase 1 whole-phase review pending.
 
-`room_portal.rs:244-277,612-615` builds Codex `-c` flags. RoomPortal should provide
-endpoint, bearer, tools, and approval contract; `codex_config.rs` or the Codex
-driver should own Codex command syntax. No new provider framework is needed.
+RoomPortal retains only its provider-neutral running state, endpoint, bearer token,
+and process-scoped bearer environment name. The existing Codex config owner now reads
+that data and builds the exact Codex `-c` URL, bearer-environment, approval, feature-
+isolation, and timeout entries. The existing Codex command regression confirms the
+same app-server arguments and that the bearer value never enters them. Provider
+all-target check, warning-denied Clippy, formatting, architecture/policy/source-
+structure, and diff gates pass; repository search leaves no Codex config syntax in
+`room_portal.rs`. No provider framework, new test, state, retry, fallback, polling,
+timer, heartbeat, background task, or performance claim was added.
 
 ### C-07 — documentation repeats status, review verdicts, and optimization history
 

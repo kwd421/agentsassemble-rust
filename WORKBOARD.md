@@ -1076,6 +1076,15 @@ contracts, findings, or verification journals.
   formatting, architecture/policy/source-structure, and diff gates pass. No test-only
   framework, retry, fallback, polling, timer, heartbeat, background work, weaker
   custody, or performance claim was added. Phase 1 whole-phase review remains pending.
+- Completed C-06 at `2b9e895`. RoomPortal now exposes only its existing running
+  state, endpoint, and process-scoped bearer environment name; the existing Codex
+  config module alone translates those values into Codex `-c` syntax, approval mode,
+  feature isolation, and tool timeouts. The existing command regression confirms the
+  exact arguments and bearer secrecy. Provider all-target check, warning-denied
+  Clippy, formatting, architecture/policy/source-structure, and diff gates pass, and
+  repository search leaves no Codex config syntax in `room_portal.rs`. No new test,
+  state, transport abstraction, retry, fallback, polling, timer, heartbeat, background
+  work, or performance claim was added. Phase 1 whole-phase review remains pending.
 - Completed D-05 at `c76bb46` and `d88edf9`. The runtime-handle codec no longer
   generates, stores, parses, and discards a second random UUID. Runtime-v6 uses the
   already authoritative launch token as its sole generation identity and retains the
