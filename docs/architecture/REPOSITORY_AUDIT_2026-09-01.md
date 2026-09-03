@@ -988,16 +988,26 @@ does not authorize a new limit, retry, fallback, usage UI, or generic budget lay
 
 ### F-13 — provider factory erases guardian/helper construction causes
 
-Disposition: `Fix typed startup reporting`; medium lifecycle/diagnostic impact.
+Disposition: `Completed at 5ad4fdf and de637de`; Phase 1 whole-phase review pending.
 
-`registration.rs:383-413` converts guardian re-execution, production guardian, and
-Windows helper binding failures into `Option` through `.ok()`. Later launch code can
-report only that the guardian/helper is unavailable, losing the actual custody
-failure and making packaged diagnosis depend on inference.
+Guardian re-execution, production guardian binding, and Windows helper binding
+failures are retained as bounded redacted construction results. The existing provider
+start owner reports `provider_custody_reexecution_failed`,
+`provider_custody_binding_failed`, or `provider_companion_binding_failed` rather than
+collapsing the cause to unavailable. Intentional absence for an unstaged local macOS
+runtime remains `None` and is not confused with failed packaged custody preparation.
+No failure selects weaker custody or another launch mechanism.
 
-Retain the construction result or a bounded redacted typed cause until the launch
-owner reports it. Absence may remain a valid explicit provider-unavailable state;
-it must not silently select weaker custody or another launch mechanism.
+One focused regression proves a missing guardian executable reaches provider start as
+the exact binding failure. Provider all-target check, warning-denied Clippy, formatting,
+architecture/policy/source-structure, and diff gates pass. The initially affected
+`registration.rs` reached the 800-line strong warning because it mixed static provider
+registration policy with factory custody preparation. A behavior-neutral structure
+commit gives factory/custody preparation one 134-line owner and returns registration
+to 721 lines; provider-specific launch routing stays with the registry. This adds no
+generic factory framework and no state beyond retaining the already produced setup
+result. No extra test, retry, fallback, polling, timer, heartbeat, background task,
+weaker custody, or performance claim was added.
 
 ### F-14 — room command IDs have an isolated weak fallback
 

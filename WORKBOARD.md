@@ -1063,6 +1063,19 @@ contracts, findings, or verification journals.
   Clippy, formatting, architecture/policy/source-structure, and diff gates pass. No
   alternate parser, retry, fallback, history read, polling, timer, background work,
   or performance claim was added. Phase 1 whole-phase review remains pending.
+- Completed F-13 at `5ad4fdf` and `de637de`. Guardian re-execution, guardian binding,
+  and Windows companion binding failures now remain bounded redacted construction
+  results until the existing provider-start owner reports their exact cause. The
+  intentional unstaged macOS absence remains distinct from a failed packaged binding;
+  neither case selects weaker custody or another launch path. One focused regression
+  proves a missing guardian executable reaches start as
+  `provider_custody_binding_failed`. The separate structure commit moves factory and
+  custody preparation out of the provider-registration policy owner without changing
+  behavior, reducing `registration.rs` from 849 to 721 lines while adding one 134-line
+  owner. The focused regression, provider all-target check, warning-denied Clippy,
+  formatting, architecture/policy/source-structure, and diff gates pass. No test-only
+  framework, retry, fallback, polling, timer, heartbeat, background work, weaker
+  custody, or performance claim was added. Phase 1 whole-phase review remains pending.
 - Completed D-05 at `c76bb46` and `d88edf9`. The runtime-handle codec no longer
   generates, stores, parses, and discards a second random UUID. Runtime-v6 uses the
   already authoritative launch token as its sole generation identity and retains the
