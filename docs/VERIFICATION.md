@@ -6195,3 +6195,38 @@ was started. Grok/Codex Luna/OpenCode Muse Spark real-flow evidence remains open
 the Phase 1 matrix. The existing void observation-abort result is also explicitly
 open for phase-wide typed cleanup; this section does not turn that incomplete
 contract into a passing claim.
+
+### D-06 reconciliation and executable-staging measurement: 2026-09-03
+
+The existing one-second reconciler was measured against a clean SQLite store that
+contained one ordinary stopped Agent Session and no unresolved lifecycle or provider
+turn. Ten thousand consecutive cycles of the two production candidate-page methods
+executed 20,000 indexed candidate statements in 1.778389 seconds in the unoptimized
+test binary, or 177.839 microseconds per cycle. A warm `/usr/bin/time -l` run reported
+1.84 user plus 0.55 system seconds including Cargo and test setup, giving a conservative
+upper bound of 0.024% of one core at the production one-Hz cadence. That process's
+137,691,136-byte maximum RSS includes the complete debug test runtime and is not
+attributed to the scan; neither page retains data after an empty transaction.
+
+Ten fresh stores then exercised the actual watcher from an already committed start
+effect whose command owner was absent. All ten recovered without a browser request in
+1.007545-1.037550 seconds; the median was 1.011258 seconds. This preserves the tested
+owner-loss contract and shows that increasing the interval would directly increase a
+visible recovery delay while saving less than 0.2 ms of debug-build work per second.
+
+A temporary provider-module harness exercised the existing private staging owner and
+was removed after measurement. In its final complete run, twenty samples cleaning 159
+stale directories with sparse 64 MiB provider files (10,670,309,376 nominal bytes,
+matching the historical incident's order of magnitude) measured 14.079 ms median,
+15.792 ms p95, and 21.387 ms maximum. Ten samples at the full 1,024-entry bound with
+empty directories measured 62.147 ms median and 62.570 ms p95/maximum; the largest
+valid cleanup seen across all attempts was 96.090 ms. Sparse files isolate directory
+enumeration/unlink cost and are not evidence for writing 9.94 GiB.
+
+Ten samples of the exact `copy_and_verify_staged` path over a real 64 MiB file,
+including copy, `sync_all`, and content-identity verification, measured 156.305 ms
+median and 160.355 ms p95/maximum. The copy streams through the existing bounded
+buffers; the staging scan retains at most 1,024 paths and runs only on staging
+create/drop under its existing root lock. These observed costs justify no source
+change: the one-second recovery cadence and 1,024 fail-closed cleanup bound remain,
+with no fallback sweeper, periodic cleanup, alternate state, or permanent benchmark.

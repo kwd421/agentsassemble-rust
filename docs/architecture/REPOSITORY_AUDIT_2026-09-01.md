@@ -1455,16 +1455,14 @@ cross distinct WebSocket and private-control-to-WebView boundaries.
 
 ### D-04 — fixed DeepSeek HTTPS uses a custom SSRF defense without SSRF input
 
-Disposition: `Simplify resolver; Decide proxy policy`; Phase 1.
+Disposition: `Completed at c43e161`; Phase 1.
 
-`remote_https.rs` accepts one compile-time DeepSeek host, disables redirects, and
-still replaces DNS with a public-IP-only resolver plus `.no_proxy()`. Normal TLS
-hostname verification already rejects DNS rebinding to an impostor; the custom
-resolver breaks split DNS, VPN, and corporate networks without stopping a trusted
-CA compromise. Remove it for the fixed endpoint. Keep HTTPS, TLS, no redirects,
-timeouts, response/tool bounds, and the separate strict SSRF owner for user-chosen
-Custom API endpoints. Keep `.no_proxy()` only if an explicit credential/proxy
-policy and operating evidence justify it.
+The fixed-endpoint client now uses the platform resolver and configured proxy path
+while retaining HTTPS-only transport, TLS hostname validation, redirect denial, and
+bounded connect/read timeouts. The public-IP resolver and `.no_proxy()` returned later
+at `22d37aa` only for caller-selected Custom API URLs, where the hostname is untrusted
+SSRF input. Fixed provider hosts and Custom API therefore share ordinary HTTP client
+mechanics without sharing the latter's distinct address policy.
 
 ### D-05 — runtime handle contained a parsed but unused identity
 
@@ -1483,15 +1481,25 @@ is claimed and no cross-repository authority type was introduced.
 
 ### D-06 — recovery and staging mechanisms are justified, exact cadence/cost is not
 
-Disposition: `Keep mechanism; Measure cadence and scan`; Phase 1 provider-runtime
-hardening.
+Disposition: `Measured; retain unchanged`; Phase 1 provider-runtime hardening.
 
-The runtime reconciler owns a real post-checkpoint owner-loss window and scans only
-unresolved/blocking rows, but no evidence makes one second uniquely correct.
-Guardian staging cleanup prevents observed orphan growth, but its bounded 1,024
-entry scan lacks start/stop p95 evidence. Measure idle SQL/CPU, recovery delay,
-entries/bytes scanned, copy cost, and cleanup latency before changing either
-cadence or bound; do not replace them with an unproven fallback.
+The runtime reconciler owns the proven post-checkpoint owner-loss window and scans
+only unresolved/blocking rows. A 10,000-cycle clean-store measurement of both indexed
+candidate scans took 1.778 seconds in the unoptimized test binary, or 0.178 ms per
+one-second production cycle; inclusive process CPU was a conservative 0.024% of one
+core. Ten actual watcher recoveries completed in 1.008-1.038 seconds, median 1.011
+seconds. Increasing the interval would trade a measurable recovery regression for no
+material idle saving.
+
+The existing staging owner was also measured without retaining a benchmark or adding
+runtime instrumentation. Cleaning 159 stale directories containing sparse 64 MiB
+images (9.94 GiB nominal) had 15.792 ms p95 and 21.387 ms maximum over the final 20
+samples. The full 1,024-entry empty-directory bound had 62.570 ms p95 in the final ten
+samples and 96.090 ms maximum across all measurement attempts. The exact 64 MiB
+copy, sync, and identity-verification path had 160.355 ms p95/maximum over ten samples.
+The cleanup scan is metadata-bound, runs only at provider staging create/drop, and
+remains cheaper than the required byte-copy boundary. Keep the one-second cadence and
+1,024 fail-closed cap; add no alternate cleanup, timer, fallback, or measurement state.
 
 ### D-07 — invite self-description claims have no proven consumer
 
@@ -1673,9 +1681,9 @@ This table routes findings; it does not add another contract layer.
 | D-01 | local startup/control and core HTTP routes | 0B | no host challenge/secret path; desktop and human socket tickets still complete |
 | D-02 | room socket protocol/client and ingress topology | 0B | remote proof is absent; local receipt and frame proof remain only if separate controlled evidence defeats the smaller child-identity plus one-use-ticket design; otherwise grants contain no proof key and frames use bounded JSON; finite subscribe, sequence, replay, and failure contracts hold |
 | D-03 | human-session target authorization | 0B | one bounded-header session authorization per HTTP operation, no bearer disclosure; desktop/socket tickets unchanged |
-| D-04 | DeepSeek fixed-host HTTP client | 1 | ordinary TLS client passes fixed-host tests; Custom API SSRF policy remains separate |
+| D-04 | DeepSeek fixed-host HTTP client | complete | platform DNS/proxy serves fixed hosts; Custom API alone retains its separate SSRF policy |
 | D-05 | provider runtime handle codec | 1 | discarded suffix absent; boot/token/owner and stale-CAS regressions pass |
-| D-06 | reconciliation and guardian staging | 1 | idle/recovery/start-stop measurements justify any cadence/bound change |
+| D-06 | reconciliation and guardian staging | complete | measured idle/recovery/start-stop costs justify retaining the cadence and bound unchanged |
 | D-07 | human-invite token claims | 5 | each retained claim has a current consumer or is removed |
 | K-01 | four asset lifecycle owners plus physical ceiling | keep | replacement/reference/expiry tests retain exact deletion and occupancy behavior |
 | K-02 | each independent trust boundary | keep | share values only; boundary-specific fail-closed errors remain |

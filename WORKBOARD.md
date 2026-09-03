@@ -438,10 +438,10 @@ contracts, findings, or verification journals.
   ordinary system proxy policy. The common fixed-endpoint client now retains HTTPS-only,
   TLS hostname validation through reqwest/rustls, redirect denial, the ten-second connect
   timeout, and the progress-reset three-minute read-inactivity timeout, while using the
-  platform resolver and configured proxy path. The `ip_network` dependency and 109 lines
-  of resolver/test state are removed. This owner is intentionally not reusable for
-  caller-selected Custom API URLs; their hostname/address validation remains a separate
-  Phase 1 SSRF boundary. All 150 provider tests, Clippy with warnings denied, formatting,
+  platform resolver and configured proxy path. The fixed path's `ip_network` dependency
+  and 109 lines of resolver/test state were removed. Commit `22d37aa` later restored that
+  dependency and resolver only for caller-selected Custom API URLs, whose hostname/address
+  validation is a separate Phase 1 SSRF boundary. All 150 provider tests, Clippy with warnings denied, formatting,
   architecture/policy gates, and diff checks pass. No remote-provider implementation or
   performance gain is claimed by this refactor.
 - Implemented pending Phase 1 whole-phase review: canonical RoomPortal provider-tool
@@ -1100,6 +1100,18 @@ contracts, findings, or verification journals.
   formatting, architecture/policy/source-structure, and diff gates pass. No new state,
   generic envelope type, retry, fallback, polling, timer, heartbeat, background work,
   or performance claim was added. Phase 1 whole-phase review remains pending.
+- Completed D-06 measurement. A temporary, subsequently removed harness ran 10,000
+  clean-store cycles of both indexed reconciliation candidate scans in 1.778 seconds
+  in the unoptimized test binary (0.178 ms per one-second cycle; inclusive CPU below
+  0.024% of one core). Ten real watcher samples recovered a pre-existing owner-loss
+  candidate in 1.008-1.038 seconds, median 1.011 seconds. Staging cleanup measured
+  15.792 ms p95/21.387 ms maximum for 159 sparse 64 MiB images and 62.570 ms p95 with
+  a 96.090 ms cross-attempt maximum at the 1,024-entry cap. The exact 64 MiB copy,
+  sync, and identity check measured 160.355 ms p95/maximum. The existing one-second
+  recovery interval and 1,024 fail-closed staging cap therefore remain unchanged:
+  weakening recovery would buy no material idle saving, while the bounded metadata
+  cleanup is cheaper than the required byte-copy owner. No production code, test,
+  state, timer, fallback, polling path, or instrumentation was added.
 - Completed D-05 at `c76bb46` and `d88edf9`. The runtime-handle codec no longer
   generates, stores, parses, and discards a second random UUID. Runtime-v6 uses the
   already authoritative launch token as its sole generation identity and retains the

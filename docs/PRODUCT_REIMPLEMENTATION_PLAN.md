@@ -344,9 +344,10 @@ Correction substage:
 - Route the human-invite token self-description audit to Phase 5, where its finite
   clients and admission owner can prove each consumer or remove the unconsumed claim.
   It is not a provider-foundation prerequisite.
-- Measure the one-second unresolved-runtime reconciliation cadence before changing
-  it; retain its recovery state machine and change only a cadence with observed
-  idle cost and recovery-latency evidence.
+- The one-second unresolved-runtime reconciliation cadence and the 1,024-entry
+  executable-staging bound are measured. Their observed idle, recovery, cleanup, and
+  copy costs justify retaining both unchanged; do not add another recovery or cleanup
+  path.
 - Phase 0B is no longer a serial global exit gate. Its completed corrections and
   final cross-review are recorded in the workboard.
   D-06 joins Phase 1's provider-runtime measurement/hardening owner, D-07 moves to
