@@ -566,8 +566,10 @@ pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, 
         session.public.updated_at = Utc::now();
         return Ok(false);
     }
-    if ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status) {
-        disconnect_after_restart(session)?;
+    if ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status)
+        || session.public.runtime_status == AgentRuntimeStatus::Disconnected
+    {
+        stop_after_confirmed_absence(session)?;
         return Ok(true);
     }
     Ok(invalidate_previous_runtime_owner(session))
@@ -679,27 +681,23 @@ fn retain_uncertain_runtime(session: &mut DurableAgentSession) -> Result<(), Per
     Ok(())
 }
 
-fn disconnect_after_restart(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
-    disconnect_common(session)?;
-    "Server restarted without a current owned provider handle."
-        .clone_into(&mut session.public.last_error);
-    "server_restarted".clone_into(&mut session.public.last_error_code);
+fn stop_after_confirmed_absence(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+    // Gone is positive proof. Persist it before clearing custody, so later room
+    // cleanup does not have to re-observe a handle that this transaction erased.
+    merge_inflight_events(session)?;
+    session.public.last_error.clear();
+    session.public.last_error_code.clear();
     session.lifecycle_intent_action = AgentLifecycleAction::None;
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status = AgentLifecycleIntentStatus::None;
-    Ok(())
-}
-
-fn disconnect_common(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
-    merge_inflight_events(session)?;
     session.public.status = AgentSessionStatus::Unavailable;
     session.public.enabled = false;
-    session.public.runtime_status = AgentRuntimeStatus::Disconnected;
+    session.public.runtime_status = AgentRuntimeStatus::Stopped;
     session.public.provider_session_active = false;
     session.public.provider_session_reused = false;
     session.public.active_turn_id.clear();
     session.public.turn_phase = AgentTurnPhase::None;
-    session.public.recovery_required = true;
+    session.public.recovery_required = false;
     session.runtime_handle_id.clear();
     session.runtime_owner_id.clear();
     session.runtime_lease_token.clear();

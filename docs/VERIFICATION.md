@@ -7347,3 +7347,28 @@ packaged build. Actual archive after restarting with a running fixture uncovered
 lost positive runtime-absence state: cleanup remains pending after the earlier
 shutdown cleared custody but left `disconnected`/`recovery_required`. This is an
 open Phase 4 acceptance defect; restore/close/delete proof is not yet complete.
+
+### Durable confirmed absence before moderation (2026-09-08)
+
+Actual packaged start → normal app quit → relaunch → archive exposed a lost-proof
+transition: Gone erased exact runtime custody but persisted disconnected/recovery
+required. Later cleanup could no longer prove absence. The reconciliation owner
+now persists stopped/no-recovery when positive absence ends an ordinary runtime,
+including one previously marked disconnected; ambiguous observations retain their
+custody and fence. No old-record inference or recovery bypass was added.
+
+The new persistence scenario failed on the old Disconnected state, then passed
+with all 264 persistence tests. The server boundary run passed 15 cases; its one
+old disconnected-state expectation was updated and the affected case passed on
+rerun. Workspace Clippy and unchanged mandatory gates passed. Release sidecar and
+packaged TypeScript/CSS/app builds passed with four Cargo workers.
+
+Actual fresh fixture flow confirmed idle before quit, stopped after relaunch,
+archive cleanup completion, a further relaunch with authenticated management still
+reachable, and restoration preserving the human message. A second archive while
+that same fixture was live also completed cleanup and restored successfully. Both
+small and desktop confirmation panels focused Cancel. The earlier isolated room
+retains its already-lost custody as unresolved; it was not silently repaired.
+Remaining Phase 4 UI acceptance includes permanent participant export, room close
+and exact-name deletion, empty-room presentation, and the user's newly reported
+bottom-left profile stacking correction.

@@ -246,14 +246,9 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     let mut recovered_socket = connect(&restarted.base_url, &restarted.state).await;
     subscribe(&mut recovered_socket).await;
     let recovered = receive_json(&mut recovered_socket).await;
-    assert_eq!(
-        recovered["agent_sessions"][0]["runtime_status"],
-        "disconnected"
-    );
-    assert_eq!(
-        recovered["agent_sessions"][0]["last_error_code"],
-        "server_restarted"
-    );
+    assert_eq!(recovered["agent_sessions"][0]["runtime_status"], "stopped");
+    assert_eq!(recovered["agent_sessions"][0]["last_error_code"], "");
+    assert_eq!(recovered["agent_sessions"][0]["recovery_required"], false);
     restarted.stop().await;
 }
 

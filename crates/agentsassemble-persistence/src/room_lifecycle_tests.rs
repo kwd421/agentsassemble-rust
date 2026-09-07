@@ -5,6 +5,88 @@ use super::tests::{AGENT_ID, fixture};
 use crate::{PersistenceError, SqliteStore};
 
 #[tokio::test]
+async fn archive_after_confirmed_shutdown_and_reopen_can_finish_cleanup()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, principal, directory) = fixture().await;
+    let payload = json!({"agent_id": AGENT_ID});
+    let crate::AgentStartPlan::Start(start) = store
+        .prepare_agent_start(&principal, "start-before-shutdown", &payload)
+        .await?
+    else {
+        panic!("stopped fixture must prepare a start");
+    };
+    store
+        .authorize_agent_start_effect(
+            &principal,
+            "start-before-shutdown",
+            &payload,
+            &start.operation_id,
+            "agent.start",
+            "shutdown-handle",
+            "shutdown-owner",
+            "shutdown-lease",
+        )
+        .await?;
+    store
+        .complete_agent_start(
+            &principal,
+            "start-before-shutdown",
+            &payload,
+            &start.operation_id,
+            &crate::AgentRuntimeStarted {
+                runtime_handle_id: "shutdown-handle".to_owned(),
+                runtime_owner_id: "shutdown-owner".to_owned(),
+                runtime_lease_token: "shutdown-lease".to_owned(),
+                provider_session_id: "shutdown-thread".to_owned(),
+                runtime_reused: false,
+                provider_session_reused: false,
+                provider_session_active: true,
+            },
+        )
+        .await?;
+    let candidate = store
+        .load_runtime_reconciliation_candidate("general", AGENT_ID)
+        .await?
+        .ok_or("running session has no custody")?;
+    store
+        .apply_runtime_shutdown_reconciliation(
+            &candidate,
+            &crate::RuntimeReconciliationObservation::Gone,
+        )
+        .await?;
+    drop(store);
+    let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
+    let snapshot = store.snapshot("general", 0, 20).await?;
+    assert_eq!(
+        snapshot.agent_sessions[0].runtime_status,
+        agentsassemble_domain::AgentRuntimeStatus::Stopped
+    );
+    assert!(!snapshot.agent_sessions[0].recovery_required);
+    let uid = snapshot.room.room_uid;
+    let archived = store
+        .execute_room_lifecycle(
+            &principal,
+            "archive-after-shutdown",
+            "room.archive",
+            &json!({"room_uid": uid, "archived": true}),
+        )
+        .await?;
+    for key in &archived.cleanup {
+        assert!(store.finish_room_runtime_cleanup(key).await?.is_some());
+    }
+    let restored = store
+        .execute_room_lifecycle(
+            &principal,
+            "restore-after-shutdown",
+            "room.archive",
+            &json!({"room_uid": uid, "archived": false}),
+        )
+        .await?;
+    assert_eq!(restored.outcome.result["room"]["status"], "active");
+    Ok(())
+}
+
+#[tokio::test]
 async fn archive_retains_management_replay_and_requires_cleanup_before_restore()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, principal, directory) = fixture().await;

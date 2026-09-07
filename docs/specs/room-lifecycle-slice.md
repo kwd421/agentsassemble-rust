@@ -44,6 +44,16 @@ introduced. Removed membership survives normal stop and recovery. Room rows and
 owned assets remain present while cleanup is unresolved; physical deletion follows
 confirmed cleanup and retains an exact command tombstone outside the room cascade.
 
+Positive runtime absence must remain durable even when it precedes moderation.
+Packaged archive-after-restart exposed the old Gone transition clearing custody
+while retaining disconnected/recovery-required state. The reconciliation owner
+must checkpoint stopped/no-recovery before clearing that custody, so a subsequent
+archive, kick or delete can complete without re-observing an erased identity.
+Ambiguous observations retain their exact identity and recovery fence. No inference
+from empty fields, old error text or an external process PID repairs prior records.
+Verify the ordinary start → confirmed shutdown → database reopen → archive/restore
+sequence, alongside the existing uncertain-absence negative case and packaged flow.
+
 Deletion records one exact request and the terminal closed event before cleanup.
 Until completion its HTTP resolution is unresolved, retaining the same retry intent.
 The existing recovery watcher finalizes bounded pending deletions after the close
