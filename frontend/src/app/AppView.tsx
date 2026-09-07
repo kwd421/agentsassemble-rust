@@ -1,3 +1,4 @@
+import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
 import RoomManagementModal from "../views/components/RoomManagementModal";
 import { lazy, Suspense, useState } from "react";
 import {
@@ -65,6 +66,15 @@ export default function AppView({ controller }: { controller: AppController }) {
     toggleMembers, typingIndicators, updateMemberRole,
     visibleChannels, visibleRoomTimelineEvents,
   } = controller;
+  // Recovery owns the entrance until its current session surface is accepted.
+  // Do not mount native directory/profile controls beneath that entrance.
+  if (controller.guestRecoveryRequest) return <GuestIdentityRecoveryPanel
+    deviceToken={deviceToken} clientId={controller.clientId} request={controller.guestRecoveryRequest}
+    onRecovered={(payload) => {
+      void controller.acceptRecoveredSession(payload).then((accepted) => {
+        if (accepted) controller.setGuestRecoveryRequest(null);
+      });
+    }} />;
   const hasRoom = Boolean(activeRoom.meetingId);
   return (
     <RoomSocketProvider socket={roomSocket}>

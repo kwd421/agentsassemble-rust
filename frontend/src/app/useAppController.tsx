@@ -71,15 +71,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const [startupIdentityReady] = useState(isDesktopWebview);
   const guestInvite = startupRoute.guestInvite;
   const guestJoinToken = startupRoute.guestJoinToken;
-  const startupIdentityResolved =
-    startupIdentityReady ||
-    Boolean(
-      startupRoute.guestInvite ||
-        startupRoute.guestSession ||
-        startupRoute.guestJoinToken ||
-        operatorPairingToken ||
-        guestRecoveryRequest
-    );
   // A built-in surface ("lobby") or an opaque custom channel id.
   const [channel, setChannel] = useState<string>(startupRoute.initialChannel);
   const [adminOpen, setAdminOpen] = useState(false);
@@ -109,10 +100,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     initialRooms: startupRoute.startupRooms,
     hostEnabled: startupHostEnabled,
   });
-  const hostServerProductSurface = useMemo(
-    () => currentServerProductSurface(),
-    [roomDirectorySyncIssue, startupIdentityResolved]
-  );
   const [activeRoomId, setActiveRoomId] = useState(() => startupRoute.activeRoomId);
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);
   const [channelMenu, setChannelMenu] = useState<ChannelMenuState>(null);
@@ -195,6 +182,19 @@ export function useAppController(deviceToken: string, clientId: string) {
     onRoomJoined: onGuestRoomJoined,
     onResetToLobby: onGuestAdmissionReset,
   });
+  const startupIdentityResolved =
+    startupIdentityReady ||
+    Boolean(
+      startupRoute.guestInvite ||
+        guestSession ||
+        startupRoute.guestJoinToken ||
+        operatorPairingToken ||
+        guestRecoveryRequest
+    );
+  const hostServerProductSurface = useMemo(
+    () => currentServerProductSurface(),
+    [roomDirectorySyncIssue, startupIdentityResolved]
+  );
   const serverProductSurface =
     guestSession?.serverSurface.server_product_surface || hostServerProductSurface;
   const onRoomCreated = useCallback(

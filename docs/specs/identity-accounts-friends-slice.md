@@ -470,3 +470,17 @@ code rotation cannot continue displaying the prior code as usable. Five focused
 frontend suites pass 18 cases (1.39 s); TypeScript/build and original CSS pass (210 ms
 bundle phase). No persistent browser authority or background work was added.
 Packaged account/friends/invite/pairing/recovery acceptance remains the phase exit.
+
+
+### Current-session startup readiness
+
+Packaged public recovery confirmed issuance, durable device binding and prior-session
+revocation, but exposed a client transition defect: clearing the consumed recovery
+request removed startup readiness because that projection still used the initial
+stored session. The application now derives readiness from the current admitted
+session. Pairing uses the same transition when its one-use entrance token clears.
+Existing surface verification and session-bound socket authorization are unchanged.
+The recovery entrance renders independently until acceptance, so private profile
+and native creation controls are not mounted beneath it. Four affected suites pass
+37 cases (2.34s); build/CSS and unchanged gates pass. Fresh packaged continuation
+verification remains required; no retry, fallback or new authority was added.

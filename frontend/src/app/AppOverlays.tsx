@@ -2,7 +2,6 @@ import { createPortal } from "react-dom";
 
 import type { AppController } from "./useAppController";
 import AgentCreateModal from "../views/components/AgentCreateModal";
-import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
 import GuestJoinProfilePanel from "../views/components/GuestJoinProfilePanel";
 import LeaveRoomDialog from "../views/components/LeaveRoomDialog";
 import RoomInviteModal from "../views/components/RoomInviteModal";
@@ -10,20 +9,20 @@ import RoomSettingsModal from "../views/components/RoomSettingsModal";
 
 export default function AppOverlays({ controller }: { controller: AppController }) {
   const {
-    acceptRecoveredSession, activeRoom, agentCreateOpen,
+    activeRoom, agentCreateOpen,
     canonicalRoom, canControlActiveAgents, closeInviteModal,
-    deviceToken, clientId,
+    deviceToken,
     generateInviteLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
-    guestRecoveryRequest, guestSession,
+    guestSession,
     inviteCopyStatus, inviteModalAppearance, inviteModalRoom, invitePublicUrl,
     inviteRoom, leaveRoom, leaveRoomTarget, mobileViewport,
     operatorPairingPending, operatorPairingState,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
     roomSettings, roomSocket,
-    setAgentCreateOpen, setGuestRecoveryRequest,
+    setAgentCreateOpen,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
     stopInviteTunnel, updateRoom,
@@ -166,19 +165,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
             });
           }}
         />
-
-        {guestRecoveryRequest && (
-          <GuestIdentityRecoveryPanel
-            deviceToken={deviceToken}
-            clientId={clientId}
-            request={guestRecoveryRequest}
-            onRecovered={(payload) => {
-              void acceptRecoveredSession(payload).then((accepted) => {
-                if (accepted) setGuestRecoveryRequest(null);
-              });
-            }}
-          />
-        )}
 
         {(guestJoinToken || operatorPairingPending) &&
           (!guestSession || guestPreflightRetryable || guestJoinRetryable) &&
