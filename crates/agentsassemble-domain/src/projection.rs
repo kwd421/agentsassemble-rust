@@ -1,5 +1,6 @@
 use std::collections::BTreeMap;
 
+use serde::Deserialize;
 use serde_json::{Map, Value, json};
 
 use crate::{Actor, AuthenticatedPrincipal, RoomEvent};
@@ -62,7 +63,8 @@ pub fn public_event_for_principal(
     principal: &AuthenticatedPrincipal,
 ) -> RoomEvent {
     let mut projected = event.clone();
-    projected.extra = project_map(&event.extra);
+    projected.extra.retain(|key, _| !is_private_key(key));
+    projected.extra.values_mut().for_each(project_value);
     let mut projected = privacy_minimized_vote_transition(projected);
     if !room_event_is_owner_only(&projected) || event_is_visible_to(&projected, principal) {
         if room_event_is_owner_only(&projected) {
@@ -104,7 +106,7 @@ pub fn public_value_for_principal(
     value: &Value,
     principal: &AuthenticatedPrincipal,
 ) -> Result<Value, serde_json::Error> {
-    if let Ok(event) = serde_json::from_value::<RoomEvent>(value.clone()) {
+    if let Ok(event) = RoomEvent::deserialize(value) {
         return serde_json::to_value(public_event_for_principal(&event, principal));
     }
     Ok(match value {
@@ -125,25 +127,14 @@ pub fn public_value_for_principal(
     })
 }
 
-fn project_map(values: &BTreeMap<String, Value>) -> BTreeMap<String, Value> {
-    values
-        .iter()
-        .filter(|(key, _)| !is_private_key(key))
-        .map(|(key, value)| (key.clone(), project_value(value)))
-        .collect()
-}
-
-fn project_value(value: &Value) -> Value {
+fn project_value(value: &mut Value) {
     match value {
-        Value::Array(values) => Value::Array(values.iter().map(project_value).collect()),
-        Value::Object(values) => Value::Object(
-            values
-                .iter()
-                .filter(|(key, _)| !is_private_key(key))
-                .map(|(key, value)| (key.clone(), project_value(value)))
-                .collect(),
-        ),
-        _ => value.clone(),
+        Value::Array(values) => values.iter_mut().for_each(project_value),
+        Value::Object(values) => {
+            values.retain(|key, _| !is_private_key(key));
+            values.values_mut().for_each(project_value);
+        }
+        _ => {}
     }
 }
 
@@ -268,13 +259,23 @@ mod tests {
 
     #[test]
     fn owner_gets_redacted_event_and_command_result() {
-        let projected = public_event_for_principal(&owner_event(), &principal("owner"));
+        let mut original = owner_event();
+        original.extra.insert(
+            "nested".to_owned(),
+            json!({"items": [{"text": "retained", "token": "private"}]}),
+        );
+        let projected = public_event_for_principal(&original, &principal("owner"));
         assert_eq!(projected.event_type, "message_final");
         assert!(!projected.extra.contains_key("provider_turn_id"));
         assert!(!projected.extra.contains_key("workspace"));
+        assert_eq!(
+            projected.extra["nested"],
+            json!({"items": [{"text": "retained"}]})
+        );
+        assert_eq!(original.extra["nested"]["items"][0]["token"], "private");
         let result = public_value_for_principal(
             &json!({
-                "event": owner_event(),
+                "event": original,
                 "agent_session": {
                     "session_id": "agent",
                     "runtime_handle_id": "private-handle",

@@ -4177,6 +4177,24 @@ transaction lifetime, and result ownership are unchanged. All 243 persistence te
 pass (2.26 seconds); architecture, unchanged source limits, and 19 policy/artifact
 tests also pass. These timings are test execution, not an application benchmark.
 
+The public projection owner now deserializes a borrowed JSON value instead of
+cloning the complete candidate subtree at every recursive level. Event redaction
+mutates only the already-owned public copy, removing a second recursive copy and
+the forwarding `project_map` helper. Private-key filtering, owner-only hiding,
+vote minimization, cursor identity, and the caller's unchanged input remain intact.
+All 58 domain tests passed; the existing redaction test additionally checks nested
+array/object filtering and original-value preservation.
+
+A temporary Rust benchmark called the actual public projection API 500 times on a
+fixed command envelope containing 50 events, each with 2,048 bytes of message text,
+1,024 bytes of nested metadata, and private fields. Alternating three before/after
+runs measured 606/615/665 ms before and 416/410/410 ms after (median 615 to 410 ms,
+33% less time for this fixture). The same 164,563-byte output checksum was observed
+on every run. Process maximum RSS was 8,208,384–8,290,304 bytes before and
+7,962,624–8,044,544 bytes after. Both used the workspace's development library and
+an optimized standalone harness; these are isolated projection measurements, not
+packaged application latency or production memory claims.
+
 The real loopback TCP tests import an actual CCv3 PNG, list the exact safe projection, read the
 thumbnail with private/no-store, CORS, disposition, and `nosniff` headers, reject missing thumbnails,
 prove ticket replay failure, prove crossed-ticket consumption before malformed body handling, and
