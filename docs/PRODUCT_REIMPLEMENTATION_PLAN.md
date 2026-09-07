@@ -7,15 +7,16 @@ and their whole-phase cross-review are complete. Work now follows the provider-f
 order below. The provider-first ordering has prior manual documentation cross-review;
 the current checkpoint records later findings, not a new approval.
 Phase 1's corrected local contract has Daybreak approval through `cae1f90`. Its
-local exit is complete and Phase 2 entry is open. The latest user decision defers
-new external reviews until the full reimplementation is complete, as owned below.
+local exit is complete. Read and triage the already-running Pro answer before
+Phase 2. Subsequent phases require Daybreak only; new Pro review waits until the
+full reimplementation is complete, as owned below.
 Freebuff is excluded; Antigravity moves exclusively to
 Phase 7's externally launched CLI and Room Connector invitation flow. Its removed
 resident-adapter requirement no longer blocks Phase 1, but the external flow remains
 required for final parity. Earlier local verification remains evidence for its scope.
 The user also directs real-provider and packaged end-to-end verification to the final
-post-implementation stage. Intermediate phases retain local tests and mandatory gates,
-with external review at final closeout; they do not claim new real-client proof.
+post-implementation stage. Intermediate phases retain local tests, mandatory gates,
+and Daybreak phase review; they do not claim new real-client proof.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -90,8 +91,8 @@ or permission to omit implementation. No mock is described as a real upstream ru
 
 Run the final packaged-frontend user flows with this allowed matrix after the retained
 implementation is complete. During implementation, affected local regressions
-and architecture/security/structure gates remain mandatory. External cross-review
-follows completion of the retained reimplementation, under the per-slice gate below.
+and architecture/security/structure gates remain mandatory. Daybreak reviews each
+complete phase; new Pro review follows full reimplementation under the gate below.
 An intermediate phase can pass those gates with final real-client evidence still
 pending under this explicit schedule; it must not claim that pending proof exists.
 
@@ -311,12 +312,12 @@ Current execution checkpoint (2026-09-07, Phase 1 local closeout):
 3. Daybreak approved all 133 individual commits, cumulative `5d0a636..cae1f90`,
    final HEAD, and the corrected local Phase 1 contract at C0/H0/M0/L0. This includes
    the Codex native terminal-status correction and the user's one-commit generated-
-   lockfile exception. Phase 1's local exit is complete; proceed to Phase 2 without
-   waiting for the already-running Pro review. Read its completed answer when
-   available and address source-supported findings at their owner; no intermediate
-   external re-review is required. Final external review, real-client, and packaged
-   proof remain required at final closeout. Earlier evidence remains bounded to its
-   tested revision and flow.
+   lockfile exception. Phase 1's local exit is complete. Read the already-running
+   Pro answer, address supported findings, and obtain Daybreak approval of any
+   corrections before Phase 2. No new Pro request is made before full
+   reimplementation. Daybreak reviews each subsequent phase. Final Pro review,
+   real-client, and packaged proof remain required at final closeout. Earlier evidence
+   remains bounded to its tested revision and flow.
 4. Continue the retained phase order below. The repository-wide optimization and
    test/security-duplication passes are complete for their recorded scope, not a new
    recurring prerequisite. Reopen their owners only for a concrete new failure,
@@ -687,11 +688,12 @@ to one provider or feature while sibling targets remain structurally absent. A s
 that meets its declared phase contract is left alone unless concrete evidence reopens
 it.
 
-Latest user decision (2026-09-07): external review is deferred until the retained
-reimplementation is complete. Intermediate commits, pushes, and phase completion
-never trigger new Pro or Daybreak requests. Each intermediate phase exits when its
-local acceptance criteria and affected mandatory gates pass; external approval is
-not a prerequisite for starting the next phase.
+Latest user decision (2026-09-07): after each complete phase passes its local
+acceptance criteria and affected mandatory gates, Daybreak Blue at `xhigh` reviews
+every individual phase commit, the cumulative phase range, final HEAD, and resulting
+product behavior. Correct supported findings, verify them, and obtain Daybreak
+re-approval before the next phase. Intermediate commits and pushes do not trigger
+review by count. No new GPT-6 Pro review is requested until full reimplementation.
 
 At final closeout, GPT-6 Pro and Daybreak Blue at `xhigh` review the full retained
 product, original-to-Rust coverage, all not-yet-reviewed individual commits, the
@@ -702,10 +704,10 @@ Real-provider and packaged-flow runs follow the user-owned final-stage scope abo
 final completion requires both reviewers' approval and that authorized real-flow
 proof. A local phase exit never claims pending external or real-client proof.
 
-The already-running Pro review is not cancelled or treated as approval. Read its
-completed answer when available and triage supported findings, while continuing
-implementation without waiting for it. Its findings do not trigger another external
-request before final closeout. Confirmed failures are still corrected at their owner.
+The already-running Pro review is the sole intermediate Pro exception: read its
+completed answer and address supported findings before Phase 2. Daybreak reviews
+those corrections; do not request another Pro review before final closeout.
+Incomplete or pending answers are not approvals.
 
 When that workflow invokes review, the request covers individual commits and the
 cumulative range. Requests
@@ -721,9 +723,10 @@ the complete inventory, original-to-Rust coverage, phase placement, observable
 product behavior, SSoT/DDD boundaries, and overimplementation. Daybreak Blue manually
 reviews actual source and diff for authorization, async/process/TCP/WebSocket
 failure paths, lifecycle cleanup, polling/timers, fallback, and swallowed failure.
-Both inspect the complete phase and may report cross-cutting ownership or duplication
-defects. Very-high web review is not used. Security/structure gates and final
-real-client evidence remain required. A diff approval never proves plan or phase
+Daybreak also covers complete phase inventory, original-to-Rust parity, phase
+placement, product behavior, SSoT/DDD, and overimplementation during intermediate
+reviews. Both reviewers may report cross-cutting ownership or duplication defects.
+Very-high web review is not used. Security/structure gates and final real-client evidence remain required. A diff approval never proves plan or phase
 completeness. The implementing
 agent independently verifies the original entry point, owner, transition, failure
 semantics, and real UI flow.

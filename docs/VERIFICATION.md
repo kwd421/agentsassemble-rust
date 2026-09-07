@@ -6841,6 +6841,7 @@ all-target Clippy, formatting, architecture/source-growth, 19 policy checks, dif
 and artifact checks pass. These are local protocol and product-boundary proofs;
 upstream execution and packaged proof remain at the authorized final stage.
 Daybreak subsequently approved the corrected range through `cae1f90` at C0/H0/M0/L0.
-The latest user decision moves new external reviews to final closeout; Phase 1
-therefore closes on its verified local contract. The running Pro answer remains
-pending evidence and does not block Phase 2. The master plan owns this cadence.
+The latest user decision retains Daybreak phase reviews and defers new Pro review
+until full reimplementation. The running Pro answer remains pending and must be
+read and triaged before Phase 2; supported corrections receive Daybreak review.
+The master plan owns this cadence.
