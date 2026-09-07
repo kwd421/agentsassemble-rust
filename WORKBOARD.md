@@ -29,9 +29,10 @@
   late-moderation terminal-export finding is closed; direct packaged desktop/mobile
   settings, profile, controls, moderation and room lifecycle are verified.
   [Contract](docs/specs/room-lifecycle-slice.md) and [review correction](docs/VERIFICATION.md#phase-4-whole-phase-review-correction-terminal-export-2026-09-08).
-- Active: Phase 5 completes identity/accounts, friends and human admission, including
-  Google/native handoff and operator pairing. Preserve the separate central identity,
-  local operator, human session and Agent Session authorities.
+- Active: Phase 5 is locally verified through account/friend/human admission,
+  recovery and paired device control/lifecycle/departure. Whole-phase Daybreak review
+  is pending. Central identity, local operator, human session and Agent Session
+  authorities remain separate.
   [Contract and acceptance](docs/specs/identity-accounts-friends-slice.md).
   Apply the frontend UX guide and verify packaged desktop/mobile flows before review.
   New Pro review and authorized real-provider proof remain at full closeout.

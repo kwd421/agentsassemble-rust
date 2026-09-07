@@ -82,6 +82,7 @@ export default function UserPanel({
   const [profileHydrated, setProfileHydrated] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
+  const avatarDialogRef = useRef<HTMLDialogElement>(null);
   const profileSnapshotRef = useRef<UserProfileSnapshot | null>(null);
   const profileScopeGeneration = useRef(0);
   const profileIntentGeneration = useRef(0);
@@ -169,6 +170,13 @@ export default function UserPanel({
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [avatarEditorOpen, profileOpen, settingsOpen]);
+
+  useEffect(() => {
+    if (!avatarEditorOpen) return;
+    const dialog = avatarDialogRef.current;
+    dialog?.showModal();
+    return () => { dialog?.close(); settingsButtonRef.current?.focus(); };
+  }, [avatarEditorOpen]);
 
   function openProfile() {
     setDraft(profile);
@@ -523,12 +531,14 @@ export default function UserPanel({
       )}
 
       {avatarEditorOpen && (
-        <section
+        <dialog
+          ref={avatarDialogRef}
           className="dc-profile-avatar-modal"
-          role="dialog"
-          aria-modal="true"
           aria-label="프로필 사진 수정"
-          onClick={(event) => event.stopPropagation()}
+          style={{ position: "fixed", inset: 0, margin: "auto", width: "min(420px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", padding: 24, color: "var(--color-text-primary)" }}
+          onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
+          onCancel={(event) => { event.preventDefault(); if (!saving) setAvatarEditorOpen(false); }}
+          onClick={(event) => { if (event.target === event.currentTarget && !saving) setAvatarEditorOpen(false); }}
         >
           <header>
             <h2>프로필 사진 수정</h2>
@@ -540,15 +550,19 @@ export default function UserPanel({
                 setAvatarCropFile(null);
               }}
               aria-label="프로필 사진 수정 닫기"
+              disabled={saving}
+              style={{ minWidth: 44, minHeight: 44 }}
             >
               <X size={18} />
             </button>
           </header>
+          <fieldset disabled={saving} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
           <label className="dc-profile-avatar-upload">
             이미지 선택
             <input
               type="file"
               accept="image/*"
+              style={{ minHeight: 44, width: "100%" }}
               onChange={(event) => {
                 const file = event.currentTarget.files?.[0] || null;
                 if (file) setAvatarCropFile(file);
@@ -563,10 +577,11 @@ export default function UserPanel({
               onCropped={(file) => void handleAvatarCropped(file)}
             />
           ) : (
-            <p className="dc-profile-notice">얼굴이 중앙에 오도록 이미지를 선택한 뒤 확대/위치를 조정하세요.</p>
+            <p>사진을 고른 뒤 표시할 영역을 조정해요.</p>
           )}
-          {avatarStatus && <p className="dc-profile-notice">{avatarStatus}</p>}
-        </section>
+          </fieldset>
+          {avatarStatus && <p role="status" style={{ marginTop: 12, overflowWrap: "anywhere" }}>{avatarStatus}</p>}
+        </dialog>
       )}
 
       {settingsOpen && (

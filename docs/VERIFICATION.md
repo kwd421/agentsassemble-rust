@@ -7998,3 +7998,111 @@ focus on the settings button. UserPanel/GoogleAccount suites pass 13 cases (1.38
 prior account/recovery suites pass 15 cases. Fresh packaging, TypeScript, approved
 CSS, architecture/source policy and formatting pass. Public recovery continuation
 and paired browser acceptance remain part of Phase 5 closure.
+
+
+## Phase 5 public recovery and operator pairing (2026-09-08)
+
+Fresh packaged same-origin HTTPS verification confirms a new one-use human invite,
+profile admission and history. That human issued a recovery link; a separate IAB
+browser recovered the identity and continued without reload, loaded the existing
+history and committed `Phase5 recovered without reload`. The former Chrome session
+expired and its composer disabled. This closes the observed startup-readiness
+defect at `1438af5`; no manual reload or direct API injection supplied acceptance.
+
+A native-created pairing link then admitted Chrome automatically at `/pair` with
+room management and no durable account editor. Remote room rename appeared on the
+native host. At 390x620, room management, its menu and terminal confirmation/cancel
+were visible with the approved margins. The paired client created and started an
+LM Studio agent using only the isolated local HTTP fixture, then confirmed pause,
+resume, stop and agent-profile rename. No real AI provider was executed. The two-
+minute link expired while the consumed session remained usable, as specified.
+Native revocation then removed room/agent management and disabled remote posting.
+The independent recovered human still committed a message after paired revocation;
+native ownership and that human's membership remained intact.
+
+The revoked UI exposed repeated English errors and indefinite history-loading text.
+The frontend now renders one explicit retired-access view from the existing
+`guestExpired` owner, with a Korean instruction for a fresh host-issued link. This
+changes no session lifetime, authority or retry. Fresh packaged text verification
+remains required. The public tunnel was stopped through the app, its inactive state
+confirmed, the exact isolated app quit normally, and Chrome's temporary viewport
+override reset. The isolated database and local fixture remain for phase completion.
+
+
+## Phase 5 paired lifecycle response correction (2026-09-08)
+
+Actual remote archive durably changed the isolated room to archived and revoked
+its requesting session. The browser nevertheless rejected the response because
+`room_directory_web::routes` omitted `Cache-Control: private, no-store`. The native
+management list confirmed archived status, and native restoration succeeded. The
+shared existing header layer now covers directory/lifecycle responses; frontend
+strict response validation is unchanged. The existing paired lifecycle test failed
+with a missing header before the fix and passes close/archive/delete afterward
+(1.09s). Server all-target/all-feature Clippy passes (30.36s), as do architecture,
+source policy, 19 gate tests, formatting and diff checks. Fresh release-sidecar and
+frontend packaging are required for the final remote archive repetition.
+
+One idle/public-ingress sample measured the isolated app at 0.0% CPU / 110096 KiB
+RSS, its launcher at 0.1% / 9520 KiB, runtime at 0.0% / 39552 KiB, and owned tunnel
+at 0.0% / 43552 KiB (four direct process-tree members). This sample excludes the
+browsers and OS-managed WebKit processes and is not a peak measurement. Isolated
+app data occupied 652 KiB and the fixture directory 32 KiB. No new polling owner or
+resource optimization was introduced for this response-header correction.
+
+
+Fresh release-sidecar/package repetition confirms remote archive now displays
+`보관됨` and the session-ended acknowledgement, with restore disabled in that
+retired client. Native restoration remains available. The expired view is visible
+at 390x620 with one Korean explanation. Its existing exit previously targeted the
+private root; it now clears the same session state and navigates to public `/join`,
+whose unauthenticated entrance requests a host-issued link without mounting private
+startup. Five affected frontend suites pass 39 cases (2.34s); packaging/CSS and the
+unchanged gates pass.
+
+Account-photo entry from settings exposed an older horizontally clipped popover at
+390px. It now uses a centered native dialog, 24px padding, 44px close/file controls,
+owned focus return and disabled pending-upload controls. Packaged manipulation
+selected an invalid test PNG, displayed its load error, then selected a repository
+icon fixture, cropped and saved it; the native profile card displayed the committed
+image. The upload-and-bind owner is unchanged. Selecting a new file now clears the
+prior crop error in the existing file-change effect. UserPanel's 10 cases pass
+(1.36s), packaging/CSS and unchanged gates pass; that final error-clear line still
+requires fresh package inspection before review.
+
+
+## Phase 5 local acceptance and packaged closeout (2026-09-08)
+
+The following closes the earlier pending packaged notes in this phase; whole-phase
+Daybreak review remains required before Phase 6.
+
+| Surface | Local acceptance evidence |
+| --- | --- |
+| Credentials and human invite | Current-owner wire constants and finite-claim reduction pass their boundary suites; native one-use invite, public profile admission, history and actual posting pass. |
+| Accounts and native Google return | Local signed-proof/account, PKCE-return and identity-isolation suites pass. Packaged native/account screens retain truthful configured/unconfigured behavior. Real Google authentication is unavailable in this isolated configuration and is not claimed. |
+| Friends | Add/edit/cancel/delete, saved-type/status/text filters, restart persistence, concise menu and selected-human invite pass native desktop/390px manipulation. Failed save/delete retry is covered by the existing controlled frontend cases. |
+| Profile and photo | Native name save/cancel/restart retention, focused settings and 390px crop error/reselection/save pass; the saved photo appears on the profile card. Fresh package confirms new-file selection clears the prior crop error and Escape restores settings focus. |
+| Human recovery | Separate public browsers confirm issuance, recovery, replacement-session revocation, history and message submission without reload. |
+| Paired room operations | Public device-bound entry, settings rename, local-fixture agent create/start/pause/resume/stop/profile edit, native revoke, link expiry independent of session expiry, and independent human-session preservation pass. |
+| Paired lifecycle and departure | Fresh remote archive displays committed archived state after its session ends. Native restore remains available. Corrected paired socket departure exits directly to public `/join` without an uncertain-result error; the native room, host, agent and humans remain present. |
+| Small screens and retirement | 390x620 paired confirmation preserves device-only scope with 44px buttons and modal focus. Expired access has one readable explanation and an accessible exit; the unauthenticated public entrance remains a link-required boundary. |
+
+The paired socket defect was reproduced in the existing delivered-ACK-before-close
+case: the human variant passed while the previously unsupported operator event
+failed. Both pass after the exact discriminant is connected; three affected suites
+pass 43 cases (1.15s). The existing socket transport and retry owner remain unchanged.
+The final release package passes TypeScript/build and the approved CSS contract;
+architecture/source, 19 policy cases, formatting/diff and artifact checks pass.
+No new scan, real AI provider, fallback, gate exception or unconfigured Google
+success was used. Authorized configured-provider integration and final Pro review
+remain at full reimplementation closeout.
+
+Cleanup: the app stopped the public tunnel and confirmed it inactive. Before normal
+quit, the direct owned tree contained app `40643`, launcher `40721` and runtime
+`40724`; all were absent afterward. The verified isolated fixture `63405` was
+stopped, the temporary Chrome viewport reset, only the two owned verification tabs
+closed, and Computer Use reset. The exact Phase 5 app identifier's Application
+Support/Caches/WebKit directories, isolated bundle and fixture directory were then
+removed and absence checked. User Ollama `4470`, unrelated applications, repository
+work and useful build caches were preserved. The artifact owner reports no further
+maintenance required. Test/build logs remain outside the removed credential-bearing
+verification directory.

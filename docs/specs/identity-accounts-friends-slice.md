@@ -1,6 +1,6 @@
 # Identity, accounts, friends and human admission
 
-Status: Phase 5 active after Phase 4 approval at `53a82f1`.
+Status: Phase 5 locally verified; whole-phase Daybreak review pending after Phase 4 approval at `53a82f1`.
 
 ## Definition and dependency order
 
@@ -484,3 +484,47 @@ The recovery entrance renders independently until acceptance, so private profile
 and native creation controls are not mounted beneath it. Four affected suites pass
 37 cases (2.34s); build/CSS and unchanged gates pass. Fresh packaged continuation
 verification remains required; no retry, fallback or new authority was added.
+
+
+### Terminal lifecycle response and retired-access presentation
+
+Real paired archive committed and revoked the requesting session, but its successful
+HTTP response lacked the private/no-store contract required by the browser decoder.
+The existing directory router now applies the same shared cache-header layer as
+other authenticated room resources, including failures. The decoder remains strict.
+The existing paired close/archive/delete integration now asserts the actual headers:
+it reproduced the missing header before the fix and passes all three paths after it.
+No compatibility acceptance or secondary response authority is added.
+
+The existing expired-admission state now renders one explicit Korean access-ended
+view instead of a history loader and repeated composer errors. Its exit uses the
+existing guest-surface exit owner and remains accessible at 390px. Session expiry,
+revocation, stored admission cleanup and recovery semantics are unchanged.
+
+
+### Paired departure acknowledgement
+
+The existing socket departure owner commits only the paired session's revocation
+and emits `operator_session_ended`; it does not mark the native host participant
+left. Packaged departure exposed a frontend decoder that accepted only the normal
+`participant_left` response. The decoder now accepts the paired discriminant with
+the exact expected room, durable event sequence, result participant and human actor.
+The socket's existing terminal-leave completion and cleanup remain unchanged.
+The original delivered-ACK-before-close test now covers both human and paired wire
+results: paired failed before the correction and both succeed afterward. No HTTP
+fallback, new retry or inferred successful departure is introduced.
+
+The focused confirmation records whether the selected operation ends a device or
+leaves a membership, so expiry cannot rewrite its explanation. Device departure
+explicitly preserves the host and agents. Successful exit clears existing guest
+session state and goes to the public `/join` entrance, never the private root.
+
+
+## Local phase acceptance
+
+All implementation and packaged obligations marked pending in the incremental
+entries above are locally complete under the configured-provider boundary. Current
+evidence and explicit unconfigured-Google/final-provider limits are recorded in
+[Phase 5 local closeout](../VERIFICATION.md#phase-5-local-acceptance-and-packaged-closeout-2026-09-08).
+No genuine Google authentication was simulated or claimed. Whole-phase Daybreak
+approval remains required before the next phase.

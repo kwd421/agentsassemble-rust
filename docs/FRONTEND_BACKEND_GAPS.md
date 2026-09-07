@@ -20,6 +20,30 @@ the evidence-free room frame proof at `3ffb9eb`, `77cae0e`, `0d24741`, and `57fd
 the completed D-03 implementation batch and corrections received final manual
 cross-review approval at `5693e13`.
 
+## Current Phase 5 exposure update (2026-09-08)
+
+This update supersedes the older account/friend/pairing rows below. Those rows
+retain their dated discovery evidence; the current contract is
+[identity/accounts/friends](specs/identity-accounts-friends-slice.md).
+
+- Accounts now have Rust status, Google challenge/connect/disconnect and native
+  central-login handoff owners. Configured Google verification is covered with local
+  signed-proof cases; the isolated packaged server truthfully reports unconfigured
+  Google login. No real Google authentication is claimed by that package.
+- Saved friends now have private operator-owned persistence and add/edit/delete,
+  filter and human-invite presentation. Packaged editing, cancellation, deletion,
+  restart retention and a selected-contact human invite are verified.
+- Pairing now has native create/revoke, public device-bound redemption and exact
+  room-session HTTP/WebSocket authority. Packaged remote room settings, local-fixture
+  agent creation/control/profile editing and revocation are verified. Fresh packaged
+  archive and device departure confirm the terminal-response corrections; native
+  membership and agent custody survive the paired device's departure.
+- Human recovery now issues/rotates at the identity owner, atomically redeems to a
+  new device and retires the replaced session. Separate-browser packaged recovery
+  continues without reload and commits a new message; the old session expires.
+- Companion/Room Connector/AgentBridge remain Phase 7. Custom channels/side chat
+  remain Phase 6. These are not provided by human or paired session credentials.
+
 ## Scope and method
 
 This inventory compares the reachable registrations and canonical React client at

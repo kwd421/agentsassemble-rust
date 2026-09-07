@@ -55,6 +55,7 @@ export default function ImageCropper({ file, onCancel, onCropped }: ImageCropper
   useEffect(() => {
     const url = URL.createObjectURL(file);
     setObjectUrl(url);
+    setStatus("");
     return () => URL.revokeObjectURL(url);
   }, [file]);
 
