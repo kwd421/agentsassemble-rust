@@ -7734,3 +7734,17 @@ and remaining pairing-integration limits as the launch entry apply.
   architecture/source gates, 19 policy tests, format/diff and artifact checks pass.
 - One bounded update touches only pairings for the affected room; no timer, task,
   cache or process is added. Public transport and packaged acceptance remain open.
+
+### Phase 5 lifecycle request authority (2026-09-08)
+
+- Room lifecycle and deletion accept the shared explicit mutation authority and
+  revalidate it in their committing transaction before manager checks and replay.
+  Runtime dispatch passes the command's provenance; native closed-room and deleted
+  receipt behavior remains with its existing trusted transport.
+- All 279 persistence tests pass (3.13 seconds). The paired archive case now uses
+  actual session authority, rejects its replay after revocation, permits native
+  restore and refuses a queued deletion using the revoked session. Both HTTP
+  lifecycle/deletion boundary tests pass (1.07 seconds).
+- Affected Clippy and unchanged architecture/source, 19 policy tests and format/
+  diff gates pass. No background work or new authority store is added. Paired
+  HTTP/socket dispatch and packaged verification are still pending.

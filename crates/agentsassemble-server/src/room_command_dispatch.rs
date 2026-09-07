@@ -117,7 +117,11 @@ pub(crate) async fn execute_command(
 
 async fn execute_room_delete(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
     match store
-        .execute_room_delete(&command.principal, &command.request_id, &command.payload)
+        .execute_room_delete(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+        )
         .await
     {
         Ok(mutation) => {
@@ -138,7 +142,7 @@ async fn execute_room_delete(store: &SqliteStore, command: &RoomCommand) -> Comm
 async fn execute_room_lifecycle(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
     match store
         .execute_room_lifecycle(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             command.action.as_str(),
             &command.payload,

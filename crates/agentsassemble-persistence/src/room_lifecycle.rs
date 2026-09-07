@@ -94,14 +94,15 @@ impl SqliteStore {
     /// reopening a closed room or an archive whose exact cleanup remains unresolved.
     pub async fn execute_room_lifecycle(
         &self,
-        credential: &AuthenticatedPrincipal,
+        authority: crate::RoomMutationAuthority<'_>,
         request_id: &str,
         action: &str,
         payload: &Value,
     ) -> Result<RoomLifecycleMutation, PersistenceError> {
         let parsed = parse_payload(action, payload)?;
         let mut transaction = self.pool.begin().await?;
-        let principal = resolve_manager(&mut transaction, credential).await?;
+        let credential = authority.resolve(&mut transaction).await?;
+        let principal = resolve_manager(&mut transaction, &credential).await?;
         let (mut room, _) = load_room_with_settings(&mut transaction, &principal.room_id).await?;
         if room.room_uid != parsed.room_uid {
             return Err(rejected(

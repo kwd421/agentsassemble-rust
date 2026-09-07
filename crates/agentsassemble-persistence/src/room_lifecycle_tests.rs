@@ -70,7 +70,7 @@ async fn archive_after_confirmed_shutdown_and_reopen_can_finish_cleanup()
     let uid = snapshot.room.room_uid;
     let archived = store
         .execute_room_lifecycle(
-            &principal,
+            TrustedPrincipal(&principal),
             "archive-after-shutdown",
             "room.archive",
             &json!({"room_uid": uid, "archived": true}),
@@ -81,7 +81,7 @@ async fn archive_after_confirmed_shutdown_and_reopen_can_finish_cleanup()
     }
     let restored = store
         .execute_room_lifecycle(
-            &principal,
+            TrustedPrincipal(&principal),
             "restore-after-shutdown",
             "room.archive",
             &json!({"room_uid": uid, "archived": false}),
@@ -98,7 +98,12 @@ async fn archive_retains_management_replay_and_requires_cleanup_before_restore()
     let uid = store.snapshot("general", 0, 20).await?.room.room_uid;
     let archive = json!({"room_uid": uid, "archived": true});
     let archived = store
-        .execute_room_lifecycle(&principal, "archive", "room.archive", &archive)
+        .execute_room_lifecycle(
+            TrustedPrincipal(&principal),
+            "archive",
+            "room.archive",
+            &archive,
+        )
         .await?;
     assert_eq!(archived.outcome.result["room"]["status"], "archived");
     assert!(store.resolve_principal(&principal).await.is_err());
@@ -117,7 +122,12 @@ async fn archive_retains_management_replay_and_requires_cleanup_before_restore()
     let restore = json!({"room_uid": uid, "archived": false});
     assert!(matches!(
         store
-            .execute_room_lifecycle(&principal, "restore", "room.archive", &restore)
+            .execute_room_lifecycle(
+                TrustedPrincipal(&principal),
+                "restore",
+                "room.archive",
+                &restore
+            )
             .await,
         Err(PersistenceError::CommandRejected {
             code: "runtime_cleanup_pending",
@@ -130,13 +140,23 @@ async fn archive_retains_management_replay_and_requires_cleanup_before_restore()
     drop(store);
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
     let replay = store
-        .execute_room_lifecycle(&principal, "archive", "room.archive", &archive)
+        .execute_room_lifecycle(
+            TrustedPrincipal(&principal),
+            "archive",
+            "room.archive",
+            &archive,
+        )
         .await?;
     assert!(replay.outcome.deduplicated);
     assert_eq!(replay.outcome.result, archived.outcome.result);
     assert!(replay.cleanup.is_empty());
     let restored = store
-        .execute_room_lifecycle(&principal, "restore", "room.archive", &restore)
+        .execute_room_lifecycle(
+            TrustedPrincipal(&principal),
+            "restore",
+            "room.archive",
+            &restore,
+        )
         .await?;
     assert_eq!(restored.outcome.result["room"]["status"], "active");
     assert!(store.resolve_principal(&principal).await.is_ok());
@@ -153,7 +173,12 @@ async fn archive_retains_management_replay_and_requires_cleanup_before_restore()
     // A replay changes neither the restored room nor its newly prepared launch.
     assert!(
         store
-            .execute_room_lifecycle(&principal, "archive", "room.archive", &archive)
+            .execute_room_lifecycle(
+                TrustedPrincipal(&principal),
+                "archive",
+                "room.archive",
+                &archive
+            )
             .await?
             .outcome
             .deduplicated
@@ -182,7 +207,7 @@ async fn closure_requires_exact_local_owner_and_incarnation_and_cannot_be_restor
     guest.is_operator = false;
     assert!(
         store
-            .execute_room_lifecycle(&guest, "guest", "room.close", &close)
+            .execute_room_lifecycle(TrustedPrincipal(&guest), "guest", "room.close", &close)
             .await
             .is_err()
     );
@@ -190,7 +215,12 @@ async fn closure_requires_exact_local_owner_and_incarnation_and_cannot_be_restor
     wrong_owner.principal_id = "other-user".to_owned();
     assert!(
         store
-            .execute_room_lifecycle(&wrong_owner, "other", "room.close", &close)
+            .execute_room_lifecycle(
+                TrustedPrincipal(&wrong_owner),
+                "other",
+                "room.close",
+                &close
+            )
             .await
             .is_err()
     );
@@ -198,14 +228,14 @@ async fn closure_requires_exact_local_owner_and_incarnation_and_cannot_be_restor
     bridge.client_kind = ClientKind::AgentBridge;
     assert!(
         store
-            .execute_room_lifecycle(&bridge, "bridge", "room.close", &close)
+            .execute_room_lifecycle(TrustedPrincipal(&bridge), "bridge", "room.close", &close)
             .await
             .is_err()
     );
     assert!(matches!(
         store
             .execute_room_lifecycle(
-                &principal,
+                TrustedPrincipal(&principal),
                 "stale",
                 "room.close",
                 &json!({"room_uid": uuid::Uuid::new_v4()})
@@ -217,12 +247,12 @@ async fn closure_requires_exact_local_owner_and_incarnation_and_cannot_be_restor
         })
     ));
     let closed = store
-        .execute_room_lifecycle(&principal, "close", "room.close", &close)
+        .execute_room_lifecycle(TrustedPrincipal(&principal), "close", "room.close", &close)
         .await?;
     assert_eq!(closed.outcome.result["room"]["status"], "closed");
     assert!(
         store
-            .execute_room_lifecycle(&principal, "close", "room.close", &close)
+            .execute_room_lifecycle(TrustedPrincipal(&principal), "close", "room.close", &close)
             .await?
             .outcome
             .deduplicated
@@ -230,7 +260,7 @@ async fn closure_requires_exact_local_owner_and_incarnation_and_cannot_be_restor
     assert!(matches!(
         store
             .execute_room_lifecycle(
-                &principal,
+                TrustedPrincipal(&principal),
                 "close",
                 "room.archive",
                 &json!({"room_uid": uid, "archived": false})
@@ -241,7 +271,7 @@ async fn closure_requires_exact_local_owner_and_incarnation_and_cannot_be_restor
     assert!(matches!(
         store
             .execute_room_lifecycle(
-                &principal,
+                TrustedPrincipal(&principal),
                 "reopen",
                 "room.archive",
                 &json!({"room_uid": uid, "archived": false})

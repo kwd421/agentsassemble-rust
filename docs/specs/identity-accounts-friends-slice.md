@@ -228,3 +228,7 @@ Room closure, archive and deletion revoke both unused pairing grants and consume
 sessions in the existing room-access transaction. Consumed fingerprints join the
 existing post-commit revocation publication. Restoring an archived room cannot
 restore either grant redemption or a previously issued paired session.
+Lifecycle and deletion mutations resolve explicit request provenance in the same
+transaction before local-manager checks or replay. Trusted native ownership still
+supports closed/archived rooms and retained deletion receipts; remote sessions
+cannot access those paths after revocation.

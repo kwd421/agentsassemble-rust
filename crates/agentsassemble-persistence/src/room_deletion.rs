@@ -132,15 +132,17 @@ impl SqliteStore {
     /// Requires current-name confirmation, local ownership and an exact incarnation.
     pub async fn execute_room_delete(
         &self,
-        credential: &AuthenticatedPrincipal,
+        authority: crate::RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<RoomDeletionMutation, PersistenceError> {
         let parsed = parse_payload(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
+        let credential = authority.resolve(&mut transaction).await?;
         let (principal, replay) =
-            resolve_delete_request(&mut transaction, credential, request_id, &payload_hash).await?;
+            resolve_delete_request(&mut transaction, &credential, request_id, &payload_hash)
+                .await?;
         if let Some(mutation) = replay {
             transaction.commit().await?;
             return Ok(mutation);

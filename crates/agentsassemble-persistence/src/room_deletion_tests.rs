@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{ClientKind, RoomStatus};
 use serde_json::json;
 
@@ -11,7 +12,7 @@ async fn deletion_waits_for_custody_and_publication_then_replays_after_recreatio
     let room = store.snapshot("general", 0, 20).await?.room;
     let payload = json!({"room_uid": room.room_uid, "confirmation_name": room.label});
     let prepared = store
-        .execute_room_delete(&principal, "delete", &payload)
+        .execute_room_delete(TrustedPrincipal(&principal), "delete", &payload)
         .await?;
     assert!(!prepared.complete);
     assert!(!prepared.outcome.deduplicated);
@@ -28,7 +29,7 @@ async fn deletion_waits_for_custody_and_publication_then_replays_after_recreatio
     assert!(matches!(
         store
             .execute_room_lifecycle(
-                &principal,
+                TrustedPrincipal(&principal),
                 "delete",
                 "room.close",
                 &json!({"room_uid": room.room_uid})
@@ -78,7 +79,7 @@ async fn assert_deletion_replay(
     payload: &serde_json::Value,
 ) -> Result<(), Box<dyn std::error::Error>> {
     let replay = store
-        .execute_room_delete(principal, "delete", payload)
+        .execute_room_delete(TrustedPrincipal(principal), "delete", payload)
         .await?;
     assert!(
         store
@@ -116,7 +117,7 @@ async fn assert_deletion_replay(
     assert_ne!(new.room.room_uid, room.room_uid);
     assert!(
         store
-            .execute_room_delete(principal, "delete", payload)
+            .execute_room_delete(TrustedPrincipal(principal), "delete", payload)
             .await?
             .complete
     );
@@ -127,7 +128,7 @@ async fn assert_deletion_replay(
     assert!(matches!(
         store
             .execute_room_delete(
-                principal,
+                TrustedPrincipal(principal),
                 "delete",
                 &json!({"room_uid": new.room.room_uid, "confirmation_name": room.label})
             )
@@ -148,14 +149,14 @@ async fn deletion_rejects_wrong_name_authority_incarnation_and_second_intent()
     bridge.client_kind = ClientKind::AgentBridge;
     assert!(
         store
-            .execute_room_delete(&bridge, "denied", &payload)
+            .execute_room_delete(TrustedPrincipal(&bridge), "denied", &payload)
             .await
             .is_err()
     );
     assert!(matches!(
         store
             .execute_room_delete(
-                &principal,
+                TrustedPrincipal(&principal),
                 "wrong",
                 &json!({"room_uid": room.room_uid, "confirmation_name": "Wrong"})
             )
@@ -168,7 +169,7 @@ async fn deletion_rejects_wrong_name_authority_incarnation_and_second_intent()
     assert!(matches!(
         store
             .execute_room_delete(
-                &principal,
+                TrustedPrincipal(&principal),
                 "stale",
                 &json!({"room_uid": uuid::Uuid::new_v4(), "confirmation_name": room.label})
             )
@@ -190,11 +191,11 @@ async fn deletion_rejects_wrong_name_authority_incarnation_and_second_intent()
             .is_empty()
     );
     store
-        .execute_room_delete(&principal, "delete", &payload)
+        .execute_room_delete(TrustedPrincipal(&principal), "delete", &payload)
         .await?;
     assert!(matches!(
         store
-            .execute_room_delete(&principal, "other", &payload)
+            .execute_room_delete(TrustedPrincipal(&principal), "other", &payload)
             .await,
         Err(PersistenceError::CommandRejected {
             code: "room_deletion_pending",

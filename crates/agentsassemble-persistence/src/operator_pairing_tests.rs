@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID};
 use chrono::{Duration, Utc};
 
@@ -63,7 +64,7 @@ async fn archive_revokes_used_and_unused_pairings_permanently_after_restore() {
         .room;
     let archived = store
         .execute_room_lifecycle(
-            principal,
+            crate::RoomMutationAuthority::OperatorSession(&paired.authorization),
             "archive-paired-room",
             "room.archive",
             &serde_json::json!({"room_uid": room.room_uid, "archived": true}),
@@ -74,15 +75,36 @@ async fn archive_revokes_used_and_unused_pairings_permanently_after_restore() {
         archived.revoked_session_fingerprints,
         vec![*paired.authorization.session_fingerprint()]
     );
+    assert_eq!(
+        code(
+            store
+                .execute_room_lifecycle(
+                    crate::RoomMutationAuthority::OperatorSession(&paired.authorization),
+                    "archive-paired-room",
+                    "room.archive",
+                    &serde_json::json!({"room_uid": room.room_uid, "archived": true}),
+                )
+                .await
+        ),
+        "session_revoked"
+    );
     store
         .execute_room_lifecycle(
-            principal,
+            TrustedPrincipal(principal),
             "restore-paired-room",
             "room.archive",
             &serde_json::json!({"room_uid": room.room_uid, "archived": false}),
         )
         .await
         .unwrap_or_else(|error| panic!("restore: {error}"));
+    assert_eq!(
+        code(store.execute_room_delete(
+            crate::RoomMutationAuthority::OperatorSession(&paired.authorization),
+            "delete-after-revoke",
+            &serde_json::json!({"room_uid": room.room_uid, "confirmation_name": room.label}),
+        ).await),
+        "session_revoked"
+    );
     for token in [[1; 32], [3; 32]] {
         assert_eq!(
             code(
