@@ -5,7 +5,10 @@ import type { ServerRoomDockSource } from "../../lib/roomDockModel";
 
 type Action = "close" | "archive" | "restore" | "delete";
 
-export default function RoomManagementModal({ controller }: { controller: ReturnType<typeof useRoomLifecycle> }) {
+type RoomManagementController = Pick<ReturnType<typeof useRoomLifecycle>,
+  "busy" | "pending" | "canChange" | "close" | "refresh" | "rooms" | "error" | "notice" | "retry" | "change">;
+
+export default function RoomManagementModal({ controller }: { controller: RoomManagementController }) {
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [confirmation, setConfirmation] = useState<{ room: ServerRoomDockSource; action: Action } | null>(null);
   const [menu, setMenu] = useState<{ roomId: string; top: number; left: number } | null>(null);

@@ -1,3 +1,4 @@
+import { usePairedRoomLifecycle } from "./usePairedRoomLifecycle";
 import { useRoomLifecycle } from "./useRoomLifecycle";
 import { uploadAgentAvatar } from "../api/agentAvatar";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -254,7 +255,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     serverSurface: serverProductSurface,
     viewerParticipantId: guestSession?.agentId || "operator-local",
     onUnauthorized: admittedSessionToken ? expireGuestSession : undefined,
-    onRoomLifecycle: roomLifecycle.onRoomLifecycle,
+    onRoomLifecycle: (room) => { roomLifecycle.onRoomLifecycle(); pairedRoomLifecycle.onRoomLifecycle(room); },
   });
   const roomMembers = useRoomMembers({
     activeRoom,
@@ -331,6 +332,12 @@ export function useAppController(deviceToken: string, clientId: string) {
   });
   const canManageActiveRoom = !activeRoomDisconnected && Boolean(activeRoomCapabilities["room.manage"]);
   const canControlActiveAgents = !activeRoomDisconnected && Boolean(activeRoomCapabilities["agent.control"]);
+  const pairedRoomLifecycle = usePairedRoomLifecycle({
+    enabled: guestLocked && canManageActiveRoom && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === "/api/room-session/lifecycle")),
+    session: guestSession, deviceToken, expired: guestExpired,
+    room: canonicalRoom.room ? { ...canonicalRoom.room, label: canonicalRoom.roomSettings?.label ?? canonicalRoom.room.label } : null,
+    refreshProjection: () => canonicalRoom.socket?.resync?.(),
+  });
   useEffect(() => {
     if (!canControlActiveAgents) setAgentCreateOpen(false);
     if (guestLocked && !canManageActiveRoom) setSettingsModal(null);
@@ -558,7 +565,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   return {
-    roomLifecycle,
+    roomLifecycle, pairedRoomLifecycle,
     acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings,
     canManageActiveRoom, canControlActiveAgents,

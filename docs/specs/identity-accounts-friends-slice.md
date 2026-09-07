@@ -375,3 +375,18 @@ exact generated-key parser. The accepted socket projection retains that verified
 record alongside its existing scope and display origin, and clears it with the
 projection on device/session/room retirement. Paired lifecycle presentation consumes
 this record; stored browser flags cannot supply room state or authority.
+
+### Paired lifecycle presentation
+
+The existing room-management dialog now has a separate paired controller for the
+one canonical active room. It shares presentation and strict result decoding with
+the native controller, without accessing the native directory. The advertised
+session route and current room-management capability enable entry. Confirmation
+retains the room incarnation and request ID; uncertain retries cannot retarget it.
+
+An owned terminal response can update the originating dialog after its own session
+expires. Device or identity replacement and owner unmount retire that response.
+A confirmed close/archive or accepted deletion disables further mutation immediately,
+even before the socket retirement arrives. Deletion acceptance remains distinct from
+completion, directing the user to the native host after paired access ends. Manual
+refresh uses the existing socket resync; no polling or new background owner is added.

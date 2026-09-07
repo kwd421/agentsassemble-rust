@@ -7936,3 +7936,19 @@ existing paired-device isolation case checks room projection retirement. TypeScr
 Vite and unchanged CSS passed with the pending paired presentation work present.
 No new timer, task, credential or persistence owner; one room record is retained by
 the existing accepted projection. Packaged phase proof remains pending.
+
+## Phase 5 paired lifecycle presentation (2026-09-08)
+
+The room rail opens the existing management dialog for the one verified paired
+room. Its independent request custody carries the existing session/device through
+the public lifecycle route; native directory refresh is not invoked. Confirmed
+terminal replies survive their own expiry, while another identity/device or owner
+unmount retires old replies. Accepted deletion disables mutation and reports native
+completion checking, without displaying completed deletion from its pending result.
+
+Four affected lifecycle/API/dialog suites passed: 8 tests, 1.19s. Controlled promises
+cover duplicate suppression, exact uncertain retry, self-expiry before/after the
+terminal reply, and device replacement. TypeScript, Vite and unchanged CSS passed;
+structure, 19 policy, format and artifact gates passed. No new timer, storage or
+background task. Actual packaged account/friend/invite/pairing and recovery acceptance
+remains pending; source/UI tests do not close Phase 5.

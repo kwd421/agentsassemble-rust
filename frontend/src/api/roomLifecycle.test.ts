@@ -1,8 +1,9 @@
-import { expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import { postJsonServerOperator } from "./http";
 import { changeRoomLifecycle, type RoomLifecycleIntent } from "./roomLifecycle";
 
-vi.mock("./http", () => ({ postJsonServerOperator: vi.fn() }));
+vi.mock("./http", async () => ({ ...await vi.importActual<typeof import("./http")>("./http"), postJsonServerOperator: vi.fn() }));
+afterEach(() => vi.unstubAllGlobals());
 
 it("binds lifecycle confirmation to the authority, incarnation and published room", async () => {
   const intent: RoomLifecycleIntent = { serverId: "server", authorityLineageId: "lineage", requestId: "request", roomId: "general", roomUid: "incarnation", action: "room.archive", archived: true };
@@ -31,4 +32,23 @@ it("binds lifecycle confirmation to the authority, incarnation and published roo
   await expect(changeRoomLifecycle(deletion, vi.fn())).resolves.toEqual({ room: deletedRoom, cleanupPending: false, deleted: true });
   vi.mocked(postJsonServerOperator).mockResolvedValueOnce({ ...completed, result: { ...completed.result, deleted: false } });
   await expect(changeRoomLifecycle(deletion, vi.fn())).rejects.toThrow();
+});
+
+it("uses the exact paired bearer/device and preserves a pending deletion response", async () => {
+  vi.mocked(postJsonServerOperator).mockClear();
+  const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
+    code: "room_deletion_pending", error: "Deletion accepted", resolution: "unresolved",
+  }), { status: 503, headers: { "Content-Type": "application/json", "Cache-Control": "private, no-store" } }));
+  vi.stubGlobal("fetch", fetchMock);
+  const beforeDispatch = vi.fn();
+  await expect(changeRoomLifecycle({ serverId: "server", authorityLineageId: "lineage", requestId: "same-request", roomId: "general", roomUid: "exact", action: "room.delete", confirmationName: "General" },
+    beforeDispatch, { kind: "remote", sessionToken: "aops1.paired", deviceToken: "device" })).rejects.toMatchObject({
+      code: "room_deletion_pending", resolution: "unresolved",
+    });
+  expect(beforeDispatch).toHaveBeenCalledOnce();
+  expect(postJsonServerOperator).not.toHaveBeenCalled();
+  expect(fetchMock).toHaveBeenCalledWith("/api/room-session/lifecycle", expect.objectContaining({
+    redirect: "error", cache: "no-store", method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: "Bearer aops1.paired", "X-Device-Token": "device" },
+  }));
 });

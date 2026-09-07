@@ -55,7 +55,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
-    roomLifecycle, roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
+    roomLifecycle, pairedRoomLifecycle, roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
     saveAgentAvatar, scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate, sendAgentControl,
     sendParticipantMute, sendParticipantRemove, serverProductSurface, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setLeaveRoomTargetId,
@@ -94,7 +94,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         friendsOpen={friendsOpen && roomLifecycle.enabled}
         onOpenFriends={roomLifecycle.enabled ? () => { setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onAddRoom={addFreshRoom}
-        onManageRooms={roomLifecycle.enabled ? roomLifecycle.show : undefined}
+        onManageRooms={roomLifecycle.enabled ? roomLifecycle.show : pairedRoomLifecycle.enabled ? pairedRoomLifecycle.show : undefined}
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
         onInviteRoom={inviteRoom}
@@ -400,6 +400,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       )}
 
       {roomLifecycle.open && <RoomManagementModal controller={roomLifecycle} />}
+      {pairedRoomLifecycle.open && <RoomManagementModal controller={pairedRoomLifecycle} />}
 
       {/* Right panel */}
       {hasRoom && showMembers && membersOpen && (
