@@ -177,6 +177,110 @@ mod tests {
     use super::SqliteStore;
 
     #[tokio::test]
+    async fn cancelled_bootstrap_rolls_back_before_exact_retry() {
+        cancelled_creation_rolls_back(false).await;
+    }
+
+    #[tokio::test]
+    async fn cancelled_room_creation_rolls_back_before_exact_retry() {
+        cancelled_creation_rolls_back(true).await;
+    }
+
+    async fn cancelled_creation_rolls_back(create_room: bool) {
+        let store = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("open cancellation fixture: {error}"));
+        let request_id = "1416e27f-72ea-4357-a366-c1449a0c2f4b";
+        if create_room {
+            store
+                .bootstrap_local_authority(request_id, "Host")
+                .await
+                .unwrap_or_else(|error| panic!("bootstrap cancellation fixture: {error}"));
+        }
+        let (entered, reached_write) = tokio::sync::oneshot::channel();
+        let (release, resume_write) = std::sync::mpsc::channel();
+        let mut entered = Some(entered);
+        let mut connection = store
+            .pool
+            .acquire()
+            .await
+            .unwrap_or_else(|error| panic!("acquire cancellation fixture: {error}"));
+        connection
+            .lock_handle()
+            .await
+            .unwrap_or_else(|error| panic!("lock cancellation fixture: {error}"))
+            .set_update_hook(move |update| {
+                let table = if create_room {
+                    "rooms"
+                } else {
+                    "user_profiles"
+                };
+                if update.table == table
+                    && let Some(entered) = entered.take()
+                {
+                    let _ = entered.send(());
+                    let _ = resume_write.recv();
+                }
+            });
+        drop(connection);
+        let writer = store.clone();
+        let operation = tokio::spawn(async move {
+            if create_room {
+                writer
+                    .create_room_for_local_operator(request_id, "cancelled", "Cancelled")
+                    .await
+                    .map(|_| ())
+            } else {
+                writer
+                    .bootstrap_local_authority(request_id, "Host")
+                    .await
+                    .map(|_| ())
+            }
+        });
+        tokio::time::timeout(std::time::Duration::from_secs(5), reached_write)
+            .await
+            .unwrap_or_else(|error| panic!("creation did not reach write: {error}"))
+            .unwrap_or_else(|error| panic!("creation write hook was lost: {error}"));
+        operation.abort();
+        assert!(operation.await.is_err_and(|error| error.is_cancelled()));
+        release
+            .send(())
+            .unwrap_or_else(|error| panic!("release cancelled write: {error}"));
+        if create_room {
+            assert!(
+                store
+                    .list_room_directory(true)
+                    .await
+                    .unwrap_or_else(|error| panic!("read cancelled room: {error}"))
+                    .is_empty()
+            );
+            assert!(
+                !store
+                    .create_room_for_local_operator(request_id, "cancelled", "Cancelled")
+                    .await
+                    .unwrap_or_else(|error| panic!("retry cancelled room: {error}"))
+                    .deduplicated
+            );
+        } else {
+            assert_eq!(
+                store
+                    .local_bootstrap_status()
+                    .await
+                    .unwrap_or_else(|error| panic!("read cancelled bootstrap: {error}"))
+                    .phase,
+                LocalBootstrapPhase::Empty
+            );
+            assert!(
+                !store
+                    .bootstrap_local_authority(request_id, "Host")
+                    .await
+                    .unwrap_or_else(|error| panic!("retry cancelled bootstrap: {error}"))
+                    .deduplicated
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn interrupted_empty_file_retries_complete_bootstrap() {
         let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
         let path = directory.path().join("runtime.sqlite3");

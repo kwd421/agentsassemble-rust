@@ -103,35 +103,20 @@ impl SqliteStore {
             ));
         }
         let payload_hash = canonical_payload_hash(&json!({"room_id": room_id, "label": label}));
-        let mut connection = self.pool.acquire().await?;
-        sqlx::query("BEGIN IMMEDIATE")
-            .execute(&mut *connection)
-            .await?;
-        let outcome = async {
-            let authority =
-                crate::bootstrap::require_complete_bootstrap_in_transaction(&mut connection)
-                    .await?;
-            create_room_in_transaction(
-                &mut connection,
-                request_id,
-                room_id,
-                label,
-                &payload_hash,
-                &authority,
-            )
-            .await
-        }
-        .await;
-        match outcome {
-            Ok(commit) => {
-                sqlx::query("COMMIT").execute(&mut *connection).await?;
-                Ok(commit)
-            }
-            Err(error) => {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *connection).await;
-                Err(error)
-            }
-        }
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let authority =
+            crate::bootstrap::require_complete_bootstrap_in_transaction(&mut transaction).await?;
+        let commit = create_room_in_transaction(
+            &mut transaction,
+            request_id,
+            room_id,
+            label,
+            &payload_hash,
+            &authority,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(commit)
     }
 }
 

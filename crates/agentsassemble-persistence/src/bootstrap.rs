@@ -83,21 +83,10 @@ impl SqliteStore {
                     "Local display name must not be empty.",
                 )
             })?;
-        let mut connection = self.pool.acquire().await?;
-        sqlx::query("BEGIN IMMEDIATE")
-            .execute(&mut *connection)
-            .await?;
-        let outcome = bootstrap_in_transaction(&mut connection, request_id, &profile).await;
-        match outcome {
-            Ok(commit) => {
-                sqlx::query("COMMIT").execute(&mut *connection).await?;
-                Ok(commit)
-            }
-            Err(error) => {
-                let _ = sqlx::query("ROLLBACK").execute(&mut *connection).await;
-                Err(error)
-            }
-        }
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let commit = bootstrap_in_transaction(&mut transaction, request_id, &profile).await?;
+        transaction.commit().await?;
+        Ok(commit)
     }
 
     /// Requires completed bootstrap before issuing any local credential.

@@ -4195,6 +4195,25 @@ on every run. Process maximum RSS was 8,208,384–8,290,304 bytes before and
 an optimized standalone harness; these are isolated projection measurements, not
 packaged application latency or production memory claims.
 
+Only bootstrap and room creation manually issued `BEGIN IMMEDIATE`, `COMMIT`, and
+`ROLLBACK`; other transaction owners already use SQLx. This duplicated plumbing
+did not register transaction lifetime with SQLx. Two deterministic regressions use
+SQLite's update hook and channels to suspend the actual public creation method
+after its first product insertion, cancel its future, and resume the SQLite worker.
+Before correction, bootstrap became `RepairRequired` and room directory reads saw
+the incomplete room on the reused connection. Both regressions failed without any
+sleep or timing-based assumption about reaching the mutation.
+
+Both owners now use `pool.begin_with("BEGIN IMMEDIATE")` and SQLx's existing
+transaction drop/rollback mechanism. Immediate writer locking, authority validation,
+atomic publication, exact request replay, and commit errors remain unchanged.
+There is no new transaction wrapper or recovery state machine. The focused full
+persistence run passes all 245 tests (3.36 seconds), including both cancellation
+cases and successful non-deduplicated retry afterward. The initial whole verification
+also reproduced both baseline failures while its 243 existing persistence tests,
+58 domain tests, 664 frontend tests, and 25 desktop tests passed; final Rust checks
+continue on the corrected source without repeating unaffected frontend/desktop runs.
+
 The real loopback TCP tests import an actual CCv3 PNG, list the exact safe projection, read the
 thumbnail with private/no-store, CORS, disposition, and `nosniff` headers, reject missing thumbnails,
 prove ticket replay failure, prove crossed-ticket consumption before malformed body handling, and
