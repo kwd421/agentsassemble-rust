@@ -14,7 +14,7 @@ export default function AgentActivitySettings({
   return (
     <ActivitySwitch
       label="생각과 작업 표시"
-      description="공개용 생각 요약과 안전하게 정리된 도구 활동만 표시합니다."
+      description="공개 가능한 요약과 도구 활동을 보여줘요."
       valueLabel={activityVisible ? "켜짐" : "꺼짐"}
       enabled={activityVisible}
       disabled={!onActivityVisibilityChange}

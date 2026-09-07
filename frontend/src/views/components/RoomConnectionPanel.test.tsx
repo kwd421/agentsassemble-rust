@@ -408,7 +408,7 @@ describe("RoomConnectionPanel", () => {
     fireEvent.click(toggle);
 
     expect(onVisibilityChange).toHaveBeenCalledWith(session, false);
-    expect(screen.getByText("공개용 생각 요약과 안전하게 정리된 도구 활동만 표시합니다.")).toBeTruthy();
+    expect(screen.getByText("공개 가능한 요약과 도구 활동을 보여줘요.")).toBeTruthy();
   });
 
   it("does not expose an interactive thought-visibility control without an owner callback", () => {

@@ -40,6 +40,18 @@ afterEach(() => {
 });
 
 describe("MemberList component wiring", () => {
+  it("opens only moderation when the overflow SVG receives pointer input", () => {
+    render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onParticipantRemove={vi.fn()} />);
+    const icon = screen.getByLabelText("Agent One 관리 메뉴").querySelector("svg")!;
+    fireEvent.pointerDown(icon, { pointerType: "mouse", button: 0, clientX: 40, clientY: 40 });
+    fireEvent.pointerUp(icon, { pointerType: "mouse", button: 0, clientX: 40, clientY: 40 });
+    fireEvent.click(icon);
+    expect(screen.getByRole("menu")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Agent One 강퇴" }));
+    expect(screen.getByRole("button", { name: "강퇴" })).toBeTruthy();
+  });
+
   it("opens the extracted detail modal with Agent Session controls", () => {
     render(
       <MemberList
@@ -131,7 +143,7 @@ describe("MemberList component wiring", () => {
     const modelLine = screen.getByLabelText(
       "gpt-5.6-sol, Fast, 추론 Ultra"
     );
-    const memberRow = modelLine.closest("[role='button']");
+    const memberRow = modelLine.closest(".dc-member");
     expect(modelLine.textContent).toContain("gpt-5.6-sol");
     expect(modelLine.textContent).toContain("Ultra");
     expect(memberRow?.getAttribute("data-ultra")).toBe("true");
@@ -456,7 +468,7 @@ describe("MemberList component wiring", () => {
       />
     );
 
-    const canonicalRow = screen.getByText("Session Makima").closest("[role='button']");
+    const canonicalRow = screen.getByText("Session Makima").closest(".dc-member");
     expect(canonicalRow).not.toBeNull();
     expect(canonicalRow?.querySelector(".dc-member-avatar-image")?.getAttribute("src")).toBe(
       "http://127.0.0.1:43123/api/agent-avatars/aa_0123456789abcdef0123456789abcdef"
@@ -486,7 +498,7 @@ describe("MemberList component wiring", () => {
     );
 
     expect(
-      screen.getByText("Agent One").closest("[role='button']")
+      screen.getByText("Agent One").closest(".dc-member")
         ?.querySelector(".dc-member-avatar-image")
     ).toBeNull();
     fireEvent.click(screen.getByText("Agent One"));

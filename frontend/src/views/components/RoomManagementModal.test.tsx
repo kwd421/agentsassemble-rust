@@ -16,13 +16,14 @@ it("shows inactive rooms, confirms restoration and keeps uncertain requests lock
   expect(screen.getByText("보관됨")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "복원" }));
   expect(controller.change).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "확인" }));
+  fireEvent.click(screen.getByRole("button", { name: "복원" }));
   expect(controller.change).toHaveBeenCalledWith(room, "restore");
+  fireEvent.click(screen.getByLabelText("General 관리 메뉴"));
   fireEvent.click(screen.getByRole("button", { name: "방 삭제" }));
   fireEvent.change(screen.getByLabelText("현재 방 이름"), { target: { value: "Wrong" } });
-  expect((screen.getByRole("button", { name: "확인" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "방 삭제" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(screen.getByLabelText("현재 방 이름"), { target: { value: "General" } });
-  fireEvent.click(screen.getByRole("button", { name: "확인" }));
+  fireEvent.click(screen.getByRole("button", { name: "방 삭제" }));
   expect(controller.change).toHaveBeenCalledWith(room, "delete", "General");
   rerender(<RoomManagementModal controller={{ ...controller, error: "응답 미확인", pending: {
     serverId: "server", authorityLineageId: "lineage", requestId: "retry", roomId: "general", roomUid: "room-one", action: "room.archive", archived: false,

@@ -97,14 +97,7 @@ function MobileMemberItem({
   return (
     <article
       className={`dc-mobile-info-member-row${nested ? " dc-mobile-owner-agent-row" : ""}`}
-      role={session ? "button" : undefined}
-      tabIndex={session ? 0 : undefined}
       onClick={selectSession}
-      onKeyDown={(event) => {
-        if (!session || (event.key !== "Enter" && event.key !== " ")) return;
-        event.preventDefault();
-        selectSession();
-      }}
     >
       <span className="dc-mobile-info-member-avatar" data-status={statusTone(row.active)}>
         {row.avatarImage ? (
@@ -119,13 +112,14 @@ function MobileMemberItem({
         <span className="dc-mobile-info-member-status" aria-hidden />
       </span>
       <span className="min-w-0 flex-1">
-        <span className="dc-mobile-info-member-name preserve-words">{row.displayName}</span>
+        <span className="dc-mobile-info-member-name preserve-words">{session ? <button type="button" style={{ textAlign: "left" }} aria-label={`${row.displayName} 프로필 보기`}
+          onClick={(event) => { event.stopPropagation(); selectSession(); }}>{row.displayName}</button> : row.displayName}</span>
         <span className="dc-mobile-info-member-detail preserve-words">
           {roleLabel(row.role)} · {row.detail}
         </span>
       </span>
       {onParticipantRemove && row.id !== "operator-local" && (
-        <ParticipantRemovalControls participantId={row.id} displayName={row.displayName} onRemove={onParticipantRemove} />
+        <ParticipantRemovalControls showMenuTrigger participantId={row.id} displayName={row.displayName} onRemove={onParticipantRemove} />
       )}
       {row.app && <span className="dc-mobile-info-app-badge">앱</span>}
     </article>
@@ -412,7 +406,7 @@ export default function MobileRoomInfoPanel({
         {room.topic || `${room.label} 안에서 사람과 AI가 함께 대화합니다.`}
       </p>
 
-      <nav className="dc-mobile-info-tabs" aria-label="채널 정보 탭">
+      <nav className="dc-mobile-info-tabs" style={{ flexShrink: 0 }} aria-label="채널 정보 탭">
         {MOBILE_INFO_TABS.map((tab) => {
           const Icon = tab.icon;
           return (
@@ -431,7 +425,7 @@ export default function MobileRoomInfoPanel({
 
       {activeTab === "members" ? (
         selectedAgentSession ? (
-          <section className="dc-mobile-agent-session-detail">
+          <section className="dc-mobile-agent-session-detail" style={{ padding: "20px 24px 32px" }}>
             <button
               type="button"
               className="dc-agent-create-secondary"

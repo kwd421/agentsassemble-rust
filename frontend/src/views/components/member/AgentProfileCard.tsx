@@ -95,7 +95,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
       onKeyDown={(event) => { if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelEditing(); } }}>
       <header className="dc-member-detail-modal-head">
         <h2 className="min-w-0 flex-1">{cropFile ? "사진 위치 조정" : "프로필 편집"}</h2>
-        <button type="button" className="dc-modal-close" aria-label="프로필 편집 취소" disabled={busy} onClick={cancelEditing}><X size={18} /></button>
+        <button type="button" className="dc-modal-close" style={{ width: 44, height: 44 }} aria-label="프로필 편집 취소" disabled={busy} onClick={cancelEditing}><X size={18} /></button>
       </header>
       {cropFile ? <ImageCropper file={cropFile} onCancel={() => setCropFile(null)} onCropped={(file) => {
         setPhoto(file); setClearPhoto(false); setCropFile(null);
@@ -146,10 +146,10 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
         <h2 className="truncate preserve-words">{session.display_name}</h2>
         {detail && <p className="truncate preserve-words">{detail}</p>}
       </div>
-      {onSave && <button type="button" className="dc-modal-close" autoFocus aria-label="프로필 편집" title="프로필 편집" onClick={beginEditing}><Pencil size={18} /></button>}
+      {onSave && <button type="button" className="dc-modal-close" style={{ width: 44, height: 44 }} autoFocus aria-label="프로필 편집" title="프로필 편집" onClick={beginEditing}><Pencil size={18} /></button>}
       {onClose && <button type="button" className="dc-modal-close" aria-label="멤버 정보 닫기" onClick={onClose}><X size={18} /></button>}
     </header>
-    {notice && <p className="dc-member-session-status preserve-words" role="status">{notice}</p>}
+    {notice && <p className="dc-member-session-status preserve-words" style={{ marginTop: 12 }} role="status">{notice}</p>}
     </>}
     <div hidden={editing && canEdit}>{children}</div>
   </>;

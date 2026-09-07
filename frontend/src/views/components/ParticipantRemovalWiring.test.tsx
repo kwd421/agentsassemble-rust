@@ -22,9 +22,11 @@ describe("participant removal surfaces", () => {
     const { rerender } = render(view({}));
     expect(screen.queryByRole("button", { name: "Guest 강퇴" })).toBeNull();
     rerender(view({ "room.manage": true }));
+    expect(screen.queryByRole("button", { name: "Guest 강퇴" })).toBeNull();
+    fireEvent.click(screen.getByLabelText("Guest 관리 메뉴"));
     expect(screen.getAllByRole("button", { name: /강퇴$/ })).toHaveLength(1);
     fireEvent.click(screen.getByRole("button", { name: "Guest 강퇴" }));
-    fireEvent.click(screen.getByRole("button", { name: "확인" }));
+    fireEvent.click(screen.getByRole("button", { name: "강퇴" }));
     expect(onRemove).toHaveBeenCalledWith("guest", "kick");
   });
 });

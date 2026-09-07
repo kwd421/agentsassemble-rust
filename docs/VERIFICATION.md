@@ -7317,3 +7317,33 @@ message. The separate Ollama fixture session stayed stopped throughout. This pro
 local protocol/control integration, not a real LM Studio provider. Settings opening
 showed the expected disabled unchanged Save. Two affected frontend files / 23 cases,
 production package/TypeScript/CSS, and mandatory gates passed.
+
+### Context menus, small-window spacing and actual rejection
+
+The user-requested Apple/Toss application rules now live in FRONTEND_UX_GUIDE.md
+and the board's frontend read route. Participant menus contain actions only, with
+removal confirmed in a separate native modal. Actual packaged SVG overflow input
+previously opened both profile and menu; the interactive-target owner now includes
+SVG elements. Real controls replace nested button-role containers so native
+accessibility exposes profile, roles and moderation independently. Room management
+uses compact action menus; fixed placement keeps their bottom actions visible.
+
+At 390×640, actual interaction verified padded profile/crop controls, unchanged
+Save disabled, cancel focus returning to the pencil, a server-rejected name with
+its draft retained, then successful correction/save. This rejection used a control
+character; a database-lock attempt did not produce a storage failure and is not
+claimed as such. Mobile kick confirmation fit with outer margins, made background
+controls inert and returned focus to the action on cancel. Confirmed kick removed
+the exact local fixture; selecting that existing session re-added and started it.
+The final tab fix preserves tab height, and actual last-tab selection scrolled the
+horizontal strip and showed its content. The short composer placeholder fits.
+
+Full frontend verification earlier in this correction passed 110 files / 697 cases;
+subsequent affected accessibility/control verification passed 7 files / 57 cases,
+and the final focus adjustment passed 5 files / 37 cases. Production TypeScript/CSS
+and package build passed, as did the unchanged architecture/source/policy/artifact/
+format gates. The final room-confirmation autofocus adjustment awaits the next
+packaged build. Actual archive after restarting with a running fixture uncovered
+lost positive runtime-absence state: cleanup remains pending after the earlier
+shutdown cleared custody but left `disconnected`/`recovery_required`. This is an
+open Phase 4 acceptance defect; restore/close/delete proof is not yet complete.

@@ -22,7 +22,7 @@ export function isPrimaryActivationPointer(event: ReactPointerEvent<HTMLElement>
 }
 
 export function rowTargetIsInteractive(target: EventTarget | null) {
-  const element = target instanceof HTMLElement ? target : null;
+  const element = target instanceof Element ? target : null;
   return Boolean(element?.closest("button, input, textarea, select, a, [role='dialog']"));
 }
 

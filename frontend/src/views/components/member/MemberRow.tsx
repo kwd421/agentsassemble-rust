@@ -1,7 +1,6 @@
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./ParticipantRemovalControls";
-import { VolumeX, Zap } from "lucide-react";
+import { MoreHorizontal, VolumeX, Zap } from "lucide-react";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ProviderLogo from "../ProviderLogo";
 import {
@@ -19,7 +18,7 @@ export type MemberRowProps = {
   onRoleChange: (memberId: string, role: RoleId) => void;
   onContextMenu: (entry: MemberEntry, event: ReactMouseEvent<HTMLElement>) => void;
   canEditRoles: boolean;
-  onParticipantRemove?: ParticipantRemovalAction;
+  canManageParticipant?: boolean;
 };
 
 export default function MemberRow({
@@ -27,7 +26,7 @@ export default function MemberRow({
   onOpenDetails,
   onRoleChange,
   onContextMenu,
-  canEditRoles, onParticipantRemove,
+  canEditRoles, canManageParticipant,
 }: MemberRowProps) {
   const canOpenDetails = Boolean(entry.agent || entry.agentSession);
   const Icon = entry.icon;
@@ -65,8 +64,6 @@ export default function MemberRow({
       data-role={entry.role}
       data-active={entry.active}
       data-ultra={entry.ultraMode}
-      role={canOpenDetails ? "button" : undefined}
-      tabIndex={canOpenDetails ? 0 : undefined}
       data-muted={entry.muted}
       onPointerDown={handlePointerDown}
       onPointerUp={handlePointerUp}
@@ -75,13 +72,6 @@ export default function MemberRow({
       onClick={(event) => {
         if (rowTargetIsInteractive(event.target)) return;
         openDetails();
-      }}
-      onKeyDown={(event) => {
-        if (!canOpenDetails) return;
-        if (event.key === "Enter" || event.key === " ") {
-          event.preventDefault();
-          openDetails();
-        }
       }}
     >
       <span className="relative shrink-0">
@@ -112,7 +102,8 @@ export default function MemberRow({
       <div className="min-w-0 flex-1">
         <div className="dc-member-name-row">
           <p className="dc-member-name truncate preserve-words">
-            {entry.displayName}
+            {canOpenDetails ? <button type="button" className="truncate preserve-words" style={{ maxWidth: "100%", textAlign: "left" }}
+              aria-label={`${entry.displayName} 프로필 보기`} onClick={(event) => { event.stopPropagation(); openDetails(); }}>{entry.displayName}</button> : entry.displayName}
           </p>
           {entry.owner && (
             // canEditRoles is only true for the room host's own view, so the
@@ -190,8 +181,10 @@ export default function MemberRow({
           )}
         </div>
       </div>
-      {!entry.owner && entry.meetingId && onParticipantRemove && (
-        <ParticipantRemovalControls participantId={entry.id} displayName={entry.displayName} onRemove={onParticipantRemove} />
+      {!entry.owner && entry.meetingId && canManageParticipant && (
+        <button type="button" className="dc-modal-close" aria-label={`${entry.displayName} 관리 메뉴`}
+          onClick={(event) => { event.stopPropagation(); onContextMenu(entry, event); }}
+          onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={18} /></button>
       )}
     </div>
   );

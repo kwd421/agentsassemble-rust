@@ -12,7 +12,7 @@ import type {
   AgentSessionControlAction,
 } from "./AgentSessionDetails";
 import MemberDetailModal from "./member/MemberDetailModal";
-import type { ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
+import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import MemberRow from "./member/MemberRow";
 import { buildMemberOwnerGroups } from "./member/memberOwnerGroups";
 import { useMemberEntries } from "./member/useMemberEntries";
@@ -98,16 +98,18 @@ export default function MemberList({
   );
 
   function handleMemberContextMenu(entry: MemberEntry, event: ReactMouseEvent<HTMLElement>) {
-    // Host-only moderation: right-clicking a participant opens the mute menu.
-    // Self and any participant without a room scope can't be muted.
+    // Room-owned moderation is shared by the overflow and context-menu entries.
     if (
-      !canModerate ||
-      !onParticipantMute ||
+      (!canModerate && !onParticipantRemove) ||
+      (!onParticipantMute && !onParticipantRemove) ||
       entry.owner ||
       !entry.meetingId
     ) return;
     event.preventDefault();
-    setMemberMenu({ x: event.clientX, y: event.clientY, entry });
+    const anchor = event.currentTarget.getBoundingClientRect();
+    const x = event.clientX || anchor.right;
+    const y = event.clientY || anchor.bottom;
+    setMemberMenu({ x: Math.max(16, Math.min(x, window.innerWidth - 256)), y: Math.max(16, Math.min(y, window.innerHeight - 180)), entry });
   }
 
   async function handleToggleMute(entry: MemberEntry) {
@@ -191,7 +193,7 @@ export default function MemberList({
                   onOpenDetails={openMemberDetails}
                   onRoleChange={handleRoleChange}
                   onContextMenu={handleMemberContextMenu}
-                  onParticipantRemove={onParticipantRemove}
+                  canManageParticipant={Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
                   canEditRoles={canEditRoles}
                 />
               ) : (
@@ -224,7 +226,7 @@ export default function MemberList({
                         onOpenDetails={openMemberDetails}
                         onRoleChange={handleRoleChange}
                         onContextMenu={handleMemberContextMenu}
-                        onParticipantRemove={onParticipantRemove}
+                        canManageParticipant={Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
                         canEditRoles={canEditRoles}
                       />
                     ))}
@@ -275,13 +277,14 @@ export default function MemberList({
             className="dc-member-context-menu"
             role="menu"
             style={{ top: memberMenu.y, left: memberMenu.x }}
+            onKeyDown={(event) => { if (event.key === "Escape") setMemberMenu(null); }}
           >
-            <p className="dc-member-context-menu-title preserve-words">{memberMenu.entry.displayName}</p>
-            {onParticipantMute && (
+            {canModerate && onParticipantMute && (
               <button
                 type="button"
                 role="menuitem"
                 className="dc-member-context-menu-item"
+                style={{ minHeight: 44 }}
                 disabled={muteBusy}
                 onClick={() => void handleToggleMute(memberMenu.entry)}
               >
@@ -289,6 +292,10 @@ export default function MemberList({
                 {memberMenu.entry.muted ? "뮤트 해제" : "뮤트"}
               </button>
             )}
+            {onParticipantRemove && <ParticipantRemovalControls
+              key={memberMenu.entry.id} participantId={memberMenu.entry.id} displayName={memberMenu.entry.displayName}
+              onRemove={async (id, action) => { await onParticipantRemove(id, action); setMemberMenu(null); }}
+            />}
           </div>
         </>
       )}

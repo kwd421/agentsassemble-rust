@@ -55,6 +55,7 @@ Read the relevant sections and owning code, not entire documents or historical l
   Historical finding labels do not override its approved phase order.
 - Architecture, protocol, persistence, auth, lifecycle, or cutover:
   [architecture](docs/ARCHITECTURE.md) and the corresponding contract in `docs/specs/`.
+- Frontend changes: read [frontend UX guide](docs/FRONTEND_UX_GUIDE.md) before editing.
 - Frontend or real-client verification: the affected entry in
   [frontend gaps](docs/FRONTEND_BACKEND_GAPS.md) and [verification](docs/VERIFICATION.md).
 - Finding history: [repository audit](docs/architecture/REPOSITORY_AUDIT_2026-09-01.md).
