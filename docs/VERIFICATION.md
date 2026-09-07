@@ -8106,3 +8106,25 @@ removed and absence checked. User Ollama `4470`, unrelated applications, reposit
 work and useful build caches were preserved. The artifact owner reports no further
 maintenance required. Test/build logs remain outside the removed credential-bearing
 verification directory.
+
+## Phase 5 whole-phase review corrections (2026-09-08)
+
+Daybreak reviewed every one of the 42 commits in `53a82f1..27026bc`, the cumulative
+range, exact HEAD and whole local Phase 5. Result: REVISE, C0/H0/M1/L1. The two
+findings concern JWKS failed-refresh amplification (`b6b0ad4`) and native central
+login completion being overwritten by cleanup/cancellation (`a51255e`). All other
+individual commits were approved; no additional structure, SSoT/DDD, policy
+duplication or original-parity finding was reported. This is source-only evidence.
+
+The JWKS owner now records each refresh attempt before external I/O, independently
+of successful key loading. Its existing minute bound applies to failed requests
+too. Matching fresh keys retain their existing cache contract; cooldown without a
+fresh matching key fails unavailable, without stale keys or a background retry.
+The concrete cost was eight concurrent failing requests causing eight external
+CONNECT attempts. The same controlled local rejecting proxy now observes one
+attempt, one later attempt after fake-clock cooldown, and no expired-key success.
+Google is never contacted. The regression fails before the fix and passes afterward;
+three affected Google service/verifier cases pass (0.37 s). This adds one timestamp
+to the existing mutex-owned cache, no task or additional authority.
+Server all-target/all-feature Clippy, unchanged architecture/source policy, all 19
+gate cases, formatting/diff and artifact checks pass. No gate exception was added.

@@ -8,12 +8,18 @@ use tokio::{sync::Mutex, time::Instant};
 
 const GOOGLE_KEYS_URL: &str = "https://www.googleapis.com/oauth2/v3/certs";
 const MAX_KEYS_BYTES: usize = 64 * 1024;
-const UNKNOWN_KEY_REFRESH_INTERVAL: Duration = Duration::from_mins(1);
+const KEY_REFRESH_INTERVAL: Duration = Duration::from_mins(1);
 
 pub(crate) struct GoogleTokenVerifier {
     client: reqwest::Client,
     client_id: String,
-    keys: Mutex<Option<TrustedKeys>>,
+    keys: Mutex<KeyCache>,
+}
+
+#[derive(Default)]
+struct KeyCache {
+    trusted: Option<TrustedKeys>,
+    last_refresh_attempt: Option<Instant>,
 }
 
 struct TrustedKeys {
@@ -43,7 +49,7 @@ impl GoogleTokenVerifier {
         Ok(Self {
             client,
             client_id,
-            keys: Mutex::new(None),
+            keys: Mutex::new(KeyCache::default()),
         })
     }
 
@@ -70,7 +76,7 @@ impl GoogleTokenVerifier {
     async fn trusted_keys(&self, kid: &str) -> Result<Arc<JwkSet>, GoogleAccountError> {
         let mut cached = self.keys.lock().await;
         let now = Instant::now();
-        if let Some(current) = cached.as_ref()
+        if let Some(current) = cached.trusted.as_ref()
             && now.duration_since(current.loaded_at) < Duration::from_hours(1)
             && matches!(
                 current
@@ -78,11 +84,19 @@ impl GoogleTokenVerifier {
                     .before_request(&google_key_request()?, std::time::SystemTime::now()),
                 http_cache_semantics::BeforeRequest::Fresh(_)
             )
-            && (current.keys.find(kid).is_some()
-                || now.duration_since(current.loaded_at) < UNKNOWN_KEY_REFRESH_INTERVAL)
+            && current.keys.find(kid).is_some()
         {
             return Ok(current.keys.clone());
         }
+        // Bound failed as well as successful refreshes: an upstream outage must
+        // not serialize another full network timeout for every public caller.
+        if cached
+            .last_refresh_attempt
+            .is_some_and(|attempt| now.duration_since(attempt) < KEY_REFRESH_INTERVAL)
+        {
+            return Err(GoogleAccountError::unavailable());
+        }
+        cached.last_refresh_attempt = Some(now);
         let mut response = self
             .client
             .get(GOOGLE_KEYS_URL)
@@ -115,7 +129,7 @@ impl GoogleTokenVerifier {
         }
         let keys = Arc::new(keys);
         let loaded_at = Instant::now();
-        *cached = policy.is_storable().then(|| TrustedKeys {
+        cached.trusted = policy.is_storable().then(|| TrustedKeys {
             keys: keys.clone(),
             loaded_at,
             policy,
@@ -123,6 +137,10 @@ impl GoogleTokenVerifier {
         Ok(keys)
     }
 }
+
+#[cfg(test)]
+#[path = "google_key_refresh_tests.rs"]
+mod refresh_tests;
 
 fn verify_google_claims(
     credential: &str,
@@ -194,7 +212,9 @@ fn key_cache_policy(
 impl GoogleTokenVerifier {
     pub(crate) async fn install_fixture_keys(&self, keys: JwkSet) {
         let now = Instant::now();
-        *self.keys.lock().await = Some(TrustedKeys {
+        let mut cache = self.keys.lock().await;
+        cache.last_refresh_attempt = Some(now);
+        cache.trusted = Some(TrustedKeys {
             keys: Arc::new(keys),
             loaded_at: now,
             policy: key_cache_policy(

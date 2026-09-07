@@ -114,8 +114,11 @@ audience, expiry and subject, plus identity-bound nonce and issued-at checks. On
 rejected, response size is capped at 64 KiB, and the request has an 8-second bound.
 `http-cache-semantics` owns freshness, including Age and Cache-Control. No heuristic,
 stale or immutable fallback is enabled; retention is capped at one hour. Unknown
-key IDs can trigger one refresh per minute while the cache is otherwise fresh,
-preventing attacker-controlled key IDs from creating an unbounded outbound fetch.
+key IDs and unavailable/expired keys share one refresh attempt per minute, recorded
+before network I/O regardless of its outcome. During cooldown, only still-fresh
+matching keys can be used; other requests fail unavailable without stale-key use.
+This prevents an upstream outage or attacker-controlled key IDs from serializing
+one external timeout per public connection.
 The challenge owner retains at most 512 entries, at most 64 unbound identities,
 with five-minute expiry checked on access and one pending challenge per subject.
 Invalid proof does not consume a legitimate challenge; successful proof consumes it
