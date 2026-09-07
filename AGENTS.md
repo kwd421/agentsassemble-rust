@@ -27,84 +27,54 @@ normal conversation in which a human asks participants for synthesis, a decision
 task planning, or task-assignment discussion. These remain product behavior and must
 not be coupled to a scripted meeting pipeline.
 
-Use mature maintained libraries for solved infrastructure.
-Reuse mechanisms; implement AgentsAssemble product semantics.
-Do not reinvent frameworks, protocols, cryptography, database drivers, WebSocket framing, routing, async runtimes, serialization, pooling, or generic concurrency primitives.
+## Implementation
 
-Prefer the smallest boring design that fully works.
-Security takes priority over convenience.
-For each completed slice, inspect measurable CPU, memory, latency, task/process, and disk
-costs. Establish an observed cost or concrete threat before optimizing; intuition and future
-extension alone are not evidence. Remove avoidable work and copying at the owning boundary,
-but do not trade product semantics, security, or maintainability for speculative optimization.
-Before adding code, state, or abstraction for performance, security, or extensibility, check
-whether the existing owner or a smaller design can preserve the same complete contract.
-Record every material optimization alongside its implementation where reviewers can find it:
-the prior cost, symptom, or threat evidence; the intent and owning boundary; the product and
-security invariants preserved; the accepted trade-off; and the measurement or verification
-result. Code that is faster or more elaborate but whose necessity cannot be reviewed is not a
-completed optimization.
+Use mature maintained libraries for infrastructure; implement only product semantics.
+Make the smallest complete change. Read `Rule.md` for implementation constraints and
+`WORKBOARD.md` for the active task and relevant document sections. Follow `SDD.md`
+for substantial design or reimplementation; read `WORKBOARD_GUIDE.md` only when
+creating or restructuring the board. Do not load unrelated documents or history.
 
-Fallbacks are forbidden by default.
-When a path fails, find and fix the root cause.
-Do not introduce new fallback behavior without explicit user approval.
+Discover behavior from reachable code and real flows, not old product markdown.
+After cutover, the Rust contract and verified user flow are authoritative.
+Completion preserves the reachable entry point, authority owner, state transition,
+retry/failure semantics, and real user flow. Expand the implementation boundary
+when necessary; placeholders, fake authority, disabled synchronization, authentication
+bypasses, and client orchestration cannot replace a server-owned contract.
+Continue through implementation, affected verification, and correction until the
+active acceptance criteria are met or an actual authorization/dependency blocks work.
 
-Never narrow a migration slice by substituting placeholder data, fake authority,
-disabled synchronization, authentication bypasses, compatibility shims, or client-side
-orchestration for an original server-owned contract. If preserving the reachable behavior
-requires a larger implementation boundary, expand the work and implement that boundary
-before calling the feature complete. An incomplete path must remain explicitly incomplete;
-passing tests or a superficially working screen is not parity. Completion requires the same
-reachable entry point, authority owner, state transition, retry/failure semantics, and real
-user flow as the original product, with only the internal language and infrastructure changed.
+## Permissions and gates
 
-Do not add tests merely because code changed.
-Keep a small number of high-value tests for meaningful contracts and failure modes.
-Do not optimize for test count or coverage.
+- Security takes priority. New fallbacks and compatibility shims require explicit
+  user approval; fix failures at their owner instead of hiding them.
+- Architecture and structure gates remain mandatory. Do not weaken, bypass, raise,
+  or add exceptions to pass. Changes to blocking gates require prior owner approval
+  and deterministic actionable failures.
+- Real providers, destructive migrations, deletion of user data, and termination of
+  external processes require explicit approval unless already authorized for this task.
+  Preserve user-owned uncommitted work outside the requested edits.
+- Never expose credentials, tokens, secrets, or provider-private data in logs,
+  events, prompts, fixtures, or committed files.
 
-Repository architecture and structure gates are mandatory.
-Do not weaken, bypass, raise, or add exceptions to a gate merely to make an implementation pass.
+## Project workflow
 
-Read `Rule.md` before implementation.
-For substantial design or reimplementation work, follow `SDD.md`.
-Read `WORKBOARD_GUIDE.md` only when creating or restructuring the workboard.
-When a workboard exists, route the active work from this file to that workboard.
+Scoped reimplementation commits and pushes are pre-authorized; unrelated changes
+are not. Keep feature commits independently buildable, verifiable, rollbackable,
+and under 1,000 changed lines. Inspect the diff before committing. Push after three
+feature commits or 2,000 aggregate changed lines; review corrections may be pushed
+immediately. External review timing and reviewer settings have one owner:
+`docs/PRODUCT_REIMPLEMENTATION_PLAN.md` → Per-slice execution gate.
 
-Do not treat old product markdown as authority.
-Determine current behavior from actual reachable code and real product flows.
-After a feature is cut over, its Rust contract and verified user flow are authoritative over the replaced Python implementation.
+Requests to the designated critical ChatGPT session are pre-authorized. Send one
+complete request, wait for and read the completed answer; never use `Get answer now`.
+If the session is exhausted or irrecoverably broken, transfer the user-authored
+requirements, decisions, and review role to a replacement using the plan's settings.
+New automated security scans require explicit approval; never use Deep Scan.
 
-Do not commit or push unless explicitly requested.
-Do not run real providers, kill arbitrary external processes, delete user data, or perform destructive migrations without explicit approval.
-Do not modify, revert, overwrite, or move user-owned uncommitted work.
-Never expose credentials, tokens, secrets, or provider-private data through logs, events, prompts, fixtures, or committed files.
-
-## Standing project workflow
-
-The user has explicitly authorized scoped commits and pushes for this reimplementation.
-Commit each independently buildable, verifiable, and rollbackable feature change as its
-own sub-1,000-line commit. Keep completed commits local until either three feature commits
-have accumulated or their aggregate insertions plus deletions since the last reviewed
-baseline reach 2,000 lines, whichever happens first. Then push that batch and request
-external review of the exact pushed range. A correction required to close an already-open
-review remains part of that review batch and may be pushed and re-reviewed immediately.
-This authorization does not cover unrelated repository changes.
-
-Review requests to the designated critical ChatGPT web session are pre-authorized.
-Send each request as one complete message without asking the user again, never use an
-early-response or `Get answer now` control, and read the completed response before
-continuing. If the session reaches its length limit or errors irrecoverably, transfer the
-user-authored requirements, decisions, and critical-review role to a new session. Start a
-replacement review session with Pro reasoning until its plan is approved, then explicitly
-switch and verify very-high reasoning for subsequent reviews.
-
-Cross-review every pushed batch with that web session and Daybreaker Blue High. Reviewers
-must inspect both the individual commits and their cumulative range. The Standard Scan
-already started for pushed HEAD `b46aa02` is the only pre-authorized automated scan. After
-it completes, return Daybreaker reviews to manual source review. Never use Deep Scan, and
-do not run another automated security scan without explicit user approval.
-
-Use Computer Use only during active packaged-frontend verification. When verification
-ends, normally quit the exact app and its owned children, reset the Computer Use session,
-and remove only the isolated verification data and regenerable artifacts created for that
-run. Never stop unrelated applications or providers.
+Computer Use is limited to packaged-frontend verification and the authorized web
+review workflow. After packaged verification, normally quit only the exact app and
+its owned children, reset Computer Use, and remove only that run's isolated data and
+regenerable artifacts. Preserve unrelated apps, providers, and user data. Retain
+build artifacts needed by active work; use the repository's artifact maintenance
+owner for stale build caches, without racing active builds.
