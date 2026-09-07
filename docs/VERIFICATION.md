@@ -6728,3 +6728,41 @@ all-target/all-feature Clippy and architecture/source-growth, 19 policy tests,
 formatting, diff, and artifact checks pass. Two initial style-lint findings were
 fixed with the required `let...else` form. Windows environment forwarding is
 source-checked here; no Windows execution is claimed.
+
+
+## Retired Antigravity verification and contract correction: 2026-09-07
+
+The completed Phase 1 manual review found the former Windows ConPTY workflow still
+filtering for removed Antigravity and terminal-helper tests, allowing zero-test
+success. The obsolete provider-specific workflow is removed as part of the approved
+managed-provider retirement; retained provider checks and their limits are unchanged.
+Current architecture and Agent Session contract text no longer describes managed
+PTY/ConPTY, workspace hooks, or managed Antigravity runtime controls. Earlier native
+interrupt observations and first-bundle scope are explicitly historical. The current
+acceptance matrix points to the existing plan owner and retains only the external
+Phase 7 Room Connector flow for Antigravity. Historical audit evidence remains in
+place; it cannot reopen the removed managed contract. No runtime code changes.
+
+Architecture/source-growth and 19 policy tests, formatting, diff, and artifact checks
+pass. No active workflow references the removed test modules. Existing local runtime
+verification is reused because this correction changes only CI routing and prose.
+
+## Phase 1 whole-phase manual review disposition: 2026-09-07
+
+Daybreak Blue xhigh completed a manual immutable review of all 122 individual
+commits in `5d0a636..4cadb12`, the cumulative range, final HEAD, and local Phase 1
+contract. Result: not approved, C0/H1/M4/L0. No automated scan, actual provider,
+or packaged application was used. Corrections are subject to re-review:
+
+| Finding | Correction or pending disposition |
+| --- | --- |
+| High: Codex config inspection and launch select different homes | `4023d5f` binds config inspection, owned child, and discovery home. |
+| Medium: tool-only room completion rejected before finalization | `c25b536` preserves common portal finalization and tests publish/decline. |
+| Medium: RoomPortal errors drift across provider owners | `d27d1a4` provides one shared typed conversion and ACP normalization. |
+| Medium: retired Antigravity CI and current contract remain active | This correction removes zero-test workflow filters and updates current contracts. |
+| Medium: historical feature commit exceeds the mandatory size limit | `60c8bff` has 1,986 changed lines, including a 1,510-line generated lockfile. Owner disposition is pending; no exception or public history rewrite is applied. |
+
+The GPT-6 Pro whole-phase review is still running. Neither these implementation
+corrections nor earlier local test counts close Phase 1 without both completed
+review dispositions. Actual-provider and packaged evidence stays at the final
+user-authorized stage.
