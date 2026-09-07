@@ -68,6 +68,8 @@ mod central_registration_web;
 mod connection_admission;
 mod event_publication;
 mod friends_web;
+mod guest_identity_recovery_web;
+mod guest_recovery_attempts;
 mod http_admission;
 mod http_api;
 mod http_transport;

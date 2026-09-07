@@ -56,6 +56,7 @@ fn registered_routes(
         crate::persona_web::HTTP_ROUTES,
         crate::profile_web::HTTP_ROUTES,
         crate::account_web::HTTP_ROUTES,
+        crate::guest_identity_recovery_web::HTTP_ROUTES,
         crate::provider_credentials_web::HTTP_ROUTES,
         crate::public_ingress_web::HTTP_ROUTES,
         crate::human_invite_manager_web::HTTP_ROUTES,

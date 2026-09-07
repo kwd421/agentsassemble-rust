@@ -19,6 +19,7 @@ fs2.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
 http-cache-semantics = "3.0.0"
+governor = { version = "0.10.4", default-features = false, features = ["std"] }
 jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
 reqwest.workspace = true
 hmac.workspace = true

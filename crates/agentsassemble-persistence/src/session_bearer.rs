@@ -2,6 +2,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
+pub const GUEST_RECOVERY_CODE_PREFIX: &str = "aagr1.";
 pub const HUMAN_SESSION_BEARER_PREFIX: &str = "aas1.";
 pub const HUMAN_SESSION_BEARER_BYTES: usize = 32;
 pub const HUMAN_SESSION_BEARER_CHARS: usize =

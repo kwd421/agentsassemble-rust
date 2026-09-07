@@ -43,6 +43,7 @@ pub struct AppState {
     pub connections: TaskTracker,
     pub(crate) connection_admission: ConnectionAdmission,
     pub(crate) socket_admission: SocketAdmission,
+    pub(crate) recovery_attempts: Arc<crate::guest_recovery_attempts::GuestRecoveryAttempts>,
     pub(crate) public_ingress: PublicIngress,
     pub server_product_surface: Arc<ServerProductSurface>,
     pub frontend_root: Option<PathBuf>,
@@ -150,6 +151,9 @@ impl AppState {
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
             socket_admission: SocketAdmission::new(),
+            recovery_attempts: Arc::new(
+                crate::guest_recovery_attempts::GuestRecoveryAttempts::default(),
+            ),
             public_ingress: PublicIngress::disabled(),
             server_product_surface: Arc::new(crate::product_surface::server_product_surface(
                 false, false,

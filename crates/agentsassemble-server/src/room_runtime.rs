@@ -335,6 +335,23 @@ impl RoomRuntime {
         Ok(())
     }
 
+    pub(crate) async fn recover_guest_identity(
+        &self,
+        request: &agentsassemble_persistence::GuestRecoveryRequest<'_>,
+    ) -> Result<agentsassemble_persistence::GuestRecoveryCommit, PersistenceError> {
+        let commit = self
+            .store
+            .redeem_guest_recovery_code(request, chrono::Utc::now())
+            .await?;
+        let rooms = self.rooms.lock().await;
+        if let Some(handle) = rooms.get(&commit.result.meeting_id) {
+            for fingerprint in &commit.replaced_session_fingerprints {
+                let _ = handle.human_session_revocations.send(*fingerprint);
+            }
+        }
+        Ok(commit)
+    }
+
     pub async fn notify_committed_events(&self, events: &[RoomEvent]) {
         let mut notified_rooms = HashSet::new();
         for event in events {

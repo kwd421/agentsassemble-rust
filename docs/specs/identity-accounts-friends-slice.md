@@ -435,3 +435,27 @@ identity owner. Schema 65 adds explicit recovery provenance and rejects older da
 without conversion. Storage adds one fixed-size recovery/receipt row per identity,
 reuses session capacity/expiry, and starts no background work. HTTP and packaged
 acceptance remain outstanding for this vertical flow.
+
+The local HTTP recovery routes now use exact human/device account authority for
+issuance and the verified ready HTTPS ingress for redemption. `/recover` and its
+assets are the explicit public recovery entry; the native root remains private.
+The response carries the existing canonical room/server surface, and the runtime
+publishes committed session replacements through its current revocation stream.
+HTTP integration passes four cases (80 ms), including read-only scope preservation,
+code retry, real entry/assets, wrong device/origin, paired rejection and excess
+attempts. The static exposure inventory and unchanged Clippy/structure gates pass.
+
+Recovery retains global/network/code attempt budgets using governor 0.10.4 GCRA:
+bursts and per-minute refill rates are 256/16/8. The network key is the accepted
+transport peer; clients behind the same proxy share that network budget. No caller
+header supplies a separate network identity. Each network/code map holds at most
+512 entries, and only fully replenished cells can be reclaimed when admitting a new
+key at capacity. Two fake-clock cases verify budget/capacity and reclamation without
+sleeping. The library owns replenishment; no timestamp mirror, timer or waiting task
+is introduced. Browser credential redirects remain prohibited at the frontend owner.
+
+The required artifact check measured 21,632,364,544 bytes against the unchanged
+18 GiB limit. After confirming no Cargo/Tauri builds were active, the existing
+`make artifact-prune` owner cleaned only this repository's regenerable Cargo target;
+source, user data and other applications were preserved. Frontend recovery URL and
+request-lifetime acceptance completes this flow in the following client change.

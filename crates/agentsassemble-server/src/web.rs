@@ -44,6 +44,9 @@ const JOIN_ASSETS_PREFIX: &str = "/join/assets";
 const PAIR_PATH: &str = "/pair";
 const PAIR_SLASH_PATH: &str = "/pair/";
 const PAIR_ASSETS_PREFIX: &str = "/pair/assets";
+const RECOVER_PATH: &str = "/recover";
+const RECOVER_SLASH_PATH: &str = "/recover/";
+const RECOVER_ASSETS_PREFIX: &str = "/recover/assets";
 #[derive(Clone, Copy)]
 struct StaticFrontendRoute {
     mount: &'static str,
@@ -61,7 +64,7 @@ const APP_ROUTE: StaticFrontendRoute = StaticFrontendRoute {
     surface: "/app/{*path}",
     exposure: crate::product_surface::RouteExposure::Private,
 };
-const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 6] = [
+const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 8] = [
     StaticFrontendRoute {
         mount: APP_PREFIX,
         surface: APP_PREFIX,
@@ -92,8 +95,18 @@ const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 6] = [
         surface: PAIR_SLASH_PATH,
         exposure: crate::product_surface::RouteExposure::SameOriginPublic,
     },
+    StaticFrontendRoute {
+        mount: RECOVER_PATH,
+        surface: RECOVER_PATH,
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
+    },
+    StaticFrontendRoute {
+        mount: RECOVER_SLASH_PATH,
+        surface: RECOVER_SLASH_PATH,
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
+    },
 ];
-const FRONTEND_ASSET_ROUTES: [StaticFrontendRoute; 3] = [
+const FRONTEND_ASSET_ROUTES: [StaticFrontendRoute; 4] = [
     StaticFrontendRoute {
         mount: JOIN_ASSETS_PREFIX,
         surface: "/join/assets/{*path}",
@@ -102,6 +115,11 @@ const FRONTEND_ASSET_ROUTES: [StaticFrontendRoute; 3] = [
     StaticFrontendRoute {
         mount: PAIR_ASSETS_PREFIX,
         surface: "/pair/assets/{*path}",
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
+    },
+    StaticFrontendRoute {
+        mount: RECOVER_ASSETS_PREFIX,
+        surface: "/recover/assets/{*path}",
         exposure: crate::product_surface::RouteExposure::SameOriginPublic,
     },
     StaticFrontendRoute {
@@ -144,6 +162,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::persona_web::routes())
         .merge(crate::profile_web::routes())
         .merge(crate::account_web::routes())
+        .merge(crate::guest_identity_recovery_web::routes())
         .merge(crate::provider_credentials_web::routes())
         .merge(crate::server_identity_web::routes())
         .merge(crate::public_ingress_web::routes())
@@ -245,7 +264,8 @@ fn strip_static_prefix(mut request: Request, prefix: &str) -> Result<Request, St
 pub(crate) fn static_frontend_surfaces() -> Vec<agentsassemble_protocol::HttpRouteSurface> {
     use agentsassemble_protocol::{HttpMethod, HttpRouteSurface};
 
-    let mut routes = Vec::with_capacity(11);
+    let mut routes =
+        Vec::with_capacity(2 + FRONTEND_INDEX_ROUTES.len() + FRONTEND_ASSET_ROUTES.len());
     routes.push(HttpRouteSurface::new(HttpMethod::Get, ROOT_ROUTE.surface));
     routes.extend(
         FRONTEND_INDEX_ROUTES
@@ -602,8 +622,11 @@ mod static_route_tests {
                 ("/join/", RouteExposure::SameOriginPublic),
                 ("/pair", RouteExposure::SameOriginPublic),
                 ("/pair/", RouteExposure::SameOriginPublic),
+                ("/recover", RouteExposure::SameOriginPublic),
+                ("/recover/", RouteExposure::SameOriginPublic),
                 ("/join/assets/{*path}", RouteExposure::SameOriginPublic,),
                 ("/pair/assets/{*path}", RouteExposure::SameOriginPublic),
+                ("/recover/assets/{*path}", RouteExposure::SameOriginPublic),
                 ("/assets/{*path}", RouteExposure::SameOriginPublic),
             ]
         );
