@@ -7623,3 +7623,23 @@ remain covered. Profile and human appearance HTTP suites pass four tests. Server
 and persistence all-target/all-feature Clippy, architecture/source gates and their
 19 tests, formatting, diff and artifact checks pass. No provider was executed and
 this preparatory owner change does not claim packaged pairing acceptance.
+
+## Phase 5 resident control session provenance (2026-09-08)
+
+Agent pause, resident resume and interrupt preparation/commit now receive the same
+explicit room mutation authority as room management. Each storage transaction
+refreshes a presented human session before capability, replay or mutation checks.
+The server retains provenance across resident-runtime and interrupt-capability
+proof. Accepted interrupt effects keep their existing durable recovery owner;
+request revocation cannot orphan an already accepted effect.
+
+The persistence suite passed 270 tests, including live ordinary-human permission
+denial and post-resolution membership revocation across all six entry points.
+Existing resident identity, replay and busy-turn tests remain passing. The server's
+pre-slot interrupt recovery test passed, as did affected all-target/all-feature
+Clippy, architecture/source gates, 19 policy tests, format, diff and artifact checks.
+Logs: `/tmp/aa-phase5-resident-authority-{tests,final-test,runtime-tests,clippy,gates}.log`.
+No new process, queue, timer or durable state is introduced. Native control uses a
+borrowed principal; browser request transactions invoke the existing session owner.
+Pairing admission and privileged remote dispatch remain pending, so these results
+prove the storage boundary and retained local behavior, not a working pairing UI.

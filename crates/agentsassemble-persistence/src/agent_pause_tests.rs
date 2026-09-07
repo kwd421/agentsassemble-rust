@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::AgentRuntimeStatus;
 use serde_json::json;
 
@@ -15,13 +16,13 @@ async fn resident_pause_and_resume_preserve_identity_queue_and_replay() {
 
     assert!(matches!(
         store
-            .prepare_agent_pause(&principal, "pause-1", &payload)
+            .prepare_agent_pause(TrustedPrincipal(&principal), "pause-1", &payload)
             .await,
         Ok(AgentResidentPlan::Resident(_))
     ));
 
     let paused = store
-        .execute_agent_pause(&principal, "pause-1", &payload, &runtime)
+        .execute_agent_pause(TrustedPrincipal(&principal), "pause-1", &payload, &runtime)
         .await
         .unwrap_or_else(|error| panic!("pause resident session: {error}"));
     assert_eq!(paused.event.event_type, "agent_session_state");
@@ -36,7 +37,7 @@ async fn resident_pause_and_resume_preserve_identity_queue_and_replay() {
     assert_eq!(runtime_identity(&paused_session), original_identity);
 
     let replay = store
-        .execute_agent_pause(&principal, "pause-1", &payload, &runtime)
+        .execute_agent_pause(TrustedPrincipal(&principal), "pause-1", &payload, &runtime)
         .await
         .unwrap_or_else(|error| panic!("replay pause: {error}"));
     assert!(replay.deduplicated);
@@ -44,7 +45,7 @@ async fn resident_pause_and_resume_preserve_identity_queue_and_replay() {
     assert!(matches!(
         store
             .execute_agent_pause(
-                &principal,
+                TrustedPrincipal(&principal),
                 "pause-1",
                 &json!({"participant_id": AGENT_ID}),
                 &runtime,
@@ -68,7 +69,7 @@ async fn resident_pause_and_resume_preserve_identity_queue_and_replay() {
     assert_eq!(runtime_identity(&queued_session), original_identity);
 
     let resumed = store
-        .resume_paused_agent(&principal, "resume-1", &payload, &runtime)
+        .resume_paused_agent(TrustedPrincipal(&principal), "resume-1", &payload, &runtime)
         .await
         .unwrap_or_else(|error| panic!("resume resident session: {error}"))
         .unwrap_or_else(|| panic!("paused resume must use the resident path"));
@@ -99,7 +100,7 @@ async fn resident_pause_and_resume_preserve_identity_queue_and_replay() {
     );
 
     let resume_replay = store
-        .resume_paused_agent(&principal, "resume-1", &payload, &runtime)
+        .resume_paused_agent(TrustedPrincipal(&principal), "resume-1", &payload, &runtime)
         .await
         .unwrap_or_else(|error| panic!("replay resident resume: {error}"))
         .unwrap_or_else(|| panic!("resident resume replay must remain state-only"));
@@ -117,7 +118,12 @@ async fn pause_rejects_incomplete_or_active_runtime_authority() {
     save_stored_session(&store, &incomplete).await;
     assert_invalid_state(
         &store
-            .execute_agent_pause(&principal, "pause-incomplete", &payload, &runtime)
+            .execute_agent_pause(
+                TrustedPrincipal(&principal),
+                "pause-incomplete",
+                &payload,
+                &runtime,
+            )
             .await,
     );
 
@@ -127,7 +133,12 @@ async fn pause_rejects_incomplete_or_active_runtime_authority() {
     save_stored_session(&store, &active).await;
     assert_invalid_state(
         &store
-            .execute_agent_pause(&principal, "pause-busy", &payload, &runtime)
+            .execute_agent_pause(
+                TrustedPrincipal(&principal),
+                "pause-busy",
+                &payload,
+                &runtime,
+            )
             .await,
     );
 }
@@ -142,7 +153,12 @@ async fn pause_rejects_a_stale_live_runtime_proof_without_mutation() {
 
     assert!(matches!(
         store
-            .execute_agent_pause(&principal, "pause-stale", &payload, &stale)
+            .execute_agent_pause(
+                TrustedPrincipal(&principal),
+                "pause-stale",
+                &payload,
+                &stale
+            )
             .await,
         Err(PersistenceError::CommandRejected {
             code: "resident_runtime_changed",

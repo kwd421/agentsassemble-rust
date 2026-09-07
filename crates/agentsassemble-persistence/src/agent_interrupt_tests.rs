@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{AgentRuntimeStatus, AgentSessionStatus};
 use serde_json::json;
 
@@ -21,7 +22,7 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
     let assignment = mutation.assignments[0].clone();
     let payload = json!({"agent_id": AGENT_ID});
     let accepted = store
-        .execute_agent_interrupt(&principal, "interrupt-request", &payload)
+        .execute_agent_interrupt(TrustedPrincipal(&principal), "interrupt-request", &payload)
         .await
         .unwrap_or_else(|error| panic!("accept exact interrupt: {error}"));
     assert_eq!(accepted.outcome.event.event_type, "agent_session_state");
@@ -34,7 +35,7 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
     assert_eq!(effect.turn_id, assignment.turn_id);
 
     let replay = store
-        .execute_agent_interrupt(&principal, "interrupt-request", &payload)
+        .execute_agent_interrupt(TrustedPrincipal(&principal), "interrupt-request", &payload)
         .await
         .unwrap_or_else(|error| panic!("replay accepted interrupt: {error}"));
     assert!(replay.outcome.deduplicated);
@@ -43,7 +44,7 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
     assert!(matches!(
         store
             .execute_agent_interrupt(
-                &principal,
+                TrustedPrincipal(&principal),
                 "interrupt-request",
                 &json!({"agent_id": "another-agent"}),
             )
@@ -52,7 +53,7 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
     ));
     assert!(matches!(
         store
-            .execute_agent_interrupt(&principal, "second-interrupt", &payload)
+            .execute_agent_interrupt(TrustedPrincipal(&principal), "second-interrupt", &payload)
             .await,
         Err(PersistenceError::CommandRejected {
             code: "provider_turn_interrupt_in_progress",
@@ -122,7 +123,11 @@ async fn explicit_interrupt_preflight_is_read_only_and_replay_aware() {
     let payload = json!({"agent_id": AGENT_ID});
     for _ in 0..2 {
         let plan = store
-            .prepare_agent_interrupt(&principal, "preflight-interrupt", &payload)
+            .prepare_agent_interrupt(
+                TrustedPrincipal(&principal),
+                "preflight-interrupt",
+                &payload,
+            )
             .await
             .unwrap_or_else(|error| panic!("prepare exact interrupt: {error}"));
         let AgentInterruptPlan::Interruptible {
@@ -148,7 +153,11 @@ async fn explicit_interrupt_preflight_is_read_only_and_replay_aware() {
         durable_turn_is_assigned,
         ..
     } = store
-        .prepare_agent_interrupt(&principal, "started-preflight-interrupt", &payload)
+        .prepare_agent_interrupt(
+            TrustedPrincipal(&principal),
+            "started-preflight-interrupt",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare started exact interrupt: {error}"))
     else {
@@ -156,12 +165,20 @@ async fn explicit_interrupt_preflight_is_read_only_and_replay_aware() {
     };
     assert!(!durable_turn_is_assigned);
     store
-        .execute_agent_interrupt(&principal, "preflight-interrupt", &payload)
+        .execute_agent_interrupt(
+            TrustedPrincipal(&principal),
+            "preflight-interrupt",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("accept exact interrupt: {error}"));
     assert!(matches!(
         store
-            .prepare_agent_interrupt(&principal, "preflight-interrupt", &payload)
+            .prepare_agent_interrupt(
+                TrustedPrincipal(&principal),
+                "preflight-interrupt",
+                &payload
+            )
             .await
             .unwrap_or_else(|error| panic!("prepare committed replay: {error}")),
         AgentInterruptPlan::Outcome(_)
@@ -183,7 +200,7 @@ async fn runtime_gone_explicit_interrupt_restores_input_without_floor_progressio
     let assignment = mutation.assignments[0].clone();
     let accepted = store
         .execute_agent_interrupt(
-            &principal,
+            TrustedPrincipal(&principal),
             "gone-interrupt-request",
             &json!({"agent_id": AGENT_ID}),
         )

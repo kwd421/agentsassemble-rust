@@ -174,3 +174,9 @@ before replay or mutation; room capability checks remain at the mutation owner.
 The local command path retains its existing transport authorization. No public
 credential may be converted into that path. This shared input is connected in
 independently buildable groups before pairing enables any privileged remote command.
+
+Resident pause/resume and busy-turn interrupt carry this provenance through runtime
+proof and into acceptance. Once interrupt acceptance durably creates its exact
+provider effect, the existing effect/recovery owner completes it independently of
+the requesting session. Revocation prevents new acceptance and replay access; it
+must not strand cleanup already authorized by a committed command.

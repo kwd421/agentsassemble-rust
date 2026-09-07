@@ -230,7 +230,11 @@ async fn execute_agent_interrupt(
     command: &RoomCommand,
 ) -> CommandExecution {
     let plan = match store
-        .prepare_agent_interrupt(&command.principal, &command.request_id, &command.payload)
+        .prepare_agent_interrupt(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+        )
         .await
     {
         Ok(plan) => plan,
@@ -253,7 +257,11 @@ async fn execute_agent_interrupt(
         });
     }
     let mutation = match store
-        .execute_agent_interrupt(&command.principal, &command.request_id, &command.payload)
+        .execute_agent_interrupt(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+        )
         .await
     {
         Ok(mutation) => mutation,

@@ -18,6 +18,62 @@ const JOIN: [u8; 32] = [0x42; 32];
 const BROWSER: [u8; 32] = [0x43; 32];
 
 #[tokio::test]
+async fn resident_and_interrupt_commands_revalidate_the_request_session() {
+    let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
+    let authorization = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize human: {error}"));
+    let authority = crate::RoomMutationAuthority::HumanSession(&authorization);
+    let payload = json!({"agent_id": "another-agent"});
+    let runtime = crate::AgentResidentRuntime {
+        runtime_handle_id: "handle".to_owned(),
+        runtime_owner_id: "owner".to_owned(),
+        runtime_lease_token: "lease".to_owned(),
+        runtime_profile_key: "profile".to_owned(),
+    };
+    for expected in ["permission_denied", "session_revoked"] {
+        assert_rejected_code(
+            store
+                .prepare_agent_pause(authority, "pause", &payload)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .prepare_paused_agent_resume(authority, "resume", &payload)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .execute_agent_pause(authority, "pause", &payload, &runtime)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .resume_paused_agent(authority, "resume", &payload, &runtime)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .prepare_agent_interrupt(authority, "interrupt", &payload)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .execute_agent_interrupt(authority, "interrupt", &payload)
+                .await,
+            expected,
+        );
+        set_participant_status(&store, ParticipantStatus::Left).await;
+    }
+}
+
+#[tokio::test]
 async fn room_management_mutations_revalidate_session_before_permission_or_replay() {
     let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
     let authorization = store

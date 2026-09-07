@@ -111,7 +111,11 @@ async fn execute_paused_resume(
     command: &RoomCommand,
 ) -> Option<CommandExecution> {
     let plan = match store
-        .prepare_paused_agent_resume(&command.principal, &command.request_id, &command.payload)
+        .prepare_paused_agent_resume(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+        )
         .await
     {
         Ok(plan) => plan,
@@ -130,7 +134,7 @@ async fn execute_paused_resume(
     };
     match store
         .resume_paused_agent(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             &command.payload,
             &runtime,
@@ -156,7 +160,11 @@ pub(crate) async fn execute_agent_pause(
     command: &RoomCommand,
 ) -> CommandExecution {
     let plan = match store
-        .prepare_agent_pause(&command.principal, &command.request_id, &command.payload)
+        .prepare_agent_pause(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+        )
         .await
     {
         Ok(plan) => plan,
@@ -173,7 +181,7 @@ pub(crate) async fn execute_agent_pause(
     };
     store
         .execute_agent_pause(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             &command.payload,
             &runtime,

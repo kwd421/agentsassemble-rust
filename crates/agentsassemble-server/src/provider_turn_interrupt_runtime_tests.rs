@@ -1,3 +1,4 @@
+use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_persistence::{
     AgentRuntimeStarted, AgentStartPlan, PersistenceError, ProviderTurnEffectPhase,
     ProviderTurnInterruptEffect, SqliteStore,
@@ -146,7 +147,7 @@ async fn stage_pre_slot_interrupt() -> PreSlotFixture {
         .unwrap_or_else(|error| panic!("assign pre-slot turn: {error}"));
     assert_eq!(mutation.assignments.len(), 1);
     let accepted = store
-        .execute_agent_interrupt(&principal, "pre-slot-interrupt", &payload)
+        .execute_agent_interrupt(TrustedPrincipal(&principal), "pre-slot-interrupt", &payload)
         .await
         .unwrap_or_else(|error| panic!("accept pre-slot interrupt: {error}"));
     PreSlotFixture {

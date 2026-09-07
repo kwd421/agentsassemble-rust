@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    AgentRuntimeStatus, AgentSessionStatus, AuthenticatedPrincipal, DurableAgentSession,
-    ParticipantStatus, canonical_payload_hash,
+    AgentRuntimeStatus, AgentSessionStatus, DurableAgentSession, ParticipantStatus,
+    canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -8,7 +8,7 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError, ProviderTurnExecution, ProviderTurnExecutionPhase,
-    ProviderTurnInterruptCause, ProviderTurnInterruptEffect, SqliteStore,
+    ProviderTurnInterruptCause, ProviderTurnInterruptEffect, RoomMutationAuthority, SqliteStore,
     agent_lifecycle::{load_participant, load_session, save_session},
     agent_lifecycle_authority::{authorize_control, lifecycle_intent_is_empty, payload_agent_id},
     agent_lifecycle_events::{append_state_event, store_result},
@@ -48,14 +48,16 @@ impl SqliteStore {
     /// Returns authorization, replay-conflict, active-turn, or storage failures.
     pub async fn prepare_agent_interrupt(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<AgentInterruptPlan, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let resolved = authority.resolve(&mut transaction).await?;
+        let principal = resolved.as_ref();
         authorize_control(principal)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = inspect_non_lifecycle_command(
             &mut transaction,
@@ -86,14 +88,16 @@ impl SqliteStore {
     /// Returns authorization, replay, active-turn, or storage failures.
     pub async fn execute_agent_interrupt(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<AgentInterruptMutation, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let resolved = authority.resolve(&mut transaction).await?;
+        let principal = resolved.as_ref();
         authorize_control(principal)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = admit_non_lifecycle_command(
             &mut transaction,
