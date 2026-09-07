@@ -122,9 +122,8 @@ pub(super) async fn interrupt_turn(
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
             let message = next_matching_notification(driver, &thread_id, &provider_turn_id).await?;
-            if let Some("turn/completed" | "turn/error" | "error") =
-                message.get("method").and_then(Value::as_str)
-            {
+            if message.get("method").and_then(Value::as_str) == Some("turn/completed") {
+                terminal_status(&message)?;
                 return Ok::<(), DriverError>(());
             }
         }
@@ -233,8 +232,12 @@ async fn read_turn(
             .as_mut()
             .ok_or_else(turn_unconfirmed)?;
         active.last_progress = Instant::now();
-        if has_terminal_completion_receipt(method) {
-            return finish_turn(driver);
+        if method == "turn/completed" {
+            return match terminal_status(&message) {
+                Ok("completed") => finish_turn(driver),
+                Ok(_) => poison(driver, turn_failed()),
+                Err(error) => poison(driver, error),
+            };
         }
         match method {
             "agent_message/delta"
@@ -251,7 +254,13 @@ async fn read_turn(
             "item/completed" if completed_agent_message(&message) => {
                 record_final(active, &message);
             }
-            "turn/error" | "error" => return poison(driver, turn_failed()),
+            "turn/error" | "error" => {
+                match nested(&message, &["params", "willRetry"]).and_then(Value::as_bool) {
+                    Some(true) => {}
+                    Some(false) => return poison(driver, turn_failed()),
+                    None => return poison(driver, protocol_error()),
+                }
+            }
             "command_execution/request_approval"
             | "file_change/request_approval"
             | "permissions/request_approval" => return poison(driver, approval_required()),
@@ -260,8 +269,11 @@ async fn read_turn(
     }
 }
 
-fn has_terminal_completion_receipt(method: &str) -> bool {
-    method == "turn/completed"
+fn terminal_status(message: &Value) -> Result<&str, DriverError> {
+    match nested(message, &["params", "turn", "status"]).and_then(Value::as_str) {
+        Some(status @ ("completed" | "failed" | "interrupted")) => Ok(status),
+        _ => Err(protocol_error()),
+    }
 }
 
 async fn next_matching_notification(
@@ -360,7 +372,8 @@ fn turn_scoped_method(method: &str) -> bool {
         || method.starts_with("agent-message/")
         || matches!(
             method,
-            "model/rerouted"
+            "error"
+                | "model/rerouted"
                 | "command_execution/request_approval"
                 | "file_change/request_approval"
                 | "permissions/request_approval"
@@ -590,7 +603,7 @@ const fn turn_interrupt_timeout() -> DriverError {
 const fn turn_failed() -> DriverError {
     DriverError::new(
         "provider_turn_failed",
-        "The Codex app-server reported a failed provider turn.",
+        "The Codex app-server provider turn did not complete successfully.",
     )
 }
 
@@ -606,17 +619,4 @@ const fn output_missing() -> DriverError {
         "provider_turn_output_missing",
         "The Codex provider turn completed without a final message.",
     )
-}
-
-#[cfg(test)]
-mod tests {
-    use super::has_terminal_completion_receipt;
-
-    #[test]
-    fn completion_requires_the_exact_terminal_receipt() {
-        assert!(has_terminal_completion_receipt("turn/completed"));
-        assert!(!has_terminal_completion_receipt("agent_message/completed"));
-        assert!(!has_terminal_completion_receipt("item/completed"));
-        assert!(!has_terminal_completion_receipt("thread/status/changed"));
-    }
 }

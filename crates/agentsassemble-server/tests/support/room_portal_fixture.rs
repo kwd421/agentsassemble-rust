@@ -17,6 +17,7 @@ pub(super) fn script(
     turn_seen: &Path,
     release_first: &Path,
     release_second: &Path,
+    first_status: &str,
 ) -> String {
     format!(
         r#"#!/bin/sh
@@ -81,14 +82,14 @@ printf '1' > {seen}
 while [ ! -f {release_first} ]; do :; done
 printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"agent_message/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-1","text":"ignored first assistant final"}}}}'
-printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-1"}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-1","status":"{first_status}","items":[]}}}}}}'
 IFS= read -r turn_two
 printf '%s\n' "$turn_two" >> {log}
 printf '2' > {seen}
 while [ ! -f {release_second} ]; do :; done
 printf '%s\n' '{{"jsonrpc":"2.0","id":4,"result":{{"turn":{{"id":"provider-turn-2"}}}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"agent_message/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-2","text":"ignored second assistant final"}}}}'
-printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-2"}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-2","status":"completed","items":[]}}}}}}'
 IFS= read -r forever
 "#,
         log = quote(transcript),

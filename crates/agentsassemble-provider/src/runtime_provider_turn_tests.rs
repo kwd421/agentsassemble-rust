@@ -27,9 +27,10 @@ async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
         "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"thread/status/changed\",\"params\":{\"threadId\":\"thread-1\",\"status\":\"active\"}}'\n",
         "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{},\"params\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
         concat!(
+            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"error\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"willRetry\":true,\"error\":{\"message\":\"transient fixture error\"}}}'\n",
             "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/delta\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"delta\":\"draft \"}}'\n",
             "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"item/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"item\":{\"type\":\"agentMessage\",\"text\":\"final answer\"}}}'\n",
-            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}'\n",
+            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turn\":{\"id\":\"provider-turn-1\",\"status\":\"completed\",\"items\":[]}}}'\n",
         ),
     );
     let session = fixture_session(directory.path(), &script).await;
@@ -79,6 +80,37 @@ async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
 }
 
 #[tokio::test]
+async fn codex_unsuccessful_or_invalid_completion_cannot_return_final_output() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    for (status, code) in [
+        (Some("failed"), "provider_turn_failed"),
+        (Some("interrupted"), "provider_turn_failed"),
+        (Some("inProgress"), "provider_protocol_invalid"),
+        (Some("unknown"), "provider_protocol_invalid"),
+        (None, "provider_protocol_invalid"),
+    ] {
+        let mut turn = serde_json::json!({"id": "provider-turn-1", "items": []});
+        if let Some(status) = status {
+            turn["status"] = serde_json::json!(status);
+        }
+        let completion = serde_json::json!({
+            "jsonrpc": "2.0", "method": "turn/completed",
+            "params": {"threadId": "thread-1", "turn": turn},
+        });
+        let notifications = format!(
+            "printf '%s\\n' '{{\"method\":\"item/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"item\":{{\"type\":\"agentMessage\",\"text\":\"must not publish\"}}}}}}'\nprintf '%s\\n' '{completion}'\n"
+        );
+        assert_turn_error(
+            r#"{"jsonrpc":"2.0","id":3,"result":{"turn":{"id":"provider-turn-1"}}}"#,
+            "",
+            &notifications,
+            code,
+        )
+        .await;
+    }
+}
+
+#[tokio::test]
 async fn nullable_hook_turn_identity_does_not_poison_an_active_turn() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()
@@ -90,7 +122,7 @@ async fn nullable_hook_turn_identity_does_not_poison_an_active_turn() {
         "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
         concat!(
             "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"answer after hook\"}}'\n",
-            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}'\n",
+            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turn\":{\"id\":\"provider-turn-1\",\"status\":\"completed\",\"items\":[]}}}'\n",
         ),
     );
     let session = fixture_session(directory.path(), &script).await;
@@ -136,7 +168,7 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
         "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
         concat!(
             "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"continued answer\"}}'\n",
-            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}'\n",
+            "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turn\":{\"id\":\"provider-turn-1\",\"status\":\"completed\",\"items\":[]}}}'\n",
         ),
     );
     let session = fixture_session(directory.path(), &script).await;
@@ -182,12 +214,21 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
 
 #[tokio::test]
 async fn exact_codex_turn_interrupt_uses_official_identity_and_retains_runtime() {
+    verify_exact_codex_interrupt(true).await;
+}
+
+#[tokio::test]
+async fn retry_notice_followed_by_invalid_completion_cannot_retain_interrupted_runtime() {
+    verify_exact_codex_interrupt(false).await;
+}
+
+async fn verify_exact_codex_interrupt(terminal_receipt: bool) {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
     let directory = tempfile::tempdir()
         .unwrap_or_else(|error| panic!("create exact interrupt fixture: {error}"));
     let transcript = directory.path().join("requests.jsonl");
     let seen = directory.path().join("turn-started");
-    let script = exact_interrupt_fixture(&transcript, &seen);
+    let script = exact_interrupt_fixture(&transcript, &seen, terminal_receipt);
     let session = fixture_session(directory.path(), &script).await;
     let adapter = ProviderAdapter::new();
     let started = adapter
@@ -225,18 +266,23 @@ async fn exact_codex_turn_interrupt_uses_official_identity_and_retains_runtime()
         super::ProviderTurnInterruptDisposition::Started
     );
     control.request_interrupt();
-    control
-        .wait_quiesced(Duration::from_secs(5))
-        .await
-        .unwrap_or_else(|error| panic!("prove retained-runtime interruption: {error}"));
+    let quiesced = control.wait_quiesced(Duration::from_secs(5)).await;
+    assert_eq!(quiesced.is_ok(), terminal_receipt);
     let completed = turn
         .await
         .unwrap_or_else(|error| panic!("join exact interrupt owner: {error}"));
     let Err(error) = completed else {
         panic!("interrupted provider turn must not publish a completion");
     };
-    assert_eq!(error.code, "provider_turn_interrupted");
-    assert!(!error.effect_uncertain);
+    assert_eq!(
+        error.code,
+        if terminal_receipt {
+            "provider_turn_interrupted"
+        } else {
+            "provider_protocol_invalid"
+        }
+    );
+    assert_eq!(error.effect_uncertain, !terminal_receipt);
     assert!(!error.runtime_stopped);
     let recorded = requests(&transcript);
     assert_eq!(
@@ -373,7 +419,7 @@ async fn rerouted_codex_turn_model_is_poisoned_without_a_second_turn() {
     let notifications = concat!(
         "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"model/rerouted\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"fromModel\":\"gpt-5.6-terra\",\"toModel\":\"other-model\"}}'\n",
         "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"wrong-model answer\"}}'\n",
-        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}'\n",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turn\":{\"id\":\"provider-turn-1\",\"status\":\"completed\",\"items\":[]}}}'\n",
     );
     assert_turn_error(
         "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
@@ -523,7 +569,7 @@ async fn assert_turn_error(
 
 fn reused_turn_fixture(transcript: &Path) -> String {
     format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r first_turn\nprintf '%s\\n' \"$first_turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"first answer\"}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}}}'\nIFS= read -r second_turn\nprintf '%s\\n' \"$second_turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nIFS= read -r forever\n",
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r first_turn\nprintf '%s\\n' \"$first_turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"first answer\"}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turn\":{{\"id\":\"provider-turn-1\",\"status\":\"completed\",\"items\":[]}}}}}}'\nIFS= read -r second_turn\nprintf '%s\\n' \"$second_turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nIFS= read -r forever\n",
         log = shell_quote(transcript),
     )
 }
@@ -543,9 +589,14 @@ pub(super) fn turn_fixture(
     )
 }
 
-fn exact_interrupt_fixture(transcript: &Path, seen: &Path) -> String {
+fn exact_interrupt_fixture(transcript: &Path, seen: &Path, terminal_receipt: bool) -> String {
+    let completion = if terminal_receipt {
+        "printf '%s\\n' '{\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turn\":{\"id\":\"provider-turn-1\",\"status\":\"interrupted\",\"items\":[]}}}'\n"
+    } else {
+        "printf '%s\\n' '{\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turn\":{\"id\":\"provider-turn-1\",\"status\":\"inProgress\",\"items\":[]}}}'\n"
+    };
     format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r turn\nprintf '%s\\n' \"$turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf seen > {seen}\nIFS= read -r interrupt\nprintf '%s\\n' \"$interrupt\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\"}}}}'\nIFS= read -r forever\n",
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r turn\nprintf '%s\\n' \"$turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf seen > {seen}\nIFS= read -r interrupt\nprintf '%s\\n' \"$interrupt\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{}}}}'\nprintf '%s\\n' '{{\"method\":\"error\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"willRetry\":true,\"error\":{{\"message\":\"retry fixture\"}}}}}}'\n{completion}\nIFS= read -r forever\n",
         log = shell_quote(transcript),
         seen = shell_quote(seen),
     )

@@ -6805,3 +6805,39 @@ three-provider list. No retained provider is replaced with a terminal helper or 
 external admission identity. Architecture/source-growth,
 19 policy tests, formatting, diff, and artifact gates pass. No runtime code changes
 or new actual-provider runs are part of this correction.
+
+
+## Codex native terminal status correction: 2026-09-07
+
+While the immutable Phase 1 Pro review remained in progress, direct source tracing
+confirmed that `codex_turn::read_turn` accepted the method `turn/completed` without
+reading its required `turn.status`. A valid RoomPortal read and staged publication
+could therefore cross the common completion owner after native failure/interruption.
+The same driver treated an intermediate error notification as interrupt quiescence
+and rejected native retry notices as fatal ordinary-turn failures.
+
+The existing Codex protocol owner now accepts successful completion only with
+`status=completed`, rejects failed/interrupted output, and rejects missing, unknown,
+or nonterminal status. Correlated `error` notices require their thread/turn IDs and
+boolean `willRetry`; a native retry continues the same event read without another
+request. Interrupt waits for a correlated completion with a valid terminal status,
+using its unchanged timeout. Invalid interrupt completion retains the existing
+uncertain result and exact custody until explicit confirmed stop; it is not a
+successful retained-runtime interruption. No new task, timer, retry, compatibility
+path, shared abstraction, or raw provider error exposure is introduced.
+The official [TurnCompletedNotification schema](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/json/v2/TurnCompletedNotification.json)
+and [ErrorNotification schema](https://github.com/openai/codex/blob/main/codex-rs/app-server-protocol/schema/json/v2/ErrorNotification.json)
+were read on this date; these are upstream protocol evidence, not a real-provider run.
+
+Affected adapter verification covers successful final/replay after a native retry,
+five unsuccessful/malformed completion cases, exact identity/cancellation/stop, and
+retained interruption versus retry followed by nonterminal completion. The affected
+run passed 19 cases; the added interrupt case then passed its focused rerun after
+correcting the test's expectation to the existing uncertain-custody contract.
+The real local MCP plus TCP/WebSocket Agent Session suite passed all 13 tests in
+57.57 seconds, including staged publication discarded for both failed and interrupted
+native completion and the existing successful two-turn/queueing flow. Provider/server
+all-target Clippy, formatting, architecture/source-growth, 19 policy checks, diff,
+and artifact checks pass. These are local protocol and product-boundary proofs;
+upstream execution and packaged proof remain at the authorized final stage.
+Phase 1 remains open pending both reviewers on the corrected range.

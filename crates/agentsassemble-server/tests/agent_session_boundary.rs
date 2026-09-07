@@ -251,8 +251,21 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
 
 #[cfg(unix)]
 #[tokio::test]
-#[allow(clippy::too_many_lines)] // One boundary scenario spans setup, blocked turn, queueing, and publication.
 async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
+    verify_room_turn_publication("completed").await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn failed_or_interrupted_codex_turn_discards_tentative_room_publication() {
+    for status in ["failed", "interrupted"] {
+        verify_room_turn_publication(status).await;
+    }
+}
+
+#[cfg(unix)]
+#[allow(clippy::too_many_lines)] // One boundary scenario spans setup, blocked turn, queueing, and publication.
+async fn verify_room_turn_publication(first_status: &str) {
     let _serial = AGENT_BOUNDARY_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create room-turn root: {error}"));
@@ -269,6 +282,7 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
         &turn_seen,
         &release_first,
         &release_second,
+        first_status,
     );
     let store = SqliteStore::open(&format!(
         "sqlite://{}",
@@ -320,6 +334,32 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
     room_portal_fixture::wait_for_turn(&turn_seen, "1").await;
     let endpoint = room_portal_fixture::wait_for_value(&portal_endpoint, "endpoint").await;
     let token = room_portal_fixture::wait_for_value(&portal_token, "token").await;
+    if first_status != "completed" {
+        room_portal_fixture::publish(&endpoint, &token, "must not publish").await;
+        std::fs::write(&release_first, b"release")
+            .unwrap_or_else(|error| panic!("release unsuccessful room turn: {error}"));
+        let mut failed = false;
+        for _ in 0..32 {
+            let frame = receive_json_with_timeout(&mut socket, Duration::from_secs(5)).await;
+            for event in frame["events"].as_array().into_iter().flatten() {
+                assert!(
+                    !(event["type"] == "message_final"
+                        && event["actor"]["participant_type"] == "agent")
+                );
+                if event["type"] == "agent_session_state"
+                    && event["agent_session"]["last_error_code"] == "provider_turn_failed"
+                {
+                    failed = true;
+                }
+            }
+            if failed {
+                break;
+            }
+        }
+        assert!(failed, "unsuccessful native completion must be visible");
+        server.stop().await;
+        return;
+    }
     send_command(
         &mut socket,
         "room-message-2",
