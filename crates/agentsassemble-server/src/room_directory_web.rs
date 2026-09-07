@@ -3,17 +3,18 @@ use agentsassemble_persistence::{LocalBootstrapPhase, PersistenceError, StoredRo
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
-    http::{Method, StatusCode},
+    http::{Method, StatusCode, header::CACHE_CONTROL},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
 use serde_json::{Value, json};
+use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, consume_local_operator, decode_json_body, ensure_empty_body,
-        exact_tauri_cors,
+        BodyDecodeError, PRIVATE_NO_STORE, consume_local_operator, decode_json_body,
+        ensure_empty_body, exact_tauri_cors,
     },
 };
 
@@ -47,7 +48,12 @@ struct LifecycleRequest {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    directory_routes().layer(exact_tauri_cors([Method::GET, Method::POST]))
+    directory_routes()
+        .layer(SetResponseHeaderLayer::overriding(
+            CACHE_CONTROL,
+            PRIVATE_NO_STORE.clone(),
+        ))
+        .layer(exact_tauri_cors([Method::GET, Method::POST]))
 }
 
 registered_routes! {

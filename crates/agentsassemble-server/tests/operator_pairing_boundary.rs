@@ -418,6 +418,20 @@ async fn assert_paired_lifecycle_result(
     response: reqwest::Response,
     mut events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    assert_eq!(
+        response
+            .headers()
+            .get("cache-control")
+            .and_then(|value| value.to_str().ok()),
+        Some("private, no-store")
+    );
+    assert_eq!(
+        response
+            .headers()
+            .get("content-type")
+            .and_then(|value| value.to_str().ok()),
+        Some("application/json")
+    );
     if action == "room.delete" {
         assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
         let response: Value = response.json().await?;
