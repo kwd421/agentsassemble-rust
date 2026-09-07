@@ -34,6 +34,7 @@ export default function UserPanel({
   agentCount,
   hasBackendError,
   guestProfile,
+  pairedRoomSession = false,
   profileIdentity = {},
   onGuestExit,
 }: {
@@ -47,6 +48,7 @@ export default function UserPanel({
     statusLabel: string;
     expired?: boolean;
   };
+  pairedRoomSession?: boolean;
   profileIdentity?: UserProfileIdentity;
   onGuestExit?: () => void;
 }) {
@@ -100,7 +102,7 @@ export default function UserPanel({
     profileIntentGeneration.current += 1;
     profileWriteGeneration.current += 1;
     setSaving(false);
-    if (guestProfile?.expired || guestAwaitingAdmission) {
+    if (guestProfile?.expired || guestAwaitingAdmission || pairedRoomSession) {
       setProfileHydrated(false);
       return;
     }
@@ -136,6 +138,7 @@ export default function UserPanel({
   }, [
     guestProfile?.expired,
     guestAwaitingAdmission,
+    pairedRoomSession,
     profileIdentity.deviceToken,
     profileIdentity.sessionToken,
   ]);
@@ -314,11 +317,15 @@ export default function UserPanel({
     }
   }
 
-  if (guestProfile && (guestProfile.expired || guestAwaitingAdmission)) {
+  if (guestProfile && (guestProfile.expired || guestAwaitingAdmission || pairedRoomSession)) {
     return (
       <div className="dc-user-panel" ref={rootRef}>
         <div className="dc-current-user">
-          <div className="dc-user-identity" aria-label="게스트 프로필">
+          <div
+            className="dc-user-identity"
+            aria-label={pairedRoomSession ? "운영자 방 접속 프로필" : "게스트 프로필"}
+            title={pairedRoomSession ? "계정과 프로필은 호스트 앱에서 변경해요." : undefined}
+          >
             <span className="relative shrink-0">
               <span
                 className="dc-self-avatar"

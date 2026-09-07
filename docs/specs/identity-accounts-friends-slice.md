@@ -390,3 +390,15 @@ A confirmed close/archive or accepted deletion disables further mutation immedia
 even before the socket retirement arrives. Deletion acceptance remains distinct from
 completion, directing the user to the native host after paired access ends. Manual
 refresh uses the existing socket resync; no polling or new background owner is added.
+
+### Paired account presentation
+
+The paired room client presents its admission identity without requesting the durable
+account profile. Its existing stored pairing label only restricts presentation; current
+server capabilities continue to authorize room controls. The profile explains that
+account edits belong to the native host. Session and device credentials stay intact;
+ordinary human profile hydration and editing remain on their existing authority.
+Switching presentation retires queued profile work through the existing generation
+owner. The focused UserPanel suite passes 10 cases, and TypeScript/build, original CSS,
+architecture/source policy, formatting and artifact checks pass. Packaged acceptance
+remains part of the phase exit. No new task, timer or persistent state is introduced.

@@ -262,6 +262,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             agentCount={scopedAgents.length || 0}
             hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
             guestProfile={guestPanelProfile}
+            pairedRoomSession={guestLocked && guestSession?.operator === true}
             profileIdentity={{
               sessionToken: admittedSessionToken,
               deviceToken,

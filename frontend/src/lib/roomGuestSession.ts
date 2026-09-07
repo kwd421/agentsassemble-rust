@@ -32,8 +32,8 @@ export type RoomGuestSession = {
   roomUid?: string;
   clientId?: string;
   serverSurface: RoomSessionSurface;
-  // True when this session belongs to the server operator's account —
-  // unlocks host moderation through the public entrance.
+  // Pairing presentation only. Current server capabilities authorize room controls;
+  // this stored field never grants durable account or profile authority.
   operator?: boolean;
 };
 

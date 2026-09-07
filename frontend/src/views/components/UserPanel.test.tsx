@@ -126,6 +126,28 @@ describe("UserPanel", () => {
     expect(screen.getByRole("button", { name: /Guest After/ })).toBeTruthy();
   });
 
+  it("keeps paired room presentation separate from durable account authority", async () => {
+    apiMocks.fetchUserProfile.mockResolvedValue(snapshot(DEFAULT_USER_PROFILE));
+    const view = render(
+      <UserPanel onlineCount={1} agentCount={0} hasBackendError={false}
+        pairedRoomSession
+        guestProfile={{ displayName: "Room Host", avatarLabel: "RH", statusLabel: "운영자로 접속" }}
+        profileIdentity={{ sessionToken: "paired-session", deviceToken: "paired-device" }} />
+    );
+    expect(within(view.container).getByLabelText("운영자 방 접속 프로필")).toBeTruthy();
+    expect(within(view.container).getByTitle("계정과 프로필은 호스트 앱에서 변경해요.")).toBeTruthy();
+    expect(within(view.container).queryByRole("button", { name: "사용자 설정" })).toBeNull();
+    expect(apiMocks.fetchUserProfile).not.toHaveBeenCalled();
+    view.rerender(
+      <UserPanel onlineCount={1} agentCount={0} hasBackendError={false}
+        guestProfile={{ displayName: "Human", avatarLabel: "H", statusLabel: "게스트로 접속" }}
+        profileIdentity={{ sessionToken: "human-session", deviceToken: "human-device" }} />
+    );
+    await waitFor(() => expect(apiMocks.fetchUserProfile).toHaveBeenCalledWith({
+      sessionToken: "human-session", deviceToken: "human-device",
+    }));
+  });
+
   it("waits for guest admission before reading the server-owned profile", async () => {
     const loaded = {
       ...DEFAULT_USER_PROFILE,
