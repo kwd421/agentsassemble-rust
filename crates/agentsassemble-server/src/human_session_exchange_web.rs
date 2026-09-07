@@ -17,8 +17,10 @@ use crate::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body, ensure_empty_body,
         exact_tauri_cors,
     },
-    human_session_bearer::fingerprint_presented_bearer,
     room_command_result::CommandFailure,
+    room_session_http_authority::{
+        RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
+    },
     room_socket::{persistence_error, persistence_error_is_internal},
 };
 
@@ -42,7 +44,11 @@ pub(crate) fn routes() -> Router<AppState> {
             header::CACHE_CONTROL,
             PRIVATE_NO_STORE.clone(),
         ))
-        .layer(exact_tauri_cors([Method::POST]))
+        .layer(exact_tauri_cors([Method::POST]).allow_headers([
+            header::AUTHORIZATION,
+            header::CONTENT_TYPE,
+            crate::http_api::DEVICE_CREDENTIAL_HEADER,
+        ]))
 }
 
 registered_routes! {
@@ -64,7 +70,7 @@ async fn leave_room(
     state
         .rooms
         .execute_room_session(
-            &agentsassemble_persistence::RoomSessionAuthorization::Human(authorization),
+            &authorization,
             uuid::Uuid::new_v4().to_string(),
             RoomAction::ParticipantLeave,
             payload,
@@ -85,9 +91,7 @@ async fn issue_socket_ticket(
     let ttl_seconds = session_ticket_ttl(&state, &authorization);
     let issued = state
         .tickets
-        .issue_room_session_socket(agentsassemble_persistence::RoomSessionAuthorization::Human(
-            authorization,
-        ))
+        .issue_room_session_socket(authorization)
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
     Ok(Json(SessionTicketResponse {
@@ -100,7 +104,7 @@ async fn issue_socket_ticket(
 async fn authorize_exchange(
     state: &AppState,
     request: Request,
-) -> Result<agentsassemble_persistence::HumanSessionAuthorization, SessionExchangeError> {
+) -> Result<agentsassemble_persistence::RoomSessionAuthorization, SessionExchangeError> {
     let authorization = authorize_presented_session(state, request.headers()).await?;
     ensure_empty_body(request, MAX_EXCHANGE_BODY_BYTES)
         .await
@@ -111,20 +115,20 @@ async fn authorize_exchange(
 async fn authorize_presented_session(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<agentsassemble_persistence::HumanSessionAuthorization, SessionExchangeError> {
-    let fingerprint = bearer_credential(headers)
-        .and_then(fingerprint_presented_bearer)
-        .ok_or_else(SessionExchangeError::unauthorized)?;
-    state
-        .store
-        .authorize_human_session(&fingerprint)
-        .await
-        .map_err(Into::into)
+) -> Result<agentsassemble_persistence::RoomSessionAuthorization, SessionExchangeError> {
+    let bearer = bearer_credential(headers).ok_or_else(SessionExchangeError::unauthorized)?;
+    match resolve_room_session_bearer(state, headers, bearer).await {
+        Ok(RoomSessionBearerResolution::Authorized(session)) => Ok(*session),
+        Ok(RoomSessionBearerResolution::Other) | Err(RoomSessionBearerError::Invalid) => {
+            Err(SessionExchangeError::unauthorized())
+        }
+        Err(RoomSessionBearerError::Persistence(error)) => Err(error.into()),
+    }
 }
 
 fn session_ticket_ttl(
     state: &AppState,
-    authorization: &agentsassemble_persistence::HumanSessionAuthorization,
+    authorization: &agentsassemble_persistence::RoomSessionAuthorization,
 ) -> u64 {
     state.tickets.ttl_seconds().min(
         authorization

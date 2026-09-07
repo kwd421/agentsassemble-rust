@@ -85,12 +85,12 @@ const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 6] = [
     StaticFrontendRoute {
         mount: PAIR_PATH,
         surface: PAIR_PATH,
-        exposure: crate::product_surface::RouteExposure::Private,
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
     },
     StaticFrontendRoute {
         mount: PAIR_SLASH_PATH,
         surface: PAIR_SLASH_PATH,
-        exposure: crate::product_surface::RouteExposure::Private,
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
     },
 ];
 const FRONTEND_ASSET_ROUTES: [StaticFrontendRoute; 3] = [
@@ -102,7 +102,7 @@ const FRONTEND_ASSET_ROUTES: [StaticFrontendRoute; 3] = [
     StaticFrontendRoute {
         mount: PAIR_ASSETS_PREFIX,
         surface: "/pair/assets/{*path}",
-        exposure: crate::product_surface::RouteExposure::Private,
+        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
     },
     StaticFrontendRoute {
         mount: ASSETS_PREFIX,
@@ -149,6 +149,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())
         .merge(crate::human_invite_manager_web::routes())
+        .merge(crate::operator_pairing_web::routes())
         .merge(crate::human_invite_web::routes());
     if state.central_registration_enabled {
         app = app.merge(crate::central_registration_web::routes());
@@ -599,10 +600,10 @@ mod static_route_tests {
                 ("/app/", RouteExposure::Private),
                 ("/join", RouteExposure::SameOriginPublic),
                 ("/join/", RouteExposure::SameOriginPublic),
-                ("/pair", RouteExposure::Private),
-                ("/pair/", RouteExposure::Private),
+                ("/pair", RouteExposure::SameOriginPublic),
+                ("/pair/", RouteExposure::SameOriginPublic),
                 ("/join/assets/{*path}", RouteExposure::SameOriginPublic,),
-                ("/pair/assets/{*path}", RouteExposure::Private),
+                ("/pair/assets/{*path}", RouteExposure::SameOriginPublic),
                 ("/assets/{*path}", RouteExposure::SameOriginPublic),
             ]
         );

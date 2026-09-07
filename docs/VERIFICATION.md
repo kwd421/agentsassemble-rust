@@ -7784,3 +7784,19 @@ and remaining pairing-integration limits as the launch entry apply.
 - Server/persistence Clippy with all targets/features and mandatory architecture,
   source growth, policy, format, diff and artifact checks pass. No new timer or task
   is introduced. Public pairing HTTP and packaged flow acceptance remain pending.
+
+### Phase 5 operator pairing HTTP boundary (2026-09-08)
+
+- Native one-use operator requests bind creation/revocation to the current exact
+  local manager. The ready-ingress owner supplies the canonical public URL.
+- Public redemption checks Origin and browser device credentials; a distinct paired
+  bearer retains its persistence provenance through socket exchange and departure.
+- TCP integration passes stale room UID rejection, missing device and foreign Origin
+  rejection, same-device retry stability, foreign-device redemption/exchange rejection,
+  active socket revocation and rejection of post-revocation reuse.
+- Existing human socket lifecycle and HTTP/WebSocket departure targets pass. The
+  static `/pair` exposure map is updated with the route owner; new API descriptors
+  use the existing shared ingress/product inventory.
+- Server all-target/all-feature Clippy passes. No provider runs or new background
+  work; only bounded grant rows and existing ticket capacity are used. Native pairing
+  UI, remaining paired HTTP room surfaces and packaged acceptance remain pending.

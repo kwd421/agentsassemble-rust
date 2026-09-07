@@ -203,10 +203,8 @@ before checking capacity; revoked consumed records remain until session expiry s
 retry cannot revive them. There is no background task. Current manager resolution
 loads the membership once and shares its bootstrap/profile proof with the principal
 projection. Queued room mutations accept persistence-issued paired provenance and
-revalidate it in their transaction. No paired public route is enabled by this storage
-slice: ready ingress validation, exact revocation publication, remaining privileged
-command owners, departure and frontend connection still
-must be completed before remote operator dispatch is enabled.
+revalidate it in their transaction. Public HTTP and socket admission are connected
+below; frontend management and packaged acceptance remain required.
 
 Stopped creation, stopped-profile selection/configuration, create/start inspection,
 preparation and pre-provider approval now preserve the same request provenance.
@@ -243,8 +241,8 @@ shortcut is unavailable to room sessions.
 Paired departure revokes only that session. It preserves the host membership and
 other paired devices, records an `operator_session_ended` event without device or
 credential data, and publishes the exact revocation through the existing channel.
-HTTP/socket admission still constructs only ordinary human sessions until pairing
-transport is connected; internal runtime proof is not packaged pairing acceptance.
+HTTP/socket admission retains the exact session variant; internal runtime proof
+is not packaged pairing acceptance.
 
 The public socket grant now retains `RoomSessionAuthorization` through one-use
 consumption, subscription, command dispatch and outbound revalidation. Human and
@@ -252,5 +250,21 @@ paired variants share the existing bounded grant partition, absolute session exp
 and exact revocation stream; neither enters the local observer branch. Vote-summary
 reads resolve the same session authority inside their read transaction. Socket
 integration proves paired departure acknowledges once, preserves native host membership,
-and prevents a previously issued ticket from reviving the ended session. Public HTTP
-pairing issuance/redemption and packaged acceptance remain pending.
+and prevents a previously issued ticket from reviving the ended session.
+
+### Operator pairing HTTP boundary
+
+The native host creates/revokes pairings using the existing one-use server-operator
+HTTP credential, then resolves the exact requested server, authority lineage, room
+and room UID at the local manager owner. Creation requires ready public ingress and
+returns a 32-byte CSPRNG grant in a `/pair` URL; only its fingerprint is stored.
+The public redemption route requires that ready canonical HTTPS Origin and the
+canonical browser device credential. Same-device retries retain the durable bearer.
+The `/pair` entry and assets are now same-origin public; creation/revocation stay private.
+
+Socket-ticket exchange and departure dispatch by credential prefix without retrying
+another authority domain. Paired credentials require current device and ready Origin;
+ordinary human admission remains with its existing owner. Revocation commits before
+notifying existing room subscribers, without creating another task or timer. Paired
+sessions cannot obtain account or native server authority. The remaining HTTP room
+surfaces and native pairing UI must be connected before packaged phase acceptance.

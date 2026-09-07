@@ -450,7 +450,7 @@ async fn resolve_local_room_user(
         .map_err(map_room_identity_error)
 }
 
-async fn resolve_local_room_manager(
+pub(crate) async fn resolve_local_room_manager(
     state: &AppState,
     requested: &ManagerRoomAuthorityRequest,
 ) -> Result<agentsassemble_persistence::LocalRoomManagerAuthority, TicketIssueError> {
