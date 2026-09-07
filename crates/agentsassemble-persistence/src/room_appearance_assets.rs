@@ -12,7 +12,8 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    LocalRoomManagerAuthority, PersistenceError, RoomSessionAuthorization, SqliteStore,
+    LocalRoomManagerAuthority, PersistenceError, RoomManagerAssetAuthority,
+    RoomSessionAuthorization, SqliteStore,
     asset_storage::enforce_storage_replacement,
     raster_assets::{prepare_raster, sanitize_filename, validate_stored_raster},
     room_user_identity::{
@@ -48,7 +49,7 @@ impl SqliteStore {
     /// capacity, or invalid durable state.
     pub async fn store_pending_room_appearance_asset(
         &self,
-        authority: &LocalRoomManagerAuthority,
+        authority: &RoomManagerAssetAuthority,
         filename: &str,
         content_type: &str,
         content: Vec<u8>,
@@ -56,7 +57,7 @@ impl SqliteStore {
         let (canonical, size) = prepare_raster(filename, content_type, content).await?;
         let now = Utc::now();
         let mut transaction = self.pool.begin().await?;
-        let manager = require_exact_local_room_manager(&mut transaction, authority).await?;
+        let manager = authority.resolve(&mut transaction).await?;
         delete_expired_pending(&mut transaction, now.timestamp()).await?;
         enforce_storage_replacement(&mut transaction, None, size).await?;
         let asset_id = format!("{ROOM_APPEARANCE_ASSET_PREFIX}{}", Uuid::new_v4().simple());

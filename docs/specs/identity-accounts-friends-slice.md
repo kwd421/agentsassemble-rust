@@ -331,3 +331,21 @@ and invitation creation retain their separate host boundary.
 This presentation adds no credential, storage, timer or retry owner. Room/agent
 image upload and remote lifecycle HTTP controls still require their complete owner
 connection, followed by packaged desktop/mobile verification before phase closure.
+
+### Paired room-owned image writes
+
+Existing agent-avatar and room-appearance storage accepts explicit local-manager
+or paired-operator provenance. The same committing transaction revalidates the
+exact local manager or durable paired session before modifying bounded pending
+asset custody. Human sessions cannot upload agent avatars or room appearance;
+paired sessions cannot select the account-profile upload purpose. Existing raster
+normalization, storage limits, expiry, replacement and binding owners are unchanged.
+No pending-image public read, native credential conversion or new route is needed.
+
+Both browser upload callers carry the actual paired bearer and device. Agent avatar
+binding uses the existing projection-bound profile command. A room-image upload
+retired by a device/session change cannot bind its result. Remote room appearance
+is presented after the canonical settings commit, when the image is bound and its
+existing remote read is authorized. Local pending-preview behavior is preserved.
+No new background task, retry, timer or persistent state is added. Remote lifecycle
+HTTP controls and packaged whole-phase acceptance remain outstanding.

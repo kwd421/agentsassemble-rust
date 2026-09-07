@@ -143,7 +143,14 @@ async fn upload_attachment(
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let (authority, prejoin_authority) = if request.headers().contains_key(header::AUTHORIZATION) {
         (
-            Some(resolve_attachment_upload_authority(&state, request.headers()).await?),
+            Some(
+                resolve_attachment_upload_authority(
+                    &state,
+                    request.headers(),
+                    request.extensions().get(),
+                )
+                .await?,
+            ),
             None,
         )
     } else {
@@ -511,7 +518,7 @@ enum ProfileAuthority {
 
 enum AttachmentUploadAuthority {
     Profile(ProfileAuthority),
-    Appearance(agentsassemble_persistence::LocalRoomManagerAuthority),
+    Appearance(agentsassemble_persistence::RoomManagerAssetAuthority),
 }
 
 enum AppearanceReadAuthority {
@@ -591,17 +598,27 @@ async fn resolve_message_attachment_read_authority(
 async fn resolve_attachment_upload_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
 ) -> Result<AttachmentUploadAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, credential).await {
-        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            return Ok(AttachmentUploadAuthority::Profile(
-                ProfileAuthority::HumanSession(authorization),
-            ));
+    match resolve_room_session_bearer(state, headers, origin, credential).await {
+        Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
+            return Ok(match *authorization {
+                agentsassemble_persistence::RoomSessionAuthorization::Human(session) => {
+                    AttachmentUploadAuthority::Profile(ProfileAuthority::HumanSession(session))
+                }
+                agentsassemble_persistence::RoomSessionAuthorization::Operator(session) => {
+                    AttachmentUploadAuthority::Appearance(
+                        agentsassemble_persistence::RoomManagerAssetAuthority::Operator(Box::new(
+                            session,
+                        )),
+                    )
+                }
+            });
         }
-        Ok(HumanSessionBearerResolution::Other) => {}
-        Err(HumanSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Persistence(error)) => return Err(error.into()),
+        Ok(RoomSessionBearerResolution::Other) => {}
+        Err(RoomSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
     }
     match state
         .tickets
@@ -613,7 +630,9 @@ async fn resolve_attachment_upload_authority(
             profile_authority(profile).map(AttachmentUploadAuthority::Profile)
         }
         ConsumedAttachmentUploadTicket::Appearance(authority) => {
-            Ok(AttachmentUploadAuthority::Appearance(authority))
+            Ok(AttachmentUploadAuthority::Appearance(
+                agentsassemble_persistence::RoomManagerAssetAuthority::Local(authority),
+            ))
         }
     }
 }

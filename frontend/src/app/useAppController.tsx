@@ -282,8 +282,12 @@ export function useAppController(deviceToken: string, clientId: string) {
     settingsStateFor: roomSettings.settingsStateFor,
     localAuthorityCurrent: managerAuthorityCurrent,
     resolveLocalManager: resolveManagerRoomAuthority,
-    bindUploadedReference: (room, slot, url) => roomSettings.updateAppearance(room,
-      slot === "banner" ? { bannerImage: url, bannerPreset: "custom" } : { iconImage: url }),
+    bindUploadedReference: (room, slot, url) => {
+      const appearance = slot === "banner" ? { bannerImage: url, bannerPreset: "custom" as const } : { iconImage: url };
+      return room.roomOrigin === "remote_server"
+        ? roomSettings.persist(room, { appearance })
+        : roomSettings.updateAppearance(room, appearance);
+    },
   });
   const roomAppearances = roomAppearanceAssets.appearances;
   const roomInvite = useRoomInviteController({
@@ -332,15 +336,17 @@ export function useAppController(deviceToken: string, clientId: string) {
     if (guestLocked && !canManageActiveRoom) setSettingsModal(null);
   }, [canControlActiveAgents, canManageActiveRoom, guestLocked]);
   const saveAgentAvatar = useCallback(async (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => {
-    if (!managerAuthorityCurrent || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
+    if ((!managerAuthorityCurrent && !(guestLocked && canControlActiveAgents)) || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
       throw new Error("현재 방의 에이전트 프로필 업로드 권위를 사용할 수 없습니다.");
     }
-    const authority = resolveManagerRoomAuthority(activeRoom.id);
+    const authority = guestLocked
+      ? { kind: "remote" as const, sessionToken: admittedSessionToken, deviceToken }
+      : { kind: "local" as const, manager: resolveManagerRoomAuthority(activeRoom.id) };
     const avatarUrl = await uploadAgentAvatar(file, authority, session.session_id, signal);
     signal.throwIfAborted();
     await sendAgentProfileUpdate(session, { display_name: displayName, avatar_image_url: avatarUrl });
   }, [managerAuthorityCurrent, activeOperationalMeetingId, roomSocket, resolveManagerRoomAuthority,
-    activeRoom.id, sendAgentProfileUpdate]);
+    activeRoom.id, sendAgentProfileUpdate, guestLocked, canControlActiveAgents, admittedSessionToken, deviceToken]);
   useDismissMenus(roomMenu, channelMenu, setRoomMenu, setChannelMenu);
   const activeChannelSettings = roomSettings.channelSettingsFor(activeRoom);
   const { roomHttpAuthority, roomMessageSearch } = useAppMessageSearch({
@@ -586,7 +592,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
-    saveAgentAvatar: managerAuthorityCurrent ? saveAgentAvatar : undefined,
+    saveAgentAvatar: canControlActiveAgents && (managerAuthorityCurrent || guestLocked) ? saveAgentAvatar : undefined,
     scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate,
     sendAgentControl, sendParticipantMute, sendParticipantRemove, setAdminOpen,
     setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery,

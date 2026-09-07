@@ -1,3 +1,8 @@
+use crate::room_session_http_authority::{
+    RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
+};
+use agentsassemble_persistence::{RoomManagerAssetAuthority, RoomSessionAuthorization};
+
 use super::{
     AppState, EncodedAttachmentUpload, Json, MAX_BASE64_UPLOAD_BODY_BYTES, Path, ProfileHttpError,
     Request, Response, State, attachment_response, bearer_credential, decode_attachment_content,
@@ -10,11 +15,30 @@ pub(super) async fn upload(
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let token = bearer_credential(request.headers()).ok_or_else(ProfileHttpError::unauthorized)?;
-    let authority = state
-        .tickets
-        .consume_agent_avatar_upload(token, &session_id)
-        .await
-        .map_err(|_| ProfileHttpError::unauthorized())?;
+    let authority = match resolve_room_session_bearer(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        token,
+    )
+    .await
+    {
+        Ok(RoomSessionBearerResolution::Authorized(session)) => match *session {
+            RoomSessionAuthorization::Operator(session) => {
+                RoomManagerAssetAuthority::Operator(Box::new(session))
+            }
+            RoomSessionAuthorization::Human(_) => return Err(ProfileHttpError::unauthorized()),
+        },
+        Ok(RoomSessionBearerResolution::Other) => RoomManagerAssetAuthority::Local(
+            state
+                .tickets
+                .consume_agent_avatar_upload(token, &session_id)
+                .await
+                .map_err(|_| ProfileHttpError::unauthorized())?,
+        ),
+        Err(RoomSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
+    };
     let payload: EncodedAttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;

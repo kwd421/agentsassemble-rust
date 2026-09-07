@@ -7882,3 +7882,24 @@ existing canonical isolation cases cover device/session projection retirement.
 TypeScript, Vite and unchanged approved CSS cascade passed (193ms Vite; 867.80 kB
 main JS, 261.97 kB gzip). No new task, timer, storage or retry. Remote image uploads,
 lifecycle HTTP connection and direct packaged whole-phase acceptance remain pending.
+
+## Phase 5 paired room-owned image writes (2026-09-08)
+
+Agent-avatar and room-appearance uploads retain local/paired provenance through
+storage and keep account-profile upload separate. Paired device headers reach both
+HTTP callers; device change retires a pending room-image bind. Remote appearance
+uses the confirmed settings projection instead of fetching a pending asset.
+
+- Existing avatar custody/restart/failure plus paired revocation: 3 tests passed;
+  existing appearance storage/binding/schema cases: 6 passed (0.08s each target).
+- HTTP pairing, ordinary profile and human appearance boundaries: 5 passed.
+  The pairing case verifies accepted appearance upload and wrong-device/revoked
+  rejection; paired agent asset storage is covered at its committing boundary.
+- Four frontend API/appearance/projection suites: 29 passed (1.25s).
+- TypeScript/Vite/unchanged CSS passed; server/persistence Clippy all targets and
+  features passed. Structure, 19 policy tests, format and artifact gates passed.
+
+Clippy initially caught import placement and test formatting growth; corrected
+without changing limits or adding exemptions. No new task, timer or storage owner.
+Direct paired packaged image and lifecycle proof remains part of pending Phase 5
+acceptance; the local tests do not establish that end-to-end result.

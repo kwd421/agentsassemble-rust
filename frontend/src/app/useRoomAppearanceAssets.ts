@@ -353,10 +353,13 @@ export function useRoomAppearanceAssets({
       uploadGenerationsRef.current.set(key, generation);
       const isCurrent = () =>
         uploadOwnerActiveRef.current &&
-        uploadGenerationsRef.current.get(key) === generation;
-      const manager = resolveLocalManager(room.id);
+        uploadGenerationsRef.current.get(key) === generation &&
+        (room.roomOrigin !== "remote_server" || remoteCredentialRef.current.revision === remoteCredentialRevision);
+      const authority = room.roomOrigin === "remote_server"
+        ? { kind: "remote" as const, sessionToken: remoteSessionToken, deviceToken: remoteDeviceToken }
+        : { kind: "local" as const, manager: resolveLocalManager(room.id) };
       try {
-        const canonicalUrl = (await uploadRoomAppearance(file, manager)).reference.url;
+        const canonicalUrl = (await uploadRoomAppearance(file, authority)).reference.url;
         if (!isCurrent()) return false;
         await bindUploadedReference(room, slot, canonicalUrl);
         return isCurrent();
@@ -367,7 +370,7 @@ export function useRoomAppearanceAssets({
         if (isCurrent()) uploadGenerationsRef.current.delete(key);
       }
     },
-    [bindUploadedReference, resolveLocalManager]
+    [bindUploadedReference, resolveLocalManager, remoteSessionToken, remoteDeviceToken, remoteCredentialRevision]
   );
 
   return { appearances, appearanceFor, errorFor, retry, upload };

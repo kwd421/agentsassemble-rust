@@ -14,6 +14,7 @@ import {
   roomAppearanceAssetReference,
   type RoomAppearanceAssetReference,
 } from "../lib/roomAppearanceAsset";
+import type { RoomAssetUploadAuthority } from "../lib/roomAssetUploadAuthority";
 import { strictPrivatePngBlob } from "./safeRaster";
 
 export type RoomAppearanceReadAuthority =
@@ -139,16 +140,20 @@ async function fetchRemoteAppearance(
 
 export async function uploadRoomAppearance(
   file: File,
-  manager: DesktopManagerRoomAuthority
+  authority: RoomAssetUploadAuthority
 ): Promise<UploadedRoomAppearance> {
   const dataBase64 = await fileToBase64(file);
-  const grant = await requestDesktopAppearanceUploadTicket(manager);
-  const response = await fetch(`${grant.http_base_url}/api/attachments`, {
-    cache: "no-store",
+  if (authority.kind === "remote" && (!authority.sessionToken || !authority.deviceToken)) {
+    throw new Error("현재 기기의 방 세션 권위를 사용할 수 없습니다.");
+  }
+  const grant = authority.kind === "local" ? await requestDesktopAppearanceUploadTicket(authority.manager) : null;
+  const response = await fetch(`${authority.kind === "local" ? grant!.http_base_url : ""}/api/attachments`, {
+    cache: "no-store", redirect: "error",
     method: "POST",
     headers: new Headers({
-      Authorization: `Bearer ${grant.ticket}`,
+      Authorization: `Bearer ${authority.kind === "remote" ? authority.sessionToken : grant!.ticket}`,
       "Content-Type": "application/json",
+      ...(authority.kind === "remote" ? { "X-Device-Token": authority.deviceToken } : {}),
     }),
     body: JSON.stringify({
       purpose: "room_appearance",

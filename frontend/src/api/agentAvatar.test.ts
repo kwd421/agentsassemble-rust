@@ -25,7 +25,7 @@ it("uploads through the exact Agent ticket and keeps human reference parsing dis
   const fetchMock = vi.fn().mockResolvedValue(response(metadata));
   vi.stubGlobal("fetch", fetchMock);
   const controller = new AbortController();
-  await expect(uploadAgentAvatar(file(), manager, "agent-one", controller.signal)).resolves.toBe(url);
+  await expect(uploadAgentAvatar(file(), { kind: "local", manager }, "agent-one", controller.signal)).resolves.toBe(url);
   expect(bridge.upload).toHaveBeenCalledWith(manager, "agent-one");
   expect(fetchMock).toHaveBeenCalledWith(`${origin}/api/agent-avatars/upload/agent-one`, expect.objectContaining({
     redirect: "error", signal: controller.signal, method: "POST", cache: "no-store",
@@ -40,10 +40,21 @@ it("uploads through the exact Agent ticket and keeps human reference parsing dis
 it("rejects foreign metadata and cancellation before any upload", async () => {
   const fetchMock = vi.fn().mockResolvedValue(response({ ...metadata, url: "/api/attachments/human-avatar?view=1" }));
   vi.stubGlobal("fetch", fetchMock);
-  await expect(uploadAgentAvatar(file(), manager, "agent-one", new AbortController().signal)).rejects.toThrow();
+  await expect(uploadAgentAvatar(file(), { kind: "local", manager }, "agent-one", new AbortController().signal)).rejects.toThrow();
   const controller = new AbortController();
   controller.abort();
-  await expect(uploadAgentAvatar(file(), manager, "agent-one", controller.signal)).rejects.toThrow();
+  await expect(uploadAgentAvatar(file(), { kind: "local", manager }, "agent-one", controller.signal)).rejects.toThrow();
   expect(fetchMock).toHaveBeenCalledOnce();
   expect(bridge.upload).toHaveBeenCalledOnce();
+});
+
+it("uploads the paired session and exact device without requesting native authority", async () => {
+  const fetchMock = vi.fn().mockResolvedValue(response(metadata));
+  vi.stubGlobal("fetch", fetchMock);
+  await expect(uploadAgentAvatar(file(), { kind: "remote", sessionToken: "aops1.paired", deviceToken: "paired-device" },
+    "agent-one", new AbortController().signal)).resolves.toBe(url);
+  expect(bridge.upload).not.toHaveBeenCalled();
+  expect(fetchMock).toHaveBeenCalledWith("/api/agent-avatars/upload/agent-one", expect.objectContaining({
+    headers: { Authorization: "Bearer aops1.paired", "Content-Type": "application/json", "X-Device-Token": "paired-device" },
+  }));
 });

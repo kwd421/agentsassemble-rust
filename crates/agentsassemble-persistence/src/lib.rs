@@ -185,7 +185,9 @@ pub use room_subscription::RoomCatchUp;
 pub use room_turns::{
     AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority, RoomCommandMutation,
 };
-pub use room_user_identity::{LocalRoomManagerAuthority, RoomUserIdentity};
+pub use room_user_identity::{
+    LocalRoomManagerAuthority, RoomManagerAssetAuthority, RoomUserIdentity,
+};
 pub use room_write_budget::command_size as room_write_command_size;
 pub use sqlite::{
     AgentLaunchFailureCommit, CommandOutcome, PersistenceError, RoomSnapshotData, SqliteStore,

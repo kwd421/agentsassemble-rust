@@ -14,7 +14,12 @@ use crate::{LocalRoomManagerAuthority, PersistenceError, SqliteStore};
 async fn pending_room_asset_is_canonical_private_custody_until_expiry() {
     let (store, authority, _principal) = fixture().await;
     let stored = store
-        .store_pending_room_appearance_asset(&authority, "banner.webp", "image/png", valid_png())
+        .store_pending_room_appearance_asset(
+            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            "banner.webp",
+            "image/png",
+            valid_png(),
+        )
         .await
         .unwrap_or_else(|error| panic!("store room appearance: {error}"));
     assert!(stored.id.starts_with("ra_"));
@@ -79,7 +84,7 @@ async fn pending_room_asset_revalidates_exact_manager_and_shared_raster_safety()
     assert_rejected_code(
         store
             .store_pending_room_appearance_asset(
-                &authority,
+                &crate::RoomManagerAssetAuthority::Local(authority.clone()),
                 "active.html",
                 "image/png",
                 b"<html>active</html>".to_vec(),
@@ -89,7 +94,12 @@ async fn pending_room_asset_revalidates_exact_manager_and_shared_raster_safety()
     );
 
     let stored = store
-        .store_pending_room_appearance_asset(&authority, "icon.png", "image/png", valid_png())
+        .store_pending_room_appearance_asset(
+            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            "icon.png",
+            "image/png",
+            valid_png(),
+        )
         .await
         .unwrap_or_else(|error| panic!("store valid appearance: {error}"));
     let mut stale = authority;
@@ -118,7 +128,12 @@ async fn pending_room_asset_revalidates_exact_manager_and_shared_raster_safety()
 async fn settings_bind_replace_clear_and_rollback_room_owned_assets_atomically() {
     let (store, authority, principal) = fixture().await;
     let shared = store
-        .store_pending_room_appearance_asset(&authority, "shared.png", "image/png", valid_png())
+        .store_pending_room_appearance_asset(
+            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            "shared.png",
+            "image/png",
+            valid_png(),
+        )
         .await
         .unwrap_or_else(|error| panic!("store shared appearance: {error}"));
     let initial = public_settings(&RoomSettings::defaults("General"))
@@ -140,7 +155,7 @@ async fn settings_bind_replace_clear_and_rollback_room_owned_assets_atomically()
 
     let replacement = store
         .store_pending_room_appearance_asset(
-            &authority,
+            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
             "replacement.png",
             "image/png",
             valid_png(),
@@ -174,7 +189,12 @@ async fn settings_bind_replace_clear_and_rollback_room_owned_assets_atomically()
     assert_bound(&store, &replacement.id).await;
 
     let rollback = store
-        .store_pending_room_appearance_asset(&authority, "rollback.png", "image/png", valid_png())
+        .store_pending_room_appearance_asset(
+            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            "rollback.png",
+            "image/png",
+            valid_png(),
+        )
         .await
         .unwrap_or_else(|error| panic!("store rollback appearance: {error}"));
     sqlx::query(
@@ -207,7 +227,12 @@ async fn settings_bind_replace_clear_and_rollback_room_owned_assets_atomically()
 async fn settings_reject_expired_pending_without_partial_reference_or_promotion() {
     let (store, authority, principal) = fixture().await;
     let expired = store
-        .store_pending_room_appearance_asset(&authority, "expired.png", "image/png", valid_png())
+        .store_pending_room_appearance_asset(
+            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            "expired.png",
+            "image/png",
+            valid_png(),
+        )
         .await
         .unwrap_or_else(|error| panic!("store expiring appearance: {error}"));
     sqlx::query("UPDATE room_appearance_assets SET expires_at = 0 WHERE asset_id = ?")
@@ -239,7 +264,12 @@ async fn settings_reject_expired_pending_without_partial_reference_or_promotion(
 async fn bound_read_requires_current_membership_reference_and_integral_bytes() {
     let (store, authority, principal) = fixture().await;
     let stored = store
-        .store_pending_room_appearance_asset(&authority, "bound.png", "image/png", valid_png())
+        .store_pending_room_appearance_asset(
+            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            "bound.png",
+            "image/png",
+            valid_png(),
+        )
         .await
         .unwrap_or_else(|error| panic!("store bound-read appearance: {error}"));
     let revision = public_settings(&RoomSettings::defaults("General"))

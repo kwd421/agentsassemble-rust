@@ -26,6 +26,36 @@ pub struct LocalRoomManagerAuthority {
     pub manager: RoomUserIdentity,
 }
 
+/// Provenance for room-owned image mutation, without granting native host authority.
+#[derive(Clone)]
+pub enum RoomManagerAssetAuthority {
+    Local(LocalRoomManagerAuthority),
+    Operator(Box<crate::OperatorSessionAuthorization>),
+}
+
+impl RoomManagerAssetAuthority {
+    pub(crate) async fn resolve(
+        &self,
+        transaction: &mut Transaction<'_, Sqlite>,
+    ) -> Result<RoomUserIdentity, PersistenceError> {
+        match self {
+            Self::Local(authority) => {
+                require_exact_local_room_manager(transaction, authority).await
+            }
+            Self::Operator(session) => {
+                let principal = crate::RoomMutationAuthority::OperatorSession(session)
+                    .resolve(transaction)
+                    .await?;
+                Ok(RoomUserIdentity {
+                    room_id: principal.room_id.clone(),
+                    user_id: principal.principal_id.clone(),
+                    participant_id: principal.participant_id.clone(),
+                })
+            }
+        }
+    }
+}
+
 impl SqliteStore {
     /// Resolves one current room human through the canonical profile binding.
     ///

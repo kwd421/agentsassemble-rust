@@ -358,7 +358,7 @@ describe("room appearance object URL lifecycle", () => {
 
     await expect(hook.result.current.upload(room, file, "banner")).resolves.toBe(true);
 
-    expect(api.upload).toHaveBeenCalledWith(file, manager);
+    expect(api.upload).toHaveBeenCalledWith(file, { kind: "local", manager });
     expect(bindUploadedReference).toHaveBeenCalledWith(room, "banner", banner);
   });
 
@@ -383,6 +383,27 @@ describe("room appearance object URL lifecycle", () => {
 
     expect(bindUploadedReference).toHaveBeenCalledOnce();
     expect(bindUploadedReference).toHaveBeenCalledWith(room, "banner", icon);
+  });
+
+  it("retires a paired upload before binding when the browser device changes", async () => {
+    const pending = deferred<{ reference: { assetId: string; url: string } }>();
+    api.upload.mockReturnValueOnce(pending.promise);
+    const remoteRoom = { ...room, roomOrigin: "remote_server" as const };
+    const hook = renderHook(({ device }) => useRoomAppearanceAssets({
+      rooms: [remoteRoom], activeRoomId: room.id, activeRemoteRoomId: room.id,
+      remoteSessionToken: "aops1.paired", remoteDeviceToken: device,
+      canonicalAppearanceFor: () => ({ bannerPreset: "default", notifications: "mentions", inviteScope: "room" }),
+      settingsStateFor: () => ({ status: "ready" }), localAuthorityCurrent: false,
+      resolveLocalManager, bindUploadedReference,
+    }), { initialProps: { device: "first-device" } });
+    const file = new File(["png"], "banner.png", { type: "image/png" });
+    const upload = hook.result.current.upload(remoteRoom, file, "banner");
+    expect(api.upload).toHaveBeenCalledWith(file, { kind: "remote", sessionToken: "aops1.paired", deviceToken: "first-device" });
+    expect(resolveLocalManager).not.toHaveBeenCalled();
+    hook.rerender({ device: "second-device" });
+    pending.resolve({ reference: { assetId: "pending", url: banner } });
+    await expect(upload).resolves.toBe(false);
+    expect(bindUploadedReference).not.toHaveBeenCalled();
   });
 
   it("does not bind an upload after its appearance owner unmounts", async () => {

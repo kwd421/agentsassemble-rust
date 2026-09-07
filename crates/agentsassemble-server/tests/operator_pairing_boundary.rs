@@ -194,6 +194,11 @@ async fn paired_room_http(
             "/api/message-attachments",
             json!({"filename": "paired.txt", "content_type": "text/plain", "data_base64": "cGFpcmVk"}),
         ),
+        (
+            "/api/attachments",
+            json!({"purpose": "room_appearance", "filename": "paired.png", "content_type": "image/png",
+                "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="}),
+        ),
     ] {
         let write = public(client.post(format!("{base}{path}")))
             .header("x-device-token", device)

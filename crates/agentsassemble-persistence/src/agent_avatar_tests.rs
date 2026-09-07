@@ -28,12 +28,13 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
             LOCAL_OPERATOR_PARTICIPANT_ID,
         )
         .await?;
+    let upload = crate::RoomManagerAssetAuthority::Local(authority.clone());
     let human = bound_human_avatar(&store).await?;
     let appearance = store
-        .store_pending_room_appearance_asset(&authority, "room.png", "image/png", png()?)
+        .store_pending_room_appearance_asset(&upload, "room.png", "image/png", png()?)
         .await?;
     let first = store
-        .store_agent_avatar(&authority, AGENT_ID, "first.png", "image/png", png()?)
+        .store_agent_avatar(&upload, AGENT_ID, "first.png", "image/png", png()?)
         .await?;
     assert!(store.agent_avatar(&first.id).await.is_err());
     let bind = json!({"agent_id": AGENT_ID, "avatar_image_url": first.url});
@@ -43,10 +44,10 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
     assert_eq!(outcome.result["participant"]["avatar_image_url"], first.url);
     assert_eq!(store.agent_avatar(&first.id).await?.metadata, first);
     let discarded = store
-        .store_agent_avatar(&authority, AGENT_ID, "discarded.png", "image/png", png()?)
+        .store_agent_avatar(&upload, AGENT_ID, "discarded.png", "image/png", png()?)
         .await?;
     let next = store
-        .store_agent_avatar(&authority, AGENT_ID, "next.png", "image/png", png()?)
+        .store_agent_avatar(&upload, AGENT_ID, "next.png", "image/png", png()?)
         .await?;
     assert!(
         store
@@ -127,8 +128,10 @@ async fn agent_avatar_rejects_stale_authority_expired_and_other_session_referenc
             LOCAL_OPERATOR_PARTICIPANT_ID,
         )
         .await?;
+    let upload = crate::RoomManagerAssetAuthority::Local(authority.clone());
     let mut stale = authority.clone();
     stale.room_uid = uuid::Uuid::new_v4();
+    let stale = crate::RoomManagerAssetAuthority::Local(stale);
     assert!(
         store
             .store_agent_avatar(&stale, AGENT_ID, "image.png", "image/png", png()?)
@@ -137,18 +140,18 @@ async fn agent_avatar_rejects_stale_authority_expired_and_other_session_referenc
     );
     assert!(
         store
-            .store_agent_avatar(&authority, "absent", "image.png", "image/png", png()?)
+            .store_agent_avatar(&upload, "absent", "image.png", "image/png", png()?)
             .await
             .is_err()
     );
     assert!(
         store
-            .store_agent_avatar(&authority, AGENT_ID, "image.png", "image/png", vec![0])
+            .store_agent_avatar(&upload, AGENT_ID, "image.png", "image/png", vec![0])
             .await
             .is_err()
     );
     let expired = store
-        .store_agent_avatar(&authority, AGENT_ID, "expired.png", "image/png", png()?)
+        .store_agent_avatar(&upload, AGENT_ID, "expired.png", "image/png", png()?)
         .await?;
     sqlx::query("UPDATE agent_avatar_assets SET expires_at = 1 WHERE asset_id = ?")
         .bind(&expired.id)
@@ -177,13 +180,7 @@ async fn agent_avatar_rejects_stale_authority_expired_and_other_session_referenc
         .bind(serde_json::to_string(&participant)?).execute(&mut *transaction).await?;
     transaction.commit().await?;
     let foreign = store
-        .store_agent_avatar(
-            &authority,
-            "other-agent",
-            "foreign.png",
-            "image/png",
-            png()?,
-        )
+        .store_agent_avatar(&upload, "other-agent", "foreign.png", "image/png", png()?)
         .await?;
     assert!(
         store
@@ -232,4 +229,54 @@ async fn bound_human_avatar(
         )
         .await?;
     Ok(human)
+}
+
+#[tokio::test]
+async fn paired_image_uploads_revalidate_revocation_before_storage()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, _, _directory) = fixture().await;
+    let manager = store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await?;
+    let origin = "https://paired-assets.example.test";
+    let now = chrono::Utc::now();
+    let grant = store
+        .create_operator_pairing(&manager, &[71; 32], origin, now)
+        .await?;
+    let paired = store
+        .redeem_operator_pairing(&[71; 32], &[72; 32], origin, now)
+        .await?;
+    let authority = crate::RoomManagerAssetAuthority::Operator(Box::new(paired.authorization));
+    store
+        .store_agent_avatar(&authority, AGENT_ID, "agent.png", "image/png", png()?)
+        .await?;
+    store
+        .store_pending_room_appearance_asset(&authority, "room.png", "image/png", png()?)
+        .await?;
+    store
+        .revoke_operator_pairing(&manager, grant.pairing_id)
+        .await?;
+    for result in [
+        store
+            .store_agent_avatar(&authority, AGENT_ID, "agent.png", "image/png", png()?)
+            .await
+            .map(|_| ()),
+        store
+            .store_pending_room_appearance_asset(&authority, "room.png", "image/png", png()?)
+            .await
+            .map(|_| ()),
+    ] {
+        assert!(matches!(
+            result,
+            Err(crate::PersistenceError::CommandRejected {
+                code: "session_revoked",
+                ..
+            })
+        ));
+    }
+    Ok(())
 }

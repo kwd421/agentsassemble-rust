@@ -87,7 +87,7 @@ describe("room appearance HTTP contract", () => {
 
     const uploaded = await uploadRoomAppearance(
       new File(["png"], "banner.png", { type: "image/png" }),
-      manager
+      { kind: "local", manager }
     );
 
     expect(uploaded.reference).toEqual({ assetId, url: reference });
@@ -104,6 +104,20 @@ describe("room appearance HTTP contract", () => {
       content_type: "image/png",
       data_base64: "cG5n",
     });
+  });
+
+  it("uploads paired appearance with its exact device and no native ticket", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ attachment: {
+      id: assetId, filename: "banner.png", content_type: "image/png", size: 3, is_image: true, url: reference,
+    } }));
+    vi.stubGlobal("fetch", fetchMock);
+    await uploadRoomAppearance(new File(["png"], "banner.png", { type: "image/png" }),
+      { kind: "remote", sessionToken: "aops1.paired", deviceToken: "paired-device" });
+    expect(bridge.upload).not.toHaveBeenCalled();
+    expect(fetchMock.mock.calls[0][0]).toBe("/api/attachments");
+    const headers = fetchMock.mock.calls[0][1].headers as Headers;
+    expect(headers.get("Authorization")).toBe("Bearer aops1.paired");
+    expect(headers.get("X-Device-Token")).toBe("paired-device");
   });
 
   it("rejects substituted upload metadata instead of accepting a generic attachment", async () => {
@@ -130,7 +144,7 @@ describe("room appearance HTTP contract", () => {
       await expect(
         uploadRoomAppearance(
           new File(["png"], "banner.png", { type: "image/png" }),
-          manager
+          { kind: "local", manager }
         )
       ).rejects.toThrow("응답 계약");
     }
@@ -151,7 +165,7 @@ describe("room appearance HTTP contract", () => {
     await expect(
       uploadRoomAppearance(
         new File(["png"], "banner.png", { type: "image/png" }),
-        manager
+        { kind: "local", manager }
       )
     ).rejects.toThrow("응답 계약");
   });

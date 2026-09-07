@@ -8,12 +8,11 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    LocalRoomManagerAuthority, PersistenceError, SqliteStore,
+    PersistenceError, RoomManagerAssetAuthority, SqliteStore,
     agent_lifecycle::load_session,
     agent_profile::load_profile_target,
     asset_storage::enforce_storage_replacement,
     raster_assets::{prepare_raster, sanitize_filename, validate_stored_raster},
-    room_user_identity::require_exact_local_room_manager,
 };
 
 const PENDING_TTL: Duration = Duration::minutes(15);
@@ -41,7 +40,7 @@ impl SqliteStore {
     /// Rejects stale authority, absent sessions, invalid raster, exhausted storage or corrupt state.
     pub async fn store_agent_avatar(
         &self,
-        authority: &LocalRoomManagerAuthority,
+        authority: &RoomManagerAssetAuthority,
         session_id: &str,
         filename: &str,
         content_type: &str,
@@ -49,7 +48,7 @@ impl SqliteStore {
     ) -> Result<AgentAvatarMetadata, PersistenceError> {
         let (raster, size) = prepare_raster(filename, content_type, content).await?;
         let mut transaction = self.pool.begin().await?;
-        let manager = require_exact_local_room_manager(&mut transaction, authority).await?;
+        let manager = authority.resolve(&mut transaction).await?;
         let (session, _) =
             load_profile_target(&mut transaction, &manager.room_id, session_id).await?;
         let now = Utc::now();

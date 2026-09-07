@@ -1,18 +1,23 @@
 import { fileToBase64, isPrivateNoStoreResponse, responseError } from "./http";
-import { requestDesktopAgentAvatarUploadTicket, type DesktopManagerRoomAuthority } from "../lib/desktopBridge";
+import { requestDesktopAgentAvatarUploadTicket } from "../lib/desktopBridge";
 import { parseAgentAvatarReference } from "../lib/agentAvatarReference";
 import { assertExactKeys, strictRecord } from "../lib/strictJsonContract";
+import type { RoomAssetUploadAuthority } from "../lib/roomAssetUploadAuthority";
 import { MAX_ATTACHMENT_BYTES } from "../types/generated/ASSET_SAFETY_WIRE";
 
-export async function uploadAgentAvatar(file: File, manager: DesktopManagerRoomAuthority,
+export async function uploadAgentAvatar(file: File, authority: RoomAssetUploadAuthority,
   sessionId: string, signal: AbortSignal): Promise<string> {
   if (file.size < 1 || file.size > MAX_ATTACHMENT_BYTES) throw new Error("프로필 사진 크기가 허용 범위를 벗어났습니다.");
   const data = await fileToBase64(file, signal);
-  const grant = await requestDesktopAgentAvatarUploadTicket(manager, sessionId);
+  if (authority.kind === "remote" && (!authority.sessionToken || !authority.deviceToken)) {
+    throw new Error("현재 기기의 방 세션 권위를 사용할 수 없습니다.");
+  }
+  const grant = authority.kind === "local" ? await requestDesktopAgentAvatarUploadTicket(authority.manager, sessionId) : null;
   signal.throwIfAborted();
-  const response = await fetch(`${grant.http_base_url}/api/agent-avatars/upload/${encodeURIComponent(sessionId)}`, {
+  const response = await fetch(`${authority.kind === "local" ? grant!.http_base_url : ""}/api/agent-avatars/upload/${encodeURIComponent(sessionId)}`, {
     method: "POST", cache: "no-store", redirect: "error", signal,
-    headers: { Authorization: `Bearer ${grant.ticket}`, "Content-Type": "application/json" },
+    headers: { Authorization: `Bearer ${authority.kind === "remote" ? authority.sessionToken : grant!.ticket}`, "Content-Type": "application/json",
+      ...(authority.kind === "remote" ? { "X-Device-Token": authority.deviceToken } : {}) },
     body: JSON.stringify({ filename: file.name, content_type: file.type, data_base64: data }),
   });
   if (!response.ok) throw await responseError(response);
