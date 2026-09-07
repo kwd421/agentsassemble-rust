@@ -79,3 +79,65 @@ pub(crate) fn durable_session(
         lifecycle_intent_status: AgentLifecycleIntentStatus::None,
     }
 }
+
+pub(crate) async fn assert_default_tier_selection(
+    provider_id: &str,
+    default_model: String,
+    controls: Vec<agentsassemble_domain::ProviderControl>,
+) {
+    use crate::{catalog::ready_provider, registration, selection::ProviderSelection};
+    use serde_json::json;
+
+    let registration = registration::provider_registration_by_id(provider_id)
+        .unwrap_or_else(|| panic!("registered provider"));
+    let mut provider = registration::loading_provider(registration);
+    provider.executable = std::env::current_exe()
+        .and_then(std::fs::canonicalize)
+        .unwrap_or_else(|error| panic!("resolve test executable: {error}"))
+        .to_string_lossy()
+        .into_owned();
+    provider.executable_identity = crate::filesystem::runtime_executable_identity(
+        &provider.provider_kind,
+        provider.executable.clone(),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("identify test executable: {error:?}"));
+    let provider = ready_provider(provider, default_model, controls);
+    assert!(provider.startable);
+    let catalog = agentsassemble_domain::ProviderCatalog {
+        status: "ready".to_owned(),
+        catalog_revision: "no-fast".to_owned(),
+        discovered_at: String::new(),
+        providers: vec![provider],
+    };
+    let workspace = tempfile::tempdir().unwrap_or_else(|error| panic!("workspace: {error}"));
+    let mut payload = json!({
+        "provider_id": provider_id,
+        "catalog_revision": "no-fast",
+        "display_name": "Default tier",
+        "workspace": workspace.path(),
+    });
+    for tier in [None, Some("default"), Some("fast")] {
+        if let Some(tier) = tier {
+            payload["service_tier"] = json!(tier);
+        }
+        let result =
+            ProviderSelection::from_catalog("room", "operator", "create", &payload, &catalog).await;
+        if tier == Some("fast") {
+            assert_eq!(
+                result
+                    .err()
+                    .unwrap_or_else(|| panic!("unadvertised fast tier must fail"))
+                    .code,
+                "unsupported_control"
+            );
+        } else {
+            assert_eq!(
+                result
+                    .unwrap_or_else(|error| panic!("select default tier: {error}"))
+                    .service_tier,
+                "default"
+            );
+        }
+    }
+}

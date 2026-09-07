@@ -15,3 +15,17 @@ fn catalog_preserves_exact_per_model_relations() {
     assert!(!super::valid_model_id("alias-claude-opus-5"));
     assert!(!super::valid_model_id("claude-opus-5-1-2"));
 }
+
+#[tokio::test]
+async fn catalog_without_fast_models_remains_selectable() {
+    let catalog = super::parse_catalog(
+        r#"{"type":"catalog","models":[{"id":"claude-haiku-4-5","label":"Haiku","efforts":["low","medium"],"fast":false}]}"#,
+    )
+    .unwrap_or_else(|| panic!("parse default-only Claude catalog"));
+    crate::test_support::assert_default_tier_selection(
+        "claude",
+        catalog.default_model.clone(),
+        catalog.controls(),
+    )
+    .await;
+}

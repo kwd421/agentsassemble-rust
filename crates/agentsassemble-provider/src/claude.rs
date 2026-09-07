@@ -124,15 +124,17 @@ impl ClaudeCatalog {
                 &default_effort,
             ),
         ];
+        let mut tiers = vec![option("default", "기본")];
         if self.has_fast {
-            controls.push(control(
-                "service_tier",
-                "응답 속도",
-                "select",
-                vec![option("default", "기본"), option("fast", "Fast")],
-                "default",
-            ));
+            tiers.push(option("fast", "Fast"));
         }
+        controls.push(control(
+            "service_tier",
+            "응답 속도",
+            "select",
+            tiers,
+            "default",
+        ));
         controls.push(permission_control(true));
         controls
     }

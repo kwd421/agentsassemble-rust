@@ -7,9 +7,10 @@ and their whole-phase cross-review are complete. Work now follows the provider-f
 order below. The provider-first ordering has prior manual documentation cross-review;
 the current checkpoint records later findings, not a new approval.
 Phase 1's corrected local contract has Daybreak approval through `cae1f90`. Its
-local exit is complete. Read and triage the already-running Pro answer before
-Phase 2. Subsequent phases require Daybreak only; new Pro review waits until the
-full reimplementation is complete, as owned below.
+completed Pro review of `2ee7fd6` returned C0/H0/M3/L0. The supported findings
+are corrected locally; Daybreak correction approval is pending before Phase 2.
+Subsequent phases require Daybreak only; new Pro review waits until the full
+reimplementation is complete, as owned below.
 Freebuff is excluded; Antigravity moves exclusively to
 Phase 7's externally launched CLI and Room Connector invitation flow. Its removed
 resident-adapter requirement no longer blocks Phase 1, but the external flow remains
@@ -312,9 +313,12 @@ Current execution checkpoint (2026-09-07, Phase 1 local closeout):
 3. Daybreak approved all 133 individual commits, cumulative `5d0a636..cae1f90`,
    final HEAD, and the corrected local Phase 1 contract at C0/H0/M0/L0. This includes
    the Codex native terminal-status correction and the user's one-commit generated-
-   lockfile exception. Phase 1's local exit is complete. Read the already-running
-   Pro answer, address supported findings, and obtain Daybreak approval of any
-   corrections before Phase 2. No new Pro request is made before full
+   lockfile exception. Pro completed its immutable `2ee7fd6` review with C0/H0/M3/L0:
+   default-only model selection, Claude cleanup receipt, and the already-corrected
+   Codex terminal-status finding. The two remaining source defects are corrected
+   locally; obtain Daybreak correction approval before Phase 2. The
+   [correction evidence](VERIFICATION.md#completed-pro-review-corrections-2026-09-07)
+   owns the final disposition. No new Pro request is made before full
    reimplementation. Daybreak reviews each subsequent phase. Final Pro review,
    real-client, and packaged proof remain required at final closeout. Earlier evidence
    remains bounded to its tested revision and flow.

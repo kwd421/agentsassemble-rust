@@ -6845,3 +6845,41 @@ The latest user decision retains Daybreak phase reviews and defers new Pro revie
 until full reimplementation. The running Pro answer remains pending and must be
 read and triaged before Phase 2; supported corrections receive Daybreak review.
 The master plan owns this cadence.
+
+## Completed Pro review corrections (2026-09-07)
+
+The completed Pro review of immutable `2ee7fd6` read all 130 patches and returned
+REVISE, C0/H0/M3/L0. M03 (Codex unsuccessful terminal status) is already corrected
+in `cae1f90` and approved by Daybreak; Pro did not review that later commit.
+M01 is reproduced in the catalog owner: Cursor and Claude advertise default-only
+model relations but omit the default tier control when no fast model exists.
+M02 is reproduced in Claude cleanup: an already-reported protocol failure masks
+confirmed process and portal cleanup and prevents lease release.
+
+Correction scope: publish the existing default tier in both catalogs; keep fast
+restricted to advertised models. Separate Claude turn/protocol rejection from the
+owned resource-stop receipt, retaining fail-closed process and portal cleanup.
+No generic selection fallback, protocol change, lifecycle state, retry, migration,
+or real-provider execution is in scope. Acceptance uses actual catalog selection,
+failed-turn rejection, owned cleanup/lease release, affected tests and mandatory
+gates. Daybreak correction approval is required before Phase 2; no new Pro request.
+The same cleanup fixture reproduced a second reachable failure: retrying stop
+polled the already-completed stderr join handle and panicked. The stop owner now
+uses that handle's completion state before awaiting it again; no new lifecycle
+flag or retry was added. The fixture repeats exact stop before releasing the lease.
+
+Local evidence: all 197 provider tests passed before this repeat-stop extension;
+the final six affected Claude tests, provider all-target/all-feature clippy, format,
+architecture/source-growth, 19 policy/artifact tests and diff checks pass. The two server
+reconciliation release tests pass (exact tombstone release after commit and startup
+confirmed absence). Catalog cases select omitted/default tiers through the real
+`ProviderSelection` owner and reject unadvertised fast. Claude uses a bound local
+protocol fixture, actual guardian custody and RoomPortal, proves failed-turn and
+reuse rejection, then process-tree/lifetime/portal absence and lease removal.
+Windows shares the production result composition but was not executed here.
+
+Cost: default-only catalogs gain one bounded single-option control. Cleanup uses
+its existing shutdown/process/portal operations and completed task state, with no
+new loop, timer, background task, provider probe or external dependency. Real
+providers, packaged flows and new automated security scans were not run.
+Daybreak correction disposition is pending.

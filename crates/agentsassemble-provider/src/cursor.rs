@@ -99,15 +99,17 @@ impl CursorCatalog {
                 "",
             ));
         }
+        let mut tiers = vec![option("default", "기본")];
         if self.has_fast {
-            controls.push(control(
-                "service_tier",
-                "응답 속도",
-                "select",
-                vec![option("default", "기본"), option("fast", "Fast")],
-                "default",
-            ));
+            tiers.push(option("fast", "Fast"));
         }
+        controls.push(control(
+            "service_tier",
+            "응답 속도",
+            "select",
+            tiers,
+            "default",
+        ));
         controls.push(permission_control(false));
         controls
     }
@@ -291,5 +293,17 @@ mod tests {
             .unwrap_or_else(|| panic!("Cursor permission control"));
         assert_eq!(permission.options.len(), 1);
         assert_eq!(permission.options[0].value, "meeting_read_only");
+    }
+
+    #[tokio::test]
+    async fn catalog_without_fast_models_remains_selectable() {
+        let catalog = parse_models("auto - Auto\n")
+            .unwrap_or_else(|| panic!("parse default-only Cursor catalog"));
+        crate::test_support::assert_default_tier_selection(
+            "cursor",
+            catalog.default_model.clone(),
+            catalog.controls(),
+        )
+        .await;
     }
 }

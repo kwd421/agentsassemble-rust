@@ -194,15 +194,19 @@ impl ClaudeSdkRuntime {
     }
 
     pub(crate) async fn stop(&mut self) -> Result<(), DriverError> {
-        let protocol = self.client.shutdown().await;
+        // Protocol failure remains terminal for turns. The stop receipt belongs to
+        // physical custody and the room portal, including after a poisoned client.
+        let _ = self.client.shutdown().await;
         #[cfg(unix)]
         let process = self.process_group.stop().await;
         #[cfg(windows)]
         let process = stop_failed_child(self.child.as_mut()).await;
         self.stderr_task.abort();
-        let _ = (&mut self.stderr_task).await;
+        if !self.stderr_task.is_finished() {
+            let _ = (&mut self.stderr_task).await;
+        }
         let portal = self.room_portal.shutdown().await.map_err(DriverError::from);
-        protocol.and(process).and(portal)
+        process.and(portal)
     }
 
     pub(crate) fn begin_observation(
@@ -380,3 +384,7 @@ const fn stop_error() -> DriverError {
 const fn sdk_error() -> DriverError {
     DriverError::new("provider_sdk_missing", "Claude Agent SDK is unavailable.")
 }
+
+#[cfg(all(test, unix))]
+#[path = "claude_sdk_runtime_tests.rs"]
+mod tests;

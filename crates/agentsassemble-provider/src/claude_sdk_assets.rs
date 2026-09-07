@@ -91,3 +91,17 @@ fn copy_regular_file(source: &Path, destination: &Path, limit: u64) -> io::Resul
 #[cfg(test)]
 #[path = "claude_sdk_assets_tests.rs"]
 mod tests;
+
+#[cfg(all(test, unix))]
+pub(crate) fn fixture_bundle() -> PrivateClaudeSdkBundle {
+    let root = tempfile::tempdir().unwrap_or_else(|error| panic!("SDK fixture: {error}"));
+    let sdk = root.path().join(SDK_RELATIVE_PATH);
+    std::fs::create_dir_all(sdk.parent().unwrap_or_else(|| panic!("SDK parent")))
+        .unwrap_or_else(|error| panic!("SDK directory: {error}"));
+    for path in [root.path().join(BRIDGE_NAME), sdk] {
+        std::fs::write(path, "// unused fixture resource\n")
+            .unwrap_or_else(|error| panic!("SDK resource: {error}"));
+    }
+    PrivateClaudeSdkBundle::stage_from(root.path())
+        .unwrap_or_else(|error| panic!("stage SDK fixture: {error}"))
+}
