@@ -30,6 +30,7 @@ pub enum AppStateBuildError {
 #[derive(Clone)]
 pub struct AppState {
     pub store: SqliteStore,
+    pub google_accounts: crate::GoogleAccountService,
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
     pub provider_catalog: ProviderCatalogService,
@@ -137,6 +138,7 @@ impl AppState {
                 provider_adapter.clone(),
             ),
             store,
+            google_accounts: crate::GoogleAccountService::default(),
             tickets,
             provider_catalog,
             provider_adapter,

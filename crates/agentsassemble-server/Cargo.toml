@@ -18,6 +18,9 @@ futures-util.workspace = true
 fs2.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
+http-cache-semantics = "3.0.0"
+jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
+reqwest.workspace = true
 hmac.workspace = true
 parking_lot.workspace = true
 process-wrap.workspace = true
@@ -42,8 +45,8 @@ which.workspace = true
 rustix.workspace = true
 
 [dev-dependencies]
+aws-lc-rs = { version = "1.18.0", features = ["ring-io"] }
 png.workspace = true
-reqwest.workspace = true
 rmcp = { workspace = true, features = ["client", "transport-streamable-http-client-reqwest"] }
 same-file.workspace = true
 tokio = { workspace = true, features = ["test-util"] }

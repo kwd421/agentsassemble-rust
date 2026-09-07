@@ -107,3 +107,17 @@ remains. Committed revocations/events use the existing runtime publication owner
 no frontend cleanup substitutes for the transaction. One-use admission identity
 is not silently promoted by normal room joining; explicit Google linking is the
 account operation which may bind that current identity to the device.
+
+Google proof uses `jsonwebtoken` 11 with AWS-LC RS256 verification, required issuer,
+audience, expiry and subject, plus identity-bound nonce and issued-at checks. Only
+`https://www.googleapis.com/oauth2/v3/certs` supplies public keys; redirects are
+rejected, response size is capped at 64 KiB, and the request has an 8-second bound.
+`http-cache-semantics` owns freshness, including Age and Cache-Control. No heuristic,
+stale or immutable fallback is enabled; retention is capped at one hour. Unknown
+key IDs can trigger one refresh per minute while the cache is otherwise fresh,
+preventing attacker-controlled key IDs from creating an unbounded outbound fetch.
+The challenge owner retains at most 512 entries, at most 64 unbound identities,
+with five-minute expiry checked on access and one pending challenge per subject.
+Invalid proof does not consume a legitimate challenge; successful proof consumes it
+before account persistence revalidates the current identity. Shutdown drops all
+in-memory state. Tests use newly generated RSA keys, never real Google credentials.

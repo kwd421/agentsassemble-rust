@@ -101,6 +101,7 @@ async fn main() -> anyhow::Result<()> {
         database_state_root(&database_path)?,
     )
     .await?;
+    state.google_accounts = agentsassemble_server::GoogleAccountService::from_environment()?;
     state = configure_startup_surface(
         state,
         manual_public_ingress,

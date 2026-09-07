@@ -7501,3 +7501,18 @@ The native focused-test command had created an obsolete 1.46 GiB desktop target;
 with builds stopped, the existing maintenance owner's selected plan removed only
 that obsolete target and retained the active shared target. The final artifact check
 passes. No Google network proof or full Phase 5 completion is claimed here.
+
+### Google ID-token and challenge boundary (2026-09-08)
+
+The configured Google service uses maintained [JWT validation](https://docs.rs/jsonwebtoken/11.0.0/jsonwebtoken/struct.Validation.html)
+and [HTTP cache semantics](https://docs.rs/http-cache-semantics/3.0.0/http_cache_semantics/struct.CachePolicy.html)
+for the [Google server-side token contract](https://developers.google.com/identity/gsi/web/guides/verify-google-id-token).
+Only the fixed HTTPS public-key endpoint is fetched; credentials and subject values
+are never sent there, persisted or logged. One bounded in-memory key set and the
+five-minute nonce owner replace per-attempt key fetching; no periodic task is added.
+No latency claim or real Google login is made. Two tests use fresh RSA signatures
+and a controlled nonce clock: valid proof succeeds, changed signature/issuer/audience/
+nonce/expiry/issued-at/presenter and replay fail, and disabled/capacity/expiry paths
+remain explicit. SQLite setup completes before pausing the nonce clock.
+PASS: both tests, server all-target/all-feature Clippy, structure/19 policy checks,
+artifact and fmt/diff checks (`/tmp/aa-phase5-google-service-*.log`).
