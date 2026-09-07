@@ -2,7 +2,6 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../lib/apiErrors";
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
-import { TEST_WEB_CRYPTO, TestTextEncoder } from "../test/webCrypto";
 import {
   loadRoomGuestSession,
   persistRoomGuestSession,
@@ -78,8 +77,9 @@ const SESSION: RoomGuestSession = {
 describe("useRoomAdmission", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal("crypto", TEST_WEB_CRYPTO);
-    vi.stubGlobal("TextEncoder", TestTextEncoder);
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "123e4567-e89b-42d3-a456-426614174000"
+    );
     deviceMocks.loadRememberedGuestProfile.mockReturnValue(null);
     surfaceMocks.verifyAndBindRoomSessionSurface.mockResolvedValue(true);
     guestSessionStore.current = null;
@@ -96,6 +96,7 @@ describe("useRoomAdmission", () => {
   });
 
   afterEach(() => {
+    vi.restoreAllMocks();
     vi.unstubAllGlobals();
   });
 

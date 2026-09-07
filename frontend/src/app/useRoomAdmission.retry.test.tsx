@@ -2,7 +2,6 @@ import { act, renderHook, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TEST_SERVER_PRODUCT_SURFACE } from "../test/serverProductSurface";
-import { TEST_WEB_CRYPTO, TestTextEncoder } from "../test/webCrypto";
 import { ApiError } from "../lib/apiErrors";
 import type { RoomGuestSession } from "../lib/roomGuestSession";
 import { ROOM_ADMISSION_INTENT_STORAGE_KEY } from "../lib/roomAdmissionIntent";
@@ -98,8 +97,9 @@ function renderAdmission(
 describe("room admission retry custody", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubGlobal("crypto", TEST_WEB_CRYPTO);
-    vi.stubGlobal("TextEncoder", TestTextEncoder);
+    vi.spyOn(globalThis.crypto, "randomUUID").mockReturnValue(
+      "123e4567-e89b-42d3-a456-426614174000"
+    );
     window.sessionStorage.clear();
     window.history.replaceState({}, "", "/join?token=invite-1");
     sessionStore.current = null;
