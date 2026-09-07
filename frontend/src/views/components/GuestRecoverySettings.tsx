@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Copy, KeyRound, Link2 } from "lucide-react";
 
 import { issueGuestRecoveryCode, type UserProfileIdentity } from "../../api";
@@ -13,30 +13,54 @@ export default function GuestRecoverySettings({
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
 
+  const generation = useRef(0);
+  const inFlight = useRef(false);
+  useLayoutEffect(() => {
+    generation.current += 1;
+    inFlight.current = false;
+    setCode("");
+    setRecoveryUrl("");
+    setStatus("");
+    setBusy(false);
+    return () => { generation.current += 1; };
+  }, [identity.sessionToken, identity.deviceToken]);
+
   async function issue() {
-    if (!identity.sessionToken || busy) return;
+    if (!identity.sessionToken || inFlight.current) return;
+    const scope = generation.current;
+    inFlight.current = true;
     setBusy(true);
+    setCode("");
+    setRecoveryUrl("");
     setStatus("복구 코드를 만드는 중...");
     try {
       const result = await issueGuestRecoveryCode({
         sessionToken: identity.sessionToken,
         deviceToken: identity.deviceToken,
       });
+      if (scope !== generation.current) return;
       setCode(result.recovery_code);
       setRecoveryUrl(result.recovery_url);
       setStatus("새 코드가 발급됐습니다. 이전 복구 코드는 더 이상 사용할 수 없습니다.");
     } catch (error) {
+      if (scope !== generation.current) return;
       setStatus(error instanceof Error ? error.message : "복구 코드를 만들지 못했습니다.");
     } finally {
-      setBusy(false);
+      if (scope === generation.current) {
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   }
 
   async function copy(value: string, label: string) {
+    const scope = generation.current;
     try {
       await navigator.clipboard.writeText(value);
+      if (scope !== generation.current) return;
       setStatus(`${label}을 복사했습니다.`);
     } catch {
+      if (scope !== generation.current) return;
       setStatus("값을 직접 선택해 복사해 주세요.");
     }
   }

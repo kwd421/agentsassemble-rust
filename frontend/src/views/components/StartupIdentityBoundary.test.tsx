@@ -76,7 +76,7 @@ describe("StartupIdentityBoundary", () => {
     ["pairing", "/pair?token=aap1_pairing-token"],
     [
       "recovery",
-      "/?recover=1&room=friend-room#recovery=ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567",
+      "/recover?recover=1&room=friend-room#recovery=aagr1.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcdEfA",
     ],
   ])("retains the authorized %s browser entrance", (_kind, url) => {
     boundaryMocks.desktop = false;

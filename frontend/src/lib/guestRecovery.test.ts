@@ -10,15 +10,15 @@ describe("consumeGuestRecoveryRequestFromUrl", () => {
     window.history.replaceState({}, "", "/");
   });
 
-  it("captures a valid recovery request and removes its secret from browser history", () => {
+  it("captures an opaque case-sensitive recovery request and removes its secret from browser history", () => {
     window.history.replaceState(
       {},
       "",
-      "/?recover=1&room=friend-room#recovery=ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567"
+      "/recover?recover=1&room=friend-room#recovery=aagr1.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcdEfA"
     );
 
     expect(consumeGuestRecoveryRequestFromUrl()).toEqual({
-      recoveryCode: "ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567",
+      recoveryCode: "aagr1.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcdEfA",
       roomId: "friend-room",
     });
     expect(window.location.href).not.toContain("recovery=");
@@ -27,11 +27,11 @@ describe("consumeGuestRecoveryRequestFromUrl", () => {
 
   it("recognizes an authorized recovery entrance without consuming it", () => {
     const url =
-      "http://localhost/?recover=1&room=friend-room#recovery=ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567";
+      "http://localhost/recover?recover=1&room=friend-room#recovery=aagr1.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcdEfA";
     const currentUrl = window.location.href;
 
     expect(guestRecoveryRequestFromUrl(url)).toEqual({
-      recoveryCode: "ABCD-EFGH-IJKL-MNOP-QRST-UVWX-YZ23-4567",
+      recoveryCode: "aagr1.AbCdEfGhIjKlMnOpQrStUvWxYz0123456789_-abcdEfA",
       roomId: "friend-room",
     });
     expect(window.location.href).toBe(currentUrl);

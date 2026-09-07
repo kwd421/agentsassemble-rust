@@ -459,3 +459,14 @@ The required artifact check measured 21,632,364,544 bytes against the unchanged
 `make artifact-prune` owner cleaned only this repository's regenerable Cargo target;
 source, user data and other applications were preserved. Frontend recovery URL and
 request-lifetime acceptance completes this flow in the following client change.
+
+The recovery client now preserves the server-owned opaque code exactly, including
+case, and uses the retained URL-consumption owner to remove it from browser history.
+Issue/redeem requests prohibit redirects and caching; strict results confirm issuance
+and the exact recovered room/client. Each existing settings/recovery panel retires
+its transient results on device, identity or request changes. Duplicate submissions
+are blocked, uncertain redemption retains the same input for retry, and an uncertain
+code rotation cannot continue displaying the prior code as usable. Five focused
+frontend suites pass 18 cases (1.39 s); TypeScript/build and original CSS pass (210 ms
+bundle phase). No persistent browser authority or background work was added.
+Packaged account/friends/invite/pairing/recovery acceptance remains the phase exit.

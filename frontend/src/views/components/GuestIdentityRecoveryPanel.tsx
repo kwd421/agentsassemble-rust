@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Check, Copy, KeyRound, LoaderCircle } from "lucide-react";
 
 import {
@@ -24,8 +24,23 @@ export default function GuestIdentityRecoveryPanel({
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
 
+  const generation = useRef(0);
+  const inFlight = useRef(false);
+  useLayoutEffect(() => {
+    generation.current += 1;
+    inFlight.current = false;
+    setRecoveryCode(request.recoveryCode);
+    setRecovered(null);
+    setStatus("");
+    setBusy(false);
+    setCopied(false);
+    return () => { generation.current += 1; };
+  }, [deviceToken, clientId, request.roomId, request.recoveryCode]);
+
   async function recover() {
-    if (busy) return;
+    if (inFlight.current) return;
+    const scope = generation.current;
+    inFlight.current = true;
     setBusy(true);
     setStatus("기존 신원과 방 멤버십을 확인하는 중...");
     try {
@@ -35,22 +50,30 @@ export default function GuestIdentityRecoveryPanel({
         deviceToken,
         clientId,
       });
+      if (scope !== generation.current) return;
       setRecovered(payload);
       setRecoveryCode(payload.recovery_code);
       setStatus("");
     } catch (error) {
+      if (scope !== generation.current) return;
       setStatus(error instanceof Error ? error.message : "신원을 복구하지 못했습니다.");
     } finally {
-      setBusy(false);
+      if (scope === generation.current) {
+        inFlight.current = false;
+        setBusy(false);
+      }
     }
   }
 
   async function copyReplacementCode() {
     if (!recovered) return;
+    const scope = generation.current;
     try {
       await navigator.clipboard.writeText(recovered.recovery_code);
+      if (scope !== generation.current) return;
       setCopied(true);
     } catch {
+      if (scope !== generation.current) return;
       setStatus("코드를 직접 선택해 복사해 주세요.");
     }
   }
@@ -74,7 +97,7 @@ export default function GuestIdentityRecoveryPanel({
           {recovered ? "새 복구 코드" : "복구 코드"}
           <input
             value={recoveryCode}
-            readOnly={Boolean(recovered)}
+            readOnly={busy || Boolean(recovered)}
             autoComplete="one-time-code"
             spellCheck={false}
             onChange={(event) => setRecoveryCode(event.currentTarget.value)}

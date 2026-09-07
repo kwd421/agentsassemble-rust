@@ -4,9 +4,10 @@ export type GuestRecoveryRequest = {
 };
 
 function cleanRecoveryCode(value: string): string {
-  const normalized = value.toUpperCase().replace(/[^A-Z0-9]/g, "");
-  if (normalized.length !== 32) return "";
-  return normalized.match(/.{1,4}/g)?.join("-") || "";
+  // The server owns credential syntax. Preserve opaque, case-sensitive codes;
+  // this parser only recognizes the recovery UI entrance and bounds URL input.
+  const code = value.trim();
+  return code.length <= 256 ? code : "";
 }
 
 export function guestRecoveryRequestFromUrl(

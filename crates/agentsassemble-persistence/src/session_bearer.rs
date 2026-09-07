@@ -33,9 +33,10 @@ pub(crate) fn derive_session_bearer(
             b"agentsassemble-human-session-bearer-v1\0",
             HUMAN_SESSION_BEARER_PREFIX,
         ),
-        SessionBearerPurpose::GuestIdentityRecovery => {
-            (b"agentsassemble-guest-recovery-code-v1\0", "aagr1.")
-        }
+        SessionBearerPurpose::GuestIdentityRecovery => (
+            b"agentsassemble-guest-recovery-code-v1\0",
+            GUEST_RECOVERY_CODE_PREFIX,
+        ),
         SessionBearerPurpose::OperatorPairing => (
             b"agentsassemble-operator-session-bearer-v1\0",
             OPERATOR_SESSION_BEARER_PREFIX,
