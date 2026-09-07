@@ -1,6 +1,6 @@
 # Identity, accounts, friends and human admission
 
-Status: Phase 5 locally verified; whole-phase Daybreak review pending after Phase 4 approval at `53a82f1`.
+Status: Phase 5 locally verified and approved by Daybreak through `1e24adf`, C0/H0/M0/L0.
 
 ## Definition and dependency order
 
@@ -535,5 +535,6 @@ All implementation and packaged obligations marked pending in the incremental
 entries above are locally complete under the configured-provider boundary. Current
 evidence and explicit unconfigured-Google/final-provider limits are recorded in
 [Phase 5 local closeout](../VERIFICATION.md#phase-5-local-acceptance-and-packaged-closeout-2026-09-08).
-No genuine Google authentication was simulated or claimed. Whole-phase Daybreak
-approval remains required before the next phase.
+No genuine Google authentication was simulated or claimed. Daybreak approved the
+whole local phase after both supported Google findings were corrected; see the
+[completed review disposition](../VERIFICATION.md#phase-5-whole-phase-review-corrections-2026-09-08).
