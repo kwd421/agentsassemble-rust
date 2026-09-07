@@ -4,15 +4,13 @@ use agentsassemble_domain::{DurableAgentSession, ProviderAvailability};
 use tokio_util::sync::CancellationToken;
 
 #[cfg(any(unix, windows))]
-use crate::antigravity::AntigravityDriver;
-#[cfg(any(unix, windows))]
 use crate::claude::ClaudeAgentSdkDriver;
 use crate::{
     ProviderCredentialId,
     catalog::{
-        discover_antigravity, discover_cerebras, discover_codex, discover_custom_api,
-        discover_deepseek, discover_llm_gateway, discover_opencode, discover_openrouter,
-        discover_tokenrouter, discover_vercel,
+        discover_cerebras, discover_codex, discover_custom_api, discover_deepseek,
+        discover_llm_gateway, discover_opencode, discover_openrouter, discover_tokenrouter,
+        discover_vercel,
     },
     cerebras,
     codex::CodexDriver,
@@ -90,23 +88,6 @@ pub(crate) static CODEX_PROVIDER: ProviderRegistration = ProviderRegistration {
     configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_codex_registered,
     launch: launch_codex,
-};
-
-pub(crate) static ANTIGRAVITY_PROVIDER: ProviderRegistration = ProviderRegistration {
-    id: "antigravity",
-    display_name: "Antigravity",
-    provider_kind: "antigravity_live_session",
-    runtime_kind: "live_cli",
-    transport: if cfg!(windows) { "conpty" } else { "pty" },
-    catalog_group: "harness",
-    workspace_required: true,
-    connection_kind: "native_cli_bridge",
-    executable_required: true,
-    probe_executable: "agy",
-    credential_available: false,
-    configuration_authority: ProviderConfigurationAuthority::Catalog,
-    discover: discover_antigravity_registered,
-    launch: launch_antigravity,
 };
 
 pub(crate) static CLAUDE_PROVIDER: ProviderRegistration = ProviderRegistration {
@@ -298,7 +279,6 @@ pub(crate) static CUSTOM_API_PROVIDER: ProviderRegistration = ProviderRegistrati
 
 static PROVIDER_REGISTRATIONS: &[&ProviderRegistration] = &[
     &CODEX_PROVIDER,
-    &ANTIGRAVITY_PROVIDER,
     &CLAUDE_PROVIDER,
     &OPENCODE_PROVIDER,
     &CURSOR_PROVIDER,
@@ -349,13 +329,6 @@ fn discover_codex_registered(
     cancellation: &CancellationToken,
 ) -> ProviderDiscoveryFuture<'_> {
     Box::pin(discover_codex(provider, cancellation))
-}
-
-fn discover_antigravity_registered(
-    provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
-    Box::pin(discover_antigravity(provider, cancellation))
 }
 
 fn discover_claude_registered(
@@ -497,34 +470,6 @@ fn launch_codex<'a>(
         #[cfg(not(unix))]
         let driver = CodexDriver::spawn(session).await?;
         Ok(Box::new(driver) as Box<dyn ProviderDriver>)
-    })
-}
-
-fn launch_antigravity<'a>(
-    factory: &'a ProductionDriverFactory,
-    session: &'a DurableAgentSession,
-    runtime_lease: &'a HeldRuntimeLease,
-) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
-    #[cfg(not(any(unix, windows)))]
-    let _ = (factory, session, runtime_lease);
-    Box::pin(async move {
-        #[cfg(unix)]
-        {
-            let driver =
-                AntigravityDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
-            Ok(Box::new(driver) as Box<dyn ProviderDriver>)
-        }
-        #[cfg(windows)]
-        {
-            let driver = AntigravityDriver::spawn(session, factory.companion()?).await?;
-            Ok(Box::new(driver) as Box<dyn ProviderDriver>)
-        }
-        #[cfg(not(any(unix, windows)))]
-        Err(DriverError::new(
-            "provider_runtime_unsupported",
-            "Terminal provider sessions are unsupported on this platform.",
-        )
-        .into())
     })
 }
 

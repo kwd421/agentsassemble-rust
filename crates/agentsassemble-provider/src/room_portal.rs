@@ -12,18 +12,11 @@ use agentsassemble_domain::{
 };
 
 use crate::driver::ProviderTurnRequest;
-#[cfg(windows)]
-use crate::filesystem::BoundExecutable;
-#[cfg(unix)]
-use crate::guardian::GuardianLaunch;
 use crate::room_attachment::{ProviderAttachmentReadIngress, valid_observation_attachments};
 use crate::room_portal_mcp_transport::PortalServer;
-#[cfg(any(unix, windows))]
-use crate::room_portal_terminal::RoomPortalTerminalHelper;
 pub(crate) use crate::room_portal_tool_contract::{
-    CAST_VOTE_TOOL, CLOSE_VOTE_TOOL, CREATE_VOTE_TOOL, PROVIDER_ROOM_TOOL_NAMES,
-    WITHDRAW_VOTE_TOOL, is_available_provider_tool, is_replay_unsafe_provider_tool,
-    is_terminal_provider_tool, is_vote_tool,
+    PROVIDER_ROOM_TOOL_NAMES, is_available_provider_tool, is_replay_unsafe_provider_tool,
+    is_terminal_provider_tool,
 };
 
 #[path = "room_portal_attachment_budget.rs"]
@@ -237,32 +230,6 @@ impl RoomPortal {
             self.bearer_environment_name.clone(),
             self.server.bearer_token().to_owned(),
         )]
-    }
-
-    #[cfg(unix)]
-    pub(crate) fn create_terminal_helper(
-        &self,
-        guardian: &GuardianLaunch,
-    ) -> Result<RoomPortalTerminalHelper, RoomPortalError> {
-        self.require_server()?;
-        RoomPortalTerminalHelper::create(
-            guardian,
-            self.server.endpoint(),
-            self.server.bearer_token(),
-        )
-    }
-
-    #[cfg(windows)]
-    pub(crate) fn create_terminal_helper(
-        &self,
-        companion: &BoundExecutable,
-    ) -> Result<RoomPortalTerminalHelper, RoomPortalError> {
-        self.require_server()?;
-        RoomPortalTerminalHelper::create(
-            companion,
-            self.server.endpoint(),
-            self.server.bearer_token(),
-        )
     }
 
     #[cfg(not(unix))]

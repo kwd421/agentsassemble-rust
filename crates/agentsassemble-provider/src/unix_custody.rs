@@ -1,10 +1,4 @@
-use std::{
-    fs::File,
-    os::fd::{AsFd, OwnedFd},
-    path::PathBuf,
-    process::Stdio,
-    time::Duration,
-};
+use std::{fs::File, os::fd::OwnedFd, path::PathBuf, process::Stdio, time::Duration};
 
 use futures_util::StreamExt;
 use rustix::process::Pid;
@@ -52,10 +46,6 @@ pub(crate) struct UnixProviderPipes {
     pub(crate) stdin: tokio::fs::File,
     pub(crate) stdout: tokio::fs::File,
     pub(crate) stderr: tokio::fs::File,
-}
-
-pub(crate) struct UnixProviderPty {
-    pub(crate) terminal: tokio::io::unix::AsyncFd<OwnedFd>,
 }
 
 #[cfg(all(test, target_os = "linux"))]
@@ -199,45 +189,6 @@ impl UnixProcessCustody {
                 },
             )
         })
-    }
-
-    pub(crate) async fn start_pty(
-        runtime_lease: &HeldRuntimeLease,
-        launch: &GuardianLaunch,
-        provider: &BoundExecutable,
-        provider_arguments: &[String],
-        provider_environment: &[(String, String)],
-        working_directory: &std::path::Path,
-    ) -> Result<(Self, UnixProviderPty), DriverLaunchError> {
-        let window = nix::pty::Winsize {
-            ws_row: 40,
-            ws_col: 120,
-            ws_xpixel: 0,
-            ws_ypixel: 0,
-        };
-        let opened = nix::pty::openpty(Some(&window), None).map_err(|_| custody_error())?;
-        let provider_stdin = opened.slave.try_clone().map_err(|_| custody_error())?;
-        let provider_stdout = opened.slave.try_clone().map_err(|_| custody_error())?;
-        let provider_stderr = opened.slave;
-        let flags = rustix::fs::fcntl_getfl(opened.master.as_fd()).map_err(|_| custody_error())?;
-        rustix::fs::fcntl_setfl(opened.master.as_fd(), flags | rustix::fs::OFlags::NONBLOCK)
-            .map_err(|_| custody_error())?;
-        let terminal = tokio::io::unix::AsyncFd::new(opened.master).map_err(|_| custody_error())?;
-        Self::start_with_config(
-            runtime_lease,
-            launch,
-            ProviderLaunchConfig {
-                provider,
-                arguments: provider_arguments,
-                environment: provider_environment,
-                working_directory,
-                pipes: [provider_stdin, provider_stdout, provider_stderr],
-                fork_policy: ProviderForkPolicy::AllowInGroup,
-                codex_code_mode_host: None,
-            },
-        )
-        .await
-        .map(|custody| (custody, UnixProviderPty { terminal }))
     }
 
     async fn start_with_config(

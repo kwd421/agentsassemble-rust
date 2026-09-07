@@ -213,69 +213,65 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
 }
 
 #[tokio::test]
-async fn first_antigravity_final_promotes_the_native_session_id_atomically() {
+async fn completed_turn_keeps_the_attached_provider_session_identity() {
     let (store, principal, _directory) = fixture().await;
-    let mut session = stored_session(&store).await;
-    "antigravity_live_session".clone_into(&mut session.public.provider_kind);
-    "pty".clone_into(&mut session.public.transport);
-    "pending-antigravity-codex-1".clone_into(&mut session.provider_session_id);
-    save_stored_session(&store, &session).await;
+    let session = stored_session(&store).await;
 
     let mutation = store
         .execute_message_with_turn(
             &principal,
-            "antigravity-first-message",
+            "identity-first-message",
             "message.send",
             &json!({"content": "@Terra bind the native conversation"}),
         )
         .await
-        .unwrap_or_else(|error| panic!("assign first Antigravity turn: {error}"));
+        .unwrap_or_else(|error| panic!("assign first provider turn: {error}"));
     let assignment = mutation
         .assignments
         .into_iter()
         .next()
-        .unwrap_or_else(|| panic!("first Antigravity turn must be assigned"));
-    let first_start = running_authority(&store, &assignment, "provider-turn-antigravity-1").await;
+        .unwrap_or_else(|| panic!("first provider turn must be assigned"));
+    let first_start = running_authority(&store, &assignment, "provider-turn-identity-1").await;
     store
         .complete_agent_turn(
             "general",
             AGENT_ID,
             authority(
                 &first_start,
-                "provider-turn-antigravity-1",
-                Some("conversation-1"),
+                "provider-turn-identity-1",
+                Some(&session.provider_session_id),
             ),
             "Native session attached",
             "",
         )
         .await
-        .unwrap_or_else(|error| panic!("commit first Antigravity final: {error}"));
+        .unwrap_or_else(|error| panic!("commit first provider final: {error}"));
     assert_eq!(
         stored_session(&store).await.provider_session_id,
-        "conversation-1"
+        session.provider_session_id
     );
 
     let second = store
         .execute_message_with_turn(
             &principal,
-            "antigravity-second-message",
+            "identity-second-message",
             "message.send",
             &json!({"content": "@Terra keep the same conversation"}),
         )
         .await
-        .unwrap_or_else(|error| panic!("assign second Antigravity turn: {error}"))
+        .unwrap_or_else(|error| panic!("assign second provider turn: {error}"))
         .assignments
         .into_iter()
         .next()
-        .unwrap_or_else(|| panic!("second Antigravity turn must be assigned"));
-    let second_start = running_authority(&store, &second, "provider-turn-antigravity-2").await;
+        .unwrap_or_else(|| panic!("second provider turn must be assigned"));
+    let second_start = running_authority(&store, &second, "provider-turn-identity-2").await;
     let Err(error) = store
         .complete_agent_turn(
             "general",
             AGENT_ID,
             authority(
                 &second_start,
-                "provider-turn-antigravity-2",
+                "provider-turn-identity-2",
                 Some("conversation-2"),
             ),
             "must roll back",
@@ -283,11 +279,11 @@ async fn first_antigravity_final_promotes_the_native_session_id_atomically() {
         )
         .await
     else {
-        panic!("an attached Antigravity session must not change identity");
+        panic!("an attached provider session must not change identity");
     };
     assert_rejection_code(&error, "provider_session_invalid");
     let stored = stored_session(&store).await;
-    assert_eq!(stored.provider_session_id, "conversation-1");
+    assert_eq!(stored.provider_session_id, session.provider_session_id);
     assert_eq!(stored.public.active_turn_id, second.turn_id);
 }
 

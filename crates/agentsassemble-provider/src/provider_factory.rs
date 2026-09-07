@@ -1,6 +1,4 @@
 use std::path::{Path, PathBuf};
-#[cfg(windows)]
-use std::sync::Arc;
 
 use agentsassemble_domain::DurableAgentSession;
 
@@ -26,8 +24,6 @@ pub(crate) struct ProductionDriverFactory {
     pub(crate) state_root: Option<PathBuf>,
     #[cfg(unix)]
     pub(crate) guardian: Result<Option<GuardianLaunch>, DriverError>,
-    #[cfg(windows)]
-    pub(crate) companion: Result<Arc<crate::filesystem::BoundExecutable>, DriverError>,
 }
 
 impl ProductionDriverFactory {
@@ -62,10 +58,6 @@ impl ProductionDriverFactory {
             state_root: None,
             #[cfg(unix)]
             guardian,
-            #[cfg(windows)]
-            companion: crate::filesystem::bind_current_helper_executable()
-                .map(Arc::new)
-                .map_err(|_| companion_binding_failed()),
         }
     }
 
@@ -94,11 +86,6 @@ impl ProductionDriverFactory {
             .as_ref()
             .ok_or_else(custody_unavailable)
     }
-
-    #[cfg(windows)]
-    pub(crate) fn companion(&self) -> Result<&crate::filesystem::BoundExecutable, DriverError> {
-        self.companion.as_deref().map_err(|error| *error)
-    }
 }
 
 #[cfg(unix)]
@@ -122,13 +109,5 @@ const fn custody_binding_failed() -> DriverError {
     DriverError::new(
         "provider_custody_binding_failed",
         "The provider process custody executable could not be bound.",
-    )
-}
-
-#[cfg(windows)]
-const fn companion_binding_failed() -> DriverError {
-    DriverError::new(
-        "provider_companion_binding_failed",
-        "The private provider companion executable could not be bound.",
     )
 }

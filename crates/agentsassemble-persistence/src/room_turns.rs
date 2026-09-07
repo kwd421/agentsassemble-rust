@@ -671,12 +671,7 @@ fn apply_provider_session_transition(
         || next.len() > 200
         || next.trim() != next
         || next.chars().any(char::is_control)
-        || next.starts_with("pending-antigravity-")
-        || (next != session.provider_session_id
-            && (session.public.provider_kind != "antigravity_live_session"
-                || !session
-                    .provider_session_id
-                    .starts_with("pending-antigravity-")))
+        || next != session.provider_session_id
     {
         return Err(rejected(
             "provider_session_invalid",

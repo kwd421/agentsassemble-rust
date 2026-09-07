@@ -39,7 +39,7 @@ const PROVIDER_EXECUTABLE_FD: i32 = 7;
 const PROVIDER_LAUNCH_FD: i32 = 8;
 const PROVIDER_LIFETIME_FD: i32 = 198;
 
-use crate::filesystem::{BoundExecutable, PrivateExecutable, bind_helper_executable_sync};
+use crate::filesystem::{BoundExecutable, bind_helper_executable_sync};
 use crate::unix_process_tree::CapturedRuntimeProcesses;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -336,10 +336,6 @@ impl GuardianLaunch {
             .configure_std_command_with_mappings(command.as_std_mut(), mappings)?;
         command.process_group(0);
         Ok(command)
-    }
-
-    pub(crate) fn stage_companion(&self, name: &str) -> io::Result<PrivateExecutable> {
-        self.executable.stage_private_companion(name)
     }
 
     fn anchor_command(&self, lease_path: &Path, lease_token: &str) -> io::Result<Command> {

@@ -177,6 +177,15 @@ claim same-process turn completion or native Antigravity interrupt parity.
 
 ## Required slice contract
 
+The 2026-09-07 user scope decision removes Freebuff and app-managed Antigravity
+from the resident Agent Session inventory. Antigravity's former terminal/hook and
+private helper path is retained only as non-build historical source. There is no
+pending-to-native provider session-ID promotion: a completed turn may report only
+the already attached provider session identity. Existing stored data is preserved;
+removed provider profiles fail through the registry's unsupported-profile result.
+Antigravity now belongs exclusively to Phase 7's external CLI Room Connector invite
+flow, with its own participant/admission authority and no resident-session controls.
+
 Custom API keeps the caller-selected model and normalized public HTTPS endpoint as
 its durable request authority. The selected endpoint may report a resolved model;
 that bounded, within-response-consistent name is metadata and never rewrites the

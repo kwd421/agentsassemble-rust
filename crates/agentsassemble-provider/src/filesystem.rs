@@ -68,6 +68,7 @@ impl BoundExecutable {
         self.allows_child_processes
     }
 
+    #[cfg(any(target_os = "linux", target_os = "android"))]
     pub(crate) fn stage_private_companion(&self, name: &str) -> io::Result<PrivateExecutable> {
         #[cfg(unix)]
         use std::os::unix::fs::PermissionsExt;
@@ -111,7 +112,7 @@ impl BoundExecutable {
         Ok(PrivateExecutable {
             file,
             path: staged_path,
-            staging,
+            _staging: staging,
         })
     }
 
@@ -194,19 +195,15 @@ pub(crate) struct PrivateExecutable {
     file: File,
     path: PathBuf,
     #[cfg(unix)]
-    staging: ExecutableStaging,
+    _staging: ExecutableStaging,
     #[cfg(not(unix))]
-    staging: tempfile::TempDir,
+    _staging: tempfile::TempDir,
 }
 
 impl PrivateExecutable {
     pub(crate) fn path(&self) -> &Path {
         let _ = &self.file;
         &self.path
-    }
-
-    pub(crate) fn directory(&self) -> &Path {
-        self.staging.path()
     }
 }
 
@@ -401,11 +398,6 @@ pub(crate) fn bind_helper_executable_sync(path: &Path) -> io::Result<BoundExecut
         file.rewind()?;
         bind_verified_unix_executable(file, &handle, &expected_identity)
     }
-}
-
-#[cfg(windows)]
-pub(crate) fn bind_current_helper_executable() -> io::Result<BoundExecutable> {
-    bind_helper_executable_sync(&std::env::current_exe()?)
 }
 
 #[cfg(unix)]

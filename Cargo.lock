@@ -138,7 +138,6 @@ dependencies = [
  "bytes",
  "chrono",
  "command-fds",
- "conpty-oxide",
  "eventsource-stream",
  "fs2",
  "futures-util",
@@ -825,18 +824,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4ca0197aee26d1ae37445ee532fefce43251d24cc7c166799f4d46817f1d3973"
 dependencies = [
  "crossbeam-utils",
-]
-
-[[package]]
-name = "conpty-oxide"
-version = "0.1.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17f99041be76720d952c719b4f405f538019fe111c3512b3b337d1261a4eee87"
-dependencies = [
- "thiserror",
- "tokio",
- "windows-spawn",
- "windows-sys 0.61.2",
 ]
 
 [[package]]
@@ -4613,15 +4600,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7781fa89eaf60850ac3d2da7af8e5242a5ea78d1a11c49bf2910bb5a73853eb5"
 dependencies = [
  "windows-link",
-]
-
-[[package]]
-name = "windows-spawn"
-version = "0.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2de3bd5b666ddb82bdd91c438afbe6a413fc21725d10e3e0b8d1d1c4afdd91c6"
-dependencies = [
- "windows-sys 0.61.2",
 ]
 
 [[package]]

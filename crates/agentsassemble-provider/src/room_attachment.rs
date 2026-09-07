@@ -7,11 +7,9 @@ use agentsassemble_domain::{
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use rmcp::model::{CallToolResult, ContentBlock, ResourceContents};
-use serde::{Deserialize, Serialize};
+use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
-
-const MAX_ATTACHMENT_BASE64_BYTES: usize = MAX_ATTACHMENT_BYTES.div_ceil(3) * 4;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderAttachment {
@@ -40,8 +38,7 @@ impl ProviderAttachment {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize)]
-#[serde(deny_unknown_fields)]
+#[derive(Serialize)]
 struct ProviderAttachmentDescriptor {
     id: String,
     filename: String,
@@ -83,70 +80,6 @@ pub(crate) fn attachment_tool_result(
         )
     };
     Ok(CallToolResult::success(vec![metadata, media]))
-}
-
-pub(crate) fn attachment_from_tool_result(
-    result: &CallToolResult,
-) -> Result<ProviderAttachment, &'static str> {
-    if result.is_error == Some(true) {
-        return Err("room helper action was rejected");
-    }
-    let [first, second] = result.content.as_slice() else {
-        return Err("room helper returned an invalid attachment");
-    };
-    let (metadata, media) = if first.as_text().is_some() && second.as_text().is_some() {
-        (second, first)
-    } else {
-        (first, second)
-    };
-    let metadata = metadata
-        .as_text()
-        .ok_or("room helper returned invalid attachment metadata")?;
-    let descriptor: ProviderAttachmentDescriptor = serde_json::from_str(&metadata.text)
-        .map_err(|_| "room helper returned invalid attachment metadata")?;
-    let content = match media {
-        ContentBlock::Image(image)
-            if descriptor.is_image && image.mime_type == descriptor.content_type =>
-        {
-            decode_attachment_base64(&image.data)?
-        }
-        ContentBlock::Text(text) if !descriptor.is_image => text.text.as_bytes().to_vec(),
-        ContentBlock::Resource(resource) if !descriptor.is_image => match &resource.resource {
-            ResourceContents::BlobResourceContents {
-                uri,
-                mime_type: Some(content_type),
-                blob,
-                ..
-            } if uri == &attachment_uri(&descriptor.id)
-                && content_type == &descriptor.content_type =>
-            {
-                decode_attachment_base64(blob)?
-            }
-            _ => return Err("room helper returned invalid attachment content"),
-        },
-        _ => return Err("room helper returned invalid attachment content"),
-    };
-    let attachment = ProviderAttachment {
-        id: descriptor.id,
-        filename: descriptor.filename,
-        content_type: descriptor.content_type,
-        size: descriptor.size,
-        is_image: descriptor.is_image,
-        content,
-    };
-    attachment
-        .is_valid()
-        .then_some(attachment)
-        .ok_or("room helper returned invalid attachment content")
-}
-
-fn decode_attachment_base64(encoded: &str) -> Result<Vec<u8>, &'static str> {
-    if encoded.is_empty() || encoded.len() > MAX_ATTACHMENT_BASE64_BYTES {
-        return Err("room helper returned invalid attachment content");
-    }
-    STANDARD
-        .decode(encoded)
-        .map_err(|_| "room helper returned invalid attachment content")
 }
 
 impl From<&ProviderAttachment> for ProviderAttachmentDescriptor {

@@ -370,11 +370,7 @@ fn render_observation_input(
         "Call `read_discussion` before deciding. Then finish with exactly one terminal action exposed by the room transport, choosing the action that fulfills the current room request. Ordinary assistant final text is not a room publication.".to_owned(),
     ];
     if tabletop_tools {
-        sections.push(if session.public.provider_kind == "antigravity_live_session" {
-            "Official game randomness is available through the exact bound room helper described by the transport instruction; do not invent a result yourself.".to_owned()
-        } else {
-            "For official game randomness, use the `roll_dice` or `choose_random` room tool; do not invent a result yourself.".to_owned()
-        });
+        sections.push("For official game randomness, use the `roll_dice` or `choose_random` room tool; do not invent a result yourself.".to_owned());
     }
     if !persona_context.is_empty() {
         sections.push(format!(

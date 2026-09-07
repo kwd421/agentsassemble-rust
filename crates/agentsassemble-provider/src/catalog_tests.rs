@@ -3,7 +3,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     FilesystemFailure, MAX_PROVIDER_BYTES, MAX_PROVIDER_OPTIONS, ProbeFailure, await_filesystem,
-    discover_custom_api, failed_provider, incomplete_provider, opencode_models, ready_provider,
+    discover_custom_api, failed_provider, opencode_models, ready_provider,
 };
 
 #[tokio::test]
@@ -85,25 +85,6 @@ fn oversized_provider_projection_cannot_remain_startable() {
     let bounded = ready_provider(fixture_provider(), "model".to_owned(), controls);
     assert!(!bounded.startable);
     assert_eq!(bounded.discovery_error_code, "model_catalog_too_large");
-}
-
-#[test]
-fn incomplete_native_runtime_is_visible_but_never_startable() {
-    let unavailable = incomplete_provider(
-        fixture_provider(),
-        "provider_native_receipt_unavailable",
-        "native receipt unavailable",
-    );
-
-    assert!(unavailable.available);
-    assert!(!unavailable.startable);
-    assert_eq!(unavailable.discovery_status, "failed");
-    assert_eq!(
-        unavailable.discovery_error_code,
-        "provider_native_receipt_unavailable"
-    );
-    assert!(unavailable.default_model.is_empty());
-    assert!(unavailable.controls.is_empty());
 }
 
 #[test]

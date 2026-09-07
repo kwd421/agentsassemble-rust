@@ -1,15 +1,5 @@
 mod acp_client;
 mod acp_runtime;
-#[cfg(any(unix, windows))]
-mod antigravity;
-#[cfg(any(unix, windows))]
-mod antigravity_hook;
-#[cfg(any(unix, windows))]
-mod antigravity_transport;
-#[cfg(unix)]
-mod antigravity_unix;
-#[cfg(windows)]
-mod antigravity_windows;
 mod catalog;
 mod catalog_service;
 mod cerebras;
@@ -70,8 +60,6 @@ mod room_attachment;
 mod room_portal;
 mod room_portal_mcp;
 mod room_portal_mcp_transport;
-#[cfg(any(unix, windows))]
-mod room_portal_terminal;
 mod room_portal_tool_contract;
 mod runtime;
 mod runtime_absence;
@@ -109,8 +97,6 @@ pub use room_portal::{
     ProviderRoomToolCommand, ProviderRoomToolError, ProviderRoomToolIngress,
     ProviderRoomToolRequest, ProviderRoomToolResult, ProviderTurnOutcome,
 };
-#[cfg(any(unix, windows))]
-pub use room_portal_terminal::run_room_helper_if_requested;
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderExactTurnAuthority, ProviderPreparedTurn,
     ProviderResidentRuntime, ProviderRoomObservation, ProviderRuntimeGone,

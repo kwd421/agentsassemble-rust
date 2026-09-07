@@ -6615,8 +6615,28 @@ module, and expected catalog entry. Selection and launch continue to use the sam
 registry, so no removed provider gains a hidden creation/launch path. The exact-set
 registration regression, affected all-target/all-feature warning-denied Clippy,
 architecture/source-growth, 19 policy tests, formatting, and diff checks pass.
-Antigravity resident retirement follows as a separate implementation change.
+Antigravity resident retirement is complete in the following implementation change.
 
 Before this verification schedule was changed, the production frontend build,
 generated bindings, copied CSS check, all 664 frontend tests, and desktop checks
 completed successfully. No new packaged app or actual provider turn was launched.
+
+Antigravity's managed registry/discovery/launch, PTY/ConPTY transport, workspace
+hooks, private room helper, and helper entry point are now disconnected. Nine
+retired source files (2,944 lines) were moved byte-for-byte to
+`deprecated/antigravity-native/`, with no build or runtime references. Terminal-only
+decoding, companion staging, and dependencies were removed from their common owners;
+the retained MCP attachment contract, process custody, and tool authorization remain.
+Turn completion now requires the attached provider session identity at both its
+runtime ingress and durable commit boundary. The existing identity regression checks
+that changing it rejects without modifying the stored identity or active turn.
+
+The exact catalog set, MCP attachment response checks, and full workspace tests pass:
+665 passed, zero failed or ignored. The measured full test command, including build,
+took 252.65 seconds wall time and 1,843,429,376 bytes maximum resident set; this is
+verification cost, not a provider runtime performance claim. Workspace and desktop
+all-target/all-feature warning-denied Clippy, architecture/source-growth, 19 policy
+tests, formatting, and diff checks pass. No new production background task, I/O, or
+fallback was added. The removed transport also removes its `conpty-oxide` and
+`windows-spawn` dependency entries. Both whole-phase code reviews remain pending;
+real-provider and packaged-flow evidence remains deferred as directed above.

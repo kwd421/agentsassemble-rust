@@ -38,18 +38,17 @@ url.workspace = true
 
 [target.'cfg(unix)'.dependencies]
 command-fds.workspace = true
-nix = { version = "0.31.3", default-features = false, features = ["term"] }
+nix = { version = "0.31.3", default-features = false }
 rustix.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
-nix = { version = "0.31.3", default-features = false, features = ["event", "term"] }
+nix = { version = "0.31.3", default-features = false, features = ["event"] }
 security-framework.workspace = true
 security-framework-sys.workspace = true
 sysinfo.workspace = true
 sysctl.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-conpty-oxide = { version = "0.1.2", default-features = false, features = ["tokio"] }
 windows-sys.workspace = true
 
 [dev-dependencies]

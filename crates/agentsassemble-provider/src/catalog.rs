@@ -24,9 +24,6 @@ const MAX_PROVIDER_BYTES: usize = 128 * 1024;
 const MAX_PROVIDER_OPTIONS: usize = 256;
 pub(crate) const MAX_OPTION_VALUE_BYTES: usize = 128;
 const MAX_OPTION_LABEL_BYTES: usize = 256;
-pub(crate) const NATIVE_RECEIPT_ERROR_CODE: &str = "provider_native_receipt_unavailable";
-pub(crate) const ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE: &str =
-    "Antigravity has no approved native attachment and completion receipt.";
 
 pub(crate) async fn provider_executable(
     program: &str,
@@ -123,23 +120,6 @@ pub(crate) async fn discover_codex(
             control("service_tier", "응답 속도", "select", tiers, "default"),
             permission_control(true),
         ],
-    )
-}
-
-pub(crate) async fn discover_antigravity(
-    mut provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderAvailability {
-    let (executable, executable_identity) = match provider_executable("agy", cancellation).await {
-        Ok(authority) => authority,
-        Err(failure) => return failed_provider(provider, failure),
-    };
-    provider.executable.clone_from(&executable);
-    provider.executable_identity = executable_identity;
-    incomplete_provider(
-        provider,
-        NATIVE_RECEIPT_ERROR_CODE,
-        ANTIGRAVITY_NATIVE_RECEIPT_ERROR_MESSAGE,
     )
 }
 
@@ -470,14 +450,6 @@ pub(crate) fn failed_provider(
         ),
     };
     unavailable_provider(provider, available, code, message)
-}
-
-pub(crate) fn incomplete_provider(
-    provider: ProviderAvailability,
-    code: &str,
-    message: &str,
-) -> ProviderAvailability {
-    unavailable_provider(provider, true, code, message)
 }
 
 pub(crate) fn unavailable_provider(

@@ -10,8 +10,9 @@
 - Custom API response-model correction is locally complete:
   [adapter-path verification](docs/VERIFICATION.md#custom-api-resolved-model-contract-2026-09-07).
 - User scope revision: Freebuff is excluded; Antigravity is external CLI plus
-  Room Connector invite only (Phase 7). Retire both managed registrations and
-  Antigravity's resident path, then verify/review the fourteen-provider Phase 1.
+  Room Connector invite only (Phase 7). Both managed registrations and Antigravity's
+  resident path are retired; the fourteen-provider Phase 1 passes local verification
+  and awaits whole-phase cross-review.
 - Next: follow the [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases),
   then complete whole-phase cross-review before Phase 2. Phase 0A and finite Phase 0B
   remain complete; reviewer settings are unchanged.

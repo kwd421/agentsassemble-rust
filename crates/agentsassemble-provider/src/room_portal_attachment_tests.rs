@@ -2,7 +2,7 @@ use std::{collections::BTreeSet, sync::Arc};
 
 use rmcp::{
     ServiceExt,
-    model::CallToolRequestParams,
+    model::{CallToolRequestParams, ContentBlock},
     transport::{
         StreamableHttpClientTransport, streamable_http_client::StreamableHttpClientTransportConfig,
     },
@@ -10,7 +10,6 @@ use rmcp::{
 use serde_json::{Map, Value, json};
 
 use super::{RoomObservationStart, RoomPortal};
-use crate::room_attachment::attachment_from_tool_result;
 use crate::{ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadIngress};
 
 const ATTACHMENT_ID: &str = "ma_11111111111111111111111111111111";
@@ -65,11 +64,11 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
         .await
         .unwrap_or_else(|error| panic!("join attachment tool: {error}"));
     assert_ne!(result.is_error, Some(true));
-    let attachment = attachment_from_tool_result(&result)
-        .unwrap_or_else(|error| panic!("decode attachment tool result: {error}"));
-    assert_eq!(attachment.id, ATTACHMENT_ID);
-    assert_eq!(attachment.filename, "diagram.png");
-    assert_eq!(attachment.content, [1, 2, 3, 4]);
+    let metadata = attachment_metadata(&result.content[0]);
+    assert_eq!(metadata["id"], ATTACHMENT_ID);
+    assert_eq!(metadata["filename"], "diagram.png");
+    assert!(matches!(&result.content[1], ContentBlock::Image(image)
+        if image.data == "AQIDBA==" && image.mime_type == "image/png"));
     let retry = tokio::spawn(call_tool(
         client.clone(),
         "read_attachment",
@@ -244,10 +243,10 @@ async fn assert_response_validation_and_generic_resource(
             .is_some_and(|content| content.text == "notes"),
         "byte-valid UTF-8 should be the first MCP text block"
     );
-    let attachment = attachment_from_tool_result(&generic)
-        .unwrap_or_else(|error| panic!("decode generic attachment resource: {error}"));
-    assert_eq!(attachment.id, SECOND_ATTACHMENT_ID);
-    assert_eq!(attachment.content, b"notes");
+    assert_eq!(
+        attachment_metadata(&generic.content[1])["id"],
+        SECOND_ATTACHMENT_ID
+    );
 
     let binary = tokio::spawn(call_tool(
         client.clone(),
@@ -274,15 +273,11 @@ async fn assert_response_validation_and_generic_resource(
         rmcp::model::ContentBlock::Resource(resource)
             if matches!(
                 &resource.resource,
-                rmcp::model::ResourceContents::BlobResourceContents { .. }
+                rmcp::model::ResourceContents::BlobResourceContents { uri, mime_type, blob, .. }
+                    if uri == &format!("agentsassemble://room-attachment/{THIRD_ATTACHMENT_ID}")
+                        && mime_type.as_deref() == Some("application/octet-stream") && blob == "/wA="
             )
     ));
-    assert_eq!(
-        attachment_from_tool_result(&binary)
-            .unwrap_or_else(|error| panic!("decode binary attachment resource: {error}"))
-            .content,
-        [0xff, 0]
-    );
 
     let duplicate = call_tool(
         client.clone(),
@@ -292,6 +287,14 @@ async fn assert_response_validation_and_generic_resource(
     .await;
     assert_eq!(duplicate.is_error, Some(true));
     assert!(commands.try_recv().is_err());
+}
+
+fn attachment_metadata(block: &ContentBlock) -> Value {
+    let text = block
+        .as_text()
+        .unwrap_or_else(|| panic!("missing attachment metadata"));
+    serde_json::from_str(&text.text)
+        .unwrap_or_else(|error| panic!("invalid attachment metadata: {error}"))
 }
 
 async fn connect(portal: &RoomPortal) -> RoomClient {
