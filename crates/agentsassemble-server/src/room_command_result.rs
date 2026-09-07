@@ -86,3 +86,14 @@ pub(crate) fn public_command_outcome(
         .collect();
     Ok(outcome)
 }
+
+/// Only definitive authorization refusal can cancel a prepared provider operation.
+pub(crate) fn ended_session_authority(error: &PersistenceError) -> Option<(&'static str, &str)> {
+    match error {
+        PersistenceError::CommandRejected {
+            code: code @ ("session_revoked" | "permission_denied"),
+            message,
+        } => Some((*code, message)),
+        _ => None,
+    }
+}

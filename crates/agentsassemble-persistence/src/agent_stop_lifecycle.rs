@@ -13,8 +13,8 @@ use sqlx::{Sqlite, Transaction};
 use crate::{
     PersistenceError, RoomCommandMutation, RoomMutationAuthority, SqliteStore,
     agent_lifecycle::{
-        AgentStopPlan, invalid_turn_queue, load_participant, load_session, merged_turn_queue,
-        require_valid_turn_authority, save_session, unresolved_effect,
+        AgentStopPlan, clear_intent, invalid_turn_queue, load_participant, load_session,
+        merged_turn_queue, require_valid_turn_authority, save_session, unresolved_effect,
     },
     agent_lifecycle_authority::{
         agent_stop_requires_cleanup, authorize_control, lifecycle_intent_is_empty,
@@ -25,7 +25,9 @@ use crate::{
         append_error_event, append_session_event, append_state_event, commit_already_stopped,
         store_result,
     },
-    agent_lifecycle_reservations::{LifecycleReservation, finish_lifecycle_command},
+    agent_lifecycle_reservations::{
+        LifecycleReservation, finish_lifecycle_command, reject_lifecycle_command,
+    },
     authority::active_room_for_principal,
     command_admission::existing_command,
     room_turns::{assign_pending_in, support::load_active_room},
@@ -125,6 +127,57 @@ impl SqliteStore {
         let effect = stop_effect(&session)?;
         transaction.commit().await?;
         Ok(AgentStopPlan::Stop(effect))
+    }
+
+    /// Rejects an exact prepared stop without claiming that its live runtime stopped.
+    ///
+    /// # Errors
+    /// Fails if the operation is no longer prepared, its reservation changed, or storage fails.
+    pub async fn fail_agent_stop_before_effect(
+        &self,
+        principal: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+        operation_id: &str,
+        reason: (&'static str, &str),
+    ) -> Result<Vec<RoomEvent>, PersistenceError> {
+        let agent_id = payload_agent_id(payload)?;
+        let payload_hash = canonical_payload_hash(payload);
+        let mut transaction = self.pool.begin().await?;
+        let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        require_intent(
+            &session,
+            AgentLifecycleAction::Stop,
+            operation_id,
+            AgentLifecycleIntentStatus::Prepared,
+            "stale_stop_confirmation",
+        )?;
+        let reservation = LifecycleReservation::new(
+            principal,
+            request_id,
+            STOP,
+            &payload_hash,
+            &agent_id,
+            operation_id,
+        );
+        let message = redact_persisted_diagnostic_text(reason.1, PUBLIC_LIFECYCLE_ERROR_LIMIT);
+        reject_lifecycle_command(&mut transaction, &reservation, reason.0, &message).await?;
+        clear_intent(&mut session);
+        session.public.last_error.clone_from(&message);
+        reason.0.clone_into(&mut session.public.last_error_code);
+        session.public.updated_at = Utc::now();
+        save_session(&mut transaction, &session).await?;
+        let error = append_error_event(
+            &mut transaction,
+            principal,
+            &session.public,
+            reason.0,
+            &message,
+        )
+        .await?;
+        let state = append_state_event(&mut transaction, principal, &session.public).await?;
+        transaction.commit().await?;
+        Ok(vec![error, state])
     }
 
     /// Records confirmed shutdown before final state and command result writes.

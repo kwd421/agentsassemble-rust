@@ -11,8 +11,10 @@ use serde_json::Value;
 use tokio::sync::broadcast;
 
 use crate::{
-    room_agent_lifecycle_runtime::persisted_start, room_command_result::CommandFailure,
-    room_runtime::RoomCommand, runtime_reconciliation::recover_exact_lifecycle_command,
+    room_agent_lifecycle_runtime::persisted_start,
+    room_command_result::{CommandFailure, ended_session_authority},
+    room_runtime::RoomCommand,
+    runtime_reconciliation::recover_exact_lifecycle_command,
 };
 
 pub(crate) struct AgentCreateExecution {
@@ -113,7 +115,12 @@ async fn execute_agent_create_start(
         Ok(reservation) => reservation,
         Err(error) => {
             return fail_created_agent_start_before_effect(
-                store, principal, request_id, payload, &effect, error,
+                store,
+                principal,
+                request_id,
+                payload,
+                &effect,
+                (error.code, error.message),
             )
             .await;
         }
@@ -141,6 +148,12 @@ async fn execute_agent_create_start(
                     &reservation,
                 )
                 .await;
+            if let Some(reason) = ended_session_authority(&error) {
+                return fail_created_agent_start_before_effect(
+                    store, principal, request_id, payload, &effect, reason,
+                )
+                .await;
+            }
             return Err(CommandFailure::unresolved(error));
         }
     };
@@ -248,16 +261,11 @@ async fn fail_created_agent_start_before_effect(
     request_id: &str,
     payload: &Value,
     effect: &AgentCreateStartEffect,
-    error: ProviderAdapterError,
+    reason: (&'static str, &str),
 ) -> Result<AgentCreateExecution, CommandFailure> {
     let commit = store
         .fail_agent_create_start_before_effect(
-            principal,
-            request_id,
-            payload,
-            effect,
-            error.code,
-            error.message,
+            principal, request_id, payload, effect, reason.0, reason.1,
         )
         .await
         .map_err(CommandFailure::unresolved)?;

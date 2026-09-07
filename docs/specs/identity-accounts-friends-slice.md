@@ -168,7 +168,7 @@ browser copy is introduced. Packaged acceptance remains pending at phase closure
 Remote pairing must retain session provenance through queued operator commands. A
 wire `AuthenticatedPrincipal` is only a public projection and cannot carry a secret
 fingerprint or substitute for durable session authorization. Persistence mutation
-entry points therefore take an explicit trusted-principal or human-session authority.
+entry points therefore take explicit trusted-principal, human-session or paired-session authority.
 The existing human-session owner revalidates the latter inside the command transaction,
 before replay or mutation; room capability checks remain at the mutation owner.
 The local command path retains its existing transport authorization. No public
@@ -205,7 +205,7 @@ loads the membership once and shares its bootstrap/profile proof with the princi
 projection. Queued room mutations accept persistence-issued paired provenance and
 revalidate it in their transaction. No paired public route is enabled by this storage
 slice: ready ingress validation, exact revocation publication, remaining privileged
-command owners, pre-effect cancellation, departure and frontend connection still
+command owners, departure and frontend connection still
 must be completed before remote operator dispatch is enabled.
 
 Stopped creation, stopped-profile selection/configuration, create/start inspection,
@@ -215,3 +215,11 @@ selection validation. Filesystem checks remain outside write transactions; serve
 selection is preceded by the guarded inspection/candidate owner. The existing agent
 control capability check is shared across these mutation owners. Post-effect
 completion/failure retains the exact durable operation rather than a new request.
+
+
+Definitive session-revoked or permission-denied refusal before provider authorization
+now cancels the exact prepared start/create-start/stop through the lifecycle failure
+owner. Start reservations are released first; committed errors and state events use
+the existing publication path. Refused stops preserve the existing live runtime and
+turn state. Effect-inflight work cannot enter this cancellation path; uncertain
+storage/authorization results remain unresolved for their existing recovery owner.

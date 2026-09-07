@@ -141,3 +141,88 @@ fn started() -> AgentRuntimeStarted {
         provider_session_active: true,
     }
 }
+
+#[tokio::test]
+async fn refused_prepared_stop_releases_only_its_intent_and_preserves_live_runtime() {
+    let (store, principal, _directory) = fixture().await;
+    let authority = TrustedPrincipal(&principal);
+    let payload = json!({"agent_id": AGENT_ID});
+    let AgentStartPlan::Start(start) = store
+        .prepare_agent_start(authority, "start-before-prepared-stop", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare start: {error}"))
+    else {
+        panic!("start required");
+    };
+    authorize_start(&store, &principal, &payload, &start).await;
+    store
+        .complete_agent_start(
+            &principal,
+            "start-before-prepared-stop",
+            &payload,
+            &start.operation_id,
+            &started(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("complete start: {error}"));
+    let AgentStopPlan::Stop(stop) = store
+        .prepare_agent_stop(authority, "refused-stop", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop: {error}"))
+    else {
+        panic!("stop required");
+    };
+    let reason = ("session_revoked", "This operator session has ended.");
+    let events = store
+        .fail_agent_stop_before_effect(
+            &principal,
+            "refused-stop",
+            &payload,
+            &stop.operation_id,
+            reason,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("reject prepared stop: {error}"));
+    assert_eq!(events.len(), 2);
+    assert!(
+        matches!(store.prepare_agent_stop(authority, "refused-stop", &payload).await,
+        Err(PersistenceError::StoredCommandRejected { code, .. }) if code == reason.0)
+    );
+    let AgentStopPlan::Stop(next) = store
+        .prepare_agent_stop(authority, "fresh-stop", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("fresh stop: {error}"))
+    else {
+        panic!("runtime must still require stop");
+    };
+    assert_eq!(next.runtime_handle_id, stop.runtime_handle_id);
+    assert_eq!(next.runtime_owner_id, stop.runtime_owner_id);
+    assert_eq!(next.runtime_lease_token, stop.runtime_lease_token);
+    store
+        .authorize_agent_stop_effect(authority, "fresh-stop", &payload, &next.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("authorize stop: {error}"));
+    assert!(matches!(
+        store
+            .fail_agent_stop_before_effect(
+                &principal,
+                "fresh-stop",
+                &payload,
+                &next.operation_id,
+                reason
+            )
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "stale_stop_confirmation",
+            ..
+        })
+    ));
+    store
+        .record_agent_stop_effect(&principal.room_id, &next.session_id, &next.operation_id)
+        .await
+        .unwrap_or_else(|error| panic!("record exact stop: {error}"));
+    store
+        .finalize_agent_stop(&principal, "fresh-stop", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("finalize exact stop: {error}"));
+}

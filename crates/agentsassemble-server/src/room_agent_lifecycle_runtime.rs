@@ -9,6 +9,7 @@ use agentsassemble_provider::{
 
 use crate::{
     room_command_execution::{CommandExecution, progressed_execution},
+    room_command_result::ended_session_authority,
     room_runtime::RoomCommand,
     runtime_reconciliation::recover_exact_lifecycle_command,
 };
@@ -69,7 +70,13 @@ pub(crate) async fn execute_agent_start(
     let reservation = match provider_adapter.reserve_start(&effect.session).await {
         Ok(reservation) => reservation,
         Err(error) => {
-            return record_agent_start_pre_effect_failure(store, command, &effect, error).await;
+            return record_agent_start_pre_effect_failure(
+                store,
+                command,
+                &effect,
+                (error.code, error.message),
+            )
+            .await;
         }
     };
     let authorized = store
@@ -94,6 +101,10 @@ pub(crate) async fn execute_agent_start(
                     &reservation,
                 )
                 .await;
+            if let Some(reason) = ended_session_authority(&error) {
+                return record_agent_start_pre_effect_failure(store, command, &effect, reason)
+                    .await;
+            }
             return CommandExecution::unresolved_failure(error);
         }
     };
@@ -213,7 +224,7 @@ async fn record_agent_start_pre_effect_failure(
     store: &SqliteStore,
     command: &RoomCommand,
     effect: &AgentStartEffect,
-    error: ProviderAdapterError,
+    reason: (&'static str, &str),
 ) -> CommandExecution {
     let commit = store
         .fail_agent_start_before_effect(
@@ -221,8 +232,8 @@ async fn record_agent_start_pre_effect_failure(
             &command.request_id,
             &command.payload,
             &effect.operation_id,
-            error.code,
-            error.message,
+            reason.0,
+            reason.1,
             command.action.as_str(),
         )
         .await;
@@ -319,6 +330,30 @@ async fn record_agent_start_failure(
     )
 }
 
+async fn record_agent_stop_authorization_failure(
+    store: &SqliteStore,
+    command: &RoomCommand,
+    operation_id: &str,
+    error: PersistenceError,
+) -> CommandExecution {
+    let Some(reason) = ended_session_authority(&error) else {
+        return CommandExecution::unresolved_failure(error);
+    };
+    match store
+        .fail_agent_stop_before_effect(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            operation_id,
+            reason,
+        )
+        .await
+    {
+        Ok(events) => CommandExecution::committed_failure(error, events),
+        Err(failure) => CommandExecution::unresolved_failure(failure),
+    }
+}
+
 pub(crate) async fn execute_agent_stop(
     store: &SqliteStore,
     provider_adapter: &ProviderAdapter,
@@ -350,7 +385,15 @@ pub(crate) async fn execute_agent_stop(
                 .await
             {
                 Ok(effect) => effect,
-                Err(error) => return CommandExecution::unresolved_failure(error),
+                Err(error) => {
+                    return record_agent_stop_authorization_failure(
+                        store,
+                        command,
+                        &effect.operation_id,
+                        error,
+                    )
+                    .await;
+                }
             };
             let stop = provider_adapter
                 .stop(

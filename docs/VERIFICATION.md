@@ -7707,3 +7707,19 @@ and remaining pairing-integration limits as the launch entry apply.
   browser identity loss. Affected Clippy, architecture/source growth, 19 policy
   tests, format/diff and artifact checks pass. No new task, retry or process owner;
   public pairing transport and pre-effect authorization-failure cleanup remain open.
+
+### Phase 5 pre-effect session revocation cleanup (2026-09-08)
+
+- Start/create-start release their exact runtime reservation and terminalize the
+  prepared lifecycle when effect approval definitively rejects session authority.
+  Stop now has an exact prepared-failure transition that preserves its live runtime,
+  records the rejection and publishes error/state events. Other failures remain
+  unresolved; no uncertain provider effect is treated as cancelled.
+- All 278 persistence tests pass (2.95 seconds). The new stop case proves rejected
+  replay, unchanged runtime handle/owner/lease, a fresh stop, refusal to cancel an
+  effect-inflight stop and successful exact stop completion afterward. Existing
+  start/create failure and rollback cases remain green. All five affected HTTP
+  create/start/recovery cases pass (32.50 seconds).
+- Affected Clippy and all unchanged architecture/source, 19 policy tests,
+  format/diff and artifact gates pass. No new background work, retries or process
+  ownership. Packaged/public paired transport proof remains pending.
