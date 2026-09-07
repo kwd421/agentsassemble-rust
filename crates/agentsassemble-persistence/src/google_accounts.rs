@@ -6,7 +6,7 @@ use uuid::Uuid;
 use crate::{
     AccountIdentity, AccountUser, PersistenceError, SqliteStore,
     account_identity::{
-        device_user_id, load_account_user, rejected, require_public_account_user,
+        bind_account_device, load_account_user, rejected, require_public_account_user,
         revalidate_account_identity,
     },
 };
@@ -205,24 +205,4 @@ async fn create_account_user(
     .execute(&mut **transaction)
     .await?;
     Ok(user)
-}
-
-async fn bind_account_device(
-    transaction: &mut Transaction<'_, Sqlite>,
-    user_id: &str,
-    device: &[u8; 32],
-) -> Result<(), PersistenceError> {
-    match device_user_id(transaction, device).await? {
-        Some(current) if current != user_id => {
-            return Err(rejected(
-                "account_device_mismatch",
-                "The browser credential belongs to another identity.",
-            ));
-        }
-        Some(_) => (),
-        None => {
-            sqlx::query("INSERT INTO human_device_credentials(credential_fingerprint, user_id, created_at) VALUES (?, ?, ?)").bind(device.as_slice()).bind(user_id).bind(Utc::now().timestamp_micros()).execute(&mut **transaction).await?;
-        }
-    }
-    Ok(())
 }

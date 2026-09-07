@@ -14,6 +14,7 @@ pub const OPERATOR_SESSION_BEARER_CHARS: usize =
 pub(crate) enum SessionBearerPurpose {
     HumanAdmission,
     OperatorPairing,
+    GuestIdentityRecovery,
 }
 
 pub(crate) struct IssuedBearer {
@@ -31,6 +32,9 @@ pub(crate) fn derive_session_bearer(
             b"agentsassemble-human-session-bearer-v1\0",
             HUMAN_SESSION_BEARER_PREFIX,
         ),
+        SessionBearerPurpose::GuestIdentityRecovery => {
+            (b"agentsassemble-guest-recovery-code-v1\0", "aagr1.")
+        }
         SessionBearerPurpose::OperatorPairing => (
             b"agentsassemble-operator-session-bearer-v1\0",
             OPERATOR_SESSION_BEARER_PREFIX,

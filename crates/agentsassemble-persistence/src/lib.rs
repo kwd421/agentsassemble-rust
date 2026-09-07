@@ -47,6 +47,7 @@ mod operator_pairing;
 pub use operator_pairing::{
     OperatorPairing, OperatorPairingRedemption, OperatorSessionAuthorization,
 };
+mod guest_identity_recovery;
 mod human_admission;
 mod human_admission_identity;
 mod human_admission_store;
@@ -139,6 +140,7 @@ pub use agentsassemble_domain::{
     LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
 };
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
+pub use guest_identity_recovery::{GuestRecoveryCommit, GuestRecoveryRequest, GuestRecoveryResult};
 pub use host_identity::PersistentHostIdentity;
 pub use human_admission::{
     HumanAdmissionCommit, HumanAdmissionDecision, HumanAdmissionInput, HumanAdmissionInputError,

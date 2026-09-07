@@ -20,7 +20,7 @@ use crate::{
     session_bearer::{SessionBearerPurpose::HumanAdmission, derive_session_bearer},
 };
 
-const SESSION_TTL: Duration = Duration::hours(1);
+pub(crate) const SESSION_TTL: Duration = Duration::hours(1);
 const MAX_PUBLIC_SESSIONS: i64 = 448;
 const MAX_PUBLIC_ROOM_SESSIONS: i64 = 112;
 
@@ -370,7 +370,7 @@ async fn exact_admission(
     ))))
 }
 
-async fn capacity_reached(
+pub(crate) async fn capacity_reached(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     participant_id: &str,
@@ -395,7 +395,7 @@ async fn capacity_reached(
     Ok(global >= MAX_PUBLIC_SESSIONS || room >= MAX_PUBLIC_ROOM_SESSIONS)
 }
 
-async fn replace_live_sessions(
+pub(crate) async fn replace_live_sessions(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     participant_id: &str,

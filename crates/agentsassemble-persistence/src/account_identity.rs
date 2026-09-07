@@ -206,3 +206,23 @@ pub(crate) fn require_public_account_user(user_id: &str) -> Result<(), Persisten
     }
     Ok(())
 }
+
+pub(crate) async fn bind_account_device(
+    transaction: &mut Transaction<'_, Sqlite>,
+    user_id: &str,
+    device: &[u8; 32],
+) -> Result<(), PersistenceError> {
+    match device_user_id(transaction, device).await? {
+        Some(current) if current != user_id => {
+            return Err(rejected(
+                "account_device_mismatch",
+                "The browser credential belongs to another identity.",
+            ));
+        }
+        Some(_) => (),
+        None => {
+            sqlx::query("INSERT INTO human_device_credentials(credential_fingerprint, user_id, created_at) VALUES (?, ?, ?)").bind(device.as_slice()).bind(user_id).bind(Utc::now().timestamp_micros()).execute(&mut **transaction).await?;
+        }
+    }
+    Ok(())
+}

@@ -402,3 +402,36 @@ Switching presentation retires queued profile work through the existing generati
 owner. The focused UserPanel suite passes 10 cases, and TypeScript/build, original CSS,
 architecture/source policy, formatting and artifact checks pass. Packaged acceptance
 remains part of the phase exit. No new task, timer or persistent state is introduced.
+
+### Local guest recovery completion
+
+The retained recovery settings and URL-entry panel currently call two absent local
+HTTP routes. Complete those routes at the human identity/session persistence owner.
+A live human session may rotate its identity's one-use recovery code. Redemption
+requires the current ready HTTPS origin, a canonical new-device credential and an
+active existing human membership in the requested room. Paired/native operator
+identities cannot mint this durable browser authority. Device conflicts, unavailable
+membership and invalid/used codes fail without consuming the code.
+
+One transaction binds the new device, retires the prior room session, issues a human
+session with the membership's latest admitted scope, and rotates the recovery code.
+Recovery is an explicit human-session provenance with a durable device binding;
+it has no fabricated invitation, invitation request ID or invitation payload hash.
+It consumes no invite use and cannot rejoin removed members. Existing room-session revocation publication retires
+old sockets. Recovery storage contains one fingerprint per identity and no plaintext
+code. A consumed code retains one receipt for the same device, room and client until
+the issued session ends; that retry returns the same session and replacement code.
+A different device cannot replay it. A subsequent rotation retires the receipt.
+No automatic compatibility parser or user-data conversion is introduced. Verify code
+rotation/use, wrong device/membership, rollback and session revocation with controlled
+local cases; connect and exercise both retained panels in packaged phase acceptance.
+
+Persistence acceptance: five recovery cases pass (80 ms), including durable restart,
+one-winner competing devices and injected insert rollback; 23 schema cases (130 ms)
+and three account/device cases (30 ms) pass. Clippy passes all persistence targets
+and features; unchanged architecture/source policy, formatting and artifact checks
+pass. Existing device binding moved intact from Google linking to the shared account
+identity owner. Schema 65 adds explicit recovery provenance and rejects older data
+without conversion. Storage adds one fixed-size recovery/receipt row per identity,
+reuses session capacity/expiry, and starts no background work. HTTP and packaged
+acceptance remain outstanding for this vertical flow.
