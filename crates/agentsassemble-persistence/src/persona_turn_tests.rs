@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
@@ -22,7 +23,7 @@ async fn ordered_and_ambient_persona_inputs_are_frozen_across_library_replacemen
                 .settings_revision;
             store
                 .execute_room_settings_update(
-                    &principal,
+                    TrustedPrincipal(&principal),
                     "persona-ambient-settings",
                     &json!({"expected_revision": revision, "conversation_mode": "ambient"}),
                 )

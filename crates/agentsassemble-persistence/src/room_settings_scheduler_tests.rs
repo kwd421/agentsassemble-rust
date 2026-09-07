@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{
     ParticipantRole, RoomInputDeliveryKind, RoomSettings, public_settings,
 };
@@ -182,7 +183,7 @@ async fn update_mode(
 ) -> Result<crate::CommandOutcome, PersistenceError> {
     store
         .execute_room_settings_update(
-            principal,
+            TrustedPrincipal(principal),
             request_id,
             &json!({"expected_revision": revision, "conversation_mode": mode}),
         )

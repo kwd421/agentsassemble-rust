@@ -40,7 +40,7 @@ async fn human_session_reads_exact_bound_appearance_directly() {
         .settings_revision;
     store
         .execute_room_settings_update(
-            &local_principal(),
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&local_principal()),
             "remote-appearance-bind",
             &json!({
                 "expected_revision": revision,

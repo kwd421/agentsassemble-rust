@@ -245,7 +245,7 @@ async fn room_appearance_upload_preview_bind_and_member_read_use_exact_tickets()
         .settings_revision;
     inspection_store
         .execute_room_settings_update(
-            &principal,
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
             "appearance-http-bind",
             &json!({
                 "expected_revision": revision,

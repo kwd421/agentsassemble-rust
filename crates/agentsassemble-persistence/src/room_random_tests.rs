@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{
     AuthenticatedPrincipal, LOCAL_OPERATOR_PARTICIPANT_ID, RoomRandomRequest, RoomRandomResult,
     RoomSettings, public_settings,
@@ -196,7 +197,7 @@ async fn assert_late_random_rejected_after_mute(
 ) {
     store
         .execute_participant_mute(
-            principal,
+            TrustedPrincipal(principal),
             "mute-before-late-room-tool",
             &json!({"participant_id": AGENT_ID, "muted": true}),
         )
@@ -237,7 +238,7 @@ async fn enable_tabletop(store: &SqliteStore, principal: &AuthenticatedPrincipal
         .settings_revision;
     store
         .execute_room_settings_update(
-            principal,
+            TrustedPrincipal(principal),
             "enable-tabletop",
             &json!({"expected_revision": revision, "tool_mode": "tabletop"}),
         )

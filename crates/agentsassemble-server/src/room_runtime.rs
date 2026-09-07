@@ -57,6 +57,21 @@ pub(crate) struct RoomCommand {
     reply: oneshot::Sender<Result<CommandOutcome, CommandFailure>>,
 }
 
+impl RoomCommand {
+    pub(crate) fn mutation_authority(
+        &self,
+    ) -> agentsassemble_persistence::RoomMutationAuthority<'_> {
+        match self.human_session.as_deref() {
+            Some(session) => {
+                agentsassemble_persistence::RoomMutationAuthority::HumanSession(session)
+            }
+            None => {
+                agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&self.principal)
+            }
+        }
+    }
+}
+
 #[derive(Clone)]
 struct RoomHandle {
     mutations: mpsc::Sender<RoomMutation>,

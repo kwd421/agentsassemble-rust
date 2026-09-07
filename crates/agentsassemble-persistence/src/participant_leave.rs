@@ -244,6 +244,7 @@ fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError 
 
 #[cfg(test)]
 mod tests {
+    use crate::RoomMutationAuthority::TrustedPrincipal;
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
         LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus,
@@ -422,7 +423,7 @@ mod tests {
         assert!(matches!(
             store
                 .execute_participant_removal(
-                    authorization.principal(),
+                    crate::RoomMutationAuthority::HumanSession(&authorization),
                     "guest-kick",
                     "participant.kick",
                     &payload
@@ -434,7 +435,12 @@ mod tests {
             })
         ));
         let mutation = store
-            .execute_participant_removal(&owner, "human-removal", "participant.export", &payload)
+            .execute_participant_removal(
+                TrustedPrincipal(&owner),
+                "human-removal",
+                "participant.export",
+                &payload,
+            )
             .await
             .unwrap_or_else(|error| panic!("remove admitted human: {error}"));
         assert_eq!(mutation.revoked_session_fingerprints, vec![fingerprint]);
@@ -448,7 +454,12 @@ mod tests {
         ));
         let rejoined = rejoin(&store).await;
         let replay = store
-            .execute_participant_removal(&owner, "human-removal", "participant.export", &payload)
+            .execute_participant_removal(
+                TrustedPrincipal(&owner),
+                "human-removal",
+                "participant.export",
+                &payload,
+            )
             .await
             .unwrap_or_else(|error| panic!("replay old removal: {error}"));
         assert!(replay.outcome.deduplicated);

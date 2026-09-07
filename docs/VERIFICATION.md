@@ -7605,3 +7605,21 @@ directory authority and invitation custody. Production TypeScript/Vite build and
 unchanged CSS hash/cascade gate pass. Requests run only on mount, user retry or
 mutation; no background polling is added. Direct packaged desktop/mobile acceptance
 and full Phase 5 resource/review evidence remain pending.
+
+## Phase 5 queued room mutation provenance (2026-09-08)
+
+Room settings, participant roles/mute/removal and Agent profile mutation now accept
+explicit trusted transport or durable human-session authority. The session branch
+reuses the existing resolver inside the committing transaction before permission,
+replay or mutation; queued commands preserve that input without adding credentials
+to the public principal. Pairing issuance and privileged remote dispatch remain
+pending; ordinary human sessions retain their existing permissions. Local authority
+borrows the principal and adds no database query, task or polling.
+
+Validation: all 269 persistence library tests pass (2.77 seconds), including live
+human permission denial and post-resolution membership revocation across all five
+mutation entries. Existing replay, moderation cleanup/restart and profile checks
+remain covered. Profile and human appearance HTTP suites pass four tests. Server
+and persistence all-target/all-feature Clippy, architecture/source gates and their
+19 tests, formatting, diff and artifact checks pass. No provider was executed and
+this preparatory owner change does not claim packaged pairing acceptance.

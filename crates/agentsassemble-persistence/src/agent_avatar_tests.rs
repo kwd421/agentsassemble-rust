@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use crate::{
     SqliteStore,
     agent_lifecycle::tests::{AGENT_ID, fixture},
@@ -37,7 +38,7 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
     assert!(store.agent_avatar(&first.id).await.is_err());
     let bind = json!({"agent_id": AGENT_ID, "avatar_image_url": first.url});
     let outcome = store
-        .execute_agent_profile_update(&principal, "avatar-first", &bind)
+        .execute_agent_profile_update(TrustedPrincipal(&principal), "avatar-first", &bind)
         .await?;
     assert_eq!(outcome.result["participant"]["avatar_image_url"], first.url);
     assert_eq!(store.agent_avatar(&first.id).await?.metadata, first);
@@ -50,7 +51,7 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
     assert!(
         store
             .execute_agent_profile_update(
-                &principal,
+                TrustedPrincipal(&principal),
                 "discarded",
                 &json!({"agent_id": AGENT_ID, "avatar_image_url": discarded.url})
             )
@@ -60,7 +61,7 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
     assert!(
         store
             .execute_agent_profile_update(
-                &principal,
+                TrustedPrincipal(&principal),
                 "human-ref",
                 &json!({"agent_id": AGENT_ID, "avatar_image_url": human.url})
             )
@@ -70,7 +71,7 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
     assert!(
         store
             .execute_agent_profile_update(
-                &principal,
+                TrustedPrincipal(&principal),
                 "room-ref",
                 &json!({"agent_id": AGENT_ID, "avatar_image_url": appearance.url})
             )
@@ -80,7 +81,7 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
     assert_eq!(store.agent_avatar(&first.id).await?.metadata, first);
     let next_payload = json!({"agent_id": AGENT_ID, "avatar_image_url": next.url});
     let next_outcome = store
-        .execute_agent_profile_update(&principal, "avatar-next", &next_payload)
+        .execute_agent_profile_update(TrustedPrincipal(&principal), "avatar-next", &next_payload)
         .await?;
     assert!(store.agent_avatar(&first.id).await.is_err());
     assert_eq!(store.profile_attachment(&human.id).await?.metadata, human);
@@ -95,14 +96,14 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
     drop(store);
     let reopened = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
     let replay = reopened
-        .execute_agent_profile_update(&principal, "avatar-next", &next_payload)
+        .execute_agent_profile_update(TrustedPrincipal(&principal), "avatar-next", &next_payload)
         .await?;
     assert!(replay.deduplicated);
     assert_eq!(replay.result, next_outcome.result);
     assert_eq!(reopened.agent_avatar(&next.id).await?.metadata, next);
     reopened
         .execute_agent_profile_update(
-            &principal,
+            TrustedPrincipal(&principal),
             "avatar-clear",
             &json!({"agent_id": AGENT_ID, "avatar_image_url": ""}),
         )
@@ -156,7 +157,7 @@ async fn agent_avatar_rejects_stale_authority_expired_and_other_session_referenc
     assert!(
         store
             .execute_agent_profile_update(
-                &principal,
+                TrustedPrincipal(&principal),
                 "expired",
                 &json!({"agent_id": AGENT_ID, "avatar_image_url": expired.url})
             )
@@ -187,7 +188,7 @@ async fn agent_avatar_rejects_stale_authority_expired_and_other_session_referenc
     assert!(
         store
             .execute_agent_profile_update(
-                &principal,
+                TrustedPrincipal(&principal),
                 "foreign",
                 &json!({"agent_id": AGENT_ID, "avatar_image_url": foreign.url})
             )

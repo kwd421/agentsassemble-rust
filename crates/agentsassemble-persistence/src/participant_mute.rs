@@ -58,12 +58,13 @@ impl SqliteStore {
     /// Returns authorization, payload, membership, replay, or exact-turn failures.
     pub async fn execute_participant_mute(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authorization: crate::RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<ParticipantMuteMutation, PersistenceError> {
-        let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
+        let principal = &authorization.resolve(&mut transaction).await?;
+        let payload_hash = canonical_payload_hash(payload);
         active_room_for_principal(&mut transaction, principal).await?;
         if !principal.capabilities.participant_mute {
             return Err(rejected(

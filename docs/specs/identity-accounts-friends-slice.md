@@ -162,3 +162,15 @@ lists only human contacts and passes the selected display name to the existing
 managed invitation owner, without treating the saved contact as identity proof.
 AI contacts remain outside human admission. No directory polling or persistent
 browser copy is introduced. Packaged acceptance remains pending at phase closure.
+
+### Room mutation session provenance
+
+Remote pairing must retain session provenance through queued operator commands. A
+wire `AuthenticatedPrincipal` is only a public projection and cannot carry a secret
+fingerprint or substitute for durable session authorization. Persistence mutation
+entry points therefore take an explicit trusted-principal or human-session authority.
+The existing human-session owner revalidates the latter inside the command transaction,
+before replay or mutation; room capability checks remain at the mutation owner.
+The local command path retains its existing transport authorization. No public
+credential may be converted into that path. This shared input is connected in
+independently buildable groups before pairing enables any privileged remote command.

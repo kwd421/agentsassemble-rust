@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{ClientKind, ParticipantStatus};
 use serde_json::json;
 
@@ -29,8 +30,9 @@ async fn removal_fences_launch_and_reopen_retains_cleanup_until_absence_is_prove
         .await
         .unwrap_or_else(|error| panic!("authorize exact launch: {error}"));
     let payload = json!({"participant_id": AGENT_ID});
+    let authority = TrustedPrincipal(&principal);
     let removal = store
-        .execute_participant_removal(&principal, "remove", "participant.kick", &payload)
+        .execute_participant_removal(authority, "remove", "participant.kick", &payload)
         .await
         .unwrap_or_else(|error| panic!("remove participant: {error}"));
     assert_eq!(removal.outcome.result["participant"]["status"], "kicked");
@@ -54,19 +56,23 @@ async fn removal_fences_launch_and_reopen_retains_cleanup_until_absence_is_prove
         })
     ));
     let replay = store
-        .execute_participant_removal(&principal, "remove", "participant.kick", &payload)
+        .execute_participant_removal(authority, "remove", "participant.kick", &payload)
         .await
         .unwrap_or_else(|error| panic!("replay removal: {error}"));
     assert!(replay.outcome.deduplicated);
     assert_eq!(replay.outcome.result, removal.outcome.result);
     assert!(matches!(
         store
-            .execute_participant_removal(&principal, "remove", "participant.export", &payload)
+            .execute_participant_removal(authority, "remove", "participant.export", &payload)
             .await,
         Err(PersistenceError::CommandConflict)
     ));
     drop(store);
-    let reopened = SqliteStore::open_path(&directory.path().join("runtime.sqlite3"))
+    verify_reopened_cleanup(directory.path(), &key).await;
+}
+
+async fn verify_reopened_cleanup(directory: &std::path::Path, key: &crate::RoomRuntimeCleanupKey) {
+    let reopened = SqliteStore::open_path(&directory.join("runtime.sqlite3"))
         .await
         .unwrap_or_else(|error| panic!("reopen removal: {error}"));
     let page = reopened
@@ -85,7 +91,7 @@ async fn removal_fences_launch_and_reopen_retains_cleanup_until_absence_is_prove
         .unwrap_or_else(|error| panic!("checkpoint proven runtime absence: {error}"));
     assert!(
         reopened
-            .finish_room_runtime_cleanup(&key)
+            .finish_room_runtime_cleanup(key)
             .await
             .unwrap_or_else(|error| panic!("finish proven cleanup: {error}"))
             .is_some()
@@ -118,7 +124,12 @@ async fn removal_rejects_owner_bridge_and_payload_retargeting_without_side_effec
     ] {
         assert!(
             store
-                .execute_participant_removal(&principal, "rejected", "participant.kick", &payload)
+                .execute_participant_removal(
+                    TrustedPrincipal(&principal),
+                    "rejected",
+                    "participant.kick",
+                    &payload
+                )
                 .await
                 .is_err()
         );
@@ -128,7 +139,7 @@ async fn removal_rejects_owner_bridge_and_payload_retargeting_without_side_effec
     assert!(matches!(
         store
             .execute_participant_removal(
-                &bridge,
+                TrustedPrincipal(&bridge),
                 "bridge",
                 "participant.kick",
                 &json!({"participant_id": AGENT_ID})
@@ -162,7 +173,7 @@ async fn exported_session_cannot_resume_after_successful_cleanup() {
     let (store, principal, _directory) = fixture().await;
     let removed = store
         .execute_participant_removal(
-            &principal,
+            TrustedPrincipal(&principal),
             "export",
             "participant.export",
             &json!({"participant_id": AGENT_ID}),
@@ -176,7 +187,12 @@ async fn exported_session_cannot_resume_after_successful_cleanup() {
     ] {
         assert!(matches!(
             store
-                .execute_participant_removal(&principal, request_id, action, &payload)
+                .execute_participant_removal(
+                    TrustedPrincipal(&principal),
+                    request_id,
+                    action,
+                    &payload
+                )
                 .await,
             Err(PersistenceError::CommandRejected {
                 code: "participant_exported",
@@ -193,7 +209,12 @@ async fn exported_session_cannot_resume_after_successful_cleanup() {
         ParticipantStatus::Exported
     );
     let replay = store
-        .execute_participant_removal(&principal, "export", "participant.export", &payload)
+        .execute_participant_removal(
+            TrustedPrincipal(&principal),
+            "export",
+            "participant.export",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("replay terminal export: {error}"));
     assert!(replay.outcome.deduplicated);
@@ -227,7 +248,7 @@ async fn closed_room_cleanup_requires_positive_absence_for_a_disconnected_sessio
         .unwrap_or_else(|error| panic!("seed uncertain disconnect: {error}"));
     let removed = store
         .execute_participant_removal(
-            &principal,
+            TrustedPrincipal(&principal),
             "remove-disconnected",
             "participant.kick",
             &json!({"participant_id": AGENT_ID}),

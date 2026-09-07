@@ -2,8 +2,7 @@ use crate::participant_rows::save_participant_exact as save_participant;
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    AGENT_PROFILE_NAME_CHARACTER_LIMIT, AuthenticatedPrincipal, DurableAgentSession, Participant,
-    canonical_payload_hash,
+    AGENT_PROFILE_NAME_CHARACTER_LIMIT, DurableAgentSession, Participant, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -29,10 +28,12 @@ impl SqliteStore {
     /// Returns authorization, malformed identity, replay conflict or storage failures.
     pub async fn execute_agent_profile_update(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authorization: crate::RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<CommandOutcome, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal = &authorization.resolve(&mut transaction).await?;
         authorize_control(principal)?;
         let agent_id =
             payload_agent_id_with_fields(payload, &["display_name", "avatar_image_url"])?;
@@ -52,7 +53,6 @@ impl SqliteStore {
             })
             .transpose()?;
         let payload_hash = canonical_payload_hash(payload);
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = admit_non_lifecycle_command(
             &mut transaction,

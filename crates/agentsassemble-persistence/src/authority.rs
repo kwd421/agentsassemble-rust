@@ -3,7 +3,36 @@ use agentsassemble_domain::{
 };
 use sqlx::{Sqlite, Transaction};
 
-use crate::PersistenceError;
+use crate::{HumanSessionAuthorization, PersistenceError};
+
+/// Explicit provenance for a room mutation; never serialized into the public principal.
+#[derive(Clone, Copy)]
+pub enum RoomMutationAuthority<'a> {
+    /// Principal already authenticated by the native or bridge transport owner.
+    TrustedPrincipal(&'a AuthenticatedPrincipal),
+    /// Durable browser session, revalidated inside the mutation transaction.
+    HumanSession(&'a HumanSessionAuthorization),
+}
+
+impl<'a> RoomMutationAuthority<'a> {
+    pub(crate) async fn resolve(
+        self,
+        transaction: &mut Transaction<'_, Sqlite>,
+    ) -> Result<std::borrow::Cow<'a, AuthenticatedPrincipal>, PersistenceError> {
+        match self {
+            Self::TrustedPrincipal(principal) => Ok(std::borrow::Cow::Borrowed(principal)),
+            Self::HumanSession(expected) => {
+                let (current, _) = crate::human_session_authority::revalidate_human_session(
+                    transaction,
+                    expected,
+                    chrono::Utc::now(),
+                )
+                .await?;
+                Ok(std::borrow::Cow::Owned(current.principal().clone()))
+            }
+        }
+    }
+}
 
 pub(crate) async fn authorize_session(
     transaction: &mut Transaction<'_, Sqlite>,

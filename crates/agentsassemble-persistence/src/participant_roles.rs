@@ -34,12 +34,13 @@ impl SqliteStore {
     /// Returns authorization, payload, target, replay, or storage failures.
     pub async fn execute_participant_role_update(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authorization: crate::RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<CommandOutcome, PersistenceError> {
-        let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
+        let principal = &authorization.resolve(&mut transaction).await?;
+        let payload_hash = canonical_payload_hash(payload);
         active_room_for_principal(&mut transaction, principal).await?;
         if !principal.capabilities.room_manage {
             return Err(rejected(
@@ -171,6 +172,7 @@ fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError 
 
 #[cfg(test)]
 mod tests {
+    use crate::RoomMutationAuthority::TrustedPrincipal;
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
         LOCAL_OPERATOR_PARTICIPANT_ID, ParticipantRole,
@@ -187,7 +189,7 @@ mod tests {
             "role": "director",
         });
         let first = store
-            .execute_participant_role_update(&principal, "role-1", &payload)
+            .execute_participant_role_update(TrustedPrincipal(&principal), "role-1", &payload)
             .await
             .unwrap_or_else(|error| panic!("update participant role: {error}"));
         assert!(!first.deduplicated);
@@ -213,7 +215,7 @@ mod tests {
         assert_eq!(snapshot.participants[0].role, ParticipantRole::Director);
 
         let replay = store
-            .execute_participant_role_update(&principal, "role-1", &payload)
+            .execute_participant_role_update(TrustedPrincipal(&principal), "role-1", &payload)
             .await
             .unwrap_or_else(|error| panic!("replay participant role: {error}"));
         assert!(replay.deduplicated);
@@ -221,7 +223,7 @@ mod tests {
         assert!(matches!(
             store
                 .execute_participant_role_update(
-                    &principal,
+                    TrustedPrincipal(&principal),
                     "role-1",
                     &json!({
                         "participant_id": LOCAL_OPERATOR_PARTICIPANT_ID,
@@ -239,7 +241,7 @@ mod tests {
         assert!(matches!(
             store
                 .execute_participant_role_update(
-                    &principal,
+                    TrustedPrincipal(&principal),
                     "role-alias",
                     &json!({
                         "participant_id": LOCAL_OPERATOR_PARTICIPANT_ID,
@@ -255,7 +257,7 @@ mod tests {
         assert!(matches!(
             store
                 .execute_participant_role_update(
-                    &principal,
+                    TrustedPrincipal(&principal),
                     "role-missing",
                     &json!({"participant_id": "missing", "role": "agent"}),
                 )
@@ -273,7 +275,7 @@ mod tests {
         assert!(matches!(
             store
                 .execute_participant_role_update(
-                    &guest,
+                    TrustedPrincipal(&guest),
                     "role-denied",
                     &json!({
                         "participant_id": LOCAL_OPERATOR_PARTICIPANT_ID,

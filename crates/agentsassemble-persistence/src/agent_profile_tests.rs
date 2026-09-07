@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use crate::participant_rows::save_participant_exact as save_participant;
 use crate::{
     PersistenceError, SqliteStore,
@@ -28,7 +29,7 @@ async fn identity_update_preserves_custody_and_membership_and_replays_after_rest
     transaction.commit().await?;
     let payload = json!({"agent_id": AGENT_ID, "display_name": "  새 이름  "});
     let outcome = store
-        .execute_agent_profile_update(&principal, "rename", &payload)
+        .execute_agent_profile_update(TrustedPrincipal(&principal), "rename", &payload)
         .await?;
     assert_eq!(outcome.result["agent_session"]["display_name"], "새 이름");
     assert_eq!(outcome.events.len(), 2);
@@ -38,7 +39,7 @@ async fn identity_update_preserves_custody_and_membership_and_replays_after_rest
     assert!(matches!(
         store
             .execute_agent_profile_update(
-                &principal,
+                TrustedPrincipal(&principal),
                 "rename",
                 &json!({"agent_id": AGENT_ID, "display_name": "Conflict"})
             )
@@ -49,7 +50,7 @@ async fn identity_update_preserves_custody_and_membership_and_replays_after_rest
     drop(store);
     let reopened = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
     let replay = reopened
-        .execute_agent_profile_update(&principal, "rename", &payload)
+        .execute_agent_profile_update(TrustedPrincipal(&principal), "rename", &payload)
         .await?;
     assert!(replay.deduplicated);
     assert_eq!(replay.result, outcome.result);
@@ -88,7 +89,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
         denied.capabilities.agent_control = false;
         assert!(matches!(
             store
-                .execute_agent_profile_update(&denied, "denied", &valid)
+                .execute_agent_profile_update(TrustedPrincipal(&denied), "denied", &valid)
                 .await,
             Err(PersistenceError::CommandRejected {
                 code: "permission_denied",
@@ -100,7 +101,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
     bridge.client_kind = ClientKind::AgentBridge;
     assert!(matches!(
         store
-            .execute_agent_profile_update(&bridge, "bridge", &valid)
+            .execute_agent_profile_update(TrustedPrincipal(&bridge), "bridge", &valid)
             .await,
         Err(PersistenceError::CommandRejected {
             code: "permission_denied",
@@ -118,7 +119,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
         assert!(matches!(
             store
                 .execute_agent_profile_update(
-                    &principal,
+                    TrustedPrincipal(&principal),
                     "invalid",
                     &json!({"agent_id": AGENT_ID, "display_name": value})
                 )
@@ -136,7 +137,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
     ] {
         assert!(matches!(
             store
-                .execute_agent_profile_update(&principal, "invalid", &payload)
+                .execute_agent_profile_update(TrustedPrincipal(&principal), "invalid", &payload)
                 .await,
             Err(PersistenceError::CommandRejected {
                 code: "bad_request",
@@ -148,7 +149,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
     other_room.room_id = "other".into();
     assert!(
         store
-            .execute_agent_profile_update(&other_room, "foreign", &valid)
+            .execute_agent_profile_update(TrustedPrincipal(&other_room), "foreign", &valid)
             .await
             .is_err()
     );
@@ -165,7 +166,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
     transaction.commit().await?;
     assert!(matches!(
         store
-            .execute_agent_profile_update(&principal, "human", &valid)
+            .execute_agent_profile_update(TrustedPrincipal(&principal), "human", &valid)
             .await,
         Err(PersistenceError::CommandRejected {
             code: "stored_agent_identity_invalid",
@@ -185,7 +186,7 @@ async fn missing_exact_participant_write_rolls_back_identity_and_replay()
     let payload = json!({"agent_id": AGENT_ID, "display_name": "Changed"});
     assert!(matches!(
         store
-            .execute_agent_profile_update(&principal, "exact-write", &payload)
+            .execute_agent_profile_update(TrustedPrincipal(&principal), "exact-write", &payload)
             .await,
         Err(PersistenceError::ParticipantMissing)
     ));
@@ -203,7 +204,7 @@ async fn missing_exact_participant_write_rolls_back_identity_and_replay()
         .execute(&store.pool)
         .await?;
     let retry = store
-        .execute_agent_profile_update(&principal, "exact-write", &payload)
+        .execute_agent_profile_update(TrustedPrincipal(&principal), "exact-write", &payload)
         .await?;
     assert!(!retry.deduplicated);
     assert_eq!(retry.result["participant"]["display_name"], "Changed");

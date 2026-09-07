@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID, Participant, ParticipantStatus, RoomRandomResult, RoomSettings,
@@ -15,6 +16,50 @@ use crate::{
 const SIGNED: [u8; 32] = [0x41; 32];
 const JOIN: [u8; 32] = [0x42; 32];
 const BROWSER: [u8; 32] = [0x43; 32];
+
+#[tokio::test]
+async fn room_management_mutations_revalidate_session_before_permission_or_replay() {
+    let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
+    let authorization = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize human: {error}"));
+    let authority = crate::RoomMutationAuthority::HumanSession(&authorization);
+    let payload = json!({"participant_id": "another-person"});
+    for expected in ["permission_denied", "session_revoked"] {
+        assert_rejected_code(
+            store
+                .execute_room_settings_update(authority, "settings", &json!({}))
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .execute_participant_role_update(authority, "role", &payload)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .execute_agent_profile_update(authority, "profile", &json!({}))
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .execute_participant_mute(authority, "mute", &payload)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .execute_participant_removal(authority, "remove", "participant.kick", &payload)
+                .await,
+            expected,
+        );
+        set_participant_status(&store, ParticipantStatus::Left).await;
+    }
+}
 
 #[tokio::test]
 async fn live_human_session_authority_revalidates_scope_membership_and_profile() {
@@ -258,7 +303,7 @@ async fn bound_appearance_read_revalidates_human_session_in_the_asset_snapshot()
         .settings_revision;
     store
         .execute_room_settings_update(
-            &local_operator_principal(),
+            TrustedPrincipal(&local_operator_principal()),
             "human-session-appearance-bind",
             &json!({
                 "expected_revision": revision,

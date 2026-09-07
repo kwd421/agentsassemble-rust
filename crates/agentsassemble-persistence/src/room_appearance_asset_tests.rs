@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use std::io::Cursor;
 
 use agentsassemble_domain::{
@@ -357,7 +358,7 @@ async fn update_appearance(
 ) -> Result<crate::CommandOutcome, PersistenceError> {
     store
         .execute_room_settings_update(
-            principal,
+            TrustedPrincipal(principal),
             request_id,
             &serde_json::json!({
                 "expected_revision": revision,

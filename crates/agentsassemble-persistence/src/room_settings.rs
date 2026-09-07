@@ -24,12 +24,13 @@ impl SqliteStore {
     /// Returns authorization, revision, validation, availability, replay, or storage failures.
     pub async fn execute_room_settings_update(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authorization: crate::RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<CommandOutcome, PersistenceError> {
-        let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
+        let principal = &authorization.resolve(&mut transaction).await?;
+        let payload_hash = canonical_payload_hash(payload);
         let mut room = active_room_for_principal(&mut transaction, principal).await?;
         if !principal.capabilities.room_manage {
             return Err(rejected(

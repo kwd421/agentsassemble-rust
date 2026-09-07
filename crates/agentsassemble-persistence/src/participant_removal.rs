@@ -37,11 +37,13 @@ impl SqliteStore {
     /// Rejects invalid authority, owner removal, conflicting replay and malformed targets.
     pub async fn execute_participant_removal(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authorization: crate::RoomMutationAuthority<'_>,
         request_id: &str,
         action: &str,
         payload: &Value,
     ) -> Result<ParticipantRemovalMutation, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal = &authorization.resolve(&mut transaction).await?;
         let (status, event_type) = removal_action(action)?;
         let target_id = removal_target(payload)?;
         if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.room_manage {
@@ -56,7 +58,6 @@ impl SqliteStore {
                 "The local room owner cannot be removed.",
             ));
         }
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         let payload_hash = canonical_payload_hash(payload);
         if let Some(outcome) = admit_non_lifecycle_command(

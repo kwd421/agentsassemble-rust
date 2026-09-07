@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{
     AgentRuntimeStatus, AgentSessionStatus, LOCAL_OPERATOR_PARTICIPANT_ID,
 };
@@ -45,7 +46,7 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
         .unwrap_or_else(|| panic!("assigned exact Agent turn"));
     let muted = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "mute-agent",
             &json!({"participant_id": AGENT_ID, "muted": true}),
         )
@@ -81,7 +82,7 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
     );
     let replay = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "mute-agent",
             &json!({"participant_id": AGENT_ID, "muted": true}),
         )
@@ -110,7 +111,7 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
     assert!(retained.inflight_inputs.is_empty());
     let unmuted = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "unmute-agent",
             &json!({"participant_id": AGENT_ID, "muted": false}),
         )
@@ -129,7 +130,7 @@ async fn human_mute_changes_only_room_participant_authority() {
     let (store, principal, _directory) = fixture().await;
     let muted = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "mute-human",
             &json!({"participant_id": LOCAL_OPERATOR_PARTICIPANT_ID, "muted": true}),
         )
@@ -363,7 +364,7 @@ async fn authorized_turn_mute_fences_interrupt_before_finalization() {
         .unwrap_or_else(|error| panic!("mark turn running before mute: {error}"));
     let effect = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "mute-started-agent",
             &json!({"participant_id": AGENT_ID, "muted": true}),
         )
@@ -429,7 +430,7 @@ async fn exact_live_control_can_resume_a_quarantined_interrupt_without_reissuing
         .unwrap_or_else(|error| panic!("mark recovery turn running: {error}"));
     let effect = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "mute-recovery-agent",
             &json!({"participant_id": AGENT_ID, "muted": true}),
         )
@@ -514,7 +515,7 @@ async fn task_death_after_interrupt_dispatch_preserves_one_ambiguous_effect() {
         .unwrap_or_else(|error| panic!("authorize dispatch-death turn: {error}"));
     let effect = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "mute-dispatch-death-agent",
             &json!({"participant_id": AGENT_ID, "muted": true}),
         )
@@ -655,7 +656,7 @@ async fn runtime_gone_releases_ordered_floor_and_consumes_an_unmute_wake() {
 
     let flash_effect = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "mute-flash-floor",
             &json!({"participant_id": SECOND_AGENT_ID, "muted": true}),
         )
@@ -684,7 +685,7 @@ async fn runtime_gone_releases_ordered_floor_and_consumes_an_unmute_wake() {
 
     let unmuted = store
         .execute_participant_mute(
-            &principal,
+            TrustedPrincipal(&principal),
             "unmute-flash-waiting",
             &json!({"participant_id": SECOND_AGENT_ID, "muted": false}),
         )

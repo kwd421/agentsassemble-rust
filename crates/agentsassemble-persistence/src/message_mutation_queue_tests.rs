@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{
     AgentRuntimeStatus, AgentSessionStatus, RoomInputDeliveryKind, RoomSettings, public_settings,
 };
@@ -38,7 +39,7 @@ async fn deletion_removes_only_pending_ordered_and_ambient_inputs_atomically() {
         .settings_revision;
     store
         .execute_room_settings_update(
-            &principal,
+            TrustedPrincipal(&principal),
             "delete-queue-ambient-mode",
             &json!({"expected_revision": revision, "conversation_mode": "ambient"}),
         )

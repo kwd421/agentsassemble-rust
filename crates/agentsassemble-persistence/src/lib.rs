@@ -31,6 +31,7 @@ mod agent_start_failure;
 mod agent_stop_lifecycle;
 mod asset_storage;
 mod authority;
+pub use authority::RoomMutationAuthority;
 mod bootstrap;
 mod command_admission;
 mod database_target;

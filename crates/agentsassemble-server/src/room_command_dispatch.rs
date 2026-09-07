@@ -24,6 +24,7 @@ pub(crate) async fn execute_command(
     if let Some(authorization) = &command.human_session {
         return execute_human_session_command(store, command, authorization).await;
     }
+    let authority = command.mutation_authority();
     match command.action {
         RoomAction::RoomDelete => execute_room_delete(store, command).await,
         RoomAction::RoomClose | RoomAction::RoomArchive => {
@@ -43,7 +44,7 @@ pub(crate) async fn execute_command(
             .await
             .unwrap_or_else(CommandExecution::transactional_failure),
         RoomAction::AgentProfileUpdate => match store
-            .execute_agent_profile_update(&command.principal, &command.request_id, &command.payload)
+            .execute_agent_profile_update(authority, &command.request_id, &command.payload)
             .await
         {
             Ok(outcome) => CommandExecution::success(outcome),
@@ -77,7 +78,7 @@ pub(crate) async fn execute_command(
             .await
         }
         RoomAction::RoomSettingsUpdate => match store
-            .execute_room_settings_update(&command.principal, &command.request_id, &command.payload)
+            .execute_room_settings_update(authority, &command.request_id, &command.payload)
             .await
         {
             Ok(outcome) if outcome.deduplicated => CommandExecution::success(outcome),
@@ -95,11 +96,7 @@ pub(crate) async fn execute_command(
             execute_message_mutation(store, command).await
         }
         RoomAction::ParticipantRoleUpdate => match store
-            .execute_participant_role_update(
-                &command.principal,
-                &command.request_id,
-                &command.payload,
-            )
+            .execute_participant_role_update(authority, &command.request_id, &command.payload)
             .await
         {
             Ok(outcome) => CommandExecution::success(outcome),
@@ -166,7 +163,7 @@ async fn execute_participant_removal(
 ) -> CommandExecution {
     let mutation = match store
         .execute_participant_removal(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             command.action.as_str(),
             &command.payload,
@@ -198,7 +195,11 @@ async fn execute_participant_mute(
     command: &RoomCommand,
 ) -> CommandExecution {
     let mutation = match store
-        .execute_participant_mute(&command.principal, &command.request_id, &command.payload)
+        .execute_participant_mute(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+        )
         .await
     {
         Ok(mutation) => mutation,
