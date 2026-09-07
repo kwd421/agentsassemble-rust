@@ -79,12 +79,7 @@ impl SqliteStore {
         }
         let mut participant =
             load_participant(&mut transaction, &principal.room_id, &target_id).await?;
-        if participant.status == status {
-            return Err(rejected(
-                "participant_already_removed",
-                "The participant already has this removal status.",
-            ));
-        }
+        require_removal_transition(participant.status, status)?;
         let mut events = Vec::new();
         let cleanup = if participant.participant_type == "agent" {
             let mut session =
@@ -137,6 +132,26 @@ impl SqliteStore {
             cleanup,
         })
     }
+}
+
+// Only fresh commands reach this check; exact replay returns before loading current state.
+fn require_removal_transition(
+    current: ParticipantStatus,
+    requested: ParticipantStatus,
+) -> Result<(), PersistenceError> {
+    if current == ParticipantStatus::Exported {
+        return Err(rejected(
+            "participant_exported",
+            "This participant was permanently exported from the room.",
+        ));
+    }
+    if current == requested {
+        return Err(rejected(
+            "participant_already_removed",
+            "The participant already has this removal status.",
+        ));
+    }
+    Ok(())
 }
 
 fn removal_action(action: &str) -> Result<(ParticipantStatus, &'static str), PersistenceError> {

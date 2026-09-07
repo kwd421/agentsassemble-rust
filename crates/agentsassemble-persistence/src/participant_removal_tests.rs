@@ -169,6 +169,35 @@ async fn exported_session_cannot_resume_after_successful_cleanup() {
         )
         .await
         .unwrap_or_else(|error| panic!("export stopped session: {error}"));
+    let payload = json!({"participant_id": AGENT_ID});
+    for (request_id, action) in [
+        ("late-kick", "participant.kick"),
+        ("new-export", "participant.export"),
+    ] {
+        assert!(matches!(
+            store
+                .execute_participant_removal(&principal, request_id, action, &payload)
+                .await,
+            Err(PersistenceError::CommandRejected {
+                code: "participant_exported",
+                ..
+            })
+        ));
+    }
+    assert_eq!(
+        store
+            .participant("general", AGENT_ID)
+            .await
+            .unwrap_or_else(|error| panic!("read terminal membership: {error}"))
+            .status,
+        ParticipantStatus::Exported
+    );
+    let replay = store
+        .execute_participant_removal(&principal, "export", "participant.export", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("replay terminal export: {error}"));
+    assert!(replay.outcome.deduplicated);
+    assert_eq!(replay.outcome.result, removed.outcome.result);
     let key = removed
         .cleanup
         .unwrap_or_else(|| panic!("export cleanup missing"));

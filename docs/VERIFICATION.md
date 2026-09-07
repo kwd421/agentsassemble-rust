@@ -7409,3 +7409,20 @@ bottom-left profile stacking correction.
   0.1%/9600 KiB and owned server 0.3%/43344 KiB (178032 KiB combined). This is a
   point sample of the app-owned process tree, not a claim about shared WebKit costs.
   LM Studio used only the owned loopback fixture; real providers were not executed.
+
+### Phase 4 whole-phase review correction: terminal export (2026-09-08)
+
+Daybreak reviewed every commit in `b8fd15b..c2ab746`, the cumulative range, final
+HEAD and complete local phase contract, returning REVISE at C0/H0/M0/L1. The one
+supported finding was a late fresh kick downgrading an exported participant to
+kicked, which allowed explicit re-add despite the permanent-export promise.
+
+The canonical removal owner now rejects every fresh transition from exported
+state, after exact replay has already been admitted. Transition validation remains
+with that owner and performs no new I/O, timer or retained-state allocation. The
+existing persistence regression first reproduced the late-kick failure, then proved
+fresh kick/export rejection, unchanged exported membership, exact export replay and
+continued start denial after cleanup. All four removal tests and affected
+persistence Clippy passed. Frontend layout and transport paths are unchanged; the
+phase's recorded direct packaged verification remains applicable, while this
+serialized command interleaving is covered at its persistence authority.
