@@ -7303,3 +7303,17 @@ mandatory source/architecture/policy/artifact/format gates passed. Failed-save d
 retention/retry and upload cancellation are covered by component tests; direct
 packaged failed-save and mobile interaction remain pending with Phase 4 acceptance.
 Build used four Cargo workers; frontend verification used two workers.
+
+### Contextual Agent Session controls
+
+The profile now shows only state-eligible controls, retaining the submitted action
+while pending and the existing server transition/error owner. Execution settings
+are disclosed on demand; unchanged canonical values cannot be saved. Packaged
+interaction verified stopped/no-history Start, idle Pause and Stop, paused Resume,
+and stopped/with-history Resume, followed by a successful resume/stop cycle. A
+new isolated LM Studio catalog fixture called only the owned localhost HTTP fixture:
+its recorded protocol was read_discussion then decline_to_speak after a new human
+message. The separate Ollama fixture session stayed stopped throughout. This proves
+local protocol/control integration, not a real LM Studio provider. Settings opening
+showed the expected disabled unchanged Save. Two affected frontend files / 23 cases,
+production package/TypeScript/CSS, and mandatory gates passed.

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { CirclePause, Play, RotateCcw, Save, Square, Zap } from "lucide-react";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
@@ -126,9 +126,9 @@ export default function AgentSessionDetails({
     ? settings[invalidRuntimeControl.key] || ""
     : "";
   const visibleSessionError = sessionErrorMessage(session);
-  useEffect(() => {
+  const storedSettings = useMemo(() => {
     const storedModel = session.model || controlDefault(provider, "model");
-    const storedSettings = {
+    return {
       model:
         provider && storedModel
           ? canonicalProviderModelValue(provider, storedModel)
@@ -146,7 +146,6 @@ export default function AgentSessionDetails({
         String(session.max_output_tokens || "") ||
         controlDefault(provider, "max_output_tokens"),
     };
-    setSettings(storedSettings);
   }, [
     provider,
     session.session_id,
@@ -158,6 +157,9 @@ export default function AgentSessionDetails({
     session.permission_mode,
     session.max_output_tokens,
   ]);
+
+  useEffect(() => { setSettings(storedSettings); }, [storedSettings]);
+  const settingsChanged = Object.entries(storedSettings).some(([key, value]) => settings[key] !== value);
 
   async function runControl(action: AgentSessionControlAction) {
     if (!onControl || pendingAction) return;
@@ -177,6 +179,7 @@ export default function AgentSessionDetails({
     if (
       !onConfigure ||
       !canConfigure ||
+      !settingsChanged ||
       invalidRuntimeControl ||
       settingsBusy
     ) return;
@@ -220,8 +223,64 @@ export default function AgentSessionDetails({
           오류 원인 · {visibleSessionError}
         </p>
       )}
+      {onControl && (
+        <div className="dc-member-session-actions" aria-label={`${session.display_name} 세션 제어`}>
+          {(canStart || pendingAction === "start") && <button
+            type="button"
+            className="dc-member-session-button"
+            title="세션 시작"
+            disabled={!canStart || Boolean(pendingAction)}
+            onClick={() => void runControl("start")}
+          >
+            <Play size={15} />
+            시작
+          </button>}
+          {(canPause || pendingAction === "pause") && <button
+            type="button"
+            className="dc-member-session-button"
+            title="세션 일시정지"
+            disabled={!canPause || Boolean(pendingAction)}
+            onClick={() => void runControl("pause")}
+          >
+            <CirclePause size={15} />
+            일시정지
+          </button>}
+          {(canStop || pendingAction === "stop") && <button
+            type="button"
+            className="dc-member-session-button"
+            data-variant="danger"
+            title="세션 중지"
+            disabled={!canStop || Boolean(pendingAction)}
+            onClick={() => void runControl("stop")}
+          >
+            <Square size={14} />
+            중지
+          </button>}
+          {(canResume || pendingAction === "resume") && <button
+            type="button"
+            className="dc-member-session-button"
+            title="세션 재개"
+            disabled={!canResume || Boolean(pendingAction)}
+            onClick={() => void runControl("resume")}
+          >
+            <RotateCcw size={15} />
+            재개
+          </button>}
+          {(canInterrupt || pendingAction === "interrupt") && <button
+            type="button"
+            className="dc-member-session-button"
+            title="현재 응답 중단"
+            disabled={!canInterrupt || Boolean(pendingAction)}
+            onClick={() => void runControl("interrupt")}
+          >
+            <Zap size={15} />
+            응답 중단
+          </button>}
+        </div>
+      )}
       {provider && onConfigure && (
-        <div className="dc-agent-runtime-settings" aria-label={`${session.display_name} 런타임 설정`}>
+        <details className="dc-agent-runtime-settings" aria-label={`${session.display_name} 런타임 설정`}>
+          <summary>실행 설정</summary>
           {displayProviderControls(provider).map((control) => {
             const providerSupportsControl = provider.controls.some(
               (candidate) => candidate.key === control.key
@@ -246,9 +305,10 @@ export default function AgentSessionDetails({
           })}
           <button
             type="button"
-            className="dc-member-session-button"
+            className="dc-agent-create-primary"
             disabled={
               !canConfigure ||
+              !settingsChanged ||
               Boolean(invalidRuntimeControl) ||
               settingsBusy
             }
@@ -266,7 +326,7 @@ export default function AgentSessionDetails({
                   : `${invalidRuntimeControl.label}을(를) 선택하세요.`
                 : `${runtimeSettingLabels}을 함께 저장합니다. 변경은 다음 세션 시작부터 적용됩니다.`}
           </p>
-        </div>
+        </details>
       )}
       {provider && onConfigure && (
         <AgentSessionPersonaSettings
@@ -282,62 +342,7 @@ export default function AgentSessionDetails({
         activityVisible={activityVisible}
         onActivityVisibilityChange={onActivityVisibilityChange}
       />
-      {onControl && (
-        <div className="dc-member-session-actions" aria-label={`${session.display_name} 세션 제어`}>
-          <button
-            type="button"
-            className="dc-member-session-button"
-            title="세션 시작"
-            disabled={!canStart || Boolean(pendingAction)}
-            onClick={() => void runControl("start")}
-          >
-            <Play size={15} />
-            시작
-          </button>
-          <button
-            type="button"
-            className="dc-member-session-button"
-            title="세션 일시정지"
-            disabled={!canPause || Boolean(pendingAction)}
-            onClick={() => void runControl("pause")}
-          >
-            <CirclePause size={15} />
-            일시정지
-          </button>
-          <button
-            type="button"
-            className="dc-member-session-button"
-            data-variant="danger"
-            title="세션 중지"
-            disabled={!canStop || Boolean(pendingAction)}
-            onClick={() => void runControl("stop")}
-          >
-            <Square size={14} />
-            중지
-          </button>
-          <button
-            type="button"
-            className="dc-member-session-button"
-            title="세션 재개"
-            disabled={!canResume || Boolean(pendingAction)}
-            onClick={() => void runControl("resume")}
-          >
-            <RotateCcw size={15} />
-            재개
-          </button>
-          <button
-            type="button"
-            className="dc-member-session-button"
-            title="현재 응답 중단"
-            disabled={!canInterrupt || Boolean(pendingAction)}
-            onClick={() => void runControl("interrupt")}
-          >
-            <Zap size={15} />
-            응답 중단
-          </button>
-        </div>
-      )}
-      {actionStatus && <p className="dc-member-session-status preserve-words">{actionStatus}</p>}
+      {actionStatus && <p role="status" className="dc-member-session-status preserve-words">{actionStatus}</p>}
       <details className="dc-room-runtime-diagnostics preserve-words">
         <summary>고급 진단</summary>
         <p>turns {session.turn_count}</p>

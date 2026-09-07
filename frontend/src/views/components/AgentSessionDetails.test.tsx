@@ -78,15 +78,16 @@ describe("AgentSessionDetails diagnostics", () => {
     const { rerender } = render(
       <AgentSessionDetails session={session} provider={provider} onControl={onControl} />
     );
-    const interrupt = screen.getByRole("button", { name: "응답 중단" }) as HTMLButtonElement;
-    expect(interrupt.disabled).toBe(support !== true);
-    await userEvent.click(interrupt);
+    const interrupt = screen.queryByRole("button", { name: "응답 중단" }) as HTMLButtonElement | null;
     if (support === true) {
+      expect(interrupt).toBeTruthy();
+      await userEvent.click(interrupt!);
       expect(onControl).toHaveBeenCalledWith(session, "interrupt");
-      await waitFor(() => expect(interrupt.disabled).toBe(false));
+      await waitFor(() => expect(interrupt!.disabled).toBe(false));
       rerender(<AgentSessionDetails session={{ ...session, recovery_required: true }} provider={provider} onControl={onControl} />);
-      expect(interrupt.disabled).toBe(true);
+      expect(screen.queryByRole("button", { name: "응답 중단" })).toBeNull();
     } else {
+      expect(interrupt).toBeNull();
       expect(onControl).not.toHaveBeenCalled();
     }
   });

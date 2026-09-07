@@ -163,6 +163,8 @@ function codexProvider(): NativeCliProviderAvailability {
 
 function openAgentDetails() {
   fireEvent.click(screen.getByText("Codex Spark"));
+  const settings = screen.queryByText("실행 설정", { selector: "summary" });
+  if (settings) fireEvent.click(settings);
 }
 
 async function chooseProviderControl(label: string, option: string): Promise<void> {
@@ -256,7 +258,7 @@ describe("RoomConnectionPanel", () => {
     openAgentDetails();
     fireEvent.click(screen.getByTitle("세션 시작"));
     expect(onAgentControl).toHaveBeenCalledWith(session, "start");
-    expect((screen.getByTitle("세션 중지") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTitle("세션 중지")).toBeNull();
   });
 
   it("pauses an idle session and resumes a paused session", async () => {
@@ -276,7 +278,7 @@ describe("RoomConnectionPanel", () => {
     openAgentDetails();
     fireEvent.click(getByTitle("세션 일시정지"));
     await waitFor(() => expect(onAgentControl).toHaveBeenCalledWith(idle, "pause"));
-    expect((getByTitle("세션 재개") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTitle("세션 재개")).toBeNull();
 
     const paused = agentSession("paused");
     rerender(
@@ -295,7 +297,7 @@ describe("RoomConnectionPanel", () => {
     );
     fireEvent.click(getByTitle("세션 재개"));
     await waitFor(() => expect(onAgentControl).toHaveBeenCalledWith(paused, "resume"));
-    expect((getByTitle("세션 일시정지") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTitle("세션 일시정지")).toBeNull();
   });
 
   it("disables interrupt and exposes recovery when a busy turn is quarantined", () => {
@@ -318,7 +320,7 @@ describe("RoomConnectionPanel", () => {
 
     openAgentDetails();
 
-    expect((screen.getByTitle("현재 응답 중단") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTitle("현재 응답 중단")).toBeNull();
     expect(
       screen.getByText(/Provider 응답 결과가 불확실해 런타임 복구가 필요합니다\./)
     ).toBeTruthy();
@@ -343,7 +345,7 @@ describe("RoomConnectionPanel", () => {
 
     openAgentDetails();
 
-    expect((screen.getByTitle("세션 재개") as HTMLButtonElement).disabled).toBe(true);
+    expect(screen.queryByTitle("세션 재개")).toBeNull();
   });
 
   it("shows only runtime diagnostics owned by the Agent Session contract", () => {
@@ -652,7 +654,7 @@ describe("RoomConnectionPanel", () => {
     expect(
       (screen.getByRole("button", { name: "런타임 설정 저장" }) as HTMLButtonElement)
         .disabled
-    ).toBe(false);
+    ).toBe(true);
     expect(screen.queryByText(/현재 선택 가능한 모델 목록에 없습니다/)).toBeNull();
   });
 
