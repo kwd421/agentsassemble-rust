@@ -9,6 +9,7 @@ import {
   reconcileProviderSettings,
 } from "../../lib/providerControlSettings";
 import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
+import AgentIdentitySettings from "./member/AgentIdentitySettings";
 import AgentActivitySettings from "./AgentActivitySettings";
 import ProviderRuntimeSettingField from "./ProviderRuntimeSettingField";
 
@@ -75,6 +76,7 @@ export default function AgentSessionDetails({
   provider,
   onControl,
   onConfigure,
+  onProfileUpdate,
   activityVisible = false,
   onActivityVisibilityChange,
 }: {
@@ -84,6 +86,7 @@ export default function AgentSessionDetails({
     session: RoomAgentSession,
     action: AgentSessionControlAction
   ) => void | Promise<void>;
+  onProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onConfigure?: (
     session: RoomAgentSession,
     settings: Record<string, string>
@@ -277,6 +280,7 @@ export default function AgentSessionDetails({
           onStatus={setActionStatus}
         />
       )}
+      {onProfileUpdate && <AgentIdentitySettings key={session.session_id} session={session} onSave={onProfileUpdate} />}
       <AgentActivitySettings
         session={session}
         activityVisible={activityVisible}

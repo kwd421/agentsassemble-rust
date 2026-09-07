@@ -688,4 +688,18 @@ describe("RoomConnectionPanel", () => {
     expect(screen.getByText(/변경하려면 세션을 중지하세요/)).toBeTruthy();
   });
 
+  it("exposes Agent identity editing only with room agent control", async () => {
+    const session = agentSession("busy");
+    const onAgentProfileUpdate = vi.fn().mockResolvedValue(undefined);
+    const props = { room, agents: [agent("working")], members: [member()], agentSessions: [session],
+      onAgentProfileUpdate };
+    const { rerender } = render(<RoomConnectionPanel {...props} capabilities={agentControlCapability} />);
+    openAgentDetails();
+    fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "New name" } });
+    fireEvent.click(screen.getByRole("button", { name: "프로필 저장" }));
+    await waitFor(() => expect(onAgentProfileUpdate).toHaveBeenCalledWith(session, { display_name: "New name" }));
+    rerender(<RoomConnectionPanel {...props} capabilities={{}} />);
+    expect(screen.queryByRole("button", { name: "프로필 저장" })).toBeNull();
+  });
+
 });

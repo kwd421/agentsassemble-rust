@@ -378,6 +378,7 @@ describe("useCanonicalRoom", () => {
     await act(async () => {
       loadedHistory = await result.current.loadHistory(3);
       await result.current.sendAgentControl(session(), "stop");
+      await result.current.sendAgentProfileUpdate(session(), { display_name: "New name" });
       await result.current.sendAgentConfigure(session("stopped"), {
         model: "gpt-5.6-terra",
       });
@@ -390,6 +391,7 @@ describe("useCanonicalRoom", () => {
     expect(historyBefore).toHaveBeenNthCalledWith(1, 3);
     expect(historyBefore).toHaveBeenNthCalledWith(2, 2);
     expect(command).toHaveBeenCalledWith("agent.stop", { agent_id: "codex" });
+    expect(command).toHaveBeenCalledWith("agent.profile.update", { agent_id: "codex", display_name: "New name" });
     expect(command).toHaveBeenCalledWith("agent.configure", {
       agent_id: "codex",
       catalog_revision: "cat-test",

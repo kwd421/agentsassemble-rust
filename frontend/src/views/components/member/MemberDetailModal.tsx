@@ -16,6 +16,7 @@ export type MemberDetailModalProps = {
     action: AgentSessionControlAction
   ) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
+  onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
     session: RoomAgentSession,
     settings: Record<string, string>
@@ -30,6 +31,7 @@ export default function MemberDetailModal({
   onAgentControl,
   availableProviders = [],
   onAgentConfigure,
+  onAgentProfileUpdate,
   activityVisible,
   onActivityVisibilityChange,
 }: MemberDetailModalProps) {
@@ -68,6 +70,7 @@ export default function MemberDetailModal({
             )}
             onControl={onAgentControl}
             onConfigure={onAgentConfigure}
+            onProfileUpdate={onAgentProfileUpdate}
             activityVisible={activityVisible}
             onActivityVisibilityChange={onActivityVisibilityChange}
           />
@@ -118,6 +121,7 @@ export default function MemberDetailModal({
             )}
             onControl={onAgentControl}
             onConfigure={onAgentConfigure}
+            onProfileUpdate={onAgentProfileUpdate}
             activityVisible={activityVisible}
             onActivityVisibilityChange={onActivityVisibilityChange}
           />

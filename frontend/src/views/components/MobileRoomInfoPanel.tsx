@@ -320,6 +320,7 @@ export default function MobileRoomInfoPanel({
   capabilities = {},
   onAgentControl,
   onAgentConfigure,
+  onAgentProfileUpdate,
   agentActivityVisibility = {},
   onAgentActivityVisibilityChange,
 }: {
@@ -341,6 +342,7 @@ export default function MobileRoomInfoPanel({
     session: RoomAgentSession,
     action: AgentSessionControlAction
   ) => void | Promise<void>;
+  onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
     session: RoomAgentSession,
     settings: Record<string, string>
@@ -433,6 +435,7 @@ export default function MobileRoomInfoPanel({
               )}
               onControl={capabilities["agent.control"] ? onAgentControl : undefined}
               onConfigure={capabilities["agent.control"] ? onAgentConfigure : undefined}
+              onProfileUpdate={capabilities["agent.control"] ? onAgentProfileUpdate : undefined}
               activityVisible={agentActivityVisibility[selectedAgentSession.participant_id] === true}
               onActivityVisibilityChange={onAgentActivityVisibilityChange}
             />

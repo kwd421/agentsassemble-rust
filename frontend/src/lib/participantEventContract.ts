@@ -607,3 +607,18 @@ export function agentReaddAckProjectionsAreCoherent(
     return false;
   }
 }
+
+export function agentProfileAckProjectionsAreCoherent(result: Record<string, unknown>): boolean {
+  if (!Array.isArray(result.events) || result.events.length !== 2) return false;
+  const [memberEvent, stateEvent] = result.events as RoomEvent[];
+  if (!agentSessionIsValid(result.agent_session) || !participantIsValid(result.participant)) return false;
+  const session = result.agent_session;
+  const participant = result.participant;
+  return participant.participant_type === "agent" && participant.room_id === session.room_id &&
+    participant.participant_id === session.participant_id && participant.display_name === session.display_name &&
+    memberEvent.type === "participant_updated" && memberEvent.participant_type === "agent" &&
+    memberEvent.participant_id === session.participant_id && memberEvent.display_name === session.display_name &&
+    stateEvent.type === "agent_session_state" && stateEvent.seq === memberEvent.seq + 1 &&
+    agentSessionProjectionsMatch(stateEvent.agent_session, session) &&
+    eventProjectionsMatch(result.event, stateEvent);
+}

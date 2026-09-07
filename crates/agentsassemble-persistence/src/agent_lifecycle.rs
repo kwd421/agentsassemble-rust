@@ -545,3 +545,7 @@ mod turn_recovery_tests;
 #[cfg(test)]
 #[path = "agent_readd_tests.rs"]
 mod readd_tests;
+
+#[cfg(test)]
+#[path = "agent_profile_tests.rs"]
+mod profile_tests;

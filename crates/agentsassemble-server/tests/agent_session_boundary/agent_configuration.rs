@@ -101,5 +101,56 @@ async fn stopped_runtime_configuration_is_revalidated_replayed_and_startable() {
             ["code"],
         "runtime_profile_conflict"
     );
+    assert_live_profile_update(&mut socket, &server, &session_id, &started).await;
     server.stop().await;
+}
+
+async fn assert_live_profile_update<S>(
+    socket: &mut RoomSocketPeer<S>,
+    server: &RunningServer,
+    session_id: &str,
+    started: &Value,
+) where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    let rename = json!({"agent_id": session_id, "display_name": "Renamed live"});
+    send_command(socket, "profile-live", "agent.profile.update", &rename).await;
+    let renamed = receive_until_ack(socket, 3).await;
+    assert_eq!(
+        renamed["result"]["agent_session"]["display_name"],
+        "Renamed live"
+    );
+    assert_eq!(
+        renamed["result"]["participant"]["display_name"],
+        "Renamed live"
+    );
+    assert_eq!(renamed["result"]["agent_session"]["runtime_status"], "idle");
+    let mut expected_session = started["result"]["agent_session"].clone();
+    expected_session["display_name"] = json!("Renamed live");
+    expected_session["updated_at"] = renamed["result"]["agent_session"]["updated_at"].clone();
+    assert_eq!(renamed["result"]["agent_session"], expected_session);
+    assert_eq!(
+        renamed["result"]["events"][0]["type"],
+        "participant_updated"
+    );
+    assert_eq!(
+        renamed["result"]["events"][1]["type"],
+        "agent_session_state"
+    );
+    assert_eq!(
+        renamed["result"]["event_seq"],
+        renamed["result"]["event"]["seq"]
+    );
+    send_command(socket, "profile-live", "agent.profile.update", &rename).await;
+    let replay = receive_json(socket).await;
+    assert_eq!(replay["op"], "ack");
+    assert_eq!(replay["deduplicated"], true);
+    assert_eq!(replay["result"], renamed["result"]);
+    let mut reconnected = connect(&server.base_url, &server.state).await;
+    subscribe(&mut reconnected).await;
+    let snapshot = receive_json(&mut reconnected).await;
+    assert_eq!(
+        snapshot["agent_sessions"][0]["display_name"],
+        "Renamed live"
+    );
 }

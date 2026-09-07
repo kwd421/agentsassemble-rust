@@ -9,6 +9,7 @@ import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreateAckProjectionsAreCoherent,
   agentControlPayloadId,
+  agentProfileAckProjectionsAreCoherent,
   agentCreationProjectionFromEvent,
   agentReactivationProjectionFromEvent,
   agentReaddAckProjectionsAreCoherent,
@@ -389,9 +390,14 @@ export function commandAckResultIsValid(
       }
       return agentCreateAckProjectionsAreCoherent(payload, result);
     }
-    const expectedAgentId = action === "agent.readd"
+    const expectedAgentId = (action === "agent.readd" || action === "agent.profile.update")
       ? agentControlPayloadId(payload) : String(payload.agent_id || "");
     if (expectedAgentId === null || !agentSessionIsValid(result.agent_session, expectedRoomId, expectedAgentId)) return false;
+    if (action === "agent.profile.update") {
+      return hasDurableEvent && Array.isArray(result.events) &&
+        result.events.every((candidate) => publicRoomEventIsValid(candidate, expectedRoomId)) &&
+        agentProfileAckProjectionsAreCoherent(result);
+    }
     if (action === "agent.readd") {
       return hasDurableEvent && Array.isArray(result.events) &&
         result.events.every((candidate) => publicRoomEventIsValid(candidate, expectedRoomId)) &&

@@ -6964,4 +6964,29 @@ The socket harness also resolves complete committed/deduplicated re-add ACKs and
 rejects missing sequence metadata; the independent server assertions use actual
 serialized results, closing the fixture-only coverage gap. No new background work,
 provider I/O, fallback, gate exception or generic storage/export framework was added.
-Daybreak re-approval of the corrected complete phase remains pending.
+Daybreak re-reviewed `5c8d17b`, all four individual Phase 2 commits, cumulative
+`2a49599..5c8d17b`, final HEAD and complete local contract: **APPROVE,
+C0/H0/M0/L0**. All four findings are closed. Phase 3 may proceed; final real-provider,
+packaged UI and Pro review remain full-closeout gates.
+
+## Phase 3 Agent identity owner (2026-09-07)
+
+The first vertical slice restores Agent name editing through `agent.profile.update`.
+The transaction owns Session identity, derived participant name, two canonical events
+and durable replay; role, mute, membership, private/runtime custody and human profile
+state are unchanged. Existing participant and Session event projectors cover roster,
+timeline and reconnect. The copied member/mobile paths use a separate callback and
+existing approved input CSS; no browser storage or provider catalog is identity
+mutation authority. Avatar editing remains unavailable until its own upload/custody
+slice is complete.
+
+Two persistence cases exercise restart/replay/conflict and the rejected authority,
+payload and target matrix. The existing TCP runtime-configuration boundary additionally
+verifies live rename preserves the complete public runtime state, exact ACK replay,
+both events and a fresh connection snapshot. Fifty affected frontend cases pass,
+including save failure/retry, room capability gating, canonical callback and ACK/event
+identity checks; the earlier unchanged MemberList suite also passes. TypeScript,
+production build/original CSS, workspace all-target/all-feature Clippy, architecture,
+source growth, 19 policy/artifact tests, format and diff checks pass. A test assertion
+initially used absent DOM matchers and was corrected to the existing test convention;
+no production fallback or gate exception was added. Phase 3 and its review remain open.

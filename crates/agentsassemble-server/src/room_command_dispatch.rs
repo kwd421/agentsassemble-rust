@@ -38,6 +38,13 @@ pub(crate) async fn execute_command(
         RoomAction::AgentConfigure => execute_agent_configure(store, provider_catalog, command)
             .await
             .unwrap_or_else(CommandExecution::transactional_failure),
+        RoomAction::AgentProfileUpdate => match store
+            .execute_agent_profile_update(&command.principal, &command.request_id, &command.payload)
+            .await
+        {
+            Ok(outcome) => CommandExecution::success(outcome),
+            Err(error) => CommandExecution::transactional_failure(error),
+        },
         RoomAction::AgentPause => {
             crate::room_agent_lifecycle_runtime::execute_agent_pause(
                 store,

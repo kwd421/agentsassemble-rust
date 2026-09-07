@@ -8,7 +8,7 @@ order below. The provider-first ordering has prior manual documentation cross-re
 the current checkpoint records later findings, not a new approval.
 Phase 1's corrected local contract is closed through `2a49599`: the completed Pro
 review's three medium findings are resolved, and Daybreak approved all 136 commits,
-the cumulative phase, final HEAD and complete local product contract. Phase 2 is active.
+the cumulative phase, final HEAD and complete local product contract. Phase 2 is closed through `5c8d17b`; Phase 3 is active.
 Subsequent phases require Daybreak only; new Pro review waits until the full
 reimplementation is complete, as owned below.
 Freebuff is excluded; Antigravity moves exclusively to
@@ -294,7 +294,7 @@ taxonomy redesign waits until post-parity.
 
 ## Ordered implementation phases
 
-Current execution checkpoint (2026-09-07, Phase 2 active):
+Current execution checkpoint (2026-09-07, Phase 3 active):
 
 1. Custom API's completion-contract correction is locally complete. Its specification
    now owns requested-versus-resolved identity while preserving request/session
@@ -319,7 +319,11 @@ Current execution checkpoint (2026-09-07, Phase 2 active):
    [Correction evidence](VERIFICATION.md#completed-pro-review-corrections-2026-09-07)
    owns the final dispositions. New Pro, real-client and packaged proof remain due
    at full closeout; each intermediate phase receives Daybreak review.
-4. Continue the retained phase order below. The repository-wide optimization and
+4. Daybreak approved all four Phase 2 commits, cumulative `2a49599..5c8d17b`,
+   final HEAD and complete local contract at C0/H0/M0/L0. Phase 2 is closed.
+   Phase 3 implements the [Agent profile owner](specs/agent-profile-slice.md),
+   preserving existing human and asset ownership.
+5. Continue the retained phase order below. The repository-wide optimization and
    test/security-duplication passes are complete for their recorded scope, not a new
    recurring prerequisite. Reopen their owners only for a concrete new failure,
    changed contract, or measured cost. For later historical finding IDs, inspect the

@@ -117,6 +117,8 @@ pub enum RoomAction {
     AgentCreate,
     #[serde(rename = "agent.configure")]
     AgentConfigure,
+    #[serde(rename = "agent.profile.update")]
+    AgentProfileUpdate,
     #[serde(rename = "agent.start")]
     AgentStart,
     #[serde(rename = "agent.pause")]
@@ -132,11 +134,12 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 19] = [
+    pub const ALL: [Self; 20] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
         Self::AgentPause,
+        Self::AgentProfileUpdate,
         Self::AgentReadd,
         Self::AgentResume,
         Self::AgentStart,
@@ -170,6 +173,7 @@ impl RoomAction {
             Self::RoomRandomChoose => "room.random.choose",
             Self::AgentCreate => "agent.create",
             Self::AgentConfigure => "agent.configure",
+            Self::AgentProfileUpdate => "agent.profile.update",
             Self::AgentStart => "agent.start",
             Self::AgentInterrupt => "agent.interrupt",
             Self::AgentPause => "agent.pause",

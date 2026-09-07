@@ -510,6 +510,18 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     [requireCurrentProjectionSocket]
   );
 
+  const sendAgentProfileUpdate = useCallback(
+    async (session: RoomAgentSession, settings: Record<string, string>) => {
+      const operationSocket = requireCurrentProjectionSocket();
+      await operationSocket.command("agent.profile.update", {
+        ...settings,
+        agent_id: session.participant_id,
+      });
+      requireCurrentProjectionSocket();
+    },
+    [requireCurrentProjectionSocket]
+  );
+
   const sendAgentConfigure = useCallback(
     async (session: RoomAgentSession, settings: Record<string, string>) => {
       const operationSocket = requireCurrentProjectionSocket();
@@ -722,6 +734,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     loadHistory,
     sendAgentControl,
     sendAgentConfigure,
+    sendAgentProfileUpdate,
     sendParticipantMute,
     sendParticipantRole,
     sendRoomSettingsUpdate,
