@@ -20,7 +20,9 @@ use crate::runtime_supervisor;
 
 mod agent_avatar;
 mod appearance;
+mod central_login;
 mod control;
+pub(crate) use central_login::CentralLoginGrant;
 mod human_invite;
 mod message_attachments;
 mod message_pins;

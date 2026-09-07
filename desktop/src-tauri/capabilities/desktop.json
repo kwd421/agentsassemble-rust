@@ -5,6 +5,8 @@
   "windows": ["main"],
   "local": true,
   "permissions": [
+    "allow-runtime-central-login",
+    "allow-open-central-google-login",
     "allow-runtime-bootstrap-status",
     "allow-runtime-bootstrap-initialize",
     "allow-runtime-ticket",

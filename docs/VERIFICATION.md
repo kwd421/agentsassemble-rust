@@ -7471,3 +7471,15 @@ The reduction concerns token bytes and serialization work only; no CPU or latenc
 improvement is claimed. Whole-phase packaged admission proof remains required.
 Affected server Clippy and unchanged architecture/source, 19 policy/artifact tests,
 format, diff and artifact gates passed after the claim change.
+
+### Native central Google return owner (2026-09-08)
+
+Startup now uses private native start/poll/cancel before local bootstrap; the exact
+loopback callback grants no account or operator authority. State expires after 600s,
+capacity is 16, first completion wins, and frontend cleanup precedes session save.
+The host checks Google HTTPS/PKCE and its owned callback before [opening the browser](https://docs.rs/open/5.4.3/open/fn.that.html).
+PASS: 2 broker tests, TCP ingress test, all 10 control-pipe tests, 22 frontend tests,
+server/desktop Clippy, frontend production/CSS build, structure/19 policy tests,
+artifact/fmt/diff checks. Desktop's 26 other tests passed; its updated 25-command
+surface test passed separately. Evidence: `/tmp/aa-phase5-native-*.log`.
+No real Google execution or packaged Phase 5 acceptance is claimed by these tests.

@@ -58,6 +58,8 @@ macro_rules! registered_routes {
 mod agent_create_runtime;
 mod app_state;
 mod central_host_identity;
+mod central_login;
+pub use central_login::central_login_control;
 mod central_registration_web;
 mod connection_admission;
 mod event_publication;

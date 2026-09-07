@@ -1,4 +1,5 @@
 import {
+  controlDesktopCentralLogin,
   fetchDesktopCentralRegistration,
   fetchDesktopOperatorRuntime,
   isDesktopWebview,
@@ -294,24 +295,6 @@ async function unsignedPost<T>(
   return responsePayload<T>(response);
 }
 
-async function localPost<T>(
-  path: string,
-  body: Record<string, unknown>,
-  signal?: AbortSignal
-): Promise<T> {
-  const response = await fetchLocalRuntime(path, {
-    method: "POST",
-    cache: "no-store",
-    credentials: "same-origin",
-    redirect: "error",
-    referrerPolicy: "no-referrer",
-    headers: { "content-type": "application/json" },
-    body: JSON.stringify(body),
-    signal,
-  });
-  return responsePayload<T>(response);
-}
-
 function fetchLocalRuntime(path: string, init: RequestInit = {}): Promise<Response> {
   return isDesktopWebview()
     ? fetchDesktopOperatorRuntime(path, init)
@@ -478,82 +461,69 @@ export async function loginCentralGoogle(
   const state = randomUrlToken(32);
   const verifier = randomUrlToken(32);
   const codeChallenge = await sha256(verifier);
-  const callback = await localPost<{ redirect_uri: string; expires_at: number }>(
-    "/api/central-login/callback/start",
-    { state },
-    signal
-  );
-  const started = parseCentralGoogleHandoff(
-    await unsignedPost<unknown>(
-      "/v1/auth/google/native/start",
-      {
-        ...(await authDeviceBody()),
-        code_challenge: codeChallenge,
-        redirect_uri: callback.redirect_uri,
-        state,
-      },
-      signal
-    )
-  );
-  if (started.state !== state) {
-    throw new Error("중앙 로그인 서버가 요청 상태를 바꾸었습니다.");
-  }
-  const authorizationUrl = new URL(started.authorization_url);
-  if (
-    authorizationUrl.searchParams.get("redirect_uri") !== callback.redirect_uri ||
-    authorizationUrl.searchParams.get("code_challenge") !== codeChallenge
-  ) {
-    throw new Error("중앙 로그인 서버가 현재 앱과 다른 로그인 요청을 만들었습니다.");
-  }
-  status?.("시스템 브라우저에서 Google 계정을 선택해 주세요.");
-  if (isDesktopWebview()) {
+  let completed: { person: CentralPerson; session: Omit<CentralSession, "person"> } | null = null;
+  try {
+    const callback = await controlDesktopCentralLogin("start", state);
+    throwIfGoogleLoginAborted(signal);
+    if (callback.result.status !== "pending") {
+      throw new Error("Google 로그인을 준비하지 못했습니다. 다시 시도해 주세요.");
+    }
+    const started = parseCentralGoogleHandoff(
+      await unsignedPost<unknown>(
+        "/v1/auth/google/native/start",
+        {
+          ...(await authDeviceBody()),
+          code_challenge: codeChallenge,
+          redirect_uri: callback.redirect_uri,
+          state,
+        },
+        signal
+      )
+    );
+    if (started.state !== state) {
+      throw new Error("중앙 로그인 서버가 요청 상태를 바꾸었습니다.");
+    }
+    const authorizationUrl = new URL(started.authorization_url);
+    if (
+      authorizationUrl.searchParams.get("redirect_uri") !== callback.redirect_uri ||
+      authorizationUrl.searchParams.get("code_challenge") !== codeChallenge
+    ) {
+      throw new Error("중앙 로그인 서버가 현재 앱과 다른 로그인 요청을 만들었습니다.");
+    }
+    status?.("시스템 브라우저에서 Google 계정을 선택해 주세요.");
+    throwIfGoogleLoginAborted(signal);
     await openDesktopCentralGoogleLogin(started.authorization_url);
-  } else {
-    const popup = window.open(started.authorization_url, "_blank");
-    if (!popup) {
-      throw new Error("브라우저 팝업이 차단됐습니다. 팝업을 허용하고 다시 시도해 주세요.");
+    const expiresAt = Math.min(started.expires_at, callback.result.expires_at);
+    while (Math.floor(Date.now() / 1000) < expiresAt) {
+      await waitForGoogleReturn(signal);
+      const { result: returned } = await controlDesktopCentralLogin("poll", state);
+      throwIfGoogleLoginAborted(signal);
+      if (returned.status === "pending") continue;
+      if (returned.status === "failed" || returned.status === "cancelled") {
+        throw new Error("Google 로그인이 취소됐습니다.");
+      }
+      const exchanged = await unsignedPost<{
+        status: "complete";
+        person: CentralPerson;
+        session: Omit<CentralSession, "person">;
+      }>(
+        "/v1/auth/google/native/exchange",
+        {
+          handoff_id: started.handoff_id,
+          authorization_code: returned.authorization_code,
+          code_verifier: verifier,
+        },
+        signal
+      );
+      completed = exchanged;
+      break;
     }
-    try {
-      popup.opener = null;
-    } catch {
-      // Cross-origin popup is already isolated.
-    }
+    if (!completed) throw new Error("Google 로그인 시간이 만료됐습니다. 다시 시도해 주세요.");
+  } finally {
+    await controlDesktopCentralLogin("cancel", state);
   }
-  const expiresAt = Math.min(started.expires_at, Number(callback.expires_at || 0));
-  while (Math.floor(Date.now() / 1000) < expiresAt) {
-    await waitForGoogleReturn(signal);
-    const returned = await localPost<
-      | { status: "pending"; expires_at: number }
-      | { status: "error"; error: string }
-      | {
-          status: "complete";
-          authorization_code: string;
-        }
-    >(
-      "/api/central-login/callback/poll",
-      { state },
-      signal
-    );
-    if (returned.status === "pending") continue;
-    if (returned.status === "error") {
-      throw new Error("Google 로그인이 취소됐습니다.");
-    }
-    const exchanged = await unsignedPost<{
-      status: "complete";
-      person: CentralPerson;
-      session: Omit<CentralSession, "person">;
-    }>(
-      "/v1/auth/google/native/exchange",
-      {
-        handoff_id: started.handoff_id,
-        authorization_code: returned.authorization_code,
-        code_verifier: verifier,
-      },
-      signal
-    );
-    return saveSession(exchanged);
-  }
-  throw new Error("Google 로그인 시간이 만료됐습니다. 다시 시도해 주세요.");
+  throwIfGoogleLoginAborted(signal);
+  return saveSession(completed);
 }
 
 export async function bootstrapCentral(): Promise<CentralBootstrap | null> {

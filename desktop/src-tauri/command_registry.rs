@@ -1,4 +1,6 @@
 desktop_commands! {
+    runtime_central_login => "allow-runtime-central-login",
+    open_central_google_login => "allow-open-central-google-login",
     runtime_bootstrap_status => "allow-runtime-bootstrap-status",
     runtime_bootstrap_initialize => "allow-runtime-bootstrap-initialize",
     runtime_ticket => "allow-runtime-ticket",

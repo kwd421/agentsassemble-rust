@@ -758,6 +758,22 @@ export async function chooseDesktopWorkspace(): Promise<DesktopWorkspaceSelectio
   return tauri.invoke<DesktopWorkspaceSelection>("choose_local_workspace");
 }
 
+export type DesktopCentralLoginResult =
+  | { status: "pending"; expires_at: number }
+  | { status: "complete"; authorization_code: string }
+  | { status: "failed" }
+  | { status: "cancelled" };
+
+export async function controlDesktopCentralLogin(
+  action: "start" | "poll" | "cancel",
+  state: string,
+): Promise<{ redirect_uri: string; result: DesktopCentralLoginResult }> {
+  const tauri = tauriInternals();
+  if (!tauri) throw new Error("데스크톱 중앙 로그인 기능을 사용할 수 없습니다.");
+  requireDesktopHostCommand("runtime_central_login");
+  return tauri.invoke("runtime_central_login", { action, state });
+}
+
 export async function openDesktopCentralGoogleLogin(url: string): Promise<void> {
   const tauri = tauriInternals();
   if (!tauri) {

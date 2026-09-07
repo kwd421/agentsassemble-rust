@@ -238,21 +238,19 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         }
     };
     match request {
+        LocalControlRequest::CentralLogin {
+            action,
+            state: login_state,
+            ..
+        } => {
+            agentsassemble_server::central_login_control(state, request_id, action, &login_state)
+                .await
+        }
         LocalControlRequest::InspectBootstrap { .. } => {
-            match state.store.local_bootstrap_status().await {
-                Ok(status) => LocalControlResponse::BootstrapOk {
-                    request_id,
-                    bootstrap: Box::new(bootstrap_grant(
-                        status,
-                        false,
-                        &state.server_product_surface,
-                    )),
-                },
-                Err(error) => bootstrap_control_error(request_id, error),
-            }
+            bootstrap_control_response(state, request_id, None).await
         }
         LocalControlRequest::InitializeBootstrap { display_name, .. } => {
-            initialize_bootstrap_control_response(state, request_id, &display_name).await
+            bootstrap_control_response(state, request_id, Some(&display_name)).await
         }
         LocalControlRequest::IssueTicket { meeting_id, .. } => {
             match issue_local_ticket(state, &meeting_id).await {
@@ -363,21 +361,29 @@ fn manager_request(
     }
 }
 
-async fn initialize_bootstrap_control_response(
+async fn bootstrap_control_response(
     state: &AppState,
     request_id: String,
-    display_name: &str,
+    display_name: Option<&str>,
 ) -> LocalControlResponse {
-    match state
-        .store
-        .bootstrap_local_authority(&request_id, display_name)
-        .await
-    {
-        Ok(commit) => LocalControlResponse::BootstrapOk {
+    let result = match display_name {
+        Some(name) => state
+            .store
+            .bootstrap_local_authority(&request_id, name)
+            .await
+            .map(|commit| (commit.status, commit.deduplicated)),
+        None => state
+            .store
+            .local_bootstrap_status()
+            .await
+            .map(|status| (status, false)),
+    };
+    match result {
+        Ok((status, deduplicated)) => LocalControlResponse::BootstrapOk {
             request_id,
             bootstrap: Box::new(bootstrap_grant(
-                commit.status,
-                commit.deduplicated,
+                status,
+                deduplicated,
                 &state.server_product_surface,
             )),
         },
@@ -502,7 +508,8 @@ async fn settings_ticket_control_response(
 
 fn control_request_id(request: &LocalControlRequest) -> &str {
     match request {
-        LocalControlRequest::InspectBootstrap { request_id }
+        LocalControlRequest::CentralLogin { request_id, .. }
+        | LocalControlRequest::InspectBootstrap { request_id }
         | LocalControlRequest::InitializeBootstrap { request_id, .. }
         | LocalControlRequest::IssueTicket { request_id, .. }
         | LocalControlRequest::IssueOperatorHttpTicket { request_id }

@@ -67,3 +67,18 @@ UX guide's margins, focused dialogs and concise menus. Run affected tests and al
 unchanged structure/security/CSS gates, measure phase resource costs and obtain
 Daybreak whole-phase approval before Phase 6. Real providers and the final Pro
 review remain deferred by user instruction; local fixtures do not prove those runs.
+
+### Native startup return boundary
+
+`StartupIdentityBoundary` admits the central login screen only in the desktop host;
+ordinary browser startup is unavailable without invite/pair/recovery authority.
+Central login precedes local profile bootstrap. Its transient start/poll/cancel
+therefore uses the existing private host-to-runtime control pipe, carrying no fake
+operator principal and granting no room/account authority. The existing runtime
+owns one bounded pending-return collection (16 entries, 10-minute expiry), and the
+loopback-only HTTP callback accepts only an expected unguessable state. No public
+start/poll endpoint or new reusable credential is necessary. The native host derives
+the redirect URI from its exact running runtime and opens only the validated Google
+authorization URL. The existing central service remains the OAuth/PKCE exchange
+owner. Completion/abort/failure retires transient state; expiry is checked on access,
+and runtime shutdown drops it without adding a polling task or persistence table.

@@ -1,4 +1,6 @@
+mod central_login;
 mod local_runtime;
+use central_login::{open_central_google_login, runtime_central_login};
 mod message_attachment_save;
 #[cfg(windows)]
 mod private_fs;
@@ -509,7 +511,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 23);
+        assert_eq!(surface.commands.len(), 25);
         assert!(
             surface
                 .commands
@@ -517,6 +519,8 @@ mod tests {
                 .any(|command| command == "host_product_surface")
         );
         for expected in [
+            "runtime_central_login",
+            "open_central_google_login",
             "runtime_message_pins_read_ticket",
             "runtime_message_pins_write_ticket",
             "runtime_message_search_read_ticket",
@@ -530,11 +534,5 @@ mod tests {
         ] {
             assert!(surface.commands.iter().any(|command| command == expected));
         }
-        assert!(
-            !surface
-                .commands
-                .iter()
-                .any(|command| command == "open_central_google_login")
-        );
     }
 }

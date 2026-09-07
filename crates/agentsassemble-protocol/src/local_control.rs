@@ -4,6 +4,11 @@ use serde::{Deserialize, Serialize};
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "op", rename_all = "snake_case", deny_unknown_fields)]
 pub enum LocalControlRequest {
+    CentralLogin {
+        request_id: String,
+        action: CentralLoginAction,
+        state: String,
+    },
     InspectBootstrap {
         request_id: String,
     },
@@ -124,6 +129,10 @@ pub struct LocalBootstrapGrant {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
 pub enum LocalControlResponse {
+    CentralLoginOk {
+        request_id: String,
+        result: CentralLoginResult,
+    },
     BootstrapOk {
         request_id: String,
         bootstrap: Box<LocalBootstrapGrant>,
@@ -221,4 +230,21 @@ pub enum LocalControlResponse {
         code: String,
         message: String,
     },
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum CentralLoginAction {
+    Start,
+    Poll,
+    Cancel,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
+pub enum CentralLoginResult {
+    Pending { expires_at: u64 },
+    Complete { authorization_code: String },
+    Failed,
+    Cancelled,
 }

@@ -152,6 +152,56 @@ async fn control_pipe_eof_releases_database_for_restart() {
 }
 
 #[tokio::test]
+async fn native_google_return_uses_private_control_before_bootstrap() {
+    use agentsassemble_protocol::{CentralLoginAction, CentralLoginResult};
+    let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("fixture: {error}"));
+    let mut server = start_controlled(&directory.path().join("runtime.sqlite3")).await;
+    let state = "s".repeat(43);
+    let request = |action| LocalControlRequest::CentralLogin {
+        request_id: "native-login".into(),
+        action,
+        state: state.clone(),
+    };
+    assert!(matches!(
+        server
+            .send_control(&request(CentralLoginAction::Start))
+            .await,
+        LocalControlResponse::CentralLoginOk {
+            result: CentralLoginResult::Pending { .. },
+            ..
+        }
+    ));
+    let response = reqwest::Client::new()
+        .get(format!(
+            "{}/api/central-login/callback?state={state}&code=fixture-code-123456",
+            server.address
+        ))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("callback: {error}"));
+    assert!(response.status().is_success());
+    assert!(matches!(
+        server
+            .send_control(&request(CentralLoginAction::Poll))
+            .await,
+        LocalControlResponse::CentralLoginOk {
+            result: CentralLoginResult::Complete { .. },
+            ..
+        }
+    ));
+    assert!(matches!(server.issue_operator_ticket().await,
+        LocalControlResponse::Error { code, .. } if code == "bootstrap_required"));
+    server
+        .send_control(&request(CentralLoginAction::Cancel))
+        .await;
+    assert!(
+        matches!(server.send_control(&request(CentralLoginAction::Poll)).await,
+        LocalControlResponse::Error { code, .. } if code == "login_expired")
+    );
+    server.close_parent_pipe().await;
+}
+
+#[tokio::test]
 async fn owned_control_pipe_issues_room_ticket_without_http_secret() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-open-central-google-login"
+description = "Enables the open_central_google_login command without any pre-configured scope."
+commands.allow = ["open_central_google_login"]
+
+[[permission]]
+identifier = "deny-open-central-google-login"
+description = "Denies the open_central_google_login command without any pre-configured scope."
+commands.deny = ["open_central_google_login"]

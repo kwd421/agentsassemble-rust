@@ -22,7 +22,8 @@ use ts_rs::TS;
 mod local_control;
 
 pub use local_control::{
-    LocalBootstrapGrant, LocalBootstrapPhase, LocalControlRequest, LocalControlResponse,
+    CentralLoginAction, CentralLoginResult, LocalBootstrapGrant, LocalBootstrapPhase,
+    LocalControlRequest, LocalControlResponse,
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;

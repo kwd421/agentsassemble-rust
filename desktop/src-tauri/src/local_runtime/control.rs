@@ -687,7 +687,7 @@ fn valid_base64url_32(value: &str) -> bool {
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
 }
 
-fn request_control(
+pub(super) fn request_control(
     runtime: &mut RuntimeProcess,
     request: &LocalControlRequest,
 ) -> Result<LocalControlResponse, TicketFailure> {
