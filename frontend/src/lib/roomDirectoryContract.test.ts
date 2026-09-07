@@ -52,7 +52,6 @@ function directoryRoom(
       tool_mode: "chat",
       ordered_exclude_previous_speaker: true,
       channels: [],
-      activity_plugin: "",
     },
   };
 }
@@ -194,7 +193,7 @@ describe("room directory contracts", () => {
           ...authority,
           server_product_surface: {
             ...surface,
-            digest: "b647500e5591ddbbe40de44ef7aaa3cbfe9085330552cee1592349a68a48b8b4",
+            digest: "d84c873b82422f0ca4b8725930eb3c8ef48a0a5095507cf50253eff4dc0bf915",
             websocket_streams: [],
           },
         }),

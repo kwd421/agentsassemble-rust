@@ -13,7 +13,6 @@ import { CHANNEL_SECTIONS, DeferredViewFallback, type ChannelConfig } from "./ap
 import type { AppController } from "./useAppController";
 import AppOverlays from "./AppOverlays";
 import LobbyView from "../views/LobbyView";
-import RimWorldPluginView from "../views/plugins/rimworld/RimWorldPluginView";
 import { RoomSocketProvider } from "../RoomSocketContext";
 import ChannelContextMenu from "../views/components/ChannelContextMenu";
 import RoomConnectionPanel from "../views/components/RoomConnectionPanel";
@@ -54,7 +53,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
-    roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
+    roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
     saveAgentAvatar, scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate, sendAgentControl,
     sendParticipantMute, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setLeaveRoomTargetId,
@@ -310,23 +309,6 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} activeMeetingId={activeRoom.meetingId} />
           ) : channel === "lobby" ? (
-            canonicalRoom.roomSettings?.activityPlugin === "rimworld" &&
-            (serverProductSurface?.websocket_streams as string[] | undefined)?.includes("plugin") ? (
-              <RimWorldPluginView
-                roomId={activeRoom.id}
-                envelopes={canonicalRoom.pluginEnvelopes}
-                canManage={Boolean(canonicalRoom.capabilities["room.manage"])}
-                onCommand={(command) => {
-                  if (!roomSocket?.ready() || !roomSocket.plugin) return;
-                  roomSocket.plugin({
-                    plugin_id: command.plugin_id,
-                    action: command.command,
-                    args: command.args,
-                    revision: command.revision,
-                  });
-                }}
-              />
-            ) : (
             <LobbyView
               activeRoom={activeRoom}
               agents={scopedAgents}
@@ -373,7 +355,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               onSearchTargetHandled={() => setPendingMessageSearchTarget(null)}
               onOpenCrossChannelSearchResult={openCrossChannelSearchResult}
             />
-            )
           ) : (
             <DeferredViewFallback />
           )}

@@ -39,7 +39,6 @@ const GENERATED_ROOM_SETTINGS_KEYS = [
   "tool_mode",
   "ordered_exclude_previous_speaker",
   "channels",
-  "activity_plugin",
 ] as const;
 const ROOM_SETTINGS_KEYS: ExactGeneratedKeys<
   PublicRoomSettings,
@@ -108,7 +107,7 @@ function publicRoomSettingsIsValid(value: unknown): value is PublicRoomSettings 
     const appearance = strictRecord(settings.appearance, "room settings appearance");
     assertExactKeys(appearance, APPEARANCE_KEYS, "room settings appearance");
     if (
-      ["settings_revision", "label", "topic", "conversation_mode", "tool_mode", "activity_plugin"]
+      ["settings_revision", "label", "topic", "conversation_mode", "tool_mode"]
         .some((key) => typeof settings[key] !== "string") ||
       typeof settings.ordered_exclude_previous_speaker !== "boolean" ||
       APPEARANCE_KEYS.some((key) => typeof appearance[key] !== "string") ||

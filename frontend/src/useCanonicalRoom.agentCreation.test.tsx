@@ -50,6 +50,7 @@ function createdAgentEvent(
       updated_at: CREATED_AT,
     },
     agent_session: {
+      avatar_image_url: "",
       room_id: "general",
       session_id: "opencode-stopped",
       participant_id: "opencode-stopped",
@@ -144,7 +145,6 @@ function snapshot(
       tool_mode: "chat",
       ordered_exclude_previous_speaker: true,
       channels: [],
-      activity_plugin: "",
     },
     participants,
     agent_sessions: sessions,

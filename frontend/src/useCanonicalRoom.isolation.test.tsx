@@ -29,7 +29,6 @@ function rawRoomSettings(): RoomSocketSnapshot["room_settings"] {
     tool_mode: "chat",
     ordered_exclude_previous_speaker: true,
     channels: [],
-    activity_plugin: "",
   };
 }
 

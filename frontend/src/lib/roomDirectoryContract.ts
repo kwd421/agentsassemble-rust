@@ -93,7 +93,6 @@ function validateSettings(value: unknown, roomId: string, label: string) {
       "tool_mode",
       "ordered_exclude_previous_speaker",
       "channels",
-      "activity_plugin",
     ],
     label
   );
@@ -106,7 +105,6 @@ function validateSettings(value: unknown, roomId: string, label: string) {
     "topic",
     "conversation_mode",
     "tool_mode",
-    "activity_plugin",
   ]) {
     if (typeof settings[key] !== "string") {
       throw new Error(`${label}.${key}가 올바르지 않습니다.`);

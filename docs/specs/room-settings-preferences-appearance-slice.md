@@ -88,8 +88,14 @@ completed in that stage:
 The current validator still rejects, with stable explicit unsupported errors and
 no write:
 
-- nonempty `channels`, until custom registry plus text/voice behavior exists;
-- nonempty `activity_plugin`, until plugin hosting exists.
+- nonempty `channels`, until custom registry plus text/voice behavior exists.
+
+Phase 4 removes `activity_plugin` from the schema and public settings contract.
+Its only presentation consumer belonged to deferred RimWorld; the production view
+no longer imports that surface. Unknown plugin fields are rejected by strict parsing.
+Schema 59 uses the existing explicit old-schema rejection without migration.
+`ROOM_LABEL_LIMIT` remains 128 Unicode characters and is exported to the existing
+settings input; the UI applies that same code-point boundary.
 
 Stage B activates `banner_image_url` and `icon_image_url` only through the owning
 settings transaction. No route keeps a second allowlist, and no unsupported field

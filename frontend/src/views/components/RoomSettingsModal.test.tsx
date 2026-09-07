@@ -1,4 +1,4 @@
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { fireEvent, cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { Radio } from "lucide-react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -35,7 +35,8 @@ function renderSettings(
   onOrderedExcludePreviousSpeakerChange = vi.fn(),
   onAppearanceChange = vi.fn().mockResolvedValue(undefined),
   onToolModeChange = vi.fn(),
-  onAppearanceUpload = vi.fn().mockResolvedValue(true)
+  onAppearanceUpload = vi.fn().mockResolvedValue(true),
+  onRoomChange = vi.fn()
 ) {
   render(
     <RoomSettingsModal
@@ -53,7 +54,7 @@ function renderSettings(
       canInvite
       onClose={() => undefined}
       onInvite={() => undefined}
-      onRoomChange={() => undefined}
+      onRoomChange={onRoomChange}
       onAppearanceChange={onAppearanceChange}
       onAppearanceUpload={onAppearanceUpload}
       onChannelSettingChange={async () => undefined}
@@ -69,6 +70,13 @@ function renderSettings(
 
 describe("RoomSettingsModal conversation mode", () => {
   beforeEach(() => vi.resetAllMocks());
+
+  it("uses the server room-name bound without splitting Unicode characters", () => {
+    const onRoomChange = vi.fn();
+    renderSettings("ordered", undefined, undefined, undefined, undefined, undefined, undefined, undefined, onRoomChange);
+    fireEvent.change(screen.getByLabelText("서버 이름"), { target: { value: "😀".repeat(129) } });
+    expect(onRoomChange).toHaveBeenCalledWith(expect.objectContaining({ label: "😀".repeat(128) }));
+  });
 
   it("does not advertise room deletion before the server owns that action", () => {
     renderSettings("ordered");

@@ -9,7 +9,7 @@ use ts_rs::TS;
 
 use crate::clean_single_line;
 
-const ROOM_LABEL_LIMIT: usize = 128;
+pub const ROOM_LABEL_LIMIT: usize = 128;
 const ROOM_TOPIC_LIMIT: usize = 160;
 const IMAGE_URL_LIMIT: usize = 240;
 const CHANNEL_NAME_LIMIT: usize = 60;
@@ -52,7 +52,6 @@ pub struct RoomSettings {
     pub tool_mode: String,
     pub ordered_exclude_previous_speaker: bool,
     pub channels: Vec<RoomChannel>,
-    pub activity_plugin: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -66,7 +65,6 @@ pub struct PublicRoomSettings {
     pub tool_mode: String,
     pub ordered_exclude_previous_speaker: bool,
     pub channels: Vec<RoomChannel>,
-    pub activity_plugin: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -78,7 +76,6 @@ pub struct RoomSettingsPatch {
     pub tool_mode: Option<String>,
     pub ordered_exclude_previous_speaker: Option<bool>,
     pub channels: Option<Vec<RoomChannel>>,
-    pub activity_plugin: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
@@ -133,7 +130,6 @@ struct RawRoomSettings {
     tool_mode: String,
     ordered_exclude_previous_speaker: bool,
     channels: Vec<RoomChannel>,
-    activity_plugin: String,
 }
 
 impl<'de> Deserialize<'de> for RoomAppearance {
@@ -173,7 +169,6 @@ impl RoomSettings {
             tool_mode: "chat".to_owned(),
             ordered_exclude_previous_speaker: true,
             channels: Vec::new(),
-            activity_plugin: String::new(),
         }
     }
 
@@ -197,7 +192,6 @@ impl RoomSettings {
                 "tool_mode",
                 "ordered_exclude_previous_speaker",
                 "channels",
-                "activity_plugin",
             ],
             "room settings",
         )?;
@@ -237,7 +231,6 @@ impl RoomSettingsPatch {
                 "ordered_exclude_previous_speaker",
             )?,
             channels: optional_typed(object, "channels")?,
-            activity_plugin: optional_string(object, "activity_plugin")?,
         })
     }
 
@@ -249,18 +242,12 @@ impl RoomSettingsPatch {
             && self.tool_mode.is_none()
             && self.ordered_exclude_previous_speaker.is_none()
             && self.channels.is_none()
-            && self.activity_plugin.is_none()
     }
 
     fn require_available(&self) -> Result<(), RoomSettingsError> {
         if self.channels.is_some() {
             return Err(RoomSettingsError::unsupported(
                 "Custom channels are unavailable until their message and voice owners exist.",
-            ));
-        }
-        if self.activity_plugin.is_some() {
-            return Err(RoomSettingsError::unsupported(
-                "Room activity plugins are unavailable.",
             ));
         }
         Ok(())
@@ -286,10 +273,6 @@ impl RoomSettingsPatch {
                 .channels
                 .clone()
                 .unwrap_or_else(|| current.channels.clone()),
-            activity_plugin: self
-                .activity_plugin
-                .clone()
-                .unwrap_or_else(|| current.activity_plugin.clone()),
         };
         validate_settings(RawRoomSettings::from(next))
     }
@@ -375,7 +358,6 @@ impl From<RoomSettings> for RawRoomSettings {
             tool_mode: value.tool_mode,
             ordered_exclude_previous_speaker: value.ordered_exclude_previous_speaker,
             channels: value.channels,
-            activity_plugin: value.activity_plugin,
         }
     }
 }
@@ -420,14 +402,6 @@ fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsE
         }
         require_canonical_text(&channel.created_at, "channel created_at", 64)?;
     }
-    if !raw.activity_plugin.is_empty() {
-        require_canonical_text(&raw.activity_plugin, "activity_plugin", 64)?;
-        if raw.activity_plugin.to_lowercase() != raw.activity_plugin {
-            return Err(RoomSettingsError::bad_request(
-                "activity_plugin must be a canonical lowercase id.",
-            ));
-        }
-    }
     Ok(RoomSettings {
         label: raw.label,
         topic: raw.topic,
@@ -436,7 +410,6 @@ fn validate_settings(raw: RawRoomSettings) -> Result<RoomSettings, RoomSettingsE
         tool_mode: raw.tool_mode,
         ordered_exclude_previous_speaker: raw.ordered_exclude_previous_speaker,
         channels: raw.channels,
-        activity_plugin: raw.activity_plugin,
     })
 }
 
@@ -604,7 +577,6 @@ pub fn public_settings(settings: &RoomSettings) -> Result<PublicRoomSettings, se
         tool_mode: settings.tool_mode.clone(),
         ordered_exclude_previous_speaker: settings.ordered_exclude_previous_speaker,
         channels: settings.channels.clone(),
-        activity_plugin: settings.activity_plugin.clone(),
     })
 }
 
@@ -632,7 +604,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("serialize canonical settings: {error}"));
         assert_eq!(
             public.settings_revision,
-            "room-settings-v1-3b84a7fa08f6ced85a21f168cc03d6363751337cee7ecc0e0c31aaecc5a22b98"
+            "room-settings-v1-ac23fc0b661d6d92fbfd05c6eae66a926225c9e8cd76d893b324f8c4b799012b"
         );
     }
 
@@ -681,6 +653,26 @@ mod tests {
         ] {
             assert_eq!(room_appearance_asset_id(rejected), None, "{rejected}");
         }
+    }
+
+    #[test]
+    fn room_label_limit_and_retired_plugin_field_are_authoritative() {
+        let current = RoomSettings::defaults("General");
+        let valid =
+            json!({"expected_revision": "rev", "label": "😀".repeat(super::ROOM_LABEL_LIMIT)});
+        assert!(current.strict_update(&valid).is_ok());
+        let invalid =
+            json!({"expected_revision": "rev", "label": "😀".repeat(super::ROOM_LABEL_LIMIT + 1)});
+        assert!(current.strict_update(&invalid).is_err());
+        assert!(
+            current
+                .strict_update(&json!({"expected_revision": "rev", "activity_plugin": "rimworld"}))
+                .is_err()
+        );
+        let mut stored =
+            serde_json::to_value(current).unwrap_or_else(|error| panic!("settings: {error}"));
+        stored["activity_plugin"] = json!("");
+        assert!(serde_json::from_value::<RoomSettings>(stored).is_err());
     }
 
     #[test]

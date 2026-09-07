@@ -1,3 +1,4 @@
+import { ROOM_LABEL_LIMIT } from "../../types/generated/ROOM_SETTINGS_WIRE";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
 import { Image as ImageIcon, UserPlus, X } from "lucide-react";
 import {
@@ -193,7 +194,7 @@ export default function RoomSettingsModal({
                 className="ops-input"
                 value={room.label}
                 onChange={(event) => {
-                  const label = event.target.value.slice(0, 80);
+                  const label = Array.from(event.target.value).slice(0, ROOM_LABEL_LIMIT).join("");
                   onRoomChange({
                     label,
                     shortLabel: (appearance.iconLabel || label || room.meetingId)

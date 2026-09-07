@@ -4,7 +4,7 @@ import { ROOM_ACTIONS } from "../types/generated/ROOM_ACTIONS";
 
 export const TEST_SERVER_PRODUCT_SURFACE: ServerProductSurface = {
   revision: PRODUCT_SURFACE_REVISION,
-  digest: "3d3e062764ae6976cea39dbedd19cd6b07ee2028aed94ddbeb0a79abf18bc535",
+  digest: "d3c4cfec40284b14176b509ef00b0868d3066f66d325bb26310d861dfb7b382f",
   http_routes: [],
   websocket_streams: ["room_events"],
   websocket_actions: [...ROOM_ACTIONS],

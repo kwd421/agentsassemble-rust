@@ -52,7 +52,6 @@ export interface RoomGlobalSettings {
   toolMode: RoomToolMode;
   orderedExcludePreviousSpeaker: boolean;
   channels: RoomChannel[];
-  activityPlugin?: string;
 }
 
 export type RoomGlobalSettingsUpdate = {
@@ -64,7 +63,6 @@ export type RoomGlobalSettingsUpdate = {
   toolMode?: RoomToolMode;
   orderedExcludePreviousSpeaker?: boolean;
   channels?: RoomChannel[];
-  activityPlugin?: string;
 };
 
 export type ChannelNotificationSetting = "default" | "all" | "mentions" | "mute";
@@ -132,7 +130,6 @@ type ApiRoomSettings = {
   tool_mode?: RoomToolMode;
   ordered_exclude_previous_speaker?: boolean;
   channels?: ApiRoomChannel[];
-  activity_plugin?: string;
 };
 
 type ApiChannelSettings = {
@@ -239,7 +236,6 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
       "tool_mode",
       "ordered_exclude_previous_speaker",
       "channels",
-      "activity_plugin",
     ],
     "방 preference.settings"
   );
@@ -284,7 +280,6 @@ function parseRoomSettingsResponse(value: unknown, expectedRoomId: string): Room
     "방 preference.settings"
   );
   const toolMode = stringField(payload, "tool_mode", "방 preference.settings");
-  stringField(payload, "activity_plugin", "방 preference.settings");
   validateApiChannels(payload.channels, "방 preference.settings.channels");
   if (
     !new Set(["default", "forest", "midnight", "ember", "custom"]).has(bannerPreset) ||
@@ -344,7 +339,6 @@ export function normalizeRoomGlobalSettings(
     typeof appearance.icon_image_url !== "string" ||
     typeof appearance.icon_label !== "string" ||
     typeof appearance.invite_scope !== "string" ||
-    typeof payload.activity_plugin !== "string" ||
     !["ordered", "ambient"].includes(String(payload.conversation_mode || "")) ||
     !["chat", "tabletop"].includes(String(payload.tool_mode || "")) ||
     typeof payload.ordered_exclude_previous_speaker !== "boolean" ||
@@ -369,7 +363,6 @@ export function normalizeRoomGlobalSettings(
     toolMode: payload.tool_mode as RoomToolMode,
     orderedExcludePreviousSpeaker: payload.ordered_exclude_previous_speaker,
     channels: normalizeRoomChannelList(payload.channels as ApiRoomChannel[]),
-    activityPlugin: payload.activity_plugin,
   };
 }
 

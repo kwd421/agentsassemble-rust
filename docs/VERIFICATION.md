@@ -7077,3 +7077,21 @@ Affected all-target/all-feature Clippy and unchanged architecture/source/format/
 and 19 policy/artifact gates pass. This slice adds no query, transaction, timer,
 cache or fallback; it reduces repeated SQL/JSON mechanism. Whole Phase 4 review
 waits for the complete settings, moderation and lifecycle contract.
+
+
+Phase 4 resolves C-09 by removing `activity_plugin` from stored/public room settings,
+strict input/projections and the sole deferred RimWorld production branch. Existing
+strict parsing rejects old/unknown fields, and schema 59 explicitly rejects older
+stores without migration. F-19 now exports the server's 128-code-point room label
+limit into the copied settings input. No plugin extension bag or replacement state
+was added. Eight domain settings cases pass including 128/129-emoji and retired-field
+rejection; all 254 persistence cases and both real TCP preference-boundary tests pass.
+The schema field removal intentionally changes the fixed settings revision fixture.
+Affected frontend verification also exposed stale Phase 3 Agent creation and product
+surface digest fixtures: these now include the required avatar field and real SHA-256
+values for the current generated actions. Production cryptographic checks were not
+changed. TypeScript/build/original CSS passes and the unused production RimWorld
+import is gone; the deferred source remains unmounted.
+All 104 affected frontend cases pass after those fixture corrections. Workspace
+all-target/all-feature Clippy and unchanged architecture/source/format/diff and
+19 policy/artifact tests also pass. Final packaged verification is not claimed.

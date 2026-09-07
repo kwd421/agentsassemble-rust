@@ -274,7 +274,6 @@ fn parse_preference_update(
         "conversation_mode",
         "tool_mode",
         "ordered_exclude_previous_speaker",
-        "activity_plugin",
     ];
     if object
         .keys()

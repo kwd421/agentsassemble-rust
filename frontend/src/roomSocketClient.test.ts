@@ -697,7 +697,7 @@ describe("bounded canonical room socket", () => {
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
     delete (frames.snap.room_settings as unknown as Record<string, unknown>)
-      .activity_plugin;
+      .tool_mode;
     sockets[0].receive(frames.receipt);
     sockets[0].receive(frames.snap);
 

@@ -20,7 +20,6 @@ function settings(label = "General") {
     tool_mode: "chat",
     ordered_exclude_previous_speaker: true,
     channels: [],
-    activity_plugin: "",
   };
 }
 
@@ -76,7 +75,7 @@ describe("room settings event validation", () => {
     "rejects a %s in a standalone settings event",
     (conflict) => {
       const projection = settings() as Record<string, unknown>;
-      if (conflict === "missing field") delete projection.activity_plugin;
+      if (conflict === "missing field") delete projection.tool_mode;
       else projection.legacy_label = "General";
       expect(publicRoomEventIsValid(
         result(projection, settings()).event,
