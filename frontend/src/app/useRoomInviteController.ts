@@ -14,6 +14,8 @@ import {
   sameManagerAuthority,
   useManagedHumanInvites,
 } from "./useManagedHumanInvites";
+import { createOperatorPairing } from "../api/operatorPairing";
+import { useManagedOperatorPairings } from "./useManagedOperatorPairings";
 
 type InviteModalState = { roomId: string } | null;
 
@@ -80,6 +82,8 @@ export function useRoomInviteController({
     useState<PublicAccessTransition>("idle");
   const ingressGenerationRef = useRef(0);
   const ingressWaitRef = useRef<(() => void) | null>(null);
+  const pairingCreationRef = useRef(false);
+  const [pairingCreating, setPairingCreating] = useState(false);
 
   const managedHumanInvites = useManagedHumanInvites({
     modalRoomDockId: modal?.roomId || "",
@@ -87,6 +91,14 @@ export function useRoomInviteController({
     resolveManagerRoomAuthority,
     copyText,
     captureCurrentPublicOriginRefresh,
+    publishStatus: setCopyStatus,
+  });
+  const managedPairings = useManagedOperatorPairings({
+    roomDockId: modal?.roomId || "",
+    publicOrigin: publicInviteStatus?.public_url || "",
+    resolveManager: resolveManagerRoomAuthority,
+    copyText,
+    captureOriginRefresh: captureCurrentPublicOriginRefresh,
     publishStatus: setCopyStatus,
   });
 
@@ -409,6 +421,34 @@ export function useRoomInviteController({
     }
   }
 
+  async function generatePairing(room: RoomDockItem) {
+    if (!localOperatorEligible || pairingCreationRef.current) return;
+    pairingCreationRef.current = true;
+    setPairingCreating(true);
+    const generation = beginIngressOperation();
+    setCopyStatus("기기 연결 링크를 만들고 있어요.");
+    try {
+      const ready = await requirePublicInviteReady(generation);
+      const authority = resolveManagerRoomAuthority(room.id);
+      assertManagerOperation(generation, room.id, authority);
+      const custody = await createOperatorPairing(authority,
+        () => assertManagerOperation(generation, room.id, authority));
+      const current = managerOperationIsCurrent(generation, room.id, authority) &&
+        custody.origin === ready.public_url;
+      // Retain a confirmed but retired response so its grant can still be revoked.
+      managedPairings.retain(custody, room.id, current);
+      if (!current) return;
+      setCopyStatus("연결할 내 기기에서 링크를 열어 주세요.");
+    } catch (error) {
+      if (ingressOperationIsCurrent(generation)) {
+        setCopyStatus(error instanceof Error ? error.message : "기기 연결 링크를 만들지 못했어요.");
+      }
+    } finally {
+      pairingCreationRef.current = false;
+      setPairingCreating(false);
+    }
+  }
+
   return {
     modal,
     copyStatus,
@@ -424,5 +464,10 @@ export function useRoomInviteController({
     generateSecureInvite,
     copyHumanInvite: managedHumanInvites.copy,
     revokeHumanInvite: managedHumanInvites.revoke,
+    pairings: managedPairings.pairings,
+    pairingCreating,
+    generatePairing,
+    copyPairing: managedPairings.copy,
+    revokePairing: managedPairings.revoke,
   };
 }

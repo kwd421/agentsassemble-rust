@@ -266,7 +266,7 @@ Socket-ticket exchange and departure dispatch by credential prefix without retry
 another authority domain. Paired credentials require current device and the ready public origin;
 ordinary human admission remains with its existing owner. Revocation commits before
 notifying existing room subscribers, without creating another task or timer. Paired
-sessions cannot obtain account or native server authority. Native pairing UI remains required before packaged phase acceptance.
+sessions cannot obtain account or native server authority. Paired operator controls and packaged phase acceptance remain required.
 
 ### Browser room-session device propagation
 
@@ -301,3 +301,19 @@ The existing search/pin/appearance projection and attachment-operation lifetimes
 include the device binding, so device changes retire prior requests and installed
 resource URLs through their current owners. No additional browser credential store,
 request retry or interval is introduced.
+
+### Native operator pairing management
+
+The local invite modal now offers a separate own-device connection card. Creation
+uses the existing private server-operator HTTP transport, resolves the current exact
+manager after ready-ingress refresh, and guards dispatch again after ticket issuance.
+A confirmed response arriving after modal closure is retained for revocation, with
+copy disabled. Clipboard dispatch rechecks the current origin, manager, link expiry
+and grant state; the UI never renders the raw pairing URL. An unknown revocation
+stays non-copyable and retries the same recorded grant rather than minting another.
+
+A single nearest-expiry UI deadline disables expired links and is cancelled on
+owner unmount. It neither polls ingress nor infers that the grant was redeemed.
+Expired links retain the separate revocation action because a consumed session can
+outlive its link. Actual paired operator controls and packaged desktop/mobile flows
+remain part of whole-phase acceptance.

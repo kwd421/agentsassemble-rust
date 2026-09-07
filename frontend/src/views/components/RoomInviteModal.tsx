@@ -6,6 +6,7 @@ import type {
   PublicAccessTransition,
 } from "../../app/useRoomInviteController";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
+import type { OperatorPairingPresentation } from "../../app/useManagedOperatorPairings";
 import type { RoomAppearance } from "../../lib/roomAppearance";
 import SavedFriendInvitePicker from "./SavedFriendInvitePicker";
 
@@ -29,6 +30,11 @@ function humanInviteUseLabel(maxUses: number) {
 export default function RoomInviteModal({
   roomLabel,
   humanInvites = [],
+  operatorPairings = [],
+  pairingCreating = false,
+  onCreatePairing,
+  onCopyPairing,
+  onRevokePairing,
   publicUrl,
   publicAccessTransition = "idle",
   tunnelStatus,
@@ -43,6 +49,11 @@ export default function RoomInviteModal({
 }: {
   roomLabel: string;
   humanInvites?: readonly HumanInvitePresentation[];
+  operatorPairings?: readonly OperatorPairingPresentation[];
+  pairingCreating?: boolean;
+  onCreatePairing?: () => void;
+  onCopyPairing?: (key: string) => void;
+  onRevokePairing?: (key: string) => void;
   publicUrl?: string;
   publicAccessTransition?: PublicAccessTransition;
   tunnelStatus?: PublicInviteStatus["tunnel"];
@@ -318,6 +329,51 @@ export default function RoomInviteModal({
             )}
           </section>
 
+          {onCreatePairing && onCopyPairing && onRevokePairing && (
+            <section className="dc-invite-card" aria-labelledby="operator-pairing-heading">
+              <div>
+                <h3 id="operator-pairing-heading">내 기기 연결</h3>
+                <p>내 다른 기기에서 이 방을 운영할 수 있어요. 연결 링크는 다른 사람에게 보내지 마세요.</p>
+              </div>
+              <button type="button" className="dc-invite-copy-button"
+                style={{ minWidth: 44, minHeight: 44 }}
+                aria-label="운영자 기기 연결 링크 생성"
+                disabled={pairingCreating || publicAccessBusy || !publicAccessRunning}
+                onClick={onCreatePairing}>
+                {pairingCreating ? "링크 만드는 중" : "연결 링크 만들기"}
+              </button>
+              {!publicAccessRunning && <p>외부 접속을 연 뒤 연결할 수 있어요.</p>}
+              {operatorPairings.length > 0 && (
+                <div className="grid gap-2" role="list" aria-label="이 앱에서 발급한 기기 연결">
+                  {operatorPairings.map((pairing, index) => (
+                    <div className="dc-invite-friend-row" role="listitem" key={pairing.key}>
+                      <span className="min-w-0 flex-1">
+                        <span className="dc-invite-friend-name">기기 연결 {index + 1}</span>
+                        <span className="dc-invite-friend-handle preserve-words">
+                          {pairing.state === "revoked" ? "연결 해제됨"
+                            : pairing.state === "unknown" ? "연결 해제 결과 미확인"
+                            : pairing.expired ? "링크 만료"
+                            : pairing.copyable ? `링크 만료 ${new Date(pairing.expiresAt).toLocaleTimeString()}`
+                            : "연결 해제만 가능"}
+                        </span>
+                      </span>
+                      <button type="button" className="dc-invite-copy-button"
+                        style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
+                        aria-label={`기기 연결 ${index + 1} 링크 복사`}
+                        disabled={!pairing.copyable} onClick={() => onCopyPairing(pairing.key)}>복사</button>
+                      <button type="button" className="dc-invite-copy-button"
+                        style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
+                        aria-label={`기기 연결 ${index + 1} 해제`}
+                        disabled={pairing.state === "revoking" || pairing.state === "revoked"}
+                        onClick={() => onRevokePairing(pairing.key)}>
+                        {pairing.state === "revoking" ? "해제 중" : pairing.state === "unknown" ? "해제 재시도" : "연결 해제"}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </div>
 
         <p className="mt-3 text-[12px] text-text-muted preserve-words">

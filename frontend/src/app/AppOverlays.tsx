@@ -43,6 +43,11 @@ export default function AppOverlays({ controller }: { controller: AppController 
           <RoomInviteModal
             roomLabel={inviteModalRoom.label}
             humanInvites={roomInvite.humanInvites}
+            operatorPairings={roomInvite.pairings}
+            pairingCreating={roomInvite.pairingCreating}
+            onCreatePairing={() => void roomInvite.generatePairing(inviteModalRoom)}
+            onCopyPairing={(key) => void roomInvite.copyPairing(key)}
+            onRevokePairing={(key) => void roomInvite.revokePairing(key)}
             publicUrl={invitePublicUrl}
             publicAccessTransition={roomInvite.publicAccessTransition}
             tunnelStatus={publicInviteStatus?.tunnel}

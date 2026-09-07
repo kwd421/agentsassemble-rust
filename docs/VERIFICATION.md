@@ -7854,3 +7854,17 @@ field. Both direct session GET and POST now send it. The existing preference HTT
 test now checks human and paired session headers across read/write rather than
 asserting device omission. All five preference tests and frontend build/CSS verification
 pass; no authority fallback, transport exchange or extra task was added.
+
+## Phase 5 native operator pairing management (2026-09-08)
+
+The invite modal now connects native create/copy/revoke to the existing pairing
+server owner. Four frontend suites pass 31 tests, including late creation retention,
+duplicate-submit exclusion, expiry without loss of revocation custody, changed-origin
+clipboard rejection, uncertain revoke retry, and malformed URL/acknowledgement rejection.
+Frontend TypeScript/Vite and the frozen CSS artifact verification pass. New connection
+buttons have component-owned 44px minimum targets; the shared stylesheet is unchanged.
+Architecture/source-growth, 19 policy checks, Rust formatting, diff and artifact gates
+pass. The browser adds one nearest-expiry deadline while copyable grants remain, with
+unmount cleanup and no recurring ingress requests. Final emitted main JS is 867.19 kB
+(261.76 kB gzip); no server task or storage mechanism was added by this UI change.
+Paired control exposure and direct packaged desktop/mobile verification remain pending.

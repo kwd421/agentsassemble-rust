@@ -12,6 +12,8 @@ import { useRoomInviteController } from "./useRoomInviteController";
 
 const apiMocks = vi.hoisted(() => ({
   createManagedHumanInvite: vi.fn(),
+  createOperatorPairing: vi.fn(),
+  revokeOperatorPairing: vi.fn(),
   fetchPublicInviteStatus: vi.fn(),
   revokeManagedHumanInvite: vi.fn(),
   startPublicInviteTunnel: vi.fn(),
@@ -21,6 +23,11 @@ const apiMocks = vi.hoisted(() => ({
 vi.mock("../api", async () => ({
   ...(await vi.importActual<typeof import("../api")>("../api")),
   ...apiMocks,
+}));
+
+vi.mock("../api/operatorPairing", () => ({
+  createOperatorPairing: apiMocks.createOperatorPairing,
+  revokeOperatorPairing: apiMocks.revokeOperatorPairing,
 }));
 
 const publicStatus: PublicInviteStatus = {
@@ -133,6 +140,39 @@ describe("useRoomInviteController", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     apiMocks.fetchPublicInviteStatus.mockResolvedValue(publicStatus);
+  });
+
+  it("retains a late pairing response for revocation while blocking duplicate creation", async () => {
+    const pending = deferred<import("../api/operatorPairing").OperatorPairingCustody>();
+    apiMocks.createOperatorPairing.mockImplementation((_authority, beforeDispatch) => {
+      beforeDispatch();
+      return pending.promise;
+    });
+    const hook = renderInviteController();
+    act(() => hook.result.current.open(room.id));
+    await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
+    let creating!: Promise<void>;
+    act(() => { creating = hook.result.current.generatePairing(room); });
+    await waitFor(() => expect(apiMocks.createOperatorPairing).toHaveBeenCalledOnce());
+    await act(() => hook.result.current.generatePairing(room));
+    expect(apiMocks.createOperatorPairing).toHaveBeenCalledOnce();
+    act(() => hook.result.current.close());
+    const expiresAtMs = Date.now() + 120_000;
+    await act(async () => {
+      pending.resolve({ authority: managerAuthority,
+        pairingId: "40000000-0000-4000-8000-000000000004",
+        pairingUrl: `${publicStatus.public_url}/pair?token=aap1.${"a".repeat(43)}`,
+        origin: publicStatus.public_url, expiresAt: new Date(expiresAtMs).toISOString(), expiresAtMs,
+      });
+      await creating;
+    });
+    act(() => hook.result.current.open(room.id));
+    expect(hook.result.current.pairings).toHaveLength(1);
+    expect(hook.result.current.pairings[0].copyable).toBe(false);
+    apiMocks.revokeOperatorPairing.mockResolvedValueOnce(undefined);
+    await act(() => hook.result.current.revokePairing(hook.result.current.pairings[0].key));
+    expect(hook.result.current.pairings[0].state).toBe("revoked");
+    hook.unmount();
   });
 
   it("creates human invites through exact directory authority and retains accepted custody", async () => {

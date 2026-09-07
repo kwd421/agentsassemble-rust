@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
+import type { OperatorPairingPresentation } from "../../app/useManagedOperatorPairings";
 import RoomInviteModal from "./RoomInviteModal";
 const friendsApi = vi.hoisted(() => ({ list: vi.fn().mockResolvedValue([]) }));
 vi.mock("../../api/friends", () => ({ fetchSavedFriends: friendsApi.list }));
@@ -26,14 +27,21 @@ function renderInviteModal({
   phase,
   requestState = "idle",
   humanInvites = [],
+  pairingAvailable = false,
+  operatorPairings = [],
 }: {
   publicAccess?: boolean;
   activeWithoutUrl?: boolean;
   phase?: "stopped" | "starting" | "running" | "stopping" | "error";
   requestState?: "idle" | "starting" | "stopping";
   humanInvites?: HumanInvitePresentation[];
+  pairingAvailable?: boolean;
+  operatorPairings?: OperatorPairingPresentation[];
 } = {}) {
   const onGenerateSecureInvite = vi.fn();
+  const onCreatePairing = vi.fn();
+  const onCopyPairing = vi.fn();
+  const onRevokePairing = vi.fn();
   const onStopTunnel = vi.fn();
   const onCopyHumanInvite = vi.fn();
   const onRevokeHumanInvite = vi.fn();
@@ -43,6 +51,10 @@ function renderInviteModal({
     <RoomInviteModal
       roomLabel="제품 방"
       humanInvites={humanInvites}
+      operatorPairings={operatorPairings}
+      onCreatePairing={pairingAvailable ? onCreatePairing : undefined}
+      onCopyPairing={pairingAvailable ? onCopyPairing : undefined}
+      onRevokePairing={pairingAvailable ? onRevokePairing : undefined}
       publicUrl={publicAccess ? "https://room.example.com" : ""}
       publicAccessTransition={requestState}
       tunnelStatus={{
@@ -62,7 +74,7 @@ function renderInviteModal({
     />
   );
   return {
-    onGenerateSecureInvite,
+    onGenerateSecureInvite, onCreatePairing, onCopyPairing, onRevokePairing,
     onStopTunnel,
     onCopyHumanInvite,
     onRevokeHumanInvite,
@@ -205,7 +217,20 @@ describe("RoomInviteModal", () => {
     expect(screen.queryByText(/Room Connector 설치/)).toBeNull();
   });
 
-  it("does not expose operator-pairing creation before its issuer exists", () => {
+  it("connects pairing creation and keeps uncertain revocation out of clipboard actions", () => {
+    const { onCreatePairing, onRevokePairing } = renderInviteModal({
+      pairingAvailable: true,
+      operatorPairings: [{ key: "pairing-one", expiresAt: "2099-01-01T00:00:00Z",
+        state: "unknown", copyable: false, expired: false }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "운영자 기기 연결 링크 생성" }));
+    expect(onCreatePairing).toHaveBeenCalledOnce();
+    expect((screen.getByRole("button", { name: "기기 연결 1 링크 복사" }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole("button", { name: "기기 연결 1 해제" }));
+    expect(onRevokePairing).toHaveBeenCalledWith("pairing-one");
+  });
+
+  it("requires the operator-pairing issuer before offering device connection", () => {
     renderInviteModal();
 
     expect(screen.queryByText("고급 연결 설정")).toBeNull();
