@@ -12,7 +12,6 @@ fn registrations_cover_each_retained_provider_once() {
         "cursor",
         "custom_api",
         "deepseek",
-        "freebuff",
         "grok",
         "llmgateway",
         "lmstudio",

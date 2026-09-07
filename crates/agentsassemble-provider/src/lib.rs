@@ -33,7 +33,6 @@ mod custom_api;
 mod deepseek;
 mod driver;
 mod filesystem;
-mod freebuff;
 mod grok;
 mod grok_acp;
 #[cfg(unix)]

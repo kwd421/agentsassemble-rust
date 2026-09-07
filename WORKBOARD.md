@@ -9,21 +9,23 @@
   [optimization audit](docs/VERIFICATION.md#repository-wide-optimization-audit-2026-09-07).
 - Custom API response-model correction is locally complete:
   [adapter-path verification](docs/VERIFICATION.md#custom-api-resolved-model-contract-2026-09-07).
-- Phase 1 remains open: Freebuff/Antigravity native adapters remain incomplete.
-  [Interface dependencies and execution exclusion](docs/VERIFICATION.md#remaining-native-provider-receipt-evidence-2026-09-07)
-  prevent their completion evidence; earlier checks do not close these findings.
+- User scope revision: Freebuff is excluded; Antigravity is external CLI plus
+  Room Connector invite only (Phase 7). Retire both managed registrations and
+  Antigravity's resident path, then verify/review the fourteen-provider Phase 1.
 - Next: follow the [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases),
   then complete whole-phase cross-review before Phase 2. Phase 0A and finite Phase 0B
-  remain complete; real-provider permissions and reviewer settings are unchanged.
+  remain complete; reviewer settings are unchanged.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:
   [per-slice execution gate](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#per-slice-execution-gate).
 - Current local exit evidence:
   [packaged provider catalog and real-turn matrix](docs/VERIFICATION.md#packaged-provider-catalog-and-real-turn-matrix-2026-09-03).
-- Existing authorization for this phase's real verification covers Grok `grok-4.6`,
-  Codex `gpt-5.6-luna`, and OpenCode `opencode/muse-spark-1.2-contributor-free` only.
-  Antigravity is excluded; unavailable evidence remains incomplete, without substitutes.
+- Final real verification, after reimplementation: configured DeepSeek, Codex,
+  OpenCode, external Antigravity, Grok, and Cursor `auto` only. Other providers use
+  original-contract implementation and local verification, without real execution.
+  Packaged frontend and real-provider flows are verified together at the final stage;
+  local tests, mandatory gates, and phase code reviews continue during implementation.
 
 ## Read routes
 

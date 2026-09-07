@@ -6593,3 +6593,30 @@ remains missing; the exclusion additionally blocks the installed-client evidence
 needed to close it. Completion requires the allowed native interface and its actual
 attachment/turn/cleanup proof. Neither provider is deferred out of scope or marked
 complete, and whole-phase cross-review/Phase 2 remain pending.
+
+### User-directed provider scope and verification schedule: 2026-09-07
+
+Subsequent explicit user direction supersedes the native-provider blocker above:
+Freebuff is excluded from reimplementation. Antigravity is retained only as an
+externally launched CLI entering through a Room Connector invitation; its managed
+driver is no longer a requirement. Its external room admission, authorized tools,
+publication, reconnect, and leave remain final acceptance under Phase 7's owner.
+No stored user data is deleted or implicitly converted to another participant type.
+
+The user directs real verification to the end of reimplementation, limited to the
+already configured DeepSeek API, Codex, OpenCode, external Antigravity, Grok, and
+Cursor `auto`. Other retained providers still require source-derived implementations
+and local contract checks, but no real execution. Packaged frontend and actual
+provider flows run at the final stage; local regressions, mandatory gates, and both
+phase code reviews continue during implementation.
+
+The Freebuff removal deletes its managed registration, discovery/launch refusal
+module, and expected catalog entry. Selection and launch continue to use the same
+registry, so no removed provider gains a hidden creation/launch path. The exact-set
+registration regression, affected all-target/all-feature warning-denied Clippy,
+architecture/source-growth, 19 policy tests, formatting, and diff checks pass.
+Antigravity resident retirement follows as a separate implementation change.
+
+Before this verification schedule was changed, the production frontend build,
+generated bindings, copied CSS check, all 664 frontend tests, and desktop checks
+completed successfully. No new packaged app or actual provider turn was launched.

@@ -6,9 +6,14 @@ defines the production roadmap. The finite Phase 0B prerequisites F-14 and F-16
 and their whole-phase cross-review are complete. Work now follows the provider-first
 order below. The provider-first ordering has prior manual documentation cross-review;
 the current checkpoint records later findings, not a new approval.
-Phase 1 remains open: earlier local verification is valid evidence,
-but the current completion-contract findings below must be resolved before claiming
-its exit. Whole-phase implementation cross-review remains pending.
+Phase 1 remains open pending the user-approved provider scope cutover and whole-phase
+verification/cross-review. Freebuff is excluded; Antigravity moves exclusively to
+Phase 7's externally launched CLI and Room Connector invitation flow. Its removed
+resident-adapter requirement no longer blocks Phase 1, but the external flow remains
+required for final parity. Earlier local verification remains evidence for its scope.
+The user also directs real-provider and packaged end-to-end verification to the final
+post-implementation stage. Intermediate phases retain local tests, mandatory gates,
+and both code reviewers; they do not claim new real-client proof.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -50,6 +55,8 @@ Exclude permanently from this reimplementation:
 - the old scripted v0 meeting runner and every v0-only research, forced-round,
   agenda, automatic moderator/decision/task, artifact, model, adapter, template,
   demo, seed, test, and documentation path listed in `AGENTS.md`;
+- Freebuff and the app-managed Antigravity provider/session path, as explicitly
+  directed on 2026-09-07. Antigravity's external CLI invitation path remains in scope;
 - Python fallback, legacy compatibility or migration logic, placeholder authority,
   fake data, disabled synchronization, client-owned substitutes for server
   contracts, and speculative future frameworks.
@@ -62,12 +69,30 @@ Defer until the retained core is complete and the user explicitly reopens them:
 - redesign of the current retained `Harness` / `API` / `Local` provider chooser
   taxonomy;
 - any new provider not present in the verified original inventory. Grok is one of
-  the retained original sixteen, so its static/contract implementation remains
+  the fourteen retained managed providers, so its static/contract implementation remains
   mandatory in Phase 1. The official client and login determine runtime
   availability; provider-run authorization determines only whether real-run
   evidence may be collected.
 
 ## Product-wide invariants
+
+### Verification execution scope (user decision, 2026-09-07)
+
+After reimplementation, run the real matrix only with the already configured
+DeepSeek API, Codex, OpenCode, externally launched Antigravity via invitation, Grok,
+and Cursor `auto`. Reuse configured credentials; no other real API/provider execution
+is authorized. Other retained providers are implemented from reachable original
+contracts and exercised locally with their protocol/contract fixtures. Missing real
+evidence for those providers is an explicit verification limit, not a parity failure
+or permission to omit implementation. No mock is described as a real upstream run.
+
+Run the final packaged-frontend user flows with this allowed matrix after the retained
+implementation is complete. During implementation, affected local regressions,
+architecture/security/structure gates, and phase code cross-review remain mandatory.
+An intermediate phase can pass those gates with final real-client evidence still
+pending under this explicit schedule; it must not claim that pending proof exists.
+
+### Ownership invariants
 
 1. SQLite is the current durable local authority. PostgreSQL is not a parallel
    authority while deferred.
@@ -195,18 +220,20 @@ entries. The older scripted-meeting adapter registry is not part of this list.
 Neither is the separately labelled legacy one-shot API CLI/catalog. Stored-profile
 compatibility branches for older Grok/Claude/transport shapes are evidence to omit,
 not provider behavior to port. The Agent Session catalog below is the only parity
-inventory. Review suggestions for Gemini CLI, Qwen CLI, or Goose ACP do not widen
+historical inventory. The 2026-09-07 user scope decision retains fourteen managed
+providers, excludes Freebuff, and retains Antigravity only as an external Room
+Connector client. Review suggestions for Gemini CLI, Qwen CLI, or Goose ACP do not widen
 it: none is a verified reachable entry in this baseline, and Antigravity is not
 silently redefined as Gemini CLI.
 
 | Provider | Verified original transport | Historical audited Rust state | Required target |
 | --- | --- | --- | --- |
 | Codex | persistent `app-server --stdio` | implemented; completion aliases/inference reopened | exact current app-server protocol, Codex-owned CLI config, no heuristic fallback |
-| Antigravity | persistent PTY/ConPTY plus hooks | transcript path retired; explicitly unavailable | PTY/ConPTY and hooks remain; exact native attachment/completion receipt is still required before start |
+| Antigravity | persistent PTY/ConPTY plus hooks | resident path retired by user scope decision | external CLI plus Room Connector invite only; Phase 7 admission/tool/reconnect/leave contract, no managed launch or resident controls |
 | Grok | official ACP stdio | absent | implement the ACP registration, catalog/selection, lifecycle, turn, failure, cancellation, and stop contracts; client/login absence affects availability and real-run evidence only |
 | Claude | persistent Claude Code terminal/hook path | absent | use Claude Agent SDK as directed; no old transcript or print path |
 | Cursor | persistent Cursor terminal/room portal | absent | implement the verified reachable registration, lifecycle, turn, failure, and stop contracts; missing client capability is an explicit runtime-unavailable state, not a substitute for static implementation |
-| Freebuff | persistent terminal runtime | absent | reimplement only its verified current reachable flow, without shared-terminal heuristics |
+| Freebuff | persistent terminal runtime | absent | excluded by the user on 2026-09-07; remove managed catalog/launch registration |
 | OpenCode | owned loopback HTTP/SSE server | implemented; completion/cleanup authority reopened | Muse Spark default only when present; one explicit completion owner; exact child/peer custody |
 | DeepSeek | official HTTPS OpenAI-compatible API | implemented | official Flash path, explicit credential owner, finite tool rounds, cancellation, selected output limits, and progress-reset read inactivity; no invented whole-turn or cumulative token/cost cap |
 | Cerebras | HTTPS OpenAI-compatible API | absent | common remote API mechanism plus provider-owned catalog/header policy |
@@ -262,7 +289,7 @@ taxonomy redesign waits until post-parity.
 
 ## Ordered implementation phases
 
-Current execution checkpoint (2026-09-07, updated after the Custom API correction):
+Current execution checkpoint (2026-09-07, user-approved provider scope revision):
 
 1. Custom API's completion-contract correction is locally complete. Its specification
    now owns requested-versus-resolved identity while preserving request/session
@@ -270,24 +297,22 @@ Current execution checkpoint (2026-09-07, updated after the Custom API correctio
    routed selection, fixed-model controls, and invalid responses pass the adapter
    path with a local HTTP peer and real MCP portal. Public HTTPS and an upstream turn
    are outside that proof. No alias registry, substitution, or fallback was added.
-2. Reconcile the sixteen-provider matrix with actual executable contracts.
-   Freebuff's launch owner and Antigravity's required-receipt owner currently reject
-   unconditionally. Registration and honest non-startable projection alone do not
-   prove their required runtime implementation. Establish the supported native
-   receipt/turn/cleanup path, or record the exact external dependency that prevents
-   it and leave that acceptance incomplete. Do not attribute missing implementation
-   to a missing login or run authorization. Read-only official source inspection has
-   not established a Freebuff CLI receipt interface. Antigravity's documented hooks
-   are a candidate, but installed attachment/turn correlation is unverified and its
-   real-run exclusion was explicitly retained. Both adapters remain incomplete; no
-   replacement client or transcript inference is authorized. See the native-provider
-   evidence below for the exact dependencies and limits.
+2. Apply the explicit scope decision: remove Freebuff from the product and retire
+   Antigravity's managed catalog, launch, terminal/hook, and late-session-promotion
+   paths. Preserve user-owned stored data; unsupported stored selections must fail
+   visibly, never migrate or become a connector implicitly. The remaining fourteen
+   managed providers retain their exact contracts. Antigravity's externally launched
+   CLI must later consume the distinct Room Connector invitation in Phase 7; it does
+   not use human admission or regain managed-session controls. Keep its earlier
+   native-receipt investigation as historical evidence, not a current phase blocker.
 3. Correct the affected paths, update their evidence, and submit the complete Phase 1
    candidate under the existing per-slice execution gate. Include the subsequent
    optimization/test/security corrections in the reviewed cumulative range and final
    HEAD. Reuse valid unaffected evidence and apply `Rule.md`'s verification scope;
    neither a historical full run nor a large test count closes a new contract gap.
-   Obtain both existing reviewers' approval before Phase 2.
+   Obtain both existing code reviewers' approval before Phase 2. New real-client and
+   packaged-flow evidence is deferred to the final stage under the verification scope
+   above; valid earlier evidence remains bounded to the tested revision and flow.
 4. Continue the retained phase order below. The repository-wide optimization and
    test/security-duplication passes are complete for their recorded scope, not a new
    recurring prerequisite. Reopen their owners only for a concrete new failure,
@@ -300,7 +325,8 @@ Evidence owners: [resolved Custom API contract](VERIFICATION.md#custom-api-resol
 [test/security cleanup](VERIFICATION.md#test-necessity-and-security-duplication-audit-2026-09-07),
 and [previous packaged/real-provider matrix](VERIFICATION.md#packaged-provider-catalog-and-real-turn-matrix-2026-09-03).
 These steps apply the existing phase exits and approval gates; they do not change
-product scope, provider-run permissions, or reviewer settings.
+reviewer settings or security/structure gates. The explicit user scope decision above
+changes the retained provider inventory; it does not waive any remaining flow's proof.
 
 Closed Phase 0 evidence remains valid, but residual audit cleanup is not allowed to
 hold the retained product behind finding-number order. The production sequence is:
@@ -407,15 +433,16 @@ Correction substage:
   continuation, and both manual reviewers approved those boundaries. Leave unrelated
   frontend/socket refinement behind; these were structural prerequisites, not
   permission to polish the first product area.
-- Build Phase 1 breadth-first. First establish the complete sixteen-provider
+- Build Phase 1 breadth-first. First establish the complete fourteen-provider
   acceptance matrix and the smallest shared registration, selection, start,
   ordinary-turn, visible-failure, and stop contracts. Remove from the four current
   providers only false or unsafe behavior that blocks those shared contracts; do
   not finish every cancellation, cleanup, performance, or UX refinement there while
   the other retained providers remain structurally absent.
-- Remove Antigravity transcript code from the production graph. If retained as the
-  requested historical copy, keep it only in a non-build `deprecated/` boundary
-  with no module/import/feature/test/runtime/fallback connection.
+- Remove the app-managed Antigravity path from the production graph, including
+  transcript, PTY/ConPTY, hooks, helper entry, and late session-ID promotion. Retain
+  the requested historical copy only in the non-build `deprecated/` boundary with
+  no module/import/feature/test/runtime/fallback connection. Freebuff is excluded.
 - Make observation abort, stop, portal teardown, hook cleanup, and process cleanup
   return typed outcomes to the common lifecycle owner.
 - Verify Codex and OpenCode native completion/session contracts and remove
@@ -452,7 +479,7 @@ Correction substage:
   through the official Agent SDK; the OpenAI-compatible remote family
   (Cerebras, OpenRouter, Vercel AI Gateway, LLM Gateway, TokenRouter, and Custom
   API); local Ollama/LM Studio; and the remaining original native providers
-  (Cursor, Freebuff, and Grok through its official ACP stdio contract). Grok's
+  (Cursor and Grok through their official ACP stdio contracts). Grok's
   registration and static/contract verification do not depend on a local executable;
   executable/login absence yields explicit runtime unavailability, while absent
   provider-run authorization changes only whether real-run evidence can be collected.
@@ -469,7 +496,7 @@ Correction substage:
   cleanup. Only then perform provider-specific performance and UX refinement backed
   by observed cost or failure evidence. An unavailable client remains truthfully
   unavailable rather than being simulated or replaced.
-- Exit: all sixteen retained providers have static/contract implementations. Each
+- Exit: all fourteen retained managed providers have static/contract implementations. Each
   enabled provider has exactly one completion/session authority and a visible
   failure/uncertainty contract. A missing executable, credential, or login is
   projected as runtime unavailable; missing run authorization does not alter product
@@ -489,7 +516,8 @@ Correction substage:
   replay contract. Keep Agent Session re-add here and human kick/re-admission with
   their later room/human owners; do not merge their principals or lifecycles.
 - Exit: copied controls advertise only exact implemented actions and pass durable,
-  TCP/WebSocket, restart, and real-provider flows.
+  TCP/WebSocket, and restart flows; authorized real-provider control verification
+  follows at the final stage.
 
 ### Phase 3 — profile and asset SSoT correction
 
@@ -542,8 +570,9 @@ Correction substage:
   existing frontend design system and Discord-like interaction conventions. Human
   Invite, Room Connector, and AgentBridge may share visual language, never backend
   credentials, permissions, or lifecycle state.
-- Exit: every visible account/friend/invite control completes a real flow or is not
-  exposed; no startup request targets an absent route.
+- Exit: every visible account/friend/invite control has a complete server-owned flow
+  and local boundary verification, with packaged verification retained for the final
+  stage; no startup request targets an absent route.
 
 ### Phase 6 — custom text channels and side chat
 
@@ -557,8 +586,9 @@ Correction substage:
   backend owner exists. The original rough dialog is not a visual contract: use the
   copied design system and coherent Discord-like UX without changing authority,
   permissions, state transitions, or failure behavior.
-- Exit: each copied entry point has a complete backend owner and real packaged
-  verification. Voice remains deferred and inactive.
+- Exit: each copied entry point has a complete backend owner and local boundary
+  verification; real packaged verification follows at the final stage. Voice remains
+  deferred and inactive.
 
 ### Phase 7 — external AI admission and bridges
 
@@ -567,6 +597,12 @@ Correction substage:
   permissions, authenticated transport, reconnect, and leave.
 - Bind the copied external-AI-session link to that Room Connector owner; it must not
   use or widen the human browser admission route.
+- Antigravity is supported exclusively here: launch its CLI externally, consume the
+  connector invitation in that current session, and verify authorized read/tool/
+  publication, reconnect, and leave through the actual packaged frontend. The app
+  owns room membership and credentials, never that CLI's model/runtime lifecycle.
+  No managed Antigravity driver, terminal parsing, transcript, or headless substitute
+  is part of this path. Freebuff remains excluded.
 - Implement external `assemble room attend` AgentBridge separately: attendee
   admission/principal, turn/report/provider-request protocol, reconnect, and
   cleanup.
@@ -577,10 +613,11 @@ Correction substage:
 - Implement the server-managed AgentBridge process as a third custody boundary;
   process launch/stop is not authority for the external attendee or connector.
 - Never widen the human invite payload or session to admit any of these agents.
-- Exit: one real client for each retained path joins through its exact credential,
-  receives only its authorized room view, uses permitted tools, publishes through
+- Exit: each retained path locally verifies joining through its exact credential,
+  receiving only its authorized room view, using permitted tools, publishing through
   the room owner, reconnects, and leaves/stops without leaking provider-private
-  data or borrowing another path's authority.
+  data or borrowing another path's authority. Final verification must exercise one
+  actual client for each retained path under the allowed provider matrix above.
 
 ### Phase 8 — operational surfaces
 
@@ -591,9 +628,9 @@ Correction substage:
   to a confirmed current owner or removing it; an unreachable lazy chunk and route
   vocabulary are not an implemented operational feature.
 - Exit: the full retained provider matrix and all visible operational controls have
-  source/static contract evidence. Installed providers whose real-client execution
-  is explicitly authorized additionally have exact real-client evidence and cleanup
-  records. Runtime-unavailable providers remain truthfully unavailable; missing
+  source/static contract evidence. The authorized real-client matrix and exact cleanup
+  records remain required at the final stage. Runtime-unavailable providers remain
+  truthfully unavailable; missing
   provider-run authorization changes no product or catalog state and leaves only
   real-client evidence incomplete. No provider is simulated.
 
@@ -647,9 +684,12 @@ that meets its declared phase contract is left alone unless concrete evidence re
 it.
 
 Intermediate commits and pushes do not trigger external review by count. After one
-complete phase passes its real flows and affected gates, cross-review every individual
+complete phase passes its local flows and affected gates, cross-review every individual
 phase commit, the cumulative phase range, final HEAD, and resulting product behavior.
 A correction required by that review is pushed and re-reviewed before the phase closes.
+Real-provider and packaged-flow runs follow the user-owned final-stage verification
+scope above. Both reviewers must distinguish static/local approval from that pending
+real-client evidence; the final phase cannot close until its authorized flows pass.
 
 When that workflow invokes review, the request covers individual commits and the
 cumulative range. Requests

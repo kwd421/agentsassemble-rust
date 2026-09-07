@@ -27,6 +27,15 @@ normal conversation in which a human asks participants for synthesis, a decision
 task planning, or task-assignment discussion. These remain product behavior and must
 not be coupled to a scripted meeting pipeline.
 
+User-approved provider scope (2026-09-07): exclude Freebuff from this reimplementation.
+Antigravity participates only through an externally launched CLI and Room Connector
+invite link; do not implement or expose an app-managed Antigravity Agent Session.
+Its external admission remains required under the product plan's Phase 7 contract.
+Real-provider verification runs after reimplementation: only the already configured
+DeepSeek API, Codex, OpenCode, external Antigravity, Grok, and Cursor `auto` are
+authorized. Implement other providers from their reachable original contracts without
+real execution. Local tests, mandatory gates, and phase code reviews still apply.
+
 ## Implementation
 
 Use mature maintained libraries for infrastructure; implement only product semantics.
