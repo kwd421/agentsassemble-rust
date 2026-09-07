@@ -239,7 +239,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     ? undefined
     : guestLocked
     ? admittedSessionToken
-      ? ({ kind: "session" as const, sessionToken: admittedSessionToken })
+      ? ({ kind: "session" as const, sessionToken: admittedSessionToken, deviceToken })
       : undefined
     : activeRoom.meetingId
       ? ({ kind: "host" as const, meetingId: activeRoom.meetingId })

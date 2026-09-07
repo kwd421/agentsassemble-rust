@@ -11,7 +11,6 @@ import {
   postJson,
   postEmptyServerOperator,
   postJsonWithIdentity,
-  postJsonWithToken,
 } from "./http";
 import {
   parsePublicIngressStatus,
@@ -107,6 +106,6 @@ export function redeemOperatorPairing({
   ).then(parseOperatorPairingRedeemResponse);
 }
 
-export function leaveRoomInvite({ sessionToken }: { sessionToken: string }) {
-  return postJsonWithToken<{ status: string }>("/api/room-invite/leave", {}, sessionToken);
+export function leaveRoomInvite(identity: { sessionToken: string; deviceToken?: string }) {
+  return postJsonWithIdentity<{ status: string }>("/api/room-invite/leave", {}, identity);
 }

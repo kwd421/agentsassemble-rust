@@ -243,7 +243,7 @@ export function canonicalRoomAuthKey(auth?: RoomSocketAuth): string {
   if (!auth) return "";
   return auth.kind === "host"
     ? `host:${auth.meetingId}`
-    : `session:${auth.sessionToken}`;
+    : JSON.stringify(["session", auth.sessionToken, auth.deviceToken ?? ""]);
 }
 
 export function canonicalRoomProjectionScopeKey(

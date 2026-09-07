@@ -325,7 +325,10 @@ describe("browser session WebSocket ticket routing", () => {
     vi.unstubAllGlobals();
   });
 
-  it("exchanges the raw session once and derives the socket origin without fallback", async () => {
+  it.each([
+    { sessionToken: "aas1.browser-session", deviceToken: undefined },
+    { sessionToken: "aops1.paired-session", deviceToken: "browser-device" },
+  ])("exchanges $sessionToken with its browser device binding", async ({ sessionToken, deviceToken }) => {
     const fetchMock = vi.fn().mockResolvedValueOnce(
       new Response(
         JSON.stringify({
@@ -339,14 +342,18 @@ describe("browser session WebSocket ticket routing", () => {
 
     const grant = await getWsTicket({
       kind: "session",
-      sessionToken: "aas1.browser-session",
+      sessionToken,
+      deviceToken,
     });
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock).toHaveBeenCalledWith("/api/session-tickets/socket", {
       cache: "no-store",
       method: "POST",
-      headers: { Authorization: "Bearer aas1.browser-session" },
+      headers: {
+        Authorization: `Bearer ${sessionToken}`,
+        ...(deviceToken ? { "X-Device-Token": deviceToken } : {}),
+      },
     });
     expect(grant).toEqual({
       ticket: "c".repeat(64),

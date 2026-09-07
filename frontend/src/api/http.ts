@@ -14,12 +14,16 @@ function isServerWideProfileRoute(url: string): boolean {
 }
 
 export async function exchangeSessionSocketTicket(
-  sessionToken: string
+  sessionToken: string,
+  deviceToken = ""
 ): Promise<Record<string, unknown>> {
   const res = await fetch("/api/session-tickets/socket", {
     cache: "no-store",
     method: "POST",
-    headers: { Authorization: `Bearer ${sessionToken}` },
+    headers: {
+      Authorization: `Bearer ${sessionToken}`,
+      ...(deviceToken ? { "X-Device-Token": deviceToken } : {}),
+    },
   });
   if (!res.ok) throw await responseError(res);
   const payload = await res.json();

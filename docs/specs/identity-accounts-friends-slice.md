@@ -268,3 +268,13 @@ ordinary human admission remains with its existing owner. Revocation commits bef
 notifying existing room subscribers, without creating another task or timer. Paired
 sessions cannot obtain account or native server authority. The remaining HTTP room
 surfaces and native pairing UI must be connected before packaged phase acceptance.
+
+### Browser room-session device propagation
+
+The canonical browser room connection passes the existing browser device identity
+through its socket-ticket exchange. Its accepted projection and transport scope
+include that device identity; a device change retires the old connection and late
+callbacks. The explicit HTTP leave helper also carries the caller's device identity.
+Human sessions retain their existing optional-device exchange contract; paired
+sessions remain device-required at the server authority owner. No device is inferred
+from the session bearer and no additional browser storage or periodic work is added.

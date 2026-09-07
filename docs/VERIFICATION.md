@@ -7800,3 +7800,13 @@ and remaining pairing-integration limits as the launch entry apply.
 - Server all-target/all-feature Clippy passes. No provider runs or new background
   work; only bounded grant rows and existing ticket capacity are used. Native pairing
   UI, remaining paired HTTP room surfaces and packaged acceptance remain pending.
+
+## Phase 5 browser paired-session device propagation (2026-09-08)
+
+Canonical browser socket exchange now carries its existing device identity, and the
+projection/transport scope retires on a device change. The leave HTTP helper accepts
+the same explicit identity. Affected HTTP/socket/projection suites passed 41 tests;
+the added causal paired-device switch case and existing isolation cases also pass.
+Frontend build/CSS verification, architecture/source-growth and 19 policy checks,
+Rust formatting, diff and artifact checks pass. No new storage, timer or task is
+introduced. Packaged operator-pairing UI acceptance is still pending.

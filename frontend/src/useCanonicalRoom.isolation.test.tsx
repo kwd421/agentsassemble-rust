@@ -111,6 +111,38 @@ type HookProps = {
 };
 
 describe("useCanonicalRoom projection isolation", () => {
+  it("retires paired room projection and transport when its device binding changes", async () => {
+    const connections: Array<{ handlers: RoomSocketHandlers; close: ReturnType<typeof vi.fn> }> = [];
+    const openSocket = vi.fn((_auth: RoomSocketAuth, _streams: string[], handlers: RoomSocketHandlers) => {
+      const close = vi.fn();
+      connections.push({ handlers, close });
+      return { close, resync: vi.fn(), ready: () => true, say: vi.fn(), historyBefore: vi.fn(), command: vi.fn() };
+    });
+    const hook = renderHook(({ deviceToken }) => useCanonicalRoom({
+      serverSurface: TEST_SERVER_PRODUCT_SURFACE,
+      roomId: "general",
+      auth: { kind: "session", sessionToken: "aops1.paired", deviceToken },
+      viewerParticipantId: "operator-local",
+      openSocket,
+    }), { initialProps: { deviceToken: "device-one" } });
+    await waitFor(() => expect(connections).toHaveLength(1));
+    act(() => connections[0].handlers.onRoomSnapshot?.(snapshot({
+      events: [roomEvent(1, "paired content")], capabilities: { "room.manage": true },
+    }), window.location.origin));
+    expect(hook.result.current.capabilities["room.manage"]).toBe(true);
+
+    hook.rerender({ deviceToken: "device-two" });
+    expect(hook.result.current.events).toEqual([]);
+    expect(hook.result.current.capabilities).toEqual({});
+    expect(connections[0].close).toHaveBeenCalledOnce();
+    act(() => connections[0].handlers.onRoomEvents?.([roomEvent(2, "late content")]));
+    expect(hook.result.current.events).toEqual([]);
+    await waitFor(() => expect(connections).toHaveLength(2));
+    expect(openSocket.mock.calls[1][0]).toMatchObject({ deviceToken: "device-two" });
+    hook.unmount();
+    expect(connections[1].close).toHaveBeenCalledOnce();
+  });
+
   it("hides the prior user's room UI and rejects a late host ACK after an auth switch", async () => {
     const hostCommand = deferred<RoomCommandAck>();
     const connections: Array<{

@@ -541,7 +541,7 @@ export function fetchRoomChannels(meetingId: string, sessionToken = ""): Promise
 }
 
 export type RoomSocketAuth =
-  | { kind: "session"; sessionToken: string }
+  | { kind: "session"; sessionToken: string; deviceToken?: string }
   | { kind: "host"; meetingId: string };
 
 export type RoomSocketTicket = DesktopRuntimeTicket;
@@ -551,7 +551,7 @@ export async function getWsTicket(auth: RoomSocketAuth): Promise<RoomSocketTicke
     return requestDesktopRuntimeTicket(auth.meetingId);
   }
   if (auth.kind === "session") {
-    const payload = await exchangeSessionSocketTicket(auth.sessionToken);
+    const payload = await exchangeSessionSocketTicket(auth.sessionToken, auth.deviceToken);
     return parseBrowserRoomRuntimeTicket(payload, window.location.href);
   }
   throw new Error("Host WebSocket authority requires the desktop Rust runtime.");
