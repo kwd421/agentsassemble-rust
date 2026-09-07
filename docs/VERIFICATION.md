@@ -7845,3 +7845,12 @@ seven existing cases pass. TypeScript/Vite/CSS build and architecture/source-gro
 19 policy checks, Rust formatting, diff and artifact gates pass. No additional task,
 timer, storage or parallel request mechanism was introduced. Packaged operator
 pairing management remains pending.
+
+## Phase 5 direct room-preference device correction (2026-09-08)
+
+Review of the concrete preference request branch found that the browser identity
+reached its controller but `requestSessionRoomPreferences` still discarded the device
+field. Both direct session GET and POST now send it. The existing preference HTTP
+test now checks human and paired session headers across read/write rather than
+asserting device omission. All five preference tests and frontend build/CSS verification
+pass; no authority fallback, transport exchange or extra task was added.

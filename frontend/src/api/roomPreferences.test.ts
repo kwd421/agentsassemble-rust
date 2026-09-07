@@ -133,7 +133,10 @@ describe("room preference HTTP authority", () => {
     });
   });
 
-  it("presents a remote session directly to each preference operation", async () => {
+  it.each([
+    { sessionToken: "aas1.guest-session", deviceToken: undefined },
+    { sessionToken: "aops1.paired", deviceToken: "paired-device" },
+  ])("presents each preference operation with session/device authority ($sessionToken)", async ({ sessionToken, deviceToken }) => {
     const invoke = vi.fn();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     const fetchMock = vi
@@ -153,8 +156,7 @@ describe("room preference HTTP authority", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     const identity = {
-      sessionToken: "aas1.guest-session",
-      deviceToken: "guest-device",
+      sessionToken, deviceToken,
     };
     await fetchRoomSettings("general", identity);
     await saveRoomSettings({
@@ -181,10 +183,10 @@ describe("room preference HTTP authority", () => {
     const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     const writeInit = fetchMock.mock.calls[1]?.[1] as RequestInit;
     const writeHeaders = writeInit.headers as Headers;
-    expect(readHeaders.get("Authorization")).toBe("Bearer aas1.guest-session");
-    expect(readHeaders.get("X-Device-Token")).toBeNull();
-    expect(writeHeaders.get("Authorization")).toBe("Bearer aas1.guest-session");
-    expect(writeHeaders.get("X-Device-Token")).toBeNull();
+    expect(readHeaders.get("Authorization")).toBe(`Bearer ${sessionToken}`);
+    expect(readHeaders.get("X-Device-Token")).toBe(deviceToken ?? null);
+    expect(writeHeaders.get("Authorization")).toBe(`Bearer ${sessionToken}`);
+    expect(writeHeaders.get("X-Device-Token")).toBe(deviceToken ?? null);
     expect(writeHeaders.get("Content-Type")).toBe("application/json");
     expect(JSON.parse(String(writeInit.body))).toEqual({
       room_id: "general",

@@ -442,6 +442,7 @@ export function fetchRoomSettings(
     identity.sessionToken
       ? requestSessionRoomPreferences(
           identity.sessionToken,
+          identity.deviceToken,
           `/api/room-settings${queryString({ room_id: roomId })}`
         )
       : isDesktopWebview()
@@ -475,6 +476,7 @@ export function saveRoomSettings({
     identity.sessionToken
       ? requestSessionRoomPreferences(
           identity.sessionToken,
+          identity.deviceToken,
           "/api/room-settings",
           {
             method: "POST",
@@ -497,11 +499,13 @@ export function saveRoomSettings({
 
 async function requestSessionRoomPreferences(
   sessionToken: string,
+  deviceToken: string | undefined,
   url: string,
   init: RequestInit = {}
 ): Promise<unknown> {
   const headers = new Headers(init.headers);
   headers.set("Authorization", `Bearer ${sessionToken}`);
+  if (deviceToken) headers.set("X-Device-Token", deviceToken);
   const response = await fetch(url, { ...init, cache: "no-store", headers });
   if (!response.ok) throw await responseError(response);
   return response.json();
