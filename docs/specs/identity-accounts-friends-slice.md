@@ -83,6 +83,12 @@ authorization URL. The existing central service remains the OAuth/PKCE exchange
 owner. Completion/abort/failure retires transient state; expiry is checked on access,
 and runtime shutdown drops it without adding a polling task or persistence table.
 
+The client retires the transient native return before exchanging its captured code
+with the central service. Retirement failure remains visible and prevents exchange;
+cancellation is checked before exchange. A received completed exchange is persisted
+immediately, with no later cleanup or abort check that can discard the issued session.
+Earlier failure/cancellation still attempts native retirement exactly once.
+
 ### Local Google account binding and guest retirement
 
 On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,

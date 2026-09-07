@@ -461,7 +461,7 @@ export async function loginCentralGoogle(
   const state = randomUrlToken(32);
   const verifier = randomUrlToken(32);
   const codeChallenge = await sha256(verifier);
-  let completed: { person: CentralPerson; session: Omit<CentralSession, "person"> } | null = null;
+  let retirementAttempted = false;
   try {
     const callback = await controlDesktopCentralLogin("start", state);
     throwIfGoogleLoginAborted(signal);
@@ -502,6 +502,11 @@ export async function loginCentralGoogle(
       if (returned.status === "failed" || returned.status === "cancelled") {
         throw new Error("Google 로그인이 취소됐습니다.");
       }
+      // Retire the transient native return before the central server issues a
+      // session. Once a complete exchange arrives, persist that committed result.
+      retirementAttempted = true;
+      await controlDesktopCentralLogin("cancel", state);
+      throwIfGoogleLoginAborted(signal);
       const exchanged = await unsignedPost<{
         status: "complete";
         person: CentralPerson;
@@ -515,15 +520,12 @@ export async function loginCentralGoogle(
         },
         signal
       );
-      completed = exchanged;
-      break;
+      return saveSession(exchanged);
     }
-    if (!completed) throw new Error("Google 로그인 시간이 만료됐습니다. 다시 시도해 주세요.");
+    throw new Error("Google 로그인 시간이 만료됐습니다. 다시 시도해 주세요.");
   } finally {
-    await controlDesktopCentralLogin("cancel", state);
+    if (!retirementAttempted) await controlDesktopCentralLogin("cancel", state);
   }
-  throwIfGoogleLoginAborted(signal);
-  return saveSession(completed);
 }
 
 export async function bootstrapCentral(): Promise<CentralBootstrap | null> {

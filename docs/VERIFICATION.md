@@ -8128,3 +8128,18 @@ three affected Google service/verifier cases pass (0.37 s). This adds one timest
 to the existing mutex-owned cache, no task or additional authority.
 Server all-target/all-feature Clippy, unchanged architecture/source policy, all 19
 gate cases, formatting/diff and artifact checks pass. No gate exception was added.
+
+The native central-login client now retires its transient callback before exchanging
+the captured code. Retirement failure blocks exchange and stays visible. Earlier
+failure/cancellation retains its one cleanup attempt; no implicit retry was added.
+Once the central service returns completion, the client persists that result without
+a later fallible cleanup or abort check. Controlled regressions reproduce both
+post-exchange cancellation losing the session and cleanup failure occurring after
+issuance before the fix; both pass afterward. Three affected frontend suites pass
+10 cases (0.94 s), including existing startup cancellation. TypeScript, production
+build and approved CSS pass. The correction changes no layout, route or credential
+authority; the phase's directly manipulated packaged account/startup evidence remains
+as recorded above. Real central Google authentication is still unavailable in the
+isolated configuration and is not represented by these local response fixtures.
+Both source-supported review findings are locally corrected; Daybreak re-approval
+is required before Phase 6.

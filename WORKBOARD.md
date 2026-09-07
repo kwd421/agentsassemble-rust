@@ -30,8 +30,10 @@
   settings, profile, controls, moderation and room lifecycle are verified.
   [Contract](docs/specs/room-lifecycle-slice.md) and [review correction](docs/VERIFICATION.md#phase-4-whole-phase-review-correction-terminal-export-2026-09-08).
 - Active: Phase 5 is locally verified through account/friend/human admission,
-  recovery and paired device control/lifecycle/departure. Whole-phase Daybreak review
-  is pending. Central identity, local operator, human session and Agent Session
+  recovery and paired device control/lifecycle/departure. Daybreak's M1/L1 findings
+  on Google key refresh and central login completion are locally corrected;
+  [re-approval is pending](docs/VERIFICATION.md#phase-5-whole-phase-review-corrections-2026-09-08).
+  Central identity, local operator, human session and Agent Session
   authorities remain separate.
   [Contract and acceptance](docs/specs/identity-accounts-friends-slice.md).
   Apply the frontend UX guide and verify packaged desktop/mobile flows before review.
