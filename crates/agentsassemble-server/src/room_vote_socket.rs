@@ -1,5 +1,5 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, VoteReference};
-use agentsassemble_persistence::{HumanSessionAuthorization, PersistenceError, SqliteStore};
+use agentsassemble_persistence::{PersistenceError, RoomSessionAuthorization, SqliteStore};
 use agentsassemble_protocol::{CommandAck, CommandResolution, RoomAction, ServerFrame};
 use serde_json::Value;
 
@@ -11,17 +11,17 @@ use crate::{
 pub(crate) async fn read_vote_summary_frame(
     store: &SqliteStore,
     principal: &AuthenticatedPrincipal,
-    human_session: Option<&HumanSessionAuthorization>,
+    room_session: Option<&RoomSessionAuthorization>,
     request_id: &str,
     payload: &Value,
 ) -> Result<ServerFrame, CommandFailure> {
     validate_command_envelope(request_id).map_err(CommandFailure::rejected)?;
     let request =
         VoteReference::from_summary_payload(payload).map_err(CommandFailure::domain_rejected)?;
-    let summary = match human_session {
+    let summary = match room_session {
         Some(authorization) => {
             store
-                .human_session_room_vote_summary(authorization, &request.vote_id)
+                .room_session_room_vote_summary(authorization, &request.vote_id)
                 .await
         }
         None => {

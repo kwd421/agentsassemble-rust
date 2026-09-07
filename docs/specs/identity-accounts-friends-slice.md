@@ -245,3 +245,12 @@ other paired devices, records an `operator_session_ended` event without device o
 credential data, and publishes the exact revocation through the existing channel.
 HTTP/socket admission still constructs only ordinary human sessions until pairing
 transport is connected; internal runtime proof is not packaged pairing acceptance.
+
+The public socket grant now retains `RoomSessionAuthorization` through one-use
+consumption, subscription, command dispatch and outbound revalidation. Human and
+paired variants share the existing bounded grant partition, absolute session expiry
+and exact revocation stream; neither enters the local observer branch. Vote-summary
+reads resolve the same session authority inside their read transaction. Socket
+integration proves paired departure acknowledges once, preserves native host membership,
+and prevents a previously issued ticket from reviving the ended session. Public HTTP
+pairing issuance/redemption and packaged acceptance remain pending.

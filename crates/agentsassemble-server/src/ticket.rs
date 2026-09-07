@@ -17,11 +17,11 @@ use uuid::Uuid;
 mod human_session;
 mod message_attachments;
 
-use human_session::HumanSessionSocketGrant;
+use human_session::RoomSessionSocketGrant;
 pub(crate) use human_session::{
     ConsumedAttachmentUploadTicket, ConsumedSocketTicket, SocketTicketHint,
 };
-pub use human_session::{ConsumedHumanSessionSocketTicket, ConsumedProfileTicket};
+pub use human_session::{ConsumedProfileTicket, ConsumedRoomSessionSocketTicket};
 
 struct StoredTicketGrant {
     authority: TicketAuthority,
@@ -32,7 +32,7 @@ enum TicketAuthority {
     Room(AuthenticatedPrincipal),
     RoomHttp(RoomHttpGrant),
     LocalRoomManager(LocalRoomManagerGrant),
-    HumanSessionSocket(HumanSessionSocketGrant),
+    RoomSessionSocket(RoomSessionSocketGrant),
     SettingsDirectoryRead {
         principal_id: String,
     },
@@ -663,7 +663,7 @@ impl TicketStore {
                 _ => Err(TicketError::Invalid),
             },
             TicketAuthority::Room(_)
-            | TicketAuthority::HumanSessionSocket(_)
+            | TicketAuthority::RoomSessionSocket(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::ServerOperator { .. }
             | TicketAuthority::CentralRegistration { .. } => Err(TicketError::Invalid),

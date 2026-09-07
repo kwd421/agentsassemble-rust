@@ -1,5 +1,5 @@
 use agentsassemble_domain::AuthenticatedPrincipal;
-use agentsassemble_persistence::{HumanSessionAuthorization, LocalRoomManagerAuthority};
+use agentsassemble_persistence::{LocalRoomManagerAuthority, RoomSessionAuthorization};
 use chrono::Utc;
 use tokio::time::Instant;
 
@@ -8,22 +8,22 @@ use super::{
     TicketError, TicketStore, insert_grant, resolve_local_room_manager_authority,
 };
 
-pub(super) struct HumanSessionSocketGrant {
-    pub(super) authorization: HumanSessionAuthorization,
+pub(super) struct RoomSessionSocketGrant {
+    pub(super) authorization: RoomSessionAuthorization,
 }
 
-pub struct ConsumedHumanSessionSocketTicket {
-    authorization: HumanSessionAuthorization,
+pub struct ConsumedRoomSessionSocketTicket {
+    authorization: RoomSessionAuthorization,
 }
 
 pub(crate) enum SocketTicketHint {
     Local,
-    HumanSession { room_id: String },
+    RoomSession { room_id: String },
 }
 
 pub(crate) enum ConsumedSocketTicket {
     Local(ConsumedTicket),
-    HumanSession(ConsumedHumanSessionSocketTicket),
+    RoomSession(ConsumedRoomSessionSocketTicket),
 }
 
 impl ConsumedSocketTicket {
@@ -31,14 +31,14 @@ impl ConsumedSocketTicket {
     pub(crate) fn principal(&self) -> &AuthenticatedPrincipal {
         match self {
             Self::Local(grant) => &grant.principal,
-            Self::HumanSession(grant) => grant.authorization.principal(),
+            Self::RoomSession(grant) => grant.authorization.principal(),
         }
     }
 }
 
-impl ConsumedHumanSessionSocketTicket {
+impl ConsumedRoomSessionSocketTicket {
     #[must_use]
-    pub fn into_authorization(self) -> HumanSessionAuthorization {
+    pub fn into_authorization(self) -> RoomSessionAuthorization {
         self.authorization
     }
 }
@@ -57,15 +57,15 @@ const PUBLIC_SOCKET_TICKETS_PER_SESSION: usize = 8;
 const LOCAL_PRIVATE_GRANT_RESERVE: usize = 2_304;
 
 impl TicketStore {
-    /// Issues an exact WebSocket-connect grant from current durable human-session authority.
+    /// Issues an exact WebSocket-connect grant from current durable room-session authority.
     ///
     /// # Errors
     ///
     /// Returns `Invalid` when the session has expired or a global, public, or per-session
     /// grant bound is exhausted.
-    pub async fn issue_human_session_socket(
+    pub async fn issue_room_session_socket(
         &self,
-        authorization: HumanSessionAuthorization,
+        authorization: RoomSessionAuthorization,
     ) -> Result<IssuedTicket, TicketError> {
         let session_fingerprint = *authorization.session_fingerprint();
         let mut grants = self.grants.lock().await;
@@ -81,7 +81,7 @@ impl TicketStore {
             if grant.expires_at <= now {
                 return false;
             }
-            if let TicketAuthority::HumanSessionSocket(public) = &grant.authority {
+            if let TicketAuthority::RoomSessionSocket(public) = &grant.authority {
                 public_count += 1;
                 if public.authorization.session_fingerprint() == &session_fingerprint {
                     same_session_count += 1;
@@ -98,12 +98,12 @@ impl TicketStore {
         }
         Ok(insert_grant(
             &mut grants,
-            TicketAuthority::HumanSessionSocket(HumanSessionSocketGrant { authorization }),
+            TicketAuthority::RoomSessionSocket(RoomSessionSocketGrant { authorization }),
             now + self.ttl.min(session_remaining),
         ))
     }
 
-    /// Inspects only enough socket authority to subscribe to human-session revocation before
+    /// Inspects only enough socket authority to subscribe to room-session revocation before
     /// consuming the one-use grant. Wrong-purpose and expired grants are consumed immediately.
     pub(crate) async fn socket_ticket_hint(
         &self,
@@ -120,7 +120,7 @@ impl TicketStore {
         }
         match &grant.authority {
             TicketAuthority::Room(_) => Ok(SocketTicketHint::Local),
-            TicketAuthority::HumanSessionSocket(session) => Ok(SocketTicketHint::HumanSession {
+            TicketAuthority::RoomSessionSocket(session) => Ok(SocketTicketHint::RoomSession {
                 room_id: session.authorization.principal().room_id.clone(),
             }),
             TicketAuthority::RoomHttp(_)
@@ -145,11 +145,11 @@ impl TicketStore {
             TicketAuthority::Room(principal) => {
                 Ok(ConsumedSocketTicket::Local(ConsumedTicket { principal }))
             }
-            TicketAuthority::HumanSessionSocket(public) => {
+            TicketAuthority::RoomSessionSocket(public) => {
                 let authorization =
-                    Self::resolve_human_session_socket_authority(public, Utc::now())?;
-                Ok(ConsumedSocketTicket::HumanSession(
-                    ConsumedHumanSessionSocketTicket { authorization },
+                    Self::resolve_room_session_socket_authority(public, Utc::now())?;
+                Ok(ConsumedSocketTicket::RoomSession(
+                    ConsumedRoomSessionSocketTicket { authorization },
                 ))
             }
             TicketAuthority::RoomHttp(_)
@@ -160,44 +160,44 @@ impl TicketStore {
         }
     }
 
-    /// Consumes only an exact human-session WebSocket credential.
+    /// Consumes only an exact room-session WebSocket credential.
     ///
     /// # Errors
     ///
     /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
-    pub async fn consume_human_session_socket(
+    pub async fn consume_room_session_socket(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedHumanSessionSocketTicket, TicketError> {
+    ) -> Result<ConsumedRoomSessionSocketTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
-        let authorization = Self::resolve_human_session_at(grant, Utc::now())?;
-        Ok(ConsumedHumanSessionSocketTicket { authorization })
+        let authorization = Self::resolve_room_session_at(grant, Utc::now())?;
+        Ok(ConsumedRoomSessionSocketTicket { authorization })
     }
 
     #[cfg(test)]
-    pub(crate) async fn consume_human_session_socket_at(
+    pub(crate) async fn consume_room_session_socket_at(
         &self,
         ticket: &str,
         now: chrono::DateTime<Utc>,
-    ) -> Result<HumanSessionAuthorization, TicketError> {
+    ) -> Result<RoomSessionAuthorization, TicketError> {
         let grant = self.consume_grant(ticket).await?;
-        Self::resolve_human_session_at(grant, now)
+        Self::resolve_room_session_at(grant, now)
     }
 
-    fn resolve_human_session_at(
+    fn resolve_room_session_at(
         grant: StoredTicketGrant,
         now: chrono::DateTime<Utc>,
-    ) -> Result<HumanSessionAuthorization, TicketError> {
-        let TicketAuthority::HumanSessionSocket(public) = grant.authority else {
+    ) -> Result<RoomSessionAuthorization, TicketError> {
+        let TicketAuthority::RoomSessionSocket(public) = grant.authority else {
             return Err(TicketError::Invalid);
         };
-        Self::resolve_human_session_socket_authority(public, now)
+        Self::resolve_room_session_socket_authority(public, now)
     }
 
-    fn resolve_human_session_socket_authority(
-        public: HumanSessionSocketGrant,
+    fn resolve_room_session_socket_authority(
+        public: RoomSessionSocketGrant,
         now: chrono::DateTime<Utc>,
-    ) -> Result<HumanSessionAuthorization, TicketError> {
+    ) -> Result<RoomSessionAuthorization, TicketError> {
         if public.authorization.expires_at() <= now {
             return Err(TicketError::Invalid);
         }
@@ -252,7 +252,7 @@ impl TicketStore {
                 )?)
             }
             TicketAuthority::Room(_)
-            | TicketAuthority::HumanSessionSocket(_)
+            | TicketAuthority::RoomSessionSocket(_)
             | TicketAuthority::RoomHttp(_)
             | TicketAuthority::SettingsDirectoryRead { .. }
             | TicketAuthority::CentralRegistration { .. } => return Err(TicketError::Invalid),

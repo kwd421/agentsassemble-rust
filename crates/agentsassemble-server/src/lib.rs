@@ -143,9 +143,10 @@ pub use room_shutdown::RoomShutdownError;
 pub use runtime_reconciliation::{RuntimeReconciliationSummary, reconcile_runtime_ownership};
 pub use stable_entry::{StableEntryActivationError, StableEntryConfig, StableEntryConfigError};
 pub use ticket::{
-    ConsumedCentralRegistrationTicket, ConsumedHumanSessionSocketTicket, ConsumedProfileTicket,
-    ConsumedRoomHttpTicket, ConsumedServerOperatorTicket, ConsumedSettingsDirectoryReadTicket,
-    ConsumedTicket, IssuedTicket, RoomHttpPurpose, TicketError, TicketStore,
+    ConsumedCentralRegistrationTicket, ConsumedProfileTicket, ConsumedRoomHttpTicket,
+    ConsumedRoomSessionSocketTicket, ConsumedServerOperatorTicket,
+    ConsumedSettingsDirectoryReadTicket, ConsumedTicket, IssuedTicket, RoomHttpPurpose,
+    TicketError, TicketStore,
 };
 pub use ticket_issuer::{
     ManagerRoomAuthorityRequest, TicketIssueError, issue_agent_avatar_upload_ticket,

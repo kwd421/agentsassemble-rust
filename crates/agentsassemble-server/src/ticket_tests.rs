@@ -324,18 +324,20 @@ async fn human_session_socket_grant_is_one_use() {
     let fixture = HumanSessionFixture::new(1).await;
     let store = TicketStore::new(Duration::from_secs(30), 4_096);
     let socket = store
-        .issue_human_session_socket(fixture.authorize(0).await)
+        .issue_room_session_socket(agentsassemble_persistence::RoomSessionAuthorization::Human(
+            fixture.authorize(0).await,
+        ))
         .await
         .unwrap_or_else(|error| panic!("issue session socket grant: {error}"));
     assert!(matches!(
         store.socket_ticket_hint(&socket.ticket).await,
-        Ok(SocketTicketHint::HumanSession { room_id }) if room_id == "general"
+        Ok(SocketTicketHint::RoomSession { room_id }) if room_id == "general"
     ));
     let consumed = store
         .consume_socket(&socket.ticket)
         .await
         .unwrap_or_else(|error| panic!("consume session socket grant: {error}"));
-    let ConsumedSocketTicket::HumanSession(consumed) = consumed else {
+    let ConsumedSocketTicket::RoomSession(consumed) = consumed else {
         panic!("human socket grant resolved as local authority");
     };
     let authorization = consumed.into_authorization();
@@ -344,7 +346,7 @@ async fn human_session_socket_grant_is_one_use() {
         &fixture.fingerprints[0]
     );
     assert!(matches!(
-        store.consume_human_session_socket(&socket.ticket).await,
+        store.consume_room_session_socket(&socket.ticket).await,
         Err(TicketError::Invalid)
     ));
 }
@@ -381,18 +383,20 @@ async fn human_session_socket_ticket_rechecks_absolute_expiry_after_issue() {
     let authorization = fixture.authorize(0).await;
     let after_session_expiry = authorization.expires_at() + ChronoDuration::microseconds(1);
     let socket = store
-        .issue_human_session_socket(authorization)
+        .issue_room_session_socket(agentsassemble_persistence::RoomSessionAuthorization::Human(
+            authorization,
+        ))
         .await
         .unwrap_or_else(|error| panic!("issue session socket grant: {error}"));
 
     assert!(matches!(
         store
-            .consume_human_session_socket_at(&socket.ticket, after_session_expiry)
+            .consume_room_session_socket_at(&socket.ticket, after_session_expiry)
             .await,
         Err(TicketError::Invalid)
     ));
     assert!(matches!(
-        store.consume_human_session_socket(&socket.ticket).await,
+        store.consume_room_session_socket(&socket.ticket).await,
         Err(TicketError::Invalid)
     ));
 }
@@ -405,24 +409,32 @@ async fn human_session_socket_tickets_enforce_per_session_limit_and_reclaim_cons
     for _ in 0..8 {
         issued.push(
             store
-                .issue_human_session_socket(fixture.authorize(0).await)
+                .issue_room_session_socket(
+                    agentsassemble_persistence::RoomSessionAuthorization::Human(
+                        fixture.authorize(0).await,
+                    ),
+                )
                 .await
                 .unwrap_or_else(|error| panic!("issue bounded session grant: {error}")),
         );
     }
     assert!(matches!(
         store
-            .issue_human_session_socket(fixture.authorize(0).await)
+            .issue_room_session_socket(agentsassemble_persistence::RoomSessionAuthorization::Human(
+                fixture.authorize(0).await
+            ))
             .await,
         Err(TicketError::Invalid)
     ));
     store
-        .consume_human_session_socket(&issued[0].ticket)
+        .consume_room_session_socket(&issued[0].ticket)
         .await
         .unwrap_or_else(|error| panic!("consume bounded session grant: {error}"));
     assert!(
         store
-            .issue_human_session_socket(fixture.authorize(0).await)
+            .issue_room_session_socket(agentsassemble_persistence::RoomSessionAuthorization::Human(
+                fixture.authorize(0).await
+            ))
             .await
             .is_ok()
     );
@@ -437,7 +449,11 @@ async fn public_socket_partition_preserves_private_reserve_and_reclaims_both_cla
         for _ in 0..8 {
             public.push(
                 store
-                    .issue_human_session_socket(fixture.authorize(session).await)
+                    .issue_room_session_socket(
+                        agentsassemble_persistence::RoomSessionAuthorization::Human(
+                            fixture.authorize(session).await,
+                        ),
+                    )
                     .await
                     .unwrap_or_else(|error| panic!("fill public partition: {error}")),
             );
@@ -445,7 +461,9 @@ async fn public_socket_partition_preserves_private_reserve_and_reclaims_both_cla
     }
     assert!(matches!(
         store
-            .issue_human_session_socket(fixture.authorize(2).await)
+            .issue_room_session_socket(agentsassemble_persistence::RoomSessionAuthorization::Human(
+                fixture.authorize(2).await
+            ))
             .await,
         Err(TicketError::Invalid)
     ));
@@ -462,12 +480,14 @@ async fn public_socket_partition_preserves_private_reserve_and_reclaims_both_cla
     assert_eq!(store.issue(principal()).await, Err(TicketError::Invalid));
 
     store
-        .consume_human_session_socket(&public[0].ticket)
+        .consume_room_session_socket(&public[0].ticket)
         .await
         .unwrap_or_else(|error| panic!("reclaim public grant: {error}"));
     assert!(
         store
-            .issue_human_session_socket(fixture.authorize(2).await)
+            .issue_room_session_socket(agentsassemble_persistence::RoomSessionAuthorization::Human(
+                fixture.authorize(2).await
+            ))
             .await
             .is_ok()
     );

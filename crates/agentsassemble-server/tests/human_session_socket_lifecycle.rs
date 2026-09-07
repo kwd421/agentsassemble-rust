@@ -46,11 +46,11 @@ async fn durable_session_deadline_closes_an_active_socket() {
     tokio::time::pause();
     for nonce in 0..14 {
         tokio::time::advance(Duration::from_mins(4)).await;
-        tokio::task::yield_now().await;
+        // Real socket I/O must not run while Tokio can auto-advance to the idle deadline.
+        tokio::time::resume();
         socket
             .send_json(&json!({"op": "ping", "nonce": format!("keepalive-{nonce}")}))
             .await;
-        tokio::time::resume();
         let pong = socket.receive_json().await;
         assert_eq!(pong["op"], "pong");
         assert_eq!(pong["nonce"], format!("keepalive-{nonce}"));
@@ -59,7 +59,6 @@ async fn durable_session_deadline_closes_an_active_socket() {
     // Cross the durable one-hour deadline without reaching the independent
     // five-minute idle deadline measured from the last successful ping.
     tokio::time::advance(Duration::from_secs(270)).await;
-    tokio::task::yield_now().await;
     tokio::time::resume();
     assert!(
         socket.wait_closed().await,
@@ -134,5 +133,76 @@ async fn missed_revocation_notification_cannot_leak_the_next_outbound_event() {
         socket.wait_closed().await,
         "displaced socket received a post-replacement product frame"
     );
+    server.stop().await;
+}
+
+#[tokio::test]
+async fn paired_socket_retains_session_provenance_and_leave_preserves_native_host() {
+    use agentsassemble_domain::{LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID};
+    use agentsassemble_persistence::RoomSessionAuthorization;
+    use support::room_socket_peer::RoomSocketPeer;
+    let (store, _) = fixture(InviteScope::ReadWrite).await;
+    let manager = store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize host: {error}"));
+    let now = chrono::Utc::now();
+    store
+        .create_operator_pairing(&manager, &[0x51; 32], "https://room.example.test", now)
+        .await
+        .unwrap_or_else(|error| panic!("create pair: {error}"));
+    let paired = store
+        .redeem_operator_pairing(&[0x51; 32], &[0x52; 32], "https://room.example.test", now)
+        .await
+        .unwrap_or_else(|error| panic!("redeem pair: {error}"));
+    let authorization = RoomSessionAuthorization::Operator(paired.authorization);
+    let server = start(store.clone()).await;
+    let mut grants = Vec::new();
+    for _ in 0..2 {
+        grants.push(
+            server
+                .state()
+                .tickets
+                .issue_room_session_socket(authorization.clone())
+                .await
+                .unwrap_or_else(|error| panic!("issue paired socket: {error}")),
+        );
+    }
+    let endpoint = server.base_url.replace("http://", "ws://");
+    let (wire, _) =
+        tokio_tungstenite::connect_async(format!("{endpoint}/ws?ticket={}", grants[0].ticket))
+            .await
+            .unwrap_or_else(|error| panic!("connect paired socket: {error}"));
+    let mut socket = RoomSocketPeer::new(wire);
+    assert_eq!(socket.subscribe(0).await["op"], "subscribed");
+    assert_eq!(socket.receive_json().await["op"], "snapshot");
+    socket.send_json(&json!({"op": "command", "request_id": "paired-socket-leave", "action": "participant.leave", "payload": {}})).await;
+    let ack = socket.receive_json().await;
+    assert_eq!(ack["op"], "ack");
+    assert_eq!(ack["accepted"], true);
+    assert!(socket.wait_closed().await);
+    assert!(
+        store
+            .revalidate_room_session_authorization(&authorization)
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .resolve_principal(authorization.principal())
+            .await
+            .is_ok()
+    );
+    // A ticket issued before departure must not revive its now-revoked paired authority.
+    let (wire, _) =
+        tokio_tungstenite::connect_async(format!("{endpoint}/ws?ticket={}", grants[1].ticket))
+            .await
+            .unwrap_or_else(|error| panic!("connect stale paired ticket: {error}"));
+    let mut stale = RoomSocketPeer::new(wire);
+    assert!(stale.wait_closed().await);
     server.stop().await;
 }

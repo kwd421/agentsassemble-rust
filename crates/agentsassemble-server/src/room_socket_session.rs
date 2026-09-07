@@ -1,7 +1,7 @@
 use std::time::Duration;
 
 use agentsassemble_domain::public_event_for_principal;
-use agentsassemble_persistence::HumanSessionAuthorization;
+use agentsassemble_persistence::RoomSessionAuthorization;
 use agentsassemble_protocol::{
     ClientFrame, CommandAck, CommandResolution, ProtocolError, RoomAction, ServerFrame,
 };
@@ -16,7 +16,7 @@ use crate::{
     room_history_socket::read_history_frame,
     room_socket::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
-        refresh_human_session,
+        refresh_room_session,
     },
     room_vote_socket::read_vote_summary_frame,
     ticket::ConsumedSocketTicket,
@@ -36,7 +36,7 @@ pub(crate) async fn run(
     let Some(EstablishedSubscription {
         room_uid,
         principal,
-        human_session,
+        room_session,
         mut events,
         mut catalog_updates,
         mut delivered_seq,
@@ -45,11 +45,11 @@ pub(crate) async fn run(
         return;
     };
     let mut principal = principal;
-    let mut human_session = human_session;
+    let mut room_session = room_session;
     let expiry = wait_for_session_expiry(
-        human_session
+        room_session
             .as_ref()
-            .map(HumanSessionAuthorization::expires_at),
+            .map(RoomSessionAuthorization::expires_at),
     );
     tokio::pin!(expiry);
     loop {
@@ -60,7 +60,7 @@ pub(crate) async fn run(
                 if !session_remains_authorized_after_revocation_signal(
                     &state,
                     &mut principal,
-                    &mut human_session,
+                    &mut room_session,
                     revoked,
                 ).await {
                     return;
@@ -75,31 +75,31 @@ pub(crate) async fn run(
                     Message::Close(_) => return,
                 };
                 if !state.socket_admission.admit_frame(&principal, frame_bytes, control_frame) {
-                    let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded."))).await;
+                    let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded."))).await;
                     return;
                 }
                 let Message::Text(raw) = message else {
                     if matches!(message, Message::Binary(_)) {
-                        let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("binary_frame_unsupported", "Binary WebSocket frames are not supported."))).await;
+                        let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("binary_frame_unsupported", "Binary WebSocket frames are not supported."))).await;
                         return;
                     }
                     continue;
                 };
                 let Ok((client_frame, _product_bytes)) = decode_client_frame(raw.as_str())
                 else {
-                    let _ = send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("frame_schema_invalid", "WebSocket frame was invalid."))).await;
+                    let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("frame_schema_invalid", "WebSocket frame was invalid."))).await;
                     return;
                 };
-                if refresh_human_session(&state, &mut principal, &mut human_session).await.is_none() {
+                if refresh_room_session(&state, &mut principal, &mut room_session).await.is_none() {
                     return;
                 }
-                if human_session.is_none() && state.store.require_room_incarnation(&principal.room_id, room_uid).await.is_err() {
+                if room_session.is_none() && state.store.require_room_incarnation(&principal.room_id, room_uid).await.is_err() {
                     return;
                 }
                 match client_frame {
                     ClientFrame::Command { request_id, action, payload } => {
                         if !action.supports_websocket() {
-                            if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, (&request_id, action.as_str(), CommandResolution::Rejected, ProtocolError::new("unsupported_transport", "This action uses the authenticated HTTP management endpoint."))).await.is_none() { return; }
+                            if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), CommandResolution::Rejected, ProtocolError::new("unsupported_transport", "This action uses the authenticated HTTP management endpoint."))).await.is_none() { return; }
                             continue;
                         }
                         if action == RoomAction::RoomHistory {
@@ -111,14 +111,14 @@ pub(crate) async fn run(
                                 &payload,
                             ).await {
                                 Ok(frame) => {
-                                    if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
+                                    if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
                                 }
                                 Err(failure) => {
                                     if persistence_error_is_internal(&failure.error) {
                                         tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room history read failed");
                                     }
                                     let (code, message) = persistence_error(&failure.error);
-                                    if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                    if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
                                 }
                             }
                             continue;
@@ -127,30 +127,30 @@ pub(crate) async fn run(
                             match read_vote_summary_frame(
                                 &state.store,
                                 &principal,
-                                human_session.as_ref(),
+                                room_session.as_ref(),
                                 &request_id,
                                 &payload,
                             ).await {
                                 Ok(frame) => {
-                                    if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
+                                    if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
                                 }
                                 Err(failure) => {
                                     if persistence_error_is_internal(&failure.error) {
                                         tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room vote summary read failed");
                                     }
                                     let (code, message) = persistence_error(&failure.error);
-                                    if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                    if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
                                 }
                             }
                             continue;
                         }
-                        let closes_human_session =
+                        let closes_room_session =
                             action == RoomAction::ParticipantLeave
-                                && human_session.is_some();
+                                && room_session.is_some();
                         let action_name = action.as_str().to_owned();
-                        let outcome = if let Some(authorization) = &human_session {
+                        let outcome = if let Some(authorization) = &room_session {
                             state.rooms.execute_room_session(
-                                &agentsassemble_persistence::RoomSessionAuthorization::Human(authorization.clone()), request_id.clone(), action, payload,
+                                authorization, request_id.clone(), action, payload,
                             ).await
                         } else {
                             state.rooms.execute(
@@ -167,29 +167,29 @@ pub(crate) async fn run(
                                     result: outcome.result,
                                     deduplicated: outcome.deduplicated,
                                 });
-                                if closes_human_session {
+                                if closes_room_session {
                                     // This exact committed ACK is the final frame authorized by
                                     // the command that revoked the session. Revalidation would
                                     // suppress it and leave the copied browser flow unresolved.
                                     let _ = send_frame(&mut sender, &state.shutdown, &frame).await;
                                     return;
                                 }
-                                if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
+                                if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
                             }
                             Err(failure) => {
                                 if persistence_error_is_internal(&failure.error) {
                                     tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action_name, "room command persistence failed");
                                 }
                                 let (code, message) = persistence_error(&failure.error);
-                                if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, (&request_id, &action_name, failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, &action_name, failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
                             }
                         }
                     }
                     ClientFrame::Ping { nonce } => {
-                        if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &ServerFrame::Pong { nonce }).await.is_none() { return; }
+                        if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &ServerFrame::Pong { nonce }).await.is_none() { return; }
                     }
                     ClientFrame::Subscribe { .. } => {
-                        if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, ("", "subscribe", CommandResolution::Unresolved, ProtocolError::new("already_subscribed", "This socket is already subscribed."))).await.is_none() { return; }
+                        if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "subscribe", CommandResolution::Unresolved, ProtocolError::new("already_subscribed", "This socket is already subscribed."))).await.is_none() { return; }
                     }
                 }
             }
@@ -205,16 +205,16 @@ pub(crate) async fn run(
                                 reason: "live room event sequence is not contiguous".to_owned(),
                                 latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(delivered_seq, |snapshot| snapshot.last_seq),
                             };
-                            let _ = send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await;
+                            let _ = send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await;
                             return;
                         }
-                        if human_session.is_none() && principal.is_operator &&
+                        if room_session.is_none() && principal.is_operator &&
                             matches!(event.event_type.as_str(), "room_closed" | "room_archived") {
                             send_terminal_room_event(&state, &principal, room_uid, &mut sender, &event).await;
                             return;
                         }
-                        let current_principal = if human_session.is_some() {
-                            if refresh_human_session(&state, &mut principal, &mut human_session).await.is_none() {
+                        let current_principal = if room_session.is_some() {
+                            if refresh_room_session(&state, &mut principal, &mut room_session).await.is_none() {
                                 return;
                             }
                             principal.clone()
@@ -229,7 +229,7 @@ pub(crate) async fn run(
                                     let _ = send_authorized_nack(
                                         &state,
                                         &mut principal,
-                                        &mut human_session,
+                                        &mut room_session,
                                         &mut sender,
                                         ("", "session", CommandResolution::Unresolved, ProtocolError::new(code, message)),
                                     ).await;
@@ -243,7 +243,7 @@ pub(crate) async fn run(
                             events: vec![public_event_for_principal(&event, &current_principal)],
                             latest_seq,
                         };
-                        if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
+                        if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
                         delivered_seq = latest_seq;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
@@ -252,7 +252,7 @@ pub(crate) async fn run(
                             reason: "subscriber fell behind the room event stream".to_owned(),
                             latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(0, |snapshot| snapshot.last_seq),
                         };
-                        let _ = send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await;
+                        let _ = send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await;
                         return;
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
@@ -265,7 +265,7 @@ pub(crate) async fn run(
                 let frame = ServerFrame::ProviderCatalogUpdated {
                     catalog: catalog_updates.borrow_and_update().clone(),
                 };
-                if send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await.is_none() { return; }
+                if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
             }
         }
     }
@@ -295,20 +295,20 @@ async fn receive_revocation(
 async fn session_remains_authorized_after_revocation_signal(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
     signal: Result<[u8; 32], broadcast::error::RecvError>,
 ) -> bool {
     match signal {
-        Ok(fingerprint) => human_session
+        Ok(fingerprint) => room_session
             .as_ref()
             .is_none_or(|authorization| authorization.session_fingerprint() != &fingerprint),
         Err(broadcast::error::RecvError::Lagged(_)) => {
-            refresh_human_session(state, principal, human_session)
+            refresh_room_session(state, principal, room_session)
                 .await
                 .is_some()
         }
         Err(broadcast::error::RecvError::Closed) => {
-            let _ = refresh_human_session(state, principal, human_session).await;
+            let _ = refresh_room_session(state, principal, room_session).await;
             false
         }
     }
@@ -350,22 +350,22 @@ async fn send_terminal_room_event(
 async fn send_authorized_frame(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     frame: &ServerFrame,
 ) -> Option<()> {
-    refresh_human_session(state, principal, human_session).await?;
+    refresh_room_session(state, principal, room_session).await?;
     send_frame(sender, &state.shutdown, frame).await.ok()
 }
 
 async fn send_authorized_nack(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
     sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
     nack: (&str, &str, CommandResolution, ProtocolError),
 ) -> Option<()> {
-    refresh_human_session(state, principal, human_session).await?;
+    refresh_room_session(state, principal, room_session).await?;
     send_nack(sender, &state.shutdown, nack.0, nack.1, nack.2, nack.3)
         .await
         .ok()
@@ -387,7 +387,9 @@ mod tests {
         let fixture = HumanSessionFixture::new(1).await;
         let authorization = fixture.authorize(0).await;
         let mut principal = authorization.principal().clone();
-        let mut human_session = Some(authorization);
+        let mut room_session = Some(agentsassemble_persistence::RoomSessionAuthorization::Human(
+            authorization.clone(),
+        ));
         let state = AppState::local(
             fixture.store().clone(),
             TicketStore::new(Duration::from_secs(30), 8),
@@ -399,9 +401,7 @@ mod tests {
         fixture
             .store()
             .update_human_session_profile(
-                human_session
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("test human session is absent")),
+                &authorization,
                 1,
                 UserProfilePatch {
                     display_name: Some("Lag Refresh".to_owned()),
@@ -427,7 +427,7 @@ mod tests {
             session_remains_authorized_after_revocation_signal(
                 &state,
                 &mut principal,
-                &mut human_session,
+                &mut room_session,
                 lagged,
             )
             .await
@@ -437,9 +437,7 @@ mod tests {
         fixture
             .store()
             .update_human_session_profile(
-                human_session
-                    .as_ref()
-                    .unwrap_or_else(|| panic!("refreshed human session is absent")),
+                &authorization,
                 2,
                 UserProfilePatch {
                     display_name: Some("Closed Refresh".to_owned()),
@@ -457,7 +455,7 @@ mod tests {
             !session_remains_authorized_after_revocation_signal(
                 &state,
                 &mut principal,
-                &mut human_session,
+                &mut room_session,
                 closed,
             )
             .await

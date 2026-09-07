@@ -4,7 +4,7 @@ use agentsassemble_domain::{
     AuthenticatedPrincipal, ProviderCatalog, RoomEvent, SnapshotMode, public_event_for_principal,
     public_settings,
 };
-use agentsassemble_persistence::{HumanSessionAuthorization, PersistenceError, RoomCatchUp};
+use agentsassemble_persistence::{PersistenceError, RoomCatchUp, RoomSessionAuthorization};
 use agentsassemble_protocol::{
     ClientFrame, CommandNack, CommandResolution, PROTOCOL_VERSION, ProtocolError, RoomSnapshot,
     RoomStream, ServerFrame, Subscribed,
@@ -26,7 +26,7 @@ const MAX_SUBSCRIPTION_CATCH_UP_EVENTS: i64 = 256;
 pub(crate) struct EstablishedSubscription {
     pub room_uid: uuid::Uuid,
     pub principal: AuthenticatedPrincipal,
-    pub human_session: Option<HumanSessionAuthorization>,
+    pub room_session: Option<RoomSessionAuthorization>,
     pub events: broadcast::Receiver<RoomEvent>,
     pub catalog_updates: watch::Receiver<ProviderCatalog>,
     pub delivered_seq: i64,
@@ -74,22 +74,22 @@ where
     S: Sink<Message, Error = axum::Error> + Unpin,
     R: Stream<Item = Result<Message, axum::Error>> + Unpin,
 {
-    let (ticket_principal, mut human_session) = match grant {
+    let (ticket_principal, mut room_session) = match grant {
         ConsumedSocketTicket::Local(grant) => (grant.principal, None),
-        ConsumedSocketTicket::HumanSession(grant) => {
+        ConsumedSocketTicket::RoomSession(grant) => {
             let authorization = grant.into_authorization();
             (authorization.principal().clone(), Some(authorization))
         }
     };
     let mut principal =
-        resolve_socket_principal(sender, state, &ticket_principal, &mut human_session).await?;
+        resolve_socket_principal(sender, state, &ticket_principal, &mut room_session).await?;
     let request =
-        receive_subscription(sender, receiver, state, &mut principal, &mut human_session).await?;
+        receive_subscription(sender, receiver, state, &mut principal, &mut room_session).await?;
     let prepared = prepare_snapshot(
         sender,
         state,
         &mut principal,
-        &mut human_session,
+        &mut room_session,
         request.resume_from_seq,
     )
     .await?;
@@ -97,11 +97,11 @@ where
         sender,
         state,
         &mut principal,
-        &mut human_session,
+        &mut room_session,
         prepared.cursor,
     )
     .await?;
-    refresh_human_session(state, &mut principal, &mut human_session).await?;
+    refresh_room_session(state, &mut principal, &mut room_session).await?;
     let receipt = subscription_receipt(
         state,
         &principal,
@@ -110,7 +110,7 @@ where
         catch_up.high_water,
     );
     send_subscription_receipt(sender, &state.shutdown, receipt).await?;
-    refresh_human_session(state, &mut principal, &mut human_session).await?;
+    refresh_room_session(state, &mut principal, &mut room_session).await?;
     send_encoded(sender, &state.shutdown, prepared.encoded)
         .await
         .ok()?;
@@ -118,7 +118,7 @@ where
         sender,
         state,
         &mut principal,
-        &mut human_session,
+        &mut room_session,
         prepared.cursor,
         catch_up,
     )
@@ -126,7 +126,7 @@ where
     Some(EstablishedSubscription {
         room_uid: prepared.room_uid,
         principal,
-        human_session,
+        room_session,
         events: prepared.events,
         catalog_updates: prepared.catalog_updates,
         delivered_seq,
@@ -137,35 +137,35 @@ async fn resolve_socket_principal<S>(
     sender: &mut S,
     state: &AppState,
     ticket_principal: &AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
 ) -> Option<AuthenticatedPrincipal>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
 {
-    if human_session.is_some() {
+    if room_session.is_some() {
         let mut principal = ticket_principal.clone();
-        refresh_human_session(state, &mut principal, human_session).await?;
+        refresh_room_session(state, &mut principal, room_session).await?;
         return Some(principal);
     }
     resolve_principal(sender, state, ticket_principal).await
 }
 
-pub(crate) async fn refresh_human_session(
+pub(crate) async fn refresh_room_session(
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
 ) -> Option<()> {
-    let Some(expected) = human_session else {
+    let Some(expected) = room_session else {
         return Some(());
     };
     let current = match state
         .store
-        .revalidate_human_session_authorization(expected)
+        .revalidate_room_session_authorization(expected)
         .await
     {
         Ok(current) => current,
         Err(error) => {
-            log_internal_persistence_error(&error, "human session revalidation failed");
+            log_internal_persistence_error(&error, "room session revalidation failed");
             return None;
         }
     };
@@ -198,7 +198,7 @@ async fn receive_subscription<S, R>(
     receiver: &mut R,
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
 ) -> Option<ValidatedSubscription>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
@@ -221,7 +221,7 @@ where
             sender,
             state,
             principal,
-            human_session,
+            room_session,
             ("ingress_limited", "WebSocket ingress budget exceeded."),
         )
         .await;
@@ -232,7 +232,7 @@ where
             sender,
             state,
             principal,
-            human_session,
+            room_session,
             (
                 "subscribe_required",
                 "The first frame must be a valid subscription.",
@@ -250,7 +250,7 @@ where
             sender,
             state,
             principal,
-            human_session,
+            room_session,
             (
                 "subscribe_required",
                 "The first frame must be a valid subscription.",
@@ -264,7 +264,7 @@ where
             sender,
             state,
             principal,
-            human_session,
+            room_session,
             (
                 "invalid_subscription",
                 "room_events and a non-negative cursor are required.",
@@ -283,7 +283,7 @@ async fn prepare_snapshot<S>(
     sender: &mut S,
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
     resume_from_seq: i64,
 ) -> Option<PreparedSnapshot>
 where
@@ -303,7 +303,7 @@ where
                 sender,
                 state,
                 principal,
-                human_session,
+                room_session,
                 &ServerFrame::ResyncRequired {
                     stream: "room_events",
                     reason: "resume cursor is ahead of durable room state".to_owned(),
@@ -319,7 +319,7 @@ where
                 sender,
                 state,
                 principal,
-                human_session,
+                room_session,
                 ("snapshot_failed", "Room snapshot failed."),
             )
             .await;
@@ -333,7 +333,7 @@ where
                 sender,
                 state,
                 principal,
-                human_session,
+                room_session,
                 ("snapshot_failed", &error.to_string()),
             )
             .await;
@@ -369,7 +369,7 @@ where
             sender,
             state,
             principal,
-            human_session,
+            room_session,
             (
                 "snapshot_too_large",
                 "Room metadata exceeds the WebSocket snapshot limit.",
@@ -391,7 +391,7 @@ async fn load_catch_up<S>(
     sender: &mut S,
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
     snapshot_cursor: i64,
 ) -> Option<RoomCatchUp>
 where
@@ -416,7 +416,7 @@ where
                 ),
             };
             let _ =
-                send_subscription_nack(sender, state, principal, human_session, (code, &message))
+                send_subscription_nack(sender, state, principal, room_session, (code, &message))
                     .await;
             return None;
         }
@@ -465,7 +465,7 @@ async fn send_catch_up<S>(
     sender: &mut S,
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
     snapshot_cursor: i64,
     catch_up: RoomCatchUp,
 ) -> Option<i64>
@@ -477,7 +477,7 @@ where
         if event.seq != delivered_seq.saturating_add(1) {
             return None;
         }
-        refresh_human_session(state, principal, human_session).await?;
+        refresh_room_session(state, principal, room_session).await?;
         let frame = ServerFrame::Event {
             stream: "room_events",
             latest_seq: event.seq,
@@ -526,13 +526,13 @@ async fn send_subscription_nack<S>(
     sender: &mut S,
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
     error: (&str, &str),
 ) -> Option<()>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
 {
-    refresh_human_session(state, principal, human_session).await?;
+    refresh_room_session(state, principal, room_session).await?;
     send_nack(sender, &state.shutdown, "", "subscribe", error.0, error.1)
         .await
         .ok()
@@ -542,13 +542,13 @@ async fn send_authorized_plain_frame<S>(
     sender: &mut S,
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
-    human_session: &mut Option<HumanSessionAuthorization>,
+    room_session: &mut Option<RoomSessionAuthorization>,
     frame: &ServerFrame,
 ) -> Option<()>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
 {
-    refresh_human_session(state, principal, human_session).await?;
+    refresh_room_session(state, principal, room_session).await?;
     send_frame(sender, &state.shutdown, frame).await.ok()
 }
 

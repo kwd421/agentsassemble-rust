@@ -85,7 +85,9 @@ async fn issue_socket_ticket(
     let ttl_seconds = session_ticket_ttl(&state, &authorization);
     let issued = state
         .tickets
-        .issue_human_session_socket(authorization)
+        .issue_room_session_socket(agentsassemble_persistence::RoomSessionAuthorization::Human(
+            authorization,
+        ))
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
     Ok(Json(SessionTicketResponse {

@@ -453,7 +453,7 @@ async fn upgrade_socket(
         .map_err(|error| ApiError::unauthorized(error.to_string()))?;
     let revocations = match &hint {
         SocketTicketHint::Local => None,
-        SocketTicketHint::HumanSession { room_id } => {
+        SocketTicketHint::RoomSession { room_id } => {
             Some(state.rooms.session_revocations(room_id).await)
         }
     };
@@ -490,7 +490,7 @@ async fn upgrade_socket(
 fn socket_hint_matches_grant(hint: &SocketTicketHint, grant: &ConsumedSocketTicket) -> bool {
     match (hint, grant) {
         (SocketTicketHint::Local, ConsumedSocketTicket::Local(_)) => true,
-        (SocketTicketHint::HumanSession { room_id }, ConsumedSocketTicket::HumanSession(_)) => {
+        (SocketTicketHint::RoomSession { room_id }, ConsumedSocketTicket::RoomSession(_)) => {
             room_id == &grant.principal().room_id
         }
         _ => false,

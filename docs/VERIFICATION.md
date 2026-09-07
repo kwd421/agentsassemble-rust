@@ -7768,3 +7768,19 @@ and remaining pairing-integration limits as the launch entry apply.
 - No timer, polling, cache or provider process is added. Session revalidation uses
   the existing bounded queue/request boundaries. Public pairing exchange, socket
   grants, room HTTP readers and packaged frontend verification remain pending.
+
+### Phase 5 room-session socket provenance (2026-09-08)
+
+- Socket grants, subscription state and command dispatch retain the human/paired
+  session enum. Session expiry and revocation reuse the existing lifecycle owner;
+  the local terminal observer remains restricted to native tickets.
+- Vote-summary reads revalidate the exact session inside their read transaction.
+- Passed: 12 ticket purpose/capacity/expiry tests; lagged/closed revocation refresh;
+  three socket lifecycle tests (human expiry, missed revocation, paired departure
+  plus stale-ticket rejection); authenticated vote-summary HTTP boundary.
+- An initial human expiry fixture failed because real socket I/O ran with virtual
+  time paused, allowing automatic advancement to the idle timeout. Resume virtual
+  time before real I/O; the final lifecycle target passes all three tests.
+- Server/persistence Clippy with all targets/features and mandatory architecture,
+  source growth, policy, format, diff and artifact checks pass. No new timer or task
+  is introduced. Public pairing HTTP and packaged flow acceptance remain pending.

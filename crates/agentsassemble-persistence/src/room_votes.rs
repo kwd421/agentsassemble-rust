@@ -10,8 +10,7 @@ use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    HumanSessionAuthorization, PersistenceError, SqliteStore,
-    human_session_authority::revalidate_human_session,
+    PersistenceError, RoomSessionAuthorization, SqliteStore,
     message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
     room_turns::support::insert_event,
     room_user_identity::resolve_local_room_manager,
@@ -57,20 +56,23 @@ impl SqliteStore {
         Ok(summary)
     }
 
-    /// Reads a canonical vote summary while one durable human session remains current.
+    /// Reads a canonical vote summary while one durable room session remains current.
     ///
     /// # Errors
     ///
     /// Rejects changed or ended session provenance, missing permission, invalid identifiers,
     /// missing votes, malformed projection state, or storage failure without a partial summary.
-    pub async fn human_session_room_vote_summary(
+    pub async fn room_session_room_vote_summary(
         &self,
-        expected: &HumanSessionAuthorization,
+        expected: &RoomSessionAuthorization,
         vote_id: &str,
     ) -> Result<VoteSummary, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) = revalidate_human_session(&mut transaction, expected, Utc::now()).await?;
-        let summary = read_vote_summary(&mut transaction, current.principal(), vote_id).await?;
+        let current = expected
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        let summary = read_vote_summary(&mut transaction, &current, vote_id).await?;
         transaction.commit().await?;
         Ok(summary)
     }
