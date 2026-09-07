@@ -387,8 +387,9 @@ re-enters the unchanged exact room resolver and performs a fresh grant/read.
   and verification-record work remain separate.
 - Batch timing is owned only by the active `Standing project workflow` in `AGENTS.md`.
   When that workflow invokes review, it covers the exact pushed range.
-  Provider-dependent verification uses persistent Codex Terra, Antigravity Flash,
-  and OpenCode Muse Spark sessions, never print mode, and removes every
+  Provider-dependent verification follows the final matrix in
+  `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`, uses each retained native contract,
+  never substitutes print mode, and removes every
   verification-owned process, window, server, and temporary resource afterward.
 
 Room close/archive/delete, operator pairing, external-agent admission, custom

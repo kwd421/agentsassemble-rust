@@ -437,11 +437,10 @@ quiescence stay in small provider modules:
   start blindly.
 - OpenCode uses exclusive current-turn session custody and observe-before-retry.
   An unresolved `/abort` blocks session reuse and is never blindly replayed.
-- Antigravity preserves the current reachable PTY behavior. Ctrl-C is issued only
-  for a `Started` exact H/O/T/generation slot. A late or ambiguous Ctrl-C is never
-  sent to an idle or reused runtime; exact stop proof or quarantine is required.
-  This module can later be replaced without changing room, persistence, or common
-  control contracts.
+- Other retained drivers use their correlated native receipt through this same
+  control owner. Unsupported retained interruption is unavailable; terminal silence
+  and process replacement cannot supply that receipt. The external Room Connector
+  flow has its separate Phase 7 authority and no managed-session control contract.
 
 The live room owner retains the exact execution and dispatch nonce for every spawned
 provider task. A task that exits without a typed result is not log-only: proved
@@ -638,9 +637,10 @@ by the active `Standing project workflow` in `AGENTS.md`. When that workflow inv
 review, it covers the exact pushed range. An
 incomplete owner remains unexposed and is not completion evidence.
 
-Completion evidence is recorded in `docs/VERIFICATION.md` through public code
-checkpoint `035416c` and verification record `3b31a76`. The final package used the
-required Codex Terra, Antigravity Flash, and OpenCode Muse Spark matrix. Exact busy mute
+Historical pre-retirement completion evidence is recorded in `docs/VERIFICATION.md` through public code
+checkpoint `035416c` and verification record `3b31a76`. That package used the
+then-required Codex Terra, Antigravity Flash, and OpenCode Muse Spark matrix.
+Current provider scope and final verification are owned by `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`. Exact busy mute
 terminalized without a late final for all three providers; the OpenCode defect found by
 that run was corrected, re-run from a fresh package, and approved by both manual
 reviewers before this boundary closed.

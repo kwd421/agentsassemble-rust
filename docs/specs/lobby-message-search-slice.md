@@ -53,16 +53,15 @@ same bounded public projections. They are read-only: they neither publish a mess
 meeting decision. Existing per-turn tool admission remains the resource owner; tabletop random
 availability remains separately gated.
 
-Codex, Antigravity, OpenCode, and the common API adapter receive that same provider-neutral ingress.
-Antigravity maps `search` and `context` through its existing private helper and exact PreToolUse hook;
-it adds no transcript, printed-result authority, request file, second queue, process, timer, polling,
-or fallback. Query cleaning, cursor size, and message-target identity reuse their domain owners, and
-the helper prints only the canonical MCP JSON returned by the same RoomPortal tools.
+Every retained driver receives that same provider-neutral ingress. Query cleaning,
+cursor size, and message-target identity reuse their domain owners. Provider scope
+and final actual-provider verification are owned by `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`.
+The retired managed Antigravity helper and hook are not part of this contract.
 
-The hook previously rejected command substitution and shell control operators but admitted unquoted
+Historical retired-hook evidence: the then-managed hook rejected command substitution and shell control operators but admitted unquoted
 POSIX pathname, brace, and tilde expansion. A room instruction could therefore induce a command such
 as `speak *` and publish workspace filenames after the shell expanded the otherwise allowlisted
-argument. The POSIX grammar owner now rejects those unquoted expansions while preserving explicitly
+argument. The correction at that revision rejected those unquoted expansions while preserving explicitly
 quoted or escaped literals; the distinct Windows `cmd.exe` grammar remains unchanged. Focused hook
 tests cover both the exact helper commands and expansion denials. This correction adds no runtime
 state or background cost and preserves the existing private-helper, one-command, turn-budget, and
@@ -140,7 +139,7 @@ change removes one React state and one filter pass; it adds no request, timer, p
 fallback, or durable state. Focused frontend tests cover the room label and profile-SSoT avatar, and
 the TCP search test covers the returned participant identity.
 
-### Packaged and real-provider evidence
+### Historical packaged and real-provider evidence (before managed-provider retirement)
 
 An isolated copied release client searched an older lobby message, navigated through its bounded
 before/target/after context, and retained both the canonical message record and search result across
@@ -189,8 +188,8 @@ measurement artifacts were stopped or moved to Trash after verification; Compute
    contract, enforce exact active-turn/receipt/budget ownership, and prove search/context without
    exposing a human token or bypassing terminal-outcome rules.
 7. A fresh packaged local flow and isolated admitted read-only browser search, navigate, restart, and
-   revoke successfully. Authorized real Codex Terra, Antigravity Flash, and OpenCode free-model
-   sessions exercise the same RoomPortal search contract where their configured harness permits it;
+   revoke successfully. The final authorized provider matrix in
+   `docs/PRODUCT_REIMPLEMENTATION_PLAN.md` exercises the same RoomPortal search contract where their configured harness permits it;
    unavailable credentials or provider behavior remain explicit rather than mocked.
 8. Final measurements record canonical/search disk bytes, representative selective and absent-query
    latency, write cost, and bounded memory/task behavior. The full architecture, policy, source-line,

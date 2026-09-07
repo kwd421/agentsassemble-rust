@@ -76,9 +76,8 @@ than asking each adapter to reconstruct ballots.
 
 The common RoomPortal owns `create_vote`, `cast_vote`, `withdraw_vote`, and `close_vote` for every
 provider transport. A tool call stages one typed terminal outcome; persistence then applies the same
-vote owner with the active Agent Session participant and exact turn receipt. No Codex, Antigravity,
-OpenCode, DeepSeek, terminal-helper, or future adapter may define vote validation, tallying, or
-authority separately. A provider may close only its own poll, and one terminal vote action completes
+vote owner with the active Agent Session participant and exact turn receipt. No transport adapter
+may define vote validation, tallying, or authority separately. A provider may close only its own poll, and one terminal vote action completes
 the current room turn just like a published message.
 
 The copied countdown's deadline-owned timeout is retained only while a finite open deadline exists;
@@ -110,10 +109,10 @@ mount, explicit user refresh, or sequenced vote events—not polling.
    unauthorized, bridge, revoked, and cross-room paths fail closed without hidden work.
 5. Poll creation routes once through the existing floor; ballot/withdraw/close events never create
    another queued provider input. Public snapshot, history, and live projection stay cursor-complete.
-6. Codex Terra, Antigravity Flash, and OpenCode Muse Spark receive the same common vote tools and
-   use the same persistence owner; provider failure remains explicit with no print/exec/legacy
-   fallback. Add Grok to this matrix only after the live OpenCode catalog exposes an eligible model
-   whose cost and tool-call capability have been verified.
+6. Every retained provider receives the same common vote tools through its own permitted tool
+   contract and uses the same persistence owner. Actual verification follows the final matrix in
+   `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`; failures remain explicit without print/exec/legacy
+   fallback. External Room Connector tools belong to their distinct Phase 7 admission owner.
 7. Measured raw-log scan and projection costs, schema/storage trade-off, CPU/memory/disk/latency,
    security boundaries, complete repository gates, real TCP, copied frontend, packaged human flows,
    actual provider flows, cleanup, and both manual reviews are recorded without extrapolation.
@@ -194,7 +193,7 @@ mount, explicit user refresh, or sequenced vote events—not polling.
   and warning-denied workspace Clippy. Packaged UI and real-provider acceptance remain pending and
   are not claimed here.
 
-## Manual review record
+## Historical manual review record (before managed-provider retirement)
 
 ### Provider terminal-path implementation
 

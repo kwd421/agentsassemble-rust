@@ -73,31 +73,19 @@ Rust-owned upload, message-binding, authorized-read, and provider-read lifecycle
   the current joined, unmuted participant and `start_dispatching` execution before it
   loads one BLOB. The portal validates the returned metadata/size and projects only
   that requested item at the standard MCP content boundary: verified images are image
-  blocks, byte-valid UTF-8 is the first text block followed by the helper-only metadata
+  blocks, byte-valid UTF-8 is the first text block followed by the separate metadata
   block, and remaining binary is an embedded blob resource. The UTF-8 branch was added
   only after the packaged Codex flow read the exact 59-byte metadata but reported that
   both the original blob and a later embedded text resource body were unavailable. The
   first text block is the smallest provider-consumable representation observed at the
   real boundary; it avoids base64's 4/3 expansion and JSON escaping for text without a
   MIME allowlist or a change to stored bytes, binary behavior, authority, item limit, or
-  retry budget. The terminal helper still validates the separate descriptor before it
-  stages those exact bytes.
-  Antigravity's original `agentsassemble-room media <id>` behavior remains a private
-  file path rather than
-  terminal base64. Its helper lazily writes only the requested item as a `0600` file in
-  the runtime-owned directory and clears that turn projection on normal completion,
-  abort, and the next turn. This choice is required by an observed bound: one 10-MiB
-  item encodes to 13,981,016 bytes while the Antigravity terminal tail retains only
-  64 KiB. It avoids preloading up to eight 10-MiB items and bounds temporary disk to
-  items the agent actually requests; no unmeasured latency or resident-memory reduction
-  is claimed. Cross-review then demonstrated that connection concurrency alone left
-  cumulative work unbounded: the same accepted ID could repeatedly cause a 10-MiB
-  SQLite read, 13.3-MiB base64 allocation, and Antigravity file sync while helper output
-  refreshed its inactivity deadline. The active turn now owns the smallest complete
-  ledger: one pending read per ID, at most two attempts (and therefore successes) per
-  listed attachment, and checked successful bytes bounded by twice the canonical
-  eight-item/10-MiB input ceiling. The second attempt preserves one bounded retry when
-  an MCP response or Antigravity's post-response staging is lost.
+  retry budget. The same accepted ID could otherwise repeatedly cause a 10-MiB SQLite
+  read and 13.3-MiB base64 allocation. The active turn therefore owns one pending read
+  per ID, at most two attempts (and successes) per listed attachment, and checked
+  successful bytes bounded by twice the canonical eight-item/10-MiB input ceiling.
+  The second attempt preserves one bounded retry when an MCP response is lost.
+  The retired managed Antigravity terminal/file-staging path is outside this contract.
   Failed or cancelled reads release only their reservation but consume an attempt;
   finish and terminal actions wait for pending reads, while abort retains a tombstone
   only until those reservations release. Deterministic tests cover concurrent duplicate,
@@ -258,8 +246,8 @@ speculate about it.
    attachment. The target authenticates before body admission, and unreferenced
    same-room attachments are unreadable to humans and agents.
 4. Ordered and ambient Agent Sessions receive the exact attachment IDs with canonical
-   room context. Codex Terra, Antigravity Flash, and OpenCode Muse Spark each exercise the
-   real attachment path when that provider-visible boundary is complete; no transcript,
+   room context. The final authorized provider matrix in `docs/PRODUCT_REIMPLEMENTATION_PLAN.md`
+   exercises the real attachment path at each retained provider-visible boundary; no transcript,
    print-mode, fake provider, or alternate attachment fallback is used.
 5. Expiry and room deletion remove only their exact pending/bound rows. Absolute storage
    accounting spans all four asset owners once, counts every physically retained row
@@ -294,6 +282,12 @@ speculate about it.
   `Standing project workflow` in `AGENTS.md`. When that workflow invokes review, it
   covers security, structure, duplicated policy, overimplementation, SSoT, lifecycle
   cleanup, and removable state.
+
+### Historical packaged and provider evidence
+
+These dated observations precede the managed Antigravity retirement. They preserve
+revision-bounded evidence, do not restore its helper/hook contract, and do not
+replace the current plan's provider scope or final verification authorization.
 
 Observed packaged download verification on 2026-08-29 used an isolated release bundle
 and authority. The local desktop file card saved the 3,307-byte `README.md` with SHA-256
@@ -395,12 +389,12 @@ The same provider-visible boundary was then exercised by exact OpenCode catalog 
 `OPENCODE_PORTAL_PROOF | PORTAL-OPENCODE-0829-a8e4d2 | 57`, again proving the unknown
 first line and byte count came from the canonical attachment rather than the prompt.
 
-Antigravity CLI 1.1.22 exposed two additional native-PTY permission boundaries. Its
-current `PreToolUse` contract uses `decision` rather than the obsolete `overwrite`
+Historical retired managed-provider evidence: Antigravity CLI 1.1.22 exposed two
+native-PTY permission boundaries. Its then-current `PreToolUse` contract uses `decision` rather than the obsolete `overwrite`
 field, and a user-level ask hook takes precedence over a project allow. The first real
 run also showed that the long private helper path wraps inside the terminal permission
 card, so independently parsing the rendered command in both the hook and PTY rejected a
-command that the hook had already validated. The managed hook is now the single policy
+command that the hook had already validated. The managed hook at that revision became the single policy
 owner: it accepts only one exact private-helper command or a `view_file` whose
 `AbsolutePath` resolves to a current regular owner-only file exactly two components
 under that turn's private `room-media` root. It writes a typed, one-use, owner-only

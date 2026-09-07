@@ -6766,3 +6766,24 @@ The GPT-6 Pro whole-phase review is still running. Neither these implementation
 corrections nor earlier local test counts close Phase 1 without both completed
 review dispositions. Actual-provider and packaged evidence stays at the final
 user-authorized stage.
+
+
+## Phase 1 remaining provider-scope document correction: 2026-09-07
+
+Manual re-review of `4cadb12..acd5e35` closes the Codex-home, tool-only completion,
+and shared-Portal-error findings and approves final source/security/failure paths
+at C0/H0/M0/L0. It retains one Medium because other active slice specifications and
+the current exposure table still direct managed Antigravity work; the historical
+`60c8bff` size violation remains separately pending owner disposition.
+
+The correction updates current search, attachment, vote, moderation, and settings
+contracts and acceptance matrices to the existing retained-provider/final-verification
+plan owner. The current exposure table reports fourteen managed providers and the
+remaining phase boundaries. Private Antigravity helper/hook/PTY requirements are
+removed from active contracts; dated original/native observations remain explicitly
+historical, including persona registry provenance. Shared attachment budgets, room
+tool authority, vote mutation ownership, and exact interrupt receipts remain intact.
+All active spec/exposure references were inspected; no retained provider is replaced
+with a terminal helper or an external admission identity. Architecture/source-growth,
+19 policy tests, formatting, diff, and artifact gates pass. No runtime code changes
+or new actual-provider runs are part of this correction.

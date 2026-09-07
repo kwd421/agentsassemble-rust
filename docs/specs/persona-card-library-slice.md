@@ -256,9 +256,9 @@ point independently selected by the loading catalog, creation selection, and run
 `edbf83d` first moved the existing provider-neutral driver and turn contract out of the runtime
 lifecycle owner. Commit `50e9b96` then made one fixed three-entry registration the owner used by
 catalog discovery, creation transport selection, and runtime launch. Provider-specific discovery,
-protocol, custody, and prompt behavior remain in their concrete owners; Antigravity's initial native
-session promotion and transport-specific room-tool instruction, and Codex's executable-bundle
-integrity, were deliberately not generalized into registration metadata.
+protocol, custody, and prompt behavior remained in their concrete owners. The then-managed
+Antigravity session promotion and room-tool instruction (retired on 2026-09-07), and Codex's
+executable-bundle integrity, were not generalized into registration metadata.
 
 The change adds no provider, product state, cache, retry, fallback, background worker, or generic
 plugin framework. Catalog discovery still owns one cancellable task and exactly the current three
