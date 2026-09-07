@@ -1,5 +1,6 @@
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
+import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./ParticipantRemovalControls";
 import { VolumeX, Zap } from "lucide-react";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ProviderLogo from "../ProviderLogo";
@@ -18,6 +19,7 @@ export type MemberRowProps = {
   onRoleChange: (memberId: string, role: RoleId) => void;
   onContextMenu: (entry: MemberEntry, event: ReactMouseEvent<HTMLElement>) => void;
   canEditRoles: boolean;
+  onParticipantRemove?: ParticipantRemovalAction;
 };
 
 export default function MemberRow({
@@ -25,7 +27,7 @@ export default function MemberRow({
   onOpenDetails,
   onRoleChange,
   onContextMenu,
-  canEditRoles,
+  canEditRoles, onParticipantRemove,
 }: MemberRowProps) {
   const canOpenDetails = Boolean(entry.agent || entry.agentSession);
   const Icon = entry.icon;
@@ -188,6 +190,9 @@ export default function MemberRow({
           )}
         </div>
       </div>
+      {!entry.owner && entry.meetingId && onParticipantRemove && (
+        <ParticipantRemovalControls participantId={entry.id} displayName={entry.displayName} onRemove={onParticipantRemove} />
+      )}
     </div>
   );
 }

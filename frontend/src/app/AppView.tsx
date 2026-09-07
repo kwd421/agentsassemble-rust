@@ -55,7 +55,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
     saveAgentAvatar, scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate, sendAgentControl,
-    sendParticipantMute, setAdminOpen, setChannelNotifications,
+    sendParticipantMute, sendParticipantRemove, serverProductSurface, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setLeaveRoomTargetId,
     setMessageSearchScope,
     setPendingMessageSearchTarget, setRoomMenu,
@@ -377,6 +377,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           agentSessions={activeRoomAgentSessions}
           availableProviders={canonicalRoom.availableProviders}
           capabilities={activeRoomCapabilities}
+          onParticipantRemove={serverProductSurface?.websocket_actions.includes("participant.kick") && serverProductSurface.websocket_actions.includes("participant.export") ? sendParticipantRemove : undefined}
           onAgentControl={sendAgentControl}
           onAgentConfigure={sendAgentConfigure}
           onAgentProfileUpdate={sendAgentProfileUpdate}
@@ -434,6 +435,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               onStartAddAgent={openAgentCreate}
               agentSessions={activeRoomAgentSessions}
               capabilities={activeRoomCapabilities}
+              onParticipantRemove={serverProductSurface?.websocket_actions.includes("participant.kick") && serverProductSurface.websocket_actions.includes("participant.export") ? sendParticipantRemove : undefined}
               onAgentControl={sendAgentControl}
               availableProviders={canonicalRoom.availableProviders}
               onAgentConfigure={sendAgentConfigure}

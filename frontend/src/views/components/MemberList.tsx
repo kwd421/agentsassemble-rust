@@ -12,6 +12,7 @@ import type {
   AgentSessionControlAction,
 } from "./AgentSessionDetails";
 import MemberDetailModal from "./member/MemberDetailModal";
+import type { ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import MemberRow from "./member/MemberRow";
 import { buildMemberOwnerGroups } from "./member/memberOwnerGroups";
 import { useMemberEntries } from "./member/useMemberEntries";
@@ -33,7 +34,7 @@ export default function MemberList({
   onSearchQueryChange,
   hideSearch = false,
   canModerate = false,
-  onParticipantMute,
+  onParticipantMute, onParticipantRemove,
   agentSessions = [],
   onAgentControl,
   availableProviders = [],
@@ -56,6 +57,7 @@ export default function MemberList({
   onSearchQueryChange?: (query: string) => void;
   hideSearch?: boolean;
   canModerate?: boolean;
+  onParticipantRemove?: ParticipantRemovalAction;
   onParticipantMute?: (participantId: string, muted: boolean) => void | Promise<void>;
   agentSessions?: RoomAgentSession[];
   onAgentControl?: (
@@ -189,6 +191,7 @@ export default function MemberList({
                   onOpenDetails={openMemberDetails}
                   onRoleChange={handleRoleChange}
                   onContextMenu={handleMemberContextMenu}
+                  onParticipantRemove={onParticipantRemove}
                   canEditRoles={canEditRoles}
                 />
               ) : (
@@ -221,6 +224,7 @@ export default function MemberList({
                         onOpenDetails={openMemberDetails}
                         onRoleChange={handleRoleChange}
                         onContextMenu={handleMemberContextMenu}
+                        onParticipantRemove={onParticipantRemove}
                         canEditRoles={canEditRoles}
                       />
                     ))}

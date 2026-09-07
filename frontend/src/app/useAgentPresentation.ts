@@ -48,6 +48,7 @@ export function useAgentPresentation({
   const sendAgentControl = canonicalRoom.sendAgentControl;
   const sendAgentConfigure = canonicalRoom.sendAgentConfigure;
   const sendAgentProfileUpdate = canonicalRoom.sendAgentProfileUpdate;
+  const sendParticipantRemove = canonicalRoom.sendParticipantRemove;
   const sendParticipantMute = canonicalRoom.sendParticipantMute;
   const sendParticipantRole = canonicalRoom.sendParticipantRole;
   const participantById = new Map(
@@ -105,7 +106,7 @@ export function useAgentPresentation({
     loadCanonicalRoomHistory,
     sendAgentControl,
     sendAgentConfigure, sendAgentProfileUpdate,
-    sendParticipantMute,
+    sendParticipantMute, sendParticipantRemove,
     sendParticipantRole,
     scopedAgents,
     changeAgentActivityVisibility,

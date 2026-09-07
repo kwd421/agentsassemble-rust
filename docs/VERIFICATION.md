@@ -7138,3 +7138,13 @@ exchange. All 259 persistence cases, 20 affected frontend cases, frontend produc
 build/CSS, affected all-target/all-feature Clippy and unchanged architecture/source/
 format/diff plus 19 policy/artifact gates pass. These are local fixture results;
 packaged and authorized real-provider proof remains at final closeout.
+
+Desktop and mobile participant rows expose kick and export only with room management
+capability and the advertised canonical actions. Both share explicit confirmation,
+cancel, immediate duplicate-submission fencing and visible server errors. The local
+owner has no removal control. Roster changes remain canonical event driven, including
+reconnection, and pending physical cleanup is not presented as confirmed termination.
+All 39 affected frontend cases and production build/CSS plus unchanged architecture,
+source, format/diff and 19 policy/artifact checks pass. React review retained event
+handlers, semantic labelled buttons and shared state scoped to each participant;
+no fetch loop, new CSS or optimistic membership authority was added.

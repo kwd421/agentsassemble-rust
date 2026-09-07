@@ -564,6 +564,15 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     [requireCurrentProjectionSocket]
   );
 
+  const sendParticipantRemove = useCallback(
+    async (participantId: string, action: "kick" | "export") => {
+      const operationSocket = requireCurrentProjectionSocket();
+      await operationSocket.command(`participant.${action}`, { participant_id: participantId });
+      requireCurrentProjectionSocket();
+    },
+    [requireCurrentProjectionSocket]
+  );
+
   const sendParticipantRole = useCallback(
     async (participantId: string, role: RoomMember["role"]) => {
       const operationSocket = requireCurrentProjectionSocket();
@@ -737,7 +746,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     sendAgentControl,
     sendAgentConfigure,
     sendAgentProfileUpdate,
-    sendParticipantMute,
+    sendParticipantMute, sendParticipantRemove,
     sendParticipantRole,
     sendRoomSettingsUpdate,
   };

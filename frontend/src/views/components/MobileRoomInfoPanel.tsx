@@ -1,3 +1,4 @@
+import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import { useMemo, useState } from "react";
 import {
   ArrowLeft,
@@ -80,12 +81,13 @@ function MobileMemberItem({
   row,
   session,
   nested = false,
-  onSelectAgentSession,
+  onSelectAgentSession, onParticipantRemove,
 }: {
   row: MobileMemberRow;
   session?: RoomAgentSession;
   nested?: boolean;
   onSelectAgentSession: (session: RoomAgentSession) => void;
+  onParticipantRemove?: ParticipantRemovalAction;
 }) {
   const Icon = row.icon;
   function selectSession() {
@@ -121,6 +123,9 @@ function MobileMemberItem({
           {roleLabel(row.role)} · {row.detail}
         </span>
       </span>
+      {onParticipantRemove && row.id !== "operator-local" && (
+        <ParticipantRemovalControls participantId={row.id} displayName={row.displayName} onRemove={onParticipantRemove} />
+      )}
       {row.app && <span className="dc-mobile-info-app-badge">앱</span>}
     </article>
   );
@@ -247,11 +252,12 @@ function buildMobileMembers({
 function MobileMemberList({
   groups,
   agentSessions,
-  onSelectAgentSession,
+  onSelectAgentSession, onParticipantRemove,
 }: {
   groups: MobileMemberGroup[];
   agentSessions: RoomAgentSession[];
   onSelectAgentSession: (session: RoomAgentSession) => void;
+  onParticipantRemove?: ParticipantRemovalAction;
 }) {
   const sessionByParticipantId = new Map(
     agentSessions.map((session) => [session.participant_id, session])
@@ -273,6 +279,7 @@ function MobileMemberList({
                     key={row.id}
                     row={row}
                     session={sessionByParticipantId.get(row.id)}
+                    onParticipantRemove={onParticipantRemove}
                     onSelectAgentSession={onSelectAgentSession}
                   />
                 );
@@ -289,6 +296,7 @@ function MobileMemberList({
                         row={row}
                         session={sessionByParticipantId.get(row.id)}
                         nested
+                        onParticipantRemove={onParticipantRemove}
                         onSelectAgentSession={onSelectAgentSession}
                       />
                     );
@@ -318,7 +326,7 @@ export default function MobileRoomInfoPanel({
   agentSessions = [],
   availableProviders = [],
   capabilities = {},
-  onAgentControl,
+  onAgentControl, onParticipantRemove,
   onAgentConfigure,
   onAgentProfileUpdate,
   onAgentAvatarUpdate,
@@ -339,6 +347,7 @@ export default function MobileRoomInfoPanel({
   agentSessions?: RoomAgentSession[];
   availableProviders?: NativeCliProviderAvailability[];
   capabilities?: Record<string, boolean>;
+  onParticipantRemove?: ParticipantRemovalAction;
   onAgentControl?: (
     session: RoomAgentSession,
     action: AgentSessionControlAction
@@ -453,6 +462,7 @@ export default function MobileRoomInfoPanel({
             </button>
           )}
           <MobileMemberList
+            onParticipantRemove={capabilities["room.manage"] ? onParticipantRemove : undefined}
             groups={memberGroups}
             agentSessions={agentSessions}
             onSelectAgentSession={(session) => setSelectedAgentSessionId(session.session_id)}
