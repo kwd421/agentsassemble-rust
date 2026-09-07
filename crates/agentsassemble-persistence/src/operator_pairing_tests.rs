@@ -42,6 +42,72 @@ fn code<T>(result: Result<T, PersistenceError>) -> &'static str {
 }
 
 #[tokio::test]
+async fn archive_revokes_used_and_unused_pairings_permanently_after_restore() {
+    let (store, manager) = fixture("sqlite::memory:").await;
+    let now = Utc::now();
+    for token in [[1; 32], [3; 32]] {
+        store
+            .create_operator_pairing(&manager, &token, ORIGIN, now)
+            .await
+            .unwrap_or_else(|error| panic!("grant: {error}"));
+    }
+    let paired = store
+        .redeem_operator_pairing(&[1; 32], &[2; 32], ORIGIN, now)
+        .await
+        .unwrap_or_else(|error| panic!("redeem: {error}"));
+    let principal = paired.authorization.principal();
+    let room = store
+        .snapshot("general", 0, 20)
+        .await
+        .unwrap_or_else(|error| panic!("room: {error}"))
+        .room;
+    let archived = store
+        .execute_room_lifecycle(
+            principal,
+            "archive-paired-room",
+            "room.archive",
+            &serde_json::json!({"room_uid": room.room_uid, "archived": true}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("archive: {error}"));
+    assert_eq!(
+        archived.revoked_session_fingerprints,
+        vec![*paired.authorization.session_fingerprint()]
+    );
+    store
+        .execute_room_lifecycle(
+            principal,
+            "restore-paired-room",
+            "room.archive",
+            &serde_json::json!({"room_uid": room.room_uid, "archived": false}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("restore: {error}"));
+    for token in [[1; 32], [3; 32]] {
+        assert_eq!(
+            code(
+                store
+                    .redeem_operator_pairing(&token, &[2; 32], ORIGIN, now)
+                    .await
+            ),
+            "session_revoked"
+        );
+    }
+    assert_eq!(
+        code(
+            store
+                .authorize_operator_session(
+                    paired.authorization.session_fingerprint(),
+                    &[2; 32],
+                    ORIGIN
+                )
+                .await
+        ),
+        "session_revoked"
+    );
+}
+
+#[tokio::test]
 async fn concurrent_redemption_has_one_device_owner_and_retry_survives_token_expiry() {
     let (store, manager) = fixture("sqlite::memory:").await;
     let now = Utc::now();

@@ -7723,3 +7723,14 @@ and remaining pairing-integration limits as the launch entry apply.
 - Affected Clippy and all unchanged architecture/source, 19 policy tests,
   format/diff and artifact gates pass. No new background work, retries or process
   ownership. Packaged/public paired transport proof remains pending.
+
+### Phase 5 room-owned pairing revocation (2026-09-08)
+
+- The existing room-access revocation transaction now retires unused pairing
+  grants and consumed sessions alongside human access. Consumed fingerprints use
+  the existing publication result; closure, archive and deletion share this owner.
+- All 279 persistence tests pass (3.08 seconds), including archive/restore followed
+  by rejection of both grant reuse and session authorization. Clippy, unchanged
+  architecture/source gates, 19 policy tests, format/diff and artifact checks pass.
+- One bounded update touches only pairings for the affected room; no timer, task,
+  cache or process is added. Public transport and packaged acceptance remain open.

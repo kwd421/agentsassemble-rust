@@ -223,3 +223,8 @@ owner. Start reservations are released first; committed errors and state events 
 the existing publication path. Refused stops preserve the existing live runtime and
 turn state. Effect-inflight work cannot enter this cancellation path; uncertain
 storage/authorization results remain unresolved for their existing recovery owner.
+
+Room closure, archive and deletion revoke both unused pairing grants and consumed
+sessions in the existing room-access transaction. Consumed fingerprints join the
+existing post-commit revocation publication. Restoring an archived room cannot
+restore either grant redemption or a previously issued paired session.
