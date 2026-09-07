@@ -5,8 +5,8 @@ import type {
   RoomEvent,
   RoomMember,
   RoomSocketAuth,
-  ServerRoom,
 } from "./api";
+import type { Room } from "./types/generated/Room";
 import type { PublicRoomSettings } from "./types/generated/PublicRoomSettings";
 import type { PluginEnvelope } from "./pluginSocketProtocol";
 import type { CommandAck } from "./types/generated/CommandAck";
@@ -77,7 +77,7 @@ export type ProviderControl = GeneratedProviderControl;
 export interface RoomSocketSnapshot {
   op: "snapshot";
   stream: "room_events";
-  room: ServerRoom | Record<string, unknown>;
+  room: Room;
   room_settings: PublicRoomSettings;
   participants: RoomMember[];
   agent_sessions: RoomAgentSession[];

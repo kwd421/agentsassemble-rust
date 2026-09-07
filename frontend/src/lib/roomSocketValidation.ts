@@ -1,4 +1,4 @@
-import { isRoomLifecycleEvent, roomFromLifecycleEvent } from "./roomLifecycleContract";
+import { isRoomLifecycleEvent, parsePublicRoom, roomFromLifecycleEvent } from "./roomLifecycleContract";
 import type { RoomEvent } from "../api";
 import { RoomSocketSayError } from "../roomSocketTypes";
 import type { Actor } from "../types/generated/Actor";
@@ -438,6 +438,7 @@ export function snapshotValidationError(
   if (isRecord(value)) {
     try {
       assertExactKeys(value, ["op", ...SNAPSHOT_KEYS], "room snapshot");
+      parsePublicRoom(value.room, expectedRoomId);
     } catch {
       return new RoomSocketSayError(
         "Room snapshot did not match the canonical browser schema; reconnecting.",
@@ -449,8 +450,6 @@ export function snapshotValidationError(
     !isRecord(value) ||
     value.op !== "snapshot" ||
     value.stream !== "room_events" ||
-    !isRecord(value.room) ||
-    value.room.room_id !== expectedRoomId ||
     !publicRoomSettingsIsValid(value.room_settings) ||
     !Array.isArray(value.participants) ||
     !Array.isArray(value.agent_sessions) ||

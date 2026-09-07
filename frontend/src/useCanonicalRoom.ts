@@ -361,7 +361,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
             : null
         );
         acceptedRoomUid = snapshot.room.room_uid;
-        acceptProjection(currentSocket, displayResourceBase);
+        acceptProjection(currentSocket, displayResourceBase, snapshot.room);
         return true;
       },
       onRoomEvents: (events) => {
@@ -714,6 +714,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   };
 
   return {
+    room: projectionIsCurrent ? acceptedProjection.room : null,
     socket: projectionIsCurrent ? socket : null,
     connectionState:
       !roomId || !auth ? "disconnected" as const : connectionState,

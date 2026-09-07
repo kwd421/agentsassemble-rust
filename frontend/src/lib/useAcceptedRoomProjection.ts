@@ -1,15 +1,18 @@
 import { useCallback, useRef, useState } from "react";
 
+import type { Room } from "../types/generated/Room";
 import type { RoomSocketHandle } from "../roomSocketClient";
 
 type AcceptedProjection = {
   scope: string;
   displayResourceBase: string;
+  room: Room | null;
 };
 
 const EMPTY_PROJECTION: AcceptedProjection = {
   scope: "",
   displayResourceBase: "",
+  room: null,
 };
 
 /** Owns the socket generation and display origin accepted for one room projection. */
@@ -24,8 +27,8 @@ export function useAcceptedRoomProjection(scope: string) {
     setAccepted(EMPTY_PROJECTION);
   }, []);
 
-  const accept = useCallback((socket: RoomSocketHandle, displayResourceBase: string) => {
-    const next = { scope, displayResourceBase };
+  const accept = useCallback((socket: RoomSocketHandle, displayResourceBase: string, room: Room) => {
+    const next = { scope, displayResourceBase, room };
     acceptedRef.current = next;
     socketRef.current = socket;
     setAccepted(next);

@@ -1,3 +1,4 @@
+import { roomFixture } from "./test/room";
 import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -77,7 +78,7 @@ function snapshot({
   return {
     op: "snapshot",
     stream: "room_events",
-    room: { room_id: roomId },
+    room: roomFixture({ room_id: roomId }),
     room_settings: rawRoomSettings(),
     participants,
     agent_sessions: [],
@@ -130,10 +131,12 @@ describe("useCanonicalRoom projection isolation", () => {
       events: [roomEvent(1, "paired content")], capabilities: { "room.manage": true },
     }), window.location.origin));
     expect(hook.result.current.capabilities["room.manage"]).toBe(true);
+    expect(hook.result.current.room?.room_id).toBe("general");
 
     hook.rerender({ deviceToken: "device-two" });
     expect(hook.result.current.events).toEqual([]);
     expect(hook.result.current.capabilities).toEqual({});
+    expect(hook.result.current.room).toBeNull();
     expect(connections[0].close).toHaveBeenCalledOnce();
     act(() => connections[0].handlers.onRoomEvents?.([roomEvent(2, "late content")]));
     expect(hook.result.current.events).toEqual([]);

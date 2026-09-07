@@ -7920,3 +7920,19 @@ no success or authorization behavior was relaxed to satisfy them.
 
 No new timer/task/storage/retry owner. Clippy and unchanged structure/policy/format/
 artifact gates apply; browser presentation and direct packaged proof remain pending.
+
+## Phase 5 canonical room identity projection (2026-09-08)
+
+The first full room-state consumer exposed the obsolete socket `ServerRoom |
+Record<string, unknown>` type. The socket now accepts the generated Room contract,
+using the existing lifecycle room parser as its shared owner; generated room-key
+and status failures reject the snapshot before cursor acceptance. The accepted
+projection retains the verified room and retires it on device/session changes.
+Minimal test snapshots were corrected to current server-shaped fixture records.
+
+Fifteen affected canonical/socket/validation suites passed: 114 tests, 3.23s. Existing
+invalid-snapshot cases now include missing room identity and unknown status; the
+existing paired-device isolation case checks room projection retirement. TypeScript,
+Vite and unchanged CSS passed with the pending paired presentation work present.
+No new timer, task, credential or persistence owner; one room record is retained by
+the existing accepted projection. Packaged phase proof remains pending.

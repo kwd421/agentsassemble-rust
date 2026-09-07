@@ -1,3 +1,4 @@
+import { roomFixture } from "./room";
 import { vi } from "vitest";
 import { openRoomSocket } from "../roomSocketClient";
 import type { SubscriptionReceipt } from "../lib/roomSubscriptionContract";
@@ -85,7 +86,7 @@ function snapshot(cursor: number) {
   return {
     op: "snapshot",
     stream: "room_events",
-    room: { room_id: "general" },
+    room: roomFixture(),
     room_settings: {
       settings_revision: "settings-general",
       label: "General",

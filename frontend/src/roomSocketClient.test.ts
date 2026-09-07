@@ -686,7 +686,7 @@ describe("bounded canonical room socket", () => {
     handle.close();
   });
 
-  it("rejects a snapshot missing a generated room-settings field", async () => {
+  it.each(["settings-field", "room-identity", "room-status"])("rejects an invalid generated snapshot field: %s", async (fault) => {
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets } = openHarness({
       onError: (error) => {
@@ -696,8 +696,9 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    delete (frames.snap.room_settings as unknown as Record<string, unknown>)
-      .tool_mode;
+    if (fault === "settings-field") delete (frames.snap.room_settings as unknown as Record<string, unknown>).tool_mode;
+    else if (fault === "room-identity") delete (frames.snap.room as unknown as Record<string, unknown>).room_uid;
+    else (frames.snap.room as unknown as Record<string, unknown>).status = "invented";
     sockets[0].receive(frames.receipt);
     sockets[0].receive(frames.snap);
 

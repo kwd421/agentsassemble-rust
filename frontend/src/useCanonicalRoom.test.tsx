@@ -1,3 +1,4 @@
+import { roomFixture } from "./test/room";
 import { TEST_SERVER_PRODUCT_SURFACE } from "./test/serverProductSurface";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
@@ -77,7 +78,7 @@ function snapshot(
   return {
     op: "snapshot",
     stream: "room_events",
-    room: { room_id: "general" },
+    room: roomFixture(),
     room_settings: rawRoomSettings(),
     participants: [],
     agent_sessions: currentSessions,

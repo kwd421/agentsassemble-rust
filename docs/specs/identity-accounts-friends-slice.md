@@ -366,3 +366,12 @@ cleanup/publication owner. It requires no surviving browser session. A paired
 caller cannot replay after revocation; deletion completion and a lost terminal
 response must be checked at the native host. No new completion credential, polling,
 background worker or native authority conversion is introduced.
+
+### Canonical room identity projection
+
+The browser socket snapshot now uses the generated `Room` type instead of the old
+directory/unknown-object union. Its room record and lifecycle events share the same
+exact generated-key parser. The accepted socket projection retains that verified
+record alongside its existing scope and display origin, and clears it with the
+projection on device/session/room retirement. Paired lifecycle presentation consumes
+this record; stored browser flags cannot supply room state or authority.
