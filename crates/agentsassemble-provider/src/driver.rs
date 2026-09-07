@@ -5,8 +5,13 @@ use thiserror::Error;
 
 use crate::{
     room_attachment::ProviderAttachmentReadIngress,
-    room_portal::{ProviderRoomToolIngress, ProviderTurnOutcome},
+    room_portal::{ProviderRoomToolIngress, ProviderTurnOutcome, RoomPortalError},
 };
+
+pub(crate) const ROOM_PORTAL_UNAVAILABLE: DriverError = DriverError::new(
+    "room_portal_unavailable",
+    "The server-owned provider room portal is unavailable.",
+);
 
 pub(crate) type DriverFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
@@ -41,19 +46,13 @@ pub(crate) trait ProviderDriver: Send {
         &mut self,
         _request: &ProviderTurnRequest,
     ) -> Result<(), DriverError> {
-        Err(DriverError::new(
-            "room_portal_unavailable",
-            "The provider runtime has no server-owned room portal.",
-        ))
+        Err(ROOM_PORTAL_UNAVAILABLE)
     }
     fn finish_room_observation(
         &mut self,
         _request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnOutcome, DriverError> {
-        Err(DriverError::new(
-            "room_portal_unavailable",
-            "The provider runtime has no server-owned room portal.",
-        ))
+        Err(ROOM_PORTAL_UNAVAILABLE)
     }
     fn abort_room_observation(&mut self) -> Result<(), DriverError> {
         Ok(())
@@ -86,6 +85,24 @@ pub(crate) struct DriverError {
 impl DriverError {
     pub(crate) const fn new(code: &'static str, message: &'static str) -> Self {
         Self { code, message }
+    }
+}
+
+impl From<RoomPortalError> for DriverError {
+    fn from(error: RoomPortalError) -> Self {
+        match error {
+            RoomPortalError::ReceiptMissing => Self::new(
+                "room_observation_unconfirmed",
+                "The provider did not confirm reading the assigned room observation.",
+            ),
+            RoomPortalError::OutcomeMissing | RoomPortalError::OutcomeInvalid => Self::new(
+                "room_portal_publication_missing",
+                "The provider did not stage a valid room publication or decline.",
+            ),
+            RoomPortalError::Authority | RoomPortalError::Observation | RoomPortalError::Mcp => {
+                ROOM_PORTAL_UNAVAILABLE
+            }
+        }
     }
 }
 

@@ -19,7 +19,7 @@ use crate::{
     filesystem::{BoundExecutable, bind_codex_executable},
     launch_cleanup,
     launch_error::DriverLaunchError,
-    room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError},
+    room_portal::{ProviderTurnOutcome, RoomPortal},
     runtime::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -437,11 +437,7 @@ impl CodexDriver {
         let process = crate::codex_process::stop(self.child.as_mut()).await;
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
-        let portal = self
-            .room_portal
-            .shutdown()
-            .await
-            .map_err(portal_driver_error);
+        let portal = self.room_portal.shutdown().await.map_err(DriverError::from);
         process.and(portal)
     }
 }
@@ -510,7 +506,7 @@ impl ProviderDriver for CodexDriver {
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
         self.room_portal
             .begin_turn(request)
-            .map_err(portal_driver_error)
+            .map_err(DriverError::from)
     }
 
     fn finish_room_observation(
@@ -519,13 +515,13 @@ impl ProviderDriver for CodexDriver {
     ) -> Result<ProviderTurnOutcome, DriverError> {
         self.room_portal
             .finish_turn(request)
-            .map_err(portal_driver_error)
+            .map_err(DriverError::from)
     }
 
     fn abort_room_observation(&mut self) -> Result<(), DriverError> {
         self.room_portal
             .end_observation()
-            .map_err(portal_driver_error)
+            .map_err(DriverError::from)
     }
 
     fn requires_restart(&self) -> bool {
@@ -578,8 +574,7 @@ fn command_arguments(
         ),
     );
     config::append_mcp_isolation(&mut arguments, inherited_mcp_servers)?;
-    config::append_room_portal(&mut arguments, room_portal)
-        .map_err(|_| room_portal_unavailable())?;
+    config::append_room_portal(&mut arguments, room_portal).map_err(DriverError::from)?;
     arguments.push("--stdio".to_owned());
     Ok(arguments)
 }
@@ -622,33 +617,8 @@ fn json_string(value: &str) -> Result<String, DriverError> {
     serde_json::to_string(value).map_err(|_| protocol_error())
 }
 
-const fn room_portal_unavailable() -> DriverError {
-    DriverError::new(
-        "room_portal_unavailable",
-        "The server-owned provider room portal is unavailable.",
-    )
-}
-
 async fn create_room_portal() -> Result<RoomPortal, DriverError> {
-    RoomPortal::create()
-        .await
-        .map_err(|_| room_portal_unavailable())
-}
-
-const fn portal_driver_error(error: RoomPortalError) -> DriverError {
-    match error {
-        RoomPortalError::ReceiptMissing => DriverError::new(
-            "room_observation_unconfirmed",
-            "The provider did not confirm reading the assigned room observation.",
-        ),
-        RoomPortalError::OutcomeMissing | RoomPortalError::OutcomeInvalid => DriverError::new(
-            "room_portal_publication_missing",
-            "The provider did not stage a valid room publication or decline.",
-        ),
-        RoomPortalError::Authority | RoomPortalError::Observation | RoomPortalError::Mcp => {
-            room_portal_unavailable()
-        }
-    }
+    RoomPortal::create().await.map_err(DriverError::from)
 }
 
 async fn drain_stderr(mut stderr: impl AsyncRead + Unpin) {

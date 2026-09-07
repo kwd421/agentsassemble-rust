@@ -3,7 +3,6 @@ use std::{
     path::{Path, PathBuf},
 };
 
-use agent_client_protocol::schema::v1::StopReason;
 use agentsassemble_domain::DurableAgentSession;
 use sha2::{Digest, Sha256};
 
@@ -16,7 +15,7 @@ use crate::{
     },
     grok::valid_model_id,
     launch_error::DriverLaunchError,
-    room_portal::{ProviderTurnOutcome, RoomPortalError},
+    room_portal::ProviderTurnOutcome,
 };
 #[cfg(unix)]
 use crate::{guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease};
@@ -100,34 +99,7 @@ impl ProviderDriver for GrokAcpDriver {
         _session: &'a DurableAgentSession,
         request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>> {
-        Box::pin(async move {
-            let turn = self
-                .runtime
-                .client
-                .prompt(&request.turn_id, &request.input)
-                .await?;
-            let outcome = match turn.stop_reason {
-                StopReason::EndTurn | StopReason::MaxTokens | StopReason::MaxTurnRequests
-                    if !turn.output.trim().is_empty() =>
-                {
-                    ProviderTurnOutcome::Message {
-                        content: turn.output,
-                        target_agent_id: String::new(),
-                    }
-                }
-                StopReason::Refusal => ProviderTurnOutcome::Declined {
-                    reason_code: "provider_refusal".to_owned(),
-                },
-                StopReason::Cancelled => return Err(cancelled_error()),
-                _ => return Err(protocol_error()),
-            };
-            Ok(ProviderTurnCompleted {
-                turn_id: request.turn_id.clone(),
-                provider_turn_id: request.turn_id.clone(),
-                provider_session_id: Some(turn.session_id),
-                outcome,
-            })
-        })
+        Box::pin(self.runtime.client.prompt(&request.turn_id, &request.input))
     }
 
     fn interrupt_turn<'a>(
@@ -149,7 +121,7 @@ impl ProviderDriver for GrokAcpDriver {
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
         self.runtime
             .begin_observation(request)
-            .map_err(portal_error)
+            .map_err(DriverError::from)
     }
 
     fn finish_room_observation(
@@ -158,11 +130,11 @@ impl ProviderDriver for GrokAcpDriver {
     ) -> Result<ProviderTurnOutcome, DriverError> {
         self.runtime
             .finish_observation(request)
-            .map_err(portal_error)
+            .map_err(DriverError::from)
     }
 
     fn abort_room_observation(&mut self) -> Result<(), DriverError> {
-        self.runtime.abort_observation().map_err(portal_error)
+        self.runtime.abort_observation().map_err(DriverError::from)
     }
 
     fn requires_restart(&self) -> bool {
@@ -301,39 +273,6 @@ const fn state_error() -> DriverError {
         "provider_state_unavailable",
         "Private Grok provider state is unavailable.",
     )
-}
-
-const fn protocol_error() -> DriverError {
-    DriverError::new(
-        "provider_protocol_invalid",
-        "Grok ACP returned an invalid protocol message.",
-    )
-}
-
-const fn cancelled_error() -> DriverError {
-    DriverError::new(
-        "provider_turn_cancelled",
-        "Grok ACP cancelled the turn without an authorized interrupt.",
-    )
-}
-
-const fn portal_error(error: RoomPortalError) -> DriverError {
-    match error {
-        RoomPortalError::ReceiptMissing => DriverError::new(
-            "room_observation_unconfirmed",
-            "Grok did not confirm reading the assigned room observation.",
-        ),
-        RoomPortalError::OutcomeMissing | RoomPortalError::OutcomeInvalid => DriverError::new(
-            "room_portal_publication_missing",
-            "Grok did not stage a valid room publication or decline.",
-        ),
-        RoomPortalError::Authority | RoomPortalError::Observation | RoomPortalError::Mcp => {
-            DriverError::new(
-                "room_portal_unavailable",
-                "The server-owned provider room portal is unavailable.",
-            )
-        }
-    }
 }
 
 #[cfg(test)]

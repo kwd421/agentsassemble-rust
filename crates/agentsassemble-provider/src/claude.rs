@@ -23,7 +23,7 @@ use crate::{
         ProviderTurnCompleted, ProviderTurnRequest,
     },
     launch_error::DriverLaunchError,
-    room_portal::{ProviderTurnOutcome, RoomPortalError},
+    room_portal::ProviderTurnOutcome,
 };
 #[cfg(unix)]
 use crate::{guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease};
@@ -286,7 +286,7 @@ impl ProviderDriver for ClaudeAgentSdkDriver {
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
         self.runtime
             .begin_observation(request)
-            .map_err(portal_error)
+            .map_err(DriverError::from)
     }
 
     fn finish_room_observation(
@@ -295,11 +295,11 @@ impl ProviderDriver for ClaudeAgentSdkDriver {
     ) -> Result<ProviderTurnOutcome, DriverError> {
         self.runtime
             .finish_observation(request)
-            .map_err(portal_error)
+            .map_err(DriverError::from)
     }
 
     fn abort_room_observation(&mut self) -> Result<(), DriverError> {
-        self.runtime.abort_observation().map_err(portal_error)
+        self.runtime.abort_observation().map_err(DriverError::from)
     }
 
     fn requires_restart(&self) -> bool {
@@ -366,23 +366,6 @@ const fn protocol_error() -> DriverError {
         "provider_protocol_invalid",
         "Claude Agent SDK protocol failed.",
     )
-}
-
-#[cfg(any(unix, windows))]
-const fn portal_error(error: RoomPortalError) -> DriverError {
-    match error {
-        RoomPortalError::ReceiptMissing => DriverError::new(
-            "room_observation_unconfirmed",
-            "Claude did not confirm reading the assigned room observation.",
-        ),
-        RoomPortalError::OutcomeMissing | RoomPortalError::OutcomeInvalid => DriverError::new(
-            "room_portal_publication_missing",
-            "Claude did not stage a valid room publication or decline.",
-        ),
-        RoomPortalError::Authority | RoomPortalError::Observation | RoomPortalError::Mcp => {
-            DriverError::new("room_portal_unavailable", "The room portal is unavailable.")
-        }
-    }
 }
 
 #[cfg(test)]

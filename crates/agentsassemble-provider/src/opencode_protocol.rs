@@ -2,8 +2,7 @@ use agentsassemble_domain::DurableAgentSession;
 use serde_json::{Map, Value};
 
 use crate::{
-    loopback_http::LoopbackHttpError, opencode_sse::OpenCodeEventError,
-    room_portal::RoomPortalError, runtime::DriverError,
+    loopback_http::LoopbackHttpError, opencode_sse::OpenCodeEventError, runtime::DriverError,
 };
 
 pub(crate) const fn turn_in_progress() -> DriverError {
@@ -192,10 +191,6 @@ pub(crate) const fn http_driver_error(_error: LoopbackHttpError) -> DriverError 
     )
 }
 
-pub(crate) const fn portal_driver_error(_error: RoomPortalError) -> DriverError {
-    portal_unavailable()
-}
-
 pub(crate) const fn executable_error() -> DriverError {
     DriverError::new(
         "provider_executable_changed",
@@ -251,13 +246,6 @@ pub(crate) const fn profile_error() -> DriverError {
     DriverError::new(
         "invalid_runtime_profile",
         "The stored OpenCode runtime profile is invalid.",
-    )
-}
-
-pub(crate) const fn portal_unavailable() -> DriverError {
-    DriverError::new(
-        "room_portal_unavailable",
-        "The OpenCode room portal is unavailable.",
     )
 }
 

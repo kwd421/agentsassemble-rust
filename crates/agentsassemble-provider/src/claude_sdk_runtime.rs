@@ -201,11 +201,7 @@ impl ClaudeSdkRuntime {
         let process = stop_failed_child(self.child.as_mut()).await;
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
-        let portal = self
-            .room_portal
-            .shutdown()
-            .await
-            .map_err(|_| room_portal_unavailable());
+        let portal = self.room_portal.shutdown().await.map_err(DriverError::from);
         protocol.and(process).and(portal)
     }
 
@@ -334,7 +330,7 @@ where
 async fn create_room_portal() -> Result<RoomPortal, DriverLaunchError> {
     RoomPortal::create()
         .await
-        .map_err(|_| DriverLaunchError::safe(room_portal_unavailable()))
+        .map_err(|error| DriverLaunchError::safe(error.into()))
 }
 
 #[cfg(windows)]
@@ -383,8 +379,4 @@ const fn stop_error() -> DriverError {
 
 const fn sdk_error() -> DriverError {
     DriverError::new("provider_sdk_missing", "Claude Agent SDK is unavailable.")
-}
-
-const fn room_portal_unavailable() -> DriverError {
-    DriverError::new("room_portal_unavailable", "The room portal is unavailable.")
 }

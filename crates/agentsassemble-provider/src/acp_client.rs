@@ -31,7 +31,11 @@ use tokio_util::{
 };
 
 use crate::room_portal_tool_contract::PROVIDER_ROOM_TOOL_NAMES;
-use crate::{driver::DriverError, launch_error::DriverLaunchError};
+use crate::{
+    driver::{DriverError, ProviderTurnCompleted},
+    launch_error::DriverLaunchError,
+    room_portal::ProviderTurnOutcome,
+};
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
@@ -71,12 +75,6 @@ struct OpenedSession {
 pub(super) struct AcpAttachment {
     pub(super) session_id: String,
     pub(super) reused: bool,
-}
-
-pub(super) struct AcpTurn {
-    pub(super) session_id: String,
-    pub(super) stop_reason: StopReason,
-    pub(super) output: String,
 }
 
 pub(super) struct AcpClient {
@@ -183,17 +181,38 @@ impl AcpClient {
         &mut self,
         turn_id: &str,
         input: &str,
-    ) -> Result<AcpTurn, DriverError> {
+    ) -> Result<ProviderTurnCompleted, DriverError> {
         self.start_turn(turn_id, input)?;
         let stop_reason = self.await_turn(turn_id).await?;
         let output = self.take_output(turn_id)?;
         let Some(session_id) = self.attached_session_id.as_ref().map(ToString::to_string) else {
             return self.poison(protocol_error());
         };
-        Ok(AcpTurn {
-            session_id,
-            stop_reason,
-            output,
+        let outcome = match stop_reason {
+            StopReason::EndTurn | StopReason::MaxTokens | StopReason::MaxTurnRequests
+                if !output.trim().is_empty() =>
+            {
+                ProviderTurnOutcome::Message {
+                    content: output,
+                    target_agent_id: String::new(),
+                }
+            }
+            StopReason::Refusal => ProviderTurnOutcome::Declined {
+                reason_code: "provider_refusal".to_owned(),
+            },
+            StopReason::Cancelled => {
+                return Err(DriverError::new(
+                    "provider_turn_cancelled",
+                    "The ACP provider cancelled the turn without an authorized interrupt.",
+                ));
+            }
+            _ => return Err(protocol_error()),
+        };
+        Ok(ProviderTurnCompleted {
+            turn_id: turn_id.to_owned(),
+            provider_turn_id: turn_id.to_owned(),
+            provider_session_id: Some(session_id),
+            outcome,
         })
     }
 

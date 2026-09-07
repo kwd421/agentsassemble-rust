@@ -15,17 +15,17 @@ use crate::filesystem::BoundExecutable;
 #[cfg(not(unix))]
 use crate::opencode_protocol::health_error;
 use crate::{
+    driver::ROOM_PORTAL_UNAVAILABLE,
     filesystem::bind_executable_with_children,
     launch_cleanup,
     launch_error::DriverLaunchError,
     loopback_http::{JsonResponse, LoopbackHttp, VerifiedLoopbackConnection},
     opencode_protocol::{
         TurnTransportError, assistant_message, clean_session_id, config_error, executable_error,
-        http_driver_error, model_id, model_mismatch, portal_driver_error, portal_unavailable,
-        profile_error, protocol_error, provider_id, provider_request_error, runtime_exited,
-        session_mismatch, session_missing, session_path, session_unconfirmed, startup_error,
-        turn_empty, turn_in_progress, turn_mismatch, turn_timeout, turn_transport_error,
-        validate_profile,
+        http_driver_error, model_id, model_mismatch, profile_error, protocol_error, provider_id,
+        provider_request_error, runtime_exited, session_mismatch, session_missing, session_path,
+        session_unconfirmed, startup_error, turn_empty, turn_in_progress, turn_mismatch,
+        turn_timeout, turn_transport_error, validate_profile,
     },
     opencode_sse::{OpenCodeTurnEvents, collect_turn_events},
     opencode_startup::{drain_output, observe_startup, reserve_loopback_port, server_password},
@@ -105,7 +105,7 @@ impl OpenCodeDriver {
         .map_err(|_| executable_error())?;
         let http = LoopbackHttp::new(&endpoint, workspace, SERVER_USERNAME, &server_password)
             .map_err(http_driver_error)?;
-        let mut room_portal = RoomPortal::create().await.map_err(portal_driver_error)?;
+        let mut room_portal = RoomPortal::create().await.map_err(DriverError::from)?;
         #[cfg(unix)]
         let started = UnixProcessCustody::start_with_children(
             runtime_lease,
@@ -288,7 +288,7 @@ impl OpenCodeDriver {
         if connected {
             Ok(())
         } else {
-            Err(portal_unavailable())
+            Err(ROOM_PORTAL_UNAVAILABLE)
         }
     }
 
@@ -527,11 +527,7 @@ impl OpenCodeDriver {
         self.stderr_task.abort();
         let _ = (&mut self.stdout_task).await;
         let _ = (&mut self.stderr_task).await;
-        let portal = self
-            .room_portal
-            .shutdown()
-            .await
-            .map_err(portal_driver_error);
+        let portal = self.room_portal.shutdown().await.map_err(DriverError::from);
         process.and(portal)
     }
 
@@ -666,7 +662,7 @@ impl ProviderDriver for OpenCodeDriver {
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
         self.room_portal
             .begin_turn(request)
-            .map_err(portal_driver_error)
+            .map_err(DriverError::from)
     }
 
     fn finish_room_observation(
@@ -675,13 +671,13 @@ impl ProviderDriver for OpenCodeDriver {
     ) -> Result<ProviderTurnOutcome, DriverError> {
         self.room_portal
             .finish_turn(request)
-            .map_err(portal_driver_error)
+            .map_err(DriverError::from)
     }
 
     fn abort_room_observation(&mut self) -> Result<(), DriverError> {
         self.room_portal
             .end_observation()
-            .map_err(portal_driver_error)
+            .map_err(DriverError::from)
     }
 
     fn requires_restart(&self) -> bool {

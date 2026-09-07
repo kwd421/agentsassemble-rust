@@ -6640,3 +6640,38 @@ tests, formatting, and diff checks pass. No new production background task, I/O,
 fallback was added. The removed transport also removes its `conpty-oxide` and
 `windows-spawn` dependency entries. Both whole-phase code reviews remain pending;
 real-provider and packaged-flow evidence remains deferred as directed above.
+
+### Shared provider outcome and RoomPortal error correction: 2026-09-07
+
+During whole-Phase-1 manual review of `5d0a636..4cadb12`, Daybreak identified two
+shared-owner defects. Cursor and Grok repeated the same ACP completion mapping.
+RoomPortal failures were converted independently by each driver, and OpenCode and
+the remote API owner collapsed missing read/publication receipts into generic
+unavailability. The persistence error projector already preserves the specific
+`room_observation_unconfirmed` and `room_portal_publication_missing` codes, so this
+was an observable diagnostic difference between providers, not a new permission or
+transport threat. The complete independent reviews remain pending.
+
+The existing driver-error owner now converts RoomPortal errors once and supplies
+one unavailable constant. Every retained driver uses that conversion for portal
+creation, observation completion, and cleanup. The ACP client normalizes its exact
+prompt result directly into `ProviderTurnCompleted`, removing the intermediate
+`AcpTurn` and both duplicated driver mappings. Provider-specific launch arguments,
+model attachment, permissions, read-before-publication authority, error-effect
+uncertainty, cancellation receipts, and cleanup ownership remain with their
+existing boundaries. No timer, retry, side effect, new state, or generic adapter
+framework was introduced; this is a source/contract simplification, without a
+runtime speed or memory claim.
+
+The existing typed ACP peer now verifies the common completed identity/outcome.
+One regression uses the real authenticated in-process MCP portal and remote driver
+to distinguish completion before reading from completion after reading without
+publication, then explicitly releases the observation and portal. All 189 provider
+tests pass. The real TCP/WebSocket exact busy-turn interrupt regression also passes
+with one native fixture start and interrupt and retained runtime identity. Workspace
+all-target/all-feature warning-denied Clippy, architecture/source-growth, 19 policy
+tests, formatting, diff, and artifact checks pass. Provider tests including the
+rebuild took 97.21 seconds wall time and 1,417,592,832 bytes maximum RSS;
+these are verification costs. The added error conversion initially required an
+explicit `DriverError` result type in the Codex interrupt future; that compile
+failure was corrected before the successful checks. No actual provider was run.

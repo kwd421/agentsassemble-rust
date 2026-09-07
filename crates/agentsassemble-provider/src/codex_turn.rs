@@ -125,7 +125,7 @@ pub(super) async fn interrupt_turn(
             if let Some("turn/completed" | "turn/error" | "error") =
                 message.get("method").and_then(Value::as_str)
             {
-                return Ok(());
+                return Ok::<(), DriverError>(());
             }
         }
     })

@@ -186,6 +186,17 @@ removed provider profiles fail through the registry's unsupported-profile result
 Antigravity now belongs exclusively to Phase 7's external CLI Room Connector invite
 flow, with its own participant/admission authority and no resident-session controls.
 
+RoomPortal failures have one provider-neutral driver-error conversion: missing read
+receipt is `room_observation_unconfirmed`, missing or invalid terminal publication
+is `room_portal_publication_missing`, and unavailable transport/authority is
+`room_portal_unavailable`. Providers must preserve that distinction through ordinary
+completion and cleanup. The shared ACP client similarly normalizes its correlated
+prompt completion once; Cursor/Grok retain only their distinct launch, model,
+permission, and attachment contracts. This correction changes no admission,
+publication, retry, cancellation, or process-lifetime authority. Existing protocol
+and room-tool regressions verify the shared paths; actual-provider evidence remains
+deferred under the user-directed final verification schedule.
+
 Custom API keeps the caller-selected model and normalized public HTTPS endpoint as
 its durable request authority. The selected endpoint may report a resolved model;
 that bounded, within-response-consistent name is metadata and never rewrites the

@@ -7,11 +7,10 @@ use crate::{
         ProviderTurnCompleted, ProviderTurnRequest,
     },
     launch_error::DriverLaunchError,
-    room_portal::{ProviderTurnOutcome, RoomPortalError},
+    room_portal::ProviderTurnOutcome,
 };
 #[cfg(unix)]
 use crate::{guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease};
-use agent_client_protocol::schema::v1::StopReason;
 use agentsassemble_domain::DurableAgentSession;
 
 pub(crate) struct CursorAcpDriver {
@@ -96,39 +95,7 @@ impl ProviderDriver for CursorAcpDriver {
         _session: &'a DurableAgentSession,
         request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>> {
-        Box::pin(async move {
-            let turn = self
-                .runtime
-                .client
-                .prompt(&request.turn_id, &request.input)
-                .await?;
-            let outcome = match turn.stop_reason {
-                StopReason::EndTurn | StopReason::MaxTokens | StopReason::MaxTurnRequests
-                    if !turn.output.trim().is_empty() =>
-                {
-                    ProviderTurnOutcome::Message {
-                        content: turn.output,
-                        target_agent_id: String::new(),
-                    }
-                }
-                StopReason::Refusal => ProviderTurnOutcome::Declined {
-                    reason_code: "provider_refusal".to_owned(),
-                },
-                StopReason::Cancelled => {
-                    return Err(DriverError::new(
-                        "provider_turn_cancelled",
-                        "Cursor ACP cancelled the turn without an authorized interrupt.",
-                    ));
-                }
-                _ => return Err(protocol_error()),
-            };
-            Ok(ProviderTurnCompleted {
-                turn_id: request.turn_id.clone(),
-                provider_turn_id: request.turn_id.clone(),
-                provider_session_id: Some(turn.session_id),
-                outcome,
-            })
-        })
+        Box::pin(self.runtime.client.prompt(&request.turn_id, &request.input))
     }
 
     fn interrupt_turn<'a>(
@@ -150,7 +117,7 @@ impl ProviderDriver for CursorAcpDriver {
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
         self.runtime
             .begin_observation(request)
-            .map_err(portal_error)
+            .map_err(DriverError::from)
     }
 
     fn finish_room_observation(
@@ -159,11 +126,11 @@ impl ProviderDriver for CursorAcpDriver {
     ) -> Result<ProviderTurnOutcome, DriverError> {
         self.runtime
             .finish_observation(request)
-            .map_err(portal_error)
+            .map_err(DriverError::from)
     }
 
     fn abort_room_observation(&mut self) -> Result<(), DriverError> {
-        self.runtime.abort_observation().map_err(portal_error)
+        self.runtime.abort_observation().map_err(DriverError::from)
     }
 
     fn requires_restart(&self) -> bool {
@@ -171,39 +138,9 @@ impl ProviderDriver for CursorAcpDriver {
     }
 }
 
-const fn protocol_error() -> DriverError {
-    DriverError::new(
-        "provider_protocol_invalid",
-        "Cursor ACP returned an invalid protocol message.",
-    )
-}
-
 const fn invalid_profile() -> DriverError {
     DriverError::new(
         "invalid_runtime_profile",
         "The Cursor runtime profile is invalid.",
     )
-}
-
-const fn room_portal_unavailable() -> DriverError {
-    DriverError::new(
-        "room_portal_unavailable",
-        "The server-owned provider room portal is unavailable.",
-    )
-}
-
-const fn portal_error(error: RoomPortalError) -> DriverError {
-    match error {
-        RoomPortalError::ReceiptMissing => DriverError::new(
-            "room_observation_unconfirmed",
-            "Cursor did not confirm reading the assigned room observation.",
-        ),
-        RoomPortalError::OutcomeMissing | RoomPortalError::OutcomeInvalid => DriverError::new(
-            "room_portal_publication_missing",
-            "Cursor did not stage a valid room publication or decline.",
-        ),
-        RoomPortalError::Authority | RoomPortalError::Observation | RoomPortalError::Mcp => {
-            room_portal_unavailable()
-        }
-    }
 }

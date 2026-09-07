@@ -125,6 +125,50 @@ fn room_request(session_id: &str) -> ProviderTurnRequest {
     }
 }
 
+#[tokio::test]
+async fn portal_completion_preserves_read_and_publication_failure_codes() {
+    let mut driver = RemoteOpenAiDriver::launch(
+        &DEEPSEEK_SPEC,
+        ProviderCredentialStore::isolated_test_store(),
+    )
+    .await
+    .unwrap_or_else(|error| panic!("launch in-process room portal: {}", error.error));
+    let request = room_request("session");
+    driver
+        .begin_room_observation(&request)
+        .unwrap_or_else(|error| panic!("begin room observation: {error}"));
+    let Err(error) = driver.finish_room_observation(&request) else {
+        panic!("accepted incomplete room observation");
+    };
+    assert_eq!(error.code, "room_observation_unconfirmed");
+
+    driver
+        .execute_tool(
+            crate::openai_stream::ToolCall {
+                id: "read".to_owned(),
+                kind: "function",
+                function: crate::openai_stream::ToolFunction {
+                    name: "read_discussion".to_owned(),
+                    arguments: "{}".to_owned(),
+                },
+            },
+            false,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("read through authenticated MCP: {error}"));
+    let Err(error) = driver.finish_room_observation(&request) else {
+        panic!("accepted incomplete room observation");
+    };
+    assert_eq!(error.code, "room_portal_publication_missing");
+    driver
+        .abort_room_observation()
+        .unwrap_or_else(|error| panic!("release failed observation: {error}"));
+    driver
+        .stop()
+        .await
+        .unwrap_or_else(|error| panic!("stop room portal: {error}"));
+}
+
 // Only the external HTTP peer and credential store are isolated fixtures. The actual
 // request builder, SSE decoder, driver, authenticated MCP portal, and read/publication
 // receipt owners run unchanged. This does not exercise public HTTPS/DNS discovery.

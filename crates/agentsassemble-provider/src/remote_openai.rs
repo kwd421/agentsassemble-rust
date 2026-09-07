@@ -14,6 +14,7 @@ use serde_json::{Map, Value, json};
 
 use crate::{
     credentials::{ProviderCredential, ProviderCredentialStore},
+    driver::ROOM_PORTAL_UNAVAILABLE,
     driver::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -33,10 +34,6 @@ use crate::{
 const MAX_TOOL_RESULT_BYTES: usize = 128 * 1024;
 const MAX_TOOL_ROUNDS: usize = 16;
 const PORTAL_CLOSE_TIMEOUT: Duration = Duration::from_secs(2);
-const PORTAL_UNAVAILABLE: DriverError = DriverError::new(
-    "room_portal_unavailable",
-    "The server-owned room portal is unavailable.",
-);
 
 type PortalClient = RunningService<RoleClient, ()>;
 
@@ -158,19 +155,22 @@ impl RemoteOpenAiDriver {
         credentials: ProviderCredentialStore,
         api: RemoteOpenAiApi,
     ) -> Result<Self, DriverLaunchError> {
-        let mut portal = RoomPortal::create().await.map_err(|_| PORTAL_UNAVAILABLE)?;
+        let mut portal = RoomPortal::create().await.map_err(DriverError::from)?;
         let portal_client = ().serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(portal.endpoint())
                 .auth_header(portal.bearer_token()),
         ));
         let Ok(mut portal_client) = portal_client.await else {
-            let error = failed_remote_launch(&mut portal, None, PORTAL_UNAVAILABLE).await;
+            let error = failed_remote_launch(&mut portal, None, ROOM_PORTAL_UNAVAILABLE).await;
             return Err(error);
         };
         let Ok(tools) = portal_client.list_all_tools().await else {
-            let error =
-                failed_remote_launch(&mut portal, Some(&mut portal_client), PORTAL_UNAVAILABLE)
-                    .await;
+            let error = failed_remote_launch(
+                &mut portal,
+                Some(&mut portal_client),
+                ROOM_PORTAL_UNAVAILABLE,
+            )
+            .await;
             return Err(error);
         };
         if let Err(error) = validate_tool_catalog(&tools) {
@@ -322,7 +322,7 @@ impl RemoteOpenAiDriver {
         if replay_unsafe {
             self.turn_effect_uncertain = true;
         }
-        let client = self.portal_client.active().ok_or(PORTAL_UNAVAILABLE)?;
+        let client = self.portal_client.active().ok_or(ROOM_PORTAL_UNAVAILABLE)?;
         let result = client
             .call_tool(
                 CallToolRequestParams::new(call.function.name.clone()).with_arguments(arguments),
@@ -330,7 +330,7 @@ impl RemoteOpenAiDriver {
             .await
             .map_err(|_| {
                 self.portal_failed = true;
-                PORTAL_UNAVAILABLE
+                ROOM_PORTAL_UNAVAILABLE
             })?;
         if replay_unsafe && result.is_error == Some(true) {
             self.turn_effect_uncertain = previous_effect_uncertain;
@@ -379,7 +379,7 @@ impl ProviderDriver for RemoteOpenAiDriver {
     ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>> {
         Box::pin(async move {
             if self.stopped || self.portal_failed {
-                return Err(PORTAL_UNAVAILABLE);
+                return Err(ROOM_PORTAL_UNAVAILABLE);
             }
             let namespace = self
                 .spec
@@ -459,19 +459,19 @@ impl ProviderDriver for RemoteOpenAiDriver {
                         Ok(Some(_)) => Ok(()),
                         Ok(None) => {
                             self.portal_client = PortalClientState::CleanupUnconfirmed;
-                            Err(PORTAL_UNAVAILABLE)
+                            Err(ROOM_PORTAL_UNAVAILABLE)
                         }
-                        Err(_) => Err(PORTAL_UNAVAILABLE),
+                        Err(_) => Err(ROOM_PORTAL_UNAVAILABLE),
                     }
                 }
                 PortalClientState::CleanupUnconfirmed => {
                     self.portal_client = PortalClientState::CleanupUnconfirmed;
-                    Err(PORTAL_UNAVAILABLE)
+                    Err(ROOM_PORTAL_UNAVAILABLE)
                 }
                 PortalClientState::Closed => Ok(()),
             };
             let portal = if let Some(portal) = self.portal.as_mut() {
-                portal.shutdown().await.map_err(|_| PORTAL_UNAVAILABLE)
+                portal.shutdown().await.map_err(DriverError::from)
             } else {
                 Ok(())
             };
@@ -485,9 +485,9 @@ impl ProviderDriver for RemoteOpenAiDriver {
     fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
         self.portal
             .as_ref()
-            .ok_or(PORTAL_UNAVAILABLE)?
+            .ok_or(ROOM_PORTAL_UNAVAILABLE)?
             .begin_turn(request)
-            .map_err(|_| PORTAL_UNAVAILABLE)
+            .map_err(DriverError::from)
     }
 
     fn finish_room_observation(
@@ -496,14 +496,14 @@ impl ProviderDriver for RemoteOpenAiDriver {
     ) -> Result<ProviderTurnOutcome, DriverError> {
         self.portal
             .as_ref()
-            .ok_or(PORTAL_UNAVAILABLE)?
+            .ok_or(ROOM_PORTAL_UNAVAILABLE)?
             .finish_turn(request)
-            .map_err(|_| PORTAL_UNAVAILABLE)
+            .map_err(DriverError::from)
     }
 
     fn abort_room_observation(&mut self) -> Result<(), DriverError> {
         if let Some(portal) = self.portal.as_ref() {
-            portal.end_observation().map_err(|_| PORTAL_UNAVAILABLE)?;
+            portal.end_observation().map_err(DriverError::from)?;
         }
         Ok(())
     }
@@ -598,7 +598,7 @@ fn validate_tool_catalog(tools: &[Tool]) -> Result<(), DriverError> {
         .into_iter()
         .all(|name| names.contains(name))
         .then_some(())
-        .ok_or(PORTAL_UNAVAILABLE)
+        .ok_or(ROOM_PORTAL_UNAVAILABLE)
 }
 
 fn validate_completion(

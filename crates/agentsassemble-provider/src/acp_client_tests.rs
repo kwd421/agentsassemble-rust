@@ -37,9 +37,16 @@ async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
         .prompt("turn-1", "Hello")
         .await
         .unwrap_or_else(|error| panic!("complete ACP prompt: {error}"));
-    assert_eq!(turn.session_id, "cursor-session");
-    assert_eq!(turn.stop_reason, StopReason::EndTurn);
-    assert_eq!(turn.output, "Hello from Cursor");
+    assert_eq!(turn.turn_id, "turn-1");
+    assert_eq!(turn.provider_turn_id, "turn-1");
+    assert_eq!(turn.provider_session_id.as_deref(), Some("cursor-session"));
+    assert_eq!(
+        turn.outcome,
+        crate::ProviderTurnOutcome::Message {
+            content: "Hello from Cursor".to_owned(),
+            target_agent_id: String::new(),
+        }
+    );
     assert!(!client.requires_restart());
     client.shutdown().await;
     fixture_task
