@@ -41,11 +41,17 @@ mod friends;
 mod friends_tests;
 mod host_identity;
 mod host_key_file;
+mod operator_pairing;
+pub use operator_pairing::{
+    OperatorPairing, OperatorPairingRedemption, OperatorSessionAuthorization,
+};
 mod human_admission;
 mod human_admission_identity;
 mod human_admission_store;
-pub use human_admission_store::{
+mod session_bearer;
+pub use session_bearer::{
     HUMAN_SESSION_BEARER_BYTES, HUMAN_SESSION_BEARER_CHARS, HUMAN_SESSION_BEARER_PREFIX,
+    OPERATOR_SESSION_BEARER_CHARS, OPERATOR_SESSION_BEARER_PREFIX,
 };
 mod human_invite_preflight;
 mod human_invites;

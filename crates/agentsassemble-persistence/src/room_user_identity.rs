@@ -6,7 +6,7 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::{
     LocalBootstrapStatus, PersistenceError, SqliteStore,
-    authority::{load_active_participant, load_active_room},
+    authority::{load_active_membership, load_active_participant},
     bootstrap::require_complete_bootstrap_in_transaction,
     profile_store::load_profile_for_identity,
 };
@@ -59,17 +59,10 @@ impl SqliteStore {
         participant_id: &str,
     ) -> Result<LocalRoomManagerAuthority, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let manager =
-            resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
-        let bootstrap = require_current_local_room_manager(&mut transaction, &manager).await?;
-        let room = load_active_room(&mut transaction, &manager.room_id).await?;
+        let (authority, _) =
+            resolve_local_room_manager(&mut transaction, room_id, user_id, participant_id).await?;
         transaction.commit().await?;
-        Ok(LocalRoomManagerAuthority {
-            server_id: bootstrap.server_id,
-            authority_lineage_id: bootstrap.authority_lineage_id,
-            room_uid: room.room_uid,
-            manager,
-        })
+        Ok(authority)
     }
 }
 
@@ -109,52 +102,65 @@ pub(crate) async fn require_current_local_room_manager(
     require_complete_bootstrap_in_transaction(transaction).await
 }
 
-pub(crate) async fn current_local_room_principal(
+pub(crate) async fn resolve_local_room_manager(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     user_id: &str,
     participant_id: &str,
-) -> Result<AuthenticatedPrincipal, PersistenceError> {
-    let identity =
-        resolve_room_user_identity(transaction, room_id, user_id, participant_id).await?;
-    require_current_local_room_manager(transaction, &identity).await?;
-    let participant = load_active_participant(transaction, room_id, participant_id).await?;
-    Ok(AuthenticatedPrincipal {
-        principal_id: identity.user_id,
-        participant_id: identity.participant_id,
+) -> Result<(LocalRoomManagerAuthority, AuthenticatedPrincipal), PersistenceError> {
+    let (room, participant) = load_active_membership(transaction, room_id, participant_id).await?;
+    if participant.participant_type != "human" {
+        return Err(rejected(
+            "session_revoked",
+            "Room management requires a current human participant.",
+        ));
+    }
+    load_profile_for_identity(transaction, user_id, participant_id).await?;
+    let manager = RoomUserIdentity {
+        room_id: room_id.to_owned(),
+        user_id: user_id.to_owned(),
+        participant_id: participant_id.to_owned(),
+    };
+    let bootstrap = require_current_local_room_manager(transaction, &manager).await?;
+    let principal = AuthenticatedPrincipal {
+        principal_id: user_id.to_owned(),
+        participant_id: participant_id.to_owned(),
         display_name: participant.display_name,
-        room_id: identity.room_id,
+        room_id: room_id.to_owned(),
         client_kind: ClientKind::Browser,
         invite_scope: InviteScope::ReadWrite,
         is_operator: true,
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
-    })
+    };
+    Ok((
+        LocalRoomManagerAuthority {
+            server_id: bootstrap.server_id,
+            authority_lineage_id: bootstrap.authority_lineage_id,
+            room_uid: room.room_uid,
+            manager,
+        },
+        principal,
+    ))
 }
 
 pub(crate) async fn require_exact_local_room_manager(
     transaction: &mut Transaction<'_, Sqlite>,
     expected: &LocalRoomManagerAuthority,
 ) -> Result<RoomUserIdentity, PersistenceError> {
-    let current = resolve_room_user_identity(
+    let (current, _) = resolve_local_room_manager(
         transaction,
         &expected.manager.room_id,
         &expected.manager.user_id,
         &expected.manager.participant_id,
     )
     .await?;
-    let bootstrap = require_current_local_room_manager(transaction, &current).await?;
-    let room = load_active_room(transaction, &current.room_id).await?;
-    if bootstrap.server_id != expected.server_id
-        || bootstrap.authority_lineage_id != expected.authority_lineage_id
-        || room.room_uid != expected.room_uid
-        || current != expected.manager
-    {
+    if current != *expected {
         return Err(rejected(
             "room_authority_changed",
             "Room-manager authority changed before the mutation.",
         ));
     }
-    Ok(current)
+    Ok(current.manager)
 }
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {

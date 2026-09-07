@@ -7677,3 +7677,18 @@ Affected Clippy and unchanged architecture/source, 19 policy, format, diff and
 artifact gates passed. Logs: `/tmp/aa-phase5-stop-authority-{tests,runtime-tests,clippy,gates}.log`.
 No new runtime tasks or persisted state are introduced; the same transaction timing
 and remaining pairing-integration limits as the launch entry apply.
+
+### Phase 5 operator pairing persistence (2026-09-08)
+
+- Added the clean-schema grant/session owner with 120-second grants, one-hour
+  sessions, exact room/host/origin/device binding, atomic device selection and exact
+  revocation. Ordinary human admission retains its fixed bearer vector; operator
+  derivation has a separate prefix/context and never writes raw credentials.
+- All 275 persistence tests pass (2.97 seconds), including four focused pairing
+  cases covering competing devices, same-device retry after
+  grant expiry, wrong origin/device, room-incarnation change, expiry, credential
+  domain separation, file-backed restart and queued-command refusal after revoke.
+- Affected persistence/server all-target Clippy and unchanged architecture, source
+  growth, 19 policy tests, formatting, diff and artifact checks pass. The storage cap
+  bounds retained records to 128/server and 32/room; expiry cleanup runs on creation,
+  with no polling/task/process added. No HTTP or packaged pairing flow is claimed.

@@ -10,7 +10,7 @@ use crate::{
     human_session_authority::revalidate_human_session,
     message_attachments::{MessageAttachmentMetadata, message_attachments_from_event},
     room_turns::support::load_event,
-    room_user_identity::current_local_room_principal,
+    room_user_identity::resolve_local_room_manager,
 };
 
 pub(crate) async fn remove_lobby_message_pin(
@@ -143,7 +143,7 @@ async fn authorize_local_operator(
             "Only the local room operator may use local pin authority.",
         ));
     }
-    current_local_room_principal(transaction, room_id, user_id, participant_id).await?;
+    resolve_local_room_manager(transaction, room_id, user_id, participant_id).await?;
     Ok(())
 }
 

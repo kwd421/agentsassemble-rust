@@ -14,7 +14,7 @@ use crate::{
     human_session_authority::revalidate_human_session,
     message_search_index::{canonical_created_at_nanos, searchable_lobby_message},
     room_turns::support::{load_participant, provider_room_principal},
-    room_user_identity::current_local_room_principal,
+    room_user_identity::resolve_local_room_manager,
     turn_authority::require_provider_room_tool_authority,
 };
 
@@ -43,9 +43,8 @@ impl SqliteStore {
         cursor: &str,
     ) -> Result<LobbyMessageSearchPage, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let principal =
-            current_local_room_principal(&mut transaction, room_id, user_id, participant_id)
-                .await?;
+        let (_, principal) =
+            resolve_local_room_manager(&mut transaction, room_id, user_id, participant_id).await?;
         let page = search_in(&mut transaction, &principal, query, cursor).await?;
         transaction.commit().await?;
         Ok(page)
@@ -84,9 +83,8 @@ impl SqliteStore {
         event_id: &str,
     ) -> Result<LobbyMessageContext, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let principal =
-            current_local_room_principal(&mut transaction, room_id, user_id, participant_id)
-                .await?;
+        let (_, principal) =
+            resolve_local_room_manager(&mut transaction, room_id, user_id, participant_id).await?;
         let context = context_in(&mut transaction, &principal, event_id).await?;
         transaction.commit().await?;
         Ok(context)

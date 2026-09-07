@@ -14,7 +14,7 @@ use crate::{
     human_session_authority::revalidate_human_session,
     message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
     room_turns::support::insert_event,
-    room_user_identity::current_local_room_principal,
+    room_user_identity::resolve_local_room_manager,
 };
 
 struct StoredVote {
@@ -50,9 +50,8 @@ impl SqliteStore {
         vote_id: &str,
     ) -> Result<VoteSummary, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let principal =
-            current_local_room_principal(&mut transaction, room_id, user_id, participant_id)
-                .await?;
+        let (_, principal) =
+            resolve_local_room_manager(&mut transaction, room_id, user_id, participant_id).await?;
         let summary = read_vote_summary(&mut transaction, &principal, vote_id).await?;
         transaction.commit().await?;
         Ok(summary)

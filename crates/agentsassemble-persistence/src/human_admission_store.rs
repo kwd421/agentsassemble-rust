@@ -4,11 +4,8 @@ use agentsassemble_domain::{
     Actor, InviteScope, Participant, ParticipantRole, ParticipantStatus, RoomEvent, RoomSettings,
     RoomStatus, UserProfile,
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use chrono::{DateTime, Duration, Utc};
-use hmac::{Hmac, Mac};
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
@@ -20,13 +17,9 @@ use crate::{
     human_session_authority::fixed_session_fingerprint,
     profile_store::decode_bound_profile,
     room_event_sequence::next_sequence,
+    session_bearer::{SessionBearerPurpose::HumanAdmission, derive_session_bearer},
 };
 
-const SESSION_BEARER_CONTEXT: &[u8] = b"agentsassemble-human-session-bearer-v1\0";
-pub const HUMAN_SESSION_BEARER_PREFIX: &str = "aas1.";
-pub const HUMAN_SESSION_BEARER_BYTES: usize = 32;
-pub const HUMAN_SESSION_BEARER_CHARS: usize =
-    HUMAN_SESSION_BEARER_PREFIX.len() + (HUMAN_SESSION_BEARER_BYTES * 4).div_ceil(3);
 const SESSION_TTL: Duration = Duration::hours(1);
 const MAX_PUBLIC_SESSIONS: i64 = 448;
 const MAX_PUBLIC_ROOM_SESSIONS: i64 = 112;
@@ -241,7 +234,8 @@ async fn commit_new_admission(
         expires_at,
     )
     .await?;
-    let issued = issue_session_bearer(store, &admission_key);
+    let key = store.host_key.session_hmac_key();
+    let issued = derive_session_bearer(key, &admission_key, HumanAdmission);
     sqlx::query(
         "INSERT INTO human_room_sessions(admission_key, key_kind, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, reusable_identity_fingerprint, result_json, admitted_at, expires_at, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'browser', ?, ?, ?, ?, ?, ?, 'active')",
     )
@@ -358,7 +352,8 @@ async fn exact_admission(
             "Stored human admission result is cross-bound.",
         ));
     }
-    let issued = issue_session_bearer(store, &admission_key);
+    let key = store.host_key.session_hmac_key();
+    let issued = derive_session_bearer(key, &admission_key, HumanAdmission);
     if row.get::<Vec<u8>, _>("session_fingerprint").as_slice() != issued.fingerprint {
         return Err(invalid_state(
             "Stored human session fingerprint is invalid.",
@@ -578,31 +573,6 @@ fn human_usage_guide(room_id: &str, participant_id: &str, display_name: &str) ->
             "rejoin": "This session cannot be renewed after it expires; ask the host for a new invite link."
         }
     })
-}
-
-struct IssuedBearer {
-    bearer: String,
-    fingerprint: [u8; 32],
-}
-
-fn issue_session_bearer(store: &SqliteStore, admission_key: &[u8; 32]) -> IssuedBearer {
-    derive_session_bearer(store.host_key.session_hmac_key(), admission_key)
-}
-
-fn derive_session_bearer(key: &[u8; 32], admission_key: &[u8; 32]) -> IssuedBearer {
-    let mut signer = Hmac::<Sha256>::new_from_slice(key)
-        .unwrap_or_else(|_| unreachable!("HMAC accepts a 32-byte key"));
-    signer.update(SESSION_BEARER_CONTEXT);
-    signer.update(admission_key);
-    let mac: [u8; HUMAN_SESSION_BEARER_BYTES] = signer.finalize().into_bytes().into();
-    let mut bearer = String::with_capacity(HUMAN_SESSION_BEARER_CHARS);
-    bearer.push_str(HUMAN_SESSION_BEARER_PREFIX);
-    URL_SAFE_NO_PAD.encode_string(mac, &mut bearer);
-    let fingerprint = Sha256::digest(bearer.as_bytes()).into();
-    IssuedBearer {
-        bearer,
-        fingerprint,
-    }
 }
 
 fn timestamp(value: i64) -> Result<DateTime<Utc>, PersistenceError> {

@@ -186,3 +186,24 @@ carry the request session. The latter is the provider-start authorization point;
 subsequent exact receipt/failure/recovery belongs to the durable lifecycle operation,
 not a fresh browser request. Before pairing dispatch is enabled, revocation before
 that point must terminate its prepared intent through the existing failure owner.
+
+### Operator pairing persistence boundary
+
+The clean schema stores one pairing grant and its optional consumed session in one
+`operator_pairings` row. Creation revalidates the exact local manager; redemption
+serializes device selection in a write transaction. The grant expires in 120 seconds,
+and the consumed session expires one hour after redemption. A still-live same-device
+retry returns the same bearer even after grant expiry; another device, revocation,
+expired session, changed room incarnation or changed host lineage cannot redeem it.
+The ordinary human bearer remains unchanged; a distinct operator prefix and HMAC
+context use the same existing derivation mechanism. Only fingerprints are persisted.
+
+The record cap is 128 per server and 32 per room. Creation removes expired records
+before checking capacity; revoked consumed records remain until session expiry so a
+retry cannot revive them. There is no background task. Current manager resolution
+loads the membership once and shares its bootstrap/profile proof with the principal
+projection. Queued room mutations accept persistence-issued paired provenance and
+revalidate it in their transaction. No paired public route is enabled by this storage
+slice: ready ingress validation, exact revocation publication, remaining privileged
+command owners, pre-effect cancellation, departure and frontend connection still
+must be completed before remote operator dispatch is enabled.

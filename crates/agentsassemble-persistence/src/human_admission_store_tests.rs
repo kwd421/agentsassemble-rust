@@ -4,7 +4,8 @@ use agentsassemble_domain::{
 use chrono::{DateTime, Duration, Utc};
 use sqlx::Row;
 
-use super::{SESSION_TTL, derive_session_bearer};
+use super::SESSION_TTL;
+use crate::session_bearer::{SessionBearerPurpose, derive_session_bearer};
 use crate::{
     HumanAdmissionCommit, HumanAdmissionDecision, HumanAdmissionInput, HumanAdmissionRejection,
     HumanInviteCredentialEvidence, PersistenceError, PreparedHumanAdmission, SqliteStore,
@@ -16,7 +17,11 @@ const BROWSER: [u8; 32] = [0x33; 32];
 
 #[test]
 fn fixed_bearer_vector_stays_inside_the_persistence_owner() {
-    let issued = derive_session_bearer(&[0x11; 32], &[0x22; 32]);
+    let issued = derive_session_bearer(
+        &[0x11; 32],
+        &[0x22; 32],
+        SessionBearerPurpose::HumanAdmission,
+    );
     assert_eq!(
         issued.bearer,
         "aas1.azzIr-3RAkGakKN9P6yud8kvdUIp5QWcLJ3m_yDTqk4"
