@@ -19,6 +19,7 @@
     "allow-save-message-attachment",
     "allow-runtime-human-invite-create-ticket",
     "allow-runtime-human-invite-revoke-ticket",
+    "allow-runtime-agent-avatar-upload-ticket",
     "allow-runtime-appearance-upload-ticket",
     "allow-runtime-appearance-pending-read-ticket",
     "allow-runtime-appearance-bound-read-ticket",

@@ -7001,3 +7001,18 @@ TypeScript/build and original CSS also pass. The storage path reuses the bounded
 worker and absolute asset quota, adds at most one current and one pending raster per
 Session, and adds no background task. HTTP/ticket and avatar editor acceptance remain
 open for the next vertical slice.
+
+The Agent avatar HTTP/private-control/Tauri transport is connected. Actual local
+HTTP and WebSocket exercise wrong-target consumption, replayed ticket rejection,
+wrong-purpose profile ticket rejection, pending 404, canonical bind events/ACK,
+current PNG/no-store response and exact clear/404. All three existing human-profile
+and room-appearance TCP boundary tests pass unchanged. The 26 desktop cases include
+exact avatar response-purpose/request binding and the registered capability
+intersection; 36 bridge/socket frontend cases, TypeScript/build/original CSS,
+workspace and desktop Clippy, format and architecture gates pass. During integration,
+the capability intersection caught the missing native permission and that concrete
+permission was added. Ticket construction and reply dispatch were kept within their
+existing control owner and split from pipe I/O to meet the unchanged function limit.
+Artifact maintenance removed the detected separate desktop target and performed its
+existing explicit shared-target cleanup after all Cargo work stopped; subsequent
+desktop validation rebuilt successfully. No packaged app or real provider was run.

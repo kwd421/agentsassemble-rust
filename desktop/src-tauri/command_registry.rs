@@ -13,6 +13,7 @@ desktop_commands! {
     save_message_attachment => "allow-save-message-attachment",
     runtime_human_invite_create_ticket => "allow-runtime-human-invite-create-ticket",
     runtime_human_invite_revoke_ticket => "allow-runtime-human-invite-revoke-ticket",
+    runtime_agent_avatar_upload_ticket => "allow-runtime-agent-avatar-upload-ticket",
     runtime_appearance_upload_ticket => "allow-runtime-appearance-upload-ticket",
     runtime_appearance_pending_read_ticket => "allow-runtime-appearance-pending-read-ticket",
     runtime_appearance_bound_read_ticket => "allow-runtime-appearance-bound-read-ticket",

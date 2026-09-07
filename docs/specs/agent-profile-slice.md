@@ -64,3 +64,15 @@ require both current asset custody and the exact Session reference. Foreign huma
 appearance, other-session, malformed or expired references cannot bind. Session
 removal cascades only that session's assets. Upload and HTTP/frontend connections
 remain the next slice; their absence does not advertise an avatar editor.
+
+## Avatar transport
+
+`POST /api/agent-avatars/upload/{session_id}` consumes a one-use local-manager
+credential whose purpose includes that exact Session ID. The stored grant also
+binds server identity, authority lineage and room incarnation; storage revalidates
+that manager before committing bytes. Wrong target/purpose consumes and rejects
+the ticket. Existing body/PNG bounds and no-store/error response rules apply.
+`GET /api/agent-avatars/{asset_id}` serves only a bound current PNG with the existing
+safe attachment headers. The private control command and bundled-only Tauri command
+have dedicated request/response variants and a registered capability. Browser upload
+controls remain unavailable until the final editor/projection slice is connected.

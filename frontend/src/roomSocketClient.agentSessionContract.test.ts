@@ -473,7 +473,7 @@ it("binds profile ACK identity and projects both committed events", () => {
   const { participant, session, createdEvent } = creationRecords();
   const updated = { ...session, display_name: "Renamed" };
   const member = { ...participant, display_name: "Renamed" };
-  const memberEvent = { ...createdEvent, type: "participant_updated", display_name: "Renamed" };
+  const memberEvent = { ...createdEvent, type: "participant_updated", display_name: "Renamed", avatar_image_url: updated.avatar_image_url };
   const stateEvent = { ...createdEvent, ...event(2), type: "agent_session_state",
     runtime_status: updated.runtime_status, display_name: "Renamed", agent_session: updated };
   const result = { participant: member, agent_session: updated,

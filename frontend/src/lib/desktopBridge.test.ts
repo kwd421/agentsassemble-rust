@@ -5,6 +5,7 @@ import {
   fetchDesktopCentralRegistration,
   fetchDesktopHumanInviteCreate,
   fetchDesktopHumanInviteRevoke,
+  requestDesktopAgentAvatarUploadTicket,
   requestDesktopAppearanceBoundReadTicket,
   requestDesktopAppearancePendingReadTicket,
   requestDesktopAppearanceUploadTicket,
@@ -21,6 +22,7 @@ import {
 
 const hostCommands = [
   "host_product_surface",
+  "runtime_agent_avatar_upload_ticket",
   "runtime_appearance_bound_read_ticket",
   "runtime_appearance_pending_read_ticket",
   "runtime_appearance_upload_ticket",
@@ -234,6 +236,8 @@ describe("desktop exact-purpose HTTP bridge", () => {
     await requestDesktopAppearanceUploadTicket(managerAuthority);
     await requestDesktopAppearancePendingReadTicket(managerAuthority, assetId);
     await requestDesktopAppearanceBoundReadTicket(managerAuthority, assetId);
+    await requestDesktopAgentAvatarUploadTicket(managerAuthority, "agent-session");
+    expect(invoke).toHaveBeenNthCalledWith(5, "runtime_agent_avatar_upload_ticket", { authority: managerAuthority, sessionId: "agent-session" });
 
     expect(invoke).toHaveBeenNthCalledWith(2, "runtime_appearance_upload_ticket", {
       authority: managerAuthority,

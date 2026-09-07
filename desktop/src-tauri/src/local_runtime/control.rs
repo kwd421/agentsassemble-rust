@@ -186,6 +186,17 @@ pub(super) fn request_human_invite_revoke_ticket(
     request_http_ticket(runtime, HttpTicketKind::HumanInviteRevoke(authority))
 }
 
+pub(super) fn request_agent_avatar_upload_ticket(
+    runtime: &mut RuntimeProcess,
+    authority: &ManagerRoomAuthority,
+    session_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(
+        runtime,
+        HttpTicketKind::AgentAvatarUpload(authority, session_id),
+    )
+}
+
 pub(super) fn request_appearance_upload_ticket(
     runtime: &mut RuntimeProcess,
     authority: &ManagerRoomAuthority,
@@ -233,6 +244,7 @@ enum HttpTicketKind<'a> {
     MessageAttachmentRead(&'a str, &'a str),
     HumanInviteCreate(&'a ManagerRoomAuthority),
     HumanInviteRevoke(&'a ManagerRoomAuthority),
+    AgentAvatarUpload(&'a ManagerRoomAuthority, &'a str),
     AppearanceUpload(&'a ManagerRoomAuthority),
     AppearancePendingRead(&'a ManagerRoomAuthority, &'a str),
     AppearanceBoundRead(&'a ManagerRoomAuthority, &'a str),
@@ -244,47 +256,60 @@ fn request_http_ticket(
     kind: HttpTicketKind<'_>,
 ) -> Result<HttpTicketGrant, TicketFailure> {
     let request_id = Uuid::new_v4().to_string();
-    let request = message_attachment_request(kind, &request_id).unwrap_or_else(|| match kind {
+    let request = http_ticket_request(kind, &request_id);
+    let response = request_control(runtime, &request)?;
+    let (ticket, ttl_seconds) = decode_http_ticket_response(kind, &request_id, response)?;
+    validate_http_ticket_grant(&ticket, ttl_seconds)?;
+    Ok(HttpTicketGrant {
+        ticket,
+        ttl_seconds,
+        http_base_url: runtime.address.to_string().trim_end_matches('/').to_owned(),
+    })
+}
+
+fn http_ticket_request(kind: HttpTicketKind<'_>, request_id: &str) -> LocalControlRequest {
+    asset_ticket_request(kind, request_id).unwrap_or_else(|| match kind {
         HttpTicketKind::Operator => LocalControlRequest::IssueOperatorHttpTicket {
-            request_id: request_id.clone(),
+            request_id: request_id.to_owned(),
         },
         HttpTicketKind::PreferencesRead(room_id) => {
             LocalControlRequest::IssuePreferencesReadTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 meeting_id: room_id.to_owned(),
             }
         }
         HttpTicketKind::PreferencesWrite(room_id) => {
             LocalControlRequest::IssuePreferencesWriteTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 meeting_id: room_id.to_owned(),
             }
         }
         HttpTicketKind::MessagePinsRead(room_id) => {
             LocalControlRequest::IssueMessagePinsReadTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 meeting_id: room_id.to_owned(),
             }
         }
         HttpTicketKind::MessagePinsWrite(room_id) => {
             LocalControlRequest::IssueMessagePinsWriteTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 meeting_id: room_id.to_owned(),
             }
         }
         HttpTicketKind::MessageSearchRead(room_id) => {
             LocalControlRequest::IssueMessageSearchReadTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 meeting_id: room_id.to_owned(),
             }
         }
         HttpTicketKind::MessageAttachmentUpload(_)
-        | HttpTicketKind::MessageAttachmentRead(_, _) => {
-            unreachable!("message attachment requests are decoded above")
+        | HttpTicketKind::MessageAttachmentRead(_, _)
+        | HttpTicketKind::AgentAvatarUpload(_, _) => {
+            unreachable!("asset requests are decoded above")
         }
         HttpTicketKind::HumanInviteCreate(authority) => {
             LocalControlRequest::IssueHumanInviteCreateTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 server_id: authority.server_id.clone(),
                 authority_lineage_id: authority.authority_lineage_id.clone(),
                 meeting_id: authority.room_id.clone(),
@@ -293,7 +318,7 @@ fn request_http_ticket(
         }
         HttpTicketKind::HumanInviteRevoke(authority) => {
             LocalControlRequest::IssueHumanInviteRevokeTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 server_id: authority.server_id.clone(),
                 authority_lineage_id: authority.authority_lineage_id.clone(),
                 meeting_id: authority.room_id.clone(),
@@ -302,7 +327,7 @@ fn request_http_ticket(
         }
         HttpTicketKind::AppearanceUpload(authority) => {
             LocalControlRequest::IssueAppearanceUploadTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 server_id: authority.server_id.clone(),
                 authority_lineage_id: authority.authority_lineage_id.clone(),
                 meeting_id: authority.room_id.clone(),
@@ -311,7 +336,7 @@ fn request_http_ticket(
         }
         HttpTicketKind::AppearancePendingRead(authority, asset_id) => {
             LocalControlRequest::IssueAppearancePendingReadTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 server_id: authority.server_id.clone(),
                 authority_lineage_id: authority.authority_lineage_id.clone(),
                 meeting_id: authority.room_id.clone(),
@@ -321,7 +346,7 @@ fn request_http_ticket(
         }
         HttpTicketKind::AppearanceBoundRead(authority, asset_id) => {
             LocalControlRequest::IssueAppearanceBoundReadTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
                 server_id: authority.server_id.clone(),
                 authority_lineage_id: authority.authority_lineage_id.clone(),
                 meeting_id: authority.room_id.clone(),
@@ -331,17 +356,9 @@ fn request_http_ticket(
         }
         HttpTicketKind::SettingsDirectoryRead => {
             LocalControlRequest::IssueSettingsDirectoryReadTicket {
-                request_id: request_id.clone(),
+                request_id: request_id.to_owned(),
             }
         }
-    });
-    let response = request_control(runtime, &request)?;
-    let (ticket, ttl_seconds) = decode_http_ticket_response(kind, &request_id, response)?;
-    validate_http_ticket_grant(&ticket, ttl_seconds)?;
-    Ok(HttpTicketGrant {
-        ticket,
-        ttl_seconds,
-        http_base_url: runtime.address.to_string().trim_end_matches('/').to_owned(),
     })
 }
 
@@ -357,10 +374,7 @@ fn validate_http_ticket_grant(ticket: &str, ttl_seconds: u64) -> Result<(), Tick
     Ok(())
 }
 
-fn message_attachment_request(
-    kind: HttpTicketKind<'_>,
-    request_id: &str,
-) -> Option<LocalControlRequest> {
+fn asset_ticket_request(kind: HttpTicketKind<'_>, request_id: &str) -> Option<LocalControlRequest> {
     match kind {
         HttpTicketKind::MessageAttachmentUpload(room_id) => {
             Some(LocalControlRequest::IssueMessageAttachmentUploadTicket {
@@ -375,6 +389,16 @@ fn message_attachment_request(
                 attachment_id: attachment_id.to_owned(),
             })
         }
+        HttpTicketKind::AgentAvatarUpload(authority, session_id) => {
+            Some(LocalControlRequest::IssueAgentAvatarUploadTicket {
+                request_id: request_id.to_owned(),
+                server_id: authority.server_id.clone(),
+                authority_lineage_id: authority.authority_lineage_id.clone(),
+                meeting_id: authority.room_id.clone(),
+                room_uid: authority.room_uid.clone(),
+                session_id: session_id.to_owned(),
+            })
+        }
         _ => None,
     }
 }
@@ -384,20 +408,19 @@ fn decode_http_ticket_response(
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
-    if matches!(kind, HttpTicketKind::MessageSearchRead(_)) {
-        return decode_message_search_ticket_response(request_id, response);
-    }
-    if matches!(
-        kind,
-        HttpTicketKind::MessagePinsRead(_) | HttpTicketKind::MessagePinsWrite(_)
-    ) {
-        return decode_message_pin_ticket_response(kind, request_id, response);
-    }
-    if matches!(
-        kind,
-        HttpTicketKind::MessageAttachmentUpload(_) | HttpTicketKind::MessageAttachmentRead(_, _)
-    ) {
-        return decode_message_attachment_ticket_response(kind, request_id, response);
+    match kind {
+        HttpTicketKind::MessageSearchRead(_) => {
+            return decode_message_search_ticket_response(request_id, response);
+        }
+        HttpTicketKind::MessagePinsRead(_) | HttpTicketKind::MessagePinsWrite(_) => {
+            return decode_message_pin_ticket_response(kind, request_id, response);
+        }
+        HttpTicketKind::MessageAttachmentUpload(_)
+        | HttpTicketKind::MessageAttachmentRead(_, _)
+        | HttpTicketKind::AgentAvatarUpload(_, _) => {
+            return decode_asset_ticket_response(kind, request_id, response);
+        }
+        _ => {}
     }
     match (kind, response) {
         (
@@ -407,64 +430,64 @@ fn decode_http_ticket_response(
                 ticket,
                 ttl_seconds,
             },
-        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
-        (
+        )
+        | (
             HttpTicketKind::PreferencesRead(_),
             LocalControlResponse::PreferencesReadOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
             },
-        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
-        (
+        )
+        | (
             HttpTicketKind::PreferencesWrite(_),
             LocalControlResponse::PreferencesWriteOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
             },
-        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
-        (
+        )
+        | (
             HttpTicketKind::HumanInviteCreate(_),
             LocalControlResponse::HumanInviteCreateOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
             },
-        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
-        (
+        )
+        | (
             HttpTicketKind::HumanInviteRevoke(_),
             LocalControlResponse::HumanInviteRevokeOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
             },
-        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
-        (
+        )
+        | (
             HttpTicketKind::AppearanceUpload(_),
             LocalControlResponse::AppearanceUploadOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
             },
-        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
-        (
+        )
+        | (
             HttpTicketKind::AppearancePendingRead(_, _),
             LocalControlResponse::AppearancePendingReadOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
             },
-        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
-        (
+        )
+        | (
             HttpTicketKind::AppearanceBoundRead(_, _),
             LocalControlResponse::AppearanceBoundReadOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,
             },
-        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
-        (
+        )
+        | (
             HttpTicketKind::SettingsDirectoryRead,
             LocalControlResponse::SettingsDirectoryReadOk {
                 request_id: response_id,
@@ -486,7 +509,7 @@ fn decode_http_ticket_response(
     }
 }
 
-fn decode_message_attachment_ticket_response(
+fn decode_asset_ticket_response(
     kind: HttpTicketKind<'_>,
     request_id: &str,
     response: LocalControlResponse,
@@ -507,6 +530,14 @@ fn decode_message_attachment_ticket_response(
                 ticket,
                 ttl_seconds,
             },
+        )
+        | (
+            HttpTicketKind::AgentAvatarUpload(_, _),
+            LocalControlResponse::AgentAvatarUploadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
         ) if response_id == request_id => Ok((ticket, ttl_seconds)),
         (
             _,
@@ -517,7 +548,7 @@ fn decode_message_attachment_ticket_response(
             },
         ) if response_id == request_id => Err(control_ticket_failure(&code, message)),
         _ => Err(TicketFailure::Broken(
-            "local runtime message-attachment response did not match the request".to_owned(),
+            "local runtime asset ticket response did not match the request".to_owned(),
         )),
     }
 }

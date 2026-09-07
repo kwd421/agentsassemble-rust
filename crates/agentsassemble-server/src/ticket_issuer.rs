@@ -316,6 +316,33 @@ pub async fn issue_appearance_upload_ticket(
     Ok(operator_http_response(state, issued))
 }
 
+/// Issues a one-use upload credential bound to an Agent Session and exact room manager.
+///
+/// # Errors
+/// Returns bounded identity, room-manager or ticket-capacity errors.
+pub async fn issue_agent_avatar_upload_ticket(
+    state: &AppState,
+    requested: &ManagerRoomAuthorityRequest,
+    session_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    if session_id.is_empty()
+        || session_id.chars().count() > 128
+        || session_id.trim() != session_id
+        || session_id.chars().any(char::is_control)
+    {
+        return Err(TicketIssueError::InvalidAsset(
+            "Agent Session identity is invalid.".to_owned(),
+        ));
+    }
+    let authority = resolve_local_room_manager(state, requested).await?;
+    let issued = state
+        .tickets
+        .issue_agent_avatar_upload(authority, session_id.to_owned())
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
 /// Issues an exact pending-appearance read credential for the current local room manager.
 ///
 /// # Errors

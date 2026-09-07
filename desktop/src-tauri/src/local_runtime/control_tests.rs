@@ -217,3 +217,42 @@ fn runtime_preservation_child() {
             .unwrap_or_else(|error| panic!("await runtime fixture release: {error}"));
     }
 }
+
+#[test]
+fn agent_avatar_ticket_response_requires_its_exact_purpose_and_request() {
+    let authority = ManagerRoomAuthority {
+        server_id: "10000000-0000-4000-8000-000000000001".into(),
+        authority_lineage_id: "20000000-0000-4000-8000-000000000002".into(),
+        room_id: "general".into(),
+        room_uid: "30000000-0000-4000-8000-000000000003".into(),
+    };
+    let response = LocalControlResponse::AgentAvatarUploadOk {
+        request_id: "avatar-request".into(),
+        ticket: "d".repeat(64),
+        ttl_seconds: 30,
+    };
+    assert!(
+        decode_http_ticket_response(
+            HttpTicketKind::AgentAvatarUpload(&authority, "agent"),
+            "avatar-request",
+            response.clone()
+        )
+        .is_ok()
+    );
+    assert!(matches!(
+        decode_http_ticket_response(
+            HttpTicketKind::AppearanceUpload(&authority),
+            "avatar-request",
+            response.clone()
+        ),
+        Err(TicketFailure::Broken(_))
+    ));
+    assert!(matches!(
+        decode_http_ticket_response(
+            HttpTicketKind::AgentAvatarUpload(&authority, "agent"),
+            "other-request",
+            response
+        ),
+        Err(TicketFailure::Broken(_))
+    ));
+}

@@ -27,6 +27,7 @@ use tokio::{
     net::TcpListener,
 };
 
+mod agent_avatar_control;
 mod appearance_control;
 mod message_attachments_control;
 mod message_pins_control;
@@ -304,6 +305,9 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         | LocalControlRequest::IssueHumanInviteRevokeTicket { .. }) => {
             invite_ticket_control_request(state, request_id, request).await
         }
+        request @ LocalControlRequest::IssueAgentAvatarUploadTicket { .. } => {
+            agent_avatar_control::response(state, request_id, request).await
+        }
         request @ (LocalControlRequest::IssueAppearanceUploadTicket { .. }
         | LocalControlRequest::IssueAppearancePendingReadTicket { .. }
         | LocalControlRequest::IssueAppearanceBoundReadTicket { .. }) => {
@@ -511,6 +515,7 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::IssueMessageAttachmentReadTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteCreateTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteRevokeTicket { request_id, .. }
+        | LocalControlRequest::IssueAgentAvatarUploadTicket { request_id, .. }
         | LocalControlRequest::IssueAppearanceUploadTicket { request_id, .. }
         | LocalControlRequest::IssueAppearancePendingReadTicket { request_id, .. }
         | LocalControlRequest::IssueAppearanceBoundReadTicket { request_id, .. }

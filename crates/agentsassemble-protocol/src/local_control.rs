@@ -61,6 +61,14 @@ pub enum LocalControlRequest {
         meeting_id: String,
         room_uid: String,
     },
+    IssueAgentAvatarUploadTicket {
+        request_id: String,
+        server_id: String,
+        authority_lineage_id: String,
+        meeting_id: String,
+        room_uid: String,
+        session_id: String,
+    },
     IssueAppearanceUploadTicket {
         request_id: String,
         server_id: String,
@@ -171,6 +179,11 @@ pub enum LocalControlResponse {
         ttl_seconds: u64,
     },
     HumanInviteRevokeOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    AgentAvatarUploadOk {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,

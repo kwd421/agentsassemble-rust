@@ -18,6 +18,7 @@ use url::Url;
 
 use crate::runtime_supervisor;
 
+mod agent_avatar;
 mod appearance;
 mod control;
 mod human_invite;

@@ -45,6 +45,10 @@ mod agent_interrupt;
 #[path = "agent_session_boundary/lifecycle_resume_retry.rs"]
 mod lifecycle_resume_retry;
 
+#[cfg(unix)]
+#[path = "agent_session_boundary/agent_avatar.rs"]
+mod agent_avatar;
+
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 struct RunningServer {

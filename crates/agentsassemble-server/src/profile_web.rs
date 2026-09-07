@@ -31,6 +31,8 @@ use crate::{
     },
 };
 
+mod agent_avatar;
+
 const MAX_PROFILE_BODY_BYTES: usize = 16 * 1024;
 
 #[derive(Deserialize)]
@@ -43,7 +45,7 @@ struct AttachmentUpload {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct MessageAttachmentUpload {
+struct EncodedAttachmentUpload {
     filename: String,
     content_type: String,
     data_base64: String,
@@ -67,6 +69,8 @@ pub(crate) fn routes() -> Router<AppState> {
 
 registered_routes! {
     fn profile_routes<AppState>() {
+        same_origin_public "/api/agent-avatars/upload/{session_id}" => post(agent_avatar::upload),
+        same_origin_public "/api/agent-avatars/{asset_id}" => get(agent_avatar::read),
         same_origin_public "/api/user-profile" => get(read_profile).post(update_profile),
         same_origin_public "/api/attachments" => post(upload_attachment),
         same_origin_public "/api/message-attachments" => post(upload_message_attachment),
@@ -188,7 +192,7 @@ async fn upload_message_attachment(
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
     let authority = resolve_message_attachment_upload_authority(&state, request.headers()).await?;
-    let payload: MessageAttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
+    let payload: EncodedAttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
     let content = decode_attachment_content(&payload.data_base64)?;
@@ -697,6 +701,7 @@ impl From<PersistenceError> for ProfileHttpError {
                 let status = match code {
                     "session_revoked" => StatusCode::UNAUTHORIZED,
                     "attachment_missing"
+                    | "attachment_not_found"
                     | "appearance_asset_missing"
                     | "message_attachment_missing"
                     | "user_profile_missing" => StatusCode::NOT_FOUND,
@@ -718,7 +723,9 @@ impl From<PersistenceError> for ProfileHttpError {
                     | "attachment_type_mismatch"
                     | "attachment_invalid_image"
                     | "attachment_image_limits" => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                    "invalid_state" => StatusCode::SERVICE_UNAVAILABLE,
+                    "invalid_state" | "agent_avatar_custody_invalid" => {
+                        StatusCode::SERVICE_UNAVAILABLE
+                    }
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {

@@ -77,6 +77,7 @@ type DesktopHttpTicketCommand =
   | "runtime_message_attachment_read_ticket"
   | "runtime_human_invite_create_ticket"
   | "runtime_human_invite_revoke_ticket"
+  | "runtime_agent_avatar_upload_ticket"
   | "runtime_appearance_upload_ticket"
   | "runtime_appearance_pending_read_ticket"
   | "runtime_appearance_bound_read_ticket"
@@ -519,6 +520,14 @@ export function requestDesktopHumanInviteRevokeTicket(
     { authority: verified },
     "사람 초대 취소 티켓"
   );
+}
+
+export function requestDesktopAgentAvatarUploadTicket(
+  authority: DesktopManagerRoomAuthority, sessionId: string
+): Promise<DesktopOperatorHttpTicket> {
+  const verified = parseDesktopManagerRoomAuthority(authority);
+  return requestDesktopHttpTicket("runtime_agent_avatar_upload_ticket",
+    { authority: verified, sessionId }, "에이전트 프로필 사진 업로드 티켓");
 }
 
 export function requestDesktopAppearanceUploadTicket(

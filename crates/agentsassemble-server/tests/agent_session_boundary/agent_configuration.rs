@@ -102,6 +102,7 @@ async fn stopped_runtime_configuration_is_revalidated_replayed_and_startable() {
         "runtime_profile_conflict"
     );
     assert_live_profile_update(&mut socket, &server, &session_id, &started).await;
+    agent_avatar::assert_avatar_flow(&mut socket, &server, &session_id).await;
     server.stop().await;
 }
 

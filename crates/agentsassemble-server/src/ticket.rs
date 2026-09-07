@@ -63,6 +63,7 @@ pub(super) enum LocalRoomManagerPurpose {
     HumanInviteCreate,
     HumanInviteRevoke,
     AppearanceUpload,
+    AgentAvatarUpload { session_id: String },
     PendingPreviewRead { asset_id: String },
 }
 
@@ -356,6 +357,39 @@ impl TicketStore {
     ) -> Result<IssuedTicket, TicketError> {
         self.issue_local_room_manager(authority, LocalRoomManagerPurpose::AppearanceUpload)
             .await
+    }
+
+    /// Issues an upload credential bound to one Agent Session and room incarnation.
+    ///
+    /// # Errors
+    /// Returns `Invalid` if ticket capacity is exhausted.
+    pub async fn issue_agent_avatar_upload(
+        &self,
+        authority: LocalRoomManagerAuthority,
+        session_id: String,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_local_room_manager(
+            authority,
+            LocalRoomManagerPurpose::AgentAvatarUpload { session_id },
+        )
+        .await
+    }
+
+    pub(crate) async fn consume_agent_avatar_upload(
+        &self,
+        ticket: &str,
+        session_id: &str,
+    ) -> Result<LocalRoomManagerAuthority, TicketError> {
+        let grant = self.consume_grant(ticket).await?;
+        let TicketAuthority::LocalRoomManager(manager) = grant.authority else {
+            return Err(TicketError::Invalid);
+        };
+        resolve_local_room_manager_authority(
+            manager,
+            &LocalRoomManagerPurpose::AgentAvatarUpload {
+                session_id: session_id.to_owned(),
+            },
+        )
     }
 
     /// Issues one pending-preview credential bound to an exact asset.
