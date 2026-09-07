@@ -1,4 +1,6 @@
+import { useEffect, useRef } from "react";
 import { X } from "lucide-react";
+import AgentProfileCard from "./AgentProfileCard";
 import type { RoomAgentSession } from "../../../api";
 import AgentSessionDetails, {
   type AgentSessionControlAction,
@@ -37,86 +39,31 @@ export default function MemberDetailModal({
   activityVisible,
   onActivityVisibilityChange,
 }: MemberDetailModalProps) {
-  if (!entry.agent && entry.agentSession) {
-    return (
-      <div className="dc-modal-backdrop" role="presentation" onClick={onClose}>
-        <section
-          className="dc-member-detail-modal"
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="member-detail-title"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <header className="dc-member-detail-modal-head">
-            <span className="dc-member-detail-modal-avatar" data-role={entry.role}>
-              {entry.avatarImage ? (
-                <img className="dc-member-avatar-image" src={entry.avatarImage} alt="" />
-              ) : (
-                <ProviderLogo providerKind={entry.providerKind} size={48} />
-              )}
-            </span>
-            <div className="min-w-0 flex-1">
-              <h2 id="member-detail-title" className="truncate preserve-words">
-                {entry.displayName}
-              </h2>
-              <p className="truncate preserve-words">{entry.fullDetail || entry.detail}</p>
-            </div>
-            <button type="button" className="dc-modal-close" onClick={onClose} aria-label="멤버 정보 닫기">
-              <X size={18} />
-            </button>
-          </header>
-          <AgentSessionDetails
-            session={entry.agentSession}
-            provider={availableProviders.find(
-              (provider) => provider.provider_kind === entry.agentSession?.provider_kind
-            )}
-            onControl={onAgentControl}
-            onConfigure={onAgentConfigure}
-            onProfileUpdate={onAgentProfileUpdate}
-            onAvatarUpdate={onAgentAvatarUpdate}
-            activityVisible={activityVisible}
-            onActivityVisibilityChange={onActivityVisibilityChange}
-          />
-        </section>
-      </div>
-    );
-  }
-
-  if (!entry.agent) return null;
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const visible = Boolean(entry.agent || entry.agentSession);
+  useEffect(() => {
+    if (!visible) return;
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    return () => dialog?.close();
+  }, [visible]);
+  if (!visible) return null;
   const DetailIcon = entry.icon;
 
   return (
-    <div className="dc-modal-backdrop" role="presentation" onClick={onClose}>
-      <section
-        className="dc-member-detail-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="member-detail-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        <header className="dc-member-detail-modal-head">
-          <span className="dc-member-detail-modal-avatar" data-role={entry.role}>
-            {entry.avatarImage ? (
-              <img className="dc-member-avatar-image" src={entry.avatarImage} alt="" />
-            ) : (
-              <ProviderLogo
-                providerKind={entry.providerKind}
-                size={48}
-                fallback={<DetailIcon size={22} />}
-              />
-            )}
-          </span>
-          <div className="min-w-0 flex-1">
-            <h2 id="member-detail-title" className="truncate preserve-words">
-              {entry.displayName}
-            </h2>
-            <p className="truncate preserve-words">{entry.fullDetail || entry.detail}</p>
-          </div>
-          <button type="button" className="dc-modal-close" onClick={onClose} aria-label="멤버 정보 닫기">
-            <X size={18} />
-          </button>
-        </header>
-        {entry.agentSession && (
+    <div className="dc-modal-backdrop" role="presentation">
+      <dialog ref={dialogRef} className="dc-member-detail-modal fixed inset-0 text-text-primary"
+        style={{ margin: "auto" }} aria-modal="true" aria-label={entry.displayName}
+        onCancel={(event) => { event.preventDefault(); onClose(); }}>
+        {entry.agentSession ? <AgentProfileCard
+          key={`${entry.agentSession.room_id}:${entry.agentSession.session_id}`}
+          session={entry.agentSession}
+          avatarImage={entry.avatarImage}
+          detail={entry.fullDetail || entry.detail}
+          onClose={onClose}
+          onSave={onAgentProfileUpdate}
+          onAvatarUpdate={onAgentAvatarUpdate}
+        >
           <AgentSessionDetails
             session={entry.agentSession}
             provider={availableProviders.find(
@@ -124,14 +71,25 @@ export default function MemberDetailModal({
             )}
             onControl={onAgentControl}
             onConfigure={onAgentConfigure}
-            onProfileUpdate={onAgentProfileUpdate}
-            onAvatarUpdate={onAgentAvatarUpdate}
             activityVisible={activityVisible}
             onActivityVisibilityChange={onActivityVisibilityChange}
           />
-        )}
-        <MemberUsage displayName={entry.displayName} />
-      </section>
+          {entry.agent && <MemberUsage displayName={entry.displayName} />}
+        </AgentProfileCard> : <>
+          <header className="dc-member-detail-modal-head">
+            <span className="dc-member-detail-modal-avatar" data-role={entry.role}>
+              {entry.avatarImage ? <img className="dc-member-avatar-image" src={entry.avatarImage} alt="" /> :
+                <ProviderLogo providerKind={entry.providerKind} size={48} fallback={<DetailIcon size={22} />} />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="truncate preserve-words">{entry.displayName}</h2>
+              <p className="truncate preserve-words">{entry.fullDetail || entry.detail}</p>
+            </div>
+            <button type="button" className="dc-modal-close" onClick={onClose} aria-label="멤버 정보 닫기"><X size={18} /></button>
+          </header>
+          <MemberUsage displayName={entry.displayName} />
+        </>}
+      </dialog>
     </div>
   );
 }

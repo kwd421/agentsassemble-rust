@@ -23,6 +23,7 @@ import { isActivePresence, presenceStatusLabel } from "../../lib/presenceStatus"
 import { participantTypeMeta } from "../../lib/participantTypes";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
+import AgentProfileCard from "./member/AgentProfileCard";
 import AgentSessionDetails, { type AgentSessionControlAction } from "./AgentSessionDetails";
 import { memberRole } from "./member/memberHelpers";
 import ProviderLogo from "./ProviderLogo";
@@ -439,6 +440,14 @@ export default function MobileRoomInfoPanel({
               <ArrowLeft size={16} />
               멤버 목록
             </button>
+            <AgentProfileCard
+              key={`${selectedAgentSession.room_id}:${selectedAgentSession.session_id}`}
+              session={selectedAgentSession}
+              avatarImage={resolveAttachmentReference(selectedAgentSession.avatar_image_url, displayResourceBase)}
+              detail={selectedAgentSession.model}
+              onSave={capabilities["agent.control"] ? onAgentProfileUpdate : undefined}
+              onAvatarUpdate={capabilities["agent.control"] ? onAgentAvatarUpdate : undefined}
+            >
             <AgentSessionDetails
               session={selectedAgentSession}
               provider={availableProviders.find(
@@ -446,11 +455,10 @@ export default function MobileRoomInfoPanel({
               )}
               onControl={capabilities["agent.control"] ? onAgentControl : undefined}
               onConfigure={capabilities["agent.control"] ? onAgentConfigure : undefined}
-              onProfileUpdate={capabilities["agent.control"] ? onAgentProfileUpdate : undefined}
-              onAvatarUpdate={capabilities["agent.control"] ? onAgentAvatarUpdate : undefined}
               activityVisible={agentActivityVisibility[selectedAgentSession.participant_id] === true}
               onActivityVisibilityChange={onAgentActivityVisibilityChange}
             />
+            </AgentProfileCard>
           </section>
         ) : (
           <>

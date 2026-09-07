@@ -176,13 +176,13 @@ export default function ImageCropper({ file, onCancel, onCropped }: ImageCropper
         onPointerCancel={handlePointerEnd}
       />
       <canvas ref={canvasRef} className="hidden" aria-hidden />
-      <p className="dc-image-crop-hint">드래그로 위치 이동 · 휠(⌘/Ctrl+휠)로 확대/축소 · 모바일은 핀치 줌</p>
-      <div className="dc-image-crop-actions">
-        <button type="button" className="dc-member-session-button" onClick={cropImage}>
-          적용
-        </button>
-        <button type="button" className="dc-member-session-button" onClick={onCancel}>
+      <p className="dc-image-crop-hint">사진을 드래그해 위치를 맞추고, 휠이나 핀치로 확대해요.</p>
+      <div className="dc-image-crop-actions" style={{ justifyContent: "flex-end" }}>
+        <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 44 }} onClick={onCancel}>
           취소
+        </button>
+        <button type="button" className="dc-agent-create-primary" style={{ minHeight: 44 }} onClick={cropImage}>
+          이 사진 사용
         </button>
       </div>
       {status && <p className="dc-member-session-status preserve-words">{status}</p>}

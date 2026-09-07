@@ -44,7 +44,22 @@ implemented fields and confirmed server permission, with visible save failures.
   project Agent identity from the Session and human identity from the human owner.
 - Run affected local verification and mandatory architecture/source/CSS gates.
   Daybreak reviews the complete phase after local acceptance. Real provider and
-  packaged frontend proof remain scheduled together at full reimplementation exit.
+  integrated provider proof remain at full reimplementation exit. Packaged frontend
+  interaction is now required per phase; Phase 4 includes this profile surface.
+
+## Phase 4 frontend correction
+
+The user's Discord-style direction replaces the always-visible identity form inside
+runtime settings with a profile card and one explicit editing task. Name and avatar
+drafts are local until one save action commits through the existing exact Session
+owner. Avatar selection/cropping previews locally; removing a photo changes only
+the draft until save. Cancel discards the draft without an upload or command. Failed
+saves retain the draft and expose the error; canonical session state owns the viewed
+card after success. Closing or changing the target cancels an in-flight upload.
+Desktop and mobile share this editing behavior. Runtime settings remain separate.
+Use existing reviewed styles and native modal focus ownership; preserve all backend
+authorization, exact retry and asset-custody contracts. Verify the card, edit, crop,
+cancel, save, clear and failure paths by direct packaged interaction before Phase 5.
 
 ## Avatar storage contract
 

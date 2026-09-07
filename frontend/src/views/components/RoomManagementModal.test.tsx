@@ -1,19 +1,9 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
+import { afterEach, expect, it, vi } from "vitest";
 import RoomManagementModal from "./RoomManagementModal";
 import type { useRoomLifecycle } from "../../app/useRoomLifecycle";
 
 afterEach(cleanup);
-
-// jsdom has no native modal top layer. Packaged verification owns focus behavior.
-beforeAll(() => {
-  Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value(this: HTMLDialogElement) { this.open = true; } });
-  Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value(this: HTMLDialogElement) { this.open = false; } });
-});
-afterAll(() => {
-  Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
-  Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
-});
 
 it("shows inactive rooms, confirms restoration and keeps uncertain requests locked", () => {
   const room = { room_id: "general", room_uid: "room-one", label: "General", status: "archived", cleanup_pending: false };

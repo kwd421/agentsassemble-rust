@@ -7285,3 +7285,21 @@ changed. Before Phase 4 closure, move Agent identity editing out of runtime sett
 make profile changes a coherent task and review the phase's newly exposed actions
 against this reference and the Toss/Apple guidance linked from the product plan.
 Packaged interaction and whole-phase review remain pending for that correction.
+
+## Phase 4 profile interaction correction (2026-09-07)
+
+The packaged isolated application now opens an Agent profile card with a pencil
+entry; one editing task stages name and cropped photo together until Save. Actual
+interaction verified name typing without early persistence, crop preview, combined
+name/photo save reflected in card and roster, cancel after photo removal retaining
+the existing image, and saved removal returning the provider image with no retained
+avatar assets. The final package also verified disabled unchanged Save, cancel
+returning focus to the pencil, and the crop view with secondary Cancel and primary
+Use photo actions. Native modal background controls are inert. No real provider ran.
+
+Affected verification: 6 frontend files / 50 cases passed, the prior complete
+frontend run passed 110 files / 696 cases, production TypeScript/CSS build and
+mandatory source/architecture/policy/artifact/format gates passed. Failed-save draft
+retention/retry and upload cancellation are covered by component tests; direct
+packaged failed-save and mobile interaction remain pending with Phase 4 acceptance.
+Build used four Cargo workers; frontend verification used two workers.

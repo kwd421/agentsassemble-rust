@@ -695,11 +695,12 @@ describe("RoomConnectionPanel", () => {
       onAgentProfileUpdate };
     const { rerender } = render(<RoomConnectionPanel {...props} capabilities={agentControlCapability} />);
     openAgentDetails();
+    fireEvent.click(screen.getByRole("button", { name: "프로필 편집" }));
     fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "New name" } });
-    fireEvent.click(screen.getByRole("button", { name: "프로필 저장" }));
+    fireEvent.click(screen.getByRole("button", { name: "변경사항 저장" }));
     await waitFor(() => expect(onAgentProfileUpdate).toHaveBeenCalledWith(session, { display_name: "New name" }));
     rerender(<RoomConnectionPanel {...props} capabilities={{}} />);
-    expect(screen.queryByRole("button", { name: "프로필 저장" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "변경사항 저장" })).toBeNull();
   });
 
 });
