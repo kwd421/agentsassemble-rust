@@ -423,6 +423,8 @@ describe("useCanonicalRoom", () => {
     const initial = snapshot([
       event(1, "message_final", "hello"),
     ]);
+    const avatar = "/api/agent-avatars/aa_0123456789abcdef0123456789abcdef";
+    initial.agent_sessions[0].avatar_image_url = avatar;
     initial.participants = [
       participantFixture({
         room_id: "general",
@@ -440,7 +442,7 @@ describe("useCanonicalRoom", () => {
     act(() => handlers?.onRoomSnapshot?.(initial, "http://127.0.0.1:43123"));
     expect(result.current.timelineEvents[0]).toMatchObject({
       name: "Codex",
-      avatar_image_url: undefined,
+      avatar_image_url: `http://127.0.0.1:43123${avatar}`,
     });
     expect(result.current.participants[0].avatar_image_url).toBe(
       "/api/attachments/old-avatar?view=1"
@@ -461,7 +463,7 @@ describe("useCanonicalRoom", () => {
 
     expect(result.current.timelineEvents[0]).toMatchObject({
       name: "Codex",
-      avatar_image_url: undefined,
+      avatar_image_url: `http://127.0.0.1:43123${avatar}`,
       role: "director",
     });
     expect(result.current.participants[0].display_name).toBe("Makima");
@@ -479,7 +481,12 @@ describe("useCanonicalRoom", () => {
       ])
     );
 
-    expect(result.current.timelineEvents[0].avatar_image_url).toBeUndefined();
+    expect(result.current.timelineEvents[0].avatar_image_url).toBe(`http://127.0.0.1:43123${avatar}`);
+    act(() => handlers?.onRoomEvents?.([{
+      ...event(4, "agent_session_state"),
+      agent_session: { ...initial.agent_sessions[0], display_name: "Renamed", avatar_image_url: "" },
+    } as unknown as RoomEvent]));
+    expect(result.current.timelineEvents[0]).toMatchObject({ name: "Renamed", avatar_image_url: undefined });
   });
 
   it("removes a participant from canonical browser state after participant_left", async () => {

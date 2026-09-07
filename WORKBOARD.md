@@ -21,8 +21,9 @@
 - Phase 2 is closed through `5c8d17b`: Daybreak approved every individual commit,
   cumulative phase, final HEAD and complete local contract at C0/H0/M0/L0.
   [Evidence](docs/VERIFICATION.md#phase-2-exact-agent-session-controls-2026-09-07).
-- Active: Phase 3 gives Agent identity editing its own mutation and avatar custody,
-  preserving human profiles and room-owned membership state.
+- Active: Phase 3 local acceptance is complete and awaits whole-phase Daybreak review.
+  Agent identity editing has its own mutation and avatar custody, preserving human
+  profiles and room-owned membership state.
   [Contract and acceptance](docs/specs/agent-profile-slice.md).
   New Pro review and authorized real-provider/packaged proof wait until full closeout.
 - Scope, acceptance, dependency order, and finding placement:

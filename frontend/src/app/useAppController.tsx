@@ -1,3 +1,4 @@
+import { uploadAgentAvatar } from "../api/agentAvatar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
   CSSProperties,
@@ -7,6 +8,7 @@ import {
   type ChannelNotificationSetting,
   type ChannelSettings,
   type RoomMember,
+  type RoomAgentSession,
   type RoomSearchResult,
 } from "../api";
 import { useCanonicalRoom } from "../useCanonicalRoom";
@@ -315,6 +317,16 @@ export function useAppController(deviceToken: string, clientId: string) {
     agentActivityVisibility,
     setAgentActivityVisibility,
   });
+  const saveAgentAvatar = useCallback(async (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => {
+    if (!managerAuthorityCurrent || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
+      throw new Error("현재 방의 에이전트 프로필 업로드 권위를 사용할 수 없습니다.");
+    }
+    const authority = resolveManagerRoomAuthority(activeRoom.id);
+    const avatarUrl = await uploadAgentAvatar(file, authority, session.session_id, signal);
+    signal.throwIfAborted();
+    await sendAgentProfileUpdate(session, { display_name: displayName, avatar_image_url: avatarUrl });
+  }, [managerAuthorityCurrent, activeOperationalMeetingId, roomSocket, resolveManagerRoomAuthority,
+    activeRoom.id, sendAgentProfileUpdate]);
   useDismissMenus(roomMenu, channelMenu, setRoomMenu, setChannelMenu);
   const activeChannelSettings = roomSettings.channelSettingsFor(activeRoom);
   const { roomHttpAuthority, roomMessageSearch } = useAppMessageSearch({
@@ -555,6 +567,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,
+    saveAgentAvatar: managerAuthorityCurrent ? saveAgentAvatar : undefined,
     scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate,
     sendAgentControl, sendParticipantMute, setAdminOpen,
     setAgentCreateOpen, setChannelNotifications, setChannelSearchQuery,

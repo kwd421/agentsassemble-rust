@@ -1,5 +1,6 @@
 use agentsassemble_domain::{
-    AgentSession, agent_avatar_asset_id, agent_avatar_url, is_agent_avatar_asset_id,
+    AGENT_AVATAR_ID_PREFIX, AgentSession, agent_avatar_asset_id, agent_avatar_url,
+    is_agent_avatar_asset_id,
 };
 use chrono::{Duration, Utc};
 use serde::Serialize;
@@ -74,7 +75,7 @@ impl SqliteStore {
             )
             .await?;
         }
-        let id = format!("aa_{}", Uuid::new_v4().simple());
+        let id = format!("{AGENT_AVATAR_ID_PREFIX}{}", Uuid::new_v4().simple());
         sqlx::query("INSERT INTO agent_avatar_assets(asset_id, room_id, session_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)")
             .bind(&id).bind(&manager.room_id).bind(&session.public.session_id).bind(&raster.filename)
             .bind(&raster.content).bind(size).bind(now.to_rfc3339())

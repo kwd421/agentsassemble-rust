@@ -428,6 +428,7 @@ describe("MemberList component wiring", () => {
     const canonicalSession = {
       ...SESSION,
       display_name: "Session Makima",
+      avatar_image_url: "/api/agent-avatars/aa_0123456789abcdef0123456789abcdef",
       provider_kind: "antigravity_live_session",
     };
     render(
@@ -457,10 +458,10 @@ describe("MemberList component wiring", () => {
 
     const canonicalRow = screen.getByText("Session Makima").closest("[role='button']");
     expect(canonicalRow).not.toBeNull();
-    expect(canonicalRow?.querySelector(".dc-member-avatar-image")).toBeNull();
-    expect(
-      canonicalRow?.querySelector(".dc-provider-logo")?.getAttribute("data-provider-brand")
-    ).toBe("antigravity");
+    expect(canonicalRow?.querySelector(".dc-member-avatar-image")?.getAttribute("src")).toBe(
+      "http://127.0.0.1:43123/api/agent-avatars/aa_0123456789abcdef0123456789abcdef"
+    );
+
     expect(
       (screen.getByRole("combobox", {
         name: "Session Makima 역할",

@@ -20,6 +20,7 @@ describe("agentSessionMemberToLiveAgent", () => {
       session_id: "agent-1",
       participant_id: "agent-1",
       display_name: "Session Makima",
+      avatar_image_url: "/api/agent-avatars/aa_0123456789abcdef0123456789abcdef",
       status: "detached",
       runtime_status: "stopped",
       enabled: false,
@@ -31,6 +32,7 @@ describe("agentSessionMemberToLiveAgent", () => {
     expect(agentSessionMemberToLiveAgent(member, session)).toMatchObject({
       agent_id: "agent-1",
       display_name: "Session Makima",
+      avatar_image_url: "/api/agent-avatars/aa_0123456789abcdef0123456789abcdef",
       provider_kind: "codex_live_session",
       connection_kind: "native_cli_bridge",
       session_id: "agent-1",

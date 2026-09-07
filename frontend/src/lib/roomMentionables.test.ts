@@ -17,6 +17,7 @@ describe("roomMentionables", () => {
         agentSessionFixture({
           participant_id: "codex-codex-gpt-5.6-luna",
           display_name: "Luna — 플레이어",
+          avatar_image_url: "/api/agent-avatars/aa_0123456789abcdef0123456789abcdef",
           provider_kind: "codex_live_session",
         }),
       ],
@@ -47,7 +48,7 @@ describe("roomMentionables", () => {
       {
         token: "codex-codex-gpt-5.6-luna",
         label: "Luna — 플레이어",
-        avatarImage: undefined,
+        avatarImage: "http://127.0.0.1:43123/api/agent-avatars/aa_0123456789abcdef0123456789abcdef",
         participantKind: "agent",
         providerKind: "codex_live_session",
         detail: "SeiNel의 에이전트",

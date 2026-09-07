@@ -112,6 +112,7 @@ export function agentSessionMemberToLiveAgent(
   return {
     agent_id: member.participant_id,
     display_name: session.display_name,
+    avatar_image_url: session.avatar_image_url,
     owner_id: member.owner_id,
     owner_participant_id: member.owner_id,
     status,

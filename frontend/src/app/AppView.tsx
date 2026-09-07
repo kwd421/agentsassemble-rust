@@ -55,7 +55,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
     roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables, serverProductSurface,
-    scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate, sendAgentControl,
+    saveAgentAvatar, scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate, sendAgentControl,
     sendParticipantMute, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setLeaveRoomTargetId,
     setMessageSearchScope,
@@ -399,6 +399,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           onAgentControl={sendAgentControl}
           onAgentConfigure={sendAgentConfigure}
           onAgentProfileUpdate={sendAgentProfileUpdate}
+          onAgentAvatarUpdate={saveAgentAvatar}
           agentActivityVisibility={agentActivityVisibility}
           onAgentActivityVisibilityChange={changeAgentActivityVisibility}
         />
@@ -456,6 +457,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               availableProviders={canonicalRoom.availableProviders}
               onAgentConfigure={sendAgentConfigure}
               onAgentProfileUpdate={sendAgentProfileUpdate}
+              onAgentAvatarUpdate={saveAgentAvatar}
               agentActivityVisibility={agentActivityVisibility}
               onAgentActivityVisibilityChange={changeAgentActivityVisibility}
               onParticipantMute={sendParticipantMute}

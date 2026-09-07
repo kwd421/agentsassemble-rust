@@ -75,7 +75,7 @@ export function roomMentionables({
           ? `${displayName} · ${participantId}`
           : participantId,
       avatarImage: session
-        ? undefined
+        ? resolveAttachmentReference(session.avatar_image_url, displayResourceBase)
         : resolveAttachmentReference(member.avatar_image_url, displayResourceBase),
       participantKind,
       providerKind: clean(session?.provider_kind) || undefined,

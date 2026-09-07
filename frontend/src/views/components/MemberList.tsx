@@ -39,6 +39,7 @@ export default function MemberList({
   availableProviders = [],
   onAgentConfigure,
   onAgentProfileUpdate,
+  onAgentAvatarUpdate,
   agentActivityVisibility = {},
   onAgentActivityVisibilityChange,
 }: {
@@ -62,6 +63,7 @@ export default function MemberList({
     action: AgentSessionControlAction
   ) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
+  onAgentAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
   onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
     session: RoomAgentSession,
@@ -245,6 +247,7 @@ export default function MemberList({
           availableProviders={availableProviders}
           onAgentConfigure={onAgentConfigure}
           onAgentProfileUpdate={onAgentProfileUpdate}
+          onAgentAvatarUpdate={onAgentAvatarUpdate}
           activityVisible={
             detailEntry.agentSession
               ? agentActivityVisibility[detailEntry.agentSession.participant_id] === true

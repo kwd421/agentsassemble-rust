@@ -1,3 +1,6 @@
+import { AGENT_AVATAR_REFERENCE_PREFIX } from "../types/generated/AGENT_AVATAR_WIRE";
+import { parseAgentAvatarReference } from "./agentAvatarReference";
+
 type AttachmentReference = {
   value: string;
   disposition: "view" | "download";
@@ -30,7 +33,9 @@ export function resolveAttachmentReference(
   resourceBase: string
 ): string | undefined {
   if (!value) return undefined;
-  const reference = parseAttachmentReference(value);
+  const reference = value.startsWith(AGENT_AVATAR_REFERENCE_PREFIX)
+    ? parseAgentAvatarReference(value)?.url
+    : parseAttachmentReference(value)?.value;
   if (!reference) return undefined;
   let base: URL;
   try {
@@ -46,5 +51,5 @@ export function resolveAttachmentReference(
   ) {
     return undefined;
   }
-  return `${base.origin}${reference.value}`;
+  return `${base.origin}${reference}`;
 }

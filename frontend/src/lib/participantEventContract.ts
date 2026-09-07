@@ -1,3 +1,4 @@
+import { parseAgentAvatarReference } from "./agentAvatarReference";
 import { AGENT_CONTROL_ID_KEYS } from "../types/generated/ROOM_ACTIONS";
 import type { RoomAgentSession, RoomEvent, RoomMember } from "../api";
 import type { AgentSession } from "../types/generated/AgentSession";
@@ -192,6 +193,7 @@ function exactAgentSession(
     !session.room_id ||
     !session.session_id ||
     !session.participant_id ||
+    (session.avatar_image_url !== "" && !parseAgentAvatarReference(session.avatar_image_url)) ||
     !personaSummaryMatches(session.persona_card, session.persona_card_id as string)
   ) {
     throw new Error(invalidMessage);

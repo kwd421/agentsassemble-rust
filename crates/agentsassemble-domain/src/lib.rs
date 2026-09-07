@@ -1,5 +1,8 @@
 mod agent_avatar;
-pub use agent_avatar::{agent_avatar_asset_id, agent_avatar_url, is_agent_avatar_asset_id};
+pub use agent_avatar::{
+    AGENT_AVATAR_HEX_LENGTH, AGENT_AVATAR_ID_PREFIX, AGENT_AVATAR_REFERENCE_PREFIX,
+    agent_avatar_asset_id, agent_avatar_url, is_agent_avatar_asset_id,
+};
 mod agent_session_state;
 mod asset;
 mod canonical_json;

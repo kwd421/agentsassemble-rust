@@ -7016,3 +7016,21 @@ existing control owner and split from pipe I/O to meet the unchanged function li
 Artifact maintenance removed the detected separate desktop target and performed its
 existing explicit shared-target cleanup after all Cargo work stopped; subsequent
 desktop validation rebuilt successfully. No packaged app or real provider was run.
+
+
+The final Phase 3 editor slice connects cropped, abortable Agent upload and explicit
+clear to the canonical profile command through the exact local manager authority.
+Its display projection uses the Session avatar in timeline/history/search, desktop
+and mobile rosters and mentions. Existing canonical-hook coverage now proves nonempty
+avatar preservation against participant identity changes and canonical Session clear.
+The 19 affected projection/upload/editor cases pass, including exact ticket/target,
+foreign metadata rejection, visible failure, clear, and upload cancellation; the
+earlier 68 affected copied-component/socket cases pass. TypeScript, production build,
+original CSS, architecture/source growth, 19 policy/artifact cases, format and diff
+checks pass. No timer, provider execution, new CSS, fallback, or user-data migration
+was introduced. Current local acceptance is complete; whole-phase Daybreak review
+and final authorized packaged/provider proof are separate pending gates.
+The final 33 member/connection/editor cases also pass with a nonempty canonical
+roster avatar. Affected domain/persistence/protocol all-target/all-feature Clippy
+passes after moving asset constant emission into one cohesive exporter function;
+the unchanged function-length gate caught the oversized exporter entrypoint.

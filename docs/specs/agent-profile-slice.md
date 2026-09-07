@@ -1,6 +1,6 @@
 # Agent profile and avatar ownership
 
-Status: Phase 3 implementation in progress after Phase 2 approval at `5c8d17b`.
+Status: Phase 3 local implementation and acceptance complete; whole-phase Daybreak review pending.
 
 ## Retained behavior and boundary
 
@@ -62,8 +62,7 @@ commit in its existing transaction. Clear removes the exact current reference;
 an unrelated pending image remains bounded by its existing expiry. Public reads
 require both current asset custody and the exact Session reference. Foreign human,
 appearance, other-session, malformed or expired references cannot bind. Session
-removal cascades only that session's assets. Upload and HTTP/frontend connections
-remain the next slice; their absence does not advertise an avatar editor.
+removal cascades only that session's assets. Upload and frontend connections use the transport and editor contracts below.
 
 ## Avatar transport
 
@@ -74,5 +73,10 @@ that manager before committing bytes. Wrong target/purpose consumes and rejects
 the ticket. Existing body/PNG bounds and no-store/error response rules apply.
 `GET /api/agent-avatars/{asset_id}` serves only a bound current PNG with the existing
 safe attachment headers. The private control command and bundled-only Tauri command
-have dedicated request/response variants and a registered capability. Browser upload
-controls remain unavailable until the final editor/projection slice is connected.
+have dedicated request/response variants and a registered capability. The confirmed local manager can crop and upload from desktop/mobile Agent details;
+`agent.control` gates the editor. The existing canonical WebSocket command binds the
+returned pending reference, and its ACK reports save success. Name-only saves retain
+the avatar; clear is explicit. Unmount cancels upload, and the existing current-socket
+authority rejects a bind after room change. Session identity projects consistently
+into timeline/history/search, roster, mobile and mention surfaces. Reference constants
+are generated from Rust; human upload references retain their separate parser.
