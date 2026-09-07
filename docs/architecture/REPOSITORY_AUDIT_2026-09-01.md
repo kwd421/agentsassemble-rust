@@ -1355,8 +1355,9 @@ claim was added.
 
 ### C-13 — identical internal wire constants have multiple producers
 
-Disposition: `Provider custody completed at 3779085`; low drift risk; Phase 5
-remains for human identity/admission.
+Disposition: `Completed`; provider custody at `3779085`, human identity/admission
+in Phase 5. Browser format is exported by the existing protocol owner; session
+bearer format by its existing persistence issuer. Boundary parsers remain separate.
 
 Browser-device credential prefix/length repeats in `deviceIdentity.ts:6-9` and
 `human_browser_credential.rs:4-7`; human-session bearer format repeats in

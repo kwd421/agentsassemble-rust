@@ -94,9 +94,10 @@ mod tests {
     use super::{HumanInvitePreflightError, preflight_human_invite};
     use crate::{
         HumanInviteCredentialAuthority, HumanInviteCredentialDraft,
-        human_browser_credential::{BROWSER_CREDENTIAL_PREFIX, fingerprint_browser_credential},
+        human_browser_credential::fingerprint_browser_credential,
         human_session_bearer::fingerprint_presented_bearer,
     };
+    use agentsassemble_protocol::BROWSER_CREDENTIAL_PREFIX;
 
     #[test]
     fn client_credentials_are_canonical_fixed_size_domains() {

@@ -7430,3 +7430,23 @@ serialized command interleaving is covered at its persistence authority.
 Daybreak re-reviewed `c2ab746..53a82f1`, cumulative `b8fd15b..53a82f1`, final HEAD
 and the whole local Phase 4 contract: APPROVE C0/H0/M0/L0. The historical finding
 in `780bfda` is closed by `53a82f1`; no remaining phase finding was reported.
+
+### Phase 5 human credential format ownership (2026-09-08)
+
+C-13 human constants now have one producer per credential: the protocol exports
+browser prefix/byte/body lengths to TypeScript and the browser parser; the existing
+persistence session issuer exports its bearer prefix/byte/total lengths to the
+server parser. Lengths derive from raw size and prefix. Generation, canonical
+base64 decoding, fingerprinting, HMAC, storage and authorization retain their owners.
+No new state, runtime I/O or periodic work was introduced.
+
+Verification: eight browser-storage cases, two raw preflight/credential-domain cases,
+one presented-bearer classification case and the unchanged fixed session-issuer
+vector passed. Affected protocol/persistence/server Clippy, TypeScript/production
+CSS build and unchanged architecture/source/19 policy/artifact/format/diff gates
+passed. This slice changes constants only; phase-end packaged verification remains
+required for Phase 5's new account/friend/admission flows.
+The artifact gate initially reported 19,787,407,360 bytes above its unchanged
+19,327,352,832-byte limit. With no Cargo/Tauri process active, the repository's
+`make artifact-prune` removed 18.2 GiB of regenerable artifacts; artifact-check then
+passed. User source, data and unrelated processes were not cleanup targets.

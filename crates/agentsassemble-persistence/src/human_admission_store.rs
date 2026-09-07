@@ -23,7 +23,10 @@ use crate::{
 };
 
 const SESSION_BEARER_CONTEXT: &[u8] = b"agentsassemble-human-session-bearer-v1\0";
-const SESSION_BEARER_PREFIX: &str = "aas1.";
+pub const HUMAN_SESSION_BEARER_PREFIX: &str = "aas1.";
+pub const HUMAN_SESSION_BEARER_BYTES: usize = 32;
+pub const HUMAN_SESSION_BEARER_CHARS: usize =
+    HUMAN_SESSION_BEARER_PREFIX.len() + (HUMAN_SESSION_BEARER_BYTES * 4).div_ceil(3);
 const SESSION_TTL: Duration = Duration::hours(1);
 const MAX_PUBLIC_SESSIONS: i64 = 448;
 const MAX_PUBLIC_ROOM_SESSIONS: i64 = 112;
@@ -591,9 +594,9 @@ fn derive_session_bearer(key: &[u8; 32], admission_key: &[u8; 32]) -> IssuedBear
         .unwrap_or_else(|_| unreachable!("HMAC accepts a 32-byte key"));
     signer.update(SESSION_BEARER_CONTEXT);
     signer.update(admission_key);
-    let mac: [u8; 32] = signer.finalize().into_bytes().into();
-    let mut bearer = String::with_capacity(48);
-    bearer.push_str(SESSION_BEARER_PREFIX);
+    let mac: [u8; HUMAN_SESSION_BEARER_BYTES] = signer.finalize().into_bytes().into();
+    let mut bearer = String::with_capacity(HUMAN_SESSION_BEARER_CHARS);
+    bearer.push_str(HUMAN_SESSION_BEARER_PREFIX);
     URL_SAFE_NO_PAD.encode_string(mac, &mut bearer);
     let fingerprint = Sha256::digest(bearer.as_bytes()).into();
     IssuedBearer {

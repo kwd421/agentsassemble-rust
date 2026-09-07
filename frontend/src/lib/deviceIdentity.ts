@@ -1,12 +1,10 @@
+import { BROWSER_CREDENTIAL_PREFIX, BROWSER_CREDENTIAL_BYTES, BROWSER_CREDENTIAL_BODY_CHARS } from "../types/generated/BROWSER_CREDENTIAL_WIRE";
 import { decodeCanonicalBase64Url, encodeBase64Url } from "./base64Url";
 
 const BROWSER_CREDENTIAL_STORAGE_KEY = "agentsassemble.browserCredential.v1";
 const CLIENT_ID_STORAGE_KEY = "agentsassemble.clientId.v1";
 const GUEST_PROFILE_STORAGE_KEY = "agentsassemble.guestProfile.v1";
-const BROWSER_CREDENTIAL_PREFIX = "aad1_";
-const BROWSER_CREDENTIAL_BYTES = 32;
-const BROWSER_CREDENTIAL_BODY_CHARS = 43;
-const BROWSER_CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]{43}$/;
+const BROWSER_CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]+$/;
 
 const BROWSER_CREDENTIAL_UNAVAILABLE =
   "이 브라우저에서 안전한 입장 자격 증명을 영구 저장할 수 없습니다.";

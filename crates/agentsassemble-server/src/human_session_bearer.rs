@@ -1,9 +1,9 @@
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use sha2::{Digest, Sha256};
 
-const BEARER_PREFIX: &str = "aas1.";
-const BEARER_BYTES: usize = 32;
-const BEARER_CHARS: usize = 48;
+use agentsassemble_persistence::{
+    HUMAN_SESSION_BEARER_BYTES, HUMAN_SESSION_BEARER_CHARS, HUMAN_SESSION_BEARER_PREFIX,
+};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum PresentedHumanSessionBearer {
@@ -13,7 +13,7 @@ pub(crate) enum PresentedHumanSessionBearer {
 }
 
 pub(crate) fn classify_presented_bearer(value: &str) -> PresentedHumanSessionBearer {
-    if !value.starts_with(BEARER_PREFIX) {
+    if !value.starts_with(HUMAN_SESSION_BEARER_PREFIX) {
         return PresentedHumanSessionBearer::Other;
     }
     fingerprint_presented_bearer(value).map_or(
@@ -23,13 +23,13 @@ pub(crate) fn classify_presented_bearer(value: &str) -> PresentedHumanSessionBea
 }
 
 pub(crate) fn fingerprint_presented_bearer(value: &str) -> Option<[u8; 32]> {
-    if value.len() != BEARER_CHARS {
+    if value.len() != HUMAN_SESSION_BEARER_CHARS {
         return None;
     }
-    let encoded = value.strip_prefix(BEARER_PREFIX)?;
+    let encoded = value.strip_prefix(HUMAN_SESSION_BEARER_PREFIX)?;
     // The strict URL-safe engine rejects padding, other alphabets, and nonzero trailing bits.
     let decoded = URL_SAFE_NO_PAD.decode(encoded).ok()?;
-    if decoded.len() != BEARER_BYTES {
+    if decoded.len() != HUMAN_SESSION_BEARER_BYTES {
         return None;
     }
     Some(fingerprint(value.as_bytes()))
