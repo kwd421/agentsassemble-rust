@@ -7095,3 +7095,11 @@ import is gone; the deferred source remains unmounted.
 All 104 affected frontend cases pass after those fixture corrections. Workspace
 all-target/all-feature Clippy and unchanged architecture/source/format/diff and
 19 policy/artifact tests also pass. Final packaged verification is not claimed.
+
+The moderation prerequisite now preserves committed `kicked`, `exported` and `left`
+membership through runtime detachment. Normal and unconfirmed stop, lifecycle
+reconciliation and provider-turn runtime-gone reconciliation share the domain
+transition. The existing exact-CAS/recovered-stop case now commits a kick before
+recovery and verifies that the recovered stop result leaves that removal intact.
+All 254 persistence cases, affected Clippy and unchanged architecture/source/format/
+diff and 19 policy/artifact checks pass. No query, state field or retry is added.

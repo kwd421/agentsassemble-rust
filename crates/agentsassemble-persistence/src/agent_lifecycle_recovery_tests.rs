@@ -322,6 +322,11 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
         .unwrap_or_else(|error| panic!("load stop candidate: {error}"))
         .pop()
         .unwrap_or_else(|| panic!("prepared stop had no candidate"));
+    sqlx::query("UPDATE participants SET participant_json = json_set(participant_json, '$.status', 'kicked') WHERE room_id = 'general' AND participant_id = ?")
+        .bind(AGENT_ID)
+        .execute(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("commit removal before recovery: {error}"));
     store
         .apply_runtime_reconciliation(&current, &RuntimeReconciliationObservation::Gone)
         .await
@@ -335,6 +340,14 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
     };
     assert_eq!(outcome.result["agent_session"]["runtime_status"], "stopped");
     assert_eq!(stop.runtime_handle_id, "runtime-before-observation");
+    assert_eq!(
+        store
+            .participant("general", AGENT_ID)
+            .await
+            .unwrap_or_else(|error| panic!("read removed participant: {error}"))
+            .status,
+        agentsassemble_domain::ParticipantStatus::Kicked,
+    );
 }
 
 async fn clone_agent(store: &SqliteStore, agent_id: &str) {

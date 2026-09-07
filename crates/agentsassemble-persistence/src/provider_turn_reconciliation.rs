@@ -602,8 +602,7 @@ async fn finalize_runtime_gone_session(
         &session.public.participant_id,
     )
     .await?;
-    participant.status = ParticipantStatus::Detached;
-    participant.updated_at = Utc::now();
+    participant.detach_runtime(Utc::now());
     save_participant(&mut transaction, &participant).await?;
     events.push(session_state_event(&mut transaction, &session).await?);
     let scheduled = if floor_progression == FloorProgression::Assign

@@ -3,8 +3,8 @@ use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
-    AgentTurnPhase, AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, RoomEvent,
-    canonical_payload_hash, redact_persisted_diagnostic_text,
+    AgentTurnPhase, AuthenticatedPrincipal, DurableAgentSession, RoomEvent, canonical_payload_hash,
+    redact_persisted_diagnostic_text,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -210,8 +210,7 @@ impl SqliteStore {
         save_session(&mut transaction, &session).await?;
         let mut participant =
             load_participant(&mut transaction, &principal.room_id, agent_id).await?;
-        participant.status = ParticipantStatus::Detached;
-        participant.updated_at = Utc::now();
+        participant.detach_runtime(Utc::now());
         save_participant(
             &mut transaction,
             &participant.room_id,
@@ -343,8 +342,7 @@ async fn detach_confirmed_session(
     session.public.updated_at = Utc::now();
     save_session(transaction, session).await?;
     let mut participant = load_participant(transaction, &principal.room_id, agent_id).await?;
-    participant.status = ParticipantStatus::Detached;
-    participant.updated_at = Utc::now();
+    participant.detach_runtime(Utc::now());
     save_participant(
         transaction,
         &participant.room_id,

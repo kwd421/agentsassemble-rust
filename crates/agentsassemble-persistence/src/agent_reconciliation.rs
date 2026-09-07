@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
-    AgentTurnPhase, AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, Room,
-    RoomStatus, canonical_payload_hash,
+    AgentTurnPhase, AuthenticatedPrincipal, DurableAgentSession, Room, RoomStatus,
+    canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -756,8 +756,7 @@ pub(crate) async fn detach_participant(
     else {
         return Ok(());
     };
-    participant.status = ParticipantStatus::Detached;
-    participant.updated_at = Utc::now();
+    participant.detach_runtime(Utc::now());
     crate::participant_rows::save_participant_exact(
         transaction,
         room_id,

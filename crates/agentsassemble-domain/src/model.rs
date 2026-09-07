@@ -86,6 +86,19 @@ pub struct Participant {
     pub updated_at: DateTime<Utc>,
 }
 
+impl Participant {
+    /// Runtime cleanup cannot undo a committed membership removal.
+    pub fn detach_runtime(&mut self, now: DateTime<Utc>) {
+        if matches!(
+            self.status,
+            ParticipantStatus::Joined | ParticipantStatus::Detached
+        ) {
+            self.status = ParticipantStatus::Detached;
+            self.updated_at = now;
+        }
+    }
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ClientKind {
