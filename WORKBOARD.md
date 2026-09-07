@@ -18,9 +18,9 @@
 - Phase 1 is closed through `2a49599`: Pro's three supported findings are resolved;
   Daybreak approved all 136 commits, cumulative phase, final HEAD and complete local
   contract. [Disposition and verification](docs/VERIFICATION.md#completed-pro-review-corrections-2026-09-07).
-- Active: Phase 2, exact Agent Session controls. Complete stored-session re-add and
-  provider-owned interrupt advertisement, preserving existing pause/resume/stop and
-  exact native interrupt. [Contract](docs/specs/agent-session-slice.md#phase-2-exact-controls-and-re-add).
+- Active: Phase 2 local implementation and affected verification are complete.
+  Stored-session re-add and provider-owned interrupt advertisement preserve existing
+  pause/resume/stop and exact native interrupt; complete Daybreak review is pending. [Contract](docs/specs/agent-session-slice.md#phase-2-exact-controls-and-re-add).
   Phase 2 starts at `2a49599`; Daybreak review is required after its local acceptance.
   New Pro review and authorized real-provider/packaged proof wait until full closeout.
 - Scope, acceptance, dependency order, and finding placement:

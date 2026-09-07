@@ -6920,3 +6920,16 @@ Clippy, format, architecture/source-growth, 19 policy/artifact tests and diff ch
 pass. Listing-only re-add performs no provider I/O; one transaction owns membership
 and result. Existing lifecycle concurrency, budget and custody owners are reused.
 TCP/WebSocket/restart integration and whole-phase review remain pending.
+
+Whole-phase local acceptance: all 248 persistence tests and six protocol tests
+pass. All 14 Agent Session TCP/WebSocket boundary tests pass, including retained
+busy-turn interruption, pause/resume/stop, exact start and stop replay, in-flight
+shutdown ownership and listing-only re-add through reconnect and server restart.
+The existing staged-launch retry scenarios now run for both resume and re-add;
+current-generation replay reaches the same effect owner, definitive failures retain
+their original error, and prior-generation abandoned starts never relaunch. All
+three affected launch/re-add scenarios pass again after test error propagation was
+simplified. Related frontend coverage totals 95 passing cases. Workspace Clippy
+and prior format/architecture/source-growth/policy checks pass; no gate exceptions,
+new scans, real providers or packaged applications were used. Daybreak's complete
+Phase 2 source review is the remaining phase gate.
