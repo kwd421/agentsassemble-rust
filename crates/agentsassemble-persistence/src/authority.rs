@@ -17,14 +17,8 @@ pub(crate) async fn active_room_for_principal(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
 ) -> Result<Room, PersistenceError> {
-    let room = load_active_room(transaction, &principal.room_id).await?;
-    let participant =
-        load_active_participant(transaction, &principal.room_id, &principal.participant_id).await?;
-    if participant.room_id != principal.room_id
-        || participant.participant_id != principal.participant_id
-    {
-        return Err(session_revoked());
-    }
+    let (room, _) =
+        load_active_membership(transaction, &principal.room_id, &principal.participant_id).await?;
     Ok(room)
 }
 
@@ -33,7 +27,16 @@ pub(crate) async fn load_active_participant(
     room_id: &str,
     participant_id: &str,
 ) -> Result<Participant, PersistenceError> {
-    load_active_room(transaction, room_id).await?;
+    let (_, participant) = load_active_membership(transaction, room_id, participant_id).await?;
+    Ok(participant)
+}
+
+async fn load_active_membership(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<(Room, Participant), PersistenceError> {
+    let room = load_active_room(transaction, room_id).await?;
     let participant_json = sqlx::query_scalar::<_, String>(
         "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
     )
@@ -49,7 +52,7 @@ pub(crate) async fn load_active_participant(
     {
         return Err(session_revoked());
     }
-    Ok(participant)
+    Ok((room, participant))
 }
 
 pub(crate) async fn load_active_room(
