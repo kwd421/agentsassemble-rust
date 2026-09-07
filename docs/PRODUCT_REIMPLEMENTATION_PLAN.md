@@ -15,9 +15,11 @@ Freebuff is excluded; Antigravity moves exclusively to
 Phase 7's externally launched CLI and Room Connector invitation flow. Its removed
 resident-adapter requirement no longer blocks Phase 1, but the external flow remains
 required for final parity. Earlier local verification remains evidence for its scope.
-The user also directs real-provider and packaged end-to-end verification to the final
-post-implementation stage. Intermediate phases retain local tests, mandatory gates,
-and Daybreak phase review; they do not claim new real-client proof.
+Latest frontend verification decision (2026-09-07): verify each phase by directly
+operating the packaged app before Daybreak review. Automated frontend tests and
+production builds support, but do not replace, that proof. Phase 4 also verifies the
+earlier Phase 2 control and Phase 3 profile UI flows. Real-provider execution remains
+at final post-implementation closeout under the authorized provider matrix.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -317,8 +319,8 @@ Current execution checkpoint (2026-09-07, Phase 4 active):
    at C0/H0/M0/L0. Phase 1 is closed; Phase 2 now owns re-add and accurate control
    advertisement while preserving verified pause/resume/stop and exact interrupt.
    [Correction evidence](VERIFICATION.md#completed-pro-review-corrections-2026-09-07)
-   owns the final dispositions. New Pro, real-client and packaged proof remain due
-   at full closeout; each intermediate phase receives Daybreak review.
+   owns the final dispositions. New Pro and real-provider proof remain due at full
+   closeout; each intermediate phase receives packaged app verification and Daybreak review.
 4. Daybreak approved all four Phase 2 commits, cumulative `2a49599..5c8d17b`,
    final HEAD and complete local contract at C0/H0/M0/L0. Phase 2 is closed.
    Phase 3 implements the [Agent profile owner](specs/agent-profile-slice.md),
@@ -581,8 +583,8 @@ Correction substage:
   Invite, Room Connector, and AgentBridge may share visual language, never backend
   credentials, permissions, or lifecycle state.
 - Exit: every visible account/friend/invite control has a complete server-owned flow
-  and local boundary verification, with packaged verification retained for the final
-  stage; no startup request targets an absent route.
+  and local boundary plus direct packaged app verification; no startup request targets
+  an absent route.
 
 ### Phase 6 — custom text channels and side chat
 
@@ -596,8 +598,8 @@ Correction substage:
   backend owner exists. The original rough dialog is not a visual contract: use the
   copied design system and coherent Discord-like UX without changing authority,
   permissions, state transitions, or failure behavior.
-- Exit: each copied entry point has a complete backend owner and local boundary
-  verification; real packaged verification follows at the final stage. Voice remains
+- Exit: each copied entry point has a complete backend owner, local boundary proof
+  and direct packaged app verification before phase review. Voice remains
   deferred and inactive.
 
 ### Phase 7 — external AI admission and bridges
@@ -694,7 +696,8 @@ that meets its declared phase contract is left alone unless concrete evidence re
 it.
 
 Latest user decision (2026-09-07): after each complete phase passes its local
-acceptance criteria and affected mandatory gates, Daybreak Blue at `xhigh` reviews
+acceptance criteria, affected mandatory gates and direct packaged app manipulation,
+Daybreak Blue at `xhigh` reviews
 every individual phase commit, the cumulative phase range, final HEAD, and resulting
 product behavior. Correct supported findings, verify them, and obtain Daybreak
 re-approval before the next phase. Intermediate commits and pushes do not trigger
@@ -705,7 +708,8 @@ product, original-to-Rust coverage, all not-yet-reviewed individual commits, the
 cumulative implementation range, and final HEAD. Reuse prior exact reviewed evidence
 without dropping final integration coverage. Correct source-supported findings,
 run affected verification, and submit corrections together for final re-review.
-Real-provider and packaged-flow runs follow the user-owned final-stage scope above;
+Real-provider runs follow the user-owned final-stage scope above; packaged app flows
+are directly exercised at every phase, with final integration coverage at closeout.
 final completion requires both reviewers' approval and that authorized real-flow
 proof. A local phase exit never claims pending external or real-client proof.
 

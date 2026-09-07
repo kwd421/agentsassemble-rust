@@ -156,6 +156,36 @@ pub(crate) async fn resolve_manager(
     transaction: &mut Transaction<'_, Sqlite>,
     credential: &AuthenticatedPrincipal,
 ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    let principal = resolve_local_owner(transaction, credential).await?;
+    require_manager_membership(transaction, principal).await
+}
+
+pub(crate) async fn require_manager_membership(
+    transaction: &mut Transaction<'_, Sqlite>,
+    mut principal: AuthenticatedPrincipal,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
+    let participant =
+        load_participant_by_key(transaction, &principal.room_id, &principal.participant_id)
+            .await?
+            .ok_or(PersistenceError::ParticipantMissing)?;
+    if participant.room_id != principal.room_id
+        || participant.participant_id != principal.participant_id
+        || participant.participant_type != "human"
+        || participant.status != ParticipantStatus::Joined
+    {
+        return Err(rejected(
+            "session_revoked",
+            "The exact room owner membership is invalid.",
+        ));
+    }
+    principal.display_name = participant.display_name;
+    Ok(principal)
+}
+
+pub(crate) async fn resolve_local_owner(
+    transaction: &mut Transaction<'_, Sqlite>,
+    credential: &AuthenticatedPrincipal,
+) -> Result<AuthenticatedPrincipal, PersistenceError> {
     if !credential.is_operator
         || credential.client_kind != ClientKind::Browser
         || credential.principal_id != LOCAL_OPERATOR_USER_ID
@@ -167,28 +197,14 @@ pub(crate) async fn resolve_manager(
         ));
     }
     require_complete_bootstrap_in_transaction(transaction).await?;
-    let participant =
-        load_participant_by_key(transaction, &credential.room_id, &credential.participant_id)
-            .await?
-            .ok_or(PersistenceError::ParticipantMissing)?;
-    if participant.room_id != credential.room_id
-        || participant.participant_id != credential.participant_id
-        || participant.participant_type != "human"
-        || participant.status != ParticipantStatus::Joined
-    {
-        return Err(rejected(
-            "session_revoked",
-            "The exact room owner membership is invalid.",
-        ));
-    }
-    load_profile_for_identity(
+    let profile = load_profile_for_identity(
         transaction,
         &credential.principal_id,
         &credential.participant_id,
     )
     .await?;
     let mut principal = credential.clone();
-    principal.display_name = participant.display_name;
+    principal.display_name = profile.display_name;
     principal.capabilities =
         CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite);
     Ok(principal)
@@ -284,7 +300,7 @@ pub(crate) async fn revoke_room_access(
         .collect()
 }
 
-async fn lifecycle_event(
+pub(crate) async fn lifecycle_event(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
     room: &Room,

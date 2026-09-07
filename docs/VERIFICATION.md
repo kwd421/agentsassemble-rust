@@ -7201,3 +7201,23 @@ unchanged architecture/source/format/diff plus 19 policy/artifact checks pass. R
 review confirms event-owned effects, immediate duplicate-submission fencing and
 labelled controls without another polling or optimistic room-state owner. Packaged
 interaction proof remains at final closeout; deletion remains Phase 4 work.
+
+The user's later 2026-09-07 clarification requires direct packaged app manipulation
+at every phase. Phase 4 will cover lifecycle/moderation plus the earlier Phase 2
+controls and Phase 3 profile UI before Daybreak review. Prior build/unit results
+remain limited to their recorded scope; real-provider execution remains at closeout.
+
+Room deletion persistence now records an exact local-owner request, closes the room,
+revokes access and requests existing runtime cleanup in one transaction. Its retained
+result remains pending until closure publication and positive cleanup completion.
+Only then does one transaction cascade room-owned data and mark the immutable result
+complete. The result survives room deletion/recreation; current bootstrap/profile
+authority and exact request/hash bind replay without requiring deleted membership.
+Schema 61 is a clean boundary, with no migration or deletion of user data.
+
+All 263 persistence cases pass. New isolated proof covers current-name/owner/UID
+rejection, retained room data before cleanup and publication, restart recovery,
+command-ID conflict, deleted-room retry and unchanged replacement incarnation.
+Affected all-target/all-feature Clippy and unchanged architecture/source/format/diff
+plus 19 policy/artifact checks pass. HTTP/recovery wiring and deletion UI remain
+to be connected before this action is advertised.

@@ -18,6 +18,13 @@ pub(crate) async fn existing_command(
     action: &str,
     payload_hash: &str,
 ) -> Result<Option<CommandOutcome>, PersistenceError> {
+    crate::room_deletion::reject_deleted_request_reuse(
+        transaction,
+        room_id,
+        principal_id,
+        request_id,
+    )
+    .await?;
     let row = sqlx::query(
         "SELECT action, payload_hash, result_json FROM command_results WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )
@@ -140,7 +147,19 @@ impl SqliteStore {
     ) -> Result<bool, PersistenceError> {
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
-        if crate::room_lifecycle::is_room_lifecycle_action(action) {
+        if action == "room.delete" {
+            let (_, replay) = crate::room_deletion::resolve_delete_request(
+                &mut transaction,
+                principal,
+                request_id,
+                &payload_hash,
+            )
+            .await?;
+            if replay.is_some() {
+                transaction.commit().await?;
+                return Ok(false);
+            }
+        } else if crate::room_lifecycle::is_room_lifecycle_action(action) {
             crate::room_lifecycle::resolve_manager(&mut transaction, principal).await?;
         } else {
             active_room_for_principal(&mut transaction, principal).await?;
@@ -189,6 +208,13 @@ pub(crate) async fn existing_request_identity(
     action: &str,
     payload_hash: &str,
 ) -> Result<Option<ExistingRequestIdentity>, PersistenceError> {
+    crate::room_deletion::reject_deleted_request_reuse(
+        transaction,
+        room_id,
+        principal_id,
+        request_id,
+    )
+    .await?;
     let command = sqlx::query(
         "SELECT action, payload_hash FROM command_results WHERE room_id = ? AND principal_id = ? AND request_id = ?",
     )

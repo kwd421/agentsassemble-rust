@@ -44,6 +44,16 @@ introduced. Removed membership survives normal stop and recovery. Room rows and
 owned assets remain present while cleanup is unresolved; physical deletion follows
 confirmed cleanup and retains an exact command tombstone outside the room cascade.
 
+Deletion records one exact request and the terminal closed event before cleanup.
+Until completion its HTTP resolution is unresolved, retaining the same retry intent.
+The existing recovery watcher finalizes bounded pending deletions after the close
+event has entered canonical publication and all runtime cleanup rows are gone.
+Only that transaction deletes room-owned rows/assets and commits the immutable
+success result outside the room cascade. Replay authenticates the current local
+bootstrap/profile owner and the stored request/hash/UID, without requiring deleted
+membership or touching a new incarnation. No request can revise pending deletion;
+the closed room cannot be restored. No new timer or filesystem asset owner is needed.
+
 Lifecycle management uses the authenticated HTTP directory boundary because archive
 and close invalidate ordinary room admission, and restoration must work without a
 room socket. Both transports delegate to the same bounded room command owner; the
@@ -75,4 +85,6 @@ plugin framework, scheduler, or periodic cleanup is implied by this phase.
   and deletion replay without weakening active-room admission for ordinary clients.
 - Run affected local TCP/WebSocket, persistence and frontend proof plus unchanged
   architecture, source, format, Clippy and CSS gates. Obtain whole-phase Daybreak
-  approval before Phase 5. Packaged/provider proof remains at final closeout.
+  approval before Phase 5. Direct packaged app manipulation is required before the
+  phase review, including earlier Phase 2 controls and Phase 3 profile UI. Real-provider
+  execution remains at final closeout.

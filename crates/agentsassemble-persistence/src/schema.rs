@@ -38,6 +38,11 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "room_delete_results",
+        ddl: "CREATE TABLE IF NOT EXISTS room_delete_results (room_id TEXT NOT NULL, room_uid TEXT NOT NULL UNIQUE, principal_id TEXT NOT NULL, request_id TEXT NOT NULL, payload_hash TEXT NOT NULL, result_json TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'complete')), PRIMARY KEY(room_id, principal_id, request_id))",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "participants",
         ddl: "CREATE TABLE IF NOT EXISTS participants (room_id TEXT NOT NULL, participant_id TEXT NOT NULL, participant_json TEXT NOT NULL, PRIMARY KEY(room_id, participant_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
         infrastructure: false,
@@ -320,6 +325,7 @@ const TABLES: &[TableDefinition] = &[
 ];
 
 const INDEXES: &[&str] = &[
+    "CREATE UNIQUE INDEX IF NOT EXISTS room_delete_pending_idx ON room_delete_results(room_id) WHERE state = 'pending'",
     "CREATE INDEX IF NOT EXISTS agent_avatar_assets_expiry_idx ON agent_avatar_assets(expires_at) WHERE state = 'pending'",
     "CREATE UNIQUE INDEX IF NOT EXISTS profile_avatar_assets_owner_state_idx ON profile_avatar_assets(owner_user_id, state)",
     "CREATE INDEX IF NOT EXISTS profile_avatar_assets_state_expiry_idx ON profile_avatar_assets(state, expires_at)",

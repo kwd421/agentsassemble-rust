@@ -27,7 +27,9 @@
 - Active: Phase 4 starts with participant persistence consolidation, then room
   settings, moderation and lifecycle under the canonical command owner.
   [Contract and acceptance](docs/specs/room-lifecycle-slice.md).
-  New Pro review and authorized real-provider/packaged proof wait until full closeout.
+  Direct packaged app manipulation is required before every phase review; Phase 4
+  also covers the earlier Phase 2 controls and Phase 3 profile UI. New Pro review
+  and authorized real-provider proof wait until full closeout.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:
@@ -37,8 +39,9 @@
 - Final real verification, after reimplementation: configured DeepSeek, Codex,
   OpenCode, external Antigravity, Grok, and Cursor `auto` only. Other providers use
   original-contract implementation and local verification, without real execution.
-  Packaged frontend and real-provider flows are verified together at the final stage;
-  local tests, mandatory gates, and phase code reviews continue during implementation.
+  Packaged frontend flows are verified by direct app manipulation in every phase;
+  final real-provider flows add integrated coverage. Local tests, mandatory gates,
+  and phase code reviews continue during implementation.
 
 ## Read routes
 
