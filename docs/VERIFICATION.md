@@ -7830,3 +7830,18 @@ architecture/source growth, 19 policies, formatting, diff and artifact checks pa
 The added origin provenance is bounded per request; no task, timer, storage row or
 polling loop is added. Frontend device propagation for these resources and packaged
 pairing management remain pending.
+
+## Phase 5 browser room HTTP device binding (2026-09-08)
+
+The existing browser device identity now reaches room preference, search/context,
+pin, message attachment and bound appearance HTTP calls. Search/pin state, appearance
+resource ownership and composer upload cancellation include device changes. Existing
+transport tests now exercise both human and paired credentials; composer upload
+proves the device reaches its API and a device change aborts delayed work. The causal
+search test rejects a late response after a same-session device change.
+
+Nine affected frontend suites pass 107 tests; the added search device case and its
+seven existing cases pass. TypeScript/Vite/CSS build and architecture/source-growth,
+19 policy checks, Rust formatting, diff and artifact gates pass. No additional task,
+timer, storage or parallel request mechanism was introduced. Packaged operator
+pairing management remains pending.

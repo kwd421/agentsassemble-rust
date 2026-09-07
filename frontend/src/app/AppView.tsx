@@ -324,6 +324,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               messageAttachmentReadOwner={messageAttachmentReadOwner}
               mentionables={scopedMentionables}
               roomSessionToken={lobbyPostingState.sessionToken}
+              roomDeviceToken={deviceToken}
               messagePinsAuthority={roomHttpAuthority}
               viewerParticipantId={guestSession?.agentId || "operator-local"}
               canManageRoom={!guestLocked && !activeRoomDisconnected}

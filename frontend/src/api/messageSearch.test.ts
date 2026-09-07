@@ -192,7 +192,10 @@ describe("lobby message-search HTTP authority", () => {
     });
   });
 
-  it("sends the reusable remote session directly to each search read", async () => {
+  it.each([
+    { sessionToken: "aas1.session", deviceToken: undefined },
+    { sessionToken: "aops1.paired", deviceToken: "paired-device" },
+  ])("sends the reusable remote session directly to each search read ($sessionToken)", async ({ sessionToken, deviceToken }) => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ results: [], next_cursor: "" }))
@@ -202,7 +205,7 @@ describe("lobby message-search HTTP authority", () => {
         events: [contextEvent()],
       }));
     vi.stubGlobal("fetch", fetchMock);
-    const authority = { kind: "remote", sessionToken: "aas1.session" } as const;
+    const authority = { kind: "remote", sessionToken, deviceToken } as const;
 
     await searchRoomMessages({
       roomId: "general",
@@ -224,7 +227,9 @@ describe("lobby message-search HTTP authority", () => {
     for (const [, init] of fetchMock.mock.calls) {
       expect(init).toEqual({
         cache: "no-store",
-        headers: { Authorization: "Bearer aas1.session" },
+        headers: { Authorization: `Bearer ${sessionToken}`,
+          ...(deviceToken ? { "X-Device-Token": deviceToken } : {}),
+        },
       });
     }
   });

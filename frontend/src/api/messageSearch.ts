@@ -55,7 +55,7 @@ export type RoomMessageContext = Readonly<{
   events: RoomEvent[];
 }>;
 
-type SearchAuthority = Readonly<{ baseUrl: string; credential: string }>;
+type SearchAuthority = Readonly<{ baseUrl: string; credential: string; deviceToken?: string }>;
 
 const SEARCH_RESULT_KEYS = [
   "event_id",
@@ -453,7 +453,7 @@ async function searchAuthority(
     return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
   if (!authority.sessionToken) throw new Error("방 세션 권위를 사용할 수 없습니다.");
-  return { baseUrl: "", credential: authority.sessionToken };
+  return { baseUrl: "", credential: authority.sessionToken, deviceToken: authority.deviceToken };
 }
 
 async function fetchSearchJson(
@@ -464,7 +464,9 @@ async function fetchSearchJson(
   beforeDispatch?.();
   const response = await fetch(`${authority.baseUrl}${path}`, {
     cache: "no-store",
-    headers: { Authorization: `Bearer ${authority.credential}` },
+    headers: { Authorization: `Bearer ${authority.credential}`,
+      ...(authority.deviceToken ? { "X-Device-Token": authority.deviceToken } : {}),
+    },
   });
   if (!response.ok) throw await responseError(response);
   if (!isPrivateNoStoreResponse(response, "application/json")) invalidResponse();

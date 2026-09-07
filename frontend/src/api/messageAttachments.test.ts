@@ -99,20 +99,24 @@ describe("lobby message-attachment HTTP authority", () => {
     });
   });
 
-  it("sends the reusable remote session directly to the message target", async () => {
+  it.each([
+    { sessionToken: "aas1.session", deviceToken: undefined },
+    { sessionToken: "aops1.paired", deviceToken: "paired-device" },
+  ])("sends the reusable remote session directly to the message target ($sessionToken)", async ({ sessionToken, deviceToken }) => {
     const fetchMock = vi.fn().mockResolvedValueOnce(jsonResponse({ attachment }));
     vi.stubGlobal("fetch", fetchMock);
 
     await uploadMessageAttachment(
       new File(["notes"], "notes.txt", { type: "text/plain" }),
       "general",
-      { kind: "remote", sessionToken: "aas1.session" }
+      { kind: "remote", sessionToken, deviceToken }
     );
 
     expect(fetchMock).toHaveBeenCalledOnce();
     expect(fetchMock.mock.calls[0]?.[0]).toBe("/api/message-attachments");
     const targetHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    expect(targetHeaders.get("Authorization")).toBe("Bearer aas1.session");
+    expect(targetHeaders.get("Authorization")).toBe(`Bearer ${sessionToken}`);
+    expect(targetHeaders.get("X-Device-Token")).toBe(deviceToken ?? null);
   });
 
   it("surfaces a remote target denial without fallback", async () => {

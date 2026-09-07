@@ -85,7 +85,7 @@ export function uploadLobbyAttachment(
       file,
       resolved.roomId || "",
       resolved.sessionToken
-        ? { kind: "remote", sessionToken: resolved.sessionToken }
+        ? { kind: "remote", sessionToken: resolved.sessionToken, deviceToken: resolved.deviceToken }
         : { kind: "local" },
       resolved.beforeDispatch,
       resolved.signal
@@ -116,7 +116,7 @@ export function uploadLobbyAttachment(
       return postJsonWithIdentity<{ attachment: LobbyAttachmentRef }>(
         "/api/attachments",
         body,
-        { roomId: resolved.roomId, sessionToken: resolved.sessionToken }
+        { roomId: resolved.roomId, sessionToken: resolved.sessionToken, deviceToken: resolved.deviceToken }
       );
     }
     return postJsonModerator<{ attachment: LobbyAttachmentRef }>(

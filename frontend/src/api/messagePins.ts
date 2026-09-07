@@ -146,7 +146,7 @@ async function operationAuthority(
   roomId: string,
   authority: MessagePinsAuthority,
   operation: PinOperation
-): Promise<{ baseUrl: string; credential: string }> {
+): Promise<{ baseUrl: string; credential: string; deviceToken?: string }> {
   if (authority.kind === "local") {
     const grant =
       operation === "read"
@@ -159,12 +159,13 @@ async function operationAuthority(
   }
   return {
     baseUrl: "",
-    credential: authority.sessionToken,
+    credential: authority.sessionToken, deviceToken: authority.deviceToken,
   };
 }
 
-function bearer(credential: string, json = false): Headers {
+function bearer(credential: string, json = false, deviceToken?: string): Headers {
   const headers = new Headers({ Authorization: `Bearer ${credential}` });
+  if (deviceToken) headers.set("X-Device-Token", deviceToken);
   if (json) headers.set("Content-Type", "application/json");
   return headers;
 }
@@ -187,7 +188,7 @@ export async function fetchLobbyMessagePins({
   beforeDispatch?.();
   const response = await fetch(`${resolved.baseUrl}${path}`, {
     cache: "no-store",
-    headers: bearer(resolved.credential),
+    headers: bearer(resolved.credential, false, resolved.deviceToken),
   });
   if (!response.ok) throw await responseError(response);
   return parseListResponse(await response.json());
@@ -213,7 +214,7 @@ export async function setLobbyMessagePinned({
   const response = await fetch(`${resolved.baseUrl}/api/room-pins`, {
     cache: "no-store",
     method: "POST",
-    headers: bearer(resolved.credential, true),
+    headers: bearer(resolved.credential, true, resolved.deviceToken),
     body: JSON.stringify({
       room_id: canonicalRoom,
       channel_id: "lobby",

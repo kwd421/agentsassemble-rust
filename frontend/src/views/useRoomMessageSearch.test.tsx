@@ -69,7 +69,10 @@ describe("useRoomMessageSearch authority lifecycle", () => {
     expect(hook.result.current.hasMore).toBe(false);
   });
 
-  it("ignores a response completed after the authority changes", async () => {
+  it.each([
+    { kind: "remote", sessionToken: "session-b" },
+    { kind: "remote", sessionToken: "session-a", deviceToken: "next-device" },
+  ] as const)("ignores a response completed after session/device authority changes", async (nextAuthority) => {
     vi.useFakeTimers();
     let resolveSearch: (value: RoomSearchPage) => void = () => undefined;
     api.search.mockReturnValueOnce(new Promise<RoomSearchPage>((resolve) => {
@@ -80,7 +83,7 @@ describe("useRoomMessageSearch authority lifecycle", () => {
     act(() => hook.result.current.updateQuery("history"));
     await act(() => vi.advanceTimersByTimeAsync(250));
     hook.rerender({
-      currentAuthority: { kind: "remote", sessionToken: "session-b" },
+      currentAuthority: nextAuthority,
     });
     await act(async () => resolveSearch(page));
 

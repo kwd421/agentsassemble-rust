@@ -69,6 +69,7 @@ export default function LobbyView({
   appearance,
   onGuestSessionExpired,
   roomSessionToken = "",
+  roomDeviceToken = "",
   messagePinsAuthority,
   viewerParticipantId = "",
   typingIndicators = [],
@@ -107,6 +108,7 @@ export default function LobbyView({
   appearance?: RoomAppearance;
   onGuestSessionExpired?: () => void;
   roomSessionToken?: string;
+  roomDeviceToken?: string;
   messagePinsAuthority?: MessagePinsAuthority;
   viewerParticipantId?: string;
   submitMessage?: (message: string) => Promise<LobbyEvent[]>;
@@ -174,9 +176,9 @@ export default function LobbyView({
   const messageAttachmentAuthority = useMemo<MessageAttachmentAuthority>(
     () =>
       postingMode === "guest"
-        ? { kind: "remote", sessionToken: roomSessionToken }
+        ? { kind: "remote", sessionToken: roomSessionToken, deviceToken: roomDeviceToken }
         : { kind: "local" },
-    [postingMode, roomSessionToken]
+    [postingMode, roomSessionToken, roomDeviceToken]
   );
   const messageAttachmentReadScheduler = useMemo(
     () => messageAttachmentReadOwner.forAuthority(
@@ -227,7 +229,7 @@ export default function LobbyView({
     activeRoom.meetingId,
     messagePinsAuthority?.kind,
     messagePinsAuthority?.kind === "remote"
-      ? messagePinsAuthority.sessionToken
+      ? JSON.stringify([messagePinsAuthority.sessionToken, messagePinsAuthority.deviceToken ?? ""])
       : "",
   ]);
 
@@ -726,6 +728,7 @@ export default function LobbyView({
           submitMessage={submitMessage}
           mentionables={mentionables}
           roomSessionToken={roomSessionToken}
+          roomDeviceToken={roomDeviceToken}
           postingMode={postingMode}
           disabledReason={!canPostMessages ? composerDisabledReason : undefined}
           onGuestSessionExpired={onGuestSessionExpired}

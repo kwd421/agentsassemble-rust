@@ -6,15 +6,17 @@ export function useAppMessageSearch({
   roomId,
   scope,
   sessionToken,
+  deviceToken,
   localAvailable,
 }: {
   roomId: string;
   scope: ChannelSearchScope;
   sessionToken: string;
+  deviceToken?: string;
   localAvailable: boolean;
 }) {
   const channelId = scope === "all" ? "all" : "lobby";
-  const roomHttpAuthority = resolveRoomHttpAuthority(sessionToken, localAvailable);
+  const roomHttpAuthority = resolveRoomHttpAuthority(sessionToken, localAvailable, deviceToken);
   const roomMessageSearch = useRoomMessageSearch({
     roomId,
     channelId,

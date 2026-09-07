@@ -19,6 +19,7 @@ type UseRoomAppearanceAssetsOptions = {
   activeRoomId: string;
   activeRemoteRoomId: string;
   remoteSessionToken: string;
+  remoteDeviceToken?: string;
   canonicalAppearanceFor: (room: RoomDockItem) => RoomAppearance;
   settingsStateFor: (room: RoomDockItem) => { status: SettingsStatus };
   localAuthorityCurrent: boolean;
@@ -85,6 +86,7 @@ export function useRoomAppearanceAssets({
   activeRoomId,
   activeRemoteRoomId,
   remoteSessionToken,
+  remoteDeviceToken = "",
   canonicalAppearanceFor,
   settingsStateFor,
   localAuthorityCurrent,
@@ -101,14 +103,15 @@ export function useRoomAppearanceAssets({
   const uploadOwnerActiveRef = useRef(true);
   const liveObjectUrlsRef = useRef(new Set<string>());
   const renderedObjectUrlsRef = useRef(new Set<string>());
-  const remoteCredentialRef = useRef({ value: remoteSessionToken, revision: 0 });
+  const remoteCredentialKey = JSON.stringify([remoteSessionToken, remoteDeviceToken]);
+  const remoteCredentialRef = useRef({ value: remoteCredentialKey, revision: 0 });
   const localAuthorityCurrentRef = useRef(localAuthorityCurrent);
   useLayoutEffect(() => {
     localAuthorityCurrentRef.current = localAuthorityCurrent;
   }, [localAuthorityCurrent]);
-  if (remoteCredentialRef.current.value !== remoteSessionToken) {
+  if (remoteCredentialRef.current.value !== remoteCredentialKey) {
     remoteCredentialRef.current = {
-      value: remoteSessionToken,
+      value: remoteCredentialKey,
       revision: remoteCredentialRef.current.revision + 1,
     };
   }
@@ -135,7 +138,7 @@ export function useRoomAppearanceAssets({
           room.id === activeRemoteRoomId &&
           remoteSessionToken
         ) {
-          authority = { kind: "remote", sessionToken: remoteSessionToken };
+          authority = { kind: "remote", sessionToken: remoteSessionToken, deviceToken: remoteDeviceToken };
           authorityKey = `remote:${roomKey}:${remoteCredentialRevision}`;
         } else if (room.roomOrigin !== "remote_server") {
           if (!localAuthorityCurrent) {
@@ -253,6 +256,7 @@ export function useRoomAppearanceAssets({
     localAuthorityCurrent,
     remoteCredentialRevision,
     remoteSessionToken,
+    remoteDeviceToken,
     resolveLocalManager,
     retryRevision,
     rooms,

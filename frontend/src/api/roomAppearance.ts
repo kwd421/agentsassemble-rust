@@ -18,7 +18,7 @@ import { strictPrivatePngBlob } from "./safeRaster";
 
 export type RoomAppearanceReadAuthority =
   | { kind: "local"; manager: DesktopManagerRoomAuthority }
-  | { kind: "remote"; sessionToken: string };
+  | { kind: "remote"; sessionToken: string; deviceToken?: string };
 
 export type UploadedRoomAppearance = Readonly<{
   reference: RoomAppearanceAssetReference;
@@ -92,9 +92,10 @@ function parseUploadResponse(value: unknown): UploadedRoomAppearance {
   });
 }
 
-function bearer(ticket: string): Headers {
+function bearer(ticket: string, deviceToken?: string): Headers {
   const headers = new Headers();
   headers.set("Authorization", `Bearer ${ticket}`);
+  if (deviceToken) headers.set("X-Device-Token", deviceToken);
   return headers;
 }
 
@@ -131,7 +132,7 @@ async function fetchRemoteAppearance(
   }
   return fetch(reference.url, {
     cache: "no-store",
-    headers: bearer(authority.sessionToken),
+    headers: bearer(authority.sessionToken, authority.deviceToken),
     signal,
   });
 }

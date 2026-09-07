@@ -263,7 +263,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   });
   const roomPreferenceAuthority: RoomPreferenceAuthority = guestLocked
     ? admittedSessionToken
-      ? { kind: "remote", sessionToken: admittedSessionToken }
+      ? { kind: "remote", sessionToken: admittedSessionToken, deviceToken }
       : { kind: "remote-unavailable" }
     : { kind: "local", deviceToken };
   const activeRoomMembers = roomMembers.activeMembers;
@@ -277,7 +277,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   });
   const roomAppearanceAssets = useRoomAppearanceAssets({
     rooms, activeRoomId: activeRoom.id,
-    activeRemoteRoomId: guestLocked ? activeRoom.id : "", remoteSessionToken: admittedSessionToken,
+    activeRemoteRoomId: guestLocked ? activeRoom.id : "", remoteSessionToken: admittedSessionToken, remoteDeviceToken: deviceToken,
     canonicalAppearanceFor: roomSettings.appearanceFor,
     settingsStateFor: roomSettings.settingsStateFor,
     localAuthorityCurrent: managerAuthorityCurrent,
@@ -340,6 +340,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   const { roomHttpAuthority, roomMessageSearch } = useAppMessageSearch({
     roomId: activeOperationalMeetingId,
     scope: messageSearchScope,
+    deviceToken,
     sessionToken: admittedSessionToken,
     localAvailable: !guestLocked && isDesktopWebview(),
   });

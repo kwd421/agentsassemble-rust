@@ -178,13 +178,16 @@ describe("room appearance HTTP contract", () => {
     expect(secondHeaders.get("Authorization")).toBe(`Bearer ${"d".repeat(64)}`);
   });
 
-  it("sends the reusable remote session directly to the bound canonical asset", async () => {
+  it.each([
+    { sessionToken: "aas1.session", deviceToken: undefined },
+    { sessionToken: "aops1.paired", deviceToken: "paired-device" },
+  ])("sends the reusable remote session directly to the bound canonical asset ($sessionToken)", async ({ sessionToken, deviceToken }) => {
     const fetchMock = vi.fn().mockResolvedValue(pngResponse());
     vi.stubGlobal("fetch", fetchMock);
 
     await fetchRoomAppearanceBlob(
       reference,
-      { kind: "remote", sessionToken: "aas1.session" },
+      { kind: "remote", sessionToken, deviceToken },
       "bound"
     );
 
@@ -194,11 +197,12 @@ describe("room appearance HTTP contract", () => {
       expect.objectContaining({ headers: expect.any(Headers) })
     );
     const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
-    expect(readHeaders.get("Authorization")).toBe("Bearer aas1.session");
+    expect(readHeaders.get("Authorization")).toBe(`Bearer ${sessionToken}`);
+    expect(readHeaders.get("X-Device-Token")).toBe(deviceToken ?? null);
     await expect(
       fetchRoomAppearanceBlob(
         reference,
-        { kind: "remote", sessionToken: "aas1.session" },
+        { kind: "remote", sessionToken, deviceToken },
         "pending"
       )
     ).rejects.toThrow("pending");

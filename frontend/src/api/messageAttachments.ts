@@ -37,7 +37,7 @@ export type LobbyAttachmentRef = Readonly<{
 
 export type MessageAttachmentAuthority = RoomHttpAuthority;
 
-type TransferAuthority = Readonly<{ baseUrl: string; credential: string }>;
+type TransferAuthority = Readonly<{ baseUrl: string; credential: string; deviceToken?: string }>;
 
 const ATTACHMENT_KEYS = [
   "id",
@@ -123,8 +123,9 @@ function parseUploadResponse(value: unknown): LobbyAttachmentRef {
   return parseMessageAttachment(envelope.attachment);
 }
 
-function bearer(ticket: string, json = false): Headers {
+function bearer(ticket: string, json = false, deviceToken?: string): Headers {
   const headers = new Headers({ Authorization: `Bearer ${ticket}` });
+  if (deviceToken) headers.set("X-Device-Token", deviceToken);
   if (json) headers.set("Content-Type", "application/json");
   return headers;
 }
@@ -141,7 +142,7 @@ async function uploadAuthority(
     return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
   if (!authority.sessionToken) throw new Error("방 세션 권위를 사용할 수 없습니다.");
-  return { baseUrl: "", credential: authority.sessionToken };
+  return { baseUrl: "", credential: authority.sessionToken, deviceToken: authority.deviceToken };
 }
 
 async function readAuthority(
@@ -160,7 +161,7 @@ async function readAuthority(
     return { baseUrl: grant.http_base_url, credential: grant.ticket };
   }
   if (!authority.sessionToken) throw new Error("방 세션 권위를 사용할 수 없습니다.");
-  return { baseUrl: "", credential: authority.sessionToken };
+  return { baseUrl: "", credential: authority.sessionToken, deviceToken: authority.deviceToken };
 }
 
 export async function uploadMessageAttachment(
@@ -181,7 +182,7 @@ export async function uploadMessageAttachment(
   const response = await fetch(`${resolvedAuthority.baseUrl}/api/message-attachments`, {
     cache: "no-store",
     method: "POST",
-    headers: bearer(resolvedAuthority.credential, true),
+    headers: bearer(resolvedAuthority.credential, true, resolvedAuthority.deviceToken),
     body: JSON.stringify({
       filename: file.name || "attachment.bin",
       content_type: file.type || "application/octet-stream",
@@ -215,7 +216,7 @@ export async function fetchMessageAttachmentBlob(
   beforeDispatch?.();
   const response = await fetch(`${resolvedAuthority.baseUrl}${reference}`, {
     cache: "no-store",
-    headers: bearer(resolvedAuthority.credential),
+    headers: bearer(resolvedAuthority.credential, false, resolvedAuthority.deviceToken),
     signal,
   });
   if (!response.ok) throw await responseError(response);

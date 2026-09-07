@@ -25,7 +25,8 @@ export function useRoomMessageSearch({
   const requestVersionRef = useRef(0);
   const contextVersionRef = useRef(0);
   const authorityKind = authority?.kind || "unavailable";
-  const authorityToken = authority?.kind === "remote" ? authority.sessionToken : "";
+  const authorityToken = authority?.kind === "remote"
+    ? JSON.stringify([authority.sessionToken, authority.deviceToken ?? ""]) : "";
 
   const updateQuery = useCallback((value: string) => {
     requestVersionRef.current += 1;

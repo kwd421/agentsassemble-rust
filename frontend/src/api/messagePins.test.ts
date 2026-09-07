@@ -95,13 +95,16 @@ describe("lobby message-pin HTTP authority", () => {
     });
   });
 
-  it("presents a remote session directly to each pin operation", async () => {
+  it.each([
+    { sessionToken: "aas1.session", deviceToken: undefined },
+    { sessionToken: "aops1.paired", deviceToken: "paired-device" },
+  ])("presents a remote session directly to each pin operation ($sessionToken)", async ({ sessionToken, deviceToken }) => {
     const fetchMock = vi
       .fn()
       .mockResolvedValueOnce(jsonResponse({ pins: [] }))
       .mockResolvedValueOnce(jsonResponse({ pinned: true, pins: [pin()] }));
     vi.stubGlobal("fetch", fetchMock);
-    const authority = { kind: "remote", sessionToken: "aas1.session" } as const;
+    const authority = { kind: "remote", sessionToken, deviceToken } as const;
 
     await fetchLobbyMessagePins({ roomId: "general", authority });
     await setLobbyMessagePinned({
@@ -123,8 +126,10 @@ describe("lobby message-pin HTTP authority", () => {
     );
     const readHeaders = fetchMock.mock.calls[0]?.[1]?.headers as Headers;
     const writeHeaders = fetchMock.mock.calls[1]?.[1]?.headers as Headers;
-    expect(readHeaders.get("Authorization")).toBe("Bearer aas1.session");
-    expect(writeHeaders.get("Authorization")).toBe("Bearer aas1.session");
+    expect(readHeaders.get("Authorization")).toBe(`Bearer ${sessionToken}`);
+    expect(readHeaders.get("X-Device-Token")).toBe(deviceToken ?? null);
+    expect(writeHeaders.get("Authorization")).toBe(`Bearer ${sessionToken}`);
+    expect(writeHeaders.get("X-Device-Token")).toBe(deviceToken ?? null);
   });
 
   it("surfaces a read-only denial from the pin target", async () => {

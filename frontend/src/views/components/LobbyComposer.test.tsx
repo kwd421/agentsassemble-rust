@@ -106,6 +106,7 @@ describe("LobbyComposer", () => {
         onPosted={vi.fn()}
         postingMode="guest"
         roomSessionToken="aas1.public-session"
+        roomDeviceToken="browser-device"
       />
     );
 
@@ -123,6 +124,7 @@ describe("LobbyComposer", () => {
         expect.objectContaining({
           roomId: "room-a",
           sessionToken: "aas1.public-session",
+          deviceToken: "browser-device",
           signal: expect.any(AbortSignal),
           beforeDispatch: expect.any(Function),
         })
@@ -136,6 +138,7 @@ describe("LobbyComposer", () => {
     ["session", { meetingId: "room-a", postingMode: "guest" as const, roomSessionToken: "aas1.session-b" }],
     ["authority", { meetingId: "room-a", postingMode: "host" as const, roomSessionToken: "aas1.session-a" }],
     ["role", { meetingId: "room-a", postingMode: "guest" as const, roomSessionToken: "aas1.session-a", disabledReason: "읽기 전용" }],
+    ["device", { meetingId: "room-a", postingMode: "guest" as const, roomSessionToken: "aas1.session-a", roomDeviceToken: "new-device" }],
     ["unmount", null],
   ])("retires a delayed attachment upload on %s change", async (_label, nextProps) => {
     apiMocks.uploadLobbyAttachment.mockImplementation(

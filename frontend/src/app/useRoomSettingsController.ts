@@ -30,7 +30,7 @@ type UseRoomSettingsControllerOptions = {
 
 export type RoomPreferenceAuthority =
   | { kind: "local"; deviceToken: string }
-  | { kind: "remote"; sessionToken: string }
+  | { kind: "remote"; sessionToken: string; deviceToken?: string }
   | { kind: "remote-unavailable" };
 
 type PersistedRoomSettingsOverrides = RoomGlobalSettingsUpdate;
@@ -115,7 +115,7 @@ export function useRoomSettingsController({
   const activeMeetingId = activeRoom.meetingId;
   const preferenceAuthorityKind = preferenceAuthority.kind;
   const preferenceDeviceToken =
-    preferenceAuthority.kind === "local" ? preferenceAuthority.deviceToken : "";
+    preferenceAuthority.kind !== "remote-unavailable" ? preferenceAuthority.deviceToken ?? "" : "";
   const preferenceSessionToken =
     preferenceAuthority.kind === "remote" ? preferenceAuthority.sessionToken : "";
   const canonicalGlobalSettingsSignature = canonicalGlobalSettings

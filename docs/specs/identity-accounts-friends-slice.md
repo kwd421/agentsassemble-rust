@@ -266,8 +266,7 @@ Socket-ticket exchange and departure dispatch by credential prefix without retry
 another authority domain. Paired credentials require current device and the ready public origin;
 ordinary human admission remains with its existing owner. Revocation commits before
 notifying existing room subscribers, without creating another task or timer. Paired
-sessions cannot obtain account or native server authority. Native pairing UI and
-frontend room HTTP device propagation remain required before packaged phase acceptance.
+sessions cannot obtain account or native server authority. Native pairing UI remains required before packaged phase acceptance.
 
 ### Browser room-session device propagation
 
@@ -295,3 +294,10 @@ GETs without an Origin header, without trusting a caller-supplied origin as a pr
 proof. Existing proxy, Host, forwarded HTTPS and optional-Origin checks are unchanged;
 redemption still requires the explicit matching Origin header. No routes or ingress
 acceptance rules are broadened, and no retry, task or polling owner is introduced.
+
+Browser room HTTP callers now carry the existing device identity through preferences,
+search/context, pins, message attachment upload/read and room-appearance reads.
+The existing search/pin/appearance projection and attachment-operation lifetimes
+include the device binding, so device changes retire prior requests and installed
+resource URLs through their current owners. No additional browser credential store,
+request retry or interval is introduced.

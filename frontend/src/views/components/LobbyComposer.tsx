@@ -90,6 +90,7 @@ export default function LobbyComposer({
   mentionables = [],
   disabledReason,
   roomSessionToken = "",
+  roomDeviceToken = "",
   postingMode = "host",
   onGuestSessionExpired,
 }: {
@@ -99,6 +100,7 @@ export default function LobbyComposer({
   mentionables?: Mentionable[];
   disabledReason?: string;
   roomSessionToken?: string;
+  roomDeviceToken?: string;
   postingMode?: RoomPostingMode;
   onGuestSessionExpired?: () => void;
 }) {
@@ -192,7 +194,7 @@ export default function LobbyComposer({
       activeUploadOperation.current = null;
       operation?.controller.abort();
     };
-  }, [disabledReason, meetingId, postingMode, roomSessionToken]);
+  }, [disabledReason, meetingId, postingMode, roomSessionToken, roomDeviceToken]);
 
   useEffect(() => {
     if (busy || !restoreFocusAfterSubmitRef.current) return;
@@ -247,6 +249,7 @@ export default function LobbyComposer({
           await uploadLobbyAttachment(file, {
             roomId: meetingId,
             sessionToken: roomSessionToken,
+            deviceToken: roomDeviceToken,
             signal: operation.controller.signal,
             beforeDispatch: () =>
               requireCurrentAttachmentUpload(operation, activeUploadOperation.current),
