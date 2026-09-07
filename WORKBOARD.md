@@ -24,15 +24,17 @@
 - Phase 3 is closed through `b8fd15b`: Agent identity, avatar custody and editor
   pass local acceptance and whole-phase Daybreak review at C0/H0/M0/L0.
   [Contract and acceptance](docs/specs/agent-profile-slice.md).
-- Active: Phase 4 starts with participant persistence consolidation, then room
-  settings, moderation and lifecycle under the canonical command owner.
-  [Contract and acceptance](docs/specs/room-lifecycle-slice.md).
-  Direct packaged app manipulation is required before every phase review; Phase 4
-  also covers the earlier Phase 2 controls and Phase 3 profile UI. New Pro review
-  and authorized real-provider proof wait until full closeout.
-  Before Phase 5, apply the user's Discord-style frontend direction: verify actual
-  Discord flows and correct profile/contextual editing using Toss and Apple UX
-  guidance; endpoint-shaped button lists do not meet this acceptance.
+- Phase 4 is closed through `53a82f1`: Daybreak approved every final phase correction,
+  cumulative phase, final HEAD and whole local contract at C0/H0/M0/L0. The one
+  late-moderation terminal-export finding is closed; direct packaged desktop/mobile
+  settings, profile, controls, moderation and room lifecycle are verified.
+  [Contract](docs/specs/room-lifecycle-slice.md) and [review correction](docs/VERIFICATION.md#phase-4-whole-phase-review-correction-terminal-export-2026-09-08).
+- Active: Phase 5 completes identity/accounts, friends and human admission, including
+  Google/native handoff and operator pairing. Preserve the separate central identity,
+  local operator, human session and Agent Session authorities.
+  [Contract and acceptance](docs/specs/identity-accounts-friends-slice.md).
+  Apply the frontend UX guide and verify packaged desktop/mobile flows before review.
+  New Pro review and authorized real-provider proof remain at full closeout.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:

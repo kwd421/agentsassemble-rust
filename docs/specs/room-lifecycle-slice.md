@@ -1,6 +1,6 @@
 # Room lifecycle and moderation
 
-Status: Phase 4 active after Phase 3 approval at `b8fd15b`.
+Status: Phase 4 approved by Daybreak at `53a82f1`, C0/H0/M0/L0.
 
 ## Contract and dependency order
 
