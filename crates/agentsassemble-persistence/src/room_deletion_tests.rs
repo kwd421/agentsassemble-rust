@@ -49,23 +49,64 @@ async fn deletion_waits_for_custody_and_publication_then_replays_after_recreatio
     }
     drop(store);
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
-    assert_eq!(store.pending_room_deletions(None).await?, vec!["general"]);
+    assert_eq!(
+        store.pending_room_deletions(None).await?.room_ids,
+        vec!["general"]
+    );
     assert!(store.finish_room_deletion("general").await?);
-    assert!(store.pending_room_deletions(None).await?.is_empty());
+    assert!(
+        store
+            .pending_room_deletions(None)
+            .await?
+            .room_ids
+            .is_empty()
+    );
     assert!(matches!(
         store.snapshot("general", 0, 20).await,
         Err(PersistenceError::RoomMissing)
     ));
     assert!(!sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM agent_sessions WHERE room_id = 'general' AND session_id = ?)")
         .bind(AGENT_ID).fetch_one(&store.pool).await?);
+    assert_deletion_replay(&store, &principal, &room, &prepared, &payload).await
+}
+
+async fn assert_deletion_replay(
+    store: &SqliteStore,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+    room: &agentsassemble_domain::Room,
+    prepared: &crate::RoomDeletionMutation,
+    payload: &serde_json::Value,
+) -> Result<(), Box<dyn std::error::Error>> {
     let replay = store
-        .execute_room_delete(&principal, "delete", &payload)
+        .execute_room_delete(principal, "delete", payload)
         .await?;
+    assert!(
+        store
+            .resolve_room_terminal_principal(
+                principal,
+                room.room_uid,
+                &prepared.outcome.event.id,
+                prepared.outcome.event.seq
+            )
+            .await
+            .is_ok()
+    );
+    assert!(
+        store
+            .resolve_room_terminal_principal(
+                principal,
+                room.room_uid,
+                &prepared.outcome.event.id,
+                prepared.outcome.event.seq + 1
+            )
+            .await
+            .is_err()
+    );
     assert!(replay.complete && replay.outcome.deduplicated);
     assert_eq!(replay.outcome.result, prepared.outcome.result);
     assert!(
         store
-            .resolve_room_delete_principal(&principal, "delete", &payload)
+            .resolve_room_delete_principal(principal, "delete", payload)
             .await
             .is_ok()
     );
@@ -75,7 +116,7 @@ async fn deletion_waits_for_custody_and_publication_then_replays_after_recreatio
     assert_ne!(new.room.room_uid, room.room_uid);
     assert!(
         store
-            .execute_room_delete(&principal, "delete", &payload)
+            .execute_room_delete(principal, "delete", payload)
             .await?
             .complete
     );
@@ -86,7 +127,7 @@ async fn deletion_waits_for_custody_and_publication_then_replays_after_recreatio
     assert!(matches!(
         store
             .execute_room_delete(
-                &principal,
+                principal,
                 "delete",
                 &json!({"room_uid": new.room.room_uid, "confirmation_name": room.label})
             )
@@ -141,7 +182,13 @@ async fn deletion_rejects_wrong_name_authority_incarnation_and_second_intent()
         store.snapshot("general", 0, 20).await?.room.status,
         RoomStatus::Active
     );
-    assert!(store.pending_room_deletions(None).await?.is_empty());
+    assert!(
+        store
+            .pending_room_deletions(None)
+            .await?
+            .room_ids
+            .is_empty()
+    );
     store
         .execute_room_delete(&principal, "delete", &payload)
         .await?;

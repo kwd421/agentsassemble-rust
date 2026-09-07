@@ -143,6 +143,7 @@ pub(crate) async fn watch_runtime_reconciliation(
     let mut cursor: Option<RuntimeReconciliationCursor> = None;
     let mut provider_turn_cursor: Option<ProviderTurnReconciliationCursor> = None;
     let mut cleanup_cursor = None;
+    let mut deletion_cursor = None;
     let mut interval = tokio::time::interval_at(
         Instant::now() + RECOVERY_SCAN_INTERVAL,
         RECOVERY_SCAN_INTERVAL,
@@ -164,6 +165,17 @@ pub(crate) async fn watch_runtime_reconciliation(
         {
             Ok(next) => cleanup_cursor = next,
             Err(error) => tracing::warn!(%error, "server-owned room cleanup scan failed"),
+        }
+        match crate::room_runtime_cleanup::reconcile_deletion_page(
+            &store,
+            &rooms,
+            deletion_cursor.as_deref(),
+            &cancellation,
+        )
+        .await
+        {
+            Ok(next) => deletion_cursor = next,
+            Err(error) => tracing::warn!(%error, "server-owned room deletion scan failed"),
         }
         let provider_page = tokio::select! {
             () = cancellation.cancelled() => return,

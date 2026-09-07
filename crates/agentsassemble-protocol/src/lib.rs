@@ -111,6 +111,8 @@ pub enum RoomAction {
     RoomClose,
     #[serde(rename = "room.archive")]
     RoomArchive,
+    #[serde(rename = "room.delete")]
+    RoomDelete,
     #[serde(rename = "room.settings.update")]
     RoomSettingsUpdate,
     #[serde(rename = "room.history")]
@@ -144,10 +146,10 @@ pub enum RoomAction {
 impl RoomAction {
     #[must_use]
     pub const fn supports_websocket(self) -> bool {
-        !matches!(self, Self::RoomClose | Self::RoomArchive)
+        !matches!(self, Self::RoomClose | Self::RoomArchive | Self::RoomDelete)
     }
 
-    pub const ALL: [Self; 24] = [
+    pub const ALL: [Self; 25] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
@@ -167,6 +169,7 @@ impl RoomAction {
         Self::ParticipantRoleUpdate,
         Self::RoomArchive,
         Self::RoomClose,
+        Self::RoomDelete,
         Self::RoomHistory,
         Self::RoomRandomChoose,
         Self::RoomRandomRoll,
@@ -188,6 +191,7 @@ impl RoomAction {
             Self::RoomSettingsUpdate => "room.settings.update",
             Self::RoomArchive => "room.archive",
             Self::RoomClose => "room.close",
+            Self::RoomDelete => "room.delete",
             Self::RoomHistory => "room.history",
             Self::RoomVoteSummary => "room.vote.summary",
             Self::RoomRandomRoll => "room.random.roll",

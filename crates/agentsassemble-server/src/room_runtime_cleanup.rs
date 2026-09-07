@@ -138,9 +138,37 @@ pub(crate) async fn reconcile_before_admission(
         cursor =
             reconcile_cleanup_page(store, adapter, rooms, cursor.as_ref(), cancellation).await?;
         if cursor.is_none() || cancellation.is_cancelled() {
+            break;
+        }
+    }
+    let mut deletion_cursor = None;
+    loop {
+        deletion_cursor =
+            reconcile_deletion_page(store, rooms, deletion_cursor.as_deref(), cancellation).await?;
+        if deletion_cursor.is_none() || cancellation.is_cancelled() {
             return Ok(());
         }
     }
+}
+
+pub(crate) async fn reconcile_deletion_page(
+    store: &SqliteStore,
+    rooms: &RoomRuntime,
+    cursor: Option<&str>,
+    cancellation: &CancellationToken,
+) -> Result<Option<String>, PersistenceError> {
+    let page = store.pending_room_deletions(cursor).await?;
+    stream::iter(page.room_ids).for_each_concurrent(RECOVERY_OBSERVATION_CONCURRENCY, |room_id| async move {
+        tokio::select! {
+            () = cancellation.cancelled() => {},
+            result = rooms.finalize_room_deletion(&room_id) => {
+                if let Err(error) = result {
+                    tracing::warn!(code = persistence_error_code(&error), room_id, "room deletion remains durable and pending");
+                }
+            }
+        }
+    }).await;
+    Ok(page.next_cursor)
 }
 
 pub(crate) fn log_pending(key: &RoomRuntimeCleanupKey, error: &PersistenceError) {

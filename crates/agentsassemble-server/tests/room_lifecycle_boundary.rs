@@ -40,6 +40,7 @@ async fn http_lifecycle_revokes_access_and_restores_without_a_room_socket()
                 action,
                 agentsassemble_protocol::RoomAction::RoomClose
                     | agentsassemble_protocol::RoomAction::RoomArchive
+                    | agentsassemble_protocol::RoomAction::RoomDelete
             ))
     );
     let admitted = join(
@@ -103,18 +104,92 @@ async fn change(
     server: &RunningServer,
     body: &Value,
 ) -> Result<Value, Box<dyn std::error::Error>> {
+    let response = request_lifecycle(client, server, body).await?;
+    assert_eq!(response.status(), reqwest::StatusCode::OK);
+    Ok(response.json().await?)
+}
+
+async fn request_lifecycle(
+    client: &Client,
+    server: &RunningServer,
+    body: &Value,
+) -> Result<reqwest::Response, reqwest::Error> {
     let ticket = server
         .state()
         .tickets
         .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
-        .await?
+        .await
+        .unwrap_or_else(|error| panic!("issue owner ticket: {error}"))
         .ticket;
-    let response = client
+    client
         .post(format!("{}/api/rooms/lifecycle", server.base_url))
         .bearer_auth(ticket)
         .json(body)
         .send()
+        .await
+}
+
+#[tokio::test]
+async fn deletion_retires_room_runtime_and_http_replay_preserves_recreated_room()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, _credentials) = fixture(InviteScope::ReadOnly).await;
+    let authority = store.local_bootstrap_status().await?;
+    let room = store.snapshot("general", 0, 20).await?.room;
+    let server = start(store.clone()).await;
+    let client = Client::new();
+    let mut manager =
+        support::local_socket::connect(&server.base_url, server.state(), "general").await;
+    manager.subscribe(0).await;
+    manager.receive_json().await;
+    let mut room_events = server.state().rooms.subscribe("general").await;
+    let body = json!({"server_id": authority.server_id, "authority_lineage_id": authority.authority_lineage_id,
+        "room_id": "general", "request_id": "delete-http", "action": "room.delete",
+        "payload": {"room_uid": room.room_uid, "confirmation_name": room.label}});
+    let response = request_lifecycle(&client, &server, &body).await?;
+    assert_eq!(response.status(), reqwest::StatusCode::SERVICE_UNAVAILABLE);
+    let pending: Value = response.json().await?;
+    assert_eq!(pending["resolution"], "unresolved");
+    assert_eq!(pending["code"], "room_deletion_pending");
+    let closed = manager
+        .receive_json_with_timeout(Duration::from_secs(5))
+        .await;
+    assert_eq!(
+        closed["events"][0]["room"]["room_uid"],
+        json!(room.room_uid)
+    );
+    assert_eq!(closed["events"][0]["type"], "room_closed");
+    assert!(tokio::time::timeout(Duration::from_secs(5), manager.wait_closed()).await?);
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            match room_events.recv().await {
+                Ok(_) => {}
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                Err(error) => panic!("deleted room event stream: {error}"),
+            }
+        }
+    })
+    .await?;
+    assert!(!store.room_exists("general").await?);
+    let completed = change(&client, &server, &body).await?;
+    assert_eq!(completed["result"]["deleted"], true);
+    assert_eq!(completed["deduplicated"], true);
+    let new = store
+        .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "general", &room.label)
         .await?;
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    Ok(response.json().await?)
+    assert_ne!(new.room.room_uid, room.room_uid);
+    assert_eq!(change(&client, &server, &body).await?, completed);
+    assert_eq!(
+        store.snapshot("general", 0, 20).await?.room.room_uid,
+        new.room.room_uid
+    );
+    let mut replacement =
+        support::local_socket::connect(&server.base_url, server.state(), "general").await;
+    replacement.subscribe(0).await;
+    assert_eq!(
+        replacement.receive_json().await["room"]["room_uid"],
+        json!(new.room.room_uid)
+    );
+    replacement.close().await;
+    server.stop().await;
+    Ok(())
 }

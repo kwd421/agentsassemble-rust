@@ -5,55 +5,104 @@ use super::lifecycle_resume_retry::create_stopped_agent;
 use super::*;
 
 #[tokio::test]
-async fn http_room_close_leaves_cleanup_with_existing_watcher_until_exact_runtime_is_gone()
+async fn http_room_termination_waits_for_exact_runtime_and_deletion_retires_the_owner()
 -> Result<(), Box<dyn std::error::Error>> {
     let _serial = AGENT_BOUNDARY_LOCK.lock().await;
-    let directory = tempfile::tempdir()?;
-    let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
-    bootstrap(&store).await;
-    let authority = store.local_bootstrap_status().await?;
-    let uid = store.snapshot("general", 0, 20).await?.room.room_uid;
-    let server = start(store.clone(), agent_catalog(directory.path())).await;
-    let mut socket = connect(&server.base_url, &server.state).await;
-    subscribe(&mut socket).await;
-    receive_json(&mut socket).await;
-    let id = create_stopped_agent(&mut socket, directory.path(), "create-room-close").await;
-    send_command(
-        &mut socket,
-        "start-room-close",
-        "agent.start",
-        &json!({"agent_id": id}),
-    )
-    .await;
-    assert_eq!(
-        receive_command_ack(&mut socket).await["result"]["agent_session"]["runtime_status"],
-        "idle"
-    );
-    let running = store
-        .load_runtime_reconciliation_candidate("general", &id)
-        .await?
-        .unwrap_or_else(|| panic!("running custody missing"));
-    let mut events = server.state.rooms.subscribe("general").await;
-    let ticket = server
-        .state
-        .tickets
-        .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
-        .await?
-        .ticket;
-    let response = Client::new()
+    for action in ["room.close", "room.delete"] {
+        let directory = tempfile::tempdir()?;
+        let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
+        bootstrap(&store).await;
+        let authority = store.local_bootstrap_status().await?;
+        let room = store.snapshot("general", 0, 20).await?.room;
+        let server = start(store.clone(), agent_catalog(directory.path())).await;
+        let mut socket = connect(&server.base_url, &server.state).await;
+        subscribe(&mut socket).await;
+        receive_json(&mut socket).await;
+        let id = create_stopped_agent(&mut socket, directory.path(), "create-room-close").await;
+        send_command(
+            &mut socket,
+            "start-room-close",
+            "agent.start",
+            &json!({"agent_id": id}),
+        )
+        .await;
+        assert_eq!(
+            receive_command_ack(&mut socket).await["result"]["agent_session"]["runtime_status"],
+            "idle"
+        );
+        let running = store
+            .load_runtime_reconciliation_candidate("general", &id)
+            .await?
+            .unwrap_or_else(|| panic!("running custody missing"));
+        let mut events = server.state.rooms.subscribe("general").await;
+        let ticket = server
+            .state
+            .tickets
+            .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+            .await?
+            .ticket;
+        let mut payload = json!({"room_uid": room.room_uid});
+        if action == "room.delete" {
+            payload["confirmation_name"] = json!(room.label);
+        }
+        let response = Client::new()
         .post(format!("{}/api/rooms/lifecycle", server.base_url))
         .bearer_auth(ticket)
         .json(&json!({
             "server_id": authority.server_id, "authority_lineage_id": authority.authority_lineage_id,
-            "room_id": "general", "request_id": "close-running-room", "action": "room.close",
-            "payload": {"room_uid": uid},
+            "room_id": "general", "request_id": "close-running-room", "action": action,
+            "payload": payload,
         }))
         .send()
         .await?;
-    assert_eq!(response.status(), reqwest::StatusCode::OK);
-    let committed: Value = response.json().await?;
-    assert_eq!(committed["result"]["cleanup_pending"], true);
-    assert_eq!(committed["result"]["room"]["status"], "closed");
+        assert_eq!(
+            response.status(),
+            if action == "room.delete" {
+                reqwest::StatusCode::SERVICE_UNAVAILABLE
+            } else {
+                reqwest::StatusCode::OK
+            }
+        );
+        let committed: Value = response.json().await?;
+        if action == "room.close" {
+            assert_eq!(committed["result"]["cleanup_pending"], true);
+            assert_eq!(committed["result"]["room"]["status"], "closed");
+        } else {
+            assert_eq!(committed["resolution"], "unresolved");
+        }
+        await_stopped_session(&mut events).await?;
+        assert!(matches!(
+            server.provider_adapter.observe(&running.session).await,
+            ProviderRuntimeObservation::Gone
+        ));
+        assert!(
+            store
+                .load_room_runtime_cleanup_page(None)
+                .await?
+                .keys
+                .is_empty()
+        );
+        if action == "room.delete" {
+            tokio::time::timeout(Duration::from_secs(10), async {
+                loop {
+                    match events.recv().await {
+                        Ok(_) => {}
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                        Err(error) => panic!("deletion stream failed: {error}"),
+                    }
+                }
+            })
+            .await?;
+            assert!(!store.room_exists("general").await?);
+        }
+        server.stop().await;
+    }
+    Ok(())
+}
+
+async fn await_stopped_session(
+    events: &mut tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+) -> Result<(), Box<dyn std::error::Error>> {
     tokio::time::timeout(Duration::from_secs(10), async {
         loop {
             let event = events.recv().await?;
@@ -68,18 +117,6 @@ async fn http_room_close_leaves_cleanup_with_existing_watcher_until_exact_runtim
         }
     })
     .await??;
-    assert!(matches!(
-        server.provider_adapter.observe(&running.session).await,
-        ProviderRuntimeObservation::Gone
-    ));
-    assert!(
-        store
-            .load_room_runtime_cleanup_page(None)
-            .await?
-            .keys
-            .is_empty()
-    );
-    server.stop().await;
     Ok(())
 }
 

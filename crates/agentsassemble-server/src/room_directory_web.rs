@@ -71,7 +71,10 @@ async fn change_lifecycle(
     let body: LifecycleRequest = decode_json_body(request, MAX_DIRECTORY_BODY_BYTES)
         .await
         .map_err(DirectoryHttpError::from_body)?;
-    if !matches!(body.action, RoomAction::RoomClose | RoomAction::RoomArchive) {
+    if !matches!(
+        body.action,
+        RoomAction::RoomClose | RoomAction::RoomArchive | RoomAction::RoomDelete
+    ) {
         return Err(DirectoryHttpError::bad_request(
             "This route accepts room lifecycle commands only.",
         ));
@@ -100,6 +103,7 @@ async fn change_lifecycle(
         .rooms
         .execute(
             principal,
+            None,
             body.request_id.clone(),
             body.action,
             body.payload,

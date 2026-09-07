@@ -45,6 +45,33 @@ pub(crate) fn is_room_lifecycle_action(action: &str) -> bool {
 }
 
 impl SqliteStore {
+    /// Fences a queued local socket operation to its accepted room incarnation.
+    ///
+    /// # Errors
+    /// Rejects a missing/replaced room and propagates stored-data failures.
+    pub async fn require_room_incarnation(
+        &self,
+        room_id: &str,
+        expected_incarnation: Uuid,
+    ) -> Result<(), PersistenceError> {
+        let raw: Option<String> =
+            sqlx::query_scalar("SELECT room_json FROM rooms WHERE room_id = ?")
+                .bind(room_id)
+                .fetch_optional(&self.pool)
+                .await?;
+        let room = raw
+            .map(|raw| serde_json::from_str::<Room>(&raw))
+            .transpose()?;
+        if room.is_none_or(|room| room.room_id != room_id || room.room_uid != expected_incarnation)
+        {
+            return Err(rejected(
+                "room_incarnation_changed",
+                "The exact room no longer exists.",
+            ));
+        }
+        Ok(())
+    }
+
     /// Resolves local management authority for active, closed or archived rooms.
     /// Ordinary socket and provider admission continues to require an active room.
     ///

@@ -93,6 +93,9 @@ pub(crate) async fn run(
                 if refresh_human_session(&state, &mut principal, &mut human_session).await.is_none() {
                     return;
                 }
+                if human_session.is_none() && state.store.require_room_incarnation(&principal.room_id, room_uid).await.is_err() {
+                    return;
+                }
                 match client_frame {
                     ClientFrame::Command { request_id, action, payload } => {
                         if !action.supports_websocket() {
@@ -151,7 +154,7 @@ pub(crate) async fn run(
                             ).await
                         } else {
                             state.rooms.execute(
-                                principal.clone(), request_id.clone(), action, payload,
+                                principal.clone(), Some(room_uid), request_id.clone(), action, payload,
                             ).await
                         };
                         match outcome {
@@ -331,7 +334,7 @@ async fn send_terminal_room_event(
     }
     let Ok(current) = state
         .store
-        .resolve_room_lifecycle_principal(principal)
+        .resolve_room_terminal_principal(principal, room_uid, &event.id, event.seq)
         .await
     else {
         return;

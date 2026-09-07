@@ -26,7 +26,11 @@ pub(crate) async fn admit_human_command(
     payload: &Value,
 ) -> Result<AdmittedHumanCommand, CommandFailure> {
     validate_command_envelope(request_id).map_err(CommandFailure::rejected)?;
-    let principal = if matches!(action, RoomAction::RoomClose | RoomAction::RoomArchive) {
+    let principal = if action == RoomAction::RoomDelete {
+        store
+            .resolve_room_delete_principal(principal, request_id, payload)
+            .await
+    } else if matches!(action, RoomAction::RoomClose | RoomAction::RoomArchive) {
         store.resolve_room_lifecycle_principal(principal).await
     } else {
         store.resolve_principal(principal).await

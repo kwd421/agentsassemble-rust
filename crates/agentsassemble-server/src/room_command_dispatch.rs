@@ -25,6 +25,7 @@ pub(crate) async fn execute_command(
         return execute_human_session_command(store, command, authorization).await;
     }
     match command.action {
+        RoomAction::RoomDelete => execute_room_delete(store, command).await,
         RoomAction::RoomClose | RoomAction::RoomArchive => {
             execute_room_lifecycle(store, command).await
         }
@@ -114,6 +115,26 @@ pub(crate) async fn execute_command(
         RoomAction::RoomHistory | RoomAction::RoomVoteSummary => {
             misrouted_direct_read(command.action)
         }
+    }
+}
+
+async fn execute_room_delete(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
+    match store
+        .execute_room_delete(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(mutation) => {
+            let mut execution = if mutation.complete {
+                CommandExecution::success(mutation.outcome)
+            } else {
+                CommandExecution::unresolved_failure_with_events(PersistenceError::CommandUnresolved {
+                        code: "room_deletion_pending", message: "The room is closed. Deletion is waiting for owned runtime cleanup and publication; retry the same request.".to_owned(),
+                    }, if mutation.outcome.deduplicated { Vec::new() } else { mutation.outcome.events })
+            };
+            execution.revoked_human_sessions = mutation.revoked_session_fingerprints;
+            execution
+        }
+        Err(error) => CommandExecution::transactional_failure(error),
     }
 }
 

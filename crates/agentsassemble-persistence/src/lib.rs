@@ -50,7 +50,7 @@ mod room_appearance_assets;
 mod room_deletion;
 mod room_directory;
 mod room_lifecycle;
-pub use room_deletion::RoomDeletionMutation;
+pub use room_deletion::{RoomDeletionMutation, RoomDeletionPage};
 pub use room_lifecycle::RoomLifecycleMutation;
 mod room_event_publication;
 mod room_event_sequence;

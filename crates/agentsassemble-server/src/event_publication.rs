@@ -113,6 +113,51 @@ mod tests {
     use crate::RoomRuntime;
 
     #[tokio::test]
+    async fn queued_socket_command_cannot_target_another_room_incarnation() {
+        let (store, principal) = fixture().await;
+        let before = store
+            .snapshot("general", 0, 20)
+            .await
+            .unwrap_or_else(|error| panic!("snapshot: {error}"));
+        let rooms = crate::RoomRuntime::new(
+            store.clone(),
+            agentsassemble_provider::ProviderCatalogService::fixed(
+                agentsassemble_domain::ProviderCatalog::default(),
+            ),
+        );
+        let failure = rooms
+            .execute(
+                principal,
+                Some(uuid::Uuid::new_v4()),
+                "stale-socket".to_owned(),
+                agentsassemble_protocol::RoomAction::MessageSend,
+                serde_json::json!({"content": "must never enter the replacement room"}),
+            )
+            .await
+            .err()
+            .unwrap_or_else(|| panic!("stale incarnation was accepted"));
+        assert!(matches!(
+            failure.error,
+            agentsassemble_persistence::PersistenceError::CommandRejected {
+                code: "room_incarnation_changed",
+                ..
+            }
+        ));
+        assert_eq!(
+            store
+                .snapshot("general", 0, 20)
+                .await
+                .unwrap_or_else(|error| panic!("snapshot: {error}"))
+                .last_seq,
+            before.last_seq
+        );
+        rooms
+            .shutdown()
+            .await
+            .unwrap_or_else(|error| panic!("shutdown: {error}"));
+    }
+
+    #[tokio::test]
     async fn room_owner_publishes_external_profile_commit_from_durable_history() {
         let (store, principal) = fixture().await;
         let rooms = RoomRuntime::new(

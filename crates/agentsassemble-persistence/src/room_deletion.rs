@@ -24,6 +24,12 @@ pub struct RoomDeletionMutation {
     pub revoked_session_fingerprints: Vec<[u8; 32]>,
 }
 
+#[derive(Debug)]
+pub struct RoomDeletionPage {
+    pub room_ids: Vec<String>,
+    pub next_cursor: Option<String>,
+}
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DeletePayload {
@@ -32,6 +38,71 @@ struct DeletePayload {
 }
 
 impl SqliteStore {
+    /// Reads an immutable completed deletion without creating another room runtime.
+    ///
+    /// # Errors
+    /// Requires current local authority and rejects conflicting exact request reuse.
+    pub async fn completed_room_deletion(
+        &self,
+        credential: &AuthenticatedPrincipal,
+        request_id: &str,
+        payload: &Value,
+    ) -> Result<Option<CommandOutcome>, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal = resolve_local_owner(&mut transaction, credential).await?;
+        let replay = deletion_replay(
+            &mut transaction,
+            &principal,
+            request_id,
+            &canonical_payload_hash(payload),
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(replay
+            .filter(|mutation| mutation.complete)
+            .map(|mutation| mutation.outcome))
+    }
+
+    /// Authenticates one final event for an already admitted local room observer.
+    /// A deleted room uses its retained exact close event as the membership receipt.
+    ///
+    /// # Errors
+    /// Rejects changed bootstrap, foreign identity, room incarnation or event identity.
+    pub async fn resolve_room_terminal_principal(
+        &self,
+        credential: &AuthenticatedPrincipal,
+        room_uid: Uuid,
+        event_id: &str,
+        event_seq: i64,
+    ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal = resolve_local_owner(&mut transaction, credential).await?;
+        let retained: Option<String> = sqlx::query_scalar("SELECT result_json FROM room_delete_results WHERE room_id = ? AND room_uid = ? AND principal_id = ?")
+            .bind(&principal.room_id).bind(room_uid.to_string()).bind(&principal.principal_id)
+            .fetch_optional(&mut *transaction).await?;
+        let principal = if let Some(retained) = retained {
+            let result: Value = serde_json::from_str(&retained)?;
+            if result["event"]["id"] != event_id || result["event_seq"] != event_seq {
+                return Err(rejected(
+                    "room_incarnation_changed",
+                    "The terminal room event no longer matches its deletion receipt.",
+                ));
+            }
+            principal
+        } else {
+            let (room, _) = load_room_with_settings(&mut transaction, &principal.room_id).await?;
+            if room.room_uid != room_uid {
+                return Err(rejected(
+                    "room_incarnation_changed",
+                    "The exact room no longer exists.",
+                ));
+            }
+            require_manager_membership(&mut transaction, principal).await?
+        };
+        transaction.commit().await?;
+        Ok(principal)
+    }
+
     /// Authenticates current local ownership and exact retained deletion identity.
     ///
     /// # Errors
@@ -152,9 +223,18 @@ impl SqliteStore {
     pub async fn pending_room_deletions(
         &self,
         after: Option<&str>,
-    ) -> Result<Vec<String>, PersistenceError> {
-        Ok(sqlx::query_scalar("SELECT room_id FROM room_delete_results WHERE state = 'pending' AND (? IS NULL OR room_id > ?) ORDER BY room_id LIMIT 64")
-            .bind(after).bind(after).fetch_all(&self.pool).await?)
+    ) -> Result<RoomDeletionPage, PersistenceError> {
+        let room_ids = sqlx::query_scalar("SELECT room_id FROM room_delete_results WHERE state = 'pending' AND (? IS NULL OR room_id > ?) ORDER BY room_id LIMIT 64")
+            .bind(after).bind(after).fetch_all(&self.pool).await?;
+        let next_cursor = if room_ids.len() == 64 {
+            room_ids.last().cloned()
+        } else {
+            None
+        };
+        Ok(RoomDeletionPage {
+            room_ids,
+            next_cursor,
+        })
     }
 
     /// Deletes only after exact runtime custody is cleared and closure was published.

@@ -7221,3 +7221,25 @@ command-ID conflict, deleted-room retry and unchanged replacement incarnation.
 Affected all-target/all-feature Clippy and unchanged architecture/source/format/diff
 plus 19 policy/artifact checks pass. HTTP/recovery wiring and deletion UI remain
 to be connected before this action is advertised.
+
+HTTP room deletion now uses the canonical command queue and reports unresolved
+while cleanup is pending. The existing recovery interval reads at most 64 deletion
+keys with its existing concurrency limit and asks each room actor to publish closure,
+finish exact cleanup-gated deletion and retire itself. Completed replay authenticates
+and reads the retained result without recreating a deleted room actor. The existing
+room map lock orders that routing with the short deletion transaction; no provider
+effect runs under it. Local socket commands carry their accepted room UID into the
+queue, and the actor checks it before dispatch so recreation cannot retarget a queued
+request. Late terminal delivery validates the exact retained close-event receipt.
+
+Five directory/lifecycle TCP cases pass, including physical deletion, actor event
+stream closure, immutable HTTP replay and replacement-room admission. The owned
+shell fixture passes both close and delete: the watcher positively observes its
+absence before room deletion. Both deletion persistence cases, all 89 server unit
+cases, generated frontend production build/CSS, affected Clippy and unchanged architecture/source/format/diff plus 19 policy/
+artifact gates pass. An initial broad unit run hit runtime-authority fixture capacity;
+the new UID-only test now reuses the existing room-only fixture instead of creating
+an unrelated Agent Session, and the complete unit run passes. The 832-line room
+runtime remains the cohesive queue/publication/retirement owner; no forwarding-only
+module or additional scheduler was introduced. Deletion UI and direct packaged app
+verification remain before Phase 4 review.

@@ -47,6 +47,7 @@ const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 
 pub(crate) struct RoomCommand {
     pub(crate) principal: AuthenticatedPrincipal,
+    pub(crate) room_uid: Option<uuid::Uuid>,
     pub(crate) human_session: Option<Box<HumanSessionAuthorization>>,
     pub(crate) request_id: String,
     pub(crate) action: RoomAction,
@@ -61,8 +62,13 @@ struct RoomHandle {
     mutations: mpsc::Sender<RoomMutation>,
     events: broadcast::Sender<RoomEvent>,
     human_session_revocations: broadcast::Sender<[u8; 32]>,
-    publication_wake: mpsc::Sender<()>,
+    publication_wake: mpsc::Sender<RoomPublicationWake>,
     provider_recovery: mpsc::Sender<RecoveredAssignments>,
+}
+
+enum RoomPublicationWake {
+    Publish,
+    FinalizeDeletion(oneshot::Sender<Result<bool, PersistenceError>>),
 }
 
 struct RoomTaskContext {
@@ -132,6 +138,7 @@ impl RoomRuntime {
     pub(crate) async fn execute(
         &self,
         principal: AuthenticatedPrincipal,
+        room_uid: Option<uuid::Uuid>,
         request_id: String,
         action: RoomAction,
         payload: Value,
@@ -145,7 +152,7 @@ impl RoomRuntime {
             &payload,
         )
         .await?;
-        self.enqueue_command(admitted, None, request_id, action, payload)
+        self.enqueue_command(admitted, None, room_uid, request_id, action, payload)
             .await
     }
 
@@ -168,6 +175,7 @@ impl RoomRuntime {
         self.enqueue_command(
             admitted,
             Some(Box::new(current)),
+            None,
             request_id,
             action,
             payload,
@@ -179,6 +187,7 @@ impl RoomRuntime {
         &self,
         admitted: AdmittedHumanCommand,
         human_session: Option<Box<HumanSessionAuthorization>>,
+        room_uid: Option<uuid::Uuid>,
         request_id: String,
         action: RoomAction,
         payload: Value,
@@ -188,12 +197,32 @@ impl RoomRuntime {
             mutation_debit,
             inflight_permit,
         } = admitted;
-        let handle = self.handle(&principal.room_id).await;
+        let handle = if action == RoomAction::RoomDelete {
+            // Serialize replay routing with deletion retirement. An immutable
+            // retry must not recreate an actor for a physically absent room.
+            let mut rooms = self.rooms.lock().await;
+            if let Some(outcome) = self
+                .store
+                .completed_room_deletion(&principal, &request_id, &payload)
+                .await
+                .map_err(CommandFailure::unresolved)?
+            {
+                if let Some(debit) = &mutation_debit {
+                    debit.resolve();
+                }
+                return public_command_outcome(&principal, outcome)
+                    .map_err(CommandFailure::unresolved);
+            }
+            self.handle_locked(&principal.room_id, &mut rooms).await
+        } else {
+            self.handle(&principal.room_id).await
+        };
         let (reply, response) = oneshot::channel();
         handle
             .mutations
             .try_send(RoomMutation::Command(RoomCommand {
                 principal,
+                room_uid,
                 human_session,
                 request_id,
                 action,
@@ -281,13 +310,39 @@ impl RoomRuntime {
                 continue;
             }
             let handle = self.handle(&event.room_id).await;
-            let _ = handle.publication_wake.try_send(());
+            let _ = handle
+                .publication_wake
+                .try_send(RoomPublicationWake::Publish);
         }
     }
 
     pub(crate) async fn notify_room_publication(&self, room_id: &str) {
         let handle = self.handle(room_id).await;
-        let _ = handle.publication_wake.try_send(());
+        let _ = handle
+            .publication_wake
+            .try_send(RoomPublicationWake::Publish);
+    }
+
+    pub(crate) async fn finalize_room_deletion(
+        &self,
+        room_id: &str,
+    ) -> Result<bool, PersistenceError> {
+        let handle = self.handle(room_id).await;
+        let (reply, response) = oneshot::channel();
+        handle
+            .publication_wake
+            .try_send(RoomPublicationWake::FinalizeDeletion(reply))
+            .map_err(|_| PersistenceError::CommandUnresolved {
+                code: "room_busy",
+                message: "The room maintenance queue is unavailable; deletion remains pending."
+                    .to_owned(),
+            })?;
+        response
+            .await
+            .map_err(|_| PersistenceError::CommandUnresolved {
+                code: "room_unavailable",
+                message: "The deletion completion response was lost.".to_owned(),
+            })?
     }
 
     pub(crate) async fn publish_then_resume_assigned_turns(
@@ -398,6 +453,14 @@ impl RoomRuntime {
 
     async fn handle(&self, room_id: &str) -> RoomHandle {
         let mut rooms = self.rooms.lock().await;
+        self.handle_locked(room_id, &mut rooms).await
+    }
+
+    async fn handle_locked(
+        &self,
+        room_id: &str,
+        rooms: &mut HashMap<String, RoomHandle>,
+    ) -> RoomHandle {
         if let Some(handle) = rooms.get(room_id) {
             return handle.clone();
         }
@@ -450,7 +513,7 @@ impl RoomRuntime {
 fn spawn_room_task(
     context: RoomTaskContext,
     mut mutation_rx: mpsc::Receiver<RoomMutation>,
-    mut publication_rx: mpsc::Receiver<()>,
+    mut publication_rx: mpsc::Receiver<RoomPublicationWake>,
     mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
     mut attachment_rx: mpsc::Receiver<ProviderAttachmentReadCommand>,
     mut provider_recovery_rx: mpsc::Receiver<RecoveredAssignments>,
@@ -472,8 +535,17 @@ fn spawn_room_task(
                     RoomInput::Mutation(mutation)
                 }
                 wake = publication_rx.recv() => {
-                    let Some(()) = wake else { break; };
-                    RoomInput::Publication
+                    match wake {
+                        Some(RoomPublicationWake::Publish) => RoomInput::Publication,
+                        Some(RoomPublicationWake::FinalizeDeletion(reply)) => {
+                            if finalize_owned_room(&context, reply).await {
+                                abort_provider_turns(&mut turn_tasks).await;
+                                break;
+                            }
+                            continue;
+                        }
+                        None => break,
+                    }
                 }
                 () = publication_retry.wait(), if publication_retry.is_armed() => RoomInput::Publication,
                 result = turn_tasks.join_next(), if !turn_tasks.is_empty() => {
@@ -505,6 +577,28 @@ fn spawn_room_task(
             }
         }
     })
+}
+
+async fn finalize_owned_room(
+    context: &RoomTaskContext,
+    reply: oneshot::Sender<Result<bool, PersistenceError>>,
+) -> bool {
+    if publish_durable_room_events(&context.store, &context.event_tx, &context.room_id).await
+        == PublicationAttempt::Retry
+    {
+        let _ = reply.send(Ok(false));
+        return false;
+    }
+    // The actor serializes commands with deletion. The existing map lock also
+    // serializes physical deletion/retirement with immutable HTTP replay routing.
+    let mut rooms = context.active_rooms.lock().await;
+    let result = context.store.finish_room_deletion(&context.room_id).await;
+    let retired = matches!(result, Ok(true));
+    if retired {
+        rooms.remove(&context.room_id);
+    }
+    let _ = reply.send(result);
+    retired
 }
 
 async fn handle_room_input(
@@ -635,7 +729,7 @@ async fn notify_active_room_publications(
             .collect::<Vec<_>>()
     };
     for wake in wakes {
-        let _ = wake.try_send(());
+        let _ = wake.try_send(RoomPublicationWake::Publish);
     }
 }
 
@@ -666,7 +760,14 @@ async fn handle_room_command(
             message: "The exact lifecycle request is currently owned by server recovery. Retry the same request.".to_owned(),
         }),
         Some(_lifecycle_guard) => {
-            Box::pin(crate::room_command_dispatch::execute_command(
+            let incarnation = match command.room_uid {
+                Some(expected) => store.require_room_incarnation(&command.principal.room_id, expected).await,
+                None => Ok(()),
+            };
+            if let Err(error) = incarnation {
+                CommandExecution::transactional_failure(error)
+            } else {
+                Box::pin(crate::room_command_dispatch::execute_command(
                 store,
                 provider_catalog,
                 provider_adapter,
@@ -674,6 +775,7 @@ async fn handle_room_command(
                 &command,
             ))
             .await
+            }
         }
     };
     if execution.is_definitive()
