@@ -4,8 +4,11 @@ Status: authoritative working plan. The Phase 0A inventory at `9711232` remains
 historical reviewed evidence, but its finding-number execution order no longer
 defines the production roadmap. The finite Phase 0B prerequisites F-14 and F-16
 and their whole-phase cross-review are complete. Work now follows the provider-first
-order below. The corrected provider-first plan is approved by manual documentation
-cross-review.
+order below. The provider-first ordering has prior manual documentation cross-review;
+the current checkpoint records later findings, not a new approval.
+Phase 1 remains open: earlier local verification is valid evidence,
+but the current completion-contract findings below must be resolved before claiming
+its exit. Whole-phase implementation cross-review remains pending.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -157,10 +160,12 @@ asset lifecycles into one credential or authority.
 
 ## Retained feature inventory and dependency order
 
-The status below describes the audited baseline, not an approval. `implemented`
-means code exists; it can still be reopened by Phase 0 findings.
+The tables below describe the historical audited baseline, not current progress or
+approval. `implemented` means code existed at that checkpoint. Use the execution
+checkpoint below and linked verification evidence for the current remaining work;
+do not reimplement a completed owner because a historical row says `absent`.
 
-| Area | Audited Rust state | Required remaining result | Phase |
+| Area | Historical audited Rust state | Required target | Phase |
 | --- | --- | --- | --- |
 | Core room snapshot/event transport | finite snapshot/catch-up/replay is implemented; redundant receipt and per-frame proof removed at `3ffb9eb`, `77cae0e`, and `0d24741` | preserve the synchronization contract through final real-flow verification | 0, 9 |
 | Local bootstrap, room directory/create | implemented | reconcile stale spec statuses and final real-flow evidence | 0, 9 |
@@ -194,7 +199,7 @@ inventory. Review suggestions for Gemini CLI, Qwen CLI, or Goose ACP do not wide
 it: none is a verified reachable entry in this baseline, and Antigravity is not
 silently redefined as Gemini CLI.
 
-| Provider | Verified original transport | Audited Rust state | Required target |
+| Provider | Verified original transport | Historical audited Rust state | Required target |
 | --- | --- | --- | --- |
 | Codex | persistent `app-server --stdio` | implemented; completion aliases/inference reopened | exact current app-server protocol, Codex-owned CLI config, no heuristic fallback |
 | Antigravity | persistent PTY/ConPTY plus hooks | transcript path retired; explicitly unavailable | PTY/ConPTY and hooks remain; exact native attachment/completion receipt is still required before start |
@@ -256,6 +261,42 @@ provider presentation may legitimately appear in more than one group. Further
 taxonomy redesign waits until post-parity.
 
 ## Ordered implementation phases
+
+Current execution checkpoint (2026-09-07, inspected source `9654b63`):
+
+1. Close the known Phase 1 completion-contract gaps first. Custom API currently
+   accepts a routed model selection while `remote_openai::validate_completion`
+   requires the returned model string to equal it. Resolve requested-versus-resolved
+   identity at the provider contract owner; preserve request/session attribution,
+   tool authorization, and malformed-response rejection. Verify the accepted routed
+   selection through the adapter path, fixed-model behavior, and invalid responses.
+   The earlier extracted-function reproduction is not end-to-end proof. This is not
+   authorization for an alias registry, model substitution, or a compatibility fallback.
+2. Reconcile the sixteen-provider matrix with actual executable contracts.
+   Freebuff's launch owner and Antigravity's required-receipt owner currently reject
+   unconditionally. Registration and honest non-startable projection alone do not
+   prove their required runtime implementation. Establish the supported native
+   receipt/turn/cleanup path, or record the exact external dependency that prevents
+   it and leave that acceptance incomplete. Do not attribute missing implementation
+   to a missing login or run authorization. Antigravity's existing real-run exclusion
+   remains; no replacement client or transcript inference is authorized.
+3. Correct the affected paths, update their evidence, and submit the complete Phase 1
+   candidate under the existing per-slice execution gate. Include the subsequent
+   optimization/test/security corrections in the reviewed cumulative range and final
+   HEAD. Reuse valid unaffected evidence and apply `Rule.md`'s verification scope;
+   neither a historical full run nor a large test count closes a new contract gap.
+   Obtain both existing reviewers' approval before Phase 2.
+4. Continue the retained phase order below. The repository-wide optimization and
+   test/security-duplication passes are complete for their recorded scope, not a new
+   recurring prerequisite. Reopen their owners only for a concrete new failure,
+   changed contract, or measured cost. For later historical finding IDs, inspect the
+   current owner first and implement only the unresolved portion.
+
+Evidence owners: [optimization and remaining model-contract finding](VERIFICATION.md#repository-wide-optimization-audit-2026-09-07),
+[test/security cleanup](VERIFICATION.md#test-necessity-and-security-duplication-audit-2026-09-07),
+and [previous packaged/real-provider matrix](VERIFICATION.md#packaged-provider-catalog-and-real-turn-matrix-2026-09-03).
+These steps apply the existing phase exits and approval gates; they do not change
+product scope, provider-run permissions, or reviewer settings.
 
 Closed Phase 0 evidence remains valid, but residual audit cleanup is not allowed to
 hold the retained product behind finding-number order. The production sequence is:
@@ -433,12 +474,16 @@ Correction substage:
 
 ### Phase 2 — finish exact Agent Session control
 
+- Start after Phase 1 closes. Inspect the corrected provider capability/receipt
+  matrix and current control paths first; complete only missing transitions instead
+  of rewriting controls already verified by their existing owner.
 - Revalidate pause/resume/stop and the active busy-turn interrupt against the
   corrected provider contract.
 - Keep unsupported interrupt unavailable until a correlated native quiescence
   receipt exists; never substitute Ctrl-C silence or process replacement.
 - Implement re-add only with its complete participant/session transition and
-  replay contract.
+  replay contract. Keep Agent Session re-add here and human kick/re-admission with
+  their later room/human owners; do not merge their principals or lifecycles.
 - Exit: copied controls advertise only exact implemented actions and pass durable,
   TCP/WebSocket, restart, and real-provider flows.
 

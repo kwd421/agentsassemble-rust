@@ -7,11 +7,12 @@
 - User-requested repository-wide optimization is locally complete: measured duplicate
   work removed and creation cancellation fixed; scope, verification, and remaining finding:
   [optimization audit](docs/VERIFICATION.md#repository-wide-optimization-audit-2026-09-07).
-- Phase 1 provider-first implementation has met its local exit contract; whole-phase
-  external cross-review remains pending. Phase 0A and finite Phase 0B are complete.
-- Next: review the complete Phase 1 candidate, correct review findings, and obtain
-  both reviewers' approval before starting Phase 2. The optimization pass does not
-  change phase approval status or claim new packaged/real-provider verification.
+- Phase 1 remains open: resolve the Custom API response-model contract and reconcile
+  Freebuff/Antigravity's missing native receipts with actual completion evidence.
+  Earlier passing checks remain evidence; they do not close these findings.
+- Next: follow the [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases),
+  then complete whole-phase cross-review before Phase 2. Phase 0A and finite Phase 0B
+  remain complete; real-provider permissions and reviewer settings are unchanged.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:
