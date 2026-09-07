@@ -7516,3 +7516,26 @@ nonce/expiry/issued-at/presenter and replay fail, and disabled/capacity/expiry p
 remain explicit. SQLite setup completes before pausing the nonce clock.
 PASS: both tests, server all-target/all-feature Clippy, structure/19 policy checks,
 artifact and fmt/diff checks (`/tmp/aa-phase5-google-service-*.log`).
+
+## Phase 5 Google account HTTP boundary (2026-09-08)
+
+The registered same-origin public account status, challenge, connect and disconnect
+routes now use the verified Google service and transactional account owner. Requests
+are bounded at 32 KiB and private/no-store; malformed present credentials never
+become anonymous access. Native operator tickets require the exact local ingress
+owner before consumption. Public device/session proof cannot resolve or bind the
+local operator profile, including a Google subject already linked to that profile.
+Guest retirement returns room-bound session revocations, which the existing runtime
+sends only to that room before waking committed event publication.
+
+Three persistence account tests pass, including operator recovery rejection,
+transaction rollback, guest retirement, history preservation, restart and multiple
+devices. Two actual TCP server tests pass through authenticated manual public ingress:
+fresh RSA proof, challenge/device binding, replay, status/disconnect, hostile origin,
+malformed/unknown credentials and local-only native ticket consumption. These use
+fresh fixture keys and no real Google account. Affected persistence/server all-target,
+all-feature Clippy, architecture/source growth, 19 policy tests, format, diff and
+artifact gates pass. Evidence: `/tmp/aa-phase5-account-boundary-tests.log`,
+`/tmp/aa-phase5-account-http-tests.log`, `/tmp/aa-phase5-account-http-clippy.log`,
+`/tmp/aa-phase5-account-http-gates.log`. No new task, timer or key cache is introduced
+by the HTTP boundary. Frontend connection and packaged Phase 5 acceptance remain pending.

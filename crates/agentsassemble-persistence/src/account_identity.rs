@@ -114,7 +114,10 @@ async fn resolve_account_user(
         AccountAuthority::BrowserDevice(fingerprint) => {
             let user_id = device_user_id(transaction, fingerprint).await?;
             match user_id {
-                Some(user_id) => load_account_user(transaction, &user_id).await.map(Some),
+                Some(user_id) => {
+                    require_public_account_user(&user_id)?;
+                    load_account_user(transaction, &user_id).await.map(Some)
+                }
                 None => Ok(None),
             }
         }
@@ -133,6 +136,7 @@ async fn resolve_account_user(
                 ));
             }
             let principal = authorization.principal();
+            require_public_account_user(&principal.principal_id)?;
             if device_user_id(transaction, browser_fingerprint)
                 .await?
                 .is_some_and(|owner| owner != principal.principal_id)
@@ -191,4 +195,14 @@ pub(crate) fn rejected(code: &'static str, message: &str) -> PersistenceError {
         code,
         message: message.into(),
     }
+}
+
+pub(crate) fn require_public_account_user(user_id: &str) -> Result<(), PersistenceError> {
+    if user_id == LOCAL_OPERATOR_USER_ID {
+        return Err(rejected(
+            "account_operator_boundary",
+            "Public account proof cannot grant local operator authority.",
+        ));
+    }
+    Ok(())
 }

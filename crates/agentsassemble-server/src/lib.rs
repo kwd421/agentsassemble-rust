@@ -63,6 +63,7 @@ mod google_accounts;
 mod google_token_verifier;
 pub use central_login::central_login_control;
 pub use google_accounts::{GoogleAccountError, GoogleAccountService};
+mod account_web;
 mod central_registration_web;
 mod connection_admission;
 mod event_publication;

@@ -33,7 +33,7 @@ impl LocalIngress {
         local_bind_is_supported(address).then_some(Self { listener: address })
     }
 
-    fn authorizes(self, peer: PeerAddr, headers: &HeaderMap) -> bool {
+    pub(crate) fn authorizes(self, peer: PeerAddr, headers: &HeaderMap) -> bool {
         if !peer.0.ip().is_loopback() || has_proxy_provenance(headers) {
             return false;
         }

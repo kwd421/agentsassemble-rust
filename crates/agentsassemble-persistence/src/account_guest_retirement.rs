@@ -16,7 +16,7 @@ pub(crate) async fn retire_guest(
     transaction: &mut Transaction<'_, Sqlite>,
     guest: &AccountUser,
     device: Option<&[u8; 32]>,
-) -> Result<(Vec<RoomEvent>, Vec<[u8; 32]>), PersistenceError> {
+) -> Result<(Vec<RoomEvent>, Vec<(String, [u8; 32])>), PersistenceError> {
     // The current Rust room owner is the bootstrapped local operator; it cannot be retired.
     if guest.user_id == LOCAL_OPERATOR_USER_ID {
         return Err(rejected(
@@ -55,8 +55,12 @@ pub(crate) async fn retire_guest(
                 "Guest membership binding is invalid.",
             ));
         }
-        revoked
-            .extend(revoke_participant_access(transaction, &room_id, &guest.participant_id).await?);
+        revoked.extend(
+            revoke_participant_access(transaction, &room_id, &guest.participant_id)
+                .await?
+                .into_iter()
+                .map(|fingerprint| (room_id.clone(), fingerprint)),
+        );
         if participant.status == ParticipantStatus::Joined {
             participant.status = ParticipantStatus::Left;
             participant.updated_at = Utc::now();

@@ -123,8 +123,11 @@ async fn confirmed_guest_switch_is_atomic_and_preserves_public_history() {
     assert!(switched.identity_switched);
     assert_eq!(switched.user.user_id, target.user.user_id);
     assert_eq!(
-        switched.revoked_session_fingerprints,
-        vec![*authorization.session_fingerprint()]
+        switched.revoked_sessions,
+        vec![(
+            authorization.principal().room_id.clone(),
+            *authorization.session_fingerprint()
+        )]
     );
     assert_eq!(switched.events.len(), 1);
     assert_eq!(switched.events[0].event_type, "participant_left");
@@ -189,6 +192,22 @@ async fn account_proof_cannot_retire_operator_or_cross_a_session_device_boundary
         })
     ));
     checked(store.local_operator_profile().await);
+    checked(
+        store
+            .connect_google_account(&operator, &[13; 32], false)
+            .await,
+    );
+    assert!(matches!(
+        store
+            .connect_google_account(&device(&store, 3).await, &[13; 32], true)
+            .await,
+        Err(PersistenceError::CommandRejected {
+            code: "account_operator_boundary",
+            ..
+        })
+    ));
+    assert!(device(&store, 3).await.user().is_none());
+    assert!(checked(store.google_account(&operator).await).is_some());
 }
 
 async fn admitted_guest() -> (SqliteStore, AccountIdentity, HumanSessionAuthorization) {

@@ -316,6 +316,21 @@ impl RoomRuntime {
         }
     }
 
+    pub(crate) async fn notify_account_commit(
+        &self,
+        commit: &agentsassemble_persistence::GoogleAccountLink,
+    ) {
+        {
+            let rooms = self.rooms.lock().await;
+            for (room_id, fingerprint) in &commit.revoked_sessions {
+                if let Some(handle) = rooms.get(room_id) {
+                    let _ = handle.human_session_revocations.send(*fingerprint);
+                }
+            }
+        }
+        self.notify_committed_events(&commit.events).await;
+    }
+
     pub(crate) async fn notify_room_publication(&self, room_id: &str) {
         let handle = self.handle(room_id).await;
         let _ = handle

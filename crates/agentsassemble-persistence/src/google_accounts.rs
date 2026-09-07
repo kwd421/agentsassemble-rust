@@ -5,7 +5,10 @@ use uuid::Uuid;
 
 use crate::{
     AccountIdentity, AccountUser, PersistenceError, SqliteStore,
-    account_identity::{device_user_id, load_account_user, rejected, revalidate_account_identity},
+    account_identity::{
+        device_user_id, load_account_user, rejected, require_public_account_user,
+        revalidate_account_identity,
+    },
 };
 
 #[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
@@ -18,7 +21,7 @@ pub struct GoogleAccountLink {
     pub user: AccountUser,
     pub identity_switched: bool,
     pub events: Vec<RoomEvent>,
-    pub revoked_session_fingerprints: Vec<[u8; 32]>,
+    pub revoked_sessions: Vec<(String, [u8; 32])>,
 }
 
 impl SqliteStore {
@@ -60,8 +63,13 @@ impl SqliteStore {
                 .bind(subject_fingerprint.as_slice())
                 .fetch_optional(&mut *transaction)
                 .await?;
+        if identity.authority.browser_fingerprint().is_some()
+            && let Some(target) = &linked_id
+        {
+            require_public_account_user(target)?;
+        }
         let mut events = Vec::new();
-        let mut revoked_session_fingerprints = Vec::new();
+        let mut revoked_sessions = Vec::new();
         let identity_switched = match (&current, &linked_id) {
             (Some(current), Some(target)) if current.user_id != *target => {
                 if !discard_guest {
@@ -70,13 +78,12 @@ impl SqliteStore {
                         "Confirm guest discard before switching to the existing account.",
                     ));
                 }
-                (events, revoked_session_fingerprints) =
-                    crate::account_guest_retirement::retire_guest(
-                        &mut transaction,
-                        current,
-                        identity.authority.browser_fingerprint(),
-                    )
-                    .await?;
+                (events, revoked_sessions) = crate::account_guest_retirement::retire_guest(
+                    &mut transaction,
+                    current,
+                    identity.authority.browser_fingerprint(),
+                )
+                .await?;
                 true
             }
             _ => false,
@@ -111,7 +118,7 @@ impl SqliteStore {
             user,
             identity_switched,
             events,
-            revoked_session_fingerprints,
+            revoked_sessions,
         })
     }
 
