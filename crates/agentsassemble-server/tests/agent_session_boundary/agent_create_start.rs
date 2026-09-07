@@ -1,4 +1,5 @@
 use super::*;
+use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
 
 #[tokio::test]
 async fn create_with_start_is_one_command_with_original_nested_result_and_replay() {
@@ -188,7 +189,7 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
     let payload = json!({"agent_id": session_id});
     let principal = local_principal();
     let agentsassemble_persistence::AgentStartPlan::Start(effect) = recovery_store
-        .prepare_agent_start(&principal, "lost-browser-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "lost-browser-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare interrupted start: {error}"))
     else {
@@ -201,7 +202,7 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
         .unwrap_or_else(|error| panic!("reserve interrupted start: {error}"));
     recovery_store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "lost-browser-start",
             &payload,
             &effect.operation_id,
@@ -437,7 +438,11 @@ async fn stage_unconfirmed_running_reuse(
     payload: &Value,
 ) {
     let agentsassemble_persistence::AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(principal, "lost-browser-running-start", payload)
+        .prepare_agent_start(
+            TrustedPrincipal(principal),
+            "lost-browser-running-start",
+            payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare running reuse: {error}"))
     else {
@@ -449,7 +454,7 @@ async fn stage_unconfirmed_running_reuse(
         .unwrap_or_else(|error| panic!("reserve running reuse: {error}"));
     store
         .authorize_agent_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             "lost-browser-running-start",
             payload,
             &effect.operation_id,
@@ -492,7 +497,7 @@ async fn wait_for_recovered_rejection(
     let recovered = tokio::time::timeout(Duration::from_secs(5), async {
         loop {
             match store
-                .prepare_agent_start(principal, request_id, payload)
+                .prepare_agent_start(TrustedPrincipal(principal), request_id, payload)
                 .await
             {
                 Err(agentsassemble_persistence::PersistenceError::StoredCommandRejected {

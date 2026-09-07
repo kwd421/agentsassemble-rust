@@ -25,7 +25,7 @@ pub(crate) async fn execute_agent_start(
     }
     let mut plan = store
         .prepare_agent_launch(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             &command.payload,
             command.action.as_str(),
@@ -45,7 +45,7 @@ pub(crate) async fn execute_agent_start(
             Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
                 store
                     .prepare_agent_launch(
-                        &command.principal,
+                        command.mutation_authority(),
                         &command.request_id,
                         &command.payload,
                         command.action.as_str(),
@@ -74,7 +74,7 @@ pub(crate) async fn execute_agent_start(
     };
     let authorized = store
         .authorize_agent_start_effect(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             &command.payload,
             &effect.operation_id,

@@ -1,4 +1,5 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, ProviderCatalog};
+use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_persistence::{
     AgentRuntimeStarted, AgentStartPlan, AgentTurnAssignment, LiveRuntimeReconciliation,
     ProviderTurnExecutionPhase, ProviderTurnReconciliationCandidate, SqliteStore,
@@ -52,7 +53,7 @@ async fn production_replay_helper_observes_gone_before_reenabling_start() {
         .unwrap_or_else(|| panic!("created session has no id"));
     let payload = json!({"agent_id": session_id});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "live-helper-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "live-helper-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -65,7 +66,7 @@ async fn production_replay_helper_observes_gone_before_reenabling_start() {
         .unwrap_or_else(|error| panic!("reserve provider start: {error}"));
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "live-helper-start",
             &payload,
             &effect.operation_id,
@@ -102,7 +103,7 @@ async fn production_replay_helper_observes_gone_before_reenabling_start() {
         LiveRuntimeReconciliation::RetryOriginalEffect
     );
     let AgentStartPlan::Start(retry) = store
-        .prepare_agent_start(&principal, "live-helper-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "live-helper-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("re-enter start: {error}"))
     else {
@@ -177,7 +178,11 @@ async fn stage_live_scan_fixture() -> LiveScanFixture {
     let (directory, store, principal, session_id) = create_live_scan_agent().await;
     let payload = json!({"agent_id": session_id});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "stage-live-provider", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "stage-live-provider",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -190,7 +195,7 @@ async fn stage_live_scan_fixture() -> LiveScanFixture {
         .unwrap_or_else(|error| panic!("reserve exact runtime lease: {error}"));
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "stage-live-provider",
             &payload,
             &effect.operation_id,

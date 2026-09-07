@@ -18,6 +18,53 @@ const JOIN: [u8; 32] = [0x42; 32];
 const BROWSER: [u8; 32] = [0x43; 32];
 
 #[tokio::test]
+async fn launch_preparation_and_effect_dispatch_revalidate_the_request_session() {
+    let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
+    let authorization = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await
+        .unwrap_or_else(|error| panic!("authorize launch request session: {error}"));
+    let authority = crate::RoomMutationAuthority::HumanSession(&authorization);
+    let payload = json!({"agent_id": "another-agent"});
+    for expected in ["permission_denied", "session_revoked"] {
+        assert_rejected_code(
+            store
+                .prepare_agent_start(authority, "start", &payload)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .prepare_agent_resume(authority, "resume", &payload)
+                .await,
+            expected,
+        );
+        assert_rejected_code(
+            store
+                .prepare_agent_launch(authority, "readd", &payload, "agent.readd")
+                .await,
+            expected,
+        );
+        set_participant_status(&store, ParticipantStatus::Left).await;
+    }
+    assert_rejected_code(
+        store
+            .authorize_agent_start_effect(
+                authority,
+                "start",
+                &payload,
+                "operation",
+                "agent.start",
+                "handle",
+                "owner",
+                "lease",
+            )
+            .await,
+        "session_revoked",
+    );
+}
+
+#[tokio::test]
 async fn resident_and_interrupt_commands_revalidate_the_request_session() {
     let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
     let authorization = store

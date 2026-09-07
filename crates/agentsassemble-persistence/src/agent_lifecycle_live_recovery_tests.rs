@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::AgentLifecycleIntentStatus;
 use serde_json::json;
 
@@ -12,7 +13,7 @@ async fn exact_live_replay_reenters_start_only_after_gone_proof() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "live-gone-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "live-gone-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -48,7 +49,7 @@ async fn exact_live_replay_reenters_start_only_after_gone_proof() {
         LiveRuntimeReconciliation::RetryOriginalEffect
     );
     let AgentStartPlan::Start(retry) = store
-        .prepare_agent_start(&principal, "live-gone-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "live-gone-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("re-enter exact start: {error}"))
     else {
@@ -57,7 +58,7 @@ async fn exact_live_replay_reenters_start_only_after_gone_proof() {
     assert!(retry.session.runtime_handle_id.is_empty());
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "replacement-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "replacement-start", &payload)
             .await,
         Err(PersistenceError::CommandRejected {
             code: "operation_in_progress",
@@ -71,7 +72,11 @@ async fn exact_effect_inflight_replay_remains_live_recovery_authority() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "live-effect-inflight", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "live-effect-inflight",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare effect-inflight start: {error}"))
     else {
@@ -112,7 +117,7 @@ async fn exact_live_replay_resumes_only_the_adopted_owned_runtime() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "live-adopted-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "live-adopted-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -157,7 +162,7 @@ async fn exact_live_replay_resumes_only_the_adopted_owned_runtime() {
         LiveRuntimeReconciliation::RetryOriginalEffect
     );
     let AgentStartPlan::Start(retry) = store
-        .prepare_agent_start(&principal, "live-adopted-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "live-adopted-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("resume exact start: {error}"))
     else {
@@ -172,7 +177,7 @@ async fn startup_gone_terminalizes_old_start_and_unblocks_a_new_request() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "abandoned-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "abandoned-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -203,7 +208,7 @@ async fn startup_gone_terminalizes_old_start_and_unblocks_a_new_request() {
         .unwrap_or_else(|error| panic!("terminalize abandoned start: {error}"));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "abandoned-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "abandoned-start", &payload)
             .await,
         Err(PersistenceError::StoredCommandRejected {
             code,
@@ -212,7 +217,11 @@ async fn startup_gone_terminalizes_old_start_and_unblocks_a_new_request() {
     ));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "replacement-after-recovery", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "replacement-after-recovery",
+                &payload
+            )
             .await
             .unwrap_or_else(|error| panic!("prepare replacement start: {error}")),
         AgentStartPlan::Start(_)
@@ -224,7 +233,11 @@ async fn previous_supervisor_request_cannot_use_live_effect_reentry_after_reopen
     let (store, principal, directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "previous-supervisor-start", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "previous-supervisor-start",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -281,7 +294,7 @@ async fn previous_supervisor_request_cannot_use_live_effect_reentry_after_reopen
         .unwrap_or_else(|error| panic!("terminalize old request: {error}"));
     assert!(matches!(
         reopened
-            .prepare_agent_start(&principal, "previous-supervisor-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "previous-supervisor-start", &payload)
             .await,
         Err(PersistenceError::StoredCommandRejected { code, .. })
             if code == "runtime_start_recovered_gone"
@@ -305,7 +318,7 @@ async fn authorize_start(
     };
     store
         .authorize_agent_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             request_id,
             payload,
             &effect.operation_id,

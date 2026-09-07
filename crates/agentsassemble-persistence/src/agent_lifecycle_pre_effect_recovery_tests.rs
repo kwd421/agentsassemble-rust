@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use serde_json::{Value, json};
 
 use super::{AgentRuntimeStarted, AgentStartPlan, AgentStopPlan};
@@ -11,7 +12,7 @@ async fn abandoned_pre_effect_start_is_terminalized_without_spawning() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(_) = store
-        .prepare_agent_start(&principal, "unobserved-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "unobserved-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare unobserved start: {error}"))
     else {
@@ -26,14 +27,18 @@ async fn abandoned_pre_effect_start_is_terminalized_without_spawning() {
     );
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "unobserved-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "unobserved-start", &payload)
             .await,
         Err(PersistenceError::StoredCommandRejected { code, .. })
             if code == "runtime_start_abandoned_before_effect"
     ));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "replacement-after-unobserved", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "replacement-after-unobserved",
+                &payload
+            )
             .await,
         Ok(AgentStartPlan::Start(_))
     ));
@@ -44,7 +49,11 @@ async fn restart_rejects_a_pre_effect_stop_without_claiming_runtime_shutdown() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-before-prepared-stop", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "start-before-prepared-stop",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -85,7 +94,11 @@ async fn restart_rejects_a_pre_effect_stop_without_claiming_runtime_shutdown() {
     ));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "new-start-after-owner-loss", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "new-start-after-owner-loss",
+                &payload
+            )
             .await
             .unwrap_or_else(|error| panic!("prepare new start: {error}")),
         AgentStartPlan::Start(_)
@@ -100,7 +113,7 @@ async fn authorize_start(
 ) {
     store
         .authorize_agent_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             "start-before-prepared-stop",
             payload,
             &effect.operation_id,

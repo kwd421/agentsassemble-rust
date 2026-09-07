@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::AuthenticatedPrincipal;
 use serde_json::{Value, json};
 
@@ -14,7 +15,7 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
     start_then_stop(&store, &principal, &payload).await;
 
     let AgentStartPlan::Start(resume) = store
-        .prepare_agent_resume(&principal, "resume-stopped", &payload)
+        .prepare_agent_resume(TrustedPrincipal(&principal), "resume-stopped", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare resume: {error}"))
     else {
@@ -23,7 +24,7 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
     assert_eq!(resume.session.provider_session_id, "provider-thread-stable");
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "resume-stopped",
             &payload,
             &resume.operation_id,
@@ -49,7 +50,7 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
     assert_eq!(resumed["provider_session_reused"], true);
 
     let AgentStartPlan::Outcome(replayed) = store
-        .prepare_agent_resume(&principal, "resume-stopped", &payload)
+        .prepare_agent_resume(TrustedPrincipal(&principal), "resume-stopped", &payload)
         .await
         .unwrap_or_else(|error| panic!("replay resume: {error}"))
     else {
@@ -67,7 +68,7 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
 
 async fn start_then_stop(store: &SqliteStore, principal: &AuthenticatedPrincipal, payload: &Value) {
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(principal, "initial-start", payload)
+        .prepare_agent_start(TrustedPrincipal(principal), "initial-start", payload)
         .await
         .unwrap_or_else(|error| panic!("prepare initial start: {error}"))
     else {
@@ -75,7 +76,7 @@ async fn start_then_stop(store: &SqliteStore, principal: &AuthenticatedPrincipal
     };
     store
         .authorize_agent_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             "initial-start",
             payload,
             &start.operation_id,

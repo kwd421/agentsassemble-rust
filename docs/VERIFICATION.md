@@ -7643,3 +7643,24 @@ No new process, queue, timer or durable state is introduced. Native control uses
 borrowed principal; browser request transactions invoke the existing session owner.
 Pairing admission and privileged remote dispatch remain pending, so these results
 prove the storage boundary and retained local behavior, not a working pairing UI.
+
+## Phase 5 agent launch session provenance (2026-09-08)
+
+Start, provider-launch resume and re-add now carry room mutation authority into
+preparation, recovered retry preparation and the exact pre-provider authorization
+transaction. Public session revocation is checked before an effect can become
+inflight. The existing exact lifecycle receipt, failure and autonomous reconciliation
+owners remain responsible after an accepted effect; their provider identity,
+reservation and replay checks are preserved.
+
+All 271 persistence tests and five server runtime-reconciliation tests passed.
+The added boundary case rejects ordinary human control and post-resolution revoked
+sessions for all three launch entries and the pre-effect authorization entry.
+Affected all-target/all-feature Clippy and unchanged architecture/source, 19 policy,
+format, diff and artifact checks passed. Logs are
+`/tmp/aa-phase5-start-authority-{tests,runtime-tests,clippy,gates}.log`.
+The only local-path cost is transaction acquisition before capability/payload
+validation; accepted local requests retain borrowed principals and the same queries.
+No new polling or durable state was added. Pairing, stop/create/configuration
+provenance and prepared-intent revocation cleanup still require integration before
+privileged remote dispatch or packaged pairing acceptance can be claimed.

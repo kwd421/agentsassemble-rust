@@ -94,7 +94,11 @@ async fn stage_pre_slot_interrupt() -> PreSlotFixture {
         .to_owned();
     let payload = json!({"agent_id": session_id});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-pre-slot-interrupt-agent", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "start-pre-slot-interrupt-agent",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare pre-slot runtime: {error}"))
     else {
@@ -107,7 +111,7 @@ async fn stage_pre_slot_interrupt() -> PreSlotFixture {
         .unwrap_or_else(|error| panic!("reserve pre-slot runtime: {error}"));
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-pre-slot-interrupt-agent",
             &payload,
             &start.operation_id,

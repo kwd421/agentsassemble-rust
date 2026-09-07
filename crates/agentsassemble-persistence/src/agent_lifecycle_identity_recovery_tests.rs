@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::AgentLifecycleIntentStatus;
 use serde_json::{Value, json};
 
@@ -12,7 +13,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(first_start) = store
-        .prepare_agent_start(&principal, "first-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "first-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare first start: {error}"))
     else {
@@ -62,7 +63,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
         .await
         .unwrap_or_else(|error| panic!("finalize stop: {error}"));
     let AgentStartPlan::Start(restart) = store
-        .prepare_agent_start(&principal, "restart", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "restart", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare restart: {error}"))
     else {
@@ -110,7 +111,11 @@ async fn unconfirmed_start_rejects_a_substituted_runtime_identity() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "identity-bound-start", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "identity-bound-start",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare identity-bound start: {error}"))
     else {
@@ -160,7 +165,11 @@ async fn durable_runtime_identity_rejects_a_missing_lease_generation() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "missing-lease-generation", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "missing-lease-generation",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare identity-bound start: {error}"))
     else {
@@ -239,7 +248,7 @@ async fn authorize_start(
 ) {
     store
         .authorize_agent_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             request_id,
             payload,
             &effect.operation_id,

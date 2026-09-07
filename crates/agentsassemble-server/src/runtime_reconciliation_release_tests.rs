@@ -1,3 +1,4 @@
+use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_persistence::{
     AgentRuntimeStarted, AgentStartPlan, AgentStopPlan, LiveRuntimeReconciliation, SqliteStore,
 };
@@ -70,7 +71,11 @@ async fn exact_live_stop_releases_its_captured_tombstone_after_commit() {
         .unwrap_or_else(|error| panic!("finalize exact stop: {error}"));
     let AgentStartPlan::Start(retry) = fixture
         .store
-        .prepare_agent_start(&fixture.principal, "fresh-after-stop", &fixture.payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&fixture.principal),
+            "fresh-after-stop",
+            &fixture.payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare fresh start: {error}"))
     else {
@@ -113,7 +118,7 @@ async fn startup_gone_accepts_an_active_runtime_without_a_lifecycle_action() {
     let AgentStartPlan::Start(retry) = fixture
         .store
         .prepare_agent_start(
-            &fixture.principal,
+            TrustedPrincipal(&fixture.principal),
             "fresh-after-cold-gone",
             &fixture.payload,
         )
@@ -156,7 +161,7 @@ async fn confirmed_absence_fixture(id_suffix: &str) -> ConfirmedAbsenceFixture {
     let payload = json!({"agent_id": session_id});
     let request_id = format!("stage-confirmed-absence-{id_suffix}");
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, &request_id, &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), &request_id, &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare confirmed absence: {error}"))
     else {
@@ -169,7 +174,7 @@ async fn confirmed_absence_fixture(id_suffix: &str) -> ConfirmedAbsenceFixture {
         .unwrap_or_else(|error| panic!("reserve confirmed absence: {error}"));
     let authorized = store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             &request_id,
             &payload,
             &effect.operation_id,

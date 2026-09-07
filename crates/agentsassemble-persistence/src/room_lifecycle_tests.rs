@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{ClientKind, RoomStatus};
 use serde_json::json;
 
@@ -10,14 +11,18 @@ async fn archive_after_confirmed_shutdown_and_reopen_can_finish_cleanup()
     let (store, principal, directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let crate::AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-before-shutdown", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "start-before-shutdown",
+            &payload,
+        )
         .await?
     else {
         panic!("stopped fixture must prepare a start");
     };
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-before-shutdown",
             &payload,
             &start.operation_id,
@@ -137,7 +142,11 @@ async fn archive_retains_management_replay_and_requires_cleanup_before_restore()
     assert!(store.resolve_principal(&principal).await.is_ok());
     assert!(
         store
-            .prepare_agent_start(&principal, "after-restore", &json!({"agent_id": AGENT_ID}))
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "after-restore",
+                &json!({"agent_id": AGENT_ID})
+            )
             .await
             .is_ok()
     );

@@ -120,6 +120,7 @@ fn admission_error_is_definitive(error: &PersistenceError) -> bool {
 
 #[cfg(test)]
 mod tests {
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
     use std::{fs::File, path::Path};
 
     use agentsassemble_domain::{
@@ -158,7 +159,7 @@ mod tests {
         drop(first);
 
         let AgentStartPlan::Start(effect) = store
-            .prepare_agent_start(&principal, "terminal-rejection", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "terminal-rejection", &payload)
             .await
             .unwrap_or_else(|error| panic!("prepare failed start: {error}"))
         else {

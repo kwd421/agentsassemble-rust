@@ -1,4 +1,5 @@
 use agentsassemble_persistence::AgentStartPlan;
+use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
 
 use super::*;
 
@@ -29,7 +30,12 @@ async fn current_generation_launch_retry(action: &'static str) {
 
     assert!(matches!(
         staging_store
-            .prepare_agent_launch(&local_principal(), "current-resume-retry", &payload, action)
+            .prepare_agent_launch(
+                TrustedPrincipal(&local_principal()),
+                "current-resume-retry",
+                &payload,
+                action
+            )
             .await
             .unwrap_or_else(|error| panic!("stage current resume: {error}")),
         AgentStartPlan::Start(_)
@@ -101,7 +107,7 @@ async fn rejected_and_previous_generation_launch_retry(
     let rejected_payload = launch_payload(action, &rejected_session);
     let AgentStartPlan::Start(rejected_effect) = staging_store
         .prepare_agent_launch(
-            &local_principal(),
+            TrustedPrincipal(&local_principal()),
             "rejected-resume-retry",
             &rejected_payload,
             action,
@@ -128,7 +134,7 @@ async fn rejected_and_previous_generation_launch_retry(
     assert!(matches!(
         previous_owner
             .prepare_agent_launch(
-                &local_principal(),
+                TrustedPrincipal(&local_principal()),
                 "previous-resume-retry",
                 &previous_payload,
                 action,

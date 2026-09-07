@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{AgentRuntimeStatus, AgentSession, AuthenticatedPrincipal};
 use serde_json::{Value, json};
 
@@ -12,7 +13,7 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "start-failed", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "start-failed", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -44,7 +45,7 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
     ));
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-failed",
             &payload,
             &effect.operation_id,
@@ -85,7 +86,11 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
     ));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "new-start-after-safe-failure", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "new-start-after-safe-failure",
+                &payload
+            )
             .await
             .unwrap_or_else(|error| panic!("prepare replacement start: {error}")),
         AgentStartPlan::Start(_)
@@ -119,7 +124,7 @@ async fn assert_terminal_start_failure(
     );
     assert!(matches!(
         store
-            .prepare_agent_start(principal, "start-failed", payload)
+            .prepare_agent_start(TrustedPrincipal(principal), "start-failed", payload)
             .await,
         Err(PersistenceError::StoredCommandRejected { code, message })
             if code == failure.code && message == failure.message

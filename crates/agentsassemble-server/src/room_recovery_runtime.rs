@@ -84,6 +84,7 @@ async fn publish_before_recovery_entry(
 #[cfg(test)]
 mod tests {
     use agentsassemble_domain::AuthenticatedPrincipal;
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
     use agentsassemble_persistence::{
         AgentRuntimeStarted, AgentStartPlan, AgentTurnAssignment, SqliteStore,
     };
@@ -214,7 +215,11 @@ mod tests {
             .to_owned();
         let payload = json!({"agent_id": session_id});
         let AgentStartPlan::Start(effect) = store
-            .prepare_agent_start(&principal, "start-recovery-publication-agent", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "start-recovery-publication-agent",
+                &payload,
+            )
             .await
             .unwrap_or_else(|error| panic!("prepare start: {error}"))
         else {
@@ -227,7 +232,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("reserve runtime authority: {error}"));
         store
             .authorize_agent_start_effect(
-                &principal,
+                TrustedPrincipal(&principal),
                 "start-recovery-publication-agent",
                 &payload,
                 &effect.operation_id,

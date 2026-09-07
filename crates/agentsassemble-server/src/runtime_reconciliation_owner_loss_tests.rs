@@ -1,3 +1,4 @@
+use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
 use std::path::Path;
 
 use agentsassemble_domain::{AuthenticatedPrincipal, ProviderCatalog};
@@ -30,7 +31,7 @@ async fn lost_command_owner_recovers_effect_inflight_without_browser_request_ide
         "agent.start",
     );
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "owner-loss-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "owner-loss-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -42,7 +43,7 @@ async fn lost_command_owner_recovers_effect_inflight_without_browser_request_ide
         .unwrap_or_else(|error| panic!("reserve start: {error}"));
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "owner-loss-start",
             &payload,
             &effect.operation_id,
@@ -88,14 +89,18 @@ async fn lost_command_owner_recovers_effect_inflight_without_browser_request_ide
     .await;
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "owner-loss-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "owner-loss-start", &payload)
             .await,
         Err(PersistenceError::StoredCommandRejected { code, .. })
             if code == "runtime_start_recovered_gone"
     ));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "owner-loss-replacement", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "owner-loss-replacement",
+                &payload
+            )
             .await,
         Ok(AgentStartPlan::Start(_))
     ));

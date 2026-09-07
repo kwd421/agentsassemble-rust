@@ -374,6 +374,7 @@ fn stale_shutdown_observation() -> PersistenceError {
 
 #[cfg(test)]
 pub(crate) mod tests {
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
     use std::{fs::File, path::Path};
 
     use agentsassemble_domain::{
@@ -415,7 +416,11 @@ pub(crate) mod tests {
             .unwrap_or_else(|| panic!("created session has no id"));
         let payload = json!({"agent_id": session_id});
         let AgentStartPlan::Start(effect) = store
-            .prepare_agent_start(&principal, "safe-failure-replay", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "safe-failure-replay",
+                &payload,
+            )
             .await
             .unwrap_or_else(|error| panic!("prepare safe failure start: {error}"))
         else {
@@ -428,7 +433,7 @@ pub(crate) mod tests {
             .unwrap_or_else(|error| panic!("reserve failed generation: {error}"));
         let authorized = store
             .authorize_agent_start_effect(
-                &principal,
+                TrustedPrincipal(&principal),
                 "safe-failure-replay",
                 &payload,
                 &effect.operation_id,
@@ -458,7 +463,11 @@ pub(crate) mod tests {
             LiveRuntimeReconciliation::RetryOriginalEffect
         );
         let AgentStartPlan::Start(retry) = store
-            .prepare_agent_start(&principal, "safe-failure-replay", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "safe-failure-replay",
+                &payload,
+            )
             .await
             .unwrap_or_else(|error| panic!("reload recovered start: {error}"))
         else {
@@ -507,7 +516,7 @@ pub(crate) mod tests {
             .unwrap_or_else(|| panic!("created session has no id"));
         let payload = json!({"agent_id": session_id});
         let AgentStartPlan::Start(effect) = store
-            .prepare_agent_start(&principal, "dynamic-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "dynamic-start", &payload)
             .await
             .unwrap_or_else(|error| panic!("prepare start: {error}"))
         else {
@@ -520,7 +529,7 @@ pub(crate) mod tests {
             .unwrap_or_else(|error| panic!("reserve provider start: {error}"));
         store
             .authorize_agent_start_effect(
-                &principal,
+                TrustedPrincipal(&principal),
                 "dynamic-start",
                 &payload,
                 &effect.operation_id,
@@ -571,7 +580,7 @@ pub(crate) mod tests {
         );
         assert!(matches!(
             store
-                .prepare_agent_start(&principal, "dynamic-start", &payload)
+                .prepare_agent_start(TrustedPrincipal(&principal), "dynamic-start", &payload)
                 .await
                 .unwrap_or_else(|error| panic!("re-enter recovered start: {error}")),
             AgentStartPlan::Start(_)

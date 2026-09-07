@@ -7,7 +7,7 @@ use chrono::Utc;
 use serde_json::Value;
 
 use crate::{
-    PersistenceError, SqliteStore,
+    PersistenceError, RoomMutationAuthority, SqliteStore,
     agent_lifecycle::{AgentStartEffect, AgentStopEffect, load_session, save_session},
     agent_lifecycle_authority::{lifecycle_operation_id, payload_agent_id, require_intent},
     agent_lifecycle_reservations::load_lifecycle_reservation,
@@ -73,7 +73,7 @@ impl SqliteStore {
     #[allow(clippy::too_many_arguments)]
     pub async fn authorize_agent_start_effect(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
@@ -82,6 +82,9 @@ impl SqliteStore {
         runtime_owner_id: &str,
         runtime_lease_token: &str,
     ) -> Result<AgentStartEffect, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let resolved = authority.resolve(&mut transaction).await?;
+        let principal = resolved.as_ref();
         let (agent_id, _) = crate::agent_readd::launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, command_action);
@@ -91,7 +94,6 @@ impl SqliteStore {
                 "Provider start authorization does not match its request.",
             ));
         }
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         let reservation = load_lifecycle_reservation(
             &mut transaction,

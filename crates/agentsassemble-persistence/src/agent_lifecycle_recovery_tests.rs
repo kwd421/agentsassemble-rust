@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, DurableAgentSession,
     Participant, QueuedRoomInput, RoomInputDeliveryKind,
@@ -57,7 +58,7 @@ async fn oversized_turn_queue_fails_before_lifecycle_or_reconciliation_effects()
 
     for result in [
         store
-            .prepare_agent_start(&principal, "oversized-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "oversized-start", &payload)
             .await
             .map(|_| ()),
         store
@@ -84,7 +85,11 @@ async fn live_looking_start_requires_supervisor_confirmation_before_success() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(first) = store
-        .prepare_agent_start(&principal, "first-observed-start", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "first-observed-start",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare first start: {error}"))
     else {
@@ -110,7 +115,11 @@ async fn live_looking_start_requires_supervisor_confirmation_before_success() {
         .await
         .unwrap_or_else(|error| panic!("complete first start: {error}"));
     let AgentStartPlan::Start(reconcile) = store
-        .prepare_agent_start(&principal, "second-observed-start", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "second-observed-start",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare observed reuse: {error}"))
     else {
@@ -129,7 +138,7 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "ambiguous-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "ambiguous-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare ambiguous start: {error}"))
     else {
@@ -192,7 +201,7 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
         .unwrap_or_else(|error| panic!("retain exact uncertain lease: {error}"));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "replacement-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "replacement-start", &payload)
             .await,
         Err(PersistenceError::CommandRejected {
             code: "operation_in_progress",
@@ -201,7 +210,7 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
     ));
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "ambiguous-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "ambiguous-start", &payload)
             .await,
         Err(PersistenceError::CommandUnresolved {
             code: "runtime_effect_unconfirmed",
@@ -227,7 +236,11 @@ async fn reconciliation_rejects_competing_pending_lifecycle_authority() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(_) = store
-        .prepare_agent_start(&principal, "authoritative-start", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "authoritative-start",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare authoritative start: {error}"))
     else {
@@ -257,7 +270,11 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-before-observation", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "start-before-observation",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -403,7 +420,11 @@ async fn pending_request_identity_cannot_be_rebound_to_another_agent() {
     clone_agent(&store, SECOND_AGENT_ID).await;
     let first_payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(first) = store
-        .prepare_agent_start(&principal, "shared-request", &first_payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "shared-request",
+            &first_payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare first start: {error}"))
     else {
@@ -411,7 +432,7 @@ async fn pending_request_identity_cannot_be_rebound_to_another_agent() {
     };
     let conflict = store
         .prepare_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "shared-request",
             &json!({"agent_id": SECOND_AGENT_ID}),
         )
@@ -444,7 +465,11 @@ async fn pending_lifecycle_request_blocks_non_lifecycle_command_admission() {
     let (store, principal, _directory) = fixture().await;
     let lifecycle_payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(_) = store
-        .prepare_agent_start(&principal, "shared-command-request", &lifecycle_payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "shared-command-request",
+            &lifecycle_payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare reserved start: {error}"))
     else {
@@ -487,7 +512,7 @@ async fn start_completion_derives_its_request_operation_binding() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "owned-request", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "owned-request", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -534,7 +559,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "owned-start", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "owned-start", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare owned start: {error}"))
     else {
@@ -542,7 +567,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
     };
     for result in [
         store
-            .prepare_agent_start(&principal, "different-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "different-start", &payload)
             .await
             .map(|_| ()),
         store
@@ -587,7 +612,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
     };
     for result in [
         store
-            .prepare_agent_start(&principal, "opposite-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "opposite-start", &payload)
             .await
             .map(|_| ()),
         store
@@ -634,7 +659,7 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-before-stop", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "start-before-stop", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -723,7 +748,7 @@ async fn authorize_start(
 ) {
     store
         .authorize_agent_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             request_id,
             payload,
             &effect.operation_id,

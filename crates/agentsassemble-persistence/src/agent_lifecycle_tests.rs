@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
     AgentSessionStatus, AgentTurnPhase, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION,
@@ -153,7 +154,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let prepared = store
-        .prepare_agent_start(&principal, "start-lifecycle", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "start-lifecycle", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"));
     let AgentStartPlan::Start(effect) = prepared else {
@@ -180,7 +181,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     };
     let effect = store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-lifecycle",
             &payload,
             &effect.operation_id,
@@ -233,7 +234,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         true
     );
     let replay = store
-        .prepare_agent_start(&principal, "start-lifecycle", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "start-lifecycle", &payload)
         .await
         .unwrap_or_else(|error| panic!("replay start: {error}"));
     let AgentStartPlan::Outcome(replay) = replay else {
@@ -299,7 +300,11 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-without-thread", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "start-without-thread",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -331,7 +336,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
     ));
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-without-thread",
             &payload,
             &start.operation_id,
@@ -414,7 +419,7 @@ async fn unversioned_runtime_profile_fails_before_a_start_effect() {
 
     let outcome = store
         .prepare_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-unsupported-profile",
             &json!({"agent_id": AGENT_ID}),
         )
@@ -452,7 +457,7 @@ async fn unversioned_runtime_profile_fails_before_a_start_effect() {
     assert!(matches!(
         store
             .prepare_agent_start(
-                &principal,
+                TrustedPrincipal(&principal),
                 "start-unsupported-field",
                 &json!({"agent_id": AGENT_ID}),
             )
@@ -519,7 +524,7 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
     );
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "replacement-start", &payload)
+            .prepare_agent_start(TrustedPrincipal(&principal), "replacement-start", &payload)
             .await,
         Err(PersistenceError::CommandRejected {
             code: "operation_in_progress",
@@ -561,7 +566,11 @@ async fn restart_retains_ambiguous_stop_authority_until_gone_is_proven() {
     assert_ambiguous_owner_was_retained(&store).await;
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "replacement-after-restart", &payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "replacement-after-restart",
+                &payload
+            )
             .await,
         Err(PersistenceError::CommandRejected {
             code: "operation_in_progress",
@@ -607,7 +616,11 @@ async fn mark_ambiguous_stop(
     payload: &Value,
 ) -> Vec<agentsassemble_domain::RoomEvent> {
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(principal, "start-before-ambiguous-stop", payload)
+        .prepare_agent_start(
+            TrustedPrincipal(principal),
+            "start-before-ambiguous-stop",
+            payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -615,7 +628,7 @@ async fn mark_ambiguous_stop(
     };
     store
         .authorize_agent_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             "start-before-ambiguous-stop",
             payload,
             &start.operation_id,
@@ -672,7 +685,11 @@ async fn startup_reconciliation_retains_ambiguous_runtime_authority() {
     let (store, principal, _directory) = fixture().await;
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(&principal, "start-before-restart", &payload)
+        .prepare_agent_start(
+            TrustedPrincipal(&principal),
+            "start-before-restart",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -680,7 +697,7 @@ async fn startup_reconciliation_retains_ambiguous_runtime_authority() {
     };
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-before-restart",
             &payload,
             &start.operation_id,

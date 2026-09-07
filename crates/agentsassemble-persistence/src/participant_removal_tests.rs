@@ -10,7 +10,7 @@ async fn removal_fences_launch_and_reopen_retains_cleanup_until_absence_is_prove
     let (store, principal, directory) = fixture().await;
     let launch = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "launch", &launch)
+        .prepare_agent_start(TrustedPrincipal(&principal), "launch", &launch)
         .await
         .unwrap_or_else(|error| panic!("prepare launch: {error}"))
     else {
@@ -18,7 +18,7 @@ async fn removal_fences_launch_and_reopen_retains_cleanup_until_absence_is_prove
     };
     store
         .authorize_agent_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "launch",
             &launch,
             &effect.operation_id,
@@ -48,7 +48,7 @@ async fn removal_fences_launch_and_reopen_retains_cleanup_until_absence_is_prove
     );
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "restart", &launch)
+            .prepare_agent_start(TrustedPrincipal(&principal), "restart", &launch)
             .await,
         Err(PersistenceError::CommandRejected {
             code: "runtime_cleanup_pending",
@@ -231,7 +231,11 @@ async fn exported_session_cannot_resume_after_successful_cleanup() {
     );
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "start-exported", &json!({"agent_id": AGENT_ID}))
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "start-exported",
+                &json!({"agent_id": AGENT_ID})
+            )
             .await,
         Err(PersistenceError::CommandRejected {
             code: "participant_exported",

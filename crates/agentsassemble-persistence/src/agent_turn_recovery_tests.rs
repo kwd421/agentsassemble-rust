@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{AgentRuntimeStatus, AuthenticatedPrincipal, DurableAgentSession};
 use serde_json::{Value, json};
 
@@ -39,7 +40,7 @@ async fn start_fixture_runtime(
 ) -> Value {
     let payload = json!({"agent_id": super::tests::AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(principal, request_id, &payload)
+        .prepare_agent_start(TrustedPrincipal(principal), request_id, &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare recovery start: {error}"))
     else {
@@ -47,7 +48,7 @@ async fn start_fixture_runtime(
     };
     store
         .authorize_agent_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             request_id,
             &payload,
             &start.operation_id,

@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::AgentRuntimeStatus;
 use serde_json::json;
 
@@ -124,7 +125,7 @@ async fn terminal_lifecycle_rejection_requires_a_new_principal_budget_debit() {
             .unwrap_or_else(|error| panic!("classify fresh start: {error}"))
     );
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_start(&principal, "terminal-rejection", &payload)
+        .prepare_agent_start(TrustedPrincipal(&principal), "terminal-rejection", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare failed start: {error}"))
     else {

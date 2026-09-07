@@ -180,3 +180,9 @@ proof and into acceptance. Once interrupt acceptance durably creates its exact
 provider effect, the existing effect/recovery owner completes it independently of
 the requesting session. Revocation prevents new acceptance and replay access; it
 must not strand cleanup already authorized by a committed command.
+
+Agent start/resume/re-add preparation and the transition to `EffectInflight` also
+carry the request session. The latter is the provider-start authorization point;
+subsequent exact receipt/failure/recovery belongs to the durable lifecycle operation,
+not a fresh browser request. Before pairing dispatch is enabled, revocation before
+that point must terminate its prepared intent through the existing failure owner.

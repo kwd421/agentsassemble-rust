@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use crate::participant_rows::save_participant_exact as save_participant;
 use agentsassemble_domain::ParticipantStatus;
 use serde_json::json;
@@ -32,7 +33,12 @@ async fn listing_readd_preserves_room_authority_and_replays_after_reopen()
     transaction.commit().await?;
     let payload = json!({"agent_id": AGENT_ID, "start": false});
     let AgentStartPlan::Outcome(outcome) = store
-        .prepare_agent_launch(&principal, "readd-list", &payload, "agent.readd")
+        .prepare_agent_launch(
+            TrustedPrincipal(&principal),
+            "readd-list",
+            &payload,
+            "agent.readd",
+        )
         .await?
     else {
         panic!("listing must not launch")
@@ -57,7 +63,7 @@ async fn listing_readd_preserves_room_authority_and_replays_after_reopen()
     assert!(matches!(
         store
             .prepare_agent_launch(
-                &principal,
+                TrustedPrincipal(&principal),
                 "readd-list",
                 &json!({"agent_id": AGENT_ID, "start": true}),
                 "agent.readd"
@@ -69,7 +75,12 @@ async fn listing_readd_preserves_room_authority_and_replays_after_reopen()
     drop(store);
     let reopened = crate::SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
     let AgentStartPlan::Outcome(replay) = reopened
-        .prepare_agent_launch(&principal, "readd-list", &payload, "agent.readd")
+        .prepare_agent_launch(
+            TrustedPrincipal(&principal),
+            "readd-list",
+            &payload,
+            "agent.readd",
+        )
         .await?
     else {
         panic!("replay must not launch")
@@ -83,6 +94,7 @@ async fn listing_readd_preserves_room_authority_and_replays_after_reopen()
 async fn started_readd_joins_only_after_exact_effect_and_replays_once()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, principal, _directory) = fixture().await;
+    let authority = TrustedPrincipal(&principal);
     let mut transaction = store.pool.begin().await?;
     let mut participant = load_participant(&mut transaction, "general", AGENT_ID).await?;
     participant.status = ParticipantStatus::Kicked;
@@ -96,7 +108,7 @@ async fn started_readd_joins_only_after_exact_effect_and_replays_once()
     transaction.commit().await?;
     let payload = json!({"agent_id": AGENT_ID, "start_now": true});
     let AgentStartPlan::Start(effect) = store
-        .prepare_agent_launch(&principal, "readd-start", &payload, "agent.readd")
+        .prepare_agent_launch(authority, "readd-start", &payload, "agent.readd")
         .await?
     else {
         panic!("launch required")
@@ -111,7 +123,7 @@ async fn started_readd_joins_only_after_exact_effect_and_replays_once()
     transaction.commit().await?;
     store
         .authorize_agent_start_effect(
-            &principal,
+            authority,
             "readd-start",
             &payload,
             &effect.operation_id,
@@ -156,7 +168,7 @@ async fn started_readd_joins_only_after_exact_effect_and_replays_once()
         ]
     );
     let AgentStartPlan::Outcome(replay) = store
-        .prepare_agent_launch(&principal, "readd-start", &payload, "agent.readd")
+        .prepare_agent_launch(authority, "readd-start", &payload, "agent.readd")
         .await?
     else {
         panic!("must not relaunch")
@@ -164,7 +176,7 @@ async fn started_readd_joins_only_after_exact_effect_and_replays_once()
     assert_eq!(outcome.result, replay.result);
     assert!(
         store
-            .prepare_agent_launch(&principal, "readd-active", &payload, "agent.readd")
+            .prepare_agent_launch(authority, "readd-active", &payload, "agent.readd")
             .await
             .is_err()
     );
@@ -181,7 +193,12 @@ async fn readd_rejects_untrusted_flags_and_missing_control_authority()
     ] {
         assert!(matches!(
             store
-                .prepare_agent_launch(&principal, "invalid-readd", &payload, "agent.readd")
+                .prepare_agent_launch(
+                    TrustedPrincipal(&principal),
+                    "invalid-readd",
+                    &payload,
+                    "agent.readd"
+                )
                 .await,
             Err(PersistenceError::CommandRejected {
                 code: "bad_request",
@@ -194,7 +211,7 @@ async fn readd_rejects_untrusted_flags_and_missing_control_authority()
     assert!(
         store
             .prepare_agent_launch(
-                &principal,
+                TrustedPrincipal(&principal),
                 "forbidden-readd",
                 &json!({"agent_id": AGENT_ID}),
                 "agent.readd"
@@ -240,7 +257,7 @@ async fn readd_rejects_cross_bound_stored_identity_before_mutation()
             assert!(matches!(
                 store
                     .prepare_agent_launch(
-                        &principal,
+                        TrustedPrincipal(&principal),
                         "corrupt-readd",
                         &json!({"agent_id": AGENT_ID, "start": start}),
                         "agent.readd"

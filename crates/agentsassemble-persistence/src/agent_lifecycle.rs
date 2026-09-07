@@ -10,7 +10,7 @@ use serde_json::Value;
 use sqlx::{Sqlite, Transaction};
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore,
+    CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore,
     agent_launch_events::commit_launch_result,
     agent_lifecycle_authority::{
         authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id, require_intent,
@@ -75,11 +75,11 @@ impl SqliteStore {
     /// Returns authorization, idempotency, payload, state, or storage failures.
     pub async fn prepare_agent_start(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<AgentStartPlan, PersistenceError> {
-        self.prepare_agent_launch(principal, request_id, payload, START)
+        self.prepare_agent_launch(authority, request_id, payload, START)
             .await
     }
 
@@ -93,11 +93,11 @@ impl SqliteStore {
     /// Returns authorization, idempotency, payload, state, or storage failures.
     pub async fn prepare_agent_resume(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<AgentStartPlan, PersistenceError> {
-        self.prepare_agent_launch(principal, request_id, payload, RESUME)
+        self.prepare_agent_launch(authority, request_id, payload, RESUME)
             .await
     }
 
@@ -107,16 +107,18 @@ impl SqliteStore {
     /// Returns authorization, payload, replay, inactive-custody, or storage failures.
     pub async fn prepare_agent_launch(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         command_action: &'static str,
     ) -> Result<AgentStartPlan, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let resolved = authority.resolve(&mut transaction).await?;
+        let principal = resolved.as_ref();
         authorize_control(principal)?;
         let (agent_id, start_requested) = launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let operation_id = lifecycle_operation_id(principal, request_id, command_action);
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
             &mut transaction,

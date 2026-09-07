@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use std::{fs::File, path::Path};
 
 use agentsassemble_domain::{
@@ -513,7 +514,11 @@ async fn startup_gone_keeps_created_identity_and_terminalizes_its_old_start() {
     let retry_payload = json!({"agent_id": effect.session.public.session_id});
     assert!(matches!(
         store
-            .prepare_agent_start(&principal, "start-created-after-recovery", &retry_payload)
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "start-created-after-recovery",
+                &retry_payload
+            )
             .await
             .unwrap_or_else(|error| panic!("start retained created session: {error}")),
         AgentStartPlan::Start(_)
