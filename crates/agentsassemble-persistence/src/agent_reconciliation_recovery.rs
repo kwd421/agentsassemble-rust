@@ -143,6 +143,17 @@ async fn apply_reconciliation(
         return Ok(Vec::new());
     }
     let detach = reconcile_observation(&mut session, observation)?;
+    if observation == &RuntimeReconciliationObservation::Gone
+        && crate::room_runtime_cleanup::cleanup_exists(
+            &mut transaction,
+            &session.public.room_id,
+            &session.public.session_id,
+        )
+        .await?
+    {
+        session.public.runtime_status = AgentRuntimeStatus::Stopped;
+        session.public.recovery_required = false;
+    }
     save_reconciled_session(&mut transaction, &session).await?;
     if detach {
         detach_participant(

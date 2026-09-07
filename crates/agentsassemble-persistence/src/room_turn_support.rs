@@ -97,16 +97,30 @@ pub(crate) async fn load_active_room(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<(Room, RoomSettings), PersistenceError> {
+    let (room, settings) = load_room_with_settings(transaction, room_id).await?;
+    if room.status != RoomStatus::Active {
+        return Err(rejected(
+            "room_inactive",
+            "Closed or archived rooms do not accept commands.",
+        ));
+    }
+    Ok((room, settings))
+}
+
+pub(crate) async fn load_room_with_settings(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+) -> Result<(Room, RoomSettings), PersistenceError> {
     let row = sqlx::query("SELECT room_json, settings_json FROM rooms WHERE room_id = ?")
         .bind(room_id)
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(PersistenceError::RoomMissing)?;
     let room: Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
-    if room.status != RoomStatus::Active {
+    if room.room_id != room_id {
         return Err(rejected(
-            "room_inactive",
-            "Closed or archived rooms do not accept commands.",
+            "invalid_state",
+            "Stored room identity differs from its row.",
         ));
     }
     let settings = serde_json::from_str(row.get::<&str, _>("settings_json"))?;

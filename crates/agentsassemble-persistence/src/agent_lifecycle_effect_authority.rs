@@ -1,3 +1,4 @@
+use crate::room_runtime_cleanup::load_launch_session;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
     AuthenticatedPrincipal, DurableAgentSession, canonical_payload_hash,
@@ -119,7 +120,8 @@ impl SqliteStore {
                 "Provider start reservation is not owned by this runtime.",
             ));
         }
-        let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        let mut session =
+            load_launch_session(&mut transaction, &principal.room_id, &agent_id).await?;
         authorize_start_effect(
             &mut session,
             operation_id,

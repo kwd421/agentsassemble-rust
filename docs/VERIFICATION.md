@@ -7103,3 +7103,21 @@ transition. The existing exact-CAS/recovered-stop case now commits a kick before
 recovery and verifies that the recovered stop result leaves that removal intact.
 All 254 persistence cases, affected Clippy and unchanged architecture/source/format/
 diff and 19 policy/artifact checks pass. No query, state field or retry is added.
+
+The Phase 4 persistence removal owner commits `participant.kick`/`participant.export`,
+exact human-session revocation, participant-targeted invite revocation, a canonical
+event/result, and pending Agent cleanup atomically. Schema 60 adds a pending-key
+table referencing existing Agent Session custody; it prevents room/session cascade
+deletion while cleanup remains unresolved. Launch/re-add and launch confirmation
+check that fence at their transaction boundaries. Pending scans use the key index
+and at most 64 rows; no provider identity is copied and no timer is added here.
+Cleanup completion requires checkpointed absence and advances only an active room's
+ordered floor. Closed rooms retain exact pending recovery access without accepting
+normal sessions. Exported Agents cannot restart after cleanup.
+
+All 259 persistence cases pass, including removed launch/reopen recovery, positive
+absence in a closed room, exported restart rejection, guest/bridge/owner boundaries,
+and real human-admission removal with replay after rejoin. Affected Clippy and the
+unchanged architecture/source/format/diff and 19 policy/artifact gates pass. This is
+the persistence contract; command transport, the existing recovery watcher and
+frontend controls are connected in the next Phase 4 slice, before advertising it.

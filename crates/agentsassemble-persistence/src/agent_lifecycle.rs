@@ -1,4 +1,5 @@
 use crate::participant_rows::save_participant_exact as save_participant;
+use crate::room_runtime_cleanup::load_launch_session;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
     AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
@@ -140,10 +141,17 @@ impl SqliteStore {
         );
         self.claim_lifecycle_command(&mut transaction, &reservation, payload, true)
             .await?;
-        let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        let mut session =
+            load_launch_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
         let mut participant =
             load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
+        if participant.status == ParticipantStatus::Exported {
+            return Err(rejected(
+                "participant_exported",
+                "This agent was exported from the room and cannot be started.",
+            ));
+        }
         if command_action != READD && participant.status == ParticipantStatus::Kicked {
             return Err(rejected(
                 "participant_kicked",
@@ -263,7 +271,8 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(outcome);
         }
-        let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
+        let mut session =
+            load_launch_session(&mut transaction, &principal.room_id, &agent_id).await?;
         validate_runtime_started(&session, started)?;
         require_intent(
             &session,
@@ -540,3 +549,7 @@ mod profile_tests;
 #[cfg(test)]
 #[path = "agent_avatar_tests.rs"]
 mod avatar_tests;
+
+#[cfg(test)]
+#[path = "participant_removal_tests.rs"]
+mod removal_tests;

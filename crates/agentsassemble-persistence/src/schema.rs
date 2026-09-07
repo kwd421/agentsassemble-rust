@@ -211,6 +211,11 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "room_runtime_cleanup",
+        ddl: "CREATE TABLE IF NOT EXISTS room_runtime_cleanup (room_id TEXT NOT NULL, session_id TEXT NOT NULL, PRIMARY KEY(room_id, session_id), FOREIGN KEY(room_id, session_id) REFERENCES agent_sessions(room_id, session_id) ON DELETE RESTRICT)",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "agent_avatar_assets",
         ddl: concat!(
             "CREATE TABLE IF NOT EXISTS agent_avatar_assets (",

@@ -1,4 +1,5 @@
 use crate::participant_rows::save_participant_exact as save_participant;
+use crate::room_runtime_cleanup::load_launch_session;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSessionDraft, AuthenticatedPrincipal,
     ParticipantStatus, RoomEvent, canonical_payload_hash,
@@ -209,7 +210,7 @@ impl SqliteStore {
         let prepared_result: Value = serde_json::from_str(&stored.prepared_result_json)?;
         validate_prepared_result(&prepared_result, &stored.session_id)?;
         let mut session =
-            load_session(&mut transaction, &principal.room_id, &stored.session_id).await?;
+            load_launch_session(&mut transaction, &principal.room_id, &stored.session_id).await?;
         authorize_start_effect(
             &mut session,
             operation_id,
@@ -277,7 +278,7 @@ impl SqliteStore {
         let mut prepared_result: Value = serde_json::from_str(&stored.prepared_result_json)?;
         validate_prepared_result(&prepared_result, &stored.session_id)?;
         let mut session =
-            load_session(&mut transaction, &principal.room_id, &stored.session_id).await?;
+            load_launch_session(&mut transaction, &principal.room_id, &stored.session_id).await?;
         validate_runtime_started(&session, started)?;
         require_intent(
             &session,

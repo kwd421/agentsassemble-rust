@@ -53,6 +53,7 @@ mod room_event_sequence;
 mod room_history;
 mod room_preferences;
 mod room_random;
+mod room_runtime_cleanup;
 mod room_settings;
 mod room_subscription;
 mod room_turns;
@@ -76,6 +77,7 @@ mod human_session_authority_tests;
 mod message_attachment_tests;
 mod participant_leave;
 mod participant_mute;
+mod participant_removal;
 mod participant_roles;
 #[cfg(test)]
 mod persistence_security_tests;
@@ -130,6 +132,7 @@ pub use message_pins::PinnedLobbyMessage;
 pub use message_search::ProviderMessageSearchAuthority;
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;
+pub use participant_removal::ParticipantRemovalMutation;
 pub use persona_charx::import_charx_asset;
 pub use persona_import::{ImportedPersonaAsset, PersonaImportError, import_ccv3_asset};
 pub use persona_risu::import_risum_asset;
@@ -151,6 +154,7 @@ pub use room_appearance_assets::{RoomAppearanceAsset, RoomAppearanceAssetMetadat
 pub use room_directory::{RoomCreateCommit, StoredRoomSummary};
 pub use room_preferences::{LocalRoomPreferencesDirectoryEntry, RoomPreferencesSnapshot};
 pub use room_random::{ProviderRoomRandomCommit, RoomRandomCommit};
+pub use room_runtime_cleanup::{RoomRuntimeCleanupKey, RoomRuntimeCleanupPage};
 pub use room_subscription::RoomCatchUp;
 pub use room_turns::{
     AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority, RoomCommandMutation,

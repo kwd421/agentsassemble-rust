@@ -243,7 +243,9 @@ pub(crate) async fn load_candidate(
         return Ok(None);
     };
     let room = serde_json::from_str::<Room>(&row.get::<String, _>("room_json"))?;
-    if room.status == RoomStatus::Closed {
+    if room.status == RoomStatus::Closed
+        && !crate::room_runtime_cleanup::cleanup_exists(transaction, room_id, session_id).await?
+    {
         return Ok(None);
     }
     let encoded_session = row.get::<String, _>("session_json");

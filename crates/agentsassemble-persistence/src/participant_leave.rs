@@ -383,19 +383,7 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("invalid payload revoked session: {error}"));
 
-        let owner = AuthenticatedPrincipal {
-            principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
-            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-            display_name: "Host".to_owned(),
-            room_id: "general".to_owned(),
-            client_kind: ClientKind::Browser,
-            invite_scope: InviteScope::ReadWrite,
-            is_operator: true,
-            capabilities: CapabilitySet::local_operator(
-                ClientKind::Browser,
-                InviteScope::ReadWrite,
-            ),
-        };
+        let owner = local_owner();
         assert!(
             store
                 .command_requires_principal_budget(
@@ -425,6 +413,67 @@ mod tests {
             .unwrap_or_else(|error| panic!("count partial leave events: {error}")),
             0
         );
+    }
+
+    #[tokio::test]
+    async fn moderator_removal_revokes_admitted_human_and_replay_cannot_retarget_rejoin() {
+        let (store, authorization, fingerprint) = admitted_fixture(InviteScope::ReadWrite).await;
+        let owner = local_owner();
+        let payload = json!({"participant_id": authorization.principal().participant_id});
+        assert!(matches!(
+            store
+                .execute_participant_removal(
+                    authorization.principal(),
+                    "guest-kick",
+                    "participant.kick",
+                    &payload
+                )
+                .await,
+            Err(PersistenceError::CommandRejected {
+                code: "permission_denied",
+                ..
+            })
+        ));
+        let mutation = store
+            .execute_participant_removal(&owner, "human-removal", "participant.export", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("remove admitted human: {error}"));
+        assert_eq!(mutation.revoked_session_fingerprints, vec![fingerprint]);
+        assert!(mutation.cleanup.is_none());
+        assert!(matches!(
+            store.authorize_human_session(&fingerprint).await,
+            Err(PersistenceError::CommandRejected {
+                code: "session_revoked",
+                ..
+            })
+        ));
+        let rejoined = rejoin(&store).await;
+        let replay = store
+            .execute_participant_removal(&owner, "human-removal", "participant.export", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("replay old removal: {error}"));
+        assert!(replay.outcome.deduplicated);
+        assert!(replay.revoked_session_fingerprints.is_empty());
+        store
+            .authorize_human_session(rejoined.session_fingerprint())
+            .await
+            .unwrap_or_else(|error| panic!("old removal revoked a new membership: {error}"));
+    }
+
+    fn local_owner() -> AuthenticatedPrincipal {
+        AuthenticatedPrincipal {
+            principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+            display_name: "Host".to_owned(),
+            room_id: "general".to_owned(),
+            client_kind: ClientKind::Browser,
+            invite_scope: InviteScope::ReadWrite,
+            is_operator: true,
+            capabilities: CapabilitySet::local_operator(
+                ClientKind::Browser,
+                InviteScope::ReadWrite,
+            ),
+        }
     }
 
     async fn admitted_fixture(

@@ -33,6 +33,15 @@ requires exact-name confirmation and a durable result/tombstone so retry cannot
 retarget a recreated room. Cleanup failure must remain visible and recoverable;
 never claim runtime termination or deletion from only a submitted effect.
 
+Removal commits access revocation before external cleanup. A pending cleanup row
+references the existing Agent Session rather than copying its runtime identity or
+creating another provider supervisor. It fences new launch/re-add effects until
+the existing exact runtime/turn reconciliation owners prove absence. The current
+server recovery watcher consumes bounded pending cleanup work; no second timer is
+introduced. Removed membership survives normal stop and recovery. Room rows and
+owned assets remain present while cleanup is unresolved; physical deletion follows
+confirmed cleanup and retains an exact command tombstone outside the room cascade.
+
 No client orchestration substitutes for server lifecycle. No real providers or
 user-room deletion runs during implementation. No new fallback, gate exception,
 plugin framework, scheduler, or periodic cleanup is implied by this phase.
