@@ -553,3 +553,7 @@ mod avatar_tests;
 #[cfg(test)]
 #[path = "participant_removal_tests.rs"]
 mod removal_tests;
+
+#[cfg(test)]
+#[path = "room_lifecycle_tests.rs"]
+mod room_lifecycle_tests;

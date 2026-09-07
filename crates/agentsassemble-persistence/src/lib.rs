@@ -48,6 +48,8 @@ mod profile_store;
 mod raster_assets;
 mod room_appearance_assets;
 mod room_directory;
+mod room_lifecycle;
+pub use room_lifecycle::RoomLifecycleMutation;
 mod room_event_publication;
 mod room_event_sequence;
 mod room_history;

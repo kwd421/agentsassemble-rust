@@ -7148,3 +7148,18 @@ All 39 affected frontend cases and production build/CSS plus unchanged architect
 source, format/diff and 19 policy/artifact checks pass. React review retained event
 handlers, semantic labelled buttons and shared state scoped to each participant;
 no fetch loop, new CSS or optimistic membership authority was added.
+
+Room close/archive persistence now validates the bootstrapped local owner and exact
+room UID, uses existing command admission/replay, and commits inactivity, invite and
+human-session revocation plus cleanup requests in one transaction. Normal admission
+still rejects inactive rooms. The separate management resolver checks the same
+bootstrap, exact local membership and profile identity without requiring an active
+room. Archive restoration waits for cleanup; closed rooms cannot be restored.
+Joined Agent membership remains restartable after archive cleanup; removed members
+retain their detached/kicked/exported status.
+
+All 261 persistence cases, affected Clippy and unchanged architecture/source/format/
+diff plus 19 policy/artifact checks pass. New proof covers archive/reopen replay,
+restoration fencing, ordinary versus management admission, exact-owner/bridge/stale
+UID rejection, close replay and terminal close semantics. Transport remains to be
+connected through the existing room command owner before exposing lifecycle UI.

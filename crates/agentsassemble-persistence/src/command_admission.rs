@@ -140,7 +140,11 @@ impl SqliteStore {
     ) -> Result<bool, PersistenceError> {
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
-        active_room_for_principal(&mut transaction, principal).await?;
+        if crate::room_lifecycle::is_room_lifecycle_action(action) {
+            crate::room_lifecycle::resolve_manager(&mut transaction, principal).await?;
+        } else {
+            active_room_for_principal(&mut transaction, principal).await?;
+        }
         let existing = existing_request_identity(
             &mut transaction,
             &principal.room_id,

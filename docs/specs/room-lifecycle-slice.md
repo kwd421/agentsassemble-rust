@@ -28,7 +28,9 @@ provider runtime custody, human-session revocation and room directory owners.
 Kick/export removes exact membership/access, stops or retains explicit unresolved
 custody for the exact Agent runtime, and publishes the canonical removed state.
 Close prevents further writes/admission and cleans owned running work and access;
-archive/unarchive preserves data and an authenticated management path. Delete
+archive/unarchive preserves data and an authenticated management path. Archive revokes
+live access and stops owned work while preserving membership and settings; restoring
+requires completed cleanup and never reopens a closed room. Delete
 requires exact-name confirmation and a durable result/tombstone so retry cannot
 retarget a recreated room. Cleanup failure must remain visible and recoverable;
 never claim runtime termination or deletion from only a submitted effect.
@@ -41,6 +43,15 @@ server recovery watcher consumes bounded pending cleanup work; no second timer i
 introduced. Removed membership survives normal stop and recovery. Room rows and
 owned assets remain present while cleanup is unresolved; physical deletion follows
 confirmed cleanup and retains an exact command tombstone outside the room cascade.
+
+Lifecycle management uses the authenticated HTTP directory boundary because archive
+and close invalidate ordinary room admission, and restoration must work without a
+room socket. Both transports delegate to the same bounded room command owner; the
+HTTP response is not the broadcast authority. Existing sequence-coupled commands
+and all real-time updates remain WebSocket-owned. The user's 2026-09-07 transport
+clarification prioritizes stability and replaceable transport adapters, not a
+wholesale Discord-protocol copy. No duplicate HTTP moderation wrapper is retained
+without a distinct integration consumer.
 
 No client orchestration substitutes for server lifecycle. No real providers or
 user-room deletion runs during implementation. No new fallback, gate exception,

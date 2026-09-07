@@ -198,7 +198,18 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(None);
         }
-        session.public.status = AgentSessionStatus::Detached;
+        let participant = crate::agent_lifecycle::load_participant(
+            &mut transaction,
+            &key.room_id,
+            &key.session_id,
+        )
+        .await?;
+        session.public.status =
+            if participant.status == agentsassemble_domain::ParticipantStatus::Joined {
+                AgentSessionStatus::Available
+            } else {
+                AgentSessionStatus::Detached
+            };
         session.public.runtime_status = AgentRuntimeStatus::Stopped;
         session.public.enabled = false;
         session.public.provider_session_active = false;
