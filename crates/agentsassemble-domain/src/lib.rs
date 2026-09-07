@@ -8,6 +8,8 @@ mod asset;
 mod canonical_json;
 mod command;
 mod diagnostic;
+mod friend;
+pub use friend::{FriendDetails, FriendParticipantType, SaveFriend, SavedFriend};
 mod identity;
 mod message_attachments;
 mod message_mutations;

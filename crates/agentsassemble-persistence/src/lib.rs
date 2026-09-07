@@ -35,6 +35,9 @@ mod bootstrap;
 mod command_admission;
 mod database_target;
 mod filesystem_authority;
+mod friends;
+#[cfg(test)]
+mod friends_tests;
 mod host_identity;
 mod host_key_file;
 mod human_admission;

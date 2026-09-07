@@ -130,3 +130,26 @@ cannot recover the local operator. Only configured browser servers admit the fix
 GIS script/style/frame/connect sources. Google proof remains transient until a
 separate focused guest-discard confirmation; failed proof/persistence requests never
 produce a connected view. The native startup central account remains separate.
+
+### Saved friend directory boundary
+
+The retained `App.tsx` home/friends entry and room invite picker consume the original
+server-wide `/api/room-friends` address book. Its route supplies no live agent list;
+saved metadata does not establish presence. Rust keeps this local operator resource
+behind a private HTTP operator ticket and rechecks completed bootstrap inside each
+storage transaction. Public guests and paired room operators cannot read or edit it.
+
+The persistence owner stores stable UUID contact IDs, revisions, supplied name,
+handle, participant type, provider and connection identity, source agent/room and
+timestamps. Provider text never changes participant type. Creation uses a client
+UUID retained across retries, while edits require the observed revision. Identical
+replays return the committed contact; a stale differing edit fails visibly. Delete
+is idempotent; it erases contact metadata and retains only the ID to prevent a delayed
+creation retry from resurrecting it. A later edit cannot recreate a deleted record. Old JSON files and
+schema versions are not silently imported. A failed read remains an error.
+
+The home entry presents searchable/type-filtered contacts, add/edit drafts and a
+focused deletion confirmation. The room invite picker uses the existing human
+invite owner for people; external AI invitations remain separately owned by Phase 7.
+Local storage/restart and conflicting edit checks precede private HTTP/UI connection;
+packaged desktop/mobile verification completes the vertical flow before phase review.

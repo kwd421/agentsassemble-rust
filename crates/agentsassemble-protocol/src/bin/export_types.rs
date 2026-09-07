@@ -35,6 +35,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_import_extension(Some("js"));
     RoomSnapshot::export_all(&config)?;
     PersonaAssetSummary::export_all(&config)?;
+    agentsassemble_domain::SavedFriend::export_all(&config)?;
+    agentsassemble_domain::SaveFriend::export_all(&config)?;
     Subscribed::export_all(&config)?;
     CommandAck::export_all(&config)?;
     TicketResponse::export_all(&config)?;

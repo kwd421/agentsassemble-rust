@@ -7569,3 +7569,20 @@ the frozen CSS owner is unchanged. Evidence: `/tmp/aa-phase5-account-ui-final-te
 `/tmp/aa-phase5-google-csp-tests.log`, `/tmp/aa-phase5-account-ui-clippy.log`,
 `/tmp/aa-phase5-account-ui-gates.log`. Actual packaged desktop/mobile Phase 5 and
 real Google completion are not claimed by these local fixtures.
+## Phase 5 saved friend persistence (2026-09-08)
+
+The retained home directory and room invite callers establish a server-wide saved
+address book, separate from live presence and room admission. Its Rust storage owner
+now preserves explicit participant/provider metadata, independent UUID identities,
+optimistic revisions and exact immediate retries. Deletion erases metadata and keeps
+only the ID to fence delayed creation retries. Bootstrap is checked in the committing
+transaction; reads propagate malformed data rather than returning an empty list.
+
+The focused persistence test passes: bootstrap rejection, duplicate creation retry,
+same-name independent contacts, simultaneous conflicting edits, exact edit retry,
+restart, idempotent delete, delayed retry rejection, metadata erasure and corrupt-read
+failure. The test took 0.05s; this owner adds no timers/tasks/network work, uses one
+transaction per operation and reads contact rows only on request. Persistence and
+protocol all-target/all-feature Clippy, generated types, architecture/source gates,
+19 gate-policy checks, format, diff and artifact checks pass. HTTP authorization,
+visible directory/invite controls and packaged proof remain pending.

@@ -149,6 +149,11 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "saved_friends",
+        ddl: "CREATE TABLE IF NOT EXISTS saved_friends (friend_id TEXT PRIMARY KEY, friend_json TEXT)",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "human_device_credentials",
         ddl: concat!(
             "CREATE TABLE IF NOT EXISTS human_device_credentials (",
