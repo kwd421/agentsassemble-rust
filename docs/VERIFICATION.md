@@ -6762,8 +6762,13 @@ or packaged application was used. Corrections are subject to re-review:
 | High: Codex config inspection and launch select different homes | `4023d5f` binds config inspection, owned child, and discovery home. |
 | Medium: tool-only room completion rejected before finalization | `c25b536` preserves common portal finalization and tests publish/decline. |
 | Medium: RoomPortal errors drift across provider owners | `d27d1a4` provides one shared typed conversion and ACP normalization. |
-| Medium: retired Antigravity CI and current contract remain active | This correction removes zero-test workflow filters and updates current contracts. |
-| Medium: historical feature commit exceeds the mandatory size limit | `60c8bff` has 1,986 changed lines, including a 1,510-line generated lockfile. Owner disposition is pending; no exception or public history rewrite is applied. |
+| Medium: retired Antigravity CI and current contract remain active | Corrections through `b3887b6` remove zero-test workflow filters and update all active contracts; final manual re-review closes the finding. |
+| Medium: historical feature commit exceeds the mandatory size limit | The user accepted the generated-lockfile exception for `60c8bff` on 2026-09-07 after reviewing its 1,986 changed lines: 1,510 generated lockfile lines and 476 other lines. This disposition applies to that commit only; no general gate change or public history rewrite is applied. |
+
+Daybreak's completed re-review at `b3887b6` approves the corrected final source,
+documentation, and local contract at C0/H0/M0/L0. Its separate historical size
+blocker now has the user disposition above; the updated cumulative review verdict
+remains subject to reviewer confirmation.
 
 The GPT-6 Pro whole-phase review is still running. Neither these implementation
 corrections nor earlier local test counts close Phase 1 without both completed
@@ -6777,7 +6782,8 @@ Manual re-review of `4cadb12..acd5e35` closes the Codex-home, tool-only completi
 and shared-Portal-error findings and approves final source/security/failure paths
 at C0/H0/M0/L0. It retains one Medium because other active slice specifications and
 the current exposure table still direct managed Antigravity work; the historical
-`60c8bff` size violation remains separately pending owner disposition.
+`60c8bff` size violation was separately pending owner disposition at that review.
+The later user disposition is recorded in the whole-phase table above.
 
 The correction updates current search, attachment, vote, moderation, and settings
 contracts and acceptance matrices to the existing retained-provider/final-verification
