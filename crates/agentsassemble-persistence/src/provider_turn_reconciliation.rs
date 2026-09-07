@@ -692,18 +692,17 @@ async fn save_participant(
     transaction: &mut Transaction<'_, Sqlite>,
     participant: &agentsassemble_domain::Participant,
 ) -> Result<(), PersistenceError> {
-    let changed = sqlx::query(
-        "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
+    crate::participant_rows::save_participant_exact(
+        transaction,
+        &participant.room_id,
+        &participant.participant_id,
+        participant,
     )
-    .bind(serde_json::to_string(participant)?)
-    .bind(&participant.room_id)
-    .bind(&participant.participant_id)
-    .execute(&mut **transaction)
-    .await?;
-    if changed.rows_affected() != 1 {
-        return Err(stale_reconciliation());
-    }
-    Ok(())
+    .await
+    .map_err(|error| match error {
+        PersistenceError::ParticipantMissing => stale_reconciliation(),
+        other => other,
+    })
 }
 
 fn generation_i64(generation: u64) -> Result<i64, PersistenceError> {

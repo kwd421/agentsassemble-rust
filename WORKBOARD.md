@@ -26,6 +26,7 @@
   [Contract and acceptance](docs/specs/agent-profile-slice.md).
 - Active: Phase 4 starts with participant persistence consolidation, then room
   settings, moderation and lifecycle under the canonical command owner.
+  [Contract and acceptance](docs/specs/room-lifecycle-slice.md).
   New Pro review and authorized real-provider/packaged proof wait until full closeout.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).

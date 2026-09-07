@@ -356,13 +356,12 @@ pub(crate) async fn project_profile_into_rooms(
             .avatar_image_url
             .clone_from(&profile.avatar_image_url);
         participant.updated_at = profile.updated_at;
-        sqlx::query(
-            "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
+        crate::participant_rows::save_participant_exact(
+            transaction,
+            &room_id,
+            identity.participant_id,
+            &participant,
         )
-        .bind(serde_json::to_string(&participant)?)
-        .bind(&room_id)
-        .bind(identity.participant_id)
-        .execute(&mut **transaction)
         .await?;
         let event = participant_updated_event(transaction, identity, profile, room_id).await?;
         sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")

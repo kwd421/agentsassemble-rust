@@ -1,3 +1,4 @@
+use crate::participant_rows::save_participant_exact as save_participant;
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
@@ -11,7 +12,7 @@ use sqlx::{Sqlite, Transaction};
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_avatar_assets::replace_agent_avatar,
-    agent_lifecycle::{load_participant, load_session, save_participant, save_session},
+    agent_lifecycle::{load_participant, load_session, save_session},
     agent_lifecycle_authority::{authorize_control, payload_agent_id_with_fields},
     agent_lifecycle_events::{append_session_event, append_state_event, store_result},
     authority::active_room_for_principal,
@@ -85,7 +86,13 @@ impl SqliteStore {
             .clone_from(&session.public.avatar_image_url);
         participant.updated_at = session.public.updated_at;
         save_session(&mut transaction, &session).await?;
-        save_participant(&mut transaction, &participant).await?;
+        save_participant(
+            &mut transaction,
+            &participant.room_id,
+            &participant.participant_id,
+            &participant,
+        )
+        .await?;
         let participant_event = append_session_event(
             &mut transaction,
             principal,

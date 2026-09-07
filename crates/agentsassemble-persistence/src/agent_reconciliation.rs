@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
-    AgentTurnPhase, AuthenticatedPrincipal, DurableAgentSession, Participant, ParticipantStatus,
-    Room, RoomStatus, canonical_payload_hash,
+    AgentTurnPhase, AuthenticatedPrincipal, DurableAgentSession, ParticipantStatus, Room,
+    RoomStatus, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -750,26 +750,20 @@ pub(crate) async fn detach_participant(
     room_id: &str,
     participant_id: &str,
 ) -> Result<(), PersistenceError> {
-    let Some(encoded) = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-    )
-    .bind(room_id)
-    .bind(participant_id)
-    .fetch_optional(&mut **transaction)
-    .await?
+    let Some(mut participant) =
+        crate::participant_rows::load_participant_by_key(transaction, room_id, participant_id)
+            .await?
     else {
         return Ok(());
     };
-    let mut participant = serde_json::from_str::<Participant>(&encoded)?;
     participant.status = ParticipantStatus::Detached;
     participant.updated_at = Utc::now();
-    sqlx::query(
-        "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
+    crate::participant_rows::save_participant_exact(
+        transaction,
+        room_id,
+        participant_id,
+        &participant,
     )
-    .bind(serde_json::to_string(&participant)?)
-    .bind(room_id)
-    .bind(participant_id)
-    .execute(&mut **transaction)
     .await?;
     Ok(())
 }

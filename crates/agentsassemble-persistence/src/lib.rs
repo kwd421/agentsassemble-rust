@@ -1,4 +1,5 @@
 mod agent_avatar_assets;
+mod participant_rows;
 pub use agent_avatar_assets::{AgentAvatarAsset, AgentAvatarMetadata};
 mod agent_configuration;
 mod agent_create_start;

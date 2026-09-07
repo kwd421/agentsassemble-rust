@@ -1,7 +1,8 @@
+use crate::participant_rows::save_participant_exact as save_participant;
 use crate::{
     PersistenceError, SqliteStore,
     agent_lifecycle::{
-        load_participant, load_session, save_participant,
+        load_participant, load_session,
         tests::{AGENT_ID, fixture},
     },
 };
@@ -17,7 +18,13 @@ async fn identity_update_preserves_custody_and_membership_and_replays_after_rest
     let mut before_participant = load_participant(&mut transaction, "general", AGENT_ID).await?;
     before_participant.muted = true;
     before_participant.status = ParticipantStatus::Kicked;
-    save_participant(&mut transaction, &before_participant).await?;
+    save_participant(
+        &mut transaction,
+        &before_participant.room_id,
+        &before_participant.participant_id,
+        &before_participant,
+    )
+    .await?;
     transaction.commit().await?;
     let payload = json!({"agent_id": AGENT_ID, "display_name": "  새 이름  "});
     let outcome = store
@@ -148,7 +155,13 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
     let mut transaction = store.pool.begin().await?;
     let mut participant = load_participant(&mut transaction, "general", AGENT_ID).await?;
     participant.participant_type = "human".into();
-    save_participant(&mut transaction, &participant).await?;
+    save_participant(
+        &mut transaction,
+        &participant.room_id,
+        &participant.participant_id,
+        &participant,
+    )
+    .await?;
     transaction.commit().await?;
     assert!(matches!(
         store
@@ -159,5 +172,40 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
             ..
         })
     ));
+    Ok(())
+}
+
+#[tokio::test]
+async fn missing_exact_participant_write_rolls_back_identity_and_replay()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, principal, _directory) = fixture().await;
+    let before = store.participant("general", AGENT_ID).await?;
+    sqlx::query("CREATE TRIGGER ignore_participant_write BEFORE UPDATE ON participants BEGIN SELECT RAISE(IGNORE); END")
+        .execute(&store.pool).await?;
+    let payload = json!({"agent_id": AGENT_ID, "display_name": "Changed"});
+    assert!(matches!(
+        store
+            .execute_agent_profile_update(&principal, "exact-write", &payload)
+            .await,
+        Err(PersistenceError::ParticipantMissing)
+    ));
+    assert_eq!(store.participant("general", AGENT_ID).await?, before);
+    let mut transaction = store.pool.begin().await?;
+    assert_eq!(
+        load_session(&mut transaction, "general", AGENT_ID)
+            .await?
+            .public
+            .display_name,
+        before.display_name
+    );
+    transaction.rollback().await?;
+    sqlx::query("DROP TRIGGER ignore_participant_write")
+        .execute(&store.pool)
+        .await?;
+    let retry = store
+        .execute_agent_profile_update(&principal, "exact-write", &payload)
+        .await?;
+    assert!(!retry.deduplicated);
+    assert_eq!(retry.result["participant"]["display_name"], "Changed");
     Ok(())
 }

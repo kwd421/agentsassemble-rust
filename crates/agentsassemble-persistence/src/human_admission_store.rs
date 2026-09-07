@@ -423,16 +423,14 @@ async fn join_participant(
     profile: &UserProfile,
     now: DateTime<Utc>,
 ) -> Result<(Participant, bool), PersistenceError> {
-    let existing = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
+    let existing = crate::participant_rows::load_participant_by_key(
+        transaction,
+        &invite.room_id,
+        participant_id,
     )
-    .bind(&invite.room_id)
-    .bind(participant_id)
-    .fetch_optional(&mut **transaction)
     .await?;
     let (participant, joined, changed) = match existing {
-        Some(json) => {
-            let mut participant: Participant = serde_json::from_str(&json)?;
+        Some(mut participant) => {
             if participant.room_id != invite.room_id
                 || participant.participant_id != participant_id
                 || participant.participant_type != "human"

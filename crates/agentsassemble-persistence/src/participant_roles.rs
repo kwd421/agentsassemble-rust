@@ -88,13 +88,12 @@ impl SqliteStore {
             "event": event,
             "event_seq": event.seq,
         });
-        sqlx::query(
-            "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
+        crate::participant_rows::save_participant_exact(
+            &mut transaction,
+            &principal.room_id,
+            &participant.participant_id,
+            &participant,
         )
-        .bind(serde_json::to_string(&participant)?)
-        .bind(&principal.room_id)
-        .bind(&participant.participant_id)
-        .execute(&mut *transaction)
         .await?;
         insert_event(&mut transaction, &event).await?;
         store_command_result(

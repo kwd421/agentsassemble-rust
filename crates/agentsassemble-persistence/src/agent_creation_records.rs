@@ -1,3 +1,4 @@
+use crate::participant_rows::load_participant_by_key as load_optional_participant;
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
@@ -280,24 +281,6 @@ fn prepare_start(session: &mut DurableAgentSession, operation_id: &str) {
     operation_id.clone_into(&mut session.lifecycle_intent_id);
     session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
     session.public.updated_at = Utc::now();
-}
-
-async fn load_optional_participant(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    participant_id: &str,
-) -> Result<Option<Participant>, PersistenceError> {
-    let encoded = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-    )
-    .bind(room_id)
-    .bind(participant_id)
-    .fetch_optional(&mut **transaction)
-    .await?;
-    encoded
-        .map(|encoded| serde_json::from_str(&encoded))
-        .transpose()
-        .map_err(Into::into)
 }
 
 async fn save_session(

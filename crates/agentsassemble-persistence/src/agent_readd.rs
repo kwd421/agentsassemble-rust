@@ -1,3 +1,4 @@
+use crate::participant_rows::save_participant_exact as save_participant;
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
@@ -10,7 +11,7 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::{
     CommandOutcome, PersistenceError,
-    agent_lifecycle::{save_participant, save_session},
+    agent_lifecycle::save_session,
     agent_lifecycle_authority::{payload_agent_id, payload_agent_id_with_fields},
     agent_lifecycle_events::{append_session_event, store_result},
 };
@@ -100,7 +101,13 @@ pub(crate) async fn commit_readd_listing(
     participant.status = ParticipantStatus::Detached;
     participant.updated_at = session.public.updated_at;
     save_session(transaction, session).await?;
-    save_participant(transaction, participant).await?;
+    save_participant(
+        transaction,
+        &participant.room_id,
+        &participant.participant_id,
+        participant,
+    )
+    .await?;
     let event = append_session_event(
         transaction,
         principal,

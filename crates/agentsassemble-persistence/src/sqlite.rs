@@ -207,15 +207,10 @@ impl SqliteStore {
         room_id: &str,
         participant_id: &str,
     ) -> Result<Participant, PersistenceError> {
-        let encoded = sqlx::query_scalar::<_, String>(
-            "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-        )
-        .bind(room_id)
-        .bind(participant_id)
-        .fetch_optional(&self.pool)
-        .await?
-        .ok_or(PersistenceError::ParticipantMissing)?;
-        Ok(serde_json::from_str(&encoded)?)
+        let mut connection = self.pool.acquire().await?;
+        crate::participant_rows::load_participant_by_key(&mut connection, room_id, participant_id)
+            .await?
+            .ok_or(PersistenceError::ParticipantMissing)
     }
 
     /// Reads a durable room snapshot after the supplied event cursor.

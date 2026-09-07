@@ -1,10 +1,11 @@
+use crate::participant_rows::save_participant_exact as save_participant;
 use agentsassemble_domain::ParticipantStatus;
 use serde_json::json;
 
 use crate::{
     AgentRuntimeStarted, AgentStartPlan, PersistenceError,
     agent_lifecycle::{
-        load_participant, load_session, save_participant,
+        load_participant, load_session,
         tests::{AGENT_ID, fixture},
     },
 };
@@ -18,7 +19,13 @@ async fn listing_readd_preserves_room_authority_and_replays_after_reopen()
     participant.status = ParticipantStatus::Kicked;
     participant.muted = true;
     participant.display_name = "Room-owned name".to_owned();
-    save_participant(&mut transaction, &participant).await?;
+    save_participant(
+        &mut transaction,
+        &participant.room_id,
+        &participant.participant_id,
+        &participant,
+    )
+    .await?;
     transaction.commit().await?;
     let mut transaction = store.pool.begin().await?;
     let before = load_session(&mut transaction, "general", AGENT_ID).await?;
@@ -79,7 +86,13 @@ async fn started_readd_joins_only_after_exact_effect_and_replays_once()
     let mut transaction = store.pool.begin().await?;
     let mut participant = load_participant(&mut transaction, "general", AGENT_ID).await?;
     participant.status = ParticipantStatus::Kicked;
-    save_participant(&mut transaction, &participant).await?;
+    save_participant(
+        &mut transaction,
+        &participant.room_id,
+        &participant.participant_id,
+        &participant,
+    )
+    .await?;
     transaction.commit().await?;
     let payload = json!({"agent_id": AGENT_ID, "start_now": true});
     let AgentStartPlan::Start(effect) = store

@@ -37,15 +37,10 @@ async fn load_active_membership(
     participant_id: &str,
 ) -> Result<(Room, Participant), PersistenceError> {
     let room = load_active_room(transaction, room_id).await?;
-    let participant_json = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-    )
-    .bind(room_id)
-    .bind(participant_id)
-    .fetch_optional(&mut **transaction)
-    .await?
-    .ok_or(PersistenceError::ParticipantMissing)?;
-    let participant: Participant = serde_json::from_str(&participant_json)?;
+    let participant =
+        crate::participant_rows::load_participant_by_key(transaction, room_id, participant_id)
+            .await?
+            .ok_or(PersistenceError::ParticipantMissing)?;
     if participant.room_id != room_id
         || participant.participant_id != participant_id
         || participant.status != ParticipantStatus::Joined

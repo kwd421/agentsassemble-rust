@@ -1,3 +1,4 @@
+use crate::participant_rows::save_participant_exact as save_participant;
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
@@ -13,7 +14,7 @@ use crate::{
     PersistenceError, RoomCommandMutation, SqliteStore,
     agent_lifecycle::{
         AgentStopPlan, invalid_turn_queue, load_participant, load_session, merged_turn_queue,
-        require_valid_turn_authority, save_participant, save_session, unresolved_effect,
+        require_valid_turn_authority, save_session, unresolved_effect,
     },
     agent_lifecycle_authority::{
         agent_stop_requires_cleanup, authorize_control, lifecycle_intent_is_empty,
@@ -211,7 +212,13 @@ impl SqliteStore {
             load_participant(&mut transaction, &principal.room_id, agent_id).await?;
         participant.status = ParticipantStatus::Detached;
         participant.updated_at = Utc::now();
-        save_participant(&mut transaction, &participant).await?;
+        save_participant(
+            &mut transaction,
+            &participant.room_id,
+            &participant.participant_id,
+            &participant,
+        )
+        .await?;
         let error = append_error_event(
             &mut transaction,
             principal,
@@ -338,7 +345,13 @@ async fn detach_confirmed_session(
     let mut participant = load_participant(transaction, &principal.room_id, agent_id).await?;
     participant.status = ParticipantStatus::Detached;
     participant.updated_at = Utc::now();
-    save_participant(transaction, &participant).await?;
+    save_participant(
+        transaction,
+        &participant.room_id,
+        &participant.participant_id,
+        &participant,
+    )
+    .await?;
     let detached = append_session_event(
         transaction,
         principal,

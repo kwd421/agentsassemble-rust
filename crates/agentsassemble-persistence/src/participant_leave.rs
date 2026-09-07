@@ -124,13 +124,12 @@ async fn execute_leave_in(
         Some(fingerprint) => end_exact_session(transaction, principal, fingerprint).await?,
         None => Vec::new(),
     };
-    sqlx::query(
-        "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
+    crate::participant_rows::save_participant_exact(
+        transaction,
+        &principal.room_id,
+        &principal.participant_id,
+        &participant,
     )
-    .bind(serde_json::to_string(&participant)?)
-    .bind(&principal.room_id)
-    .bind(&principal.participant_id)
-    .execute(&mut **transaction)
     .await?;
     let event = participant_left_event(transaction, principal, &participant).await?;
     insert_event(transaction, &event).await?;

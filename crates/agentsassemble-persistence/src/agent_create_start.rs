@@ -1,3 +1,4 @@
+use crate::participant_rows::save_participant_exact as save_participant;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentSessionDraft, AuthenticatedPrincipal,
     ParticipantStatus, RoomEvent, canonical_payload_hash,
@@ -9,9 +10,7 @@ use crate::{
     AgentLaunchFailureCommit, AgentRuntimeStarted, CommandOutcome, PersistenceError, SqliteStore,
     agent_creation_records::create_or_reuse_agent_records,
     agent_launch_events::{append_launch_events, launch_result},
-    agent_lifecycle::{
-        apply_runtime_started, load_participant, load_session, save_participant, save_session,
-    },
+    agent_lifecycle::{apply_runtime_started, load_participant, load_session, save_session},
     agent_lifecycle_authority::{
         authorize_control, lifecycle_operation_id, require_intent, validate_runtime_started,
     },
@@ -306,15 +305,19 @@ impl SqliteStore {
         let joined = participant.status != ParticipantStatus::Joined;
         participant.status = ParticipantStatus::Joined;
         participant.updated_at = Utc::now();
-        save_participant(&mut transaction, &participant).await?;
+        save_participant(
+            &mut transaction,
+            &participant.room_id,
+            &participant.participant_id,
+            &participant,
+        )
+        .await?;
         let launch_events =
             append_launch_events(&mut transaction, principal, &session, &participant, joined)
                 .await?;
-        let newly_committed_events = launch_events.clone();
-        let start_result = launch_result(&session, started.runtime_reused, &launch_events);
+        prepared_result["start"] = launch_result(&session, started.runtime_reused, &launch_events);
         let mut committed_events = prepared_events(&prepared_result)?;
-        committed_events.extend(launch_events);
-        prepared_result["start"] = start_result;
+        committed_events.extend(launch_events.clone());
         prepared_result["events"] = serde_json::to_value(&committed_events)?;
         prepared_result["event"] = serde_json::to_value(committed_events.last())?;
         prepared_result["event_seq"] = committed_events
@@ -334,7 +337,7 @@ impl SqliteStore {
         Ok(AgentCreateStartCommit {
             outcome,
             committed_events,
-            newly_committed_events,
+            newly_committed_events: launch_events,
         })
     }
 

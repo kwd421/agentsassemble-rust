@@ -7058,3 +7058,22 @@ Daybreak re-reviewed correction `68c6763..b8fd15b`, cumulative
 Phase 3 local contract: **APPROVE C0/H0/M0/L0**. Both lows are closed; prior
 individual-commit review remains immutable evidence. Phase 4 may proceed. Final
 packaged/provider and both-reviewer integration proof remains pending.
+
+
+## Phase 4 participant row codec (2026-09-07)
+
+C-01's repeated exact participant JSON load/update SQL now has one connection-scoped
+owner. All production exact-key paths use it, including public reads, admission,
+Agent creation/lifecycle/recovery, human/profile projection and moderation. Existing
+transactions, query keys, domain identity/permission checks, optional-versus-required
+missing policy and recovery-specific errors remain at their owners. Exact save
+rejects a zero-row update instead of committing unrelated state/events as success.
+Bulk snapshots and joined profile queries retain their distinct bounded queries.
+
+All 254 persistence cases pass. The additional real mutation case makes SQLite
+ignore the participant update, verifies both Session and Participant rollback,
+then retries the same request successfully after the write obstruction is removed.
+Affected all-target/all-feature Clippy and unchanged architecture/source/format/diff
+and 19 policy/artifact gates pass. This slice adds no query, transaction, timer,
+cache or fallback; it reduces repeated SQL/JSON mechanism. Whole Phase 4 review
+waits for the complete settings, moderation and lifecycle contract.

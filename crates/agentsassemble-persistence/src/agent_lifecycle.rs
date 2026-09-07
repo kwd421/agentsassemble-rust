@@ -1,3 +1,4 @@
+use crate::participant_rows::save_participant_exact as save_participant;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
     AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
@@ -287,7 +288,13 @@ impl SqliteStore {
         let joined = participant.status != ParticipantStatus::Joined;
         participant.status = ParticipantStatus::Joined;
         participant.updated_at = Utc::now();
-        save_participant(&mut transaction, &participant).await?;
+        save_participant(
+            &mut transaction,
+            &participant.room_id,
+            &participant.participant_id,
+            &participant,
+        )
+        .await?;
         let outcome = commit_launch_result(
             &mut transaction,
             principal,
@@ -429,15 +436,10 @@ pub(crate) async fn load_participant(
     room_id: &str,
     participant_id: &str,
 ) -> Result<Participant, PersistenceError> {
-    let encoded = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-    )
-    .bind(room_id)
-    .bind(participant_id)
-    .fetch_optional(&mut **transaction)
-    .await?
-    .ok_or(PersistenceError::ParticipantMissing)?;
-    let participant: Participant = serde_json::from_str(&encoded)?;
+    let participant =
+        crate::participant_rows::load_participant_by_key(transaction, room_id, participant_id)
+            .await?
+            .ok_or(PersistenceError::ParticipantMissing)?;
     if participant.room_id != room_id || participant.participant_id != participant_id {
         return Err(rejected(
             "stored_agent_identity_invalid",
@@ -445,21 +447,6 @@ pub(crate) async fn load_participant(
         ));
     }
     Ok(participant)
-}
-
-pub(crate) async fn save_participant(
-    transaction: &mut Transaction<'_, Sqlite>,
-    participant: &Participant,
-) -> Result<(), PersistenceError> {
-    sqlx::query(
-        "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
-    )
-    .bind(serde_json::to_string(participant)?)
-    .bind(&participant.room_id)
-    .bind(&participant.participant_id)
-    .execute(&mut **transaction)
-    .await?;
-    Ok(())
 }
 
 pub(crate) fn apply_runtime_started(

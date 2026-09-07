@@ -118,15 +118,9 @@ pub(crate) async fn load_participant(
     room_id: &str,
     participant_id: &str,
 ) -> Result<Participant, PersistenceError> {
-    let value = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-    )
-    .bind(room_id)
-    .bind(participant_id)
-    .fetch_optional(&mut **transaction)
-    .await?
-    .ok_or(PersistenceError::ParticipantMissing)?;
-    Ok(serde_json::from_str(&value)?)
+    crate::participant_rows::load_participant_by_key(transaction, room_id, participant_id)
+        .await?
+        .ok_or(PersistenceError::ParticipantMissing)
 }
 
 pub(crate) async fn load_event(

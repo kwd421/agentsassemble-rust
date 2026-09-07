@@ -603,18 +603,13 @@ pub(crate) async fn terminalize_ordinary_execution(
     {
         return Err(stale_execution());
     }
-    let participant = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
+    let participant = crate::participant_rows::load_participant_by_key(
+        transaction,
+        authority.room_id,
+        &session.public.participant_id,
     )
-    .bind(authority.room_id)
-    .bind(&session.public.participant_id)
-    .fetch_optional(&mut **transaction)
     .await?
-    .ok_or(PersistenceError::ParticipantMissing)
-    .and_then(|json| {
-        serde_json::from_str::<agentsassemble_domain::Participant>(&json)
-            .map_err(PersistenceError::from)
-    })?;
+    .ok_or(PersistenceError::ParticipantMissing)?;
     if participant.room_id != authority.room_id
         || participant.participant_id != session.public.participant_id
         || participant.status != ParticipantStatus::Joined

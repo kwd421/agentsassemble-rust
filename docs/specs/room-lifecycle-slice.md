@@ -1,0 +1,58 @@
+# Room lifecycle and moderation
+
+Status: Phase 4 active after Phase 3 approval at `b8fd15b`.
+
+## Contract and dependency order
+
+Retain original canonical participant kick/export and room close/archive/delete,
+including their reachable frontend or bounded HTTP entry points. The room owner
+controls deletion and must supply the current room name. Room moderation remains
+server-authorized; a target cannot replace a principal or remove the local owner.
+Host-device claim belongs to the existing Rust local bootstrap authority rather
+than a second browser-token identity. Verify that entry point as part of this phase.
+
+First consolidate the repeated participant row codec (C-01). One connection-scoped
+load-by-key decodes an optional row; one exact save checks the affected row count.
+Transactions, missing-row policy, identity/authority checks, state transitions and
+canonical events remain at their existing owners. Preserve query keys and rollback
+behavior. Do not introduce a generic repository or cache.
+
+Before more settings, remove the future-only `activity_plugin` field (C-09): its
+only frontend consumer is the explicitly deferred RimWorld surface. Keep that
+surface unreachable. Use an explicit clean schema boundary without migrating user
+data. Export the authoritative 128-character room label limit to its existing UI
+(F-19); preserve existing channel/profile ownership and server validation.
+
+Then connect moderation and room lifecycle to the existing command, durable replay,
+provider runtime custody, human-session revocation and room directory owners.
+Kick/export removes exact membership/access, stops or retains explicit unresolved
+custody for the exact Agent runtime, and publishes the canonical removed state.
+Close prevents further writes/admission and cleans owned running work and access;
+archive/unarchive preserves data and an authenticated management path. Delete
+requires exact-name confirmation and a durable result/tombstone so retry cannot
+retarget a recreated room. Cleanup failure must remain visible and recoverable;
+never claim runtime termination or deletion from only a submitted effect.
+
+No client orchestration substitutes for server lifecycle. No real providers or
+user-room deletion runs during implementation. No new fallback, gate exception,
+plugin framework, scheduler, or periodic cleanup is implied by this phase.
+
+## Acceptance and verification
+
+- Existing participant mutation, admission, profile, lifecycle and recovery tests
+  preserve their public results with the shared codec; missing exact save fails and
+  transaction rollback remains observable.
+- Room label hints derive from the server limit; unsupported plugin state is absent
+  from live schema, wire and UI projections.
+- Each advertised moderation/lifecycle action has exact principal/target checks,
+  canonical ACK/events, deterministic replay/conflict and restart recovery. Guest,
+  Agent Bridge, wrong-room, stale incarnation and owner-removal attempts fail.
+- Runtime cleanup is owned by the existing server runtime lifecycle; in-flight
+  turns, reservations, human sessions, invite/ticket authority and asset custody
+  cannot survive room/participant removal with usable authority.
+- Desktop/mobile settings and roster controls report failure, reflect events and
+  reconnect, and expose only implemented capabilities. Preserve archive management
+  and deletion replay without weakening active-room admission for ordinary clients.
+- Run affected local TCP/WebSocket, persistence and frontend proof plus unchanged
+  architecture, source, format, Clippy and CSS gates. Obtain whole-phase Daybreak
+  approval before Phase 5. Packaged/provider proof remains at final closeout.

@@ -156,13 +156,12 @@ async fn prepare_participant_mute(
     participant.muted = update.muted;
     participant.updated_at = Utc::now();
     let event = muted_event(transaction, principal, &participant).await?;
-    sqlx::query(
-        "UPDATE participants SET participant_json = ? WHERE room_id = ? AND participant_id = ?",
+    crate::participant_rows::save_participant_exact(
+        transaction,
+        &principal.room_id,
+        &participant.participant_id,
+        &participant,
     )
-    .bind(serde_json::to_string(&participant)?)
-    .bind(&principal.room_id)
-    .bind(&participant.participant_id)
-    .execute(&mut **transaction)
     .await?;
     insert_event(transaction, &event).await?;
     let mut interrupt_effect = None;
