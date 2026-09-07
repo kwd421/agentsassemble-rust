@@ -69,6 +69,13 @@ impl SqliteStore {
             ));
         }
         let now = Utc::now();
+        crate::room_channels::transition_channels(
+            &mut transaction,
+            &principal.room_id,
+            &current.channels,
+            &next.channels,
+        )
+        .await?;
         transition_room_appearance_references(
             &mut transaction,
             &principal.room_id,

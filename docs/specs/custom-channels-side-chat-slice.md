@@ -85,3 +85,35 @@ and disk costs at the completed phase. Clean only that verification's owned app,
 children, browser tabs and isolated data. Obtain Daybreak approval of every phase
 commit, cumulative range, exact HEAD and whole local phase before Phase 7. Real
 AI providers and new Pro review remain at authorized full closeout.
+
+## Channel persistence owner
+
+The first channel slice uses `channel_message_final` records in the existing durable
+room event store; that distinct event type never enters the lobby message/turn
+owner. The channel append transaction revalidates room/session membership and the
+current text-channel registration before an exact command replay or new write.
+It applies the existing participant write policy, commits one event and receipt,
+and never creates provider input. Channel history selects only that room/channel
+through a partial SQLite expression index and returns bounded messages with the
+same transaction's room high-water mark.
+
+Channel changes remain canonical settings updates. Renaming/reordering preserves
+identity; type/creation identity changes fail. Removal atomically tombstones the
+channel's visible event content and removes its search/pin pointers. One retired ID
+row prevents a later channel from inheriting its stream or notification identity.
+The sequence remains intact for existing room subscriptions. Registered-channel
+validation precedes replay, so the stored old append result cannot reopen a removed
+channel. The clean schema is version 66; older databases fail without conversion.
+
+Local acceptance: four persistence cases cover channel/room isolation, paging,
+replay/conflict, restart, rename/reorder, retirement/reuse rejection, read-only/mute,
+and injected final receipt failure rollback (0.06 s). Sixty domain cases (0.08 s)
+and 23 affected schema cases (0.24 s) pass. The index exposed a prior pin fixture
+which manually interpolated an unescaped NUL into JSON; using the existing JSON
+serializer preserves that fixture's event-ID rejection test. No validation was
+weakened. The message/history transport and copied UI are not enabled by this
+persistence-only slice; search/pins and side chat remain later Phase 6 obligations.
+Domain/persistence all-target/all-feature Clippy and unchanged architecture/source,
+19 policy cases, formatting/diff and artifact checks pass. Storage adds one partial
+index entry per custom message and one small row per retired channel; existing
+event/receipt size and write budgets still apply. No timer or provider task is added.

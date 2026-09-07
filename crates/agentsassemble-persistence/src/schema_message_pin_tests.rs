@@ -10,7 +10,7 @@ async fn seed_room_event(pool: &sqlx::SqlitePool, room_id: &str, seq: i64, event
     sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
         .bind(room_id)
         .bind(seq)
-        .bind(format!(r#"{{"id":"{event_id}"}}"#))
+        .bind(serde_json::json!({"id": event_id}).to_string())
         .execute(pool)
         .await
         .unwrap_or_else(|error| panic!("insert room event: {error}"));

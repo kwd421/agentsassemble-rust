@@ -38,6 +38,11 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "room_channel_retirements",
+        ddl: "CREATE TABLE IF NOT EXISTS room_channel_retirements (room_id TEXT NOT NULL, channel_id TEXT NOT NULL, PRIMARY KEY(room_id, channel_id), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE) STRICT",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_delete_results",
         ddl: "CREATE TABLE IF NOT EXISTS room_delete_results (room_id TEXT NOT NULL, room_uid TEXT NOT NULL UNIQUE, principal_id TEXT NOT NULL, request_id TEXT NOT NULL, payload_hash TEXT NOT NULL, result_json TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'complete')), PRIMARY KEY(room_id, principal_id, request_id))",
         infrastructure: false,
@@ -367,6 +372,7 @@ const TABLES: &[TableDefinition] = &[
 ];
 
 const INDEXES: &[&str] = &[
+    "CREATE INDEX IF NOT EXISTS room_channel_messages_idx ON room_events(room_id, json_extract(event_json, '$.channel_id'), seq) WHERE json_extract(event_json, '$.type') = 'channel_message_final'",
     "CREATE UNIQUE INDEX IF NOT EXISTS room_delete_pending_idx ON room_delete_results(room_id) WHERE state = 'pending'",
     "CREATE INDEX IF NOT EXISTS agent_avatar_assets_expiry_idx ON agent_avatar_assets(expires_at) WHERE state = 'pending'",
     "CREATE UNIQUE INDEX IF NOT EXISTS profile_avatar_assets_owner_state_idx ON profile_avatar_assets(owner_user_id, state)",

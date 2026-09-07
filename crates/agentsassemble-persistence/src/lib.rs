@@ -35,6 +35,7 @@ pub use authority::RoomMutationAuthority;
 mod room_session_authority;
 pub use room_session_authority::RoomSessionAuthorization;
 mod bootstrap;
+mod channel_messages;
 mod command_admission;
 mod database_target;
 mod filesystem_authority;
@@ -44,6 +45,7 @@ mod friends_tests;
 mod host_identity;
 mod host_key_file;
 mod operator_pairing;
+mod room_channels;
 pub use operator_pairing::{
     OperatorPairing, OperatorPairingRedemption, OperatorSessionAuthorization,
 };

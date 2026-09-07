@@ -12,8 +12,8 @@ use crate::clean_single_line;
 pub const ROOM_LABEL_LIMIT: usize = 128;
 const ROOM_TOPIC_LIMIT: usize = 160;
 const IMAGE_URL_LIMIT: usize = 240;
-const CHANNEL_NAME_LIMIT: usize = 60;
-const MAX_CHANNELS: usize = 50;
+pub const CHANNEL_NAME_LIMIT: usize = 60;
+pub const MAX_CHANNELS: usize = 50;
 pub const ROOM_APPEARANCE_ASSET_PREFIX: &str = "ra_";
 pub const ROOM_APPEARANCE_ASSET_HEX_LENGTH: usize = 32;
 pub const ROOM_APPEARANCE_REFERENCE_PREFIX: &str = "/api/attachments/";
@@ -23,6 +23,11 @@ pub const ROOM_APPEARANCE_REFERENCE_SUFFIX: &str = "?view=1";
 static CHANNEL_ID: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"^c[0-9a-f]{12}$").unwrap_or_else(|error| panic!("valid channel regex: {error}"))
 });
+
+#[must_use]
+pub fn is_custom_channel_id(value: &str) -> bool {
+    CHANNEL_ID.is_match(value)
+}
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, TS)]
 pub struct RoomAppearance {
     pub banner_preset: String,
@@ -245,9 +250,13 @@ impl RoomSettingsPatch {
     }
 
     fn require_available(&self) -> Result<(), RoomSettingsError> {
-        if self.channels.is_some() {
+        if self.channels.as_ref().is_some_and(|channels| {
+            channels
+                .iter()
+                .any(|channel| channel.channel_type != "text")
+        }) {
             return Err(RoomSettingsError::unsupported(
-                "Custom channels are unavailable until their message and voice owners exist.",
+                "Voice channels are deferred; only text channels can be configured.",
             ));
         }
         Ok(())
@@ -609,16 +618,16 @@ mod tests {
     }
 
     #[test]
-    fn strict_update_rejects_unimplemented_fields() {
+    fn strict_update_keeps_voice_channels_unavailable() {
         let current = RoomSettings::defaults("General");
         let revision = public_settings(&current)
             .unwrap_or_else(|error| panic!("settings revision: {error}"))
             .settings_revision;
         let Err(error) = current.strict_update(&json!({
             "expected_revision": revision,
-            "channels": []
+            "channels": [{"id":"c0123456789ab", "name":"Voice", "type":"voice", "position":0, "created_at":"2026-09-08T00:00:00Z"}]
         })) else {
-            panic!("channels unexpectedly became available");
+            panic!("voice unexpectedly became available");
         };
         assert_eq!(error.code, "room_setting_unsupported");
     }

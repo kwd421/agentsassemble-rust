@@ -6,6 +6,7 @@ pub use agent_avatar::{
 mod agent_session_state;
 mod asset;
 mod canonical_json;
+mod channel_messages;
 mod command;
 mod diagnostic;
 mod friend;
@@ -33,6 +34,10 @@ pub use agent_session_state::{
     AgentTurnPhase,
 };
 pub use asset::MAX_ATTACHMENT_BYTES;
+pub use channel_messages::{
+    CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE, CHANNEL_MESSAGE_MAX_CHARACTERS,
+    ChannelHistoryPage, ChannelMessageSend, prepare_channel_message_event,
+};
 pub use command::{
     AGENT_CONTROL_ID_KEYS, CommandRejection, MessageSend, canonical_payload_hash,
     prepare_message_event, require_message_write_authority,
@@ -92,11 +97,11 @@ pub use room_preferences::{
     RoomNotificationMode, RoomPreferencesError, RoomUserPreferences, RoomUserPreferencesPatch,
 };
 pub use room_settings::{
-    PublicRoomSettings, ROOM_APPEARANCE_ASSET_HEX_LENGTH, ROOM_APPEARANCE_ASSET_PREFIX,
-    ROOM_APPEARANCE_REFERENCE_PREFIX, ROOM_APPEARANCE_REFERENCE_QUERY,
-    ROOM_APPEARANCE_REFERENCE_SUFFIX, ROOM_LABEL_LIMIT, RoomAppearance, RoomChannel, RoomSettings,
-    RoomSettingsError, RoomSettingsPatch, is_room_appearance_asset_id, public_settings,
-    room_appearance_asset_id,
+    CHANNEL_NAME_LIMIT, MAX_CHANNELS, PublicRoomSettings, ROOM_APPEARANCE_ASSET_HEX_LENGTH,
+    ROOM_APPEARANCE_ASSET_PREFIX, ROOM_APPEARANCE_REFERENCE_PREFIX,
+    ROOM_APPEARANCE_REFERENCE_QUERY, ROOM_APPEARANCE_REFERENCE_SUFFIX, ROOM_LABEL_LIMIT,
+    RoomAppearance, RoomChannel, RoomSettings, RoomSettingsError, RoomSettingsPatch,
+    is_custom_channel_id, is_room_appearance_asset_id, public_settings, room_appearance_asset_id,
 };
 pub use room_turn::{
     QueuedRoomInput, RoomInputDeliveryKind, RoomRandomError, RoomRandomRequest, RoomRandomResult,
