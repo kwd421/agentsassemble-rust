@@ -549,3 +549,7 @@ mod readd_tests;
 #[cfg(test)]
 #[path = "agent_profile_tests.rs"]
 mod profile_tests;
+
+#[cfg(test)]
+#[path = "agent_avatar_tests.rs"]
+mod avatar_tests;

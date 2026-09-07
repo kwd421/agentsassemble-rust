@@ -8,6 +8,7 @@ use chrono::{DateTime, Utc};
 pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
     DurableAgentSession {
         public: AgentSession {
+            avatar_image_url: String::new(),
             room_id: "general".to_owned(),
             session_id: super::AGENT_ID.to_owned(),
             participant_id: super::AGENT_ID.to_owned(),

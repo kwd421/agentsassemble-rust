@@ -17,6 +17,7 @@ pub(crate) fn durable_session(
         .with_timezone(&Utc);
     DurableAgentSession {
         public: AgentSession {
+            avatar_image_url: String::new(),
             room_id: room_id.to_owned(),
             session_id: session_id.to_owned(),
             participant_id: session_id.to_owned(),

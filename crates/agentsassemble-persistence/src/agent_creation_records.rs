@@ -108,6 +108,7 @@ async fn create_agent_records(
         latest_message_cursor(transaction, &principal.room_id).await?;
     let persona_card = resolve_persona_selection(transaction, &draft.persona_card_id).await?;
     let public_session = AgentSession {
+        avatar_image_url: String::new(),
         room_id: principal.room_id.clone(),
         session_id: draft.agent_id.clone(),
         participant_id: draft.agent_id.clone(),

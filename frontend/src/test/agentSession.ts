@@ -8,6 +8,7 @@ export function agentSessionFixture(
     session_id: "session-test",
     participant_id: "agent-test",
     display_name: "Agent Test",
+    avatar_image_url: "",
     status: "available",
     runtime_status: "stopped",
     enabled: false,

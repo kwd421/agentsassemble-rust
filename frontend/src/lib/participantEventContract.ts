@@ -31,6 +31,7 @@ const PARTICIPANT_TYPES = ["human", "agent"] as const;
 const PARTICIPANT_STATUSES = ["joined", "left", "kicked", "exported", "detached"] as const;
 
 const GENERATED_AGENT_SESSION_KEYS = [
+  "avatar_image_url",
   "room_id",
   "session_id",
   "participant_id",
@@ -615,7 +616,7 @@ export function agentProfileAckProjectionsAreCoherent(result: Record<string, unk
   const session = result.agent_session;
   const participant = result.participant;
   return participant.participant_type === "agent" && participant.room_id === session.room_id &&
-    participant.participant_id === session.participant_id && participant.display_name === session.display_name &&
+    participant.participant_id === session.participant_id && participant.display_name === session.display_name && participant.avatar_image_url === session.avatar_image_url &&
     memberEvent.type === "participant_updated" && memberEvent.participant_type === "agent" &&
     memberEvent.participant_id === session.participant_id && memberEvent.display_name === session.display_name &&
     stateEvent.type === "agent_session_state" && stateEvent.seq === memberEvent.seq + 1 &&

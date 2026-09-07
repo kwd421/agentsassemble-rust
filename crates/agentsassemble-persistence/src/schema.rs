@@ -211,6 +211,21 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "agent_avatar_assets",
+        ddl: concat!(
+            "CREATE TABLE IF NOT EXISTS agent_avatar_assets (",
+            "asset_id TEXT NOT NULL PRIMARY KEY CHECK(length(asset_id) = 35 AND substr(asset_id, 1, 3) = 'aa_' AND substr(asset_id, 4) NOT GLOB '*[^0-9a-f]*'), ",
+            "room_id TEXT NOT NULL, session_id TEXT NOT NULL, filename TEXT NOT NULL, ",
+            "content_type TEXT NOT NULL CHECK(content_type = 'image/png'), content BLOB NOT NULL, ",
+            "size INTEGER NOT NULL CHECK(size BETWEEN 1 AND 10485760 AND length(content) = size), ",
+            "created_at TEXT NOT NULL, state TEXT NOT NULL CHECK(state IN ('pending', 'current')), expires_at INTEGER, ",
+            "CHECK((state = 'pending' AND expires_at IS NOT NULL) OR (state = 'current' AND expires_at IS NULL)), ",
+            "UNIQUE(room_id, session_id, state), ",
+            "FOREIGN KEY(room_id, session_id) REFERENCES agent_sessions(room_id, session_id) ON DELETE CASCADE)",
+        ),
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "provider_turn_executions",
         ddl: "CREATE TABLE IF NOT EXISTS provider_turn_executions (room_id TEXT NOT NULL, session_id TEXT NOT NULL, turn_generation INTEGER NOT NULL CHECK(turn_generation > 0), execution_id TEXT NOT NULL, participant_id TEXT NOT NULL, turn_id TEXT NOT NULL, assignment_json TEXT NOT NULL, phase TEXT NOT NULL CHECK(phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', 'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required', 'completed', 'declined', 'failed', 'interrupted')), runtime_handle_id TEXT NOT NULL CHECK(length(runtime_handle_id) > 0), runtime_owner_id TEXT NOT NULL CHECK(length(runtime_owner_id) > 0), runtime_lease_token TEXT NOT NULL CHECK(length(runtime_lease_token) > 0), start_dispatch_nonce TEXT NOT NULL DEFAULT '', provider_turn_id TEXT NOT NULL DEFAULT '', requeue_finalized INTEGER NOT NULL DEFAULT 0 CHECK(requeue_finalized IN (0, 1)), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, PRIMARY KEY(room_id, session_id, turn_generation), UNIQUE(room_id, execution_id), UNIQUE(room_id, session_id, turn_id), FOREIGN KEY(room_id, session_id) REFERENCES agent_sessions(room_id, session_id) ON DELETE CASCADE, FOREIGN KEY(room_id, participant_id) REFERENCES participants(room_id, participant_id) ON DELETE CASCADE)",
         infrastructure: false,
@@ -300,6 +315,7 @@ const TABLES: &[TableDefinition] = &[
 ];
 
 const INDEXES: &[&str] = &[
+    "CREATE INDEX IF NOT EXISTS agent_avatar_assets_expiry_idx ON agent_avatar_assets(expires_at) WHERE state = 'pending'",
     "CREATE UNIQUE INDEX IF NOT EXISTS profile_avatar_assets_owner_state_idx ON profile_avatar_assets(owner_user_id, state)",
     "CREATE INDEX IF NOT EXISTS profile_avatar_assets_state_expiry_idx ON profile_avatar_assets(state, expires_at)",
     "CREATE UNIQUE INDEX IF NOT EXISTS prejoin_avatar_assets_custody_idx ON prejoin_avatar_assets(custody_fingerprint)",

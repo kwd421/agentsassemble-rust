@@ -337,6 +337,7 @@ pub struct ProviderAvailability {
 #[allow(clippy::struct_excessive_bools)] // Public runtime observations are independent wire facts.
 #[serde(deny_unknown_fields)]
 pub struct AgentSession {
+    pub avatar_image_url: String,
     pub room_id: String,
     pub session_id: String,
     pub participant_id: String,

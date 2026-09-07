@@ -44,3 +44,23 @@ implemented fields and confirmed server permission, with visible save failures.
 - Run affected local verification and mandatory architecture/source/CSS gates.
   Daybreak reviews the complete phase after local acceptance. Real provider and
   packaged frontend proof remain scheduled together at full reimplementation exit.
+
+## Avatar storage contract
+
+Schema 58 adds `agent_avatar_assets` with a room/session foreign key, unique
+room/session/state custody, PNG byte/size limits and pending expiration. Older
+schemas remain rejected by the existing explicit schema boundary; no user database
+is migrated. The public Agent Session now includes required `avatar_image_url`.
+
+The exact current local room manager may upload for an existing Agent target. Each
+upload replaces that target's prior pending image and expires pending images after
+15 minutes on the next upload; there is no timer. Shared raster preparation retains
+its existing decode bounds, and the existing absolute asset count/byte accounting
+includes this table. `agent.profile.update` accepts name and/or avatar reference;
+current replacement, pending promotion and public Session/participant projection
+commit in its existing transaction. Clear removes the exact current reference;
+an unrelated pending image remains bounded by its existing expiry. Public reads
+require both current asset custody and the exact Session reference. Foreign human,
+appearance, other-session, malformed or expired references cannot bind. Session
+removal cascades only that session's assets. Upload and HTTP/frontend connections
+remain the next slice; their absence does not advertise an avatar editor.

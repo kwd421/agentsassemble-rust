@@ -1,3 +1,5 @@
+mod agent_avatar_assets;
+pub use agent_avatar_assets::{AgentAvatarAsset, AgentAvatarMetadata};
 mod agent_configuration;
 mod agent_create_start;
 mod agent_creation_records;

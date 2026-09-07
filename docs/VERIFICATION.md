@@ -6990,3 +6990,14 @@ production build/original CSS, workspace all-target/all-feature Clippy, architec
 source growth, 19 policy/artifact tests, format and diff checks pass. A test assertion
 initially used absent DOM matchers and was corrected to the existing test convention;
 no production fallback or gate exception was added. Phase 3 and its review remain open.
+
+Agent avatar storage is implemented under schema 58 and the required public Session
+avatar field. Its two focused flows pass exact current/pending replacement, clear,
+failed-bind rollback, human/appearance isolation, restart/replay, stale manager and
+missing target rejection, malformed raster, expiry, other-session rejection and
+session deletion cascade. Existing persistence coverage (251 cases before these two
+new flows) passes the public-field/schema update; 32 affected frontend contract cases,
+TypeScript/build and original CSS also pass. The storage path reuses the bounded raster
+worker and absolute asset quota, adds at most one current and one pending raster per
+Session, and adds no background task. HTTP/ticket and avatar editor acceptance remain
+open for the next vertical slice.

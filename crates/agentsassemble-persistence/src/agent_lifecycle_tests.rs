@@ -60,6 +60,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
     };
     let session = DurableAgentSession {
         public: AgentSession {
+            avatar_image_url: String::new(),
             room_id: "general".to_owned(),
             session_id: AGENT_ID.to_owned(),
             participant_id: AGENT_ID.to_owned(),

@@ -155,6 +155,7 @@ mod tests {
         let now = Utc::now();
         DurableAgentSession {
             public: AgentSession {
+                avatar_image_url: String::new(),
                 room_id: "general".to_owned(),
                 session_id: id.to_owned(),
                 participant_id: id.to_owned(),
