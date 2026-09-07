@@ -107,6 +107,10 @@ pub enum RoomAction {
     ParticipantKick,
     #[serde(rename = "participant.export")]
     ParticipantExport,
+    #[serde(rename = "room.close")]
+    RoomClose,
+    #[serde(rename = "room.archive")]
+    RoomArchive,
     #[serde(rename = "room.settings.update")]
     RoomSettingsUpdate,
     #[serde(rename = "room.history")]
@@ -138,7 +142,12 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 22] = [
+    #[must_use]
+    pub const fn supports_websocket(self) -> bool {
+        !matches!(self, Self::RoomClose | Self::RoomArchive)
+    }
+
+    pub const ALL: [Self; 24] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
@@ -156,6 +165,8 @@ impl RoomAction {
         Self::ParticipantLeave,
         Self::ParticipantMute,
         Self::ParticipantRoleUpdate,
+        Self::RoomArchive,
+        Self::RoomClose,
         Self::RoomHistory,
         Self::RoomRandomChoose,
         Self::RoomRandomRoll,
@@ -175,6 +186,8 @@ impl RoomAction {
             Self::ParticipantExport => "participant.export",
             Self::ParticipantRoleUpdate => "participant.role.update",
             Self::RoomSettingsUpdate => "room.settings.update",
+            Self::RoomArchive => "room.archive",
+            Self::RoomClose => "room.close",
             Self::RoomHistory => "room.history",
             Self::RoomVoteSummary => "room.vote.summary",
             Self::RoomRandomRoll => "room.random.roll",
@@ -214,7 +227,10 @@ impl ServerProductSurface {
         http_routes.sort();
         validate_routes(&http_routes)?;
         let websocket_streams = RoomStream::ALL.to_vec();
-        let websocket_actions = RoomAction::ALL.to_vec();
+        let websocket_actions = RoomAction::ALL
+            .into_iter()
+            .filter(|action| action.supports_websocket())
+            .collect::<Vec<_>>();
         let digest = server_surface_digest(
             PRODUCT_SURFACE_REVISION,
             &http_routes,

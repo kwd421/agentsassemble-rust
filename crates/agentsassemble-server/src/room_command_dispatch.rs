@@ -25,6 +25,9 @@ pub(crate) async fn execute_command(
         return execute_human_session_command(store, command, authorization).await;
     }
     match command.action {
+        RoomAction::RoomClose | RoomAction::RoomArchive => {
+            execute_room_lifecycle(store, command).await
+        }
         RoomAction::AgentCreate => {
             execute_agent_create_command(
                 store,
@@ -111,6 +114,27 @@ pub(crate) async fn execute_command(
         RoomAction::RoomHistory | RoomAction::RoomVoteSummary => {
             misrouted_direct_read(command.action)
         }
+    }
+}
+
+async fn execute_room_lifecycle(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
+    match store
+        .execute_room_lifecycle(
+            &command.principal,
+            &command.request_id,
+            command.action.as_str(),
+            &command.payload,
+        )
+        .await
+    {
+        Ok(mutation) => {
+            let mut execution = CommandExecution::success(mutation.outcome);
+            execution.revoked_human_sessions = mutation.revoked_session_fingerprints;
+            // The existing watcher cleans durable pending runtime custody; live
+            // human revocation and HTTP ACK must not wait for every provider.
+            execution
+        }
+        Err(error) => CommandExecution::transactional_failure(error),
     }
 }
 

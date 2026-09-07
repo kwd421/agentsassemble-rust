@@ -35,6 +35,15 @@ struct CreateRoomRequest {
     label: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LifecycleRequest {
+    request_id: String,
+    room_id: String,
+    action: agentsassemble_protocol::RoomAction,
+    payload: Value,
+}
+
 pub(crate) fn routes() -> Router<AppState> {
     directory_routes().layer(exact_tauri_cors([Method::GET, Method::POST]))
 }
@@ -42,7 +51,66 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn directory_routes<AppState>() {
         private "/api/rooms" => get(list_rooms).post(create_room),
+        private "/api/rooms/lifecycle" => post(change_lifecycle),
     }
+}
+
+async fn change_lifecycle(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, DirectoryHttpError> {
+    use agentsassemble_domain::{
+        AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
+        LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
+    };
+    use agentsassemble_protocol::RoomAction;
+
+    consume_operator(&state, request.headers()).await?;
+    let body: LifecycleRequest = decode_json_body(request, MAX_DIRECTORY_BODY_BYTES)
+        .await
+        .map_err(DirectoryHttpError::from_body)?;
+    if !matches!(body.action, RoomAction::RoomClose | RoomAction::RoomArchive) {
+        return Err(DirectoryHttpError::bad_request(
+            "This route accepts room lifecycle commands only.",
+        ));
+    }
+    let room_id = validate_room_id(&body.room_id)
+        .map_err(|error| DirectoryHttpError::bad_request(error.message))?;
+    let principal = AuthenticatedPrincipal {
+        principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+        display_name: String::new(),
+        room_id,
+        client_kind: ClientKind::Browser,
+        invite_scope: InviteScope::ReadWrite,
+        is_operator: true,
+        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
+    };
+    let execution = state
+        .rooms
+        .execute(
+            principal,
+            body.request_id.clone(),
+            body.action,
+            body.payload,
+        )
+        .await;
+    let outcome =
+        match execution {
+            Ok(outcome) => outcome,
+            Err(failure) => {
+                let error = DirectoryHttpError::from(failure.error);
+                return Ok((error.status, Json(json!({
+                "error": error.message, "code": error.code, "resolution": failure.resolution,
+                "request_id": body.request_id, "action": body.action,
+            }))).into_response());
+            }
+        };
+    Ok(Json(json!({
+        "request_id": body.request_id, "action": body.action, "resolution": "committed",
+        "result": outcome.result, "deduplicated": outcome.deduplicated,
+    }))
+    .into_response())
 }
 
 async fn list_rooms(
@@ -220,11 +288,25 @@ impl DirectoryHttpError {
 impl From<PersistenceError> for DirectoryHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
+            PersistenceError::CommandConflict => Self {
+                status: StatusCode::CONFLICT,
+                code: "command_conflict",
+                message: "The request id was already used with a different command.".to_owned(),
+            },
+            PersistenceError::CommandUnresolved { code, message } => Self {
+                status: StatusCode::SERVICE_UNAVAILABLE,
+                code,
+                message,
+            },
             PersistenceError::CommandRejected { code, message } => {
                 let status = match code {
-                    "invalid_state" | "room_already_exists" | "room_create_request_conflict" => {
-                        StatusCode::CONFLICT
-                    }
+                    "invalid_state"
+                    | "room_already_exists"
+                    | "room_create_request_conflict"
+                    | "room_incarnation_changed"
+                    | "room_closed"
+                    | "runtime_cleanup_pending" => StatusCode::CONFLICT,
+                    "permission_denied" | "session_revoked" => StatusCode::FORBIDDEN,
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {

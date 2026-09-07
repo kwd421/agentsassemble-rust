@@ -34,6 +34,7 @@ pub(crate) async fn run(
 ) {
     let (mut sender, mut receiver) = socket.split();
     let Some(EstablishedSubscription {
+        room_uid,
         principal,
         human_session,
         mut events,
@@ -94,6 +95,10 @@ pub(crate) async fn run(
                 }
                 match client_frame {
                     ClientFrame::Command { request_id, action, payload } => {
+                        if !action.supports_websocket() {
+                            if send_authorized_nack(&state, &mut principal, &mut human_session, &mut sender, (&request_id, action.as_str(), CommandResolution::Rejected, ProtocolError::new("unsupported_transport", "This action uses the authenticated HTTP management endpoint."))).await.is_none() { return; }
+                            continue;
+                        }
                         if action == RoomAction::RoomHistory {
                             match read_history_frame(
                                 &state.store,
@@ -200,6 +205,11 @@ pub(crate) async fn run(
                             let _ = send_authorized_frame(&state, &mut principal, &mut human_session, &mut sender, &frame).await;
                             return;
                         }
+                        if human_session.is_none() && principal.is_operator &&
+                            matches!(event.event_type.as_str(), "room_closed" | "room_archived") {
+                            send_terminal_room_event(&state, &principal, room_uid, &mut sender, &event).await;
+                            return;
+                        }
                         let current_principal = if human_session.is_some() {
                             if refresh_human_session(&state, &mut principal, &mut human_session).await.is_none() {
                                 return;
@@ -299,6 +309,39 @@ async fn session_remains_authorized_after_revocation_signal(
             false
         }
     }
+}
+
+async fn send_terminal_room_event(
+    state: &AppState,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+    room_uid: uuid::Uuid,
+    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    event: &agentsassemble_domain::RoomEvent,
+) {
+    // An already-admitted local observer receives one final room transition.
+    // This neither admits an inactive socket nor authorizes further commands.
+    let Some(raw_room) = event.extra.get("room") else {
+        return;
+    };
+    let Ok(room) = serde_json::from_value::<agentsassemble_domain::Room>(raw_room.clone()) else {
+        return;
+    };
+    if room.room_id != principal.room_id || room.room_uid != room_uid {
+        return;
+    }
+    let Ok(current) = state
+        .store
+        .resolve_room_lifecycle_principal(principal)
+        .await
+    else {
+        return;
+    };
+    let frame = ServerFrame::Event {
+        stream: "room_events",
+        events: vec![public_event_for_principal(event, &current)],
+        latest_seq: event.seq,
+    };
+    let _ = send_frame(sender, &state.shutdown, &frame).await;
 }
 
 async fn send_authorized_frame(

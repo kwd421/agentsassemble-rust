@@ -56,6 +56,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
             serde_json::to_string(
                 &RoomAction::ALL
                     .iter()
+                    .filter(|action| action.supports_websocket())
                     .map(|action| action.as_str())
                     .collect::<Vec<_>>()
             )?,

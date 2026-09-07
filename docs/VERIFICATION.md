@@ -7163,3 +7163,25 @@ diff plus 19 policy/artifact checks pass. New proof covers archive/reopen replay
 restoration fencing, ordinary versus management admission, exact-owner/bridge/stale
 UID rejection, close replay and terminal close semantics. Transport remains to be
 connected through the existing room command owner before exposing lifecycle UI.
+
+The bounded one-use server-operator `POST /api/rooms/lifecycle` adapter now delegates
+close/archive/restore to the same room command queue, principal budget, durable
+command owner and publication mechanism as socket commands. HTTP failures retain
+committed/rejected/unresolved semantics rather than guessing from a network error.
+The action registry declares lifecycle HTTP-only and derives the advertised socket
+actions and TypeScript list from that policy; a socket attempt is explicitly
+rejected. Existing real-time commands and event delivery remain WebSocket-based.
+
+An admitted local observer receives the exact-incarnation terminal room event before
+its socket closes; bootstrap and local membership are revalidated for that final
+notification. Guests lose all live access. No inactive ordinary socket admission is
+added. Runtime cleanup uses the existing watcher, so human revocation and the HTTP
+result never wait for a roomful of provider stops. The lifecycle event invalidates
+the room as one transition; per-session completion remains with cleanup events.
+
+Six local TCP cases pass: directory authority/creation, HTTP archive and restore,
+HTTP-only route advertisement/rejection, exact local terminal event delivery, guest
+revocation, participant removal, and room close stopping an owned shell fixture
+through the existing watcher. All 261 persistence and six protocol cases, affected
+Clippy, frontend build/CSS and unchanged architecture/source/format/diff plus 19
+policy/artifact checks pass. Lifecycle management UI and deletion remain Phase 4 work.

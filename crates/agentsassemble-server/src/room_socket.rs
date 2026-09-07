@@ -24,6 +24,7 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_SUBSCRIPTION_CATCH_UP_EVENTS: i64 = 256;
 
 pub(crate) struct EstablishedSubscription {
+    pub room_uid: uuid::Uuid,
     pub principal: AuthenticatedPrincipal,
     pub human_session: Option<HumanSessionAuthorization>,
     pub events: broadcast::Receiver<RoomEvent>,
@@ -37,6 +38,7 @@ struct ValidatedSubscription {
 }
 
 struct PreparedSnapshot {
+    room_uid: uuid::Uuid,
     events: broadcast::Receiver<RoomEvent>,
     catalog_updates: watch::Receiver<ProviderCatalog>,
     cursor: i64,
@@ -122,6 +124,7 @@ where
     )
     .await?;
     Some(EstablishedSubscription {
+        room_uid: prepared.room_uid,
         principal,
         human_session,
         events: prepared.events,
@@ -340,6 +343,7 @@ where
     let mut catalog_updates = state.provider_catalog.subscribe();
     let provider_catalog = catalog_updates.borrow_and_update().clone();
     let snapshot_cursor = snapshot_data.last_seq;
+    let room_uid = snapshot_data.room.room_uid;
     let snapshot = RoomSnapshot {
         stream: "room_events",
         room: snapshot_data.room,
@@ -375,6 +379,7 @@ where
         return None;
     };
     Some(PreparedSnapshot {
+        room_uid,
         events,
         catalog_updates,
         cursor: snapshot_cursor,

@@ -26,10 +26,12 @@ pub(crate) async fn admit_human_command(
     payload: &Value,
 ) -> Result<AdmittedHumanCommand, CommandFailure> {
     validate_command_envelope(request_id).map_err(CommandFailure::rejected)?;
-    let principal = store
-        .resolve_principal(principal)
-        .await
-        .map_err(CommandFailure::unresolved)?;
+    let principal = if matches!(action, RoomAction::RoomClose | RoomAction::RoomArchive) {
+        store.resolve_room_lifecycle_principal(principal).await
+    } else {
+        store.resolve_principal(principal).await
+    }
+    .map_err(CommandFailure::unresolved)?;
     admit_current_command(store, admission, principal, request_id, action, payload).await
 }
 

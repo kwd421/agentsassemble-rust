@@ -22,7 +22,7 @@ use crate::{
     profile_store::load_profile_for_identity,
     room_event_sequence::next_sequence,
     room_runtime_cleanup::request_runtime_cleanup,
-    room_turns::support::{insert_event, load_room_with_settings, session_state_event},
+    room_turns::support::{insert_event, load_room_with_settings},
     room_write_budget::command_size,
 };
 
@@ -114,8 +114,7 @@ impl SqliteStore {
         let (cleanup, revoked_session_fingerprints) = if status == RoomStatus::Active {
             (Vec::new(), Vec::new())
         } else {
-            let cleanup =
-                request_room_cleanup(&mut transaction, &room.room_id, &mut events).await?;
+            let cleanup = request_room_cleanup(&mut transaction, &room.room_id).await?;
             let revoked = revoke_room_access(&mut transaction, &room.room_id).await?;
             (cleanup, revoked)
         };
@@ -250,7 +249,6 @@ pub(crate) async fn room_cleanup_pending(
 pub(crate) async fn request_room_cleanup(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
-    events: &mut Vec<RoomEvent>,
 ) -> Result<Vec<RoomRuntimeCleanupKey>, PersistenceError> {
     let ids = sqlx::query_scalar::<_, String>(
         "SELECT session_id FROM agent_sessions WHERE room_id = ? ORDER BY session_id",
@@ -262,7 +260,6 @@ pub(crate) async fn request_room_cleanup(
     for session_id in ids {
         let mut session = load_session(transaction, room_id, &session_id).await?;
         request_runtime_cleanup(transaction, &mut session).await?;
-        events.push(session_state_event(transaction, &session).await?);
         keys.push(RoomRuntimeCleanupKey {
             room_id: room_id.to_owned(),
             session_id,
