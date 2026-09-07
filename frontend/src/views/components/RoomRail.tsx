@@ -30,7 +30,7 @@ export default function RoomRail({
   menuRoom,
   roomMenu,
   onSelectRoom,
-  onAddRoom,
+  onAddRoom, onManageRooms,
   onOpenRoomMenu,
   onMarkRoomRead,
   onInviteRoom,
@@ -46,6 +46,7 @@ export default function RoomRail({
   roomMenu: RoomMenuState;
   onSelectRoom: (roomId: string) => void;
   onAddRoom: () => void;
+  onManageRooms?: () => void;
   onOpenRoomMenu: (event: ReactMouseEvent, room: RoomDockItem) => void;
   onMarkRoomRead: (roomId: string) => void;
   onInviteRoom: (roomId: string) => void;
@@ -101,6 +102,7 @@ export default function RoomRail({
           </button>
         )}
       </div>
+      {onManageRooms && <button type="button" className="dc-server-btn" aria-label="방 관리" title="방 관리" onClick={onManageRooms}><Settings size={20} /></button>}
       {menuRoom && roomMenu && (
         <div
           className="dc-context-menu"

@@ -147,6 +147,7 @@ export function useRoomDirectory({
 }: UseRoomDirectoryOptions) {
   const initialIssue = hostEnabled ? UNCONFIRMED_ISSUE : null;
   const roomsRef = useRef<RoomDockItem[]>(initialRooms);
+  const [managementRooms, setManagementRooms] = useState<StrictRoomDirectory["rooms"]>([]);
   const [rooms, setRooms] = useState<RoomDockItem[]>(initialRooms);
   const activeRef = useRef(false);
   const hostEnabledRef = useRef(false);
@@ -402,6 +403,7 @@ export function useRoomDirectory({
       roomsRef.current = synchronized;
       managerSnapshotRef.current = snapshot;
       setRooms(synchronized);
+      setManagementRooms(payload.rooms);
       publishSyncIssue(null);
       return synchronized;
     },
@@ -550,6 +552,7 @@ export function useRoomDirectory({
 
   return {
     rooms,
+    managementRooms,
     replaceRooms,
     prependRoom,
     mergeFlowRoom,

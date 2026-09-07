@@ -11,6 +11,7 @@ async fn http_room_close_leaves_cleanup_with_existing_watcher_until_exact_runtim
     let directory = tempfile::tempdir()?;
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
     bootstrap(&store).await;
+    let authority = store.local_bootstrap_status().await?;
     let uid = store.snapshot("general", 0, 20).await?.room.room_uid;
     let server = start(store.clone(), agent_catalog(directory.path())).await;
     let mut socket = connect(&server.base_url, &server.state).await;
@@ -43,6 +44,7 @@ async fn http_room_close_leaves_cleanup_with_existing_watcher_until_exact_runtim
         .post(format!("{}/api/rooms/lifecycle", server.base_url))
         .bearer_auth(ticket)
         .json(&json!({
+            "server_id": authority.server_id, "authority_lineage_id": authority.authority_lineage_id,
             "room_id": "general", "request_id": "close-running-room", "action": "room.close",
             "payload": {"room_uid": uid},
         }))

@@ -34,6 +34,7 @@ function directoryRoom(
 ) {
   return {
     ...room(),
+    cleanup_pending: false,
     room_id: roomId,
     room_uid: uid,
     room_settings: {

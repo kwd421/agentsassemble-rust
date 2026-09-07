@@ -1,3 +1,4 @@
+import { isRoomLifecycleEvent, roomFromLifecycleEvent } from "./roomLifecycleContract";
 import type { RoomEvent } from "../api";
 import { RoomSocketSayError } from "../roomSocketTypes";
 import type { Actor } from "../types/generated/Actor";
@@ -160,6 +161,7 @@ function publicRoomSettingsMatch(left: unknown, right: unknown): boolean {
 
 export function eventProjectionIsValid(event: RoomEvent): boolean {
   try {
+    if (isRoomLifecycleEvent(event)) roomFromLifecycleEvent(event);
     if (
       event.type === "room_settings_updated" &&
       !publicRoomSettingsIsValid(

@@ -1,3 +1,4 @@
+import RoomManagementModal from "../views/components/RoomManagementModal";
 import { lazy, Suspense, useState } from "react";
 import {
   Bell,
@@ -53,7 +54,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
-    roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
+    roomLifecycle, roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
     saveAgentAvatar, scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate, sendAgentControl,
     sendParticipantMute, sendParticipantRemove, serverProductSurface, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setLeaveRoomTargetId,
@@ -88,6 +89,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         roomMenu={roomMenu}
         onSelectRoom={selectRoom}
         onAddRoom={addFreshRoom}
+        onManageRooms={roomLifecycle.enabled ? roomLifecycle.show : undefined}
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
         onInviteRoom={inviteRoom}
@@ -386,6 +388,8 @@ export default function AppView({ controller }: { controller: AppController }) {
           onAgentActivityVisibilityChange={changeAgentActivityVisibility}
         />
       )}
+
+      {roomLifecycle.open && <RoomManagementModal controller={roomLifecycle} />}
 
       {/* Right panel */}
       {showMembers && membersOpen && (

@@ -7185,3 +7185,19 @@ revocation, participant removal, and room close stopping an owned shell fixture
 through the existing watcher. All 261 persistence and six protocol cases, affected
 Clippy, frontend build/CSS and unchanged architecture/source/format/diff plus 19
 policy/artifact checks pass. Lifecycle management UI and deletion remain Phase 4 work.
+
+Room management now lists the verified directory's active, archived and closed rooms
+on desktop/mobile and confirms close, archive and restore through the HTTP owner.
+The directory exposes cleanup status with an indexed existence check in its existing
+query. Actions bind server ID, authority lineage and exact room UID; uncertain
+responses retain the same request for explicit retry. New actions wait for verified
+directory continuity. HTTP results validate the canonical room/event projections;
+live terminal events check the accepted snapshot UID, close the socket and invalidate
+the directory. Concurrent invalidations coalesce through the existing refresh owner.
+
+The 40 affected frontend cases, separate modal and HTTP projection cases, four
+directory/lifecycle TCP cases, frontend production build/CSS, affected Clippy and
+unchanged architecture/source/format/diff plus 19 policy/artifact checks pass. React
+review confirms event-owned effects, immediate duplicate-submission fencing and
+labelled controls without another polling or optimistic room-state owner. Packaged
+interaction proof remains at final closeout; deletion remains Phase 4 work.

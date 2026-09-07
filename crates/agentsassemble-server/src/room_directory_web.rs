@@ -38,6 +38,8 @@ struct CreateRoomRequest {
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct LifecycleRequest {
+    server_id: String,
+    authority_lineage_id: String,
     request_id: String,
     room_id: String,
     action: agentsassemble_protocol::RoomAction,
@@ -74,6 +76,14 @@ async fn change_lifecycle(
             "This route accepts room lifecycle commands only.",
         ));
     }
+    let authority = state.store.local_bootstrap_status().await?;
+    if body.server_id != authority.server_id
+        || body.authority_lineage_id != authority.authority_lineage_id
+    {
+        return Err(DirectoryHttpError::bad_request(
+            "The requested server authority no longer matches this runtime.",
+        ));
+    }
     let room_id = validate_room_id(&body.room_id)
         .map_err(|error| DirectoryHttpError::bad_request(error.message))?;
     let principal = AuthenticatedPrincipal {
@@ -107,6 +117,7 @@ async fn change_lifecycle(
             }
         };
     Ok(Json(json!({
+        "server_id": authority.server_id, "authority_lineage_id": authority.authority_lineage_id,
         "request_id": body.request_id, "action": body.action, "resolution": "committed",
         "result": outcome.result, "deduplicated": outcome.deduplicated,
     }))
@@ -194,6 +205,7 @@ fn room_payload(room: &StoredRoomSummary, origin: &str) -> Result<Value, Directo
             Value::String(room.room.room_id.clone()),
         );
     let mut payload = room_identity_payload(&room.room, &room.settings, origin);
+    payload["cleanup_pending"] = json!(room.cleanup_pending);
     payload
         .as_object_mut()
         .ok_or_else(DirectoryHttpError::internal)?

@@ -1,3 +1,4 @@
+import { useRoomLifecycle } from "./useRoomLifecycle";
 import { uploadAgentAvatar } from "../api/agentAvatar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type {
@@ -90,7 +91,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     !operatorPairingToken &&
     !guestRecoveryRequest;
   const {
-    rooms,
+    rooms, managementRooms,
     replaceRooms,
     markRoomRead: markRoomDirectoryRead,
     removeRoom,
@@ -213,6 +214,11 @@ export function useAppController(deviceToken: string, clientId: string) {
     verifyRoomDirectoryAuthority,
     onCreated: onRoomCreated,
   });
+  const roomLifecycle = useRoomLifecycle({
+    enabled: !guestLocked && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === "/api/rooms/lifecycle")),
+    authorityReady: !roomDirectorySyncIssue,
+    managementRooms, captureRoomDirectoryContinuity, validateRoomDirectoryContinuity, refreshRoomDirectory,
+  });
   const lobbyPostingState = useMemo(
     () =>
       roomPostingState({
@@ -247,6 +253,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     serverSurface: serverProductSurface,
     viewerParticipantId: guestSession?.agentId || "operator-local",
     onUnauthorized: admittedSessionToken ? expireGuestSession : undefined,
+    onRoomLifecycle: roomLifecycle.onRoomLifecycle,
   });
   const roomMembers = useRoomMembers({
     activeRoom,
@@ -535,6 +542,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   return {
+    roomLifecycle,
     acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,

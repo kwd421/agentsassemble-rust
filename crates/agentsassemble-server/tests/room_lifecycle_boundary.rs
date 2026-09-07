@@ -18,6 +18,7 @@ use support::human_invite::{
 async fn http_lifecycle_revokes_access_and_restores_without_a_room_socket()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, credentials) = fixture(InviteScope::ReadOnly).await;
+    let authority = store.local_bootstrap_status().await?;
     let uid = store.snapshot("general", 0, 20).await?.room.room_uid;
     let server = start(store.clone()).await;
     let client = Client::new();
@@ -57,7 +58,7 @@ async fn http_lifecycle_revokes_access_and_restores_without_a_room_socket()
         support::local_socket::connect(&server.base_url, server.state(), "general").await;
     manager.subscribe(0).await;
     manager.receive_json().await;
-    let body = json!({"room_id": "general", "request_id": "archive-http", "action": "room.archive", "payload": {"room_uid": uid, "archived": true}});
+    let body = json!({"server_id": authority.server_id, "authority_lineage_id": authority.authority_lineage_id, "room_id": "general", "request_id": "archive-http", "action": "room.archive", "payload": {"room_uid": uid, "archived": true}});
     // HTTP-only lifecycle is not silently accepted on the socket adapter.
     manager.send_json(&json!({"op": "command", "request_id": "archive-socket", "action": "room.archive", "payload": body["payload"]})).await;
     let rejected = manager

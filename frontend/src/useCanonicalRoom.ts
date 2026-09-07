@@ -1,3 +1,5 @@
+import { isRoomLifecycleEvent, roomFromLifecycleEvent } from "./lib/roomLifecycleContract";
+import type { Room } from "./types/generated/Room";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   normalizeRoomGlobalSettings,
@@ -53,6 +55,7 @@ type OpenRoomSocket = (
 
 const NO_STREAMS: RoomStream[] = [];
 type CanonicalRoomCallbacks = {
+  onRoomLifecycle?: (room: Room) => void;
   onError?: (error: Event | Error) => void;
   onUnauthorized?: () => void;
 };
@@ -85,6 +88,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   } = options;
   const callbacksRef = useRef<CanonicalRoomCallbacks>({});
   callbacksRef.current = {
+    onRoomLifecycle: options.onRoomLifecycle,
     onError: options.onError,
     onUnauthorized: options.onUnauthorized,
   };
@@ -262,6 +266,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     const connectionIsCurrent = () => connectionGenerationRef.current === connectionGeneration;
     setLastError(null);
     setConnectionState("connecting");
+    let acceptedRoomUid: unknown;
     const currentSocket = openSocket(auth, streams, {
       onRoomSnapshot: (snapshot, displayResourceBase) => {
         if (!connectionIsCurrent()) return false;
@@ -367,12 +372,28 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
             ? previous
             : null
         );
+        acceptedRoomUid = snapshot.room.room_uid;
         acceptProjection(currentSocket, displayResourceBase);
         return true;
       },
       onRoomEvents: (events) => {
         if (connectionIsCurrent() && socketIsAccepted(currentSocket)) {
+          const terminalEvent = events.find(isRoomLifecycleEvent);
+          const terminalRoom = terminalEvent ? roomFromLifecycleEvent(terminalEvent) : null;
+          if (terminalRoom && terminalRoom.room_uid !== acceptedRoomUid) {
+            const error = new Error("방 상태 이벤트의 방 식별자가 일치하지 않습니다.");
+            setLastError(error);
+            callbacksRef.current.onError?.(error);
+            currentSocket.resync?.();
+            return;
+          }
           applyEvents(roomId, events);
+          if (terminalRoom) {
+            callbacksRef.current.onRoomLifecycle?.(terminalRoom);
+            currentSocket.close();
+            clearAcceptedProjection();
+            setConnectionState("disconnected");
+          }
         }
       },
       onPlugin: (envelopes, snapshot) => {

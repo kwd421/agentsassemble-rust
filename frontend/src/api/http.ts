@@ -288,6 +288,7 @@ export async function responseError(res: Response): Promise<ApiError> {
   try {
     const payload = JSON.parse(text) as {
       code?: unknown;
+      resolution?: unknown;
       error?: unknown;
       message?: unknown;
     };
@@ -313,7 +314,8 @@ export async function responseError(res: Response): Promise<ApiError> {
     return new ApiError(
       res.status,
       message,
-      code
+      code,
+      payload.resolution === "rejected" || payload.resolution === "unresolved" ? payload.resolution : undefined
     );
   } catch {
     return new ApiError(res.status, text);

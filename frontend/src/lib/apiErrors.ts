@@ -4,12 +4,14 @@ export const GUEST_SESSION_EXPIRED_MESSAGE =
 export class ApiError extends Error {
   status: number;
   code: string;
+  resolution?: "rejected" | "unresolved";
 
-  constructor(status: number, message: string, code = "") {
+  constructor(status: number, message: string, code = "", resolution?: "rejected" | "unresolved") {
     super(message);
     this.name = "ApiError";
     this.status = status;
     this.code = code;
+    this.resolution = resolution;
   }
 }
 

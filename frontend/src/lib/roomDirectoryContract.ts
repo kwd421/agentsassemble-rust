@@ -131,6 +131,7 @@ function validateRoom(value: unknown, index: number): ServerRoomDockSource {
       "status",
       "origin",
       "room_settings",
+      "cleanup_pending",
     ],
     label
   );
@@ -147,6 +148,7 @@ function validateRoom(value: unknown, index: number): ServerRoomDockSource {
   if (!new Set(["active", "closed", "archived"]).has(requiredString(room, "status", label))) {
     throw new Error(`${label}.status가 올바르지 않습니다.`);
   }
+  if (typeof room.cleanup_pending !== "boolean") throw new Error(`${label}.cleanup_pending가 올바르지 않습니다.`);
   validateSettings(room.room_settings, roomId, `${label}.room_settings`);
   return room as ServerRoomDockSource;
 }

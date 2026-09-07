@@ -16,6 +16,7 @@ use crate::{PersistenceError, SqliteStore, profile_store::load_local_operator_pr
 pub struct StoredRoomSummary {
     pub room: Room,
     pub settings: RoomSettings,
+    pub cleanup_pending: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -57,7 +58,7 @@ impl SqliteStore {
         &self,
         include_archived: bool,
     ) -> Result<Vec<StoredRoomSummary>, PersistenceError> {
-        let rows = sqlx::query("SELECT room_id, room_json, settings_json FROM rooms")
+        let rows = sqlx::query("SELECT room_id, room_json, settings_json, EXISTS(SELECT 1 FROM room_runtime_cleanup cleanup WHERE cleanup.room_id = rooms.room_id) AS cleanup_pending FROM rooms")
             .fetch_all(&self.pool)
             .await?;
         let mut rooms = Vec::with_capacity(rows.len());
@@ -69,7 +70,11 @@ impl SqliteStore {
                 return Err(invalid_room_state());
             }
             if include_archived || room.status != RoomStatus::Archived {
-                rooms.push(StoredRoomSummary { room, settings });
+                rooms.push(StoredRoomSummary {
+                    room,
+                    settings,
+                    cleanup_pending: row.get("cleanup_pending"),
+                });
             }
         }
         rooms.sort_by(|left, right| {
