@@ -6,16 +6,16 @@ defines the production roadmap. The finite Phase 0B prerequisites F-14 and F-16
 and their whole-phase cross-review are complete. Work now follows the provider-first
 order below. The provider-first ordering has prior manual documentation cross-review;
 the current checkpoint records later findings, not a new approval.
-Phase 1's local contract has Daybreak approval at `2ee7fd6`. Read and triage the
-already-running Pro review before Phase 2 and close supported findings. Phase 1 and
-subsequent phases require both reviewers under the per-slice execution gate below.
+Phase 1's corrected local contract has Daybreak approval through `cae1f90`. Its
+local exit is complete and Phase 2 entry is open. The latest user decision defers
+new external reviews until the full reimplementation is complete, as owned below.
 Freebuff is excluded; Antigravity moves exclusively to
 Phase 7's externally launched CLI and Room Connector invitation flow. Its removed
 resident-adapter requirement no longer blocks Phase 1, but the external flow remains
 required for final parity. Earlier local verification remains evidence for its scope.
 The user also directs real-provider and packaged end-to-end verification to the final
-post-implementation stage. Intermediate phases retain local tests, mandatory gates,
-and both phase code reviewers; they do not claim new real-client proof.
+post-implementation stage. Intermediate phases retain local tests and mandatory gates,
+with external review at final closeout; they do not claim new real-client proof.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -89,8 +89,9 @@ evidence for those providers is an explicit verification limit, not a parity fai
 or permission to omit implementation. No mock is described as a real upstream run.
 
 Run the final packaged-frontend user flows with this allowed matrix after the retained
-implementation is complete. During implementation, affected local regressions,
-architecture/security/structure gates, and phase code cross-review remain mandatory.
+implementation is complete. During implementation, affected local regressions
+and architecture/security/structure gates remain mandatory. External cross-review
+follows completion of the retained reimplementation, under the per-slice gate below.
 An intermediate phase can pass those gates with final real-client evidence still
 pending under this explicit schedule; it must not claim that pending proof exists.
 
@@ -307,14 +308,15 @@ Current execution checkpoint (2026-09-07, Phase 1 local closeout):
    CLI must later consume the distinct Room Connector invitation in Phase 7; it does
    not use human admission or regain managed-session controls. Keep its earlier
    native-receipt investigation as historical evidence, not a current phase blocker.
-3. Daybreak approved all 130 individual commits, cumulative `5d0a636..2ee7fd6`,
-   final HEAD, and the local Phase 1 contract at C0/H0/M0/L0, including the subsequent
-   optimization/test/security corrections and the user's one-commit generated-lockfile
-   exception. Read and triage the already-running Pro review as the user requested;
-   any resulting correction is reviewed by both reviewers. Obtain both approvals
-   for the corrected phase before closing Phase 1 and proceeding to Phase 2. New real-client and
-   packaged-flow evidence is deferred to the final stage under the verification scope
-   above; valid earlier evidence remains bounded to the tested revision and flow.
+3. Daybreak approved all 133 individual commits, cumulative `5d0a636..cae1f90`,
+   final HEAD, and the corrected local Phase 1 contract at C0/H0/M0/L0. This includes
+   the Codex native terminal-status correction and the user's one-commit generated-
+   lockfile exception. Phase 1's local exit is complete; proceed to Phase 2 without
+   waiting for the already-running Pro review. Read its completed answer when
+   available and address source-supported findings at their owner; no intermediate
+   external re-review is required. Final external review, real-client, and packaged
+   proof remain required at final closeout. Earlier evidence remains bounded to its
+   tested revision and flow.
 4. Continue the retained phase order below. The repository-wide optimization and
    test/security-duplication passes are complete for their recorded scope, not a new
    recurring prerequisite. Reopen their owners only for a concrete new failure,
@@ -685,13 +687,25 @@ to one provider or feature while sibling targets remain structurally absent. A s
 that meets its declared phase contract is left alone unless concrete evidence reopens
 it.
 
-Intermediate commits and pushes do not trigger external review by count. After one
-complete phase passes its local flows and affected gates, cross-review every individual
-phase commit, the cumulative phase range, final HEAD, and resulting product behavior.
-A correction required by that review is pushed and re-reviewed before the phase closes.
-Real-provider and packaged-flow runs follow the user-owned final-stage verification
-scope above. Both reviewers must distinguish static/local approval from that pending
-real-client evidence; the final phase cannot close until its authorized flows pass.
+Latest user decision (2026-09-07): external review is deferred until the retained
+reimplementation is complete. Intermediate commits, pushes, and phase completion
+never trigger new Pro or Daybreak requests. Each intermediate phase exits when its
+local acceptance criteria and affected mandatory gates pass; external approval is
+not a prerequisite for starting the next phase.
+
+At final closeout, GPT-6 Pro and Daybreak Blue at `xhigh` review the full retained
+product, original-to-Rust coverage, all not-yet-reviewed individual commits, the
+cumulative implementation range, and final HEAD. Reuse prior exact reviewed evidence
+without dropping final integration coverage. Correct source-supported findings,
+run affected verification, and submit corrections together for final re-review.
+Real-provider and packaged-flow runs follow the user-owned final-stage scope above;
+final completion requires both reviewers' approval and that authorized real-flow
+proof. A local phase exit never claims pending external or real-client proof.
+
+The already-running Pro review is not cancelled or treated as approval. Read its
+completed answer when available and triage supported findings, while continuing
+implementation without waiting for it. Its findings do not trigger another external
+request before final closeout. Confirmed failures are still corrected at their owner.
 
 When that workflow invokes review, the request covers individual commits and the
 cumulative range. Requests
@@ -702,13 +716,6 @@ or in-scope threat and compare the smallest fail-closed alternative; future risk
 the word security alone is not approval evidence. Findings and final disposition
 are recorded without copying full review prose into multiple product documents.
 
-Latest user decision (2026-09-07): retain GPT-6 Pro and Daybreak Blue at `xhigh`
-for every whole-phase review and correction re-review. This supersedes the brief
-Daybreak-only instruction. Intermediate commits and pushes still do not trigger
-Pro reviews; the phase completion cadence above remains the owner.
-Read the already-running Pro review to completion, address supported findings,
-and obtain both reviewers' approval of the corrected Phase 1 before Phase 2.
-Incomplete or pending answers are not approvals.
 The reviewers have distinct primary duties. Critical-web uses GPT-6 Pro and reviews
 the complete inventory, original-to-Rust coverage, phase placement, observable
 product behavior, SSoT/DDD boundaries, and overimplementation. Daybreak Blue manually

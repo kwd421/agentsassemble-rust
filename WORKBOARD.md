@@ -12,14 +12,14 @@
 - User scope revision: Freebuff is excluded; Antigravity is external CLI plus
   Room Connector invite only (Phase 7). Both managed registrations and Antigravity's
   resident path are retired; the fourteen-provider Phase 1 passes local verification
-  and Daybreak's whole-phase review through `2ee7fd6`.
+  and Daybreak's whole-phase review through `cae1f90`.
 - Codex native terminal-status correction passes affected local verification;
   [failure/publication and interrupt evidence](docs/VERIFICATION.md#codex-native-terminal-status-correction-2026-09-07).
-- Next: follow the [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases),
-  read the already-running Pro review and address supported findings, then implement
-  Phase 2's missing Agent Session controls after both whole-phase reviewers approve
-  the corrected Phase 1. Phase 0A and finite Phase 0B remain complete.
-  The restored Pro plus Daybreak review policy is owned by the per-slice gate below.
+- Next: implement Phase 2's missing Agent Session controls using the
+  [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases).
+  Phase 1's local exit is complete. Read the running Pro result when available;
+  it does not block implementation. New external reviews are deferred until the
+  full reimplementation is complete, under the per-slice gate below.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:
