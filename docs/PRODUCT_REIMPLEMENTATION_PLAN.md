@@ -6,14 +6,16 @@ defines the production roadmap. The finite Phase 0B prerequisites F-14 and F-16
 and their whole-phase cross-review are complete. Work now follows the provider-first
 order below. The provider-first ordering has prior manual documentation cross-review;
 the current checkpoint records later findings, not a new approval.
-Phase 1 remains open pending the user-approved provider scope cutover and whole-phase
-verification/cross-review. Freebuff is excluded; Antigravity moves exclusively to
+Phase 1's local contract has Daybreak approval at `2ee7fd6`. Read and triage the
+already-running Pro review before Phase 2; any correction and all subsequent reviews
+use Daybreak alone under the user's decision in the per-slice execution gate below.
+Freebuff is excluded; Antigravity moves exclusively to
 Phase 7's externally launched CLI and Room Connector invitation flow. Its removed
 resident-adapter requirement no longer blocks Phase 1, but the external flow remains
 required for final parity. Earlier local verification remains evidence for its scope.
 The user also directs real-provider and packaged end-to-end verification to the final
 post-implementation stage. Intermediate phases retain local tests, mandatory gates,
-and both code reviewers; they do not claim new real-client proof.
+and phase code review; they do not claim new real-client proof.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -289,7 +291,7 @@ taxonomy redesign waits until post-parity.
 
 ## Ordered implementation phases
 
-Current execution checkpoint (2026-09-07, user-approved provider scope revision):
+Current execution checkpoint (2026-09-07, Phase 1 local closeout):
 
 1. Custom API's completion-contract correction is locally complete. Its specification
    now owns requested-versus-resolved identity while preserving request/session
@@ -297,20 +299,20 @@ Current execution checkpoint (2026-09-07, user-approved provider scope revision)
    routed selection, fixed-model controls, and invalid responses pass the adapter
    path with a local HTTP peer and real MCP portal. Public HTTPS and an upstream turn
    are outside that proof. No alias registry, substitution, or fallback was added.
-2. Apply the explicit scope decision: remove Freebuff from the product and retire
-   Antigravity's managed catalog, launch, terminal/hook, and late-session-promotion
-   paths. Preserve user-owned stored data; unsupported stored selections must fail
-   visibly, never migrate or become a connector implicitly. The remaining fourteen
+2. The explicit scope decision is implemented: Freebuff and Antigravity's managed
+   catalog, launch, terminal/hook, and late-session-promotion paths are retired.
+   User-owned stored data is preserved; unsupported stored selections fail visibly
+   without migration or implicit connector conversion. The remaining fourteen
    managed providers retain their exact contracts. Antigravity's externally launched
    CLI must later consume the distinct Room Connector invitation in Phase 7; it does
    not use human admission or regain managed-session controls. Keep its earlier
    native-receipt investigation as historical evidence, not a current phase blocker.
-3. Correct the affected paths, update their evidence, and submit the complete Phase 1
-   candidate under the existing per-slice execution gate. Include the subsequent
-   optimization/test/security corrections in the reviewed cumulative range and final
-   HEAD. Reuse valid unaffected evidence and apply `Rule.md`'s verification scope;
-   neither a historical full run nor a large test count closes a new contract gap.
-   Obtain both existing code reviewers' approval before Phase 2. New real-client and
+3. Daybreak approved all 130 individual commits, cumulative `5d0a636..2ee7fd6`,
+   final HEAD, and the local Phase 1 contract at C0/H0/M0/L0, including the subsequent
+   optimization/test/security corrections and the user's one-commit generated-lockfile
+   exception. Read and triage the already-running Pro review as the user requested;
+   any resulting correction is reviewed by Daybreak without a new Pro request.
+   Then close Phase 1 and proceed to Phase 2. New real-client and
    packaged-flow evidence is deferred to the final stage under the verification scope
    above; valid earlier evidence remains bounded to the tested revision and flow.
 4. Continue the retained phase order below. The repository-wide optimization and
@@ -323,10 +325,10 @@ Evidence owners: [resolved Custom API contract](VERIFICATION.md#custom-api-resol
 [remaining native-provider dependencies](VERIFICATION.md#remaining-native-provider-receipt-evidence-2026-09-07),
 [optimization audit](VERIFICATION.md#repository-wide-optimization-audit-2026-09-07),
 [test/security cleanup](VERIFICATION.md#test-necessity-and-security-duplication-audit-2026-09-07),
+[Phase 1 review disposition](VERIFICATION.md#phase-1-whole-phase-manual-review-disposition-2026-09-07),
 and [previous packaged/real-provider matrix](VERIFICATION.md#packaged-provider-catalog-and-real-turn-matrix-2026-09-03).
-These steps apply the existing phase exits and approval gates; they do not change
-reviewer settings or security/structure gates. The explicit user scope decision above
-changes the retained provider inventory; it does not waive any remaining flow's proof.
+The user-approved reviewer change is owned by the per-slice execution gate below.
+Security/structure gates and all remaining product-flow proof requirements remain in force.
 
 Closed Phase 0 evidence remains valid, but residual audit cleanup is not allowed to
 hold the retained product behind finding-number order. The production sequence is:
@@ -653,7 +655,7 @@ Correction substage:
   evidence where its required external client/API is installed and explicitly
   authorized. Unavailable external dependencies have explicit static/contract
   evidence and a truthful unavailable state. Every excluded/deferred surface is
-  inactive and explicit, both manual reviewers approve the exact pushed range, and
+  inactive and explicit, the designated manual reviewer approves the exact pushed range, and
   no Python/legacy fallback remains.
 
 At that exit, stop and report parity before beginning a repository-wide size-warning
@@ -688,25 +690,28 @@ complete phase passes its local flows and affected gates, cross-review every ind
 phase commit, the cumulative phase range, final HEAD, and resulting product behavior.
 A correction required by that review is pushed and re-reviewed before the phase closes.
 Real-provider and packaged-flow runs follow the user-owned final-stage verification
-scope above. Both reviewers must distinguish static/local approval from that pending
+scope above. The reviewer must distinguish static/local approval from that pending
 real-client evidence; the final phase cannot close until its authorized flows pass.
 
 When that workflow invokes review, the request covers individual commits and the
 cumulative range. Requests
 explicitly include structure, duplicated policy, overimplementation, ownership,
 lifecycle, meaningless polling/heartbeat/timers, fallback, and swallowed failure.
-For defensive code, reviewers must name the reachable use case, observed failure,
+For defensive code, the reviewer must name the reachable use case, observed failure,
 or in-scope threat and compare the smallest fail-closed alternative; future risk or
 the word security alone is not approval evidence. Findings and final disposition
 are recorded without copying full review prose into multiple product documents.
 
-The reviewers have distinct primary duties. Critical-web uses GPT-6 Pro for every
-phase and reviews the complete inventory, original-to-Rust coverage, phase placement,
-observable product behavior, SSoT/DDD boundaries, and overimplementation. Daybreak
-Blue at `xhigh` manually reviews the actual source and diff for authorization,
-async/process/TCP/WebSocket failure paths, lifecycle cleanup, polling/timers,
-fallback, and swallowed failure. Very-high web review is not used. Both reviewers
-inspect the complete phase and may report cross-cutting ownership or duplication
-defects, but a diff approval never proves plan or phase completeness. The implementing
+User decision (2026-09-07): Daybreak Blue at `xhigh` is the sole required manual
+reviewer for new reviews and correction re-reviews. The one already-running Pro
+review is read to completion and its supported findings are addressed before Phase 2;
+their corrections are reviewed by Daybreak alone. No new Pro/web review is requested.
+Incomplete or pending answers are not approvals.
+Daybreak reviews the complete inventory, original-to-Rust coverage, phase placement,
+observable product behavior, SSoT/DDD boundaries, overimplementation, and actual source
+and diff for authorization, async/process/TCP/WebSocket failure paths, lifecycle
+cleanup, polling/timers, fallback, and swallowed failure. This reviewer change does
+not waive phase coverage, correction re-review, security/structure gates, or final
+real-client evidence. A diff approval never proves plan or phase completeness. The implementing
 agent independently verifies the original entry point, owner, transition, failure
 semantics, and real UI flow.

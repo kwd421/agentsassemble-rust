@@ -12,10 +12,11 @@
 - User scope revision: Freebuff is excluded; Antigravity is external CLI plus
   Room Connector invite only (Phase 7). Both managed registrations and Antigravity's
   resident path are retired; the fourteen-provider Phase 1 passes local verification
-  and awaits whole-phase cross-review.
+  and Daybreak's whole-phase review through `2ee7fd6`.
 - Next: follow the [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases),
-  then complete whole-phase cross-review before Phase 2. Phase 0A and finite Phase 0B
-  remain complete; reviewer settings are unchanged.
+  read the already-running Pro review and address supported findings, then implement
+  Phase 2's missing Agent Session controls. Phase 0A and finite Phase 0B remain complete.
+  The user's change to Daybreak-only new reviews is owned by the per-slice gate below.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:

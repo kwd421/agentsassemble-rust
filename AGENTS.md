@@ -75,14 +75,14 @@ feature commits or 2,000 aggregate changed lines; review corrections may be push
 immediately. External review timing and reviewer settings have one owner:
 `docs/PRODUCT_REIMPLEMENTATION_PLAN.md` → Per-slice execution gate.
 
-Requests to the designated critical ChatGPT session are pre-authorized. Send one
-complete request, wait for and read the completed answer; never use `Get answer now`.
-If the session is exhausted or irrecoverably broken, transfer the user-authored
-requirements, decisions, and review role to a replacement using the plan's settings.
+Manual review requests under the plan's per-slice execution gate are pre-authorized.
+Send a complete request, wait for and read the completed answer. Reviewer selection
+and phase-closure requirements are owned by that gate.
 New automated security scans require explicit approval; never use Deep Scan.
 
-Computer Use is limited to packaged-frontend verification and the authorized web
-review workflow. After packaged verification, normally quit only the exact app and
+Computer Use is limited to packaged-frontend verification and completion of the
+already-running web review specified by the plan. After packaged verification,
+normally quit only the exact app and
 its owned children, reset Computer Use, and remove only that run's isolated data and
 regenerable artifacts. Preserve unrelated apps, providers, and user data. Retain
 build artifacts needed by active work; use the repository's artifact maintenance
