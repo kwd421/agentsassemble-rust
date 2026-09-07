@@ -7,7 +7,8 @@ Status: current real-client verification owner
 Verification claims only the boundary actually observed. Build, lint, unit tests, simulated sockets, responsive browser emulation, and real provider runs are separate evidence classes and cannot substitute for one another.
 
 Historical entries below retain their contemporaneous batch and review wording as
-evidence. They do not own current commit, push, or review timing; those are owned by
+evidence. Current commit and push timing is owned by the project workflow in
+`AGENTS.md`; external review timing and reviewer settings follow
 `docs/PRODUCT_REIMPLEMENTATION_PLAN.md` under `Per-slice execution gate`.
 
 The active comparison baseline is original
