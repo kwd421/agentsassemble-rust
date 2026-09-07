@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Check, LogOut, Plus, Settings, UserPlus } from "lucide-react";
+import { Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
 import {
   completeRoomAppearance,
   roomAppearanceStyle,
@@ -33,7 +33,7 @@ export default function RoomRail({
   roomMenu,
   mobileViewport = false,
   onSelectRoom,
-  onAddRoom, onManageRooms,
+  onAddRoom, onManageRooms, onOpenFriends, friendsOpen = false,
   onOpenRoomMenu,
   onMarkRoomRead,
   onInviteRoom,
@@ -51,6 +51,8 @@ export default function RoomRail({
   onSelectRoom: (roomId: string) => void;
   onAddRoom: () => void;
   onManageRooms?: () => void;
+  onOpenFriends?: () => void;
+  friendsOpen?: boolean;
   onOpenRoomMenu: (event: ReactMouseEvent, room: RoomDockItem) => void;
   onMarkRoomRead: (roomId: string) => void;
   onInviteRoom: (roomId: string) => void;
@@ -64,10 +66,11 @@ export default function RoomRail({
       aria-label="룸 레일"
       style={mobileViewport ? { width: MOBILE_ROOM_RAIL_WIDTH } : undefined}
     >
+      {onOpenFriends && <button type="button" className="dc-server-btn" style={buttonStyle} aria-label="친구" title="친구" aria-pressed={friendsOpen} data-active={friendsOpen} onClick={onOpenFriends}><Users size={20} /></button>}
       <div className="dc-room-stack min-h-0 flex-1 overflow-y-auto chat-scroll" aria-label="방 목록">
         {rooms.map((room) => {
           const Icon = room.icon;
-          const active = !adminOpen && activeRoom.id === room.id;
+          const active = !adminOpen && !friendsOpen && activeRoom.id === room.id;
           const disconnected = roomIsDisconnected(room);
           const roomAppearance = completeRoomAppearance(
             {

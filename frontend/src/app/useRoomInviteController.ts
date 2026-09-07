@@ -22,6 +22,7 @@ export type PublicAccessTransition = "idle" | "starting" | "stopping";
 export type HumanInviteOptions = {
   maxUses: number;
   ttlSeconds: number;
+  displayName?: string;
 };
 
 type UseRoomInviteControllerOptions = {
@@ -395,9 +396,10 @@ export function useRoomInviteController({
     try {
       await createManagedHumanInviteForRoom({
         room,
-        displayName: "Guest",
+        displayName: options.displayName ?? "Guest",
         inviteScope,
-        ...options,
+        maxUses: options.maxUses,
+        ttlSeconds: options.ttlSeconds,
         startTunnelIfNeeded,
       });
       setCopyStatus("보안 초대 링크 생성됨");

@@ -67,6 +67,7 @@ mod account_web;
 mod central_registration_web;
 mod connection_admission;
 mod event_publication;
+mod friends_web;
 mod http_admission;
 mod http_api;
 mod http_transport;

@@ -26,8 +26,10 @@ import { GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 
 const AdminPanel = lazy(() => import("../views/AdminPanel"));
+const FriendsView = lazy(() => import("../views/FriendsView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
+  const [friendsOpen, setFriendsOpen] = useState(false);
   const [messageAttachmentReadOwner] = useState(
     () => createMessageAttachmentReadOwner()
   );
@@ -88,7 +90,9 @@ export default function AppView({ controller }: { controller: AppController }) {
         menuRoom={menuRoom}
         roomMenu={roomMenu}
         mobileViewport={mobileViewport}
-        onSelectRoom={selectRoom}
+        onSelectRoom={(roomId) => { setFriendsOpen(false); selectRoom(roomId); }}
+        friendsOpen={friendsOpen && roomLifecycle.enabled}
+        onOpenFriends={roomLifecycle.enabled ? () => { setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onAddRoom={addFreshRoom}
         onManageRooms={roomLifecycle.enabled ? roomLifecycle.show : undefined}
         onOpenRoomMenu={openRoomMenu}
@@ -221,7 +225,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                         data-active={!adminOpen && channel === id}
                         data-muted={activeChannelSettings[id]?.notifications === "mute"}
                         data-read-at={activeChannelSettings[id]?.lastReadAt || undefined}
-                        onClick={() => goToChannel(id)}
+                        onClick={() => { setFriendsOpen(false); goToChannel(id); }}
                         onContextMenu={(event) => openChannelMenu(event, id)}
                         className="dc-channel"
                       >
@@ -298,7 +302,9 @@ export default function AppView({ controller }: { controller: AppController }) {
       {/* Central channel column */}
       <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용">
         <Suspense fallback={<DeferredViewFallback />}>
-          {activeRoomDisconnected ? (
+          {friendsOpen && roomLifecycle.enabled ? (
+            <FriendsView onClose={() => setFriendsOpen(false)} />
+          ) : activeRoomDisconnected ? (
             <DisconnectedRoomView room={activeRoom} />
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} activeMeetingId={activeRoom.meetingId} />

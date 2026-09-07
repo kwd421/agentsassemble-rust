@@ -222,6 +222,7 @@ async fn manual_public_ingress_enforces_the_real_tcp_route_and_origin_boundary()
             ),
         ),
         ("/healthz", trusted_headers.clone()),
+        ("/api/room-friends", trusted_headers.clone()),
     ] {
         let response = request(
             server.address,

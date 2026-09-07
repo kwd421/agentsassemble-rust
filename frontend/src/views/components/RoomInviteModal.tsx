@@ -7,6 +7,7 @@ import type {
 } from "../../app/useRoomInviteController";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import type { RoomAppearance } from "../../lib/roomAppearance";
+import SavedFriendInvitePicker from "./SavedFriendInvitePicker";
 
 type PendingPublicAction = { kind: "human"; options: HumanInviteOptions };
 
@@ -55,14 +56,16 @@ export default function RoomInviteModal({
   onStopTunnel: () => void;
 }) {
   const [humanMaxUses, setHumanMaxUses] = useState(1);
+  const [friendDisplayName, setFriendDisplayName] = useState<string>();
   const [humanTtlSeconds, setHumanTtlSeconds] = useState(86400);
   const [pendingPublicAction, setPendingPublicAction] =
     useState<PendingPublicAction | null>(null);
   const readOnlyInvite = inviteScope === "read_only";
-  const currentHumanOptions = { maxUses: humanMaxUses, ttlSeconds: humanTtlSeconds };
+  const currentHumanOptions = { maxUses: humanMaxUses, ttlSeconds: humanTtlSeconds, ...(friendDisplayName ? { displayName: friendDisplayName } : {}) };
   const selectedHumanInvite = humanInvites.find(
     (invite) =>
       !invite.retired &&
+      invite.displayName === (friendDisplayName ?? "Guest") &&
       invite.maxUses === humanMaxUses &&
       invite.ttlSeconds === humanTtlSeconds
   );
@@ -207,6 +210,7 @@ export default function RoomInviteModal({
               </p>
             </div>
             <div className="dc-invite-options">
+              <SavedFriendInvitePicker onSelect={setFriendDisplayName} />
               <label>
                 <span>초대 가능 인원</span>
                 <select

@@ -137,6 +137,7 @@ pub fn router(state: AppState) -> Router {
     let mut app = core_routes()
         .merge(crate::central_login::routes())
         .merge(crate::room_directory_web::routes())
+        .merge(crate::friends_web::routes())
         .merge(crate::room_preferences_web::routes())
         .merge(crate::message_pins_web::routes())
         .merge(crate::message_search_web::routes())

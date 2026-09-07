@@ -151,7 +151,7 @@ describe("useRoomInviteController", () => {
       await hook.result.current.generateSecureInvite(
         room,
         "room",
-        { maxUses: 5, ttlSeconds: 604800 },
+        { maxUses: 5, ttlSeconds: 604800, displayName: "초대 친구" },
         false
       );
     });
@@ -159,7 +159,7 @@ describe("useRoomInviteController", () => {
     expect(apiMocks.createManagedHumanInvite).toHaveBeenCalledWith(
       {
         authority: managerAuthority,
-        displayName: "Guest",
+        displayName: "초대 친구",
         inviteScope: "room",
         ttlSeconds: 604800,
         maxUses: 5,

@@ -7586,3 +7586,22 @@ transaction per operation and reads contact rows only on request. Persistence an
 protocol all-target/all-feature Clippy, generated types, architecture/source gates,
 19 gate-policy checks, format, diff and artifact checks pass. HTTP authorization,
 visible directory/invite controls and packaged proof remain pending.
+
+### Saved friend HTTP and frontend connection
+
+The private route now passes a real HTTP test for missing/wrong-scope/replayed
+operator tickets, committed save, edit conflict, delete and subsequent list. The
+existing real TCP public-ingress test also rejects `/api/room-friends`. Responses
+including route errors are private/no-store; shared body limits and deadlines apply.
+Server all-target/all-feature Clippy and the unchanged architecture/source, 19 policy,
+format/diff/artifact gates pass.
+
+The room rail now opens the directory; add/edit/delete, search/type/last-saved online
+filters and human-only invite selection are connected. Twenty-four affected UI and
+invitation tests pass, including failed creation with stable retry ID, cancelled
+edit, initial-read failure, failed deletion with explicit retry and human-only friend
+selection. The controller test confirms the selected name reaches existing exact
+directory authority and invitation custody. Production TypeScript/Vite build and the
+unchanged CSS hash/cascade gate pass. Requests run only on mount, user retry or
+mutation; no background polling is added. Direct packaged desktop/mobile acceptance
+and full Phase 5 resource/review evidence remain pending.

@@ -1,9 +1,24 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import RoomInviteModal from "./RoomInviteModal";
+const friendsApi = vi.hoisted(() => ({ list: vi.fn().mockResolvedValue([]) }));
+vi.mock("../../api/friends", () => ({ fetchSavedFriends: friendsApi.list }));
 
 afterEach(cleanup);
+
+it("uses a saved human name for human admission while excluding AI contacts", async () => {
+  const details = { display_name: "초대 친구", handle: "friend", participant_type: "human", provider_kind: "", connection_kind: "", agent_id: "", source_agent_id: "", last_meeting_id: "", status: "offline", source: "manual", last_seen_at: null };
+  const friend = { friend_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", revision: 1, details, created_at: "2026-09-08T00:00:00Z", updated_at: "2026-09-08T00:00:00Z" };
+  friendsApi.list.mockResolvedValueOnce([friend, { ...friend, friend_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", details: { ...details, participant_type: "remote", display_name: "외부 에이전트" } }]);
+  const { onGenerateSecureInvite } = renderInviteModal();
+  const select = screen.getByLabelText("사람 친구 초대");
+  await waitFor(() => expect((select as HTMLSelectElement).disabled).toBe(false));
+  expect(screen.queryByRole("option", { name: "외부 에이전트 · friend" })).toBeNull();
+  fireEvent.change(select, { target: { value: friend.friend_id } });
+  fireEvent.click(screen.getByRole("button", { name: "사람 초대 링크 생성" }));
+  expect(onGenerateSecureInvite).toHaveBeenCalledWith({ maxUses: 1, ttlSeconds: 86400, displayName: "초대 친구" }, false);
+});
 
 function renderInviteModal({
   publicAccess = true,

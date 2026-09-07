@@ -153,3 +153,12 @@ focused deletion confirmation. The room invite picker uses the existing human
 invite owner for people; external AI invitations remain separately owned by Phase 7.
 Local storage/restart and conflicting edit checks precede private HTTP/UI connection;
 packaged desktop/mobile verification completes the vertical flow before phase review.
+
+The private route is now registered with the shared product/ingress inventory and
+uses one-use server-operator tickets. The room rail opens the saved directory with
+search, type and last-saved online filters. Unread/failed initial data cannot enable
+mutations; failed saves retain drafts and their creation IDs. The human invite picker
+lists only human contacts and passes the selected display name to the existing
+managed invitation owner, without treating the saved contact as identity proof.
+AI contacts remain outside human admission. No directory polling or persistent
+browser copy is introduced. Packaged acceptance remains pending at phase closure.

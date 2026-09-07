@@ -1,5 +1,8 @@
 use std::time::Duration;
 
+#[path = "room_directory_boundary/friends.rs"]
+mod friends;
+
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID, ProviderCatalog,

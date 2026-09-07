@@ -49,6 +49,7 @@ fn registered_routes(
         crate::web::HTTP_ROUTES,
         crate::central_login::HTTP_ROUTES,
         crate::room_directory_web::HTTP_ROUTES,
+        crate::friends_web::HTTP_ROUTES,
         crate::room_preferences_web::HTTP_ROUTES,
         crate::message_pins_web::HTTP_ROUTES,
         crate::message_search_web::HTTP_ROUTES,
