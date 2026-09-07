@@ -77,6 +77,16 @@ impl Fixture {
 async fn body(request: RequestBuilder, expected: StatusCode) -> Value {
     let response = checked(request.send().await);
     assert_eq!(response.status(), expected);
+    let policy = checked(
+        response
+            .headers()
+            .get("content-security-policy")
+            .ok_or("policy"),
+    );
+    let policy = checked(policy.to_str());
+    assert!(policy.contains("script-src 'self' https://accounts.google.com/gsi/client;"));
+    assert!(!policy.contains("unsafe-inline"));
+
     assert_eq!(
         response
             .headers()

@@ -121,3 +121,12 @@ with five-minute expiry checked on access and one pending challenge per subject.
 Invalid proof does not consume a legitimate challenge; successful proof consumes it
 before account persistence revalidates the current identity. Shutdown drops all
 in-memory state. Tests use newly generated RSA keys, never real Google credentials.
+
+### Account presentation boundary
+
+The local HTTP account flow is connected to the settings account section. Native
+operator access stays on exact local ticket transport; public browser/session proof
+cannot recover the local operator. Only configured browser servers admit the fixed
+GIS script/style/frame/connect sources. Google proof remains transient until a
+separate focused guest-discard confirmation; failed proof/persistence requests never
+produce a connected view. The native startup central account remains separate.

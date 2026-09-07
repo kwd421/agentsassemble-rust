@@ -7539,3 +7539,33 @@ artifact gates pass. Evidence: `/tmp/aa-phase5-account-boundary-tests.log`,
 `/tmp/aa-phase5-account-http-tests.log`, `/tmp/aa-phase5-account-http-clippy.log`,
 `/tmp/aa-phase5-account-http-gates.log`. No new task, timer or key cache is introduced
 by the HTTP boundary. Frontend connection and packaged Phase 5 acceptance remain pending.
+
+## Phase 5 Google settings integration (2026-09-08)
+
+The account section now reads account status, prepares browser GIS login, requires
+a focused native confirmation dialog before sending proof with explicit guest-discard
+consent, and disconnects only the account link. Failed mutations remain visible;
+failed connection requires a deliberate fresh challenge, and disconnect failure
+retains the connected view. Identity changes retire stale UI completions. Native
+settings use the current operator-ticket transport and retain the separate central
+Google startup login. A successful identity switch clears only the retired browser
+session/profile presentation after the server commit; room admission still needs an
+invite. Tokens stay transient in component state and are never logged or persisted.
+
+The existing CSP owner derives the four fixed GIS resource additions only when
+Google login is configured, following [Google's setup guidance](https://developers.google.com/identity/gsi/web/guides/get-google-api-clientid#content_security_policy).
+No Google wildcard or inline-script/style exception is added. The one lazy GIS script
+loader owns a bounded 15-second load attempt, clears listeners/deadline on settlement,
+and removes a failed node before explicit retry; there is no periodic job.
+
+Three focused settings tests and nine existing UserPanel tests pass. The two account
+TCP tests also assert the configured CSP; six ingress boundary tests pass. Server
+all-target/all-feature Clippy, unchanged architecture/source/policy/format/diff/artifact
+gates, and production TypeScript/build/frozen CSS cascade verification pass. Initial
+new CSS was removed in favor of existing classes and scoped presentation styles;
+the frozen CSS owner is unchanged. Evidence: `/tmp/aa-phase5-account-ui-final-tests.log`,
+`/tmp/aa-phase5-account-ui-tests.log` (UserPanel results),
+`/tmp/aa-phase5-account-ui-final-build.log`, `/tmp/aa-phase5-account-csp-http-tests.log`,
+`/tmp/aa-phase5-google-csp-tests.log`, `/tmp/aa-phase5-account-ui-clippy.log`,
+`/tmp/aa-phase5-account-ui-gates.log`. Actual packaged desktop/mobile Phase 5 and
+real Google completion are not claimed by these local fixtures.

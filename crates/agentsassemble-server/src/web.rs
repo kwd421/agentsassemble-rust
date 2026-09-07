@@ -190,9 +190,16 @@ pub fn router(state: AppState) -> Router {
         ));
         app = app.merge(frontend);
     }
+    let content_policy = crate::security_headers::content_security_policy(
+        state.google_accounts.configuration().enabled,
+    );
     app.with_state(state)
         .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
         .layer(middleware::map_response(crate::security_headers::apply))
+        .layer(SetResponseHeaderLayer::overriding(
+            header::CONTENT_SECURITY_POLICY,
+            content_policy,
+        ))
 }
 
 fn static_ingress_router(
