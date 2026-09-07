@@ -8,6 +8,7 @@ use crate::{
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+        ResponseModelIdentity,
     },
 };
 
@@ -25,6 +26,7 @@ pub(crate) static CEREBRAS_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.cerebras.ai/v1/chat/completions"),
     headers: &[("X-Cerebras-Version-Patch", "2")],
     request_payload,
+    response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded Cerebras request context is too large.",

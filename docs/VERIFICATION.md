@@ -6498,3 +6498,98 @@ admission-hook tests. TypeScript, affected-package all-target/all-feature
 warning-denied Clippy, architecture/source-growth, all 19 policy/artifact tests,
 formatting, diff, and the non-destructive artifact check pass. This completes the
 follow-up acceptance without changing the pending whole-phase external-review gate.
+
+### Custom API resolved-model contract: 2026-09-07
+
+This closes the first current execution checkpoint at the provider owner. Custom API
+selection accepts a caller-selected model name at a pinned public HTTPS endpoint;
+the endpoint can resolve that name to a different response model. The
+[OpenRouter Auto Router response contract](https://openrouter.ai/docs/guides/routing/routers/auto-router#response)
+provides a reachable example. Request payloads retain the selected name on every
+tool round. Response metadata never changes configured model, endpoint, session
+attachment, request/turn identity, room permissions, or durable state. The common SSE
+owner still requires one bounded, present, consistent model within each response.
+
+`RemoteOpenAiSpec` now explicitly selects requested-model equality or endpoint-owned
+resolution. Only Custom API selects endpoint resolution; the other eight API/local
+specifications retain their previous exact comparison. There is no alias table,
+retry, substitute request, additional public control, or authentication bypass.
+This contract also applies when the caller's Custom API name looks like a fixed
+model: the arbitrary endpoint owns name resolution, not a client-maintained name
+classifier. HTTPS/SSRF policy and endpoint attachment binding are unchanged.
+
+Two adapter-path regression tests run the actual request builder, SSE decoder,
+authenticated RoomPortal MCP client/server, read receipt, and terminal publication.
+Only the upstream HTTP peer and credential backend use isolated local fixtures;
+public HTTPS/DNS and a paid upstream turn are outside this verification. On the
+original production comparison, the routed case failed `provider_protocol_invalid`
+before its first room read. After correction, changing resolved models across the
+two tool rounds completes the exact bounded room message while both requests retain
+`openrouter/auto`. Fixed Custom API and DeepSeek controls pass; wrong DeepSeek model,
+missing model, inconsistent finish reason, missing initial room read, and an
+unpermitted random tool are rejected. Tests explicitly close each real portal and
+owned fixture task. The existing selection regression now covers the routed name
+without performing network discovery or reading any real credential.
+
+The change adds one static two-value policy field and one branch per completion,
+with no model-list lookup, allocation, I/O, task, timer, or persistent state. Measured
+focused adapter tests completed in 0.04 seconds. Final affected verification passes
+all 207 provider tests, warning-denied workspace/all-target/all-feature Clippy,
+architecture/source-growth checks, 19 policy/artifact tests, formatting, diff, and
+the non-destructive artifact check. The provider run took 84.06 seconds in tests
+(97.69 seconds including compilation; maximum reported RSS 1,482,784,768 bytes).
+No frontend code changed; packaged real-provider behavior was not re-verified here.
+
+The full provider run exposed two existing concurrent-test assumptions. Portal
+shutdown already confirmed accepted-connection EOF and drained tasks; its final raw
+TCP assertion could fail if the OS reused the released port. The test now checks
+that the retired unique capability URL is unreachable or returns 404; an old live
+portal would return 401 without its bearer. Port reuse explains the invalid test
+assumption, but was not captured as the original failure's proven cause. The macOS
+leader-exit test assumed one diagnostic ordering although either leader exit or
+unconfirmed lineage history can be observed first. It retains the required
+`provider_stop_unconfirmed` result and now verifies uncertain custody through a fresh
+adapter's observation of the exact runtime owner/lease. Production shutdown,
+custody policy, and mandatory gates are unchanged.
+
+### Remaining native-provider receipt evidence: 2026-09-07
+
+Phase 1 is still incomplete. `freebuff::launch_registered` and Antigravity's
+`require_native_receipt` remain unconditional refusals, not completed adapters.
+Catalog registration and non-startable projection do not satisfy attachment,
+turn completion, or cleanup acceptance. This pass makes no provider executable
+startable and does not reclassify missing implementation as a login problem.
+
+Read-only local inspection found Freebuff's npm launcher metadata at 0.0.142 and
+its downloaded Darwin arm64 binary metadata at 0.0.154. Neither is execution proof.
+The official upstream source inspected at
+`857a2f2d8368b919e9919f1ff7d48bedf5ef49f4` exposes only login, continue, working
+directory, help, and version in its
+[Freebuff CLI argument branch](https://github.com/CodebuffAI/freebuff/blob/857a2f2d8368b919e9919f1ff7d48bedf5ef49f4/cli/src/cli-args.ts).
+Its [entry point](https://github.com/CodebuffAI/freebuff/blob/857a2f2d8368b919e9919f1ff7d48bedf5ef49f4/cli/src/index.tsx)
+renders the interactive client; inspected SDK finish handlers feed that UI, without
+an exposed external session/turn receipt transport. The blocking dependency is an
+official Freebuff CLI native attachment/completion interface with verifiable cleanup.
+The evidence does not establish that no future or undocumented interface exists.
+Embedding Codebuff's SDK would not prove the same Freebuff client, authentication,
+model, or entitlement path and is not an authorized substitute.
+
+Antigravity has an official protocol candidate: [hooks](https://antigravity.google/docs/hooks)
+document `conversationId`, `modelName`, invocation/execution counters, and Stop's
+`terminationReason`, `fullyIdle`, and `error` fields. Its
+[status-line interface](https://antigravity.google/docs/cli/statusline/)
+documents conversation/model/agent-state input. Initial attachment emission, exact
+installed model-ID mapping, same-turn correlation, and retained-runtime behavior
+remain unverified. The previous interactive Stop-hook evidence above concerns
+ordinary completion and a separate unsupported Ctrl-C receipt; it is not evidence
+that ordinary Stop hooks are absent. Official persistent
+[headless streaming](https://antigravity.google/docs/cli/headless/#stream-prompts-from-stdin)
+also documents init/result events, but does not validate the required PTY/ConPTY
+plus hooks path and was not substituted for it.
+
+The user explicitly retained Antigravity's existing execution exclusion during this
+pass. No CLI probe, model request, or actual turn was run. Missing adapter work
+remains missing; the exclusion additionally blocks the installed-client evidence
+needed to close it. Completion requires the allowed native interface and its actual
+attachment/turn/cleanup proof. Neither provider is deferred out of scope or marked
+complete, and whole-phase cross-review/Phase 2 remain pending.

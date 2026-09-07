@@ -262,24 +262,26 @@ taxonomy redesign waits until post-parity.
 
 ## Ordered implementation phases
 
-Current execution checkpoint (2026-09-07, inspected source `9654b63`):
+Current execution checkpoint (2026-09-07, updated after the Custom API correction):
 
-1. Close the known Phase 1 completion-contract gaps first. Custom API currently
-   accepts a routed model selection while `remote_openai::validate_completion`
-   requires the returned model string to equal it. Resolve requested-versus-resolved
-   identity at the provider contract owner; preserve request/session attribution,
-   tool authorization, and malformed-response rejection. Verify the accepted routed
-   selection through the adapter path, fixed-model behavior, and invalid responses.
-   The earlier extracted-function reproduction is not end-to-end proof. This is not
-   authorization for an alias registry, model substitution, or a compatibility fallback.
+1. Custom API's completion-contract correction is locally complete. Its specification
+   now owns requested-versus-resolved identity while preserving request/session
+   attribution, tool authorization, and malformed-response rejection. The accepted
+   routed selection, fixed-model controls, and invalid responses pass the adapter
+   path with a local HTTP peer and real MCP portal. Public HTTPS and an upstream turn
+   are outside that proof. No alias registry, substitution, or fallback was added.
 2. Reconcile the sixteen-provider matrix with actual executable contracts.
    Freebuff's launch owner and Antigravity's required-receipt owner currently reject
    unconditionally. Registration and honest non-startable projection alone do not
    prove their required runtime implementation. Establish the supported native
    receipt/turn/cleanup path, or record the exact external dependency that prevents
    it and leave that acceptance incomplete. Do not attribute missing implementation
-   to a missing login or run authorization. Antigravity's existing real-run exclusion
-   remains; no replacement client or transcript inference is authorized.
+   to a missing login or run authorization. Read-only official source inspection has
+   not established a Freebuff CLI receipt interface. Antigravity's documented hooks
+   are a candidate, but installed attachment/turn correlation is unverified and its
+   real-run exclusion was explicitly retained. Both adapters remain incomplete; no
+   replacement client or transcript inference is authorized. See the native-provider
+   evidence below for the exact dependencies and limits.
 3. Correct the affected paths, update their evidence, and submit the complete Phase 1
    candidate under the existing per-slice execution gate. Include the subsequent
    optimization/test/security corrections in the reviewed cumulative range and final
@@ -292,7 +294,9 @@ Current execution checkpoint (2026-09-07, inspected source `9654b63`):
    changed contract, or measured cost. For later historical finding IDs, inspect the
    current owner first and implement only the unresolved portion.
 
-Evidence owners: [optimization and remaining model-contract finding](VERIFICATION.md#repository-wide-optimization-audit-2026-09-07),
+Evidence owners: [resolved Custom API contract](VERIFICATION.md#custom-api-resolved-model-contract-2026-09-07),
+[remaining native-provider dependencies](VERIFICATION.md#remaining-native-provider-receipt-evidence-2026-09-07),
+[optimization audit](VERIFICATION.md#repository-wide-optimization-audit-2026-09-07),
 [test/security cleanup](VERIFICATION.md#test-necessity-and-security-duplication-audit-2026-09-07),
 and [previous packaged/real-provider matrix](VERIFICATION.md#packaged-provider-catalog-and-real-turn-matrix-2026-09-03).
 These steps apply the existing phase exits and approval gates; they do not change

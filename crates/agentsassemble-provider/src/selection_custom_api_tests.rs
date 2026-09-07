@@ -43,16 +43,16 @@ async fn selection_normalizes_private_custom_authority_into_session_identity() {
         "operator-local-user",
         "create-custom",
         &request(
-            "https://api.example.com/v1/chat/completions",
-            "vendor-model",
+            "https://openrouter.ai/api/v1/chat/completions",
+            "openrouter/auto",
         ),
         &catalog,
     )
     .await
     .unwrap_or_else(|error| panic!("select Custom API: {error}"));
 
-    assert_eq!(selected.provider_endpoint, "https://api.example.com/v1");
-    assert_eq!(selected.model, "vendor-model");
+    assert_eq!(selected.provider_endpoint, "https://openrouter.ai/api/v1");
+    assert_eq!(selected.model, "openrouter/auto");
     assert_eq!(selected.permission_mode, "meeting_read_only");
     assert!(selected.workspace.is_empty());
     assert!(!selected.runtime_profile_key.is_empty());
@@ -61,7 +61,7 @@ async fn selection_normalizes_private_custom_authority_into_session_identity() {
         "general",
         "operator-local-user",
         "create-custom",
-        &request("https://other.example.com/v1", "vendor-model"),
+        &request("https://other.example.com/v1", "openrouter/auto"),
         &catalog,
     )
     .await

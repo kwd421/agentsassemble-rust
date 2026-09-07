@@ -415,7 +415,20 @@ async fn explicit_shutdown_waits_for_accepted_connections() {
         .await
         .unwrap_or_else(|_| panic!("accepted portal connection remained open"));
     assert!(matches!(closed, Ok(0) | Err(_)));
-    assert!(tokio::net::TcpStream::connect(&address).await.is_err());
+    // The OS can reuse the released port for another portal. Check the retired
+    // capability path, not whether an unrelated listener can accept new TCP.
+    let retired = reqwest::Client::builder()
+        .no_proxy()
+        .timeout(Duration::from_secs(1))
+        .build()
+        .unwrap_or_else(|error| panic!("create retired endpoint client: {error}"))
+        .post(portal.endpoint())
+        .body("{}")
+        .send()
+        .await;
+    if let Ok(response) = retired {
+        assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
+    }
 }
 
 async fn call_tool(

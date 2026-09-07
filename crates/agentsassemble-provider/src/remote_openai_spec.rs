@@ -28,8 +28,17 @@ pub(crate) struct RemoteOpenAiSpec {
     pub(crate) endpoint: RemoteOpenAiEndpoint,
     pub(crate) headers: &'static [(&'static str, &'static str)],
     pub(crate) request_payload: fn(&DurableAgentSession, &[Value], Option<&[Value]>) -> Value,
+    pub(crate) response_model: ResponseModelIdentity,
     pub(crate) retain_reasoning: bool,
     pub(crate) errors: RemoteOpenAiErrors,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ResponseModelIdentity {
+    Requested,
+    /// The selected endpoint resolves the requested model name. Its response is
+    /// metadata, not authority to change the configured model or session.
+    EndpointResolved,
 }
 
 #[derive(Clone, Copy)]

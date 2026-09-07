@@ -177,6 +177,14 @@ claim same-process turn completion or native Antigravity interrupt parity.
 
 ## Required slice contract
 
+Custom API keeps the caller-selected model and normalized public HTTPS endpoint as
+its durable request authority. The selected endpoint may report a resolved model;
+that bounded, within-response-consistent name is metadata and never rewrites the
+Agent Session or a later request. Fixed-provider response comparisons remain with
+their provider specification. No alias inference, model retry/substitution, or
+local-network fallback implements resolution. Evidence and rejection cases:
+[resolved-model contract](../VERIFICATION.md#custom-api-resolved-model-contract-2026-09-07).
+
 - Codex lifecycle start binds its official executable and code-mode companion as one byte-identified bundle. The guardian's stopped launcher starts the companion as a same-anchor-group child on one validated canonical IPv4-loopback WebSocket endpoint, passes only that endpoint through the official `--code-mode-host` option, and then execs the persistent `app-server --stdio`. The companion receives a sanitized environment and runtime custody token but no RoomPortal bearer; unexpected inherited protocol descriptors are replaced with `/dev/null`. Missing or changed companion authority, invalid readiness, early exit, or custody change fails the launch without a fallback.
 - Provider options come from bounded probes of the installed provider CLIs. Every probe runs in its own owned process tree with a credential-free environment allowlist, a ten-second deadline, and bounded output. Normal completion uses its process-group or Job Object wait as the sole cleanup receipt. Cancellation or failure sends termination and must confirm the same bounded whole-tree wait; unconfirmed cleanup becomes a distinct non-startable catalog failure rather than being hidden by the original probe result. Windows probes are created suspended, assigned to their Job Object, and only then resumed, so no descendant can escape before ownership attaches. A session can be created only from a `ready` catalog entry and the exact current `catalog_revision`; a stale, unavailable, unlisted, oversized, or internally inconsistent selection fails visibly.
 - OpenCode subscription discovery accepts only syntactically valid model IDs in the original managed `opencode` and `opencode-go` namespaces. Other namespaces never become startable subscription authority.

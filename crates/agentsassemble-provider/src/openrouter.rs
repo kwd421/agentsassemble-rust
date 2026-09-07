@@ -8,6 +8,7 @@ use crate::{
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+        ResponseModelIdentity,
     },
 };
 
@@ -31,6 +32,7 @@ pub(crate) static OPENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         ("X-Title", "AgentsAssemble"),
     ],
     request_payload,
+    response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded OpenRouter request context is too large.",

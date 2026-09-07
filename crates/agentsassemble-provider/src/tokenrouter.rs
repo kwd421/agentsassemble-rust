@@ -13,6 +13,7 @@ use crate::{
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+        ResponseModelIdentity,
     },
 };
 
@@ -33,6 +34,7 @@ pub(crate) static TOKENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.tokenrouter.com/v1/chat/completions"),
     headers: &[],
     request_payload,
+    response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded TokenRouter request context is too large.",

@@ -8,6 +8,7 @@ use crate::{
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+        ResponseModelIdentity,
     },
 };
 
@@ -37,6 +38,7 @@ pub(crate) static LLM_GATEWAY_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.llmgateway.io/v1/chat/completions"),
     headers: &[],
     request_payload,
+    response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded LLM Gateway request context is too large.",

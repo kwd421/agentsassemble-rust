@@ -24,7 +24,8 @@ use crate::{
     openai_stream::{AssistantMessage, OpenAiStreamCompletion, ToolCall, send_chat_completion},
     remote_https::fixed_endpoint_client,
     remote_openai_spec::{
-        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiSpec, provider_error,
+        RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiSpec, ResponseModelIdentity,
+        provider_error,
     },
     room_portal::{ProviderTurnOutcome, RoomPortal},
 };
@@ -605,7 +606,7 @@ fn validate_completion(
     expected_model: &str,
     spec: &RemoteOpenAiSpec,
 ) -> Result<(), DriverError> {
-    if response.model != expected_model {
+    if spec.response_model == ResponseModelIdentity::Requested && response.model != expected_model {
         return Err(provider_error(
             "provider_protocol_invalid",
             spec.errors.invalid_response,
@@ -690,3 +691,7 @@ fn canonical_content(value: &str) -> Option<String> {
 #[cfg(test)]
 #[path = "deepseek_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "remote_openai_tests.rs"]
+mod contract_tests;

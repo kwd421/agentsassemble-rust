@@ -8,6 +8,7 @@ use crate::{
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+        ResponseModelIdentity,
     },
 };
 
@@ -22,6 +23,7 @@ pub(crate) static DEEPSEEK_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     endpoint: RemoteOpenAiEndpoint::Fixed("https://api.deepseek.com/chat/completions"),
     headers: &[],
     request_payload,
+    response_model: ResponseModelIdentity::Requested,
     retain_reasoning: true,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded DeepSeek request context is too large.",

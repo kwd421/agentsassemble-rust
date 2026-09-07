@@ -13,6 +13,7 @@ use crate::{
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+        ResponseModelIdentity,
     },
 };
 
@@ -31,6 +32,7 @@ pub(crate) static CUSTOM_API_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     endpoint: RemoteOpenAiEndpoint::AgentSession,
     headers: &[],
     request_payload,
+    response_model: ResponseModelIdentity::EndpointResolved,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded Custom API request context is too large.",

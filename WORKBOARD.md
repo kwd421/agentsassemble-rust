@@ -7,9 +7,11 @@
 - User-requested repository-wide optimization is locally complete: measured duplicate
   work removed and creation cancellation fixed; scope, verification, and remaining finding:
   [optimization audit](docs/VERIFICATION.md#repository-wide-optimization-audit-2026-09-07).
-- Phase 1 remains open: resolve the Custom API response-model contract and reconcile
-  Freebuff/Antigravity's missing native receipts with actual completion evidence.
-  Earlier passing checks remain evidence; they do not close these findings.
+- Custom API response-model correction is locally complete:
+  [adapter-path verification](docs/VERIFICATION.md#custom-api-resolved-model-contract-2026-09-07).
+- Phase 1 remains open: Freebuff/Antigravity native adapters remain incomplete.
+  [Interface dependencies and execution exclusion](docs/VERIFICATION.md#remaining-native-provider-receipt-evidence-2026-09-07)
+  prevent their completion evidence; earlier checks do not close these findings.
 - Next: follow the [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases),
   then complete whole-phase cross-review before Phase 2. Phase 0A and finite Phase 0B
   remain complete; real-provider permissions and reviewer settings are unchanged.

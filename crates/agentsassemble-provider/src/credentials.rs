@@ -226,6 +226,11 @@ impl ProviderCredential {
 }
 
 impl ProviderCredentialStore {
+    #[cfg(test)]
+    pub(crate) fn isolated_test_store() -> Self {
+        tests::isolated_store()
+    }
+
     #[must_use]
     pub fn production() -> Self {
         Self {
@@ -458,6 +463,10 @@ mod tests {
             backend,
             access: Arc::new(tokio::sync::Semaphore::new(1)),
         }
+    }
+
+    pub(super) fn isolated_store() -> ProviderCredentialStore {
+        store(Arc::new(TestBackend::default()))
     }
 
     #[tokio::test]

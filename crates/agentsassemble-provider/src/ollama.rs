@@ -18,6 +18,7 @@ use crate::{
     remote_openai::RemoteOpenAiDriver,
     remote_openai_spec::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
+        ResponseModelIdentity,
     },
     runtime_lease::HeldRuntimeLease,
 };
@@ -49,6 +50,7 @@ static SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     endpoint: RemoteOpenAiEndpoint::FixedLoopback("http://127.0.0.1:11434/v1/chat/completions"),
     headers: &[],
     request_payload,
+    response_model: ResponseModelIdentity::Requested,
     retain_reasoning: false,
     errors: RemoteOpenAiErrors {
         context_limit: "The bounded Ollama request context is too large.",

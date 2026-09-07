@@ -151,10 +151,16 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
             panic!("macOS must fail closed when the provider forked before its leader exited");
         };
         assert_eq!(error.code, "provider_stop_unconfirmed");
-        assert_eq!(
-            error.message,
-            "The provider leader exited before descendant custody could be proven."
-        );
+        // Fork history and leader exit may be observed in either order. The
+        // product contract is retained uncertain custody, not diagnostic ordering.
+        let mut durable_session = session.clone();
+        durable_session.runtime_handle_id = started.runtime_handle_id.clone();
+        durable_session.runtime_owner_id = started.runtime_owner_id.clone();
+        durable_session.runtime_lease_token = started.runtime_lease_token.clone();
+        assert!(matches!(
+            ProviderAdapter::new().observe(&durable_session).await,
+            ProviderRuntimeObservation::Ambiguous { .. }
+        ));
     }
     #[cfg(not(target_os = "macos"))]
     adapter
