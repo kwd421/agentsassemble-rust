@@ -197,6 +197,14 @@ publication, retry, cancellation, or process-lifetime authority. Existing protoc
 and room-tool regressions verify the shared paths; actual-provider evidence remains
 deferred under the user-directed final verification schedule.
 
+Codex resolves one absolute UTF-8 configuration home before inspecting inherited
+MCP servers. That same home is explicitly supplied as `CODEX_HOME` only to its
+owned app-server process after environment sanitization on Unix and Windows.
+Codex catalog probes use the same home resolver through the common bounded probe
+owner. Missing or unrepresentable home authority fails before launch; an explicitly
+empty custom home never falls through to the default. Config/authentication cannot
+silently switch homes between inspection, model discovery, and provider execution.
+
 A correlated provider completion may contain no assistant text when the request has
 an active room observation: read-and-publish or read-and-decline can be tool-only.
 The common runtime finalizer must still replace that temporary outcome with the

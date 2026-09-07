@@ -67,7 +67,17 @@ pub(crate) async fn discover_codex(
         };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
-    let output = match Box::pin(probe(&executable, &["debug", "models"], cancellation)).await {
+    let Ok(home) = crate::codex::config::home() else {
+        return failed_provider(provider, ProbeFailure::Failed);
+    };
+    let output = match Box::pin(probe(
+        &executable,
+        &["debug", "models"],
+        cancellation,
+        &[("CODEX_HOME".to_owned(), home)],
+    ))
+    .await
+    {
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };
@@ -134,7 +144,7 @@ pub(crate) async fn discover_opencode(
         };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
-    let output = match Box::pin(probe(&executable, &["models"], cancellation)).await {
+    let output = match Box::pin(probe(&executable, &["models"], cancellation, &[])).await {
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };

@@ -18,6 +18,9 @@ use crate::test_support::durable_session;
 
 pub(super) static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
+#[path = "runtime_codex_home_tests.rs"]
+mod codex_home_tests;
+
 #[path = "runtime_process_tree_tests.rs"]
 mod process_tree_tests;
 

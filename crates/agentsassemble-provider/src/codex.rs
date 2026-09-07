@@ -100,23 +100,21 @@ impl CodexDriver {
         )
         .into());
 
-        let inherited_mcp_servers = config::inherited_mcp_servers().await?;
+        let configuration = config::load().await?;
         let executable = bind_codex_executable(
             session.executable.clone(),
             session.executable_identity.clone(),
         )
         .await
         .map_err(|_| executable_authority_error())?;
-        #[cfg(unix)]
-        let code_mode_host = crate::filesystem::codex_code_mode_host_path(&executable)
-            .map_err(|_| executable_authority_error())?;
         let mut room_portal = create_room_portal().await?;
-        let arguments = match command_arguments(session, &room_portal, &inherited_mcp_servers) {
-            Ok(arguments) => arguments,
-            Err(error) => {
-                return Err(launch_cleanup::portal(&mut room_portal, error.into()).await);
-            }
-        };
+        let arguments =
+            match command_arguments(session, &room_portal, &configuration.inherited_mcp_servers) {
+                Ok(arguments) => arguments,
+                Err(error) => {
+                    return Err(launch_cleanup::portal(&mut room_portal, error.into()).await);
+                }
+            };
         #[cfg(unix)]
         {
             return Self::spawn_unix(
@@ -124,7 +122,7 @@ impl CodexDriver {
                 executable,
                 arguments,
                 std::path::Path::new(&session.workspace),
-                code_mode_host.as_deref(),
+                &configuration.home,
                 runtime_lease,
                 guardian_launch,
             )
@@ -137,6 +135,7 @@ impl CodexDriver {
                 &arguments,
                 std::path::Path::new(&session.workspace),
                 &mut room_portal,
+                &configuration.home,
             )
             .await?;
             let stderr_task = tokio::spawn(drain_stderr(stderr));
@@ -172,11 +171,19 @@ impl CodexDriver {
         executable: crate::filesystem::BoundExecutable,
         arguments: Vec<String>,
         workspace: &std::path::Path,
-        code_mode_host: Option<&std::path::Path>,
+        codex_home: &str,
         runtime_lease: &HeldRuntimeLease,
         guardian_launch: &GuardianLaunch,
     ) -> Result<Self, DriverLaunchError> {
-        let provider_environment = room_portal.provider_environment();
+        let Ok(code_mode_host) = crate::filesystem::codex_code_mode_host_path(&executable) else {
+            return Err(launch_cleanup::portal(
+                &mut room_portal,
+                executable_authority_error().into(),
+            )
+            .await);
+        };
+        let mut provider_environment = room_portal.provider_environment();
+        provider_environment.push(("CODEX_HOME".to_owned(), codex_home.to_owned()));
         let result = UnixProcessCustody::start_codex(
             runtime_lease,
             guardian_launch,
@@ -184,7 +191,7 @@ impl CodexDriver {
             &arguments,
             &provider_environment,
             workspace,
-            code_mode_host,
+            code_mode_host.as_deref(),
         )
         .await;
         let (process_group, pipes) = match result {
@@ -698,7 +705,7 @@ const fn notification_overflow() -> DriverError {
 mod turn;
 
 #[path = "codex_config.rs"]
-mod config;
+pub(crate) mod config;
 
 #[cfg(test)]
 #[path = "codex_command_tests.rs"]

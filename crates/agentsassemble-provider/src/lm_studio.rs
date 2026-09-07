@@ -86,7 +86,8 @@ async fn discover(
     provider.executable.clone_from(&executable);
     provider.executable_identity = identity;
     let status =
-        match probe_with_timeout(&executable, &["status"], STATUS_TIMEOUT, cancellation).await {
+        match probe_with_timeout(&executable, &["status"], STATUS_TIMEOUT, cancellation, &[]).await
+        {
             Ok(status) => status,
             Err(failure) => return failed_provider(provider, failure),
         };
@@ -98,12 +99,18 @@ async fn discover(
             "The LM Studio local server is not running.",
         );
     }
-    let output =
-        match probe_with_timeout(&executable, &["ps", "--json"], MODEL_TIMEOUT, cancellation).await
-        {
-            Ok(output) => output,
-            Err(failure) => return failed_provider(provider, failure),
-        };
+    let output = match probe_with_timeout(
+        &executable,
+        &["ps", "--json"],
+        MODEL_TIMEOUT,
+        cancellation,
+        &[],
+    )
+    .await
+    {
+        Ok(output) => output,
+        Err(failure) => return failed_provider(provider, failure),
+    };
     let Ok(models) = tool_models(&output) else {
         return failed_provider(provider, ProbeFailure::Malformed);
     };

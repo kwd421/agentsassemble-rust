@@ -77,7 +77,7 @@ async fn cancelled_probe_tree_is_killed_reaped_and_joinable() {
     };
     let outcome = tokio::time::timeout(Duration::from_secs(2), async {
         tokio::join!(
-            probe("/bin/sh", &args, &cancellation),
+            probe("/bin/sh", &args, &cancellation, &[]),
             cancel_after_descendant,
         )
         .0

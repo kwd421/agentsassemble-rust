@@ -34,6 +34,7 @@ pub(crate) async fn discover(
         &["models"],
         MODEL_DISCOVERY_TIMEOUT,
         cancellation,
+        &[],
     )
     .await
     {

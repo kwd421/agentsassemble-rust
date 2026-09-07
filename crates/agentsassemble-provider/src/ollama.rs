@@ -85,11 +85,18 @@ async fn discover(
     };
     provider.executable.clone_from(&executable);
     provider.executable_identity = identity;
-    let output =
-        match probe_with_timeout(&executable, &["list"], DISCOVERY_TIMEOUT, cancellation).await {
-            Ok(output) => output,
-            Err(failure) => return failed_provider(provider, failure),
-        };
+    let output = match probe_with_timeout(
+        &executable,
+        &["list"],
+        DISCOVERY_TIMEOUT,
+        cancellation,
+        &[],
+    )
+    .await
+    {
+        Ok(output) => output,
+        Err(failure) => return failed_provider(provider, failure),
+    };
     let mut models = Vec::new();
     for candidate in model_entries(&output).into_iter().take(MAX_MODEL_PROBES) {
         let details = match probe_with_timeout(
@@ -97,6 +104,7 @@ async fn discover(
             &["show", &candidate.value],
             DISCOVERY_TIMEOUT,
             cancellation,
+            &[],
         )
         .await
         {

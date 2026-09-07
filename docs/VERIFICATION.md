@@ -6697,3 +6697,34 @@ diff, and artifact gates pass. The first Clippy run rejected an oversized test f
 its MCP lifecycle assertions were separated before the successful check.
 No real provider or packaged client was run. Independent whole-phase approval is
 still pending, including the other findings from the completed manual review.
+
+
+## Codex configuration-home authority correction: 2026-09-07
+
+Completed manual review of `5d0a636..4cadb12` found a High-severity config-home
+mismatch: MCP isolation inspected the server's custom `CODEX_HOME`, but sanitized
+provider execution dropped that variable and could load default-home MCP servers
+and authentication instead. The fixed owner resolves an absolute representable
+home once, reads its config, and passes that same value only to the owned Codex
+child on Unix and Windows. The shared probe mechanism accepts explicit environment
+entries so Codex model discovery uses the same resolver; other providers retain
+empty overrides. This does not widen the common environment allowlist or add a
+fallback, timer, retry, alternate authentication, or process owner.
+
+An isolated test subprocess supplies distinct custom/default homes with different
+MCP server sets. In each case the actual guardian-owned fixture app-server reports
+the selected home and receives disable entries only for the config inspected there.
+The exact runtime is stopped before assertions, and a bounded probe confirms the
+same selected environment. The parent environment and user config remain untouched.
+The focused test passes in 4.16 seconds (9.32-second build); missing, empty, NUL,
+and non-UTF-8 home controls exercise fail-closed resolution. Actual Codex execution
+and packaged verification remain deferred to the authorized final stage.
+
+All 193 provider tests pass in 81.53 seconds, including shared probe cancellation
+and process-tree cleanup. The first full run exposed a fixture collision on the
+shared room lease; assigning the isolated child its own room authority fixed it
+without sleeps, retries, or changing production locking. Workspace warning-denied
+all-target/all-feature Clippy and architecture/source-growth, 19 policy tests,
+formatting, diff, and artifact checks pass. Two initial style-lint findings were
+fixed with the required `let...else` form. Windows environment forwarding is
+source-checked here; no Windows execution is claimed.

@@ -54,7 +54,7 @@ pub(crate) async fn discover(
     let Some(sdk) = bundle.sdk.to_str() else {
         return failed_provider(provider, ProbeFailure::Malformed);
     };
-    let output = match probe(&node, &[bridge, sdk, &claude, "catalog"], cancellation).await {
+    let output = match probe(&node, &[bridge, sdk, &claude, "catalog"], cancellation, &[]).await {
         Ok(output) => output,
         Err(failure) => return failed_provider(provider, failure),
     };

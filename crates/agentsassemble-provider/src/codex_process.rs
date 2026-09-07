@@ -15,6 +15,7 @@ pub(crate) async fn start(
     arguments: &[String],
     workspace: &Path,
     room_portal: &mut RoomPortal,
+    codex_home: &str,
 ) -> Result<(Box<dyn ChildWrapper>, ChildStdin, ChildStdout, ChildStderr), DriverLaunchError> {
     let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
         command
@@ -25,6 +26,7 @@ pub(crate) async fn start(
             .stderr(Stdio::piped());
     });
     sanitize_environment(command.command_mut());
+    command.command_mut().env("CODEX_HOME", codex_home);
     room_portal.configure_environment(command.command_mut());
     command.wrap(KillOnDrop);
     #[cfg(windows)]

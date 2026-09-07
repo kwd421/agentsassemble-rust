@@ -1,4 +1,10 @@
-use std::{env, io, path::PathBuf, time::Duration};
+use std::{
+    env,
+    ffi::OsString,
+    io,
+    path::{Path, PathBuf},
+    time::Duration,
+};
 
 use crate::{
     room_portal::{RoomPortal, RoomPortalError},
@@ -10,10 +16,30 @@ const MAX_CONFIG_BYTES: u64 = 1024 * 1024;
 const MAX_MCP_SERVERS: usize = 128;
 const MAX_MCP_SERVER_NAME_BYTES: usize = 256;
 
-pub(super) async fn inherited_mcp_servers() -> Result<Vec<String>, DriverError> {
-    let Some(path) = config_path() else {
-        return Ok(Vec::new());
-    };
+pub(super) struct CodexConfiguration {
+    pub(super) home: String,
+    pub(super) inherited_mcp_servers: Vec<String>,
+}
+
+pub(crate) fn home() -> Result<String, DriverError> {
+    #[cfg(windows)]
+    let default_home = env::var_os("USERPROFILE");
+    #[cfg(not(windows))]
+    let default_home = env::var_os("HOME");
+    resolve_home(env::var_os("CODEX_HOME"), default_home)
+}
+
+pub(super) async fn load() -> Result<CodexConfiguration, DriverError> {
+    let home = home()?;
+    let inherited_mcp_servers = inherited_mcp_servers(Path::new(&home)).await?;
+    Ok(CodexConfiguration {
+        home,
+        inherited_mcp_servers,
+    })
+}
+
+async fn inherited_mcp_servers(home: &Path) -> Result<Vec<String>, DriverError> {
+    let path = home.join("config.toml");
     let read = async {
         let metadata = match tokio::fs::metadata(&path).await {
             Ok(metadata) => metadata,
@@ -92,11 +118,24 @@ pub(super) fn append_room_portal(
     Ok(())
 }
 
-fn config_path() -> Option<PathBuf> {
-    env::var_os("CODEX_HOME")
-        .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".codex")))
-        .map(|home| home.join("config.toml"))
+fn resolve_home(
+    custom_home: Option<OsString>,
+    default_home: Option<OsString>,
+) -> Result<String, DriverError> {
+    let home = match custom_home {
+        Some(home) if !home.is_empty() => PathBuf::from(home),
+        Some(_) => return Err(config_error()),
+        None => default_home
+            .filter(|home| !home.is_empty())
+            .map(|home| PathBuf::from(home).join(".codex"))
+            .ok_or_else(config_error)?,
+    };
+    let absolute = std::path::absolute(home).map_err(|_| config_error())?;
+    let home = absolute.to_str().ok_or_else(config_error)?;
+    if home.len() > 4096 || home.contains('\0') {
+        return Err(config_error());
+    }
+    Ok(home.to_owned())
 }
 
 fn parse_mcp_server_names(bytes: &[u8]) -> Result<Vec<String>, DriverError> {
@@ -129,6 +168,20 @@ const fn config_error() -> DriverError {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn unrepresentable_or_missing_home_is_rejected() {
+        assert!(super::resolve_home(None, None).is_err());
+        assert!(super::resolve_home(Some("".into()), Some("/home".into())).is_err());
+        assert!(super::resolve_home(Some("bad\0home".into()), None).is_err());
+        #[cfg(unix)]
+        {
+            use std::os::unix::ffi::OsStringExt;
+            assert!(
+                super::resolve_home(Some(std::ffi::OsString::from_vec(vec![0xff])), None).is_err()
+            );
+        }
+    }
+
     #[test]
     fn inherited_mcp_names_are_parsed_without_reading_values() {
         let names = super::parse_mcp_server_names(

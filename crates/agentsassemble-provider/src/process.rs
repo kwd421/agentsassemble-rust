@@ -71,8 +71,9 @@ pub(crate) async fn probe(
     program: &str,
     args: &[&str],
     cancellation: &CancellationToken,
+    environment: &[(String, String)],
 ) -> Result<String, ProbeFailure> {
-    probe_with_timeout(program, args, PROBE_TIMEOUT, cancellation).await
+    probe_with_timeout(program, args, PROBE_TIMEOUT, cancellation, environment).await
 }
 
 pub(crate) async fn probe_with_timeout(
@@ -80,6 +81,7 @@ pub(crate) async fn probe_with_timeout(
     args: &[&str],
     timeout: Duration,
     cancellation: &CancellationToken,
+    environment: &[(String, String)],
 ) -> Result<String, ProbeFailure> {
     if cancellation.is_cancelled() {
         return Err(ProbeFailure::Cancelled);
@@ -95,6 +97,9 @@ pub(crate) async fn probe_with_timeout(
             .stderr(Stdio::piped());
     });
     sanitize_environment(command.command_mut());
+    command
+        .command_mut()
+        .envs(environment.iter().map(|(name, value)| (name, value)));
     command.wrap(KillOnDrop);
     #[cfg(unix)]
     command.wrap(ProcessGroup::leader());
