@@ -40,6 +40,7 @@ pub(crate) async fn request_runtime_cleanup(
         .execute(&mut **transaction)
         .await?;
     session.public.enabled = false;
+    session.public.status = AgentSessionStatus::Detached;
     session.schedule_requested = false;
     session.pending_inputs.clear();
     session.public.updated_at = Utc::now();
@@ -77,6 +78,29 @@ pub(crate) async fn cleanup_exists(
 }
 
 impl SqliteStore {
+    /// Loads blocking turn custody and its pending removal fence in one transaction.
+    ///
+    /// # Errors
+    /// Returns invalid stored turn authority or persistence failures.
+    pub async fn load_room_runtime_cleanup_turn(
+        &self,
+        key: &RoomRuntimeCleanupKey,
+    ) -> Result<Option<crate::ProviderTurnReconciliationCandidate>, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        if !cleanup_exists(&mut transaction, &key.room_id, &key.session_id).await? {
+            transaction.commit().await?;
+            return Ok(None);
+        }
+        let candidate = crate::provider_turn_reconciliation::load_active_candidate_in(
+            &mut transaction,
+            &key.room_id,
+            &key.session_id,
+        )
+        .await?;
+        transaction.commit().await?;
+        Ok(candidate)
+    }
+
     /// Loads exact custody for a pending removal, including a disconnected session
     /// whose runtime absence still needs a positive observation.
     ///

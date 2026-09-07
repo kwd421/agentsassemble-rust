@@ -43,6 +43,8 @@ impl SqliteStore {
              JOIN agent_sessions AS sessions ON sessions.room_id = reservation.room_id \
                AND sessions.session_id = reservation.session_id \
              WHERE reservation.status = 'pending' \
+             AND NOT EXISTS (SELECT 1 FROM room_runtime_cleanup cleanup \
+               WHERE cleanup.room_id = reservation.room_id AND cleanup.session_id = reservation.session_id) \
              AND (? IS NULL OR reservation.room_id > ? OR (reservation.room_id = ? AND reservation.session_id > ?)) \
              AND NOT EXISTS (SELECT 1 FROM provider_turn_executions AS execution \
                WHERE execution.room_id = reservation.room_id AND execution.session_id = reservation.session_id \

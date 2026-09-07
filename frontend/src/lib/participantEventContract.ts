@@ -495,7 +495,7 @@ export function agentSessionStateProjectionIsCoherent(event: RoomEvent): boolean
 
 function participantFromEvent(
   event: RoomEvent,
-  expectedStatus: "joined" | "detached"
+  expectedStatus: "joined" | "detached" | "kicked" | "exported"
 ): RoomMember {
   const participant = exactParticipant(
     (event as unknown as Record<string, unknown>).participant,
@@ -514,6 +514,30 @@ function participantFromEvent(
 
 export function joinedParticipantFromEvent(event: RoomEvent): RoomMember {
   return participantFromEvent(event, "joined");
+}
+
+export function removedParticipantFromEvent(event: RoomEvent): RoomMember {
+  if (event.type !== "participant_kicked" && event.type !== "participant_exported") {
+    throw new Error("참가자 제거 이벤트가 아닙니다.");
+  }
+  const participant = participantFromEvent(event, event.type === "participant_kicked" ? "kicked" : "exported");
+  if (participant.participant_type !== event.participant_type ||
+      participant.display_name !== event.display_name || participant.updated_at !== event.created_at) {
+    throw new Error("참가자 제거 이벤트의 투영이 일치하지 않습니다.");
+  }
+  return participant;
+}
+
+export function participantRemovalAckProjectionsAreCoherent(
+  participant: unknown, event: RoomEvent,
+): boolean {
+  try {
+    const ack = exactParticipant(participant, "Participant", "Participant");
+    const removed = removedParticipantFromEvent(event);
+    return PARTICIPANT_KEYS.every((key) => ack[key] === removed[key]);
+  } catch {
+    return false;
+  }
 }
 
 function detachedAgentProjectionFromEvent(event: RoomEvent): {

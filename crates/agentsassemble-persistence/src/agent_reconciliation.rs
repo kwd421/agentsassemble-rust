@@ -79,7 +79,7 @@ impl SqliteStore {
     ) -> Result<Vec<RuntimeReconciliationCandidate>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let keys = sqlx::query(
-            "SELECT sessions.room_id, sessions.session_id FROM agent_sessions AS sessions JOIN rooms ON rooms.room_id = sessions.room_id ORDER BY sessions.room_id, sessions.session_id",
+            "SELECT sessions.room_id, sessions.session_id FROM agent_sessions AS sessions JOIN rooms ON rooms.room_id = sessions.room_id WHERE NOT EXISTS (SELECT 1 FROM room_runtime_cleanup cleanup WHERE cleanup.room_id = sessions.room_id AND cleanup.session_id = sessions.session_id) ORDER BY sessions.room_id, sessions.session_id",
         )
         .fetch_all(&mut *transaction)
         .await?;

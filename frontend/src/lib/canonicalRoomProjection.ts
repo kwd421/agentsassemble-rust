@@ -10,6 +10,7 @@ import {
   agentCreationProjectionFromEvent,
   agentReactivationProjectionFromEvent,
   joinedParticipantFromEvent,
+  removedParticipantFromEvent,
 } from "./participantEventContract";
 
 export type CanonicalRoomHistoryState = {
@@ -192,6 +193,11 @@ export function applyParticipantEvents(
     }
     if (event.type === "participant_left") {
       changed = byId.delete(participantId) || changed;
+      continue;
+    }
+    if (event.type === "participant_kicked" || event.type === "participant_exported") {
+      const removed = removedParticipantFromEvent(event);
+      changed = byId.delete(removed.participant_id) || changed;
       continue;
     }
     if (event.type === "participant_muted") {

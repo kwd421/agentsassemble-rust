@@ -21,9 +21,9 @@ use crate::{
     },
 };
 
-const LIVE_OBSERVATION_TIMEOUT: Duration = Duration::from_secs(2);
+pub(crate) const LIVE_OBSERVATION_TIMEOUT: Duration = Duration::from_secs(2);
 const RECOVERY_SCAN_INTERVAL: Duration = Duration::from_secs(1);
-const RECOVERY_OBSERVATION_CONCURRENCY: usize = 8;
+pub(crate) const RECOVERY_OBSERVATION_CONCURRENCY: usize = 8;
 
 #[cfg(test)]
 pub(crate) static RUNTIME_RECONCILIATION_TEST_LOCK: tokio::sync::Mutex<()> =
@@ -142,6 +142,7 @@ pub(crate) async fn watch_runtime_reconciliation(
 ) {
     let mut cursor: Option<RuntimeReconciliationCursor> = None;
     let mut provider_turn_cursor: Option<ProviderTurnReconciliationCursor> = None;
+    let mut cleanup_cursor = None;
     let mut interval = tokio::time::interval_at(
         Instant::now() + RECOVERY_SCAN_INTERVAL,
         RECOVERY_SCAN_INTERVAL,
@@ -151,6 +152,18 @@ pub(crate) async fn watch_runtime_reconciliation(
         tokio::select! {
             () = cancellation.cancelled() => return,
             _ = interval.tick() => {}
+        }
+        match crate::room_runtime_cleanup::reconcile_cleanup_page(
+            &store,
+            &provider_adapter,
+            &rooms,
+            cleanup_cursor.as_ref(),
+            &cancellation,
+        )
+        .await
+        {
+            Ok(next) => cleanup_cursor = next,
+            Err(error) => tracing::warn!(%error, "server-owned room cleanup scan failed"),
         }
         let provider_page = tokio::select! {
             () = cancellation.cancelled() => return,

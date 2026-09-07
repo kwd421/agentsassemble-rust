@@ -276,18 +276,17 @@ pub async fn serve(
     result
 }
 
-async fn serve_runtime(
-    listener: TcpListener,
-    state: AppState,
-    cancellation: CancellationToken,
-) -> Result<(), ServeError> {
-    let listener_address = listener.local_addr()?;
-    let ingress = LocalIngress::from_listener(listener_address).ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::AddrNotAvailable,
-            "the local runtime listener is not bound to loopback",
-        )
-    })?;
+async fn reconcile_before_network_admission(
+    state: &AppState,
+    cancellation: &CancellationToken,
+) -> Result<(), agentsassemble_persistence::PersistenceError> {
+    crate::room_runtime_cleanup::reconcile_before_admission(
+        &state.store,
+        &state.provider_adapter,
+        &state.rooms,
+        cancellation,
+    )
+    .await?;
     let reconciled_turns = Box::pin(reconcile_provider_turn_ownership(
         &state.store,
         &state.provider_adapter,
@@ -314,6 +313,22 @@ async fn serve_runtime(
             .publish_then_resume_assigned_turns(&room_id, vec![assignment])
             .await?;
     }
+    Ok(())
+}
+
+async fn serve_runtime(
+    listener: TcpListener,
+    state: AppState,
+    cancellation: CancellationToken,
+) -> Result<(), ServeError> {
+    let listener_address = listener.local_addr()?;
+    let ingress = LocalIngress::from_listener(listener_address).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "the local runtime listener is not bound to loopback",
+        )
+    })?;
+    reconcile_before_network_admission(&state, &cancellation).await?;
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();
     let public_ingress = state.public_ingress();

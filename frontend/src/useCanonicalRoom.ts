@@ -208,6 +208,8 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           "participant_muted",
           "participant_updated",
           "participant_left",
+          "participant_kicked",
+          "participant_exported",
         ].includes(event.type)
       )
     ) {

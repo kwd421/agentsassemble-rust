@@ -17,6 +17,8 @@ import {
   agentSessionStateProjectionIsCoherent,
   joinedParticipantFromEvent,
   participantIsValid,
+  participantRemovalAckProjectionsAreCoherent,
+  removedParticipantFromEvent,
 } from "./participantEventContract";
 import { isParticipantRole } from "./participantRole";
 import { providerCatalogIsValid } from "./providerCatalogContract";
@@ -167,6 +169,7 @@ export function eventProjectionIsValid(event: RoomEvent): boolean {
       return false;
     }
     if (event.type === "participant_joined") joinedParticipantFromEvent(event);
+    if (event.type === "participant_kicked" || event.type === "participant_exported") removedParticipantFromEvent(event);
     if (event.type === "agent_session_created") agentCreationProjectionFromEvent(event);
     if (event.type === "agent_session_reactivated") agentReactivationProjectionFromEvent(event);
     if (
@@ -347,6 +350,19 @@ export function commandAckResultIsValid(
       event.participant_type === participant.participant_type &&
       event.display_name === participant.display_name &&
       event.muted === payload.muted
+    );
+  }
+  if (action === "participant.kick" || action === "participant.export") {
+    return Boolean(
+      hasDurableEvent && event &&
+      Array.isArray(result.events) && result.events.length > 0 &&
+      result.events.every((candidate) => publicRoomEventIsValid(candidate, expectedRoomId)) &&
+      result.events[result.events.length - 1].id === event.id &&
+      event.type === (action === "participant.kick" ? "participant_kicked" : "participant_exported") &&
+      event.participant_id === payload.participant_id &&
+      Number.isSafeInteger(result.revoked_sessions) && Number(result.revoked_sessions) >= 0 &&
+      typeof result.cleanup_pending === "boolean" &&
+      participantRemovalAckProjectionsAreCoherent(result.participant, event as unknown as RoomEvent)
     );
   }
   if (action === "participant.leave") {

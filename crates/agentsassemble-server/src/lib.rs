@@ -105,6 +105,7 @@ mod room_preferences_web;
 mod room_random_runtime;
 mod room_recovery_runtime;
 mod room_runtime;
+mod room_runtime_cleanup;
 mod room_shutdown;
 mod room_socket;
 mod room_socket_session;

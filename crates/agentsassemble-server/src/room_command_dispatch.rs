@@ -105,10 +105,46 @@ pub(crate) async fn execute_command(
             execute_participant_mute(store, provider_adapter, command).await
         }
         RoomAction::ParticipantLeave => execute_participant_leave(store, command).await,
+        RoomAction::ParticipantKick | RoomAction::ParticipantExport => {
+            execute_participant_removal(store, provider_adapter, command).await
+        }
         RoomAction::RoomHistory | RoomAction::RoomVoteSummary => {
             misrouted_direct_read(command.action)
         }
     }
+}
+
+async fn execute_participant_removal(
+    store: &SqliteStore,
+    adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) -> CommandExecution {
+    let mutation = match store
+        .execute_participant_removal(
+            &command.principal,
+            &command.request_id,
+            command.action.as_str(),
+            &command.payload,
+        )
+        .await
+    {
+        Ok(mutation) => mutation,
+        Err(error) => return CommandExecution::transactional_failure(error),
+    };
+    let mut execution = CommandExecution::success(mutation.outcome);
+    execution.revoked_human_sessions = mutation.revoked_session_fingerprints;
+    if let Some(key) = mutation.cleanup {
+        match Box::pin(crate::room_runtime_cleanup::attempt_cleanup(
+            store, adapter, &key,
+        ))
+        .await
+        {
+            Ok(Some(commit)) => execution.extend_turn_commit(commit),
+            Ok(None) => {}
+            Err(error) => crate::room_runtime_cleanup::log_pending(&key, &error),
+        }
+    }
+    execution
 }
 
 async fn execute_participant_mute(

@@ -174,7 +174,7 @@ fn database_url(root: &Path) -> String {
     format!("sqlite://{}", root.join("runtime.sqlite3").display())
 }
 
-async fn create_stopped_agent<S>(
+pub(super) async fn create_stopped_agent<S>(
     socket: &mut RoomSocketPeer<S>,
     workspace: &Path,
     request_id: &str,

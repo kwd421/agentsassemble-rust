@@ -49,6 +49,40 @@ pub struct ProviderTurnReconciliationPage {
     pub next_cursor: Option<ProviderTurnReconciliationCursor>,
 }
 
+pub(crate) async fn load_active_candidate_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    session_id: &str,
+) -> Result<Option<ProviderTurnReconciliationCandidate>, PersistenceError> {
+    let generations = sqlx::query_scalar::<_, i64>(
+        "SELECT turn_generation FROM provider_turn_executions \
+         WHERE room_id = ? AND session_id = ? \
+         AND phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', \
+           'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required') \
+         ORDER BY turn_generation DESC LIMIT 2",
+    )
+    .bind(room_id)
+    .bind(session_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    let Some(generation) = generations.first().copied() else {
+        return Ok(None);
+    };
+    if generations.len() != 1 {
+        return Err(invalid_reconciliation());
+    }
+    let generation = u64::try_from(generation).map_err(|_| invalid_reconciliation())?;
+    let execution = load_execution_in(transaction, room_id, session_id, generation).await?;
+    let session = load_session(transaction, room_id, session_id).await?;
+    validate_candidate(&session, &execution)?;
+    let effect = load_optional_effect_in(transaction, room_id, session_id, generation).await?;
+    Ok(Some(ProviderTurnReconciliationCandidate {
+        session,
+        execution,
+        effect,
+    }))
+}
+
 impl SqliteStore {
     /// Loads the one blocking provider turn that owns a session's current runtime authority.
     ///
@@ -61,37 +95,9 @@ impl SqliteStore {
         session_id: &str,
     ) -> Result<Option<ProviderTurnReconciliationCandidate>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let generations = sqlx::query_scalar::<_, i64>(
-            "SELECT turn_generation FROM provider_turn_executions \
-             WHERE room_id = ? AND session_id = ? \
-             AND phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', \
-               'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required') \
-             ORDER BY turn_generation DESC LIMIT 2",
-        )
-        .bind(room_id)
-        .bind(session_id)
-        .fetch_all(&mut *transaction)
-        .await?;
-        let Some(generation) = generations.first().copied() else {
-            transaction.commit().await?;
-            return Ok(None);
-        };
-        if generations.len() != 1 {
-            return Err(invalid_reconciliation());
-        }
-        let generation = u64::try_from(generation).map_err(|_| invalid_reconciliation())?;
-        let execution =
-            load_execution_in(&mut transaction, room_id, session_id, generation).await?;
-        let session = load_session(&mut transaction, room_id, session_id).await?;
-        validate_candidate(&session, &execution)?;
-        let effect =
-            load_optional_effect_in(&mut transaction, room_id, session_id, generation).await?;
+        let candidate = load_active_candidate_in(&mut transaction, room_id, session_id).await?;
         transaction.commit().await?;
-        Ok(Some(ProviderTurnReconciliationCandidate {
-            session,
-            execution,
-            effect,
-        }))
+        Ok(candidate)
     }
 
     /// Scans one bounded page of blocking provider-turn executions before admission.
@@ -113,6 +119,9 @@ impl SqliteStore {
             "SELECT room_id, session_id, turn_generation FROM provider_turn_executions \
              WHERE phase IN ('assigned', 'start_dispatching', 'running', 'interrupt_pending', \
                'quiescing', 'start_ambiguous', 'interrupt_ambiguous', 'recovery_required') \
+             AND NOT EXISTS (SELECT 1 FROM room_runtime_cleanup cleanup \
+               WHERE cleanup.room_id = provider_turn_executions.room_id \
+               AND cleanup.session_id = provider_turn_executions.session_id) \
              AND (? IS NULL OR room_id > ? OR (room_id = ? AND session_id > ?) \
                OR (room_id = ? AND session_id = ? AND turn_generation > ?)) \
              ORDER BY room_id, session_id, turn_generation LIMIT ?",

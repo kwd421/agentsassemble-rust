@@ -7121,3 +7121,20 @@ and real human-admission removal with replay after rejoin. Affected Clippy and t
 unchanged architecture/source/format/diff and 19 policy/artifact gates pass. This is
 the persistence contract; command transport, the existing recovery watcher and
 frontend controls are connected in the next Phase 4 slice, before advertising it.
+
+Canonical WebSocket kick/export now commits removal before exact provider cleanup,
+revokes live human peers, and publishes the removed participant plus disabled Agent
+Session state. The existing one-second recovery watcher consumes at most 64 pending
+keys with its existing concurrency/observation limits; startup does the same before
+network admission. Normal turn/runtime recovery excludes those fenced keys. Pending
+cleanup remains durable and visible in the original ACK; replay never stops a newly
+re-added runtime. Browser validation checks the removed projection before changing
+the roster. UI controls remain the next Phase 4 slice.
+
+Local TCP proof stops a real owned shell fixture for kick and export, observes its
+absence, re-adds a different lease and verifies old-command replay preserves it.
+A human-invite TCP case closes both live guest sockets and rejects subsequent ticket
+exchange. All 259 persistence cases, 20 affected frontend cases, frontend production
+build/CSS, affected all-target/all-feature Clippy and unchanged architecture/source/
+format/diff plus 19 policy/artifact gates pass. These are local fixture results;
+packaged and authorized real-provider proof remains at final closeout.

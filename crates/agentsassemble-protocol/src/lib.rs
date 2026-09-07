@@ -103,6 +103,10 @@ pub enum RoomAction {
     ParticipantMute,
     #[serde(rename = "participant.leave")]
     ParticipantLeave,
+    #[serde(rename = "participant.kick")]
+    ParticipantKick,
+    #[serde(rename = "participant.export")]
+    ParticipantExport,
     #[serde(rename = "room.settings.update")]
     RoomSettingsUpdate,
     #[serde(rename = "room.history")]
@@ -134,7 +138,7 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 20] = [
+    pub const ALL: [Self; 22] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
@@ -147,6 +151,8 @@ impl RoomAction {
         Self::MessageDelete,
         Self::MessageEdit,
         Self::MessageSend,
+        Self::ParticipantExport,
+        Self::ParticipantKick,
         Self::ParticipantLeave,
         Self::ParticipantMute,
         Self::ParticipantRoleUpdate,
@@ -165,6 +171,8 @@ impl RoomAction {
             Self::MessageSend => "message.send",
             Self::ParticipantMute => "participant.mute",
             Self::ParticipantLeave => "participant.leave",
+            Self::ParticipantKick => "participant.kick",
+            Self::ParticipantExport => "participant.export",
             Self::ParticipantRoleUpdate => "participant.role.update",
             Self::RoomSettingsUpdate => "room.settings.update",
             Self::RoomHistory => "room.history",

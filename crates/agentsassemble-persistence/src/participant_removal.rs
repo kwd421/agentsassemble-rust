@@ -19,7 +19,7 @@ use crate::{
     participant_rows::save_participant_exact,
     room_event_sequence::next_sequence,
     room_runtime_cleanup::request_runtime_cleanup,
-    room_turns::support::insert_event,
+    room_turns::support::{insert_event, session_state_event},
     room_write_budget::command_size,
 };
 
@@ -85,10 +85,12 @@ impl SqliteStore {
                 "The participant already has this removal status.",
             ));
         }
+        let mut events = Vec::new();
         let cleanup = if participant.participant_type == "agent" {
             let mut session =
                 load_session(&mut transaction, &principal.room_id, &target_id).await?;
             request_runtime_cleanup(&mut transaction, &mut session).await?;
+            events.push(session_state_event(&mut transaction, &session).await?);
             Some(RoomRuntimeCleanupKey {
                 room_id: principal.room_id.clone(),
                 session_id: target_id.clone(),
@@ -109,12 +111,14 @@ impl SqliteStore {
         .await?;
         let event = removal_event(&mut transaction, principal, &participant, event_type).await?;
         insert_event(&mut transaction, &event).await?;
+        events.push(event.clone());
         let result = json!({
             "participant": participant,
             "revoked_sessions": revoked_session_fingerprints.len(),
             "cleanup_pending": cleanup.is_some(),
             "event": event,
             "event_seq": event.seq,
+            "events": events,
         });
         let outcome = store_result(
             &mut transaction,
@@ -123,7 +127,7 @@ impl SqliteStore {
             action,
             payload_hash,
             result,
-            vec![event],
+            events,
         )
         .await?;
         transaction.commit().await?;
