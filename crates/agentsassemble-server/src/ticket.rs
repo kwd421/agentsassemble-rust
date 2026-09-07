@@ -9,7 +9,7 @@ use std::{
 };
 
 use agentsassemble_domain::{AuthenticatedPrincipal, is_room_appearance_asset_id};
-use agentsassemble_persistence::{HumanSessionAuthorization, LocalRoomManagerAuthority};
+use agentsassemble_persistence::{LocalRoomManagerAuthority, RoomSessionAuthorization};
 use thiserror::Error;
 use tokio::{sync::Mutex, time::Instant};
 use uuid::Uuid;
@@ -111,9 +111,9 @@ pub(crate) struct ConsumedHumanInviteManagerTicket {
     pub authority: LocalRoomManagerAuthority,
 }
 
-pub(crate) enum RoomHumanHttpAuthority {
+pub(crate) enum RoomSessionHttpAuthority {
     LocalTicket(ConsumedRoomHttpTicket),
-    HumanSession(HumanSessionAuthorization),
+    Session(Box<RoomSessionAuthorization>),
 }
 
 pub(crate) enum ConsumedAppearanceReadTicket {

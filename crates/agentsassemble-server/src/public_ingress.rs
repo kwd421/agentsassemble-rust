@@ -18,7 +18,7 @@ use url::Url;
 
 use crate::{
     ingress_trust::{
-        PeerAddr, TrustedIdentityOrigin, is_non_public_origin_host, normalized_host, single_header,
+        PeerAddr, TrustedIngressOrigin, is_non_public_origin_host, normalized_host, single_header,
         single_optional_header,
     },
     product_surface::RouteExposure,
@@ -134,8 +134,8 @@ pub enum PublicIngressControlError {
 }
 
 pub(crate) enum PublicIngressAuthorization {
-    Authorized,
-    Identity(TrustedIdentityOrigin),
+    Authorized(TrustedIngressOrigin),
+    Identity(TrustedIngressOrigin),
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -296,7 +296,7 @@ impl PublicIngress {
             PublicIngressKind::Disabled => None,
             PublicIngressKind::Manual(ingress) => ingress
                 .authorizes(peer, headers, exposure)
-                .then(|| authorization(exposure, || TrustedIdentityOrigin(ingress.origin.clone()))),
+                .then(|| authorization(exposure, || TrustedIngressOrigin(ingress.origin.clone()))),
             PublicIngressKind::Managed(ingress) => {
                 if !peer.0.ip().is_loopback() || exposure == RouteExposure::Private {
                     return None;
@@ -316,12 +316,12 @@ impl PublicIngress {
 
 fn authorization(
     exposure: RouteExposure,
-    identity_origin: impl FnOnce() -> TrustedIdentityOrigin,
+    identity_origin: impl FnOnce() -> TrustedIngressOrigin,
 ) -> PublicIngressAuthorization {
     if exposure == RouteExposure::IdentityProbePublic {
         PublicIngressAuthorization::Identity(identity_origin())
     } else {
-        PublicIngressAuthorization::Authorized
+        PublicIngressAuthorization::Authorized(identity_origin())
     }
 }
 
@@ -734,7 +734,7 @@ impl ManagedProjection {
         let trust = self.trust.as_ref()?;
         trust.authorizes(headers, exposure).then(|| {
             authorization(exposure, || {
-                TrustedIdentityOrigin(trust.origin.value.as_str().into())
+                TrustedIngressOrigin(trust.origin.value.as_str().into())
             })
         })
     }

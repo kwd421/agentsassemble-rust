@@ -26,8 +26,11 @@ use crate::{
         HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
     },
     ingress_trust::single_header,
+    room_session_http_authority::{
+        RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
+    },
     ticket::{
-        ConsumedAppearanceReadTicket, ConsumedAttachmentUploadTicket, RoomHumanHttpAuthority,
+        ConsumedAppearanceReadTicket, ConsumedAttachmentUploadTicket, RoomSessionHttpAuthority,
     },
 };
 
@@ -191,13 +194,18 @@ async fn upload_message_attachment(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let authority = resolve_message_attachment_upload_authority(&state, request.headers()).await?;
+    let authority = resolve_message_attachment_upload_authority(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+    )
+    .await?;
     let payload: EncodedAttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
     let content = decode_attachment_content(&payload.data_base64)?;
     let attachment = match authority {
-        RoomHumanHttpAuthority::LocalTicket(grant) => {
+        RoomSessionHttpAuthority::LocalTicket(grant) => {
             state
                 .store
                 .store_local_message_attachment(
@@ -210,10 +218,10 @@ async fn upload_message_attachment(
                 )
                 .await?
         }
-        RoomHumanHttpAuthority::HumanSession(authorization) => {
+        RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .store_human_session_message_attachment(
+                .store_room_session_message_attachment(
                     &authorization,
                     &payload.filename,
                     &payload.content_type,
@@ -372,11 +380,15 @@ async fn read_attachment(
                 ));
             }
         };
-        let authority =
-            resolve_message_attachment_read_authority(&state, request.headers(), &attachment_id)
-                .await?;
+        let authority = resolve_message_attachment_read_authority(
+            &state,
+            request.headers(),
+            request.extensions().get(),
+            &attachment_id,
+        )
+        .await?;
         let attachment = match authority {
-            RoomHumanHttpAuthority::LocalTicket(grant) => {
+            RoomSessionHttpAuthority::LocalTicket(grant) => {
                 state
                     .store
                     .bound_message_attachment(
@@ -387,10 +399,10 @@ async fn read_attachment(
                     )
                     .await?
             }
-            RoomHumanHttpAuthority::HumanSession(authorization) => {
+            RoomSessionHttpAuthority::Session(authorization) => {
                 state
                     .store
-                    .bound_human_session_message_attachment(&authorization, &attachment_id)
+                    .bound_room_session_message_attachment(&authorization, &attachment_id)
                     .await?
             }
         };
@@ -408,8 +420,13 @@ async fn read_attachment(
                 "Room appearance assets require the exact view query.",
             ));
         }
-        let authority =
-            resolve_appearance_read_authority(&state, request.headers(), &attachment_id).await?;
+        let authority = resolve_appearance_read_authority(
+            &state,
+            request.headers(),
+            request.extensions().get(),
+            &attachment_id,
+        )
+        .await?;
         let attachment = match authority {
             AppearanceReadAuthority::Local(ConsumedAppearanceReadTicket::Pending(grant)) => {
                 state
@@ -428,10 +445,10 @@ async fn read_attachment(
                     )
                     .await?
             }
-            AppearanceReadAuthority::HumanSession(authorization) => {
+            AppearanceReadAuthority::Session(authorization) => {
                 state
                     .store
-                    .bound_human_session_room_appearance_asset(&authorization, &attachment_id)
+                    .bound_room_session_room_appearance_asset(&authorization, &attachment_id)
                     .await?
             }
         };
@@ -499,72 +516,75 @@ enum AttachmentUploadAuthority {
 
 enum AppearanceReadAuthority {
     Local(ConsumedAppearanceReadTicket),
-    HumanSession(HumanSessionAuthorization),
+    Session(Box<agentsassemble_persistence::RoomSessionAuthorization>),
 }
 
 async fn resolve_appearance_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
     asset_id: &str,
 ) -> Result<AppearanceReadAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, credential).await {
-        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            Ok(AppearanceReadAuthority::HumanSession(authorization))
+    match resolve_room_session_bearer(state, headers, origin, credential).await {
+        Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
+            Ok(AppearanceReadAuthority::Session(authorization))
         }
-        Ok(HumanSessionBearerResolution::Other) => state
+        Ok(RoomSessionBearerResolution::Other) => state
             .tickets
             .consume_appearance_read(credential, asset_id)
             .await
             .map(AppearanceReadAuthority::Local)
             .map_err(|_| ProfileHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Invalid) => Err(ProfileHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+        Err(RoomSessionBearerError::Invalid) => Err(ProfileHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => Err(error.into()),
     }
 }
 
 async fn resolve_message_attachment_upload_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<RoomHumanHttpAuthority, ProfileHttpError> {
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
+) -> Result<RoomSessionHttpAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, credential).await {
-        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
+    match resolve_room_session_bearer(state, headers, origin, credential).await {
+        Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
             state
                 .store
-                .authorize_human_session_message_attachment_upload(&authorization)
+                .authorize_room_session_message_attachment_upload(&authorization)
                 .await?;
-            Ok(RoomHumanHttpAuthority::HumanSession(authorization))
+            Ok(RoomSessionHttpAuthority::Session(authorization))
         }
-        Ok(HumanSessionBearerResolution::Other) => state
+        Ok(RoomSessionBearerResolution::Other) => state
             .tickets
             .consume_message_attachment_upload(credential)
             .await
-            .map(RoomHumanHttpAuthority::LocalTicket)
+            .map(RoomSessionHttpAuthority::LocalTicket)
             .map_err(|_| ProfileHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Invalid) => Err(ProfileHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+        Err(RoomSessionBearerError::Invalid) => Err(ProfileHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => Err(error.into()),
     }
 }
 
 async fn resolve_message_attachment_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
     attachment_id: &str,
-) -> Result<RoomHumanHttpAuthority, ProfileHttpError> {
+) -> Result<RoomSessionHttpAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, credential).await {
-        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            Ok(RoomHumanHttpAuthority::HumanSession(authorization))
+    match resolve_room_session_bearer(state, headers, origin, credential).await {
+        Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
+            Ok(RoomSessionHttpAuthority::Session(authorization))
         }
-        Ok(HumanSessionBearerResolution::Other) => state
+        Ok(RoomSessionBearerResolution::Other) => state
             .tickets
             .consume_message_attachment_read(credential, attachment_id)
             .await
-            .map(RoomHumanHttpAuthority::LocalTicket)
+            .map(RoomSessionHttpAuthority::LocalTicket)
             .map_err(|_| ProfileHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Invalid) => Err(ProfileHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+        Err(RoomSessionBearerError::Invalid) => Err(ProfileHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => Err(error.into()),
     }
 }
 

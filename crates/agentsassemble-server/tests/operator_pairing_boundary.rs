@@ -160,6 +160,68 @@ async fn redeem_with_boundary_checks(
     session
 }
 
+async fn paired_room_http(
+    client: &Client,
+    base: &str,
+    session: &str,
+    device: &str,
+    expected: StatusCode,
+) {
+    for path in [
+        "/api/room-settings?room_id=general",
+        "/api/room-pins?room_id=general&channel_id=lobby",
+        "/api/room-search?room_id=general&channel_id=lobby&q=paired",
+    ] {
+        // Same-origin browser GETs omit Origin; only proven proxy ingress carries the origin.
+        let read = client
+            .get(format!("{base}{path}"))
+            .header("host", "pairing.example.test")
+            .header("x-forwarded-proto", "https")
+            .header("x-agentsassemble-proxy-token", PROXY)
+            .header("x-device-token", device)
+            .bearer_auth(session)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("paired read: {error}"));
+        assert_eq!(read.status(), expected, "{path}");
+    }
+    for (path, body) in [
+        (
+            "/api/room-settings",
+            json!({"room_id": "general", "appearance": {"notifications": "mute"}}),
+        ),
+        (
+            "/api/message-attachments",
+            json!({"filename": "paired.txt", "content_type": "text/plain", "data_base64": "cGFpcmVk"}),
+        ),
+    ] {
+        let write = public(client.post(format!("{base}{path}")))
+            .header("x-device-token", device)
+            .bearer_auth(session)
+            .json(&body)
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("paired write: {error}"));
+        assert_eq!(write.status(), expected, "{path}");
+    }
+    let profile = public(client.get(format!("{base}/api/user-profile")))
+        .header("x-device-token", device)
+        .bearer_auth(session)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("paired profile boundary: {error}"));
+    assert_eq!(profile.status(), StatusCode::UNAUTHORIZED);
+    let private = client
+        .get(format!("{base}/api/room-settings?room_id=general"))
+        .header("origin", ORIGIN)
+        .header("x-device-token", device)
+        .bearer_auth(session)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("private paired request: {error}"));
+    assert_eq!(private.status(), StatusCode::FORBIDDEN);
+}
+
 #[tokio::test]
 async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
     let PairingServer {
@@ -203,7 +265,9 @@ async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
     let payload = json!({"pairing_token": token});
     let device = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x91; 32]));
     let session = redeem_with_boundary_checks(&client, &base, &payload, &device).await;
+    paired_room_http(&client, &base, &session, &device, StatusCode::OK).await;
     let other = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x92; 32]));
+    paired_room_http(&client, &base, &session, &other, StatusCode::UNAUTHORIZED).await;
     let wrong = public(client.post(format!("{base}/api/session-tickets/socket")))
         .bearer_auth(&session)
         .header("x-device-token", &other)
@@ -251,6 +315,7 @@ async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
         .await
         .unwrap_or_else(|error| panic!("revoked retry: {error}"));
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    paired_room_http(&client, &base, &session, &device, StatusCode::UNAUTHORIZED).await;
     shutdown.cancel();
     running
         .await

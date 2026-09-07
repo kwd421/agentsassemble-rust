@@ -12,9 +12,8 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    HumanSessionAuthorization, LocalRoomManagerAuthority, PersistenceError, SqliteStore,
+    LocalRoomManagerAuthority, PersistenceError, RoomSessionAuthorization, SqliteStore,
     asset_storage::enforce_storage_replacement,
-    human_session_authority::revalidate_human_session,
     raster_assets::{prepare_raster, sanitize_filename, validate_stored_raster},
     room_user_identity::{
         require_current_local_room_manager, require_exact_local_room_manager,
@@ -140,29 +139,28 @@ impl SqliteStore {
         Ok(asset)
     }
 
-    /// Reads one room-owned PNG while retaining exact durable human-session provenance.
+    /// Reads one room-owned PNG while retaining exact durable room-session provenance.
     ///
     /// # Errors
     ///
     /// Fails closed when the issued session authority has expired or changed, the human has left,
     /// or the requested asset is no longer an intact reference owned by that room.
-    pub async fn bound_human_session_room_appearance_asset(
+    pub async fn bound_room_session_room_appearance_asset(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
         asset_id: &str,
     ) -> Result<RoomAppearanceAsset, PersistenceError> {
         if !valid_asset_id(asset_id) {
             return Err(asset_missing());
         }
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
-        let asset = read_bound_room_appearance_asset(
-            &mut transaction,
-            &current.principal().room_id,
-            asset_id,
-        )
-        .await?;
+        let principal = authorization
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        let asset =
+            read_bound_room_appearance_asset(&mut transaction, &principal.room_id, asset_id)
+                .await?;
         transaction.commit().await?;
         Ok(asset)
     }

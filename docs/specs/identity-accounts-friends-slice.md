@@ -263,11 +263,11 @@ canonical browser device credential. Same-device retries retain the durable bear
 The `/pair` entry and assets are now same-origin public; creation/revocation stay private.
 
 Socket-ticket exchange and departure dispatch by credential prefix without retrying
-another authority domain. Paired credentials require current device and ready Origin;
+another authority domain. Paired credentials require current device and the ready public origin;
 ordinary human admission remains with its existing owner. Revocation commits before
 notifying existing room subscribers, without creating another task or timer. Paired
-sessions cannot obtain account or native server authority. The remaining HTTP room
-surfaces and native pairing UI must be connected before packaged phase acceptance.
+sessions cannot obtain account or native server authority. Native pairing UI and
+frontend room HTTP device propagation remain required before packaged phase acceptance.
 
 ### Browser room-session device propagation
 
@@ -278,3 +278,20 @@ callbacks. The explicit HTTP leave helper also carries the caller's device ident
 Human sessions retain their existing optional-device exchange contract; paired
 sessions remain device-required at the server authority owner. No device is inferred
 from the session bearer and no additional browser storage or periodic work is added.
+
+### Paired room HTTP resources
+
+Room preferences, lobby search/context and pins, message-attachment upload/read, and
+bound room-appearance reads retain `RoomSessionAuthorization` into their existing
+storage transactions. Human and operator variants resolve at their original owners;
+room capabilities and attachment/message reachability checks remain in place.
+Account profile and profile-avatar mutation continue to accept only their prior
+human-account or native authority, independently of room operator capabilities.
+
+The existing ingress owner now passes its verified public origin as request
+provenance. Session HTTP authorization requires that origin to match the current
+ready ingress before resolving the stored device-bound bearer. This supports browser
+GETs without an Origin header, without trusting a caller-supplied origin as a proxy
+proof. Existing proxy, Host, forwarded HTTPS and optional-Origin checks are unchanged;
+redemption still requires the explicit matching Origin header. No routes or ingress
+acceptance rules are broadened, and no retry, task or polling owner is introduced.

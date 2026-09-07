@@ -6,8 +6,7 @@ use chrono::{DateTime, SecondsFormat, Utc};
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    HumanSessionAuthorization, PersistenceError, SqliteStore,
-    human_session_authority::revalidate_human_session,
+    PersistenceError, RoomSessionAuthorization, SqliteStore,
     message_attachments::{MessageAttachmentMetadata, message_attachments_from_event},
     room_turns::support::load_event,
     room_user_identity::resolve_local_room_manager,
@@ -56,19 +55,21 @@ impl SqliteStore {
         Ok(pins)
     }
 
-    /// Lists lobby pins while an exact durable human session retains room-history permission.
+    /// Lists lobby pins while an exact room session retains room-history permission.
     ///
     /// # Errors
     ///
     /// Fails when session authority, permission, a stored pointer, its event, or persistence is
     /// invalid.
-    pub async fn human_session_lobby_message_pins(
+    pub async fn room_session_lobby_message_pins(
         &self,
-        expected: &HumanSessionAuthorization,
+        expected: &RoomSessionAuthorization,
     ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) = revalidate_human_session(&mut transaction, expected, Utc::now()).await?;
-        let principal = current.principal();
+        let principal = expected
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
         require_permission(
             principal.capabilities.room_history,
             "This room session cannot read message history.",
@@ -99,20 +100,22 @@ impl SqliteStore {
         Ok(pins)
     }
 
-    /// Pins or unpins one lobby message while an exact durable human session remains writable.
+    /// Pins or unpins one lobby message while an exact room session remains writable.
     ///
     /// # Errors
     ///
     /// Fails without writing when session authority, permission, or the target message is invalid.
-    pub async fn set_human_session_lobby_message_pin(
+    pub async fn set_room_session_lobby_message_pin(
         &self,
-        expected: &HumanSessionAuthorization,
+        expected: &RoomSessionAuthorization,
         event_id: &str,
         pinned: bool,
     ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) = revalidate_human_session(&mut transaction, expected, Utc::now()).await?;
-        let principal = current.principal();
+        let principal = expected
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
         require_permission(
             principal.capabilities.message_modify,
             "This room session cannot modify messages.",

@@ -8,7 +8,8 @@ use crate::{
     human_session_http_authority::{
         HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
     },
-    operator_pairing_web::{device_fingerprint, fingerprint_token, require_ready_origin},
+    ingress_trust::TrustedIngressOrigin,
+    operator_pairing_web::{device_fingerprint, fingerprint_token},
 };
 
 pub(crate) enum RoomSessionBearerResolution {
@@ -24,6 +25,7 @@ pub(crate) enum RoomSessionBearerError {
 pub(crate) async fn resolve_room_session_bearer(
     state: &AppState,
     headers: &HeaderMap,
+    origin: Option<&TrustedIngressOrigin>,
     bearer: &str,
 ) -> Result<RoomSessionBearerResolution, RoomSessionBearerError> {
     // Credential domain selects one authority owner. A malformed or revoked paired
@@ -32,11 +34,17 @@ pub(crate) async fn resolve_room_session_bearer(
         let fingerprint = fingerprint_token(bearer, OPERATOR_SESSION_BEARER_PREFIX)
             .ok_or(RoomSessionBearerError::Invalid)?;
         let device = device_fingerprint(headers).ok_or(RoomSessionBearerError::Invalid)?;
-        let origin =
-            require_ready_origin(state, headers).map_err(|_| RoomSessionBearerError::Invalid)?;
+        let origin = origin.ok_or(RoomSessionBearerError::Invalid)?.as_str();
+        let ready = state
+            .public_ingress
+            .ready_snapshot()
+            .ok_or(RoomSessionBearerError::Invalid)?;
+        if origin != ready.public_url {
+            return Err(RoomSessionBearerError::Invalid);
+        }
         let session = state
             .store
-            .authorize_operator_session(&fingerprint, &device, &origin)
+            .authorize_operator_session(&fingerprint, &device, origin)
             .await
             .map_err(RoomSessionBearerError::Persistence)?;
         return Ok(RoomSessionBearerResolution::Authorized(Box::new(

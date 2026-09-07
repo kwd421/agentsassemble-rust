@@ -347,8 +347,8 @@ async fn human_session_message_upload_revalidates_write_scope_and_mute_state() {
         .unwrap_or_else(|error| panic!("authorize read-only message upload: {error}"));
     assert_rejected_code(
         read_only_store
-            .store_human_session_message_attachment(
-                &read_only,
+            .store_room_session_message_attachment(
+                &crate::RoomSessionAuthorization::Human(read_only.clone()),
                 "denied.txt",
                 "text/plain",
                 b"denied".to_vec(),
@@ -363,8 +363,8 @@ async fn human_session_message_upload_revalidates_write_scope_and_mute_state() {
         .await
         .unwrap_or_else(|error| panic!("authorize writable message upload: {error}"));
     let stored = store
-        .store_human_session_message_attachment(
-            &authorization,
+        .store_room_session_message_attachment(
+            &crate::RoomSessionAuthorization::Human(authorization.clone()),
             "guest.txt",
             "text/plain",
             b"guest attachment".to_vec(),
@@ -374,8 +374,8 @@ async fn human_session_message_upload_revalidates_write_scope_and_mute_state() {
     set_participant_muted(&store, true).await;
     assert_rejected_code(
         store
-            .store_human_session_message_attachment(
-                &authorization,
+            .store_room_session_message_attachment(
+                &crate::RoomSessionAuthorization::Human(authorization.clone()),
                 "muted.txt",
                 "text/plain",
                 b"muted".to_vec(),
@@ -437,7 +437,10 @@ async fn bound_appearance_read_revalidates_human_session_in_the_asset_snapshot()
         .unwrap_or_else(|error| panic!("authorize appearance reader: {error}"));
 
     let asset = store
-        .bound_human_session_room_appearance_asset(&authorization, &stored.id)
+        .bound_room_session_room_appearance_asset(
+            &crate::RoomSessionAuthorization::Human(authorization.clone()),
+            &stored.id,
+        )
         .await
         .unwrap_or_else(|error| panic!("read session-bound appearance: {error}"));
     assert_eq!(&asset.content[..8], b"\x89PNG\r\n\x1a\n");
@@ -445,7 +448,10 @@ async fn bound_appearance_read_revalidates_human_session_in_the_asset_snapshot()
     set_participant_status(&store, ParticipantStatus::Left).await;
     assert_rejected_code(
         store
-            .bound_human_session_room_appearance_asset(&authorization, &stored.id)
+            .bound_room_session_room_appearance_asset(
+                &crate::RoomSessionAuthorization::Human(authorization.clone()),
+                &stored.id,
+            )
             .await,
         "session_revoked",
     );

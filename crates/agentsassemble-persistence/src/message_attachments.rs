@@ -15,11 +15,10 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    HumanSessionAuthorization, PersistenceError, SqliteStore,
+    PersistenceError, RoomSessionAuthorization, SqliteStore,
     agent_lifecycle::load_session,
     asset_storage::enforce_storage_replacement,
     authority::load_active_participant,
-    human_session_authority::revalidate_human_session,
     provider_turn_execution::load_execution_in,
     raster_assets::{is_safe_raster_content_type, validate_preserved_safe_raster},
     room_turns::support::{load_event, load_participant},
@@ -242,19 +241,21 @@ impl SqliteStore {
         Ok(())
     }
 
-    /// Proves that a durable human session may currently upload a message attachment.
+    /// Proves that a room session may currently upload a message attachment.
     ///
     /// # Errors
     ///
     /// Fails closed for expired, replaced, read-only, muted, or otherwise stale authority.
-    pub async fn authorize_human_session_message_attachment_upload(
+    pub async fn authorize_room_session_message_attachment_upload(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
     ) -> Result<(), PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
-        require_current_message_writer(&mut transaction, current.principal()).await?;
+        let principal = authorization
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        require_current_message_writer(&mut transaction, &principal).await?;
         transaction.commit().await?;
         Ok(())
     }
@@ -312,22 +313,23 @@ impl SqliteStore {
     ///
     /// # Errors
     ///
-    /// Fails closed when the resolved human-session authorization no longer matches its durable
+    /// Fails closed when the resolved room-session authorization no longer matches its durable
     /// session, the current participant is muted or read-only, or validation and storage fail.
-    pub async fn store_human_session_message_attachment(
+    pub async fn store_room_session_message_attachment(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
         filename: &str,
         content_type: &str,
         content: Vec<u8>,
     ) -> Result<MessageAttachmentMetadata, PersistenceError> {
         let prepared = prepare_message_attachment(filename, content_type, content).await?;
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
-        require_current_message_writer(&mut transaction, current.principal()).await?;
-        let metadata =
-            store_pending_in_transaction(&mut transaction, current.principal(), prepared).await?;
+        let principal = authorization
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        require_current_message_writer(&mut transaction, &principal).await?;
+        let metadata = store_pending_in_transaction(&mut transaction, &principal, prepared).await?;
         transaction.commit().await?;
         Ok(metadata)
     }
@@ -355,35 +357,34 @@ impl SqliteStore {
         Ok(attachment)
     }
 
-    /// Reads one bound attachment through exact current human-session provenance.
+    /// Reads one bound attachment through exact current room-session provenance.
     ///
     /// # Errors
     ///
     /// Fails closed for expired or changed session authority, absent history permission,
     /// unreferenced bytes, or corrupt state.
-    pub async fn bound_human_session_message_attachment(
+    pub async fn bound_room_session_message_attachment(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
         attachment_id: &str,
     ) -> Result<MessageAttachment, PersistenceError> {
         if !is_message_attachment_id(attachment_id) {
             return Err(message_attachment_missing());
         }
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
-        if !current.principal().capabilities.room_history {
+        let principal = authorization
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        if !principal.capabilities.room_history {
             return Err(rejected(
                 "permission_denied",
                 "This room session cannot read message history.",
             ));
         }
-        let attachment = read_bound_message_attachment(
-            &mut transaction,
-            &current.principal().room_id,
-            attachment_id,
-        )
-        .await?;
+        let attachment =
+            read_bound_message_attachment(&mut transaction, &principal.room_id, attachment_id)
+                .await?;
         transaction.commit().await?;
         Ok(attachment)
     }

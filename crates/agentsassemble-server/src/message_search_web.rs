@@ -15,10 +15,10 @@ use crate::{
     http_api::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, ensure_empty_body, exact_tauri_cors,
     },
-    human_session_http_authority::{
-        HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
+    room_session_http_authority::{
+        RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
     },
-    ticket::RoomHumanHttpAuthority,
+    ticket::RoomSessionHttpAuthority,
 };
 
 const LOBBY_CHANNEL_ID: &str = "lobby";
@@ -93,14 +93,15 @@ async fn search_messages(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<SearchResponse>, MessageSearchHttpError> {
-    let grant = resolve_read_authority(&state, request.headers()).await?;
+    let grant =
+        resolve_read_authority(&state, request.headers(), request.extensions().get()).await?;
     let query = parse_query::<SearchQuery>(&request)?;
     require_search_scope(&grant, &query.room_id, &query.channel_id)?;
     ensure_empty_body(request, MAX_SEARCH_BODY_BYTES)
         .await
         .map_err(|error| MessageSearchHttpError::from_body(error, "search"))?;
     let page = match &grant {
-        RoomHumanHttpAuthority::LocalTicket(local) => {
+        RoomSessionHttpAuthority::LocalTicket(local) => {
             state
                 .store
                 .search_local_lobby_messages(
@@ -112,10 +113,10 @@ async fn search_messages(
                 )
                 .await?
         }
-        RoomHumanHttpAuthority::HumanSession(authorization) => {
+        RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .search_human_session_lobby_messages(authorization, &query.q, &query.cursor)
+                .search_room_session_lobby_messages(authorization, &query.q, &query.cursor)
                 .await?
         }
     };
@@ -126,14 +127,15 @@ async fn message_context(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<ContextResponse>, MessageSearchHttpError> {
-    let grant = resolve_read_authority(&state, request.headers()).await?;
+    let grant =
+        resolve_read_authority(&state, request.headers(), request.extensions().get()).await?;
     let query = parse_query::<ContextQuery>(&request)?;
     require_context_scope(&grant, &query.room, &query.channel)?;
     ensure_empty_body(request, MAX_SEARCH_BODY_BYTES)
         .await
         .map_err(|error| MessageSearchHttpError::from_body(error, "context"))?;
     let context = match &grant {
-        RoomHumanHttpAuthority::LocalTicket(local) => {
+        RoomSessionHttpAuthority::LocalTicket(local) => {
             state
                 .store
                 .local_lobby_message_context(
@@ -144,10 +146,10 @@ async fn message_context(
                 )
                 .await?
         }
-        RoomHumanHttpAuthority::HumanSession(authorization) => {
+        RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .human_session_lobby_message_context(authorization, &query.event)
+                .room_session_lobby_message_context(authorization, &query.event)
                 .await?
         }
     };
@@ -157,20 +159,21 @@ async fn message_context(
 async fn resolve_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<RoomHumanHttpAuthority, MessageSearchHttpError> {
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
+) -> Result<RoomSessionHttpAuthority, MessageSearchHttpError> {
     let credential = bearer_credential(headers).ok_or_else(MessageSearchHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, credential).await {
-        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            Ok(RoomHumanHttpAuthority::HumanSession(authorization))
+    match resolve_room_session_bearer(state, headers, origin, credential).await {
+        Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
+            Ok(RoomSessionHttpAuthority::Session(authorization))
         }
-        Ok(HumanSessionBearerResolution::Other) => state
+        Ok(RoomSessionBearerResolution::Other) => state
             .tickets
             .consume_message_search_read(credential)
             .await
-            .map(RoomHumanHttpAuthority::LocalTicket)
+            .map(RoomSessionHttpAuthority::LocalTicket)
             .map_err(|_| MessageSearchHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Invalid) => Err(MessageSearchHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+        Err(RoomSessionBearerError::Invalid) => Err(MessageSearchHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => Err(error.into()),
     }
 }
 
@@ -183,7 +186,7 @@ fn parse_query<T: for<'de> Deserialize<'de>>(
 }
 
 fn require_search_scope(
-    grant: &RoomHumanHttpAuthority,
+    grant: &RoomSessionHttpAuthority,
     requested_room_id: &str,
     channel_id: &str,
 ) -> Result<(), MessageSearchHttpError> {
@@ -197,7 +200,7 @@ fn require_search_scope(
 }
 
 fn require_context_scope(
-    grant: &RoomHumanHttpAuthority,
+    grant: &RoomSessionHttpAuthority,
     requested_room_id: &str,
     channel_id: &str,
 ) -> Result<(), MessageSearchHttpError> {
@@ -216,7 +219,7 @@ fn require_context_scope(
 }
 
 fn require_room(
-    grant: &RoomHumanHttpAuthority,
+    grant: &RoomSessionHttpAuthority,
     requested_room_id: &str,
 ) -> Result<(), MessageSearchHttpError> {
     let room_id = validate_room_id(requested_room_id)
@@ -227,10 +230,10 @@ fn require_room(
     Ok(())
 }
 
-fn grant_room_id(grant: &RoomHumanHttpAuthority) -> &str {
+fn grant_room_id(grant: &RoomSessionHttpAuthority) -> &str {
     match grant {
-        RoomHumanHttpAuthority::LocalTicket(local) => &local.room_id,
-        RoomHumanHttpAuthority::HumanSession(authorization) => &authorization.principal().room_id,
+        RoomSessionHttpAuthority::LocalTicket(local) => &local.room_id,
+        RoomSessionHttpAuthority::Session(authorization) => &authorization.principal().room_id,
     }
 }
 

@@ -7810,3 +7810,23 @@ the added causal paired-device switch case and existing isolation cases also pas
 Frontend build/CSS verification, architecture/source-growth and 19 policy checks,
 Rust formatting, diff and artifact checks pass. No new storage, timer or task is
 introduced. Packaged operator-pairing UI acceptance is still pending.
+
+## Phase 5 paired room HTTP resources (2026-09-08)
+
+Room preferences, search/context, pins, message attachments and bound room appearance
+now accept exact human/operator session provenance through their existing transaction
+owners. Profile/account authority remains separate. Paired browser GETs use the origin
+already proven by the existing proxy ingress owner, including its unchanged Host,
+HTTPS and optional-Origin checks; bearer authentication also checks current readiness
+and device binding. No new public route, acceptance exception or retry was introduced.
+
+The real HTTP pairing integration proves no-Origin GETs for settings/search/pins,
+preference writes and attachment upload; wrong device and revoked-session attempts
+are rejected, account profile remains unavailable, and direct local requests cannot
+substitute an Origin header for public ingress proof. All 279 persistence tests and
+15 existing affected HTTP tests pass. Final ingress/search/pairing integrations and
+12 ingress unit tests pass. Clippy for server/persistence all targets/features,
+architecture/source growth, 19 policies, formatting, diff and artifact checks pass.
+The added origin provenance is bounded per request; no task, timer, storage row or
+polling loop is added. Frontend device propagation for these resources and packaged
+pairing management remain pending.

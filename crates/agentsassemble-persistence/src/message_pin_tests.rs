@@ -357,7 +357,9 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
     let read_only = human_authorization(&read_only_store).await;
     assert_eq!(
         read_only_store
-            .human_session_lobby_message_pins(&read_only)
+            .room_session_lobby_message_pins(&crate::RoomSessionAuthorization::Human(
+                read_only.clone()
+            ))
             .await
             .unwrap_or_else(|error| panic!("read pins through read-only session: {error}"))
             .len(),
@@ -365,7 +367,11 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
     );
     assert_rejection_code(
         read_only_store
-            .set_human_session_lobby_message_pin(&read_only, &message.id, false)
+            .set_room_session_lobby_message_pin(
+                &crate::RoomSessionAuthorization::Human(read_only.clone()),
+                &message.id,
+                false,
+            )
             .await,
         "permission_denied",
     );
@@ -375,7 +381,11 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
     let message = send(&writable_store, &local, "writable-target", "target").await;
     let writable = human_authorization(&writable_store).await;
     writable_store
-        .set_human_session_lobby_message_pin(&writable, &message.id, true)
+        .set_room_session_lobby_message_pin(
+            &crate::RoomSessionAuthorization::Human(writable.clone()),
+            &message.id,
+            true,
+        )
         .await
         .unwrap_or_else(|error| panic!("pin through writable session: {error}"));
     sqlx::query("UPDATE human_room_sessions SET state = 'ended'")
@@ -384,7 +394,11 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
         .unwrap_or_else(|error| panic!("end human session: {error}"));
     assert_rejection_code(
         writable_store
-            .set_human_session_lobby_message_pin(&writable, &message.id, false)
+            .set_room_session_lobby_message_pin(
+                &crate::RoomSessionAuthorization::Human(writable.clone()),
+                &message.id,
+                false,
+            )
             .await,
         "session_revoked",
     );

@@ -65,9 +65,9 @@ pub fn local_bind_is_supported(address: SocketAddr) -> bool {
 pub(crate) struct PeerAddr(pub(crate) SocketAddr);
 
 #[derive(Clone)]
-pub(crate) struct TrustedIdentityOrigin(pub(crate) Arc<str>);
+pub(crate) struct TrustedIngressOrigin(pub(crate) Arc<str>);
 
-impl TrustedIdentityOrigin {
+impl TrustedIngressOrigin {
     pub(crate) fn as_str(&self) -> &str {
         &self.0
     }
@@ -115,14 +115,17 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
     }
+    if let Some(PublicIngressAuthorization::Authorized(origin)) = &public_authorization {
+        request.extensions_mut().insert(origin.clone());
+    }
     if exact_exposure == Some(RouteExposure::IdentityProbePublic) {
         let identity_origin = if local_trusted {
             single_header(request.headers(), header::HOST)
-                .map(|host| TrustedIdentityOrigin(format!("http://{host}").into()))
+                .map(|host| TrustedIngressOrigin(format!("http://{host}").into()))
         } else {
             match public_authorization {
                 Some(PublicIngressAuthorization::Identity(origin)) => Some(origin),
-                Some(PublicIngressAuthorization::Authorized) | None => None,
+                Some(PublicIngressAuthorization::Authorized(_)) | None => None,
             }
         };
         let Some(identity_origin) = identity_origin else {

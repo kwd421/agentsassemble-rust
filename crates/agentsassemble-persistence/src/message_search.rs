@@ -5,13 +5,12 @@ use agentsassemble_domain::{
     compact_casefolded_message_search_text, is_message_event_id, public_event_for_principal,
 };
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-use chrono::{SecondsFormat, Utc};
+use chrono::SecondsFormat;
 use sqlx::{Row, Sqlite, Transaction, sqlite::SqliteRow};
 
 use crate::{
-    HumanSessionAuthorization, PersistenceError, SqliteStore,
+    PersistenceError, RoomSessionAuthorization, SqliteStore,
     agent_lifecycle::load_session,
-    human_session_authority::revalidate_human_session,
     message_search_index::{canonical_created_at_nanos, searchable_lobby_message},
     room_turns::support::{load_participant, provider_room_principal},
     room_user_identity::resolve_local_room_manager,
@@ -50,22 +49,23 @@ impl SqliteStore {
         Ok(page)
     }
 
-    /// Searches canonical lobby history while a durable human session remains authorized.
+    /// Searches canonical lobby history while a room session remains authorized.
     ///
     /// # Errors
     ///
     /// Rejects revoked history permission, invalid input, or inconsistent stored projections.
-    pub async fn search_human_session_lobby_messages(
+    pub async fn search_room_session_lobby_messages(
         &self,
-        expected: &HumanSessionAuthorization,
+        expected: &RoomSessionAuthorization,
         query: &str,
         cursor: &str,
     ) -> Result<LobbyMessageSearchPage, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) = revalidate_human_session(&mut transaction, expected, Utc::now()).await?;
-        let principal = current.principal();
-        require_history(principal)?;
-        let page = search_in(&mut transaction, principal, query, cursor).await?;
+        let principal = expected
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        let page = search_in(&mut transaction, &principal, query, cursor).await?;
         transaction.commit().await?;
         Ok(page)
     }
@@ -90,21 +90,22 @@ impl SqliteStore {
         Ok(context)
     }
 
-    /// Reads bounded canonical lobby context while a durable human session remains authorized.
+    /// Reads bounded canonical lobby context while a room session remains authorized.
     ///
     /// # Errors
     ///
     /// Rejects revoked history permission, unknown targets, or inconsistent stored projections.
-    pub async fn human_session_lobby_message_context(
+    pub async fn room_session_lobby_message_context(
         &self,
-        expected: &HumanSessionAuthorization,
+        expected: &RoomSessionAuthorization,
         event_id: &str,
     ) -> Result<LobbyMessageContext, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) = revalidate_human_session(&mut transaction, expected, Utc::now()).await?;
-        let principal = current.principal();
-        require_history(principal)?;
-        let context = context_in(&mut transaction, principal, event_id).await?;
+        let principal = expected
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        let context = context_in(&mut transaction, &principal, event_id).await?;
         transaction.commit().await?;
         Ok(context)
     }

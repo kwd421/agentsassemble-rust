@@ -4,9 +4,8 @@ use agentsassemble_domain::{
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    HumanSessionAuthorization, PersistenceError, SqliteStore,
+    PersistenceError, RoomSessionAuthorization, SqliteStore,
     bootstrap::require_complete_bootstrap_in_transaction,
-    human_session_authority::revalidate_human_session,
     room_user_identity::resolve_room_user_identity,
 };
 
@@ -93,20 +92,21 @@ impl SqliteStore {
         Ok(snapshot)
     }
 
-    /// Reads preferences only while the exact durable human session remains current.
+    /// Reads preferences only while the exact room session remains current.
     ///
     /// # Errors
     ///
     /// Fails when session provenance, membership, profile binding, stored JSON, or persistence is
     /// no longer valid.
-    pub async fn human_session_room_preferences(
+    pub async fn room_session_room_preferences(
         &self,
-        expected: &HumanSessionAuthorization,
+        expected: &RoomSessionAuthorization,
     ) -> Result<RoomPreferencesSnapshot, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, expected, chrono::Utc::now()).await?;
-        let principal = current.principal();
+        let principal = expected
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
         let snapshot = load_room_preferences_snapshot(
             &mut transaction,
             &principal.principal_id,
@@ -139,21 +139,22 @@ impl SqliteStore {
         Ok(snapshot)
     }
 
-    /// Replaces preference fields only while the exact durable human session remains current.
+    /// Replaces preference fields only while the exact room session remains current.
     ///
     /// # Errors
     ///
     /// Fails without writing when session provenance, membership, profile binding, input, stored
     /// state, or persistence is no longer valid.
-    pub async fn update_human_session_room_preferences(
+    pub async fn update_room_session_room_preferences(
         &self,
-        expected: &HumanSessionAuthorization,
+        expected: &RoomSessionAuthorization,
         patch: RoomUserPreferencesPatch,
     ) -> Result<RoomPreferencesSnapshot, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, expected, chrono::Utc::now()).await?;
-        let principal = current.principal();
+        let principal = expected
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
         let snapshot = update_room_preferences_in_transaction(
             &mut transaction,
             &principal.room_id,

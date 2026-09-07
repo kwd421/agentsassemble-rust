@@ -62,7 +62,8 @@ async fn leave_room(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<LeaveResponse>, SessionExchangeError> {
-    let authorization = authorize_presented_session(&state, request.headers()).await?;
+    let authorization =
+        authorize_presented_session(&state, request.headers(), request.extensions().get()).await?;
     let payload: Value = decode_json_body(request, MAX_EXCHANGE_BODY_BYTES)
         .await
         .map_err(SessionExchangeError::from_leave_body)?;
@@ -105,7 +106,8 @@ async fn authorize_exchange(
     state: &AppState,
     request: Request,
 ) -> Result<agentsassemble_persistence::RoomSessionAuthorization, SessionExchangeError> {
-    let authorization = authorize_presented_session(state, request.headers()).await?;
+    let authorization =
+        authorize_presented_session(state, request.headers(), request.extensions().get()).await?;
     ensure_empty_body(request, MAX_EXCHANGE_BODY_BYTES)
         .await
         .map_err(SessionExchangeError::from_body)?;
@@ -115,9 +117,10 @@ async fn authorize_exchange(
 async fn authorize_presented_session(
     state: &AppState,
     headers: &axum::http::HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
 ) -> Result<agentsassemble_persistence::RoomSessionAuthorization, SessionExchangeError> {
     let bearer = bearer_credential(headers).ok_or_else(SessionExchangeError::unauthorized)?;
-    match resolve_room_session_bearer(state, headers, bearer).await {
+    match resolve_room_session_bearer(state, headers, origin, bearer).await {
         Ok(RoomSessionBearerResolution::Authorized(session)) => Ok(*session),
         Ok(RoomSessionBearerResolution::Other) | Err(RoomSessionBearerError::Invalid) => {
             Err(SessionExchangeError::unauthorized())

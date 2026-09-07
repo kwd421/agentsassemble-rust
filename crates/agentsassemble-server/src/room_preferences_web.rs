@@ -21,10 +21,10 @@ use crate::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body, ensure_empty_body,
         exact_tauri_cors,
     },
-    human_session_http_authority::{
-        HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
+    room_session_http_authority::{
+        RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
     },
-    ticket::RoomHumanHttpAuthority,
+    ticket::RoomSessionHttpAuthority,
 };
 
 const MAX_PREFERENCES_BODY_BYTES: usize = 16 * 1024;
@@ -69,7 +69,9 @@ async fn read_settings(
         return Ok(Json(json!({"rooms": rooms})));
     }
 
-    let grant = resolve_preferences_read_authority(&state, request.headers()).await?;
+    let grant =
+        resolve_preferences_read_authority(&state, request.headers(), request.extensions().get())
+            .await?;
     let requested_room_id = validate_room_id(&query.room_id)
         .map_err(|error| RoomPreferencesHttpError::bad_request(error.message))?;
     require_bound_room(&grant, &requested_room_id)?;
@@ -77,16 +79,16 @@ async fn read_settings(
         .await
         .map_err(RoomPreferencesHttpError::from_body)?;
     let snapshot = match &grant {
-        RoomHumanHttpAuthority::LocalTicket(grant) => {
+        RoomSessionHttpAuthority::LocalTicket(grant) => {
             state
                 .store
                 .room_preferences(&grant.room_id, &grant.principal_id, &grant.participant_id)
                 .await?
         }
-        RoomHumanHttpAuthority::HumanSession(authorization) => {
+        RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .human_session_room_preferences(authorization)
+                .room_session_room_preferences(authorization)
                 .await?
         }
     };
@@ -100,7 +102,9 @@ async fn update_preferences(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, RoomPreferencesHttpError> {
-    let grant = resolve_preferences_write_authority(&state, request.headers()).await?;
+    let grant =
+        resolve_preferences_write_authority(&state, request.headers(), request.extensions().get())
+            .await?;
     authorize_preference_write(&state, &grant).await?;
     let payload: Value = decode_json_body(request, MAX_PREFERENCES_BODY_BYTES)
         .await
@@ -109,22 +113,22 @@ async fn update_preferences(
     let patch = parse_preference_update(&payload, room_id)?;
     let snapshot = if patch.notifications.is_none() && patch.channel_settings.is_none() {
         match &grant {
-            RoomHumanHttpAuthority::LocalTicket(grant) => {
+            RoomSessionHttpAuthority::LocalTicket(grant) => {
                 state
                     .store
                     .room_preferences(&grant.room_id, &grant.principal_id, &grant.participant_id)
                     .await?
             }
-            RoomHumanHttpAuthority::HumanSession(authorization) => {
+            RoomSessionHttpAuthority::Session(authorization) => {
                 state
                     .store
-                    .human_session_room_preferences(authorization)
+                    .room_session_room_preferences(authorization)
                     .await?
             }
         }
     } else {
         match &grant {
-            RoomHumanHttpAuthority::LocalTicket(grant) => {
+            RoomSessionHttpAuthority::LocalTicket(grant) => {
                 state
                     .store
                     .update_room_preferences(
@@ -135,10 +139,10 @@ async fn update_preferences(
                     )
                     .await?
             }
-            RoomHumanHttpAuthority::HumanSession(authorization) => {
+            RoomSessionHttpAuthority::Session(authorization) => {
                 state
                     .store
-                    .update_human_session_room_preferences(authorization, patch)
+                    .update_room_session_room_preferences(authorization, patch)
                     .await?
             }
         }
@@ -152,60 +156,62 @@ async fn update_preferences(
 async fn resolve_preferences_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<RoomHumanHttpAuthority, RoomPreferencesHttpError> {
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
+) -> Result<RoomSessionHttpAuthority, RoomPreferencesHttpError> {
     let credential =
         bearer_credential(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, credential).await {
-        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            Ok(RoomHumanHttpAuthority::HumanSession(authorization))
+    match resolve_room_session_bearer(state, headers, origin, credential).await {
+        Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
+            Ok(RoomSessionHttpAuthority::Session(authorization))
         }
-        Ok(HumanSessionBearerResolution::Other) => state
+        Ok(RoomSessionBearerResolution::Other) => state
             .tickets
             .consume_preferences_read(credential)
             .await
-            .map(RoomHumanHttpAuthority::LocalTicket)
+            .map(RoomSessionHttpAuthority::LocalTicket)
             .map_err(|_| RoomPreferencesHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Invalid) => Err(RoomPreferencesHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+        Err(RoomSessionBearerError::Invalid) => Err(RoomPreferencesHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => Err(error.into()),
     }
 }
 
 async fn resolve_preferences_write_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<RoomHumanHttpAuthority, RoomPreferencesHttpError> {
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
+) -> Result<RoomSessionHttpAuthority, RoomPreferencesHttpError> {
     let credential =
         bearer_credential(headers).ok_or_else(RoomPreferencesHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, credential).await {
-        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            Ok(RoomHumanHttpAuthority::HumanSession(authorization))
+    match resolve_room_session_bearer(state, headers, origin, credential).await {
+        Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
+            Ok(RoomSessionHttpAuthority::Session(authorization))
         }
-        Ok(HumanSessionBearerResolution::Other) => state
+        Ok(RoomSessionBearerResolution::Other) => state
             .tickets
             .consume_preferences_write(credential)
             .await
-            .map(RoomHumanHttpAuthority::LocalTicket)
+            .map(RoomSessionHttpAuthority::LocalTicket)
             .map_err(|_| RoomPreferencesHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Invalid) => Err(RoomPreferencesHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Persistence(error)) => Err(error.into()),
+        Err(RoomSessionBearerError::Invalid) => Err(RoomPreferencesHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => Err(error.into()),
     }
 }
 
 async fn authorize_preference_write(
     state: &AppState,
-    grant: &RoomHumanHttpAuthority,
+    grant: &RoomSessionHttpAuthority,
 ) -> Result<(), RoomPreferencesHttpError> {
     match grant {
-        RoomHumanHttpAuthority::LocalTicket(grant) => {
+        RoomSessionHttpAuthority::LocalTicket(grant) => {
             state
                 .store
                 .authorize_room_user(&grant.room_id, &grant.principal_id, &grant.participant_id)
                 .await?;
         }
-        RoomHumanHttpAuthority::HumanSession(authorization) => {
+        RoomSessionHttpAuthority::Session(authorization) => {
             let current = state
                 .store
-                .revalidate_human_session_authorization(authorization)
+                .revalidate_room_session_authorization(authorization)
                 .await?;
             if current.principal().invite_scope != InviteScope::ReadWrite {
                 return Err(RoomPreferencesHttpError::read_only());
@@ -232,7 +238,7 @@ async fn consume_directory_ticket(
 }
 
 fn require_bound_room(
-    grant: &RoomHumanHttpAuthority,
+    grant: &RoomSessionHttpAuthority,
     requested_room_id: &str,
 ) -> Result<(), RoomPreferencesHttpError> {
     if preference_room_id(grant) == requested_room_id {
@@ -242,10 +248,10 @@ fn require_bound_room(
     }
 }
 
-fn preference_room_id(grant: &RoomHumanHttpAuthority) -> &str {
+fn preference_room_id(grant: &RoomSessionHttpAuthority) -> &str {
     match grant {
-        RoomHumanHttpAuthority::LocalTicket(grant) => &grant.room_id,
-        RoomHumanHttpAuthority::HumanSession(authorization) => &authorization.principal().room_id,
+        RoomSessionHttpAuthority::LocalTicket(grant) => &grant.room_id,
+        RoomSessionHttpAuthority::Session(authorization) => &authorization.principal().room_id,
     }
 }
 
