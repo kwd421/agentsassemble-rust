@@ -5,6 +5,7 @@ export type RoomAgentSession = AgentSession;
 // Agent Sessions are the room UI's only provider creation path.
 export interface FrontendLiveAgentCreateRequest {
   meetingId: string;
+  sessionId?: string;
   providerId: string;
   catalogRevision?: string;
   displayName: string;

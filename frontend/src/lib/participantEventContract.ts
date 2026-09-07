@@ -512,7 +512,7 @@ export function joinedParticipantFromEvent(event: RoomEvent): RoomMember {
   return participantFromEvent(event, "joined");
 }
 
-export function agentCreationProjectionFromEvent(event: RoomEvent): {
+function detachedAgentProjectionFromEvent(event: RoomEvent): {
   participant: RoomMember;
   agentSession: RoomAgentSession;
 } {
@@ -520,8 +520,8 @@ export function agentCreationProjectionFromEvent(event: RoomEvent): {
   const participant = participantFromEvent(event, "detached");
   const session = exactAgentSession(
     eventRecord.agent_session,
-    "agent_session_created 이벤트에 Agent Session 투영이 없습니다.",
-    "agent_session_created 이벤트의 Agent Session 투영이 올바르지 않습니다."
+    `${event.type} 이벤트에 Agent Session 투영이 없습니다.`,
+    `${event.type} 이벤트의 Agent Session 투영이 올바르지 않습니다.`
   );
   if (
     session.room_id !== event.room_id ||
@@ -529,12 +529,9 @@ export function agentCreationProjectionFromEvent(event: RoomEvent): {
     session.session_id !== session.participant_id ||
     session.participant_id !== event.participant_id ||
     session.participant_id !== participant.participant_id ||
-    session.provider_kind !== eventRecord.provider_kind ||
-    session.display_name !== participant.display_name ||
     session.display_name !== event.display_name ||
     event.participant_type !== "agent" ||
     String(participant.participant_type) !== "agent" ||
-    participant.role !== "agent" ||
     session.status !== "available" ||
     !(
       (session.runtime_status === "stopped" && session.enabled === false) ||
@@ -543,10 +540,61 @@ export function agentCreationProjectionFromEvent(event: RoomEvent): {
     session.external_owned !== false ||
     session.process_ownership !== "server"
   ) {
-    throw new Error("agent_session_created 이벤트의 생성 투영이 올바르지 않습니다.");
+    throw new Error(`${event.type} 이벤트의 Agent Session 투영이 올바르지 않습니다.`);
   }
   return {
     participant,
     agentSession: session as unknown as RoomAgentSession,
   };
+}
+
+export function agentCreationProjectionFromEvent(event: RoomEvent) {
+  const projection = detachedAgentProjectionFromEvent(event);
+  if (
+    projection.agentSession.provider_kind !== event.provider_kind ||
+    projection.agentSession.display_name !== projection.participant.display_name ||
+    projection.participant.role !== "agent"
+  ) throw new Error("agent_session_created 이벤트의 생성 투영이 올바르지 않습니다.");
+  return projection;
+}
+
+export function agentReactivationProjectionFromEvent(event: RoomEvent) {
+  const projection = detachedAgentProjectionFromEvent(event);
+  const session = projection.agentSession;
+  if (
+    session.runtime_status !== "stopped" || session.enabled ||
+    session.recovery_required || session.provider_session_active || session.active_turn_id
+  ) throw new Error("agent_session_reactivated 이벤트의 재추가 투영이 올바르지 않습니다.");
+  return projection;
+}
+
+export function agentReaddAckProjectionsAreCoherent(
+  payload: Record<string, unknown>,
+  result: Record<string, unknown>,
+): boolean {
+  try {
+    if (result.status !== "readded" || !Array.isArray(result.events)) return false;
+    const events = result.events as RoomEvent[];
+    if (!eventProjectionsMatch(result.event, events.at(-1))) return false;
+    if (!(payload.start === true || payload.start_now === true)) {
+      if (events.length !== 1 || events[0].type !== "agent_session_reactivated") return false;
+      const projection = agentReactivationProjectionFromEvent(events[0]);
+      return agentSessionProjectionsMatch(result.agent_session, projection.agentSession) &&
+        participantProjectionsMatch(result.participant, projection.participant);
+    }
+    if (
+      events.length !== 3 || events[0].type !== "participant_joined" ||
+      events[1].type !== "session_attached" || events[2].type !== "agent_session_state" ||
+      events.some((event, index) => event.participant_id !== payload.agent_id ||
+        (index > 0 && event.seq !== events[index - 1].seq + 1))
+    ) return false;
+    const session = exactAgentSession(result.agent_session, "Agent Session", "Agent Session");
+    return session.status === "attached" && session.runtime_status === "idle" &&
+      session.enabled === true && session.provider_session_active === true &&
+      session.recovery_required === false && typeof result.runtime_reused === "boolean" &&
+      participantProjectionsMatch(result.participant, joinedParticipantFromEvent(events[0])) &&
+      agentSessionProjectionsMatch(session, events[2].agent_session);
+  } catch {
+    return false;
+  }
 }

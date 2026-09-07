@@ -129,10 +129,18 @@ export default function AppOverlays({ controller }: { controller: AppController 
           roomLabel={activeRoom.label}
           providers={canonicalRoom.availableProviders}
           catalogRevision={canonicalRoom.providerCatalog.catalog_revision}
+          existingSessions={canonicalRoom.agentSessions}
           onClose={() => setAgentCreateOpen(false)}
           onCreate={async (request) => {
             if (!roomSocket?.ready()) {
               throw new Error("방 연결이 아직 준비되지 않았습니다");
+            }
+            if (request.sessionId) {
+              await roomSocket.command("agent.readd", {
+                agent_id: request.sessionId,
+                start: Boolean(request.startNow),
+              });
+              return;
             }
             await roomSocket.command("agent.create", {
               provider_id: request.providerId,

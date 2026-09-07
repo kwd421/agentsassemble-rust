@@ -58,7 +58,7 @@ impl Drop for LifecycleCommandGuard {
 fn lifecycle_action(action: &str) -> bool {
     matches!(
         action,
-        "agent.create" | "agent.start" | "agent.resume" | "agent.stop"
+        "agent.create" | "agent.start" | "agent.resume" | "agent.readd" | "agent.stop"
     )
 }
 

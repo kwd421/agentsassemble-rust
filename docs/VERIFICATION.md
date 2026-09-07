@@ -6904,3 +6904,19 @@ all-target/all-feature clippy, format, architecture/source-growth, 19 policy/art
 tests and diff checks pass. Whole-phase verification remains pending. Cost is one two-state capability per fourteen catalog entries;
 there is no new process, database state, probe, timer or network request. Re-add,
 full Phase 2 acceptance and Daybreak review remain outstanding.
+
+The re-add vertical slice restores copied stored-session selection and sends one
+`agent.readd` with optional start. Listing-only re-add commits the unchanged stored
+profile and room-owned participant as disabled/available and detached; optional
+start uses the existing lifecycle reservation, exact effect receipt and failure/
+reconciliation owners. Canonical event and ACK projections preserve room role,
+mute and name without treating re-add as fresh creation.
+
+Affected evidence: all 39 existing lifecycle/authority cases passed; all three new
+re-add cases pass, including kicked membership, no-effect listing, exact effect
+completion, conflict, permissions and closed-store reopen replay. The 38 affected
+selector/socket cases, TypeScript/build/original CSS, workspace all-target/all-feature
+Clippy, format, architecture/source-growth, 19 policy/artifact tests and diff checks
+pass. Listing-only re-add performs no provider I/O; one transaction owns membership
+and result. Existing lifecycle concurrency, budget and custody owners are reused.
+TCP/WebSocket/restart integration and whole-phase review remain pending.

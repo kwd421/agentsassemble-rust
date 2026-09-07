@@ -123,6 +123,8 @@ pub enum RoomAction {
     AgentPause,
     #[serde(rename = "agent.interrupt")]
     AgentInterrupt,
+    #[serde(rename = "agent.readd")]
+    AgentReadd,
     #[serde(rename = "agent.resume")]
     AgentResume,
     #[serde(rename = "agent.stop")]
@@ -130,11 +132,12 @@ pub enum RoomAction {
 }
 
 impl RoomAction {
-    pub const ALL: [Self; 18] = [
+    pub const ALL: [Self; 19] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
         Self::AgentPause,
+        Self::AgentReadd,
         Self::AgentResume,
         Self::AgentStart,
         Self::AgentStop,
@@ -170,6 +173,7 @@ impl RoomAction {
             Self::AgentStart => "agent.start",
             Self::AgentInterrupt => "agent.interrupt",
             Self::AgentPause => "agent.pause",
+            Self::AgentReadd => "agent.readd",
             Self::AgentResume => "agent.resume",
             Self::AgentStop => "agent.stop",
         }

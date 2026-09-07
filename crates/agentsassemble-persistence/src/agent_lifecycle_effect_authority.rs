@@ -13,8 +13,6 @@ use crate::{
     authority::active_room_for_principal,
 };
 
-const START: &str = "agent.start";
-const RESUME: &str = "agent.resume";
 const STOP: &str = "agent.stop";
 
 pub(crate) fn authorize_start_effect(
@@ -83,13 +81,7 @@ impl SqliteStore {
         runtime_owner_id: &str,
         runtime_lease_token: &str,
     ) -> Result<AgentStartEffect, PersistenceError> {
-        if !matches!(command_action, START | RESUME) {
-            return Err(rejected(
-                "bad_request",
-                "Provider start authorization has an invalid command action.",
-            ));
-        }
-        let agent_id = payload_agent_id(payload)?;
+        let (agent_id, _) = crate::agent_readd::launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, command_action);
         if operation_id != expected_operation_id {

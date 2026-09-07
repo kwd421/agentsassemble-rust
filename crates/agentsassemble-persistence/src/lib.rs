@@ -9,6 +9,7 @@ mod agent_lifecycle_effect_authority;
 mod agent_lifecycle_events;
 mod agent_lifecycle_reservations;
 mod agent_pause;
+mod agent_readd;
 mod agent_reconciliation;
 mod agent_reconciliation_live;
 mod agent_reconciliation_recovery;

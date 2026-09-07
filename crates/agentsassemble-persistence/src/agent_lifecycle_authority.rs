@@ -9,13 +9,19 @@ use crate::{AgentRuntimeStarted, PersistenceError};
 const AGENT_ID_KEYS: [&str; 3] = ["agent_id", "participant_id", "session_id"];
 
 pub(crate) fn payload_agent_id(payload: &Value) -> Result<String, PersistenceError> {
+    payload_agent_id_with_fields(payload, &[])
+}
+
+pub(crate) fn payload_agent_id_with_fields(
+    payload: &Value,
+    additional_fields: &[&str],
+) -> Result<String, PersistenceError> {
     let object = payload
         .as_object()
         .ok_or_else(|| rejected("payload must be an object."))?;
-    if object
-        .keys()
-        .any(|key| !AGENT_ID_KEYS.contains(&key.as_str()))
-    {
+    if object.keys().any(|key| {
+        !AGENT_ID_KEYS.contains(&key.as_str()) && !additional_fields.contains(&key.as_str())
+    }) {
         return Err(rejected("payload contains an unsupported field."));
     }
     let supplied = AGENT_ID_KEYS

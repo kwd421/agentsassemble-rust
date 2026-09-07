@@ -23,15 +23,14 @@ pub(crate) async fn execute_agent_start(
     {
         return execution;
     }
-    let mut plan = if command.action == RoomAction::AgentResume {
-        store
-            .prepare_agent_resume(&command.principal, &command.request_id, &command.payload)
-            .await
-    } else {
-        store
-            .prepare_agent_start(&command.principal, &command.request_id, &command.payload)
-            .await
-    };
+    let mut plan = store
+        .prepare_agent_launch(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            command.action.as_str(),
+        )
+        .await;
     if plan.as_ref().is_err_and(unconfirmed_effect) {
         plan = match recover_exact_lifecycle_command(
             store,
@@ -44,23 +43,14 @@ pub(crate) async fn execute_agent_start(
         .await
         {
             Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
-                if command.action == RoomAction::AgentResume {
-                    store
-                        .prepare_agent_resume(
-                            &command.principal,
-                            &command.request_id,
-                            &command.payload,
-                        )
-                        .await
-                } else {
-                    store
-                        .prepare_agent_start(
-                            &command.principal,
-                            &command.request_id,
-                            &command.payload,
-                        )
-                        .await
-                }
+                store
+                    .prepare_agent_launch(
+                        &command.principal,
+                        &command.request_id,
+                        &command.payload,
+                        command.action.as_str(),
+                    )
+                    .await
             }
             Ok(LiveRuntimeReconciliation::StillUnresolved) => plan,
             Err(error) => Err(error),
@@ -217,11 +207,6 @@ async fn record_agent_start_pre_effect_failure(
     effect: &AgentStartEffect,
     error: ProviderAdapterError,
 ) -> CommandExecution {
-    let command_action = if command.action == RoomAction::AgentResume {
-        "agent.resume"
-    } else {
-        "agent.start"
-    };
     let commit = store
         .fail_agent_start_before_effect(
             &command.principal,
@@ -230,7 +215,7 @@ async fn record_agent_start_pre_effect_failure(
             &effect.operation_id,
             error.code,
             error.message,
-            command_action,
+            command.action.as_str(),
         )
         .await;
     let commit = match commit {
@@ -253,27 +238,16 @@ async fn complete_agent_start(
     started: ProviderRuntimeStarted,
 ) -> CommandExecution {
     let persisted = persisted_start(started);
-    let outcome = if command.action == RoomAction::AgentResume {
-        store
-            .complete_agent_resume(
-                &command.principal,
-                &command.request_id,
-                &command.payload,
-                &effect.operation_id,
-                &persisted,
-            )
-            .await
-    } else {
-        store
-            .complete_agent_start(
-                &command.principal,
-                &command.request_id,
-                &command.payload,
-                &effect.operation_id,
-                &persisted,
-            )
-            .await
-    };
+    let outcome = store
+        .complete_agent_launch(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            &effect.operation_id,
+            &persisted,
+            command.action.as_str(),
+        )
+        .await;
     match outcome {
         Ok(outcome) => progressed_execution(store, &command.principal.room_id, outcome).await,
         Err(error) => CommandExecution::unresolved_failure(error),
@@ -310,29 +284,17 @@ async fn record_agent_start_failure(
             events,
         );
     }
-    let commit = if command.action == RoomAction::AgentResume {
-        store
-            .fail_agent_resume(
-                &command.principal,
-                &command.request_id,
-                &command.payload,
-                &effect.operation_id,
-                error.code,
-                error.message,
-            )
-            .await
-    } else {
-        store
-            .fail_agent_start(
-                &command.principal,
-                &command.request_id,
-                &command.payload,
-                &effect.operation_id,
-                error.code,
-                error.message,
-            )
-            .await
-    };
+    let commit = store
+        .fail_agent_launch(
+            &command.principal,
+            &command.request_id,
+            &command.payload,
+            &effect.operation_id,
+            error.code,
+            error.message,
+            command.action.as_str(),
+        )
+        .await;
     let commit = match commit {
         Ok(commit) => commit,
         Err(recording_error) => return CommandExecution::unresolved_failure(recording_error),

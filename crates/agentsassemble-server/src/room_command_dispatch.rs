@@ -49,7 +49,7 @@ pub(crate) async fn execute_command(
         RoomAction::AgentInterrupt => {
             execute_agent_interrupt(store, provider_adapter, command).await
         }
-        RoomAction::AgentStart | RoomAction::AgentResume => {
+        RoomAction::AgentStart | RoomAction::AgentResume | RoomAction::AgentReadd => {
             crate::room_agent_lifecycle_runtime::execute_agent_start(
                 store,
                 provider_adapter,

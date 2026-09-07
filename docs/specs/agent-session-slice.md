@@ -422,6 +422,12 @@ their verified owners and are revalidated, not rewritten.
   sends no second start command and fabricates no participant/session transition.
   Launch success alone joins the participant. Failed/uncertain launch remains
   visible and cannot cause duplicate provider starts on replay.
+- Listing-only re-add validates the strict stored schema/version and confirmed inactive
+  custody, without executing or rediscovering the provider. It restores membership,
+  not a claim that the stored runtime is launchable. Every actual launch uses the
+  existing provider registration/profile hash/workspace/executable revalidation and
+  exposes unsupported stored authority as a failure. A confirmed failed launch can
+  be explicitly retried with a fresh request; an unresolved effect cannot.
 - Stored profiles remain strict; no catalog substitution, model fallback, new
   process manager, compatibility conversion, schema migration or polling is in
   scope. Existing server access, admission/budget and lifecycle gates apply.

@@ -8,6 +8,7 @@ import { resolveAttachmentReference } from "./attachmentReference";
 import { isParticipantRole } from "./participantRole";
 import {
   agentCreationProjectionFromEvent,
+  agentReactivationProjectionFromEvent,
   joinedParticipantFromEvent,
 } from "./participantEventContract";
 
@@ -132,6 +133,9 @@ export function agentSessionUpdatesFromEvents(
     if (event.type === "agent_session_created") {
       return [agentCreationProjectionFromEvent(event).agentSession];
     }
+    if (event.type === "agent_session_reactivated") {
+      return [agentReactivationProjectionFromEvent(event).agentSession];
+    }
     return [];
   });
 }
@@ -172,6 +176,11 @@ export function applyParticipantEvents(
     if (event.type === "agent_session_created") {
       const created = agentCreationProjectionFromEvent(event).participant;
       byId.set(participantId, created);
+      changed = true;
+      continue;
+    }
+    if (event.type === "agent_session_reactivated") {
+      byId.set(participantId, agentReactivationProjectionFromEvent(event).participant);
       changed = true;
       continue;
     }

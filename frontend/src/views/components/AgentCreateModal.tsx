@@ -5,6 +5,7 @@ import {
   fetchProviderCredentialStatus,
   setProviderCredential,
   type FrontendLiveAgentCreateRequest,
+  type RoomAgentSession,
   type ProviderCredentialStatus,
 } from "../../api";
 import type { NativeCliProviderAvailability, ProviderControl } from "../../roomSocketClient";
@@ -38,6 +39,7 @@ type AgentCreateModalProps = {
   meetingId: string;
   roomLabel: string;
   providers: NativeCliProviderAvailability[];
+  existingSessions?: RoomAgentSession[];
   catalogRevision?: string;
   onClose: () => void;
   onCreate: (request: FrontendLiveAgentCreateRequest) => Promise<void>;
@@ -49,6 +51,7 @@ export default function AgentCreateModal({
   meetingId,
   roomLabel,
   providers,
+  existingSessions = [],
   catalogRevision = "",
   onClose,
   onCreate,
@@ -58,6 +61,7 @@ export default function AgentCreateModal({
     "harness"
   );
   const [providerId, setProviderId] = useState("");
+  const [existingSessionId, setExistingSessionId] = useState("");
   const [displayName, setDisplayName] = useState("");
   const [displayNameEdited, setDisplayNameEdited] = useState(false);
   const [workspacePath, setWorkspacePath] = useState("");
@@ -75,6 +79,13 @@ export default function AgentCreateModal({
   const groupedProviders = projectProvidersByCatalogGroup(providers);
   const visibleProviders = providerGroup ? groupedProviders[providerGroup] : [];
   const selectedProvider = visibleProviders.find((provider) => provider.id === providerId);
+  const reusableSessions = existingSessions.filter((session) =>
+    session.room_id === meetingId && !session.external_owned && session.process_ownership === "server" &&
+    session.provider_kind === selectedProvider?.provider_kind &&
+    ["stopped", "error"].includes(session.runtime_status) && !session.enabled &&
+    !session.recovery_required && !session.provider_session_active && !session.active_turn_id
+  );
+  const existingSession = reusableSessions.find((session) => session.session_id === existingSessionId);
   const workspaceRequired = Boolean(
     selectedProvider && (
       selectedProvider.workspace_required ||
@@ -82,7 +93,7 @@ export default function AgentCreateModal({
     )
   );
   const selectedProviderMissing = Boolean(providerId && providers.length && !selectedProvider);
-  const invalidControl = !selectedProvider
+  const invalidControl = existingSessionId || !selectedProvider
     ? undefined
     : selectedProvider.controls.find((control) =>
         !effectiveProviderControlOptions(selectedProvider, control, settings).some(
@@ -90,15 +101,14 @@ export default function AgentCreateModal({
         )
       );
   const canCreate = Boolean(
-    meetingId &&
-      selectedProvider &&
-      catalogRevision &&
-      selectedProvider.startable &&
-      !invalidControl &&
-      displayName.trim() &&
-      (!selectedProvider.custom_endpoint || customEndpoint.trim()) &&
-      (!selectedProvider.custom_model || customModel.trim()) &&
-      (!workspaceRequired || workspacePath.trim())
+    meetingId && selectedProvider && (
+      existingSessionId
+        ? existingSession && (!startNow || selectedProvider.startable)
+        : catalogRevision && selectedProvider.startable && !invalidControl && displayName.trim() &&
+          (!selectedProvider.custom_endpoint || customEndpoint.trim()) &&
+          (!selectedProvider.custom_model || customModel.trim()) &&
+          (!workspaceRequired || workspacePath.trim())
+    )
   );
   const statusMessage = deriveAgentCreateStatus({
     status,
@@ -107,12 +117,13 @@ export default function AgentCreateModal({
     selectedProviderMissing,
     hasProviders: providers.length > 0,
     invalidControl,
-    workspaceRequired,
+    workspaceRequired: !existingSessionId && workspaceRequired,
   });
 
   useEffect(() => {
     if (!open) {
       wasOpen.current = false;
+      setExistingSessionId("");
       setCustomEndpoint("");
       setCustomModel("");
       setPersonaCardId("");
@@ -129,16 +140,16 @@ export default function AgentCreateModal({
       wasOpen.current = true;
       return;
     }
-    if (current) {
+    if (current && !existingSessionId) {
       setSettings((previous) => reconcileProviderSettings(current, previous));
     }
     wasOpen.current = true;
-  }, [open, providers, providerGroup, providerId]);
+  }, [open, providers, providerGroup, providerId, existingSessionId]);
 
   useEffect(() => {
-    if (!open || !selectedProvider || displayNameEdited) return;
+    if (!open || !selectedProvider || existingSessionId || displayNameEdited) return;
     setDisplayName(defaultAgentDisplayName(selectedProvider, settings));
-  }, [displayNameEdited, open, selectedProvider, settings]);
+  }, [displayNameEdited, existingSessionId, open, selectedProvider, settings]);
 
   useEffect(() => {
     if (
@@ -157,6 +168,7 @@ export default function AgentCreateModal({
   }, [open, selectedProvider?.id, selectedProvider?.credential_available]);
 
   function applyProvider(provider: NativeCliProviderAvailability) {
+    setExistingSessionId("");
     const initialSettings = initializeProviderSettings(provider);
     setProviderGroup(providerCatalogGroup(provider));
     setProviderId(provider.id);
@@ -170,6 +182,7 @@ export default function AgentCreateModal({
   }
 
   function chooseProviderGroup(group: ProviderCatalogGroup) {
+    setExistingSessionId("");
     setProviderGroup(group);
     setProviderId("");
     setDisplayName("");
@@ -179,6 +192,26 @@ export default function AgentCreateModal({
     setCustomModel("");
     setPersonaCardId("");
     setStartNow(false);
+    setStatus("");
+  }
+
+  function applyExistingSession(sessionId: string) {
+    const session = reusableSessions.find((item) => item.session_id === sessionId);
+    if (!session) {
+      if (selectedProvider) applyProvider(selectedProvider);
+      return;
+    }
+    setExistingSessionId(sessionId);
+    setDisplayName(session.display_name);
+    setDisplayNameEdited(true);
+    setSettings({
+      model: session.model,
+      reasoning_effort: session.reasoning_effort,
+      service_tier: session.service_tier,
+      variant: session.variant,
+      permission_mode: session.permission_mode,
+      max_output_tokens: String(session.max_output_tokens),
+    });
     setStatus("");
   }
 
@@ -212,6 +245,7 @@ export default function AgentCreateModal({
     try {
       await onCreate({
         meetingId,
+        sessionId: existingSessionId || undefined,
         providerId: selectedProvider.id,
         catalogRevision,
         displayName,
@@ -375,9 +409,27 @@ export default function AgentCreateModal({
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">기본 정보</p>
               <div className="dc-agent-field-grid">
+              {reusableSessions.length > 0 && (
+                <label className="dc-agent-field">
+                  <span>기존 세션</span>
+                  <ProviderControlSelect
+                    label="기존 세션"
+                    options={[
+                      { value: "", label: "새 세션 만들기" },
+                      ...reusableSessions.map((session) => ({
+                        value: session.session_id,
+                        label: `${session.display_name} · ${session.model || session.provider_kind}`,
+                      })),
+                    ]}
+                    value={existingSessionId}
+                    onChange={applyExistingSession}
+                  />
+                </label>
+              )}
               <label className="dc-agent-field">
                 <span>표시 이름</span>
                 <input
+                  disabled={Boolean(existingSessionId)}
                   value={displayName}
                   placeholder="방에 표시될 이름"
                   onChange={(event) => {
@@ -386,7 +438,7 @@ export default function AgentCreateModal({
                   }}
                 />
               </label>
-              {workspaceRequired && (
+              {!existingSessionId && workspaceRequired && (
                 <WorkspacePickerField
                   value={workspacePath}
                   description={
@@ -402,7 +454,7 @@ export default function AgentCreateModal({
             </section>
           )}
 
-          {selectedProvider?.custom_endpoint && (
+          {selectedProvider?.custom_endpoint && !existingSessionId && (
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">API 연결</p>
               <div className="dc-agent-field-grid dc-agent-field-grid--dual">
@@ -455,13 +507,15 @@ export default function AgentCreateModal({
                     <ProviderControlField
                       key={`${selectedProvider.id}:${control.key}`}
                       control={control}
-                      options={options}
+                      options={existingSessionId
+                        ? [{ value: settings[control.key] ?? "", label: settings[control.key] || "미설정" }]
+                        : options}
                       value={
-                        providerSupportsControl
+                        existingSessionId ? settings[control.key] ?? "" : providerSupportsControl
                           ? settings[control.key] ?? control.default_value
                           : control.default_value
                       }
-                      disabled={!providerSupportsControl}
+                      disabled={Boolean(existingSessionId) || !providerSupportsControl}
                       onChange={(value) => updateProviderControl(control.key, value)}
                     />
                   );
@@ -482,7 +536,7 @@ export default function AgentCreateModal({
             />
           )}
 
-          {selectedProvider &&
+          {selectedProvider && !existingSessionId &&
             ["api", "local"].includes(providerCatalogGroup(selectedProvider)) && (
               <section className="dc-agent-section">
                 <AgentPersonaPicker value={personaCardId} onChange={setPersonaCardId} />

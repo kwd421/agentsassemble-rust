@@ -448,6 +448,11 @@ fn payload_session_id<'a>(
             Err(invalid_stored_authority())
         };
     }
+    if action == crate::agent_readd::READD {
+        return crate::agent_readd::launch_payload(payload, action)
+            .map(|(id, _)| id)
+            .map_err(|_| invalid_stored_authority());
+    }
     payload_agent_id(payload).map_err(|_| invalid_stored_authority())
 }
 
@@ -460,7 +465,7 @@ fn reservation_matches_intent(reservation: &Value, intent_action: &str) -> bool 
         ),
         (
             "start",
-            Some("agent.start" | "agent.resume"),
+            Some("agent.start" | "agent.resume" | "agent.readd"),
             Some("lifecycle_prepared")
         ) | ("start", Some("agent.create"), Some("creation_committed"))
             | ("stop", Some("agent.stop"), Some("lifecycle_prepared"))

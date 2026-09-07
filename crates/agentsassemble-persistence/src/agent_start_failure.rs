@@ -8,7 +8,7 @@ use serde_json::Value;
 use crate::{
     AgentLaunchFailureCommit, PersistenceError, SqliteStore,
     agent_lifecycle::{clear_intent, load_session, save_session},
-    agent_lifecycle_authority::{payload_agent_id, require_intent},
+    agent_lifecycle_authority::require_intent,
     agent_lifecycle_events::{append_error_event, append_state_event},
     agent_lifecycle_reservations::{LifecycleReservation, reject_lifecycle_command},
     authority::active_room_for_principal,
@@ -35,7 +35,7 @@ impl SqliteStore {
         message: &str,
         command_action: &'static str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
-        let agent_id = payload_agent_id(payload)?;
+        let (agent_id, _) = crate::agent_readd::launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         self.fail_agent_launch_before_effect_command(
             principal,
@@ -136,8 +136,12 @@ impl SqliteStore {
         .await
     }
 
+    /// Commits a definitive launch rejection under its original action and payload.
+    ///
+    /// # Errors
+    /// Returns malformed input, stale custody or persistence failure.
     #[allow(clippy::too_many_arguments)]
-    async fn fail_agent_launch(
+    pub async fn fail_agent_launch(
         &self,
         principal: &AuthenticatedPrincipal,
         request_id: &str,
@@ -147,7 +151,7 @@ impl SqliteStore {
         message: &str,
         command_action: &'static str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
-        let agent_id = payload_agent_id(payload)?;
+        let (agent_id, _) = crate::agent_readd::launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         self.fail_agent_launch_command(
             principal,

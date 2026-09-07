@@ -1,5 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import { RoomSocketSayError } from "./roomSocketClient";
+import { commandAckResultIsValid } from "./lib/roomSocketValidation";
+import { applyParticipantEvents, agentSessionUpdatesFromEvents } from "./lib/canonicalRoomProjection";
+import type { RoomEvent } from "./api";
 import { agentSessionFixture } from "./test/agentSession";
 import {
   event,
@@ -133,6 +136,32 @@ function creationStartRecords() {
 }
 
 describe("Agent Session socket contract", () => {
+  it("projects re-added membership without overwriting room role, mute or name and rejects mismatched ACKs", () => {
+    const { participant, session, createdEvent } = creationRecords();
+    const restored = { ...participant, display_name: "Room name", role: "director", muted: true };
+    const reactivated = { ...createdEvent, type: "agent_session_reactivated", participant: restored };
+    const result = { status: "readded", participant: restored, agent_session: session,
+      events: [reactivated], event: reactivated, event_seq: reactivated.seq };
+    const valid = (candidate: unknown) => commandAckResultIsValid("agent.readd",
+      { agent_id: session.session_id, start: false }, candidate, "general", "operator-local");
+    expect(valid(result)).toBe(true);
+    expect(valid({ ...result, participant: { ...restored, muted: false } })).toBe(false);
+    expect(valid({ ...result, agent_session: { ...session, enabled: true } })).toBe(false);
+    expect(applyParticipantEvents([], [reactivated as unknown as RoomEvent])).toEqual([restored]);
+    expect(agentSessionUpdatesFromEvents([reactivated as unknown as RoomEvent])).toEqual([session]);
+  });
+
+  it("accepts only the joined and attached final projection for re-add with start", () => {
+    const { start } = creationStartRecords();
+    const participant = (start.events[0] as unknown as { participant: unknown }).participant;
+    const result = { ...start, status: "readded", participant, event_seq: start.event.seq };
+    const valid = (candidate: unknown) => commandAckResultIsValid("agent.readd",
+      { agent_id: "agent-created", start: true }, candidate, "general", "operator-local");
+    expect(valid(result)).toBe(true);
+    expect(valid({ ...result, events: start.events.slice(1) })).toBe(false);
+    expect(valid({ ...result, agent_session: { ...start.agent_session, runtime_status: "stopped" } })).toBe(false);
+  });
+
   it("rejects a state event without its participant binding", async () => {
     const errors: RoomSocketSayError[] = [];
     const { handle, sockets } = await openReadyHarness(errors);

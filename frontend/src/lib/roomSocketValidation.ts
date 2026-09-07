@@ -9,6 +9,8 @@ import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 import {
   agentCreateAckProjectionsAreCoherent,
   agentCreationProjectionFromEvent,
+  agentReactivationProjectionFromEvent,
+  agentReaddAckProjectionsAreCoherent,
   agentSessionIsValid,
   agentSessionStateProjectionIsCoherent,
   joinedParticipantFromEvent,
@@ -165,6 +167,7 @@ export function eventProjectionIsValid(event: RoomEvent): boolean {
     }
     if (event.type === "participant_joined") joinedParticipantFromEvent(event);
     if (event.type === "agent_session_created") agentCreationProjectionFromEvent(event);
+    if (event.type === "agent_session_reactivated") agentReactivationProjectionFromEvent(event);
     if (
       event.type === "agent_session_state" &&
       !agentSessionStateProjectionIsCoherent(event)
@@ -386,7 +389,13 @@ export function commandAckResultIsValid(
       return agentCreateAckProjectionsAreCoherent(payload, result);
     }
     const expectedAgentId = String(payload.agent_id || "");
-    return agentSessionIsValid(result.agent_session, expectedRoomId, expectedAgentId);
+    if (!agentSessionIsValid(result.agent_session, expectedRoomId, expectedAgentId)) return false;
+    if (action === "agent.readd") {
+      return hasDurableEvent && Array.isArray(result.events) &&
+        result.events.every((candidate) => publicRoomEventIsValid(candidate, expectedRoomId)) &&
+        agentReaddAckProjectionsAreCoherent(payload, result);
+    }
+    return true;
   }
   if (action === "room.vote.summary") {
     return voteSummaryResultIsValid(payload, result);

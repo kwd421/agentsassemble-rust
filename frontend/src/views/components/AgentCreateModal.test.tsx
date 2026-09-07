@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AgentCreateModal from "./AgentCreateModal";
+import { agentSessionFixture } from "../../test/agentSession";
 import {
   cerebrasProvider,
   claudeProvider,
@@ -47,6 +48,23 @@ beforeEach(() => {
 });
 
 describe("AgentCreateModal", () => {
+  it("explicitly re-adds a stored session without replacing its profile or asking for a new workspace", async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined);
+    render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
+      providers={[codexProvider()]} onClose={() => {}} onCreate={onCreate}
+      existingSessions={[agentSessionFixture({ room_id: "room-a", session_id: "stored-codex",
+        display_name: "Stored Codex", model: "stored-model" })]} />);
+    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    await chooseProviderControl("기존 세션", "Stored Codex · stored-model");
+    expect((screen.getByPlaceholderText("방에 표시될 이름") as HTMLInputElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole("switch", { name: "추가하자마자 실행" }));
+    await userEvent.click(primaryActionButton());
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "stored-codex", modelId: "stored-model", startNow: false,
+    })));
+    expect(apiMocks.chooseLocalWorkspace).not.toHaveBeenCalled();
+  });
+
   it("submits only a server-catalog model value selected from a dropdown", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     render(

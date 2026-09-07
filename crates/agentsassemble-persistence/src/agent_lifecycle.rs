@@ -11,10 +11,11 @@ use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
     agent_launch_events::commit_launch_result,
     agent_lifecycle_authority::{
-        authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id, payload_agent_id,
-        require_intent, require_matching_operation, validate_runtime_started,
+        authorize_control, lifecycle_intent_is_empty, lifecycle_operation_id, require_intent,
+        require_matching_operation, validate_runtime_started,
     },
     agent_lifecycle_reservations::{LifecycleReservation, finish_lifecycle_command},
+    agent_readd::{READD, commit_readd_listing, launch_payload, require_readdable},
     agent_session_rows::{load_optional_agent_session_row, update_agent_session_row},
     authority::active_room_for_principal,
     command_admission::existing_command,
@@ -98,7 +99,11 @@ impl SqliteStore {
             .await
     }
 
-    async fn prepare_agent_launch(
+    /// Prepares a start, resume, or optional-start re-add under its exact command identity.
+    ///
+    /// # Errors
+    /// Returns authorization, payload, replay, inactive-custody, or storage failures.
+    pub async fn prepare_agent_launch(
         &self,
         principal: &AuthenticatedPrincipal,
         request_id: &str,
@@ -106,7 +111,7 @@ impl SqliteStore {
         command_action: &'static str,
     ) -> Result<AgentStartPlan, PersistenceError> {
         authorize_control(principal)?;
-        let agent_id = payload_agent_id(payload)?;
+        let (agent_id, start_requested) = launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let operation_id = lifecycle_operation_id(principal, request_id, command_action);
         let mut transaction = self.pool.begin().await?;
@@ -136,8 +141,9 @@ impl SqliteStore {
             .await?;
         let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
-        let participant = load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
-        if participant.status == ParticipantStatus::Kicked {
+        let mut participant =
+            load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
+        if command_action != READD && participant.status == ParticipantStatus::Kicked {
             return Err(rejected(
                 "participant_kicked",
                 "This agent was removed from the room and cannot be started.",
@@ -150,31 +156,27 @@ impl SqliteStore {
             ));
         }
         let incomplete = matching_start_intent(&mut session, &operation_id)?;
-        let operation_id = if incomplete {
-            save_session(&mut transaction, &session).await?;
-            operation_id
-        } else {
-            session.public.status = AgentSessionStatus::Available;
-            session.public.enabled = true;
-            if !matches!(
-                session.public.runtime_status,
-                AgentRuntimeStatus::Starting
-                    | AgentRuntimeStatus::Idle
-                    | AgentRuntimeStatus::Busy
-                    | AgentRuntimeStatus::Paused
-            ) {
-                session.public.runtime_status = AgentRuntimeStatus::Starting;
-            }
-            session.public.last_error.clear();
-            session.public.last_error_code.clear();
-            session.public.recovery_required = false;
-            session.lifecycle_intent_action = AgentLifecycleAction::Start;
-            session.lifecycle_intent_id.clone_from(&operation_id);
-            session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
-            session.public.updated_at = Utc::now();
-            save_session(&mut transaction, &session).await?;
-            operation_id
-        };
+        if command_action == READD && !incomplete {
+            require_readdable(&session, &participant)?;
+        }
+        if !start_requested {
+            finish_lifecycle_command(&mut transaction, &reservation).await?;
+            let outcome = commit_readd_listing(
+                &mut transaction,
+                principal,
+                request_id,
+                payload_hash,
+                &mut session,
+                &mut participant,
+            )
+            .await?;
+            transaction.commit().await?;
+            return Ok(AgentStartPlan::Outcome(Box::new(outcome)));
+        }
+        if !incomplete {
+            prepare_launch_session(&mut session, &operation_id);
+        }
+        save_session(&mut transaction, &session).await?;
         transaction.commit().await?;
         Ok(AgentStartPlan::Start(Box::new(AgentStartEffect {
             operation_id,
@@ -223,7 +225,11 @@ impl SqliteStore {
         .await
     }
 
-    async fn complete_agent_launch(
+    /// Commits an exact start, resume or re-add launch receipt and command result.
+    ///
+    /// # Errors
+    /// Returns malformed payload, stale effect, authority or storage failures.
+    pub async fn complete_agent_launch(
         &self,
         principal: &AuthenticatedPrincipal,
         request_id: &str,
@@ -232,7 +238,7 @@ impl SqliteStore {
         started: &AgentRuntimeStarted,
         command_action: &'static str,
     ) -> Result<CommandOutcome, PersistenceError> {
-        let agent_id = payload_agent_id(payload)?;
+        let (agent_id, _) = launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, command_action);
         if operation_id != expected_operation_id {
@@ -297,6 +303,27 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(outcome)
     }
+}
+
+fn prepare_launch_session(session: &mut DurableAgentSession, operation_id: &str) {
+    session.public.status = AgentSessionStatus::Available;
+    session.public.enabled = true;
+    if !matches!(
+        session.public.runtime_status,
+        AgentRuntimeStatus::Starting
+            | AgentRuntimeStatus::Idle
+            | AgentRuntimeStatus::Busy
+            | AgentRuntimeStatus::Paused
+    ) {
+        session.public.runtime_status = AgentRuntimeStatus::Starting;
+    }
+    session.public.last_error.clear();
+    session.public.last_error_code.clear();
+    session.public.recovery_required = false;
+    session.lifecycle_intent_action = AgentLifecycleAction::Start;
+    operation_id.clone_into(&mut session.lifecycle_intent_id);
+    session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
+    session.public.updated_at = Utc::now();
 }
 
 fn matching_start_intent(
@@ -497,3 +524,7 @@ mod resume_tests;
 #[cfg(test)]
 #[path = "agent_turn_recovery_tests.rs"]
 mod turn_recovery_tests;
+
+#[cfg(test)]
+#[path = "agent_readd_tests.rs"]
+mod readd_tests;
