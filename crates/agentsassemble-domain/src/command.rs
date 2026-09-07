@@ -13,6 +13,9 @@ use crate::{
     ParticipantStatus, RoomEvent, is_message_attachment_id,
 };
 
+/// Accepted identity keys for an Agent Session lifecycle command. Exactly one is required.
+pub const AGENT_CONTROL_ID_KEYS: [&str; 3] = ["agent_id", "participant_id", "session_id"];
+
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error("{message}")]
 pub struct CommandRejection {

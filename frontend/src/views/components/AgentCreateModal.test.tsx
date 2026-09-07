@@ -65,6 +65,24 @@ describe("AgentCreateModal", () => {
     expect(apiMocks.chooseLocalWorkspace).not.toHaveBeenCalled();
   });
 
+  it("allows listing a stored session when its provider is unavailable while keeping launch and creation disabled", async () => {
+    const onCreate = vi.fn().mockResolvedValue(undefined);
+    render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
+      providers={[{ ...codexProvider(), available: false, startable: false, controls: [],
+        discovery_status: "failed", discovery_error: "Provider executable unavailable" }]}
+      onClose={() => {}} onCreate={onCreate}
+      existingSessions={[agentSessionFixture({ room_id: "room-a", session_id: "stored-offline",
+        display_name: "Offline Codex", model: "stored-model" })]} />);
+    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    expect((primaryActionButton() as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByRole("switch", { name: "추가하자마자 실행" }) as HTMLButtonElement).disabled).toBe(true);
+    await chooseProviderControl("기존 세션", "Offline Codex · stored-model");
+    await userEvent.click(primaryActionButton());
+    await waitFor(() => expect(onCreate).toHaveBeenCalledWith(expect.objectContaining({
+      sessionId: "stored-offline", startNow: false,
+    })));
+  });
+
   it("submits only a server-catalog model value selected from a dropdown", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     render(

@@ -393,14 +393,24 @@ pub(crate) async fn load_session(
     room_id: &str,
     session_id: &str,
 ) -> Result<DurableAgentSession, PersistenceError> {
-    load_optional_agent_session_row(transaction, room_id, session_id)
+    let session = load_optional_agent_session_row(transaction, room_id, session_id)
         .await?
         .ok_or_else(|| {
             rejected(
                 "not_found",
                 format!("Agent session {session_id} was not found."),
             )
-        })
+        })?;
+    if session.public.room_id != room_id
+        || session.public.session_id != session_id
+        || session.public.participant_id != session_id
+    {
+        return Err(rejected(
+            "stored_agent_identity_invalid",
+            "Stored Agent Session identity differs from its row.",
+        ));
+    }
+    Ok(session)
 }
 
 pub(crate) async fn save_session(
@@ -427,7 +437,14 @@ pub(crate) async fn load_participant(
     .fetch_optional(&mut **transaction)
     .await?
     .ok_or(PersistenceError::ParticipantMissing)?;
-    Ok(serde_json::from_str(&encoded)?)
+    let participant: Participant = serde_json::from_str(&encoded)?;
+    if participant.room_id != room_id || participant.participant_id != participant_id {
+        return Err(rejected(
+            "stored_agent_identity_invalid",
+            "Stored participant identity differs from its row.",
+        ));
+    }
+    Ok(participant)
 }
 
 pub(crate) async fn save_participant(

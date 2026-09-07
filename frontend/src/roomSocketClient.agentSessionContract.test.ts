@@ -145,6 +145,7 @@ describe("Agent Session socket contract", () => {
     const valid = (candidate: unknown) => commandAckResultIsValid("agent.readd",
       { agent_id: session.session_id, start: false }, candidate, "general", "operator-local");
     expect(valid(result)).toBe(true);
+    expect(valid({ ...result, event_seq: undefined })).toBe(false);
     expect(valid({ ...result, participant: { ...restored, muted: false } })).toBe(false);
     expect(valid({ ...result, agent_session: { ...session, enabled: true } })).toBe(false);
     expect(applyParticipantEvents([], [reactivated as unknown as RoomEvent])).toEqual([restored]);
@@ -160,6 +161,50 @@ describe("Agent Session socket contract", () => {
     expect(valid(result)).toBe(true);
     expect(valid({ ...result, events: start.events.slice(1) })).toBe(false);
     expect(valid({ ...result, agent_session: { ...start.agent_session, runtime_status: "stopped" } })).toBe(false);
+  });
+
+  it.each(["agent_id", "participant_id", "session_id"])("binds listing and started re-add ACKs to the requested %s", (key) => {
+    const { participant, session, createdEvent } = creationRecords();
+    const event = { ...createdEvent, type: "agent_session_reactivated" };
+    const listing = { status: "readded", participant, agent_session: session,
+      events: [event], event, event_seq: event.seq };
+    const { start } = creationStartRecords();
+    const started = { ...start, status: "readded", event_seq: start.event.seq,
+      participant: (start.events[0] as unknown as { participant: unknown }).participant };
+    for (const [startRequested, result] of [[false, listing], [true, started]] as const) {
+      const valid = (payload: Record<string, unknown>) => commandAckResultIsValid("agent.readd",
+        { ...payload, start: startRequested }, result, "general", "operator-local");
+      expect(valid({ [key]: session.session_id })).toBe(true);
+      expect(valid({ [key]: "another-session" })).toBe(false);
+      expect(valid({})).toBe(false);
+      expect(valid({ [key]: "" })).toBe(false);
+      expect(valid({ agent_id: session.session_id, session_id: session.session_id })).toBe(false);
+    }
+  });
+
+  it.each([false, true])("resolves complete re-add socket ACKs including deduplicated responses with start=%s", async (startRequested) => {
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = await openReadyHarness(errors);
+    const { participant, session, createdEvent } = creationRecords();
+    const reactivated = { ...createdEvent, type: "agent_session_reactivated" };
+    const { start } = creationStartRecords();
+    const result = startRequested
+      ? { ...start, status: "readded", event_seq: start.event.seq,
+          participant: (start.events[0] as unknown as { participant: unknown }).participant }
+      : { status: "readded", participant, agent_session: session,
+          events: [reactivated], event: reactivated, event_seq: reactivated.seq };
+    for (const deduplicated of [false, true]) {
+      const sentCount = sockets[0].sent.length;
+      const pending = handle.command("agent.readd", { agent_id: session.session_id, start: startRequested });
+      await vi.waitFor(() => expect(sockets[0].sent.length).toBe(sentCount + 1));
+      const command = sentClientFrame(sockets[0], sentCount);
+      receiveServerFrame(sockets[0], { op: "ack", accepted: true, resolution: "committed",
+        request_id: command.request_id, action: "agent.readd", deduplicated, result });
+      await expect(pending).resolves.toMatchObject({ result });
+      expect(handle.ready()).toBe(true);
+    }
+    expect(errors).toEqual([]);
+    handle.close();
   });
 
   it("rejects a state event without its participant binding", async () => {

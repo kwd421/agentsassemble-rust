@@ -191,3 +191,61 @@ async fn readd_rejects_untrusted_flags_and_missing_control_authority()
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn readd_rejects_cross_bound_stored_identity_before_mutation()
+-> Result<(), Box<dyn std::error::Error>> {
+    for start in [false, true] {
+        for (participant_row, field) in [
+            (false, "room_id"),
+            (false, "session_id"),
+            (false, "participant_id"),
+            (true, "room_id"),
+            (true, "participant_id"),
+        ] {
+            let (store, principal, _directory) = fixture().await;
+            let (update, read) = if participant_row {
+                (
+                    "UPDATE participants SET participant_json = json_set(participant_json, ?, 'foreign-id') WHERE room_id = 'general' AND participant_id = ?",
+                    "SELECT participant_json FROM participants WHERE room_id = 'general' AND participant_id = ?",
+                )
+            } else {
+                (
+                    "UPDATE agent_sessions SET session_json = json_set(session_json, ?, 'foreign-id') WHERE room_id = 'general' AND session_id = ?",
+                    "SELECT session_json FROM agent_sessions WHERE room_id = 'general' AND session_id = ?",
+                )
+            };
+            sqlx::query(update)
+                .bind(format!("$.{field}"))
+                .bind(AGENT_ID)
+                .execute(&store.pool)
+                .await?;
+            let before: String = sqlx::query_scalar(read)
+                .bind(AGENT_ID)
+                .fetch_one(&store.pool)
+                .await?;
+            assert!(matches!(
+                store
+                    .prepare_agent_launch(
+                        &principal,
+                        "corrupt-readd",
+                        &json!({"agent_id": AGENT_ID, "start": start}),
+                        "agent.readd"
+                    )
+                    .await,
+                Err(PersistenceError::CommandRejected {
+                    code: "stored_agent_identity_invalid",
+                    ..
+                })
+            ));
+            let after: String = sqlx::query_scalar(read)
+                .bind(AGENT_ID)
+                .fetch_one(&store.pool)
+                .await?;
+            assert_eq!(before, after);
+            let effects: i64 = sqlx::query_scalar("SELECT count(*) FROM lifecycle_command_reservations WHERE request_id = 'corrupt-readd'").fetch_one(&store.pool).await?;
+            assert_eq!(effects, 0);
+        }
+    }
+    Ok(())
+}

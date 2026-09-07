@@ -156,7 +156,7 @@ async fn load_interruptible_session(
     let session = load_session(transaction, room_id, agent_id).await?;
     let participant =
         load_participant(transaction, room_id, &session.public.participant_id).await?;
-    require_busy_session(&session, &participant, agent_id)?;
+    require_busy_session(&session, &participant)?;
     let execution =
         load_execution_in(transaction, room_id, agent_id, session.turn_generation).await?;
     if load_optional_effect_in(transaction, room_id, agent_id, session.turn_generation)
@@ -175,17 +175,12 @@ async fn load_interruptible_session(
 fn require_busy_session(
     session: &DurableAgentSession,
     participant: &agentsassemble_domain::Participant,
-    agent_id: &str,
 ) -> Result<(), PersistenceError> {
-    if session.public.session_id != agent_id
-        || session.public.participant_id != agent_id
-        || session.public.status != AgentSessionStatus::Attached
+    if session.public.status != AgentSessionStatus::Attached
         || session.public.runtime_status != AgentRuntimeStatus::Busy
         || !session.public.enabled
         || !session.public.provider_session_active
         || session.provider_session_id.is_empty()
-        || participant.room_id != session.public.room_id
-        || participant.participant_id != agent_id
         || participant.status != ParticipantStatus::Joined
         || participant.muted
     {

@@ -20,7 +20,8 @@
   contract. [Disposition and verification](docs/VERIFICATION.md#completed-pro-review-corrections-2026-09-07).
 - Active: Phase 2 local implementation and affected verification are complete.
   Stored-session re-add and provider-owned interrupt advertisement preserve existing
-  pause/resume/stop and exact native interrupt; complete Daybreak review is pending. [Contract](docs/specs/agent-session-slice.md#phase-2-exact-controls-and-re-add).
+  pause/resume/stop and exact native interrupt. Daybreak found C0/H1/M3/L0;
+  all four findings pass local correction verification and await phase re-approval. [Contract](docs/specs/agent-session-slice.md#phase-2-exact-controls-and-re-add).
   Phase 2 starts at `2a49599`; Daybreak review is required after its local acceptance.
   New Pro review and authorized real-provider/packaged proof wait until full closeout.
 - Scope, acceptance, dependency order, and finding placement:

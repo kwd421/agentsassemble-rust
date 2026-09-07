@@ -131,7 +131,7 @@ pub(crate) async fn store_result(
     request_id: &str,
     action: &str,
     payload_hash: String,
-    result: Value,
+    mut result: Value,
     events: Vec<RoomEvent>,
 ) -> Result<CommandOutcome, PersistenceError> {
     let event = events
@@ -141,6 +141,7 @@ pub(crate) async fn store_result(
             code: "invalid_state",
             message: "Command outcome has no event.".to_owned(),
         })?;
+    result["event_seq"] = json!(event.seq);
     store_command_result(
         transaction,
         principal,

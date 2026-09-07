@@ -37,6 +37,10 @@ async fn current_generation_launch_retry(action: &'static str) {
     send_command(&mut socket, "current-resume-retry", action, &payload).await;
     let resumed = receive_command_ack(&mut socket).await;
     assert_eq!(resumed["result"]["agent_session"]["runtime_status"], "idle");
+    assert_eq!(
+        resumed["result"]["event_seq"],
+        resumed["result"]["event"]["seq"]
+    );
     send_command(&mut socket, "current-resume-retry", action, &payload).await;
     assert_eq!(receive_command_ack(&mut socket).await["deduplicated"], true);
 
@@ -238,6 +242,10 @@ async fn listing_readd_replays_across_socket_reconnect_and_server_restart()
     send_command(&mut socket, "listing-readd", "agent.readd", &payload).await;
     let added = receive_command_ack(&mut socket).await;
     assert_eq!(added["result"]["status"], "readded");
+    assert_eq!(
+        added["result"]["event_seq"],
+        added["result"]["event"]["seq"]
+    );
     assert_eq!(added["result"]["participant"]["status"], "detached");
     assert_eq!(added["result"]["agent_session"]["enabled"], false);
     assert_eq!(added["result"]["events"].as_array().map(Vec::len), Some(1));

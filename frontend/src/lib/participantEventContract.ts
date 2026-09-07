@@ -1,3 +1,4 @@
+import { AGENT_CONTROL_ID_KEYS } from "../types/generated/ROOM_ACTIONS";
 import type { RoomAgentSession, RoomEvent, RoomMember } from "../api";
 import type { AgentSession } from "../types/generated/AgentSession";
 import type { Participant } from "../types/generated/Participant";
@@ -568,9 +569,17 @@ export function agentReactivationProjectionFromEvent(event: RoomEvent) {
   return projection;
 }
 
+export function agentControlPayloadId(payload: Record<string, unknown>): string | null {
+  const supplied = AGENT_CONTROL_ID_KEYS.filter((key) => Object.hasOwn(payload, key));
+  if (supplied.length !== 1) return null;
+  const id = payload[supplied[0]];
+  return typeof id === "string" && id.length > 0 ? id : null;
+}
+
 export function agentReaddAckProjectionsAreCoherent(
   payload: Record<string, unknown>,
   result: Record<string, unknown>,
+  expectedAgentId: string,
 ): boolean {
   try {
     if (result.status !== "readded" || !Array.isArray(result.events)) return false;
@@ -585,7 +594,7 @@ export function agentReaddAckProjectionsAreCoherent(
     if (
       events.length !== 3 || events[0].type !== "participant_joined" ||
       events[1].type !== "session_attached" || events[2].type !== "agent_session_state" ||
-      events.some((event, index) => event.participant_id !== payload.agent_id ||
+      events.some((event, index) => event.participant_id !== expectedAgentId ||
         (index > 0 && event.seq !== events[index - 1].seq + 1))
     ) return false;
     const session = exactAgentSession(result.agent_session, "Agent Session", "Agent Session");

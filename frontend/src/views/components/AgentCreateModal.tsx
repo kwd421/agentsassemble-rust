@@ -79,11 +79,13 @@ export default function AgentCreateModal({
   const groupedProviders = projectProvidersByCatalogGroup(providers);
   const visibleProviders = providerGroup ? groupedProviders[providerGroup] : [];
   const selectedProvider = visibleProviders.find((provider) => provider.id === providerId);
-  const reusableSessions = existingSessions.filter((session) =>
+  const eligibleStoredSessions = existingSessions.filter((session) =>
     session.room_id === meetingId && !session.external_owned && session.process_ownership === "server" &&
-    session.provider_kind === selectedProvider?.provider_kind &&
     ["stopped", "error"].includes(session.runtime_status) && !session.enabled &&
     !session.recovery_required && !session.provider_session_active && !session.active_turn_id
+  );
+  const reusableSessions = eligibleStoredSessions.filter((session) =>
+    session.provider_kind === selectedProvider?.provider_kind
   );
   const existingSession = reusableSessions.find((session) => session.session_id === existingSessionId);
   const workspaceRequired = Boolean(
@@ -328,7 +330,9 @@ export default function AgentCreateModal({
         aria-label={presentation.providerName}
         title={presentation.providerName}
         data-active={provider.id === selectedProvider?.id}
-        disabled={!provider.available}
+        disabled={!provider.available && !eligibleStoredSessions.some(
+          (session) => session.provider_kind === provider.provider_kind
+        )}
         onClick={() => {
           applyProvider(provider);
           setStatus("");
@@ -556,7 +560,7 @@ export default function AgentCreateModal({
             aria-checked={startNow}
             aria-label="추가하자마자 실행"
             data-on={startNow}
-            disabled={!selectedProvider?.startable}
+            disabled={!selectedProvider?.startable && !startNow}
             onClick={() => setStartNow((value) => !value)}
           >
             <span className="dc-agent-launch-switch" aria-hidden="true">

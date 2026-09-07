@@ -27,8 +27,8 @@ pub use agent_session_state::{
 };
 pub use asset::MAX_ATTACHMENT_BYTES;
 pub use command::{
-    CommandRejection, MessageSend, canonical_payload_hash, prepare_message_event,
-    require_message_write_authority,
+    AGENT_CONTROL_ID_KEYS, CommandRejection, MessageSend, canonical_payload_hash,
+    prepare_message_event, require_message_write_authority,
 };
 pub use diagnostic::{redact_persisted_diagnostic, redact_persisted_diagnostic_text};
 pub use identity::{

@@ -6933,3 +6933,35 @@ simplified. Related frontend coverage totals 95 passing cases. Workspace Clippy
 and prior format/architecture/source-growth/policy checks pass; no gate exceptions,
 new scans, real providers or packaged applications were used. Daybreak's complete
 Phase 2 source review is the remaining phase gate.
+
+Daybreak reviewed every individual Phase 2 commit (`383ad17`, `e31d2c1`,
+`e28c4c4`), cumulative `2a49599..e28c4c4`, final HEAD and complete local product
+contract: **REVISE, C0/H1/M3/L0**. Four supported findings are corrected together:
+
+- H: lifecycle results omitted `event_seq`, causing the real re-add ACK to fail
+  browser validation despite a committed command. The existing result persistence
+  owner now serializes the last canonical event sequence once. Actual TCP results
+  assert that field for listing/start and preserve it through exact replay.
+- M: two accepted ID aliases failed started ACKs and left listing ACK identity
+  unbound. The existing alias keys now export from the domain command owner;
+  browser ACK validation resolves exactly one supplied ID and binds all projections.
+- M: an unavailable provider could not be selected for listing-only re-add. Its
+  selector remains usable when an eligible stored session exists; new creation and
+  launch stay gated by current startability, and a selected launch can be turned off.
+- M: schema-valid stored JSON could disagree with the requested row identity. The
+  existing lifecycle session/participant loaders now reject inconsistent row keys
+  before mutation; directly superseded interrupt identity checks were removed.
+
+The proposed restriction on already-Available inactive sessions was withdrawn:
+original `agent_reactivation.py` and copied selection allow that explicit command.
+Fresh requests remain distinct; the same request ID replays without another event.
+
+Correction evidence: 249 persistence cases (including listing/start with ten corrupt
+row-identity variants), all 14 TCP/WebSocket boundaries, 24 selector and 20 socket
+contract cases, TypeScript/build/original CSS, workspace all-target/all-feature
+Clippy, format, architecture/source-growth, 19 policy/artifact tests and diff pass.
+The socket harness also resolves complete committed/deduplicated re-add ACKs and
+rejects missing sequence metadata; the independent server assertions use actual
+serialized results, closing the fixture-only coverage gap. No new background work,
+provider I/O, fallback, gate exception or generic storage/export framework was added.
+Daybreak re-approval of the corrected complete phase remains pending.
