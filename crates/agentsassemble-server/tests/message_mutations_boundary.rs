@@ -323,8 +323,8 @@ async fn stale_human_session_cannot_mutate_on_an_unnotified_live_socket() {
         .await
         .unwrap_or_else(|error| panic!("authorize controlled stale session: {error}"));
     let revoked = store
-        .execute_human_session_participant_leave(
-            &authorization,
+        .execute_room_session_participant_leave(
+            &agentsassemble_persistence::RoomSessionAuthorization::Human(authorization.clone()),
             "313e4567-e89b-12d3-a456-426614174004",
             &json!({}),
         )

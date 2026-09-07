@@ -232,3 +232,16 @@ Lifecycle and deletion mutations resolve explicit request provenance in the same
 transaction before local-manager checks or replay. Trusted native ownership still
 supports closed/archived rooms and retained deletion receipts; remote sessions
 cannot access those paths after revocation.
+
+The room queue now retains one explicit human/operator session enum, with public
+principal fields remaining only a projection. Ordinary human sessions retain their
+finite conversation-only dispatch. Paired operator commands reach the existing
+operator mutation owners with session provenance. Session message, edit/delete and
+random mutations revalidate inside their transaction; the native deletion receipt
+shortcut is unavailable to room sessions.
+
+Paired departure revokes only that session. It preserves the host membership and
+other paired devices, records an `operator_session_ended` event without device or
+credential data, and publishes the exact revocation through the existing channel.
+HTTP/socket admission still constructs only ordinary human sessions until pairing
+transport is connected; internal runtime proof is not packaged pairing acceptance.

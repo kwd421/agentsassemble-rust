@@ -63,8 +63,8 @@ async fn leave_room(
     let participant_id = authorization.principal().participant_id.clone();
     state
         .rooms
-        .execute_human_session(
-            &authorization,
+        .execute_room_session(
+            &agentsassemble_persistence::RoomSessionAuthorization::Human(authorization),
             uuid::Uuid::new_v4().to_string(),
             RoomAction::ParticipantLeave,
             payload,

@@ -86,8 +86,8 @@ async fn confirmed_guest_switch_is_atomic_and_preserves_public_history() {
     );
     checked(
         store
-            .execute_human_session_message_with_turn(
-                &authorization,
+            .execute_room_session_message_with_turn(
+                &crate::RoomSessionAuthorization::Human(authorization.clone()),
                 "account-history",
                 "message.send",
                 &json!({"content": "Preserved guest history"}),

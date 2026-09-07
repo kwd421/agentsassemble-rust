@@ -10,10 +10,9 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
+    CommandOutcome, PersistenceError, RoomSessionAuthorization, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     command_admission::{admit_non_lifecycle_command, store_command_result},
-    human_session_authority::revalidate_human_session,
     message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
     room_event_sequence::next_sequence,
     room_write_budget::command_size,
@@ -169,29 +168,25 @@ impl SqliteStore {
         Ok(mutation)
     }
 
-    /// Commits one admitted-human message in the transaction that revalidates its exact session.
+    /// Commits one room-session message in the transaction that revalidates its exact session.
     ///
     /// # Errors
     ///
     /// Returns session provenance, idempotency, room-state, or storage failures.
-    pub async fn execute_human_session_message_with_turn(
+    pub async fn execute_room_session_message_with_turn(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
         request_id: &str,
         action: &str,
         payload: &Value,
     ) -> Result<RoomCommandMutation, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
-        let mutation = execute_message_in(
-            &mut transaction,
-            current.principal(),
-            request_id,
-            action,
-            payload,
-        )
-        .await?;
+        let current = authorization
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        let mutation =
+            execute_message_in(&mut transaction, &current, request_id, action, payload).await?;
         transaction.commit().await?;
         Ok(mutation)
     }

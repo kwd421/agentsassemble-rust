@@ -10,7 +10,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
+    CommandOutcome, PersistenceError, RoomSessionAuthorization, SqliteStore,
     agent_lifecycle_events::store_result,
     authority::active_room_for_principal,
     command_admission::inspect_non_lifecycle_command,
@@ -51,18 +51,33 @@ impl SqliteStore {
         Ok(mutation)
     }
 
-    /// Atomically leaves one admitted human and ends its exact live room session.
+    /// Leaves one admitted human or ends only the requesting paired operator session.
     ///
     /// # Errors
     ///
     /// Returns authorization, payload, replay, membership, or stored-state failures.
-    pub async fn execute_human_session_participant_leave(
+    pub async fn execute_room_session_participant_leave(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
         request_id: &str,
         payload: &Value,
     ) -> Result<ParticipantLeaveMutation, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
+        let authorization = match authorization {
+            RoomSessionAuthorization::Operator(session) => {
+                parse_payload(payload)?;
+                let mutation = crate::operator_pairing::leave_operator_session(
+                    &mut transaction,
+                    session,
+                    request_id,
+                    payload,
+                )
+                .await?;
+                transaction.commit().await?;
+                return Ok(mutation);
+            }
+            RoomSessionAuthorization::Human(session) => session,
+        };
         let (current, _) =
             revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
         let mutation = execute_leave_in(
@@ -283,7 +298,11 @@ mod tests {
         );
 
         let mutation = store
-            .execute_human_session_participant_leave(&authorization, "leave-request", &payload)
+            .execute_room_session_participant_leave(
+                &crate::RoomSessionAuthorization::Human(authorization.clone()),
+                "leave-request",
+                &payload,
+            )
             .await
             .unwrap_or_else(|error| panic!("leave room: {error}"));
         assert_eq!(mutation.revoked_session_fingerprints, vec![fingerprint]);
@@ -341,7 +360,11 @@ mod tests {
         );
         assert!(matches!(
             store
-                .execute_human_session_participant_leave(&rejoined, "leave-request", &payload,)
+                .execute_room_session_participant_leave(
+                    &crate::RoomSessionAuthorization::Human(rejoined.clone()),
+                    "leave-request",
+                    &payload,
+                )
                 .await,
             Err(PersistenceError::CommandConflict)
         ));
@@ -367,8 +390,8 @@ mod tests {
         );
         assert!(matches!(
             store
-                .execute_human_session_participant_leave(
-                    &authorization,
+                .execute_room_session_participant_leave(
+                    &crate::RoomSessionAuthorization::Human(authorization.clone()),
                     "bad-leave",
                     &json!({"participant_id": "someone-else"}),
                 )

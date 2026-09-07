@@ -1,6 +1,6 @@
 use agentsassemble_domain::{RoomRandomRequest, RoomRandomResult};
 use agentsassemble_persistence::{
-    CommandOutcome, HumanSessionAuthorization, PersistenceError, ProviderRoomRandomCommit,
+    CommandOutcome, PersistenceError, ProviderRoomRandomCommit, RoomSessionAuthorization,
     SqliteStore, room_write_command_size,
 };
 use agentsassemble_provider::{ProviderRoomToolCommand, ProviderRoomToolResult};
@@ -46,10 +46,10 @@ pub(crate) async fn execute_room_random(
         .await
 }
 
-pub(crate) async fn execute_human_session_room_random(
+pub(crate) async fn execute_session_room_random(
     store: &SqliteStore,
     command: &RoomCommand,
-    authorization: &HumanSessionAuthorization,
+    authorization: &RoomSessionAuthorization,
 ) -> Result<CommandOutcome, PersistenceError> {
     let request =
         RoomRandomRequest::parse(command.action.as_str(), &command.payload).map_err(|error| {
@@ -60,7 +60,7 @@ pub(crate) async fn execute_human_session_room_random(
         })?;
     let result = generate_room_random(&request);
     store
-        .execute_human_session_room_random_command(
+        .execute_room_session_random_command(
             authorization,
             &command.request_id,
             command.action.as_str(),

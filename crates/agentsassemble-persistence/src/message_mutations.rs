@@ -9,10 +9,9 @@ use serde_json::{Value, json};
 use sqlx::{Sqlite, Transaction};
 
 use crate::{
-    CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
+    CommandOutcome, PersistenceError, RoomSessionAuthorization, SqliteStore,
     authority::load_active_participant,
     command_admission::{admit_non_lifecycle_command, store_command_result},
-    human_session_authority::revalidate_human_session,
     message_attachments::{delete_bound_message_attachments, message_attachments_from_event},
     message_pins::remove_lobby_message_pin,
     message_search_index::{remove_lobby_message_index, replace_lobby_message_index},
@@ -50,29 +49,26 @@ impl SqliteStore {
         Ok(outcome)
     }
 
-    /// Commits one admitted-human lobby edit or deletion with session revalidation in-transaction.
+    /// Commits one room-session lobby edit or deletion with session revalidation in-transaction.
     ///
     /// # Errors
     ///
     /// Returns stale-session, authorization, target-state, idempotency, or storage failures.
-    pub async fn execute_human_session_message_mutation(
+    pub async fn execute_room_session_message_mutation(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
         request_id: &str,
         action: &str,
         payload: &Value,
     ) -> Result<CommandOutcome, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
-        let outcome = execute_message_mutation_in(
-            &mut transaction,
-            current.principal(),
-            request_id,
-            action,
-            payload,
-        )
-        .await?;
+        let current = authorization
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
+        let outcome =
+            execute_message_mutation_in(&mut transaction, &current, request_id, action, payload)
+                .await?;
         transaction.commit().await?;
         Ok(outcome)
     }

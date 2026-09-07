@@ -10,11 +10,10 @@ use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, HumanSessionAuthorization, PersistenceError, SqliteStore,
+    CommandOutcome, PersistenceError, RoomSessionAuthorization, SqliteStore,
     agent_lifecycle::load_session,
     authority::active_room_for_principal,
     command_admission::{admit_non_lifecycle_command, store_command_result},
-    human_session_authority::revalidate_human_session,
     room_event_sequence::next_sequence,
     room_turns::support::{insert_event, load_active_room, load_participant},
     room_write_budget::{command_size, reserve_room_write_budget},
@@ -70,25 +69,27 @@ impl SqliteStore {
         Ok(outcome)
     }
 
-    /// Commits one admitted-human random command in the transaction that revalidates its session.
+    /// Commits one room-session random command in the transaction that revalidates its session.
     ///
     /// # Errors
     ///
     /// Returns session provenance, replay, permission, room-mode, validation, or storage failures.
-    pub async fn execute_human_session_room_random_command(
+    pub async fn execute_room_session_random_command(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
         request_id: &str,
         action: &str,
         payload: &Value,
         result: &RoomRandomResult,
     ) -> Result<CommandOutcome, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (current, _) =
-            revalidate_human_session(&mut transaction, authorization, Utc::now()).await?;
+        let current = authorization
+            .mutation_authority()
+            .resolve(&mut transaction)
+            .await?;
         let outcome = execute_room_random_command_in(
             &mut transaction,
-            current.principal(),
+            &current,
             request_id,
             action,
             payload,

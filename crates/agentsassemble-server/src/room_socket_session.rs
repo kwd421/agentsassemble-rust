@@ -149,8 +149,8 @@ pub(crate) async fn run(
                                 && human_session.is_some();
                         let action_name = action.as_str().to_owned();
                         let outcome = if let Some(authorization) = &human_session {
-                            state.rooms.execute_human_session(
-                                authorization, request_id.clone(), action, payload,
+                            state.rooms.execute_room_session(
+                                &agentsassemble_persistence::RoomSessionAuthorization::Human(authorization.clone()), request_id.clone(), action, payload,
                             ).await
                         } else {
                             state.rooms.execute(

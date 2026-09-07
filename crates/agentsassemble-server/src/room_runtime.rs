@@ -7,7 +7,7 @@ use std::{
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
     AgentTurnAssignment, CommandOutcome, HumanAdmissionDecision, HumanAdmissionRejection,
-    HumanSessionAuthorization, PersistenceError, PreparedHumanAdmission, SqliteStore,
+    PersistenceError, PreparedHumanAdmission, RoomSessionAuthorization, SqliteStore,
 };
 use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{
@@ -30,7 +30,7 @@ use crate::{
     provider_turn::{ProviderTurnTaskResult, handle_provider_result, spawn_provider_turn},
     provider_write_budget::ProviderWriteBudget,
     room_command_admission::{
-        AdmittedHumanCommand, admit_human_command, admit_human_session_command,
+        AdmittedHumanCommand, admit_human_command, admit_room_session_command,
     },
     room_command_result::{CommandFailure, public_command_outcome},
     room_recovery_runtime::{RecoveredAssignment, RecoveredAssignments, RecoveryRuntime},
@@ -48,7 +48,7 @@ const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
 pub(crate) struct RoomCommand {
     pub(crate) principal: AuthenticatedPrincipal,
     pub(crate) room_uid: Option<uuid::Uuid>,
-    pub(crate) human_session: Option<Box<HumanSessionAuthorization>>,
+    pub(crate) room_session: Option<Box<RoomSessionAuthorization>>,
     pub(crate) request_id: String,
     pub(crate) action: RoomAction,
     pub(crate) payload: Value,
@@ -61,10 +61,8 @@ impl RoomCommand {
     pub(crate) fn mutation_authority(
         &self,
     ) -> agentsassemble_persistence::RoomMutationAuthority<'_> {
-        match self.human_session.as_deref() {
-            Some(session) => {
-                agentsassemble_persistence::RoomMutationAuthority::HumanSession(session)
-            }
+        match self.room_session.as_deref() {
+            Some(session) => session.mutation_authority(),
             None => {
                 agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&self.principal)
             }
@@ -171,14 +169,14 @@ impl RoomRuntime {
             .await
     }
 
-    pub(crate) async fn execute_human_session(
+    pub(crate) async fn execute_room_session(
         &self,
-        authorization: &HumanSessionAuthorization,
+        authorization: &RoomSessionAuthorization,
         request_id: String,
         action: RoomAction,
         payload: Value,
     ) -> Result<CommandOutcome, CommandFailure> {
-        let (admitted, current) = admit_human_session_command(
+        let (admitted, current) = admit_room_session_command(
             &self.store,
             &self.principal_mutations,
             authorization,
@@ -201,7 +199,7 @@ impl RoomRuntime {
     async fn enqueue_command(
         &self,
         admitted: AdmittedHumanCommand,
-        human_session: Option<Box<HumanSessionAuthorization>>,
+        room_session: Option<Box<RoomSessionAuthorization>>,
         room_uid: Option<uuid::Uuid>,
         request_id: String,
         action: RoomAction,
@@ -216,11 +214,12 @@ impl RoomRuntime {
             // Serialize replay routing with deletion retirement. An immutable
             // retry must not recreate an actor for a physically absent room.
             let mut rooms = self.rooms.lock().await;
-            if let Some(outcome) = self
-                .store
-                .completed_room_deletion(&principal, &request_id, &payload)
-                .await
-                .map_err(CommandFailure::unresolved)?
+            if room_session.is_none()
+                && let Some(outcome) = self
+                    .store
+                    .completed_room_deletion(&principal, &request_id, &payload)
+                    .await
+                    .map_err(CommandFailure::unresolved)?
             {
                 if let Some(debit) = &mutation_debit {
                     debit.resolve();
@@ -238,7 +237,7 @@ impl RoomRuntime {
             .try_send(RoomMutation::Command(RoomCommand {
                 principal,
                 room_uid,
-                human_session,
+                room_session,
                 request_id,
                 action,
                 payload,

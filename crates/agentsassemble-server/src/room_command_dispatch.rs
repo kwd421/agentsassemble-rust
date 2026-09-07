@@ -21,8 +21,10 @@ pub(crate) async fn execute_command(
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> CommandExecution {
-    if let Some(authorization) = &command.human_session {
-        return execute_human_session_command(store, command, authorization).await;
+    if let Some(authorization) = command.room_session.as_deref()
+        && requires_session_dispatch(authorization, command.action)
+    {
+        return execute_room_session_command(store, command, authorization).await;
     }
     let authority = command.mutation_authority();
     match command.action {
@@ -363,14 +365,32 @@ fn log_agent_interrupt_error(
     );
 }
 
-async fn execute_human_session_command(
+fn requires_session_dispatch(
+    authorization: &agentsassemble_persistence::RoomSessionAuthorization,
+    action: RoomAction,
+) -> bool {
+    matches!(
+        authorization,
+        agentsassemble_persistence::RoomSessionAuthorization::Human(_)
+    ) || matches!(
+        action,
+        RoomAction::MessageSend
+            | RoomAction::MessageEdit
+            | RoomAction::MessageDelete
+            | RoomAction::RoomRandomRoll
+            | RoomAction::RoomRandomChoose
+            | RoomAction::ParticipantLeave
+    )
+}
+
+async fn execute_room_session_command(
     store: &SqliteStore,
     command: &RoomCommand,
-    authorization: &agentsassemble_persistence::HumanSessionAuthorization,
+    authorization: &agentsassemble_persistence::RoomSessionAuthorization,
 ) -> CommandExecution {
     match command.action {
         RoomAction::MessageSend => match store
-            .execute_human_session_message_with_turn(
+            .execute_room_session_message_with_turn(
                 authorization,
                 &command.request_id,
                 command.action.as_str(),
@@ -382,7 +402,7 @@ async fn execute_human_session_command(
             Err(error) => CommandExecution::transactional_failure(error),
         },
         RoomAction::MessageEdit | RoomAction::MessageDelete => match store
-            .execute_human_session_message_mutation(
+            .execute_room_session_message_mutation(
                 authorization,
                 &command.request_id,
                 command.action.as_str(),
@@ -394,7 +414,7 @@ async fn execute_human_session_command(
             Err(error) => CommandExecution::transactional_failure(error),
         },
         RoomAction::RoomRandomRoll | RoomAction::RoomRandomChoose => {
-            match crate::room_random_runtime::execute_human_session_room_random(
+            match crate::room_random_runtime::execute_session_room_random(
                 store,
                 command,
                 authorization,
@@ -406,7 +426,7 @@ async fn execute_human_session_command(
             }
         }
         RoomAction::ParticipantLeave => match store
-            .execute_human_session_participant_leave(
+            .execute_room_session_participant_leave(
                 authorization,
                 &command.request_id,
                 &command.payload,

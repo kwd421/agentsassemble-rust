@@ -77,8 +77,8 @@ async fn tcp_summary_is_strict_private_read_only_and_revocable() {
         .await
         .unwrap_or_else(|error| panic!("authorize vote reader for controlled revoke: {error}"));
     let revoked = store
-        .execute_human_session_participant_leave(
-            &authorization,
+        .execute_room_session_participant_leave(
+            &agentsassemble_persistence::RoomSessionAuthorization::Human(authorization.clone()),
             "40000000-0000-4000-8000-000000000003",
             &json!({}),
         )

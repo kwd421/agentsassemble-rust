@@ -1,6 +1,6 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, canonical_payload_hash};
 use agentsassemble_persistence::{
-    HumanSessionAuthorization, PersistenceError, SqliteStore, room_write_command_size,
+    PersistenceError, RoomSessionAuthorization, SqliteStore, room_write_command_size,
 };
 use agentsassemble_protocol::RoomAction;
 use serde_json::Value;
@@ -39,17 +39,17 @@ pub(crate) async fn admit_human_command(
     admit_current_command(store, admission, principal, request_id, action, payload).await
 }
 
-pub(crate) async fn admit_human_session_command(
+pub(crate) async fn admit_room_session_command(
     store: &SqliteStore,
     admission: &PrincipalMutationAdmission,
-    authorization: &HumanSessionAuthorization,
+    authorization: &RoomSessionAuthorization,
     request_id: &str,
     action: RoomAction,
     payload: &Value,
-) -> Result<(AdmittedHumanCommand, HumanSessionAuthorization), CommandFailure> {
+) -> Result<(AdmittedHumanCommand, RoomSessionAuthorization), CommandFailure> {
     validate_command_envelope(request_id).map_err(CommandFailure::rejected)?;
     let current = store
-        .revalidate_human_session_authorization(authorization)
+        .revalidate_room_session_authorization(authorization)
         .await
         .map_err(CommandFailure::unresolved)?;
     let admitted = admit_current_command(
@@ -135,6 +135,106 @@ mod tests {
     use super::{PrincipalMutationAdmission, admit_human_command};
 
     const AGENT_ID: &str = "codex-00000000-0000-5000-8000-000000000001";
+
+    #[tokio::test]
+    async fn paired_room_commands_keep_provenance_and_depart_only_the_requesting_device() {
+        use agentsassemble_domain::ProviderCatalog;
+        use agentsassemble_persistence::RoomSessionAuthorization;
+        use agentsassemble_provider::ProviderCatalogService;
+        let (store, principal, _directory) = fixture().await;
+        let manager = store
+            .authorize_local_room_manager(
+                &principal.room_id,
+                &principal.principal_id,
+                &principal.participant_id,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("manager: {error}"));
+        let now = chrono::Utc::now();
+        let mut sessions = Vec::new();
+        for token in [[1; 32], [2; 32]] {
+            store
+                .create_operator_pairing(&manager, &token, "https://room.example.test", now)
+                .await
+                .unwrap_or_else(|error| panic!("pair: {error}"));
+            let paired = store
+                .redeem_operator_pairing(&token, &token, "https://room.example.test", now)
+                .await
+                .unwrap_or_else(|error| panic!("redeem: {error}"));
+            sessions.push(RoomSessionAuthorization::Operator(paired.authorization));
+        }
+        let runtime = crate::RoomRuntime::new(
+            store.clone(),
+            ProviderCatalogService::fixed(ProviderCatalog::default()),
+        );
+        let mut revocations = runtime.session_revocations(&principal.room_id).await;
+        let sent = runtime
+            .execute_room_session(
+                &sessions[0],
+                "paired-message".to_owned(),
+                RoomAction::MessageSend,
+                json!({"content": "Hello from the paired device"}),
+            )
+            .await
+            .unwrap_or_else(|failure| panic!("send: {}", failure.error));
+        assert!(!sent.deduplicated);
+        runtime
+            .execute_room_session(
+                &sessions[0],
+                "paired-leave".to_owned(),
+                RoomAction::ParticipantLeave,
+                json!({}),
+            )
+            .await
+            .unwrap_or_else(|failure| panic!("leave: {}", failure.error));
+        assert_eq!(
+            revocations
+                .try_recv()
+                .unwrap_or_else(|error| panic!("revocation: {error}")),
+            *sessions[0].session_fingerprint()
+        );
+        assert!(
+            runtime
+                .execute_room_session(
+                    &sessions[0],
+                    "paired-message".to_owned(),
+                    RoomAction::MessageSend,
+                    json!({"content": "Hello from the paired device"}),
+                )
+                .await
+                .is_err()
+        );
+        let still_joined = store
+            .resolve_principal(&principal)
+            .await
+            .unwrap_or_else(|error| panic!("native membership preserved: {error}"));
+        assert!(still_joined.is_operator);
+        let uid = store
+            .snapshot("general", 0, 20)
+            .await
+            .unwrap_or_else(|error| panic!("snapshot: {error}"))
+            .room
+            .room_uid;
+        runtime
+            .execute_room_session(
+                &sessions[1],
+                "paired-archive".to_owned(),
+                RoomAction::RoomArchive,
+                json!({"room_uid": uid, "archived": true}),
+            )
+            .await
+            .unwrap_or_else(|failure| panic!("other device archive: {}", failure.error));
+        assert_eq!(
+            revocations
+                .try_recv()
+                .unwrap_or_else(|error| panic!("archive revocation: {error}")),
+            *sessions[1].session_fingerprint()
+        );
+        runtime
+            .shutdown()
+            .await
+            .unwrap_or_else(|error| panic!("shutdown: {error}"));
+    }
 
     #[tokio::test]
     async fn terminal_lifecycle_replay_receives_a_new_process_debit() {

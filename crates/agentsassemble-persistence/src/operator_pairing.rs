@@ -14,6 +14,69 @@ const SESSION_TTL: Duration = Duration::hours(1);
 const MAX_PAIRINGS: i64 = 128;
 const MAX_ROOM_PAIRINGS: i64 = 32;
 
+pub(crate) async fn leave_operator_session(
+    tx: &mut Transaction<'_, Sqlite>,
+    expected: &OperatorSessionAuthorization,
+    request_id: &str,
+    payload: &serde_json::Value,
+) -> Result<crate::ParticipantLeaveMutation, PersistenceError> {
+    let current = revalidate_operator_session(tx, expected, Utc::now()).await?;
+    let principal = current.principal();
+    let hash = agentsassemble_domain::canonical_payload_hash(payload);
+    if crate::command_admission::inspect_non_lifecycle_command(
+        tx,
+        &principal.room_id,
+        &principal.principal_id,
+        request_id,
+        crate::participant_leave::PARTICIPANT_LEAVE_ACTION,
+        &hash,
+    )
+    .await?
+    .is_some()
+    {
+        return Err(PersistenceError::CommandConflict);
+    }
+    sqlx::query("UPDATE operator_pairings SET revoked = 1 WHERE session_fingerprint = ?")
+        .bind(current.session_fingerprint().as_slice())
+        .execute(&mut **tx)
+        .await?;
+    let event = agentsassemble_domain::RoomEvent {
+        v: 1,
+        id: Uuid::new_v4().to_string(),
+        seq: crate::room_event_sequence::next_sequence(tx, &principal.room_id).await?,
+        created_at: Utc::now(),
+        room_id: principal.room_id.clone(),
+        event_type: "operator_session_ended".to_owned(),
+        actor: agentsassemble_domain::Actor {
+            participant_id: principal.participant_id.clone(),
+            participant_type: "human".to_owned(),
+        },
+        participant_id: None,
+        participant_type: None,
+        actor_id: Some(principal.participant_id.clone()),
+        actor_type: Some("human".to_owned()),
+        display_name: None,
+        content: None,
+        message_kind: None,
+        extra: std::collections::BTreeMap::new(),
+    };
+    crate::room_turns::support::insert_event(tx, &event).await?;
+    let outcome = crate::agent_lifecycle_events::store_result(
+        tx,
+        principal,
+        request_id,
+        crate::participant_leave::PARTICIPANT_LEAVE_ACTION,
+        hash,
+        serde_json::json!({"status": "left", "participant_id": principal.participant_id, "event": event, "event_seq": event.seq}),
+        vec![event],
+    )
+    .await?;
+    Ok(crate::ParticipantLeaveMutation {
+        outcome,
+        revoked_session_fingerprints: vec![*current.session_fingerprint()],
+    })
+}
+
 /// One short-lived grant; its secret token is held only by the transport issuer.
 #[derive(Clone)]
 pub struct OperatorPairing {

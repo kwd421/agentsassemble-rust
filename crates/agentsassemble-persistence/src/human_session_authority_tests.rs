@@ -466,8 +466,8 @@ async fn session_originated_command_units_revalidate_exact_provenance() {
     set_session_expiry(&store, authorization.expires_at() + Duration::minutes(1)).await;
     assert_rejected_code(
         store
-            .execute_human_session_message_with_turn(
-                &authorization,
+            .execute_room_session_message_with_turn(
+                &crate::RoomSessionAuthorization::Human(authorization.clone()),
                 "revoked-message",
                 "message.send",
                 &json!({"content": "must not commit"}),
@@ -480,8 +480,8 @@ async fn session_originated_command_units_revalidate_exact_provenance() {
     set_participant_status(&store, ParticipantStatus::Left).await;
     assert_rejected_code(
         store
-            .execute_human_session_room_random_command(
-                &authorization,
+            .execute_room_session_random_command(
+                &crate::RoomSessionAuthorization::Human(authorization.clone()),
                 "revoked-random",
                 "room.random.roll",
                 &json!({"notation": "1d6"}),

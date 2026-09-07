@@ -7748,3 +7748,23 @@ and remaining pairing-integration limits as the launch entry apply.
 - Affected Clippy and unchanged architecture/source, 19 policy tests and format/
   diff gates pass. No background work or new authority store is added. Paired
   HTTP/socket dispatch and packaged verification are still pending.
+
+### Phase 5 room queue credential domains (2026-09-08)
+
+- The room queue retains the explicit human/operator session enum. Human commands
+  retain their existing restricted dispatcher; paired operator commands carry
+  their persistence-issued authority to manager mutations. Message/edit/delete/
+  random session owners revalidate in-transaction. Native deletion receipt lookup
+  cannot serve a room session.
+- Paired departure atomically revokes only the requesting device, stores a
+  credential-free `operator_session_ended` event and publishes its exact revoked
+  fingerprint. It does not change local host membership or other device sessions.
+- The actual runtime-queue test passes (0.54 seconds): paired message, departure,
+  revocation delivery, rejected session reuse, preserved native host membership,
+  and successful archive by another paired device. All 279 persistence tests pass
+  (3.08 seconds); ten affected HTTP/socket lifecycle, mutation, leave and vote
+  boundary tests pass. Affected Clippy and all unchanged structure, 19 policy,
+  format/diff and artifact checks pass.
+- No timer, polling, cache or provider process is added. Session revalidation uses
+  the existing bounded queue/request boundaries. Public pairing exchange, socket
+  grants, room HTTP readers and packaged frontend verification remain pending.
