@@ -181,6 +181,7 @@ impl AcpClient {
         &mut self,
         turn_id: &str,
         input: &str,
+        room_observation: bool,
     ) -> Result<ProviderTurnCompleted, DriverError> {
         self.start_turn(turn_id, input)?;
         let stop_reason = self.await_turn(turn_id).await?;
@@ -190,7 +191,7 @@ impl AcpClient {
         };
         let outcome = match stop_reason {
             StopReason::EndTurn | StopReason::MaxTokens | StopReason::MaxTurnRequests
-                if !output.trim().is_empty() =>
+                if !output.trim().is_empty() || room_observation =>
             {
                 ProviderTurnOutcome::Message {
                     content: output,

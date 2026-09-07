@@ -455,7 +455,7 @@ impl OpenCodeDriver {
         {
             return Err(model_mismatch());
         }
-        if message.content.is_empty() {
+        if message.content.is_empty() && request.room_observation.is_none() {
             return Err(turn_empty());
         }
         Ok(ProviderTurnCompleted {

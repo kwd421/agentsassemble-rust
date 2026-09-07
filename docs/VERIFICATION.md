@@ -6675,3 +6675,25 @@ rebuild took 97.21 seconds wall time and 1,417,592,832 bytes maximum RSS;
 these are verification costs. The added error conversion initially required an
 explicit `DriverError` result type in the Codex interrupt future; that compile
 failure was corrected before the successful checks. No actual provider was run.
+
+
+## Tool-only provider completion correction: 2026-09-07
+
+Manual Phase 1 review found OpenCode and the shared Cursor/Grok ACP completion path
+rejecting empty assistant text before the common runtime could finalize a valid
+RoomPortal publication or decline. Codex and Claude already defer that decision for
+room observations. The affected native completion owners now permit empty text only
+for requests with a room observation; the existing common finalizer remains the
+sole publication/receipt authority. Non-room empty responses and mismatched native
+identities remain errors. The change adds no state, retries, polling, or fallback.
+
+Two focused regressions pass: a typed ACP peer completes with no assistant chunk,
+accepted only for room observation; OpenCode preserves its native result identity
+and model mismatch rejection, followed by the real authenticated MCP portal proving
+missing-read and missing-publication failures before accepting an explicit publish or decline.
+The final focused provider test run took 9.28 seconds to build and 0.03 seconds to run.
+Workspace all-target/all-feature warning-denied Clippy and architecture, formatting,
+diff, and artifact gates pass. The first Clippy run rejected an oversized test function;
+its MCP lifecycle assertions were separated before the successful check.
+No real provider or packaged client was run. Independent whole-phase approval is
+still pending, including the other findings from the completed manual review.

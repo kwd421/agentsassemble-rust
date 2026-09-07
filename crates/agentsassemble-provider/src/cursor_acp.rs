@@ -95,7 +95,11 @@ impl ProviderDriver for CursorAcpDriver {
         _session: &'a DurableAgentSession,
         request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>> {
-        Box::pin(self.runtime.client.prompt(&request.turn_id, &request.input))
+        Box::pin(self.runtime.client.prompt(
+            &request.turn_id,
+            &request.input,
+            request.room_observation.is_some(),
+        ))
     }
 
     fn interrupt_turn<'a>(

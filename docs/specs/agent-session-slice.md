@@ -197,6 +197,13 @@ publication, retry, cancellation, or process-lifetime authority. Existing protoc
 and room-tool regressions verify the shared paths; actual-provider evidence remains
 deferred under the user-directed final verification schedule.
 
+A correlated provider completion may contain no assistant text when the request has
+an active room observation: read-and-publish or read-and-decline can be tool-only.
+The common runtime finalizer must still replace that temporary outcome with the
+validated RoomPortal publication or decline. Empty non-room responses, missing
+same-turn reads/publications, and mismatched native model/session/turn authority
+remain errors; no textual or successful fallback is permitted.
+
 Custom API keeps the caller-selected model and normalized public HTTPS endpoint as
 its durable request authority. The selected endpoint may report a resolved model;
 that bounded, within-response-consistent name is metadata and never rewrites the

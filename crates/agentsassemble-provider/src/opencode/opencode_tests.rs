@@ -169,3 +169,160 @@ async fn unconfirmed_session_creation_never_polls_a_second_provider_effect() {
     assert!(String::from_utf8_lossy(&first_bytes).starts_with("POST /session?"));
     assert!(second_bytes.is_empty(), "guarded retry sent provider bytes");
 }
+
+#[tokio::test]
+async fn tool_only_completion_preserves_portal_validation_and_native_authority() {
+    use crate::{
+        driver::{ProviderRoomObservation, ProviderTurnRequest},
+        loopback_http::JsonResponse,
+        opencode_sse::OpenCodeTurnEvents,
+        test_support::durable_session,
+    };
+    let session = durable_session(
+        "room",
+        "agent",
+        "Agent",
+        "opencode",
+        "opencode/model",
+        "http_sse",
+    );
+    let mut request = ProviderTurnRequest {
+        turn_id: "turn".to_owned(),
+        turn_generation: 1,
+        execution_id: "00000000-0000-4000-8000-000000000099".to_owned(),
+        input: "Reply".to_owned(),
+        room_observation: None,
+    };
+    let response = JsonResponse {
+        status: hyper::StatusCode::OK,
+        value: json!({"info": {"id": "assistant", "parentID": "request", "role": "assistant",
+            "providerID": "opencode", "modelID": "model"}, "parts": []}),
+    };
+    let mut events = OpenCodeTurnEvents {
+        request_message: "request".to_owned(),
+        assistant_message: "assistant".to_owned(),
+        observed_model: "opencode/model".to_owned(),
+    };
+    assert!(
+        super::OpenCodeDriver::completed_from_response(
+            &session,
+            &request,
+            "native-session",
+            &response,
+            &events
+        )
+        .is_err()
+    );
+    request.room_observation = Some(ProviderRoomObservation {
+        session_id: "agent".to_owned(),
+        input_up_to_seq: 1,
+        view: "#1 Human: reply".to_owned(),
+        attachment_ids: vec![],
+        attachment_ingress: None,
+        allowed_agent_ids: vec![],
+        tabletop_tools: false,
+        room_tool_ingress: None,
+    });
+    let completed = super::OpenCodeDriver::completed_from_response(
+        &session,
+        &request,
+        "native-session",
+        &response,
+        &events,
+    )
+    .unwrap_or_else(|error| panic!("allow room publication validation: {error}"));
+    assert_eq!(completed.provider_turn_id, "assistant");
+    assert_eq!(
+        completed.provider_session_id.as_deref(),
+        Some("native-session")
+    );
+    events.observed_model = "opencode/wrong".to_owned();
+    assert!(
+        super::OpenCodeDriver::completed_from_response(
+            &session,
+            &request,
+            "native-session",
+            &response,
+            &events
+        )
+        .is_err()
+    );
+    assert_tool_only_portal_outcome(&request, false).await;
+    assert_tool_only_portal_outcome(&request, true).await;
+}
+
+async fn assert_tool_only_portal_outcome(request: &crate::ProviderTurnRequest, decline: bool) {
+    use crate::room_portal::{ProviderTurnOutcome, RoomPortal, RoomPortalError};
+    use rmcp::{
+        ServiceExt,
+        model::CallToolRequestParams,
+        transport::{
+            StreamableHttpClientTransport,
+            streamable_http_client::StreamableHttpClientTransportConfig,
+        },
+    };
+    let mut portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("create portal: {error}"));
+    portal
+        .begin_turn(request)
+        .unwrap_or_else(|error| panic!("begin portal: {error}"));
+    assert!(matches!(
+        portal.finish_turn(request),
+        Err(RoomPortalError::ReceiptMissing)
+    ));
+    let client = ()
+        .serve(StreamableHttpClientTransport::from_config(
+            StreamableHttpClientTransportConfig::with_uri(portal.endpoint())
+                .auth_header(portal.bearer_token()),
+        ))
+        .await
+        .unwrap_or_else(|error| panic!("connect MCP: {error}"));
+    let terminal_tool = if decline {
+        ("decline_to_speak", json!({"reason_code": "duplicate"}))
+    } else {
+        (
+            "publish_message",
+            json!({"content": "Published reply", "next_agent_id": ""}),
+        )
+    };
+    for (tool, arguments) in [("read_discussion", json!({})), terminal_tool] {
+        let result = client
+            .call_tool(
+                CallToolRequestParams::new(tool)
+                    .with_arguments(arguments.as_object().cloned().unwrap_or_default()),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("call room tool: {error}"));
+        assert_ne!(result.is_error, Some(true));
+        if tool == "read_discussion" {
+            assert!(matches!(
+                portal.finish_turn(request),
+                Err(RoomPortalError::OutcomeMissing)
+            ));
+        }
+    }
+    assert_eq!(
+        portal
+            .finish_turn(request)
+            .unwrap_or_else(|error| panic!("finish publication: {error}")),
+        if decline {
+            ProviderTurnOutcome::Declined {
+                reason_code: "duplicate".to_owned(),
+            }
+        } else {
+            ProviderTurnOutcome::Message {
+                content: "Published reply".to_owned(),
+                target_agent_id: String::new(),
+            }
+        }
+    );
+    client
+        .cancel()
+        .await
+        .unwrap_or_else(|error| panic!("close MCP: {error}"));
+    portal
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("close portal: {error}"));
+}

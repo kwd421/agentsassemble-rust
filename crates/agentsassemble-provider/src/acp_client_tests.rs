@@ -34,7 +34,7 @@ async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
     assert!(!attached.reused);
 
     let turn = client
-        .prompt("turn-1", "Hello")
+        .prompt("turn-1", "Hello", false)
         .await
         .unwrap_or_else(|error| panic!("complete ACP prompt: {error}"));
     assert_eq!(turn.turn_id, "turn-1");
@@ -55,13 +55,44 @@ async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
 }
 
 #[tokio::test]
+async fn tool_only_completion_is_reserved_for_room_publication_validation() {
+    for room_observation in [false, true] {
+        let (mut client, fixture_task, _) = fixture(false).await;
+        client
+            .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
+            .await
+            .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
+        let result = client
+            .prompt("tool-turn", "Tool only", room_observation)
+            .await;
+        if room_observation {
+            let turn = result.unwrap_or_else(|error| panic!("allow portal validation: {error}"));
+            assert_eq!(turn.provider_session_id.as_deref(), Some("cursor-session"));
+            assert_eq!(
+                turn.outcome,
+                crate::ProviderTurnOutcome::Message {
+                    content: String::new(),
+                    target_agent_id: String::new(),
+                }
+            );
+        } else {
+            assert!(result.is_err(), "empty non-room turn must fail");
+        }
+        client.shutdown().await;
+        fixture_task
+            .await
+            .unwrap_or_else(|error| panic!("join ACP fixture: {error}"));
+    }
+}
+
+#[tokio::test]
 async fn cancellation_waits_for_the_exact_acp_cancelled_receipt() {
     let (mut client, fixture, prompt_seen) = fixture(true).await;
     client
         .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
         .await
         .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
-    let mut pending = Box::pin(client.prompt("turn-cancel", "Wait"));
+    let mut pending = Box::pin(client.prompt("turn-cancel", "Wait", false));
     tokio::select! {
         biased;
         _result = &mut pending => panic!("fixture completed before cancellation"),
@@ -260,6 +291,11 @@ async fn run_fixture(
                 if let Some(prompt_seen) = prompt_seen.take() {
                     let _ = prompt_seen.send(());
                 }
+            }
+            "session/prompt"
+                if message.pointer("/params/prompt/0/text") == Some(&json!("Tool only")) =>
+            {
+                respond(&mut output, id, PromptResponse::new(StopReason::EndTurn)).await;
             }
             "session/prompt" => {
                 notify(
