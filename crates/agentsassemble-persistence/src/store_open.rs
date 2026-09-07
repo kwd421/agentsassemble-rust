@@ -63,6 +63,7 @@ impl SqliteStore {
             _database_identity: prepared.identity,
             host_key: Arc::new(host_key),
             runtime_generation: format!("runtime-generation-v1-{}", uuid::Uuid::new_v4()).into(),
+            side_chat: Arc::new(crate::side_chat::SideChatRepository::default()),
             created: fresh_authority,
         };
         if store.created {

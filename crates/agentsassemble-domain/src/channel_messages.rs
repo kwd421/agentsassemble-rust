@@ -6,11 +6,10 @@ use serde_json::{Value, json};
 use ts_rs::TS;
 
 use crate::{
-    AuthenticatedPrincipal, CommandRejection, Participant, RoomEvent, clean_message,
-    has_visible_text, room_settings::is_custom_channel_id,
+    AuthenticatedPrincipal, CommandRejection, MAX_TEXT_CHAT_CHARACTERS, Participant, RoomEvent,
+    clean_message, has_visible_text, room_settings::is_custom_channel_id,
 };
 
-pub const CHANNEL_MESSAGE_MAX_CHARACTERS: usize = 2_000;
 pub const CHANNEL_HISTORY_PAGE_SIZE: i64 = 80;
 pub const CHANNEL_MESSAGE_EVENT_TYPE: &str = "channel_message_final";
 
@@ -39,7 +38,7 @@ impl ChannelMessageSend {
                 "Channel id is invalid.",
             ));
         }
-        command.content = clean_message(&command.content, CHANNEL_MESSAGE_MAX_CHARACTERS);
+        command.content = clean_message(&command.content, MAX_TEXT_CHAT_CHARACTERS);
         if !has_visible_text(&command.content) {
             return Err(CommandRejection::new(
                 "empty",
@@ -95,10 +94,7 @@ mod tests {
             "channel_id": "c0123456789ab", "content": "한".repeat(2001)
         }))
         .unwrap_or_else(|error| panic!("channel payload: {error}"));
-        assert_eq!(
-            parsed.content.chars().count(),
-            CHANNEL_MESSAGE_MAX_CHARACTERS
-        );
+        assert_eq!(parsed.content.chars().count(), MAX_TEXT_CHAT_CHARACTERS);
         for payload in [
             json!({"channel_id": "lobby", "content": "text"}),
             json!({"channel_id": "c0123456789ab", "content": "text", "attachment_ids": []}),

@@ -284,6 +284,7 @@ impl SqliteStore {
         sqlx::query("UPDATE room_delete_results SET state = 'complete' WHERE room_id = ? AND state = 'pending'")
             .bind(room_id).execute(&mut *transaction).await?;
         transaction.commit().await?;
+        self.side_chat.clear_room(room.room_uid).await;
         Ok(true)
     }
 }

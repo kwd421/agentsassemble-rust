@@ -117,3 +117,30 @@ Domain/persistence all-target/all-feature Clippy and unchanged architecture/sour
 19 policy cases, formatting/diff and artifact checks pass. Storage adds one partial
 index entry per custom message and one small row per retired channel; existing
 event/receipt size and write budgets still apply. No timer or provider task is added.
+
+## Side-chat memory owner
+
+Each current room incarnation has one store-owned memory repository with a restart
+generation, monotonically increasing sequence, and at most 200 retained messages
+and exact retry receipts. Reads and sends prune entries at the 24-hour boundary;
+physical room deletion removes the repository and closes its live subscription.
+No side-chat content or receipt enters SQLite, room events, search or turn input.
+Shared text sanitization owns the original 2,000-character composer limit.
+
+The existing single-connection authority transaction serializes current human
+membership, read/write permission and mute checks with the memory append. Identity
+comes from the canonical participant. An exact retained retry returns the original
+message without another broadcast; a changed payload conflicts. A send includes
+the observed generation and sequence, so a restart or expired receipt horizon
+returns an explicit unresolved result instead of duplicating an uncertain send.
+A read-transaction completion failure after append also stays unresolved, with its
+memory receipt available for retry. Subscribe-before-bootstrap supports overlap
+deduplication by generation/sequence without losing an append between the two.
+
+Four actual-store cases pass (0.08 s): bootstrap/live overlap and retry, current
+human/read-only/mute authority, count/controlled-clock retention, restart with no
+durable sentinel or command receipt, and room isolation/deletion/recreation. The
+read-only fixture derives capabilities using the production scope constructor.
+This foundation adds no timer, task or provider execution. Retained message lookup
+is bounded by 200 entries; bootstrap clones at most 200 text messages. Transport
+and packaged UI acceptance remain open until subsequent Phase 6 slices.

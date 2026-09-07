@@ -46,9 +46,11 @@ mod host_identity;
 mod host_key_file;
 mod operator_pairing;
 mod room_channels;
+mod side_chat;
 pub use operator_pairing::{
     OperatorPairing, OperatorPairingRedemption, OperatorSessionAuthorization,
 };
+pub use side_chat::SideChatCommit;
 mod guest_identity_recovery;
 mod human_admission;
 mod human_admission_identity;

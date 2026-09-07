@@ -26,6 +26,7 @@ mod room_history;
 mod room_preferences;
 mod room_settings;
 mod room_turn;
+mod side_chat;
 mod text;
 mod vote;
 
@@ -35,8 +36,8 @@ pub use agent_session_state::{
 };
 pub use asset::MAX_ATTACHMENT_BYTES;
 pub use channel_messages::{
-    CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE, CHANNEL_MESSAGE_MAX_CHARACTERS,
-    ChannelHistoryPage, ChannelMessageSend, prepare_channel_message_event,
+    CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE, ChannelHistoryPage, ChannelMessageSend,
+    prepare_channel_message_event,
 };
 pub use command::{
     AGENT_CONTROL_ID_KEYS, CommandRejection, MessageSend, canonical_payload_hash,
@@ -106,9 +107,13 @@ pub use room_settings::{
 pub use room_turn::{
     QueuedRoomInput, RoomInputDeliveryKind, RoomRandomError, RoomRandomRequest, RoomRandomResult,
 };
+pub use side_chat::{
+    SIDE_CHAT_MAX_MESSAGES, SIDE_CHAT_TTL_SECONDS, SideChatMessage, SideChatSend, SideChatSnapshot,
+    SideChatUpdate,
+};
 pub use text::{
-    MAX_MESSAGE_CHARACTERS, clean_identifier, clean_message, clean_single_line, has_visible_text,
-    validate_room_id,
+    MAX_MESSAGE_CHARACTERS, MAX_TEXT_CHAT_CHARACTERS, clean_identifier, clean_message,
+    clean_single_line, has_visible_text, validate_room_id,
 };
 pub use vote::{
     MAX_VOTE_BALLOTS_PER_POLL, MAX_VOTE_DURATION_SECONDS, MAX_VOTE_OPTIONS,
