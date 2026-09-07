@@ -7262,3 +7262,26 @@ invite controller no longer calls legacy host claim. Removed the now-unreference
 `api/moderation.ts` archive/claim wrappers and barrel export; no second device-token
 identity, absent-route request or authentication compatibility path was introduced.
 First-run local identity and room management will be included in packaged proof.
+
+Direct packaged interaction on the isolated Phase 4 app confirmed first-run local
+identity, room creation, archive/restore, Escape dismissal and restored trigger
+focus. Agent name and cropped avatar changes reached the roster and survived an app
+restart. It also exposed room metadata edits being replaced by canonical echoes,
+the header click immediately dismissing its menu, and the management dialog using
+the browser's top-left position while its rail entry overlapped the user strip.
+These are corrected at the text-draft, menu-event and layout owners. Metadata now
+commits when editing focus leaves, not on each character; the canonical settings
+owner continues to report persistence failures. Exact name/topic text, header menu,
+centered native management dialog and visible rail entry were rechecked in the
+rebuilt packaged app. The 13 affected frontend tests and unchanged CSS, architecture,
+source, policy, artifact, format and diff gates pass. Rebuild concurrency is bounded
+to four Cargo/Rayon workers, with heavy tasks run sequentially under the user's CPU
+headroom constraint. No gate or CSS hash changed.
+
+The user's subsequent frontend direction requires more than these functional fixes.
+Read-only inspection of the running Discord app covered its profile card, profile
+editing, inline name field and contextual avatar selection. No Discord data was
+changed. Before Phase 4 closure, move Agent identity editing out of runtime settings,
+make profile changes a coherent task and review the phase's newly exposed actions
+against this reference and the Toss/Apple guidance linked from the product plan.
+Packaged interaction and whole-phase review remain pending for that correction.

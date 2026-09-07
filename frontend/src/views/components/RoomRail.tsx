@@ -102,7 +102,7 @@ export default function RoomRail({
           </button>
         )}
       </div>
-      {onManageRooms && <button type="button" className="dc-server-btn" aria-label="방 관리" title="방 관리" onClick={onManageRooms}><Settings size={20} /></button>}
+      {onManageRooms && <button type="button" className="dc-server-btn" style={{ marginBottom: 80 }} aria-label="방 관리" title="방 관리" onClick={onManageRooms}><Settings size={20} /></button>}
       {menuRoom && roomMenu && (
         <div
           className="dc-context-menu"

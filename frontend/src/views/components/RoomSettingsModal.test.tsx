@@ -75,6 +75,8 @@ describe("RoomSettingsModal conversation mode", () => {
     const onRoomChange = vi.fn();
     renderSettings("ordered", undefined, undefined, undefined, undefined, undefined, undefined, undefined, onRoomChange);
     fireEvent.change(screen.getByLabelText("서버 이름"), { target: { value: "😀".repeat(129) } });
+    expect(onRoomChange).not.toHaveBeenCalled();
+    fireEvent.blur(screen.getByLabelText("서버 이름"));
     expect(onRoomChange).toHaveBeenCalledWith(expect.objectContaining({ label: "😀".repeat(128) }));
   });
 

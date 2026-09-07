@@ -20,6 +20,20 @@ operating the packaged app before Daybreak review. Automated frontend tests and
 production builds support, but do not replace, that proof. Phase 4 also verifies the
 earlier Phase 2 control and Phase 3 profile UI flows. Real-provider execution remains
 at final post-implementation closeout under the authorized provider matrix.
+User resource constraint (2026-09-07): leave approximately 20% CPU headroom during
+verification. Run heavy builds/tests sequentially with bounded workers, inspect
+whole-system CPU use, and reduce concurrency further when other work needs it.
+User frontend direction (2026-09-07): before advancing from Phase 4, review the
+running Discord app and correct the retained UI to follow its familiar navigation,
+profile and contextual editing patterns. A row of backend CRUD buttons is not an
+acceptable product flow. Keep profile editing with identity, reveal secondary
+actions in context, and give each editing task one clear commit/cancel boundary.
+Apply the clarity, action hierarchy, feedback and recovery guidance from
+[Toss UX](https://developers-apps-in-toss.toss.im/design/consumer-ux-guide.html) and
+[Apple HIG](https://developer.apple.com/design/human-interface-guidelines/design-principles).
+These inform usability; Discord remains the presentation reference. Recheck changed
+flows by direct packaged interaction before the whole-phase review. The user
+authorized read-only UI inspection of Discord for this comparison.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.

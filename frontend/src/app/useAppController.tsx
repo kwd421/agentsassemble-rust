@@ -368,6 +368,7 @@ export function useAppController(deviceToken: string, clientId: string) {
 
   function openRoomMenu(event: ReactMouseEvent, room: RoomDockItem) {
     event.preventDefault();
+    event.stopPropagation();
     setActiveRoomId(room.id);
     setAdminOpen(false);
     const position = roomRailMenuPosition(

@@ -30,6 +30,9 @@
   Direct packaged app manipulation is required before every phase review; Phase 4
   also covers the earlier Phase 2 controls and Phase 3 profile UI. New Pro review
   and authorized real-provider proof wait until full closeout.
+  Before Phase 5, apply the user's Discord-style frontend direction: verify actual
+  Discord flows and correct profile/contextual editing using Toss and Apple UX
+  guidance; endpoint-shaped button lists do not meet this acceptance.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:

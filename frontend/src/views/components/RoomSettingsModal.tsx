@@ -12,6 +12,7 @@ import {
   type RoomAppearance,
 } from "../../lib/roomAppearance";
 import type { RoomDockItem } from "../../lib/roomDockModel";
+import RoomSettingTextInput from "./RoomSettingTextInput";
 
 const ROOM_CHANNEL_OPTIONS = [
   { id: "lobby", label: "general" },
@@ -190,11 +191,10 @@ export default function RoomSettingsModal({
             <h3>개요</h3>
             <label>
               서버 이름
-              <input
-                className="ops-input"
+              <RoomSettingTextInput
                 value={room.label}
-                onChange={(event) => {
-                  const label = Array.from(event.target.value).slice(0, ROOM_LABEL_LIMIT).join("");
+                normalize={(value) => Array.from(value).slice(0, ROOM_LABEL_LIMIT).join("")}
+                onCommit={(label) => {
                   onRoomChange({
                     label,
                     shortLabel: (appearance.iconLabel || label || room.meetingId)
@@ -206,10 +206,10 @@ export default function RoomSettingsModal({
             </label>
             <label>
               방 주제
-              <input
-                className="ops-input"
+              <RoomSettingTextInput
                 value={room.topic}
-                onChange={(event) => onRoomChange({ topic: event.target.value.slice(0, 160) })}
+                normalize={(value) => value.slice(0, 160)}
+                onCommit={(topic) => onRoomChange({ topic })}
               />
             </label>
             <div className="dc-settings-field">
@@ -345,12 +345,10 @@ export default function RoomSettingsModal({
               </label>
               <label className="min-w-0 flex-1">
                 아이콘 글자
-                <input
-                  className="ops-input"
+                <RoomSettingTextInput
                   value={appearance.iconLabel || room.shortLabel}
-                  maxLength={2}
-                  onChange={(event) => {
-                    const iconLabel = event.target.value.slice(0, 2).toUpperCase();
+                  normalize={(value) => value.slice(0, 2).toUpperCase()}
+                  onCommit={(iconLabel) => {
                     void onAppearanceChange({ iconLabel }).catch(() => undefined);
                     onRoomChange({ shortLabel: iconLabel || room.shortLabel });
                   }}
