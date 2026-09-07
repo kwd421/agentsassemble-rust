@@ -4168,94 +4168,6 @@ executor. A process-wide two-import admission is owned through decode, normaliza
 store, including after caller cancellation; no fallback, raw-source copy, migration, or cleanup task
 was added.
 
-The storage decode pass removes 57 temporary `String` copies across 24 persistence
-files. `sqlx::Row::get::<&str, _>` borrows the same live row for immediate JSON,
-timestamp, enum, and filename decoding; returned product values remain owned. A
-200-event history page now avoids 200 full serialized-event string allocations and
-copies before deserialization. SQL, authorization, identity checks, decode errors,
-transaction lifetime, and result ownership are unchanged. All 243 persistence tests
-pass (2.26 seconds); architecture, unchanged source limits, and 19 policy/artifact
-tests also pass. These timings are test execution, not an application benchmark.
-
-The public projection owner now deserializes a borrowed JSON value instead of
-cloning the complete candidate subtree at every recursive level. Event redaction
-mutates only the already-owned public copy, removing a second recursive copy and
-the forwarding `project_map` helper. Private-key filtering, owner-only hiding,
-vote minimization, cursor identity, and the caller's unchanged input remain intact.
-All 58 domain tests passed; the existing redaction test additionally checks nested
-array/object filtering and original-value preservation.
-
-A temporary Rust benchmark called the actual public projection API 500 times on a
-fixed command envelope containing 50 events, each with 2,048 bytes of message text,
-1,024 bytes of nested metadata, and private fields. Alternating three before/after
-runs measured 606/615/665 ms before and 416/410/410 ms after (median 615 to 410 ms,
-33% less time for this fixture). The same 164,563-byte output checksum was observed
-on every run. Process maximum RSS was 8,208,384–8,290,304 bytes before and
-7,962,624–8,044,544 bytes after. Both used the workspace's development library and
-an optimized standalone harness; these are isolated projection measurements, not
-packaged application latency or production memory claims.
-
-Only bootstrap and room creation manually issued `BEGIN IMMEDIATE`, `COMMIT`, and
-`ROLLBACK`; other transaction owners already use SQLx. This duplicated plumbing
-did not register transaction lifetime with SQLx. Two deterministic regressions use
-SQLite's update hook and channels to suspend the actual public creation method
-after its first product insertion, cancel its future, and resume the SQLite worker.
-Before correction, bootstrap became `RepairRequired` and room directory reads saw
-the incomplete room on the reused connection. Both regressions failed without any
-sleep or timing-based assumption about reaching the mutation.
-
-Both owners now use `pool.begin_with("BEGIN IMMEDIATE")` and SQLx's existing
-transaction drop/rollback mechanism. Immediate writer locking, authority validation,
-atomic publication, exact request replay, and commit errors remain unchanged.
-There is no new transaction wrapper or recovery state machine. The focused full
-persistence run passes all 245 tests (3.36 seconds), including both cancellation
-cases and successful non-deduplicated retry afterward. The initial whole verification
-also reproduced both baseline failures while its 243 existing persistence tests,
-58 domain tests, 664 frontend tests, and 25 desktop tests passed; final Rust checks
-continue on the corrected source without repeating unaffected frontend/desktop runs.
-
-The duplicate-code inventory also found identical participant-loading SQL in
-`agent_configuration` and `agent_lifecycle`, and identical start-receipt conversion
-in `agent_create_runtime` and `room_agent_lifecycle_runtime`. Both paths now call
-their existing lifecycle owner, removing two implementations and 26 net production
-lines without another module, generic framework, public wire type, or behavioral
-branch. Configuration/start authorization and create-versus-start transitions stay
-with their original callers.
-
-Audit coverage and disposition (repository inventory plus owner/call-site inspection,
-not a claim that every line received an independent security audit):
-
-| Area | Inspected costs and ownership | Disposition |
-| --- | --- | --- |
-| Domain | Public projection, canonical JSON, redaction, room/persona values | Remove repeated JSON copies; retain canonical encoding and privacy policy. |
-| Persistence | Context candidates, row decoding, creation transactions, lifecycle helpers, history/catch-up/search, asset references | Apply the measured simplifications and cancellation correction above; retain atomic authority and sequence checks. |
-| Provider | Registration/catalog, common HTTP completion, exact turns, process custody/leases, portal lifetime and recovery waits | Keep provider-specific protocol owners and bounded cleanup; no speculative consolidation of different process authorities. |
-| Server | Room mutation/event publication, reconciliation scans, HTTP body/error handling, lifecycle execution | Share identical receipt conversion; keep failure-only publication retries and the cancellable bounded reconciliation owner. Similar HTTP error branches retain route-specific messages and authorization. |
-| Protocol | Surface descriptors, generated bindings, digest construction | Preserve one Rust contract and derived frontend types. |
-| Frontend | Reachable polling consumers, ingress readiness, invite expiry, appearance asset ownership, history merge/projection | Admin polling observes external status; ingress polling is operation-bounded; expiry uses the nearest deadline. Async request generations and object-URL ownership remain necessary. Dormant game/voice paths are not treated as active timers. |
-| Desktop | IPC admission/workers, runtime supervision, attachment saving | Keep caller checks at each IPC boundary and owned attachment bytes crossing the blocking worker. No new dispatcher abstraction. |
-| Scripts/build | Architecture/source checks, physical artifact accounting and cleanup | Preserve all limits and cleanup authority; no new scan or gate. |
-
-The previously identified Custom API routed-model rejection remains a Phase 1
-contract-review finding: this optimization pass does not widen response-model
-identity acceptance. The provider's documented distinction between requested
-`openrouter/auto` and the resolved response model was reconfirmed in its
-[Auto Router response contract](https://openrouter.ai/docs/guides/routing/routers/auto-router#response).
-No paid provider request or new packaged/real-provider flow was run in this pass.
-
-Final corrected-source verification passes all 682 Rust unit/integration/doc tests,
-including real local TCP/WebSocket boundaries, in 231.16 seconds with
-2,055,192,576-byte maximum RSS. Warning-denied workspace/all-target/all-feature
-Clippy, formatting, architecture/source-growth, the 19 policy/artifact tests, and
-diff checks pass. The unchanged frontend/desktop paths reuse this pass's successful
-664 frontend and 25 desktop tests, TypeScript/Vite/CSS build, generated-binding
-comparison, and desktop check. Total passing tests across these suites: 1,390.
-The final artifact check passes at 18,470,367,232 physical bytes (17.20 GiB), below
-the unchanged 18 GiB limit; the active build cache is retained for subsequent work.
-These composed checks complete local optimization acceptance. Whole-Phase-1
-GPT-6 Pro and Daybreak Blue `xhigh` review remains pending at its existing phase
-gate; no reviewer approval or whole-product parity is claimed by these commits.
-
 The real loopback TCP tests import an actual CCv3 PNG, list the exact safe projection, read the
 thumbnail with private/no-store, CORS, disposition, and `nosniff` headers, reject missing thumbnails,
 prove ticket replay failure, prove crossed-ticket consumption before malformed body handling, and
@@ -6432,3 +6344,157 @@ All 243 persistence regressions passed (2.34 seconds test execution), including
 fifty-message splitting, character limits, stateless replay, persona context,
 authorization, and storage rollback. No new task, cache, timer, or public API owner
 was added.
+
+The storage decode pass removes 57 temporary `String` copies across 24 persistence
+files. `sqlx::Row::get::<&str, _>` borrows the same live row for immediate JSON,
+timestamp, enum, and filename decoding; returned product values remain owned. A
+200-event history page now avoids 200 full serialized-event string allocations and
+copies before deserialization. SQL, authorization, identity checks, decode errors,
+transaction lifetime, and result ownership are unchanged. All 243 persistence tests
+pass (2.26 seconds); architecture, unchanged source limits, and 19 policy/artifact
+tests also pass. These timings are test execution, not an application benchmark.
+
+The public projection owner now deserializes a borrowed JSON value instead of
+cloning the complete candidate subtree at every recursive level. Event redaction
+mutates only the already-owned public copy, removing a second recursive copy and
+the forwarding `project_map` helper. Private-key filtering, owner-only hiding,
+vote minimization, cursor identity, and the caller's unchanged input remain intact.
+All 58 domain tests passed; the existing redaction test additionally checks nested
+array/object filtering and original-value preservation.
+
+A temporary Rust benchmark called the actual public projection API 500 times on a
+fixed command envelope containing 50 events, each with 2,048 bytes of message text,
+1,024 bytes of nested metadata, and private fields. Alternating three before/after
+runs measured 606/615/665 ms before and 416/410/410 ms after (median 615 to 410 ms,
+33% less time for this fixture). The same 164,563-byte output checksum was observed
+on every run. Process maximum RSS was 8,208,384–8,290,304 bytes before and
+7,962,624–8,044,544 bytes after. Both used the workspace's development library and
+an optimized standalone harness; these are isolated projection measurements, not
+packaged application latency or production memory claims.
+
+Only bootstrap and room creation manually issued `BEGIN IMMEDIATE`, `COMMIT`, and
+`ROLLBACK`; other transaction owners already use SQLx. This duplicated plumbing
+did not register transaction lifetime with SQLx. Two deterministic regressions use
+SQLite's update hook and channels to suspend the actual public creation method
+after its first product insertion, cancel its future, and resume the SQLite worker.
+Before correction, bootstrap became `RepairRequired` and room directory reads saw
+the incomplete room on the reused connection. Both regressions failed without any
+sleep or timing-based assumption about reaching the mutation.
+
+Both owners now use `pool.begin_with("BEGIN IMMEDIATE")` and SQLx's existing
+transaction drop/rollback mechanism. Immediate writer locking, authority validation,
+atomic publication, exact request replay, and commit errors remain unchanged.
+There is no new transaction wrapper or recovery state machine. The focused full
+persistence run passes all 245 tests (3.36 seconds), including both cancellation
+cases and successful non-deduplicated retry afterward. The initial whole verification
+also reproduced both baseline failures while its 243 existing persistence tests,
+58 domain tests, 664 frontend tests, and 25 desktop tests passed; final Rust checks
+continue on the corrected source without repeating unaffected frontend/desktop runs.
+
+The duplicate-code inventory also found identical participant-loading SQL in
+`agent_configuration` and `agent_lifecycle`, and identical start-receipt conversion
+in `agent_create_runtime` and `room_agent_lifecycle_runtime`. Both paths now call
+their existing lifecycle owner, removing two implementations and 26 net production
+lines without another module, generic framework, public wire type, or behavioral
+branch. Configuration/start authorization and create-versus-start transitions stay
+with their original callers.
+
+Audit coverage and disposition (repository inventory plus owner/call-site inspection,
+not a claim that every line received an independent security audit):
+
+| Area | Inspected costs and ownership | Disposition |
+| --- | --- | --- |
+| Domain | Public projection, canonical JSON, redaction, room/persona values | Remove repeated JSON copies; retain canonical encoding and privacy policy. |
+| Persistence | Context candidates, row decoding, creation transactions, lifecycle helpers, history/catch-up/search, asset references | Apply the measured simplifications and cancellation correction above; retain atomic authority and sequence checks. |
+| Provider | Registration/catalog, common HTTP completion, exact turns, process custody/leases, portal lifetime and recovery waits | Keep provider-specific protocol owners and bounded cleanup; no speculative consolidation of different process authorities. |
+| Server | Room mutation/event publication, reconciliation scans, HTTP body/error handling, lifecycle execution | Share identical receipt conversion; keep failure-only publication retries and the cancellable bounded reconciliation owner. Similar HTTP error branches retain route-specific messages and authorization. |
+| Protocol | Surface descriptors, generated bindings, digest construction | Preserve one Rust contract and derived frontend types. |
+| Frontend | Reachable polling consumers, ingress readiness, invite expiry, appearance asset ownership, history merge/projection | Admin polling observes external status; ingress polling is operation-bounded; expiry uses the nearest deadline. Async request generations and object-URL ownership remain necessary. Dormant game/voice paths are not treated as active timers. |
+| Desktop | IPC admission/workers, runtime supervision, attachment saving | Keep caller checks at each IPC boundary and owned attachment bytes crossing the blocking worker. No new dispatcher abstraction. |
+| Scripts/build | Architecture/source checks, physical artifact accounting and cleanup | Preserve all limits and cleanup authority; no new scan or gate. |
+
+The previously identified Custom API routed-model rejection remains a Phase 1
+contract-review finding: this optimization pass does not widen response-model
+identity acceptance. The provider's documented distinction between requested
+`openrouter/auto` and the resolved response model was reconfirmed in its
+[Auto Router response contract](https://openrouter.ai/docs/guides/routing/routers/auto-router#response).
+No paid provider request or new packaged/real-provider flow was run in this pass.
+
+Final corrected-source verification passes all 682 Rust unit/integration/doc tests,
+including real local TCP/WebSocket boundaries, in 231.16 seconds with
+2,055,192,576-byte maximum RSS. Warning-denied workspace/all-target/all-feature
+Clippy, formatting, architecture/source-growth, the 19 policy/artifact tests, and
+diff checks pass. The unchanged frontend/desktop paths reuse this pass's successful
+664 frontend and 25 desktop tests, TypeScript/Vite/CSS build, generated-binding
+comparison, and desktop check. Total passing tests across these suites: 1,390.
+The final artifact check passes at 18,470,367,232 physical bytes (17.20 GiB), below
+the unchanged 18 GiB limit; the active build cache is retained for subsequent work.
+These composed checks complete local optimization acceptance. Whole-Phase-1
+GPT-6 Pro and Daybreak Blue `xhigh` review remains pending at its existing phase
+gate; no reviewer approval or whole-product parity is claimed by these commits.
+
+### Test necessity and security duplication audit: 2026-09-07
+
+The user requested a follow-up on unnecessary tests and security overimplementation.
+Acceptance: relate retained tests/checks to a reachable contract or concrete failure;
+remove same-boundary duplication without accepting additional invalid inputs;
+prefer real library behavior over hand-written test substitutes; verify affected
+contracts and keep every blocking gate unchanged. This is manual source/call-site
+inspection, not an automated security scan or whole-repository vulnerability clearance.
+
+`authority::active_room_for_principal` loads the active room, then calls
+`load_active_participant`, which loads the same room again in the same transaction.
+It also repeats the participant identity comparison already enforced by that loader.
+One private membership loader can return both verified values, letting existing
+callers select what they need. Authorization remains two authoritative reads in one
+transaction; there is no skip-check flag, trusted input token, or cross-request cache.
+Existing closed-room, revoked-participant, identity, command, and snapshot tests own
+the behavioral regressions; a new test counting internal queries is unnecessary.
+
+The admission-hook suites used a 24-line substitute that called a byte accumulator
+SHA-256 and mapped character codes to bytes instead of UTF-8. The configured test
+environment already provides real Web Crypto and TextEncoder (also exercised by the
+central-registration proof suite). Both hook suites now use those implementations;
+only UUID generation is controlled for stable request identity. Their 27 tests pass
+in 1.95 seconds and TypeScript checking passes. No production dependency or test-only
+crypto abstraction replaces the deleted helper. These tests still exercise distinct
+admission/retry flows, so deleting the suites would discard useful coverage.
+
+Both browser-credential and human-session-bearer parsers separately checked ASCII,
+URL-safe alphabet, encoded length, and re-encoded equality after decoding. The pinned
+base64 0.22.1 URL_SAFE_NO_PAD engine already rejects padding, other alphabet bytes,
+and nonzero trailing bits. The parsers now retain their bounded total input length,
+distinct domain prefix, decoded size, and SHA-256 fingerprint; the strict codec owns
+the duplicated encoding policy. A temporary harness compared the unmodified baseline
+and changed functions on 393,600 inputs: 32 deterministic canonical byte patterns,
+every single ASCII substitution at each position, and malformed length, padding,
+whitespace, and Unicode cases. Both parsers produced identical rejection/fingerprint
+results throughout; this is a bounded equivalence experiment, not exhaustive proof.
+
+The existing shared credential-domain test now owns malformed encoding cases for
+both parsers, including invalid trailing bits, plus rejection of crossed credential
+domains. The bearer module's test retains its distinct Other/Invalid/Fingerprint
+classification contract instead of repeating the same malformed-input examples.
+Total test count is unchanged; the purpose is clearer coverage with less counterfeit
+infrastructure, not an arbitrary test-count reduction.
+
+Retained boundaries and test rationale from manual owner/call-site inspection:
+
+| Checks/tests | Why they remain |
+| --- | --- |
+| HTTP authentication and transaction-time membership | A principal can be revoked between admission and mutation; a check in another trust/transaction boundary cannot authorize the later write. Only the repeated query within one transaction was removed. |
+| Ticket purpose, expiration, and one-use consumption | These reject different invalid transitions; an issuance test cannot establish redemption or replay behavior. |
+| Process custody, lost-owner reconciliation, and exact-turn cleanup | These own different effects and lifetimes; the earlier process escape/orphan failures justify preserving the boundaries. |
+| Bootstrap/room-creation cancellation | Both regressions failed against the original implementation at a controlled real insertion, detecting incomplete durable authority. Keep them. |
+| Admission retry/uncertain response | Different network outcomes must preserve the same request identity and prevent duplicate admission. Keep the flows; remove fake cryptographic primitives. |
+
+No additional test was added to count SQL queries or mirror parser internals. The
+normalized Rust test-body inventory found no identical bodies; that observation does
+not establish that all tests are necessary. This pass removes demonstrated duplicate
+cases and infrastructure and does not claim a complete necessity proof for every test.
+Final affected verification passes 245 persistence tests, all 168 server unit and
+integration tests (including real loopback HTTP/WebSocket boundaries), and the 27
+admission-hook tests. TypeScript, affected-package all-target/all-feature
+warning-denied Clippy, architecture/source-growth, all 19 policy/artifact tests,
+formatting, diff, and the non-destructive artifact check pass. This completes the
+follow-up acceptance without changing the pending whole-phase external-review gate.

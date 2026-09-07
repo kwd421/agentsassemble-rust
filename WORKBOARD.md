@@ -2,6 +2,8 @@
 
 ## Active work
 
+- Test/security duplication follow-up is locally complete: same-transaction reads,
+  redundant codec checks, and fake test crypto removed; [evidence and retained boundaries](docs/VERIFICATION.md#test-necessity-and-security-duplication-audit-2026-09-07).
 - User-requested repository-wide optimization is locally complete: measured duplicate
   work removed and creation cancellation fixed; scope, verification, and remaining finding:
   [optimization audit](docs/VERIFICATION.md#repository-wide-optimization-audit-2026-09-07).

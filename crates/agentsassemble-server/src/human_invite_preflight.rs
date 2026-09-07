@@ -116,14 +116,22 @@ mod tests {
             fingerprint_presented_bearer(&session)
         );
 
-        for malformed in [
-            String::new(),
-            format!("{BROWSER_CREDENTIAL_PREFIX}{}", &body[..42]),
-            format!("{BROWSER_CREDENTIAL_PREFIX}{body}="),
-            format!(" {browser}"),
-            session,
-        ] {
-            assert_eq!(fingerprint_browser_credential(&malformed), None);
+        assert_eq!(fingerprint_browser_credential(&session), None);
+        assert_eq!(fingerprint_presented_bearer(&browser), None);
+        for prefix in [BROWSER_CREDENTIAL_PREFIX, "aas1."] {
+            for malformed in [
+                String::new(),
+                format!("{prefix}{}", &body[..42]),
+                format!("{prefix}{body}="),
+                format!(" {prefix}{body}"),
+                format!("{prefix}{}V", &body[..42]),
+                format!("{prefix}+{}", &body[..42]),
+                format!("{prefix}/{}", &body[..42]),
+                format!("{prefix}é{}", &body[..41]),
+            ] {
+                assert_eq!(fingerprint_browser_credential(&malformed), None);
+                assert_eq!(fingerprint_presented_bearer(&malformed), None);
+            }
         }
     }
 
