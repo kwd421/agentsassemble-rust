@@ -389,6 +389,7 @@ async fn finalize_recovered_stop(
         &session.public,
         "session_detached",
         BTreeMap::from([("reason".to_owned(), json!("operator stop"))]),
+        chrono::Utc::now(),
     )
     .await?;
     let state = append_state_event(transaction, &reservation.principal, &session.public).await?;

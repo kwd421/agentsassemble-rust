@@ -1,7 +1,8 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, DurableAgentSession, Participant, canonical_payload_hash,
+    AGENT_PROFILE_NAME_CHARACTER_LIMIT, AuthenticatedPrincipal, DurableAgentSession, Participant,
+    canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -94,6 +95,7 @@ impl SqliteStore {
                 "avatar_image_url".to_owned(),
                 json!(session.public.avatar_image_url),
             )]),
+            session.public.updated_at,
         )
         .await?;
         let session_event =
@@ -149,10 +151,15 @@ fn profile_name(value: &Value) -> Result<&str, PersistenceError> {
         .as_str()
         .ok_or_else(|| rejected("bad_request", "display_name must be a string."))?
         .trim();
-    if name.is_empty() || name.chars().count() > 80 || name.chars().any(char::is_control) {
+    if name.is_empty()
+        || name.chars().count() > AGENT_PROFILE_NAME_CHARACTER_LIMIT
+        || name.chars().any(char::is_control)
+    {
         return Err(rejected(
             "bad_request",
-            "display_name must contain 1 to 80 characters without controls.",
+            &format!(
+                "display_name must contain 1 to {AGENT_PROFILE_NAME_CHARACTER_LIMIT} characters without controls."
+            ),
         ));
     }
     Ok(name)

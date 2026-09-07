@@ -50,6 +50,15 @@ async fn identity_update_preserves_custody_and_membership_and_replays_after_rest
     let mut after_session = load_session(&mut transaction, "general", AGENT_ID).await?;
     let mut after_participant = load_participant(&mut transaction, "general", AGENT_ID).await?;
     assert_eq!(after_participant.display_name, "새 이름");
+    assert_eq!(
+        after_participant.updated_at,
+        after_session.public.updated_at
+    );
+    assert_eq!(after_participant.updated_at, outcome.events[0].created_at);
+    assert_eq!(
+        outcome.result["participant"]["updated_at"],
+        json!(after_participant.updated_at)
+    );
     after_session.public.display_name = before_session.public.display_name.clone();
     after_session.public.updated_at = before_session.public.updated_at;
     after_participant.display_name = before_participant.display_name.clone();

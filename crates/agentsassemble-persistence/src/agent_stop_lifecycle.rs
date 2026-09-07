@@ -345,6 +345,7 @@ async fn detach_confirmed_session(
         &session.public,
         "session_detached",
         BTreeMap::from([("reason".to_owned(), json!("operator stop"))]),
+        chrono::Utc::now(),
     )
     .await?;
     let state = append_state_event(transaction, principal, &session.public).await?;

@@ -622,6 +622,7 @@ export function agentProfileAckProjectionsAreCoherent(result: Record<string, unk
     memberEvent.type === "participant_updated" && memberEvent.participant_type === "agent" &&
     memberEvent.participant_id === session.participant_id && memberEvent.display_name === session.display_name &&
     memberEvent.avatar_image_url === session.avatar_image_url &&
+    participant.updated_at === session.updated_at && memberEvent.created_at === session.updated_at &&
     stateEvent.type === "agent_session_state" && stateEvent.seq === memberEvent.seq + 1 &&
     agentSessionProjectionsMatch(stateEvent.agent_session, session) &&
     eventProjectionsMatch(result.event, stateEvent);

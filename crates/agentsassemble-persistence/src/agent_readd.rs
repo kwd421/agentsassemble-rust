@@ -111,6 +111,7 @@ pub(crate) async fn commit_readd_listing(
             ("agent_session".to_owned(), json!(session.public)),
             ("participant".to_owned(), json!(participant)),
         ]),
+        chrono::Utc::now(),
     )
     .await?;
     let events = vec![event];

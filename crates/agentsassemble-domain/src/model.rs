@@ -333,6 +333,8 @@ pub struct ProviderAvailability {
     pub controls: Vec<ProviderControl>,
 }
 
+pub const AGENT_PROFILE_NAME_CHARACTER_LIMIT: usize = 80;
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[allow(clippy::struct_excessive_bools)] // Public runtime observations are independent wire facts.
 #[serde(deny_unknown_fields)]

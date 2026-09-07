@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { AGENT_PROFILE_NAME_CHARACTER_LIMIT } from "../../../types/generated/AGENT_PROFILE_WIRE";
 import ImageCropper from "../ImageCropper";
 import type { RoomAgentSession } from "../../../api";
 
@@ -16,8 +17,10 @@ export default function AgentIdentitySettings({ session, onSave, onAvatarUpdate 
   const [status, setStatus] = useState("");
   useEffect(() => { setName(session.display_name); }, [session.display_name]);
 
+  const nameValid = name.trim().length > 0 && Array.from(name.trim()).length <= AGENT_PROFILE_NAME_CHARACTER_LIMIT;
+
   async function saveProfile(clearAvatar = false) {
-    if (busy) return;
+    if (busy || !nameValid) return;
     setBusy(true);
     setStatus("");
     try {
@@ -31,7 +34,7 @@ export default function AgentIdentitySettings({ session, onSave, onAvatarUpdate 
   }
 
   async function saveAvatar(file: File) {
-    if (!onAvatarUpdate || busy || uploadRef.current) return;
+    if (!onAvatarUpdate || busy || !nameValid || uploadRef.current) return;
     const controller = new AbortController();
     uploadRef.current = controller;
     setBusy(true);
@@ -56,20 +59,21 @@ export default function AgentIdentitySettings({ session, onSave, onAvatarUpdate 
           onChange={(event) => setName(event.currentTarget.value)}
           placeholder={session.display_name} />
       </label>
-      <button type="button" className="dc-member-session-button" disabled={busy || !name.trim()}
+      <button type="button" className="dc-member-session-button" disabled={busy || !nameValid}
         onClick={() => void saveProfile()}>
         프로필 저장
       </button>
       {onAvatarUpdate && <>
         <input ref={avatarInputRef} className="sr-only" type="file" accept="image/*"
-          aria-label="에이전트 프로필 사진 선택" disabled={busy}
+          aria-label="에이전트 프로필 사진 선택" disabled={busy || !nameValid}
           onChange={(event) => { setCropFile(event.currentTarget.files?.[0] || null); event.currentTarget.value = ""; }} />
-        <button type="button" className="dc-member-session-button" disabled={busy}
+        <button type="button" className="dc-member-session-button" disabled={busy || !nameValid}
           onClick={() => avatarInputRef.current?.click()}>프로필 사진 변경</button>
       </>}
-      {session.avatar_image_url && <button type="button" className="dc-member-session-button" disabled={busy}
+      {session.avatar_image_url && <button type="button" className="dc-member-session-button" disabled={busy || !nameValid}
         onClick={() => void saveProfile(true)}>프로필 사진 삭제</button>}
       {cropFile && <ImageCropper file={cropFile} onCancel={() => setCropFile(null)} onCropped={(file) => void saveAvatar(file)} />}
+      {!nameValid && <p role="alert">이름은 1~{AGENT_PROFILE_NAME_CHARACTER_LIMIT}자까지 입력할 수 있습니다.</p>}
       {status && <p className="dc-member-session-status preserve-words" role="status">{status}</p>}
     </section>
   );

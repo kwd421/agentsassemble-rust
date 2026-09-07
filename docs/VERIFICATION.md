@@ -7034,3 +7034,21 @@ The final 33 member/connection/editor cases also pass with a nonempty canonical
 roster avatar. Affected domain/persistence/protocol all-target/all-feature Clippy
 passes after moving asset constant emission into one cohesive exporter function;
 the unchanged function-length gate caught the oversized exporter entrypoint.
+
+
+Daybreak reviewed every Phase 3 commit and cumulative `5c8d17b..68c6763`, final HEAD
+and whole local contract: **REVISE C0/H0/M0/L2**. Both lows originate in the name
+slice: participant-event time differed from stored/ACK time, and the editor omitted
+the original 80-character bound. The three subsequent individual deltas were
+approved; that does not close the cumulative findings.
+
+Corrections use the stored profile mutation timestamp for the participant event;
+the ACK codec now requires exact Session/Participant/event timestamp coherence.
+Other lifecycle events still select their own emission time through the existing
+shared event writer. One exported domain constant owns the name character limit;
+the editor counts Unicode code points, exposes invalid length and blocks save,
+clear and upload before side effects. Two affected persistence cases pass including
+restart/replay timestamp equality; 24 frontend cases pass including timestamp
+rejection and 80/81-emoji editor boundaries. TypeScript/build/original CSS, generated
+bindings, affected all-target/all-feature Clippy and unchanged architecture/source,
+format, diff and 19 policy/artifact gates pass. Whole-phase re-approval is pending.

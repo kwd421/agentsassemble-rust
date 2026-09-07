@@ -39,3 +39,20 @@ it("owns cropped upload cancellation and clears only the Agent avatar", async ()
   unmount();
   expect(signal.aborted).toBe(true);
 });
+
+
+it("blocks oversized names before saving or uploading and counts Unicode characters", async () => {
+  const onSave = vi.fn().mockResolvedValue(undefined);
+  const onAvatarUpdate = vi.fn();
+  render(<AgentIdentitySettings session={agentSessionFixture()} onSave={onSave} onAvatarUpdate={onAvatarUpdate} />);
+  const input = screen.getByLabelText("표시 이름");
+  fireEvent.change(input, { target: { value: "😀".repeat(81) } });
+  expect(screen.getByRole("alert").textContent).toContain("80");
+  fireEvent.click(screen.getByRole("button", { name: "프로필 저장" }));
+  expect(onSave).not.toHaveBeenCalled();
+  expect((screen.getByRole("button", { name: "프로필 사진 변경" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(onAvatarUpdate).not.toHaveBeenCalled();
+  fireEvent.change(input, { target: { value: "😀".repeat(80) } });
+  fireEvent.click(screen.getByRole("button", { name: "프로필 저장" }));
+  await waitFor(() => expect(onSave).toHaveBeenCalledWith(expect.anything(), { display_name: "😀".repeat(80) }));
+});

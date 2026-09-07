@@ -55,6 +55,7 @@ pub(crate) async fn append_launch_events(
                 &session.public,
                 "participant_joined",
                 BTreeMap::from([("participant".to_owned(), json!(participant))]),
+                chrono::Utc::now(),
             )
             .await?,
         );
@@ -66,6 +67,7 @@ pub(crate) async fn append_launch_events(
             &session.public,
             "session_attached",
             BTreeMap::new(),
+            chrono::Utc::now(),
         )
         .await?,
     );

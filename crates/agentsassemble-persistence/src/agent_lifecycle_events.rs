@@ -17,12 +17,13 @@ pub(crate) async fn append_session_event(
     session: &AgentSession,
     event_type: &str,
     extra: BTreeMap<String, Value>,
+    created_at: chrono::DateTime<Utc>,
 ) -> Result<RoomEvent, PersistenceError> {
     let event = RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),
         seq: next_sequence(transaction, &principal.room_id).await?,
-        created_at: Utc::now(),
+        created_at,
         room_id: principal.room_id.clone(),
         event_type: event_type.to_owned(),
         actor: Actor {
@@ -62,6 +63,7 @@ pub(crate) async fn append_state_event(
             ("runtime_status".to_owned(), json!(session.runtime_status)),
             ("agent_session".to_owned(), json!(session)),
         ]),
+        chrono::Utc::now(),
     )
     .await
 }
@@ -79,6 +81,7 @@ pub(crate) async fn append_error_event(
         session,
         "error",
         BTreeMap::from([("error_code".to_owned(), json!(error_code))]),
+        chrono::Utc::now(),
     )
     .await?;
     event.content = Some(message.to_owned());

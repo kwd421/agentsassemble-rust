@@ -13,9 +13,10 @@ room appearance and message attachments retain their existing owners.
 room admission and `agent.control`, excluding Agent Bridge callers. It changes only
 explicit name/avatar fields, independently of runtime configuration and provider
 availability. Name is trimmed, nonempty, at most 80 Unicode characters, without
-control characters. Unknown or wrongly typed fields fail. Session identity updates
+control characters; its exported domain limit drives editor validation before upload. Unknown or wrongly typed fields fail. Session identity updates
 and the participant identity projection commit atomically with the canonical event
-and request replay result. Room-turn principal construction consumes participant
+and request replay result. Session, participant and participant-event mutation time
+are identical. Room-turn principal construction consumes participant
 names, so this derived projection must update; role, mute, membership, runtime
 custody, persona and human identity remain untouched. The runtime profile key does
 not depend on cosmetic identity. No provider launch, restart or polling is added.

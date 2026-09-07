@@ -61,11 +61,12 @@ pub use message_search::{
     clean_message_search_value, compact_casefolded_message_search_text,
 };
 pub use model::{
-    Actor, AgentSession, AgentSessionDraft, AuthenticatedPrincipal,
-    CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole,
-    ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
-    ProviderControlOption, ProviderTurnInterrupt, Room, RoomEvent, RoomStatus, SnapshotMode,
+    AGENT_PROFILE_NAME_CHARACTER_LIMIT, Actor, AgentSession, AgentSessionDraft,
+    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet, ClientKind,
+    DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
+    Participant, ParticipantRole, ParticipantStatus, ProviderAvailability, ProviderCatalog,
+    ProviderControl, ProviderControlOption, ProviderTurnInterrupt, Room, RoomEvent, RoomStatus,
+    SnapshotMode,
 };
 pub use persona::{
     MAX_PERSONA_CONTEXT_CHARACTERS, MAX_PERSONA_ID_CHARACTERS, MAX_PERSONA_LORE_CHARACTERS,

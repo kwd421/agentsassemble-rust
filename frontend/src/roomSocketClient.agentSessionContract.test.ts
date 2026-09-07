@@ -471,8 +471,8 @@ describe("Agent Session socket contract", () => {
 
 it("binds profile ACK identity and projects both committed events", () => {
   const { participant, session, createdEvent } = creationRecords();
-  const updated = { ...session, display_name: "Renamed" };
-  const member = { ...participant, display_name: "Renamed" };
+  const updated = { ...session, display_name: "Renamed", updated_at: createdEvent.created_at };
+  const member = { ...participant, display_name: "Renamed", updated_at: updated.updated_at };
   const memberEvent = { ...createdEvent, type: "participant_updated", display_name: "Renamed", avatar_image_url: updated.avatar_image_url };
   const stateEvent = { ...createdEvent, ...event(2), type: "agent_session_state",
     runtime_status: updated.runtime_status, display_name: "Renamed", agent_session: updated };
@@ -482,6 +482,8 @@ it("binds profile ACK identity and projects both committed events", () => {
     { agent_id: session.participant_id, display_name: "Renamed" }, value, "general", "operator-local");
   expect(valid(result)).toBe(true);
   expect(valid({ ...result, event_seq: undefined })).toBe(false);
+  expect(valid({ ...result, participant: { ...member, updated_at: "different" } })).toBe(false);
+  expect(valid({ ...result, events: [{ ...memberEvent, created_at: "different" }, stateEvent] })).toBe(false);
   expect(valid({ ...result, participant: { ...member, participant_id: "foreign" } })).toBe(false);
   expect(valid({ ...result, event: { ...stateEvent, agent_session: session } })).toBe(false);
   expect(applyParticipantEvents([participant], result.events as unknown as RoomEvent[])[0].display_name).toBe("Renamed");
