@@ -54,6 +54,7 @@ registered_routes! {
     fn directory_routes<AppState>() {
         private "/api/rooms" => get(list_rooms).post(create_room),
         private "/api/rooms/lifecycle" => post(change_lifecycle),
+        same_origin_public "/api/room-session/lifecycle" => post(change_session_lifecycle),
     }
 }
 
@@ -61,13 +62,51 @@ async fn change_lifecycle(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Response, DirectoryHttpError> {
+    consume_operator(&state, request.headers()).await?;
+    execute_lifecycle(&state, request, None).await
+}
+
+async fn change_session_lifecycle(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, DirectoryHttpError> {
+    use crate::room_session_http_authority::{
+        RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
+    };
+    let credential = crate::http_api::bearer_credential(request.headers())
+        .ok_or_else(DirectoryHttpError::unauthorized)?;
+    let authorization = match resolve_room_session_bearer(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        credential,
+    )
+    .await
+    {
+        Ok(RoomSessionBearerResolution::Authorized(authorization))
+            if matches!(
+                *authorization,
+                agentsassemble_persistence::RoomSessionAuthorization::Operator(_)
+            ) =>
+        {
+            authorization
+        }
+        Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
+        _ => return Err(DirectoryHttpError::unauthorized()),
+    };
+    execute_lifecycle(&state, request, Some(&authorization)).await
+}
+
+async fn execute_lifecycle(
+    state: &AppState,
+    request: Request,
+    session: Option<&agentsassemble_persistence::RoomSessionAuthorization>,
+) -> Result<Response, DirectoryHttpError> {
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
         LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
     };
     use agentsassemble_protocol::RoomAction;
-
-    consume_operator(&state, request.headers()).await?;
     let body: LifecycleRequest = decode_json_body(request, MAX_DIRECTORY_BODY_BYTES)
         .await
         .map_err(DirectoryHttpError::from_body)?;
@@ -89,37 +128,58 @@ async fn change_lifecycle(
     }
     let room_id = validate_room_id(&body.room_id)
         .map_err(|error| DirectoryHttpError::bad_request(error.message))?;
-    let principal = AuthenticatedPrincipal {
-        principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
-        participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
-        display_name: String::new(),
-        room_id,
-        client_kind: ClientKind::Browser,
-        invite_scope: InviteScope::ReadWrite,
-        is_operator: true,
-        capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
-    };
-    let execution = state
-        .rooms
-        .execute(
-            principal,
-            None,
-            body.request_id.clone(),
-            body.action,
-            body.payload,
-        )
-        .await;
-    let outcome =
-        match execution {
-            Ok(outcome) => outcome,
-            Err(failure) => {
-                let error = DirectoryHttpError::from(failure.error);
-                return Ok((error.status, Json(json!({
-                "error": error.message, "code": error.code, "resolution": failure.resolution,
-                "request_id": body.request_id, "action": body.action,
-            }))).into_response());
-            }
+    let execution = if let Some(session) = session {
+        if room_id != session.principal().room_id {
+            return Err(DirectoryHttpError::bad_request(
+                "The paired session belongs to another room.",
+            ));
+        }
+        state
+            .rooms
+            .execute_room_session(session, body.request_id.clone(), body.action, body.payload)
+            .await
+    } else {
+        let principal = AuthenticatedPrincipal {
+            principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
+            participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+            display_name: String::new(),
+            room_id,
+            client_kind: ClientKind::Browser,
+            invite_scope: InviteScope::ReadWrite,
+            is_operator: true,
+            capabilities: CapabilitySet::local_operator(
+                ClientKind::Browser,
+                InviteScope::ReadWrite,
+            ),
         };
+        state
+            .rooms
+            .execute(
+                principal,
+                None,
+                body.request_id.clone(),
+                body.action,
+                body.payload,
+            )
+            .await
+    };
+    let outcome = match execution {
+        Ok(outcome) => outcome,
+        Err(failure) => {
+            let mut error = DirectoryHttpError::from(failure.error);
+            if session.is_some() && error.code == "room_deletion_pending" {
+                "Deletion was accepted and this paired session has ended. Check the native host for completion.".clone_into(&mut error.message);
+            }
+            return Ok((
+                error.status,
+                Json(json!({
+                    "error": error.message, "code": error.code, "resolution": failure.resolution,
+                    "request_id": body.request_id, "action": body.action,
+                })),
+            )
+                .into_response());
+        }
+    };
     Ok(Json(json!({
         "server_id": authority.server_id, "authority_lineage_id": authority.authority_lineage_id,
         "request_id": body.request_id, "action": body.action, "resolution": "committed",
@@ -262,7 +322,7 @@ impl DirectoryHttpError {
         Self {
             status: StatusCode::UNAUTHORIZED,
             code: "unauthorized",
-            message: "A valid one-use server-operator ticket is required.".to_owned(),
+            message: "Valid request authority is required.".to_owned(),
         }
     }
 

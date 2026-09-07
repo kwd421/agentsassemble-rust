@@ -349,3 +349,20 @@ is presented after the canonical settings commit, when the image is bound and it
 existing remote read is authorized. Local pending-preview behavior is preserved.
 No new background task, retry, timer or persistent state is added. Remote lifecycle
 HTTP controls and packaged whole-phase acceptance remain outstanding.
+
+### Paired lifecycle HTTP entry
+
+`/api/room-session/lifecycle` is a same-origin public entry accepting only a
+verified paired session. It checks the requested server/lineage and exact session
+room, then passes session provenance to the existing queued lifecycle/deletion
+owner. The native `/api/rooms/lifecycle` route remains private. Both share their
+existing action whitelist, payload contract, response projection and failure owner;
+ordinary human sessions cannot use the paired entry.
+
+Close/archive replies can confirm their committed room state even though that
+commit revokes the requesting session. Deletion acknowledges its durable pending
+intent through the existing unresolved result and finishes via the existing runtime
+cleanup/publication owner. It requires no surviving browser session. A paired
+caller cannot replay after revocation; deletion completion and a lost terminal
+response must be checked at the native host. No new completion credential, polling,
+background worker or native authority conversion is introduced.

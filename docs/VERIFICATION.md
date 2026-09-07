@@ -7903,3 +7903,20 @@ Clippy initially caught import placement and test formatting growth; corrected
 without changing limits or adding exemptions. No new task, timer or storage owner.
 Direct paired packaged image and lifecycle proof remains part of pending Phase 5
 acceptance; the local tests do not establish that end-to-end result.
+
+## Phase 5 paired lifecycle HTTP entry (2026-09-08)
+
+The public paired-only lifecycle entry dispatches into the existing exact-room
+queue while the native directory/lifecycle remains private. It rejects foreign
+room/device requests and cannot reauthorize a session revoked by its own command.
+
+Four HTTP integration tests passed: paired close/archive return the committed state;
+paired deletion returns the existing `room_deletion_pending` unresolved result,
+then the room's event channel closes and durable room deletion completes without
+another browser request. Native lifecycle/deletion/recreation behavior is retained.
+The two targets took 1.09s and 1.07s. Initial expectations were corrected to the
+existing lifecycle owner's 403 revoked-session and asynchronous deletion contract;
+no success or authorization behavior was relaxed to satisfy them.
+
+No new timer/task/storage/retry owner. Clippy and unchanged structure/policy/format/
+artifact gates apply; browser presentation and direct packaged proof remain pending.

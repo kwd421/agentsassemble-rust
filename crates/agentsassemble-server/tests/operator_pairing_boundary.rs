@@ -327,3 +327,125 @@ async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
         .unwrap_or_else(|error| panic!("join: {error}"))
         .unwrap_or_else(|error| panic!("serve: {error}"));
 }
+
+#[tokio::test]
+async fn paired_lifecycle_commits_before_revoking_its_request_session()
+-> Result<(), Box<dyn std::error::Error>> {
+    for action in ["room.close", "room.archive", "room.delete"] {
+        let server = PairingServer::start().await;
+        let client = Client::new();
+        let created: Value = client
+            .post(format!("{}/api/operator-pairing/create", server.base))
+            .bearer_auth(operator_ticket(&server.state).await)
+            .json(&server.authority)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let token = created["pairing_url"]
+            .as_str()
+            .ok_or("pairing URL missing")?
+            .strip_prefix(&format!("{ORIGIN}/pair?token="))
+            .ok_or("pairing origin")?;
+        let device = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x83; 32]));
+        let paired: Value =
+            public(client.post(format!("{}/api/operator-pairing/redeem", server.base)))
+                .header("x-device-token", &device)
+                .json(&json!({"pairing_token": token}))
+                .send()
+                .await?
+                .error_for_status()?
+                .json()
+                .await?;
+        let session = paired["session_token"].as_str().ok_or("session missing")?;
+        let mut body = json!({
+            "server_id": server.authority["server_id"],
+            "authority_lineage_id": server.authority["authority_lineage_id"],
+            "room_id": "general", "request_id": uuid::Uuid::new_v4().to_string(), "action": action,
+            "payload": { "room_uid": server.authority["room_uid"] },
+        });
+        if action == "room.archive" {
+            body["payload"]["archived"] = json!(true);
+        }
+        if action == "room.delete" {
+            body["payload"]["confirmation_name"] = json!("General");
+        }
+        let endpoint = format!("{}/api/room-session/lifecycle", server.base);
+        let rejected = public(client.post(&endpoint))
+            .bearer_auth(session)
+            .header(
+                "x-device-token",
+                format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x84; 32])),
+            )
+            .json(&body)
+            .send()
+            .await?;
+        assert_eq!(rejected.status(), StatusCode::FORBIDDEN);
+        let mut foreign = body.clone();
+        foreign["room_id"] = json!("another-room");
+        let rejected = public(client.post(&endpoint))
+            .bearer_auth(session)
+            .header("x-device-token", &device)
+            .json(&foreign)
+            .send()
+            .await?;
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+        let events = server.state.rooms.subscribe("general").await;
+        let response = public(client.post(&endpoint))
+            .bearer_auth(session)
+            .header("x-device-token", &device)
+            .json(&body)
+            .send()
+            .await?;
+        assert_paired_lifecycle_result(&server, action, response, events).await?;
+        let retry = public(client.post(&endpoint))
+            .bearer_auth(session)
+            .header("x-device-token", &device)
+            .json(&body)
+            .send()
+            .await?;
+        assert_eq!(retry.status(), StatusCode::FORBIDDEN);
+        server.shutdown.cancel();
+        server.running.await??;
+    }
+    Ok(())
+}
+
+async fn assert_paired_lifecycle_result(
+    server: &PairingServer,
+    action: &str,
+    response: reqwest::Response,
+    mut events: tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if action == "room.delete" {
+        assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+        let response: Value = response.json().await?;
+        assert_eq!(response["resolution"], "unresolved");
+        assert_eq!(response["code"], "room_deletion_pending");
+        tokio::time::timeout(Duration::from_secs(10), async {
+            loop {
+                match events.recv().await {
+                    Ok(_) => {}
+                    Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+                    Err(error) => panic!("paired deletion events: {error}"),
+                }
+            }
+        })
+        .await?;
+        assert!(!server.state.store.room_exists("general").await?);
+    } else {
+        assert_eq!(response.status(), StatusCode::OK);
+        let response: Value = response.json().await?;
+        assert_eq!(response["resolution"], "committed");
+        assert_eq!(
+            response["result"]["room"]["status"],
+            if action == "room.archive" {
+                "archived"
+            } else {
+                "closed"
+            }
+        );
+    }
+    Ok(())
+}
