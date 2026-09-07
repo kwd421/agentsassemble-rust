@@ -131,7 +131,7 @@ async fn execute_leave_in(
         &participant,
     )
     .await?;
-    let event = participant_left_event(transaction, principal, &participant).await?;
+    let event = participant_left_event(transaction, &participant).await?;
     insert_event(transaction, &event).await?;
     let result = json!({
         "participant": participant,
@@ -209,25 +209,24 @@ async fn end_exact_session(
         .collect()
 }
 
-async fn participant_left_event(
+pub(crate) async fn participant_left_event(
     transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
     participant: &Participant,
 ) -> Result<RoomEvent, PersistenceError> {
     Ok(RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),
-        seq: next_sequence(transaction, &principal.room_id).await?,
+        seq: next_sequence(transaction, &participant.room_id).await?,
         created_at: Utc::now(),
-        room_id: principal.room_id.clone(),
+        room_id: participant.room_id.clone(),
         event_type: "participant_left".to_owned(),
         actor: Actor {
-            participant_id: principal.participant_id.clone(),
+            participant_id: participant.participant_id.clone(),
             participant_type: "human".to_owned(),
         },
         participant_id: Some(participant.participant_id.clone()),
         participant_type: Some("human".to_owned()),
-        actor_id: Some(principal.participant_id.clone()),
+        actor_id: Some(participant.participant_id.clone()),
         actor_type: Some("human".to_owned()),
         display_name: Some(participant.display_name.clone()),
         content: None,

@@ -637,4 +637,4 @@ fn invalid_state(message: &str) -> PersistenceError {
 
 #[cfg(test)]
 #[path = "human_admission_store_tests.rs"]
-mod tests;
+pub(crate) mod tests;

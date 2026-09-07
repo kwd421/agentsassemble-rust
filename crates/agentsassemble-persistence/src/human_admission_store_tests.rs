@@ -598,7 +598,7 @@ async fn reusable_identity_replaces_only_its_session_and_preserves_room_authorit
     );
 }
 
-fn prepared(
+pub(crate) fn prepared(
     invite_fingerprint: [u8; 32],
     browser_fingerprint: [u8; 32],
     request_id: &str,
@@ -638,7 +638,7 @@ fn prepared_with_avatar(
     .unwrap_or_else(|error| panic!("prepare admission: {error}"))
 }
 
-async fn fixture() -> (SqliteStore, DateTime<Utc>) {
+pub(crate) async fn fixture() -> (SqliteStore, DateTime<Utc>) {
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open store: {error}"));
@@ -657,7 +657,7 @@ async fn fixture() -> (SqliteStore, DateTime<Utc>) {
     (store, Utc::now())
 }
 
-async fn insert_invite(
+pub(crate) async fn insert_invite(
     store: &SqliteStore,
     signed: [u8; 32],
     join: [u8; 32],
@@ -704,7 +704,7 @@ async fn set_room_authority(store: &SqliteStore, participant_id: &str) {
     .unwrap_or_else(|error| panic!("update participant authority: {error}"));
 }
 
-fn admitted(decision: HumanAdmissionDecision) -> Box<HumanAdmissionCommit> {
+pub(crate) fn admitted(decision: HumanAdmissionDecision) -> Box<HumanAdmissionCommit> {
     match decision {
         HumanAdmissionDecision::Admitted(commit) => commit,
         HumanAdmissionDecision::Rejected(_) => panic!("expected admitted decision"),

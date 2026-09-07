@@ -7483,3 +7483,21 @@ server/desktop Clippy, frontend production/CSS build, structure/19 policy tests,
 artifact/fmt/diff checks. Desktop's 26 other tests passed; its updated 25-command
 surface test passed separately. Evidence: `/tmp/aa-phase5-native-*.log`.
 No real Google execution or packaged Phase 5 acceptance is claimed by these tests.
+
+### Google account persistence and guest retirement (2026-09-08)
+
+The clean schema is 62: a unique Google subject/profile link and multiple explicitly
+linked devices per profile, retaining exact human-session credential foreign keys.
+Accounts require completed host bootstrap; central native startup remains separate.
+Confirmed guest retirement commits membership departure, access revocation, profile
+retirement and destination device binding together, preserving room message history.
+The local operator remains the room owner and cannot be discarded. No old database
+is converted or deleted. Public JWT/HTTP/UI wiring follows this persistence owner.
+PASS: all 267 persistence tests, the 3 final account scenarios after bootstrap binding,
+all-target/all-feature persistence Clippy, structure/19 policy checks, fmt/diff and
+artifact check (`/tmp/aa-phase5-account-store-*.log`). The tests include forced SQLite
+rollback, restart, multiple devices, identity changes and session/device mismatch.
+The native focused-test command had created an obsolete 1.46 GiB desktop target;
+with builds stopped, the existing maintenance owner's selected plan removed only
+that obsolete target and retained the active shared target. The final artifact check
+passes. No Google network proof or full Phase 5 completion is claimed here.

@@ -82,3 +82,28 @@ the redirect URI from its exact running runtime and opens only the validated Goo
 authorization URL. The existing central service remains the OAuth/PKCE exchange
 owner. Completion/abort/failure retires transient state; expiry is checked on access,
 and runtime shutdown drops it without adding a polling task or persistence table.
+
+### Local Google account binding and guest retirement
+
+On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,
+one-use nonce bound to the current server identity and presented browser credential.
+A local operator ticket, an exact admitted human plus its browser credential, or a
+standalone durable browser credential are distinct inputs. Pairing is never an
+account credential. Bare browser credentials may start unbound login but cannot
+read another identity; only verified Google proof can create or recover that link.
+The persistence owner resolves identity and revalidates it when committing a link.
+
+One Google subject links to one profile; one profile has at most one Google link.
+Multiple devices may explicitly authenticate to that account. The clean schema
+therefore removes the old one-device-per-profile constraint while preserving the
+exact credential/profile foreign key on reusable human sessions. Earlier schema
+versions remain rejected without automatic conversion or deletion.
+
+A switch to a different already-linked account requires explicit guest discard,
+a device still bound to that guest, and a guest with no linked account or owned
+room. One transaction leaves its memberships, revokes access, retires mutable guest
+profile/device data and binds the requesting device to the destination. Room history
+remains. Committed revocations/events use the existing runtime publication owner;
+no frontend cleanup substitutes for the transaction. One-use admission identity
+is not silently promoted by normal room joining; explicit Google linking is the
+account operation which may bind that current identity to the device.

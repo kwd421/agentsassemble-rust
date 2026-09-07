@@ -144,13 +144,18 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "google_accounts",
+        ddl: "CREATE TABLE IF NOT EXISTS google_accounts (subject_fingerprint BLOB PRIMARY KEY CHECK(typeof(subject_fingerprint) = 'blob' AND length(subject_fingerprint) = 32), user_id TEXT NOT NULL UNIQUE, FOREIGN KEY(user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "human_device_credentials",
         ddl: concat!(
             "CREATE TABLE IF NOT EXISTS human_device_credentials (",
             "credential_fingerprint BLOB PRIMARY KEY ",
             "CHECK(typeof(credential_fingerprint) = 'blob' ",
             "AND length(credential_fingerprint) = 32), ",
-            "user_id TEXT NOT NULL UNIQUE, ",
+            "user_id TEXT NOT NULL, ",
             "created_at INTEGER NOT NULL, ",
             "UNIQUE(credential_fingerprint, user_id), ",
             "FOREIGN KEY(user_id) REFERENCES user_profiles(user_id) ON DELETE CASCADE)",
