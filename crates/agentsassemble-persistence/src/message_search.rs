@@ -391,7 +391,7 @@ async fn context_side(
 }
 
 fn checked_event(row: &SqliteRow, room_id: &str) -> Result<(RoomEvent, i64), PersistenceError> {
-    let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+    let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
     let created_at_nanos = row.get::<i64, _>("created_at_nanos");
     if event.room_id != room_id
         || event.id != row.get::<String, _>("event_id")

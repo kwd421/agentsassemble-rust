@@ -46,12 +46,12 @@ impl SqliteStore {
         let mut entries = Vec::with_capacity(rows.len());
         for row in rows {
             let row_room_id = row.get::<String, _>("room_id");
-            let room: Room = serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
+            let room: Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
             if room.room_id != row_room_id {
                 return Err(invalid_stored_room());
             }
             let room_settings: RoomSettings =
-                serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
+                serde_json::from_str(row.get::<&str, _>("settings_json"))?;
             let preferences = row
                 .get::<Option<String>, _>("preferences_json")
                 .map_or_else(

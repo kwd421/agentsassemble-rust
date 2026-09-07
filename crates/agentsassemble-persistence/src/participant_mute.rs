@@ -263,10 +263,8 @@ async fn load_agent_session_for_participant(
     let mut matching = rows
         .into_iter()
         .map(|row| {
-            serde_json::from_str::<DurableAgentSession>(
-                row.get::<String, _>("session_json").as_str(),
-            )
-            .map_err(PersistenceError::from)
+            serde_json::from_str::<DurableAgentSession>(row.get::<&str, _>("session_json"))
+                .map_err(PersistenceError::from)
         })
         .collect::<Result<Vec<_>, _>>()?
         .into_iter()

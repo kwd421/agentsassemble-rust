@@ -51,8 +51,8 @@ impl SqliteStore {
         let mut summaries = Vec::with_capacity(rows.len());
         for row in rows {
             let card = decode_card(
-                row.get::<String, _>("persona_id").as_str(),
-                row.get::<String, _>("card_json").as_str(),
+                row.get::<&str, _>("persona_id"),
+                row.get::<&str, _>("card_json"),
             )?;
             let has_thumbnail = row.get::<bool, _>("has_thumbnail");
             validate_thumbnail_kind(&card, has_thumbnail)?;
@@ -150,7 +150,7 @@ async fn load_persona_row(
     .fetch_optional(&mut **transaction)
     .await?
     .ok_or_else(persona_not_found)?;
-    let card = decode_card(persona_id, row.get::<String, _>("card_json").as_str())
+    let card = decode_card(persona_id, row.get::<&str, _>("card_json"))
         .map_err(|_| persona_not_found())?;
     let has_thumbnail = row.get::<bool, _>("has_thumbnail");
     validate_thumbnail_kind(&card, has_thumbnail).map_err(|_| persona_not_found())?;

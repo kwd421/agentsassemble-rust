@@ -45,9 +45,9 @@ pub(super) async fn resolve_identity(
             let user_id = row.get::<String, _>("user_id");
             let participant_id = row.get::<String, _>("participant_id");
             let profile = decode_bound_profile(
-                row.get::<String, _>("participant_id").as_str(),
+                row.get::<&str, _>("participant_id"),
                 &participant_id,
-                row.get::<String, _>("profile_json").as_str(),
+                row.get::<&str, _>("profile_json"),
             )?;
             let previous_avatar_url = profile.avatar_image_url.clone();
             let mut updated = profile;
@@ -204,10 +204,10 @@ pub(super) async fn resolve_admission_avatar(
         return Ok(None);
     }
     validate_stored_raster(
-        row.get::<String, _>("content_type").as_str(),
+        row.get::<&str, _>("content_type"),
         row.get("size"),
         row.get("content_length"),
-        row.get::<String, _>("created_at").as_str(),
+        row.get::<&str, _>("created_at"),
     )?;
     Ok(Some(AdmissionAvatar {
         attachment_id: attachment_id.to_owned(),

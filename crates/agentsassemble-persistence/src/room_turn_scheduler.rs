@@ -309,8 +309,7 @@ async fn load_room_sessions(
     }
     rows.into_iter()
         .map(|row| {
-            serde_json::from_str(row.get::<String, _>("session_json").as_str())
-                .map_err(PersistenceError::from)
+            serde_json::from_str(row.get::<&str, _>("session_json")).map_err(PersistenceError::from)
         })
         .collect()
 }
@@ -348,7 +347,7 @@ async fn recent_agent_speaking_state(
     let mut counts = HashMap::new();
     let mut previous = String::new();
     for row in rows {
-        let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+        let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
         if event.event_type != "message_final" || event.actor.participant_type != "agent" {
             continue;
         }

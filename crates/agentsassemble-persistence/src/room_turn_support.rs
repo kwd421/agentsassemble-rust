@@ -102,14 +102,14 @@ pub(crate) async fn load_active_room(
         .fetch_optional(&mut **transaction)
         .await?
         .ok_or(PersistenceError::RoomMissing)?;
-    let room: Room = serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
+    let room: Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
     if room.status != RoomStatus::Active {
         return Err(rejected(
             "room_inactive",
             "Closed or archived rooms do not accept commands.",
         ));
     }
-    let settings = serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
+    let settings = serde_json::from_str(row.get::<&str, _>("settings_json"))?;
     Ok((room, settings))
 }
 
@@ -151,7 +151,7 @@ pub(crate) async fn load_event(
         return Ok(None);
     };
     let sequence = row.get::<i64, _>("seq");
-    let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+    let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
     if event.room_id != room_id || event.id != event_id || event.seq != sequence {
         return Err(rejected(
             "invalid_state",

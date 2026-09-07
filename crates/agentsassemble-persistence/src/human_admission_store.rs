@@ -310,10 +310,8 @@ async fn exact_admission(
     }
     let state = row.get::<String, _>("state");
     let expires_at = timestamp(row.get::<i64, _>("expires_at"))?;
-    let room: agentsassemble_domain::Room =
-        serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
-    let participant: Participant =
-        serde_json::from_str(row.get::<String, _>("participant_json").as_str())?;
+    let room: agentsassemble_domain::Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
+    let participant: Participant = serde_json::from_str(row.get::<&str, _>("participant_json"))?;
     let room_id = row.get::<String, _>("room_id");
     let participant_id = row.get::<String, _>("participant_id");
     if room.room_id != room_id
@@ -326,9 +324,9 @@ async fn exact_admission(
         ));
     }
     decode_bound_profile(
-        row.get::<String, _>("profile_participant_id").as_str(),
+        row.get::<&str, _>("profile_participant_id"),
         &participant_id,
-        row.get::<String, _>("profile_json").as_str(),
+        row.get::<&str, _>("profile_json"),
     )?;
     if state != "active" {
         return Ok(Some(rejected(HumanAdmissionRejection::SessionUnavailable)));
@@ -345,8 +343,7 @@ async fn exact_admission(
             "Stored active human session has unavailable room membership authority.",
         ));
     }
-    let result: HumanAdmissionResult =
-        serde_json::from_str(row.get::<String, _>("result_json").as_str())?;
+    let result: HumanAdmissionResult = serde_json::from_str(row.get::<&str, _>("result_json"))?;
     if result.status != "admitted"
         || result.request_id != row.get::<String, _>("first_request_id")
         || result.agent_id != participant.participant_id

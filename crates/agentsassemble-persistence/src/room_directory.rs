@@ -63,9 +63,8 @@ impl SqliteStore {
         let mut rooms = Vec::with_capacity(rows.len());
         for row in rows {
             let row_room_id = row.get::<String, _>("room_id");
-            let room: Room = serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
-            let settings: RoomSettings =
-                serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
+            let room: Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
+            let settings: RoomSettings = serde_json::from_str(row.get::<&str, _>("settings_json"))?;
             if room.room_id != row_room_id {
                 return Err(invalid_room_state());
             }
@@ -162,9 +161,8 @@ async fn create_room_in_transaction(
         .fetch_optional(&mut *connection)
         .await?
     {
-        let room: Room = serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
-        let settings: RoomSettings =
-            serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
+        let room: Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
+        let settings: RoomSettings = serde_json::from_str(row.get::<&str, _>("settings_json"))?;
         if room.room_id != room_id || settings.label != room.label {
             return Err(invalid_room_state());
         }
@@ -259,8 +257,7 @@ async fn replay_room_creation(
             "Room creation request id was reused with a different payload.",
         ));
     }
-    let mut stored: RoomCreateCommit =
-        serde_json::from_str(row.get::<String, _>("result_json").as_str())?;
+    let mut stored: RoomCreateCommit = serde_json::from_str(row.get::<&str, _>("result_json"))?;
     if stored.deduplicated || stored.room.room_id != room_id || stored.settings.label != label {
         return Err(invalid_room_state());
     }

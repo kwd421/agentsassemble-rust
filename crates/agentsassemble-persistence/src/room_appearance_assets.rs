@@ -182,7 +182,7 @@ async fn read_bound_room_appearance_asset(
         .await?
         .ok_or_else(asset_missing)?;
     let settings: agentsassemble_domain::RoomSettings =
-        serde_json::from_str(row.get::<String, _>("settings_json").as_str())?;
+        serde_json::from_str(row.get::<&str, _>("settings_json"))?;
     let referenced = [
         &settings.appearance.banner_image_url,
         &settings.appearance.icon_image_url,
@@ -230,13 +230,13 @@ fn validate_asset_metadata(
 ) -> Result<(String, usize), PersistenceError> {
     let size = row.get::<i64, _>("size");
     validate_stored_raster(
-        row.get::<String, _>("content_type").as_str(),
+        row.get::<&str, _>("content_type"),
         size,
         content_length,
-        row.get::<String, _>("created_at").as_str(),
+        row.get::<&str, _>("created_at"),
     )?;
     Ok((
-        sanitize_filename(row.get::<String, _>("filename").as_str()),
+        sanitize_filename(row.get::<&str, _>("filename")),
         usize::try_from(size).map_err(|_| invalid_asset_state())?,
     ))
 }
@@ -282,14 +282,14 @@ pub(crate) async fn transition_room_appearance_references(
         .await?
         .ok_or_else(asset_missing)?;
         validate_stored_raster(
-            row.get::<String, _>("content_type").as_str(),
+            row.get::<&str, _>("content_type"),
             row.get::<i64, _>("size"),
             row.get::<i64, _>("content_length"),
-            row.get::<String, _>("created_at").as_str(),
+            row.get::<&str, _>("created_at"),
         )?;
         let owner = row.get::<Option<String>, _>("pending_owner_user_id");
         let expires_at = row.get::<Option<i64>, _>("expires_at");
-        match row.get::<String, _>("state").as_str() {
+        match row.get::<&str, _>("state") {
             "bound"
                 if owner.is_none() && expires_at.is_none() && current_ids.contains(asset_id) => {}
             "pending" if !current_ids.contains(asset_id) => {

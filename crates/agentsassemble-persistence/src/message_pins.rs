@@ -240,8 +240,7 @@ async fn load_pins(
             let event_id = row.get::<String, _>("event_id");
             let event_seq = row.get::<i64, _>("event_seq");
             let pinned_at = row.get::<i64, _>("pinned_at");
-            let event: RoomEvent =
-                serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+            let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
             let attachments = require_message_event(&event, room_id, &event_id, event_seq)?;
             project_pin(event, pinned_at, attachments)
         })

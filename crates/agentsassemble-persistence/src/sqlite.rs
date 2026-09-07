@@ -280,7 +280,7 @@ impl SqliteStore {
         .await?;
         let participants = participant_rows
             .into_iter()
-            .map(|row| serde_json::from_str(row.get::<String, _>("participant_json").as_str()))
+            .map(|row| serde_json::from_str(row.get::<&str, _>("participant_json")))
             .collect::<Result<Vec<_>, _>>()?;
         let agent_sessions = load_agent_sessions(&mut transaction, room_id).await?;
         let durable_last_seq = sqlx::query_scalar::<_, i64>(
@@ -319,7 +319,7 @@ impl SqliteStore {
         };
         let events = event_rows
             .into_iter()
-            .map(|row| serde_json::from_str(row.get::<String, _>("event_json").as_str()))
+            .map(|row| serde_json::from_str(row.get::<&str, _>("event_json")))
             .collect::<Result<Vec<_>, _>>()?;
         let oldest_seq = events.first().map_or(0, |event: &RoomEvent| event.seq);
         let last_seq = events
@@ -361,11 +361,9 @@ async fn load_agent_sessions(
     }
     rows.into_iter()
         .map(|row| {
-            serde_json::from_str::<DurableAgentSession>(
-                row.get::<String, _>("session_json").as_str(),
-            )
-            .map(|session| session.public())
-            .map_err(PersistenceError::from)
+            serde_json::from_str::<DurableAgentSession>(row.get::<&str, _>("session_json"))
+                .map(|session| session.public())
+                .map_err(PersistenceError::from)
         })
         .collect()
 }

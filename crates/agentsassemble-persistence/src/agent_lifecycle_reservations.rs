@@ -145,7 +145,7 @@ impl SqliteStore {
                     message: "The original provider effect belongs to a previous server runtime and awaits server-owned reconciliation.".to_owned(),
                 });
             }
-            return match row.get::<String, _>("status").as_str() {
+            return match row.get::<&str, _>("status") {
                 "pending" => Ok(()),
                 "rejected" => Err(stored_rejection(
                     row.get::<String, _>("failure_code"),

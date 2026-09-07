@@ -264,12 +264,12 @@ async fn load_vote(
     .fetch_optional(&mut **transaction)
     .await?
     .ok_or_else(vote_missing)?;
-    let poll: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+    let poll: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
     if poll.id != vote_id || poll.room_id != room_id || poll.seq != row.get::<i64, _>("poll_seq") {
         return Err(invalid_vote_state());
     }
     let definition = poll_definition(&poll)?;
-    let tallies: Vec<u64> = serde_json::from_str(row.get::<String, _>("tallies_json").as_str())?;
+    let tallies: Vec<u64> = serde_json::from_str(row.get::<&str, _>("tallies_json"))?;
     let total_votes =
         u64::try_from(row.get::<i64, _>("total_votes")).map_err(|_| invalid_vote_state())?;
     if total_votes > MAX_VOTE_BALLOTS_PER_POLL

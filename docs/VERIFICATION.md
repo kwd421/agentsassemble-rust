@@ -4168,6 +4168,15 @@ executor. A process-wide two-import admission is owned through decode, normaliza
 store, including after caller cancellation; no fallback, raw-source copy, migration, or cleanup task
 was added.
 
+The storage decode pass removes 57 temporary `String` copies across 24 persistence
+files. `sqlx::Row::get::<&str, _>` borrows the same live row for immediate JSON,
+timestamp, enum, and filename decoding; returned product values remain owned. A
+200-event history page now avoids 200 full serialized-event string allocations and
+copies before deserialization. SQL, authorization, identity checks, decode errors,
+transaction lifetime, and result ownership are unchanged. All 243 persistence tests
+pass (2.26 seconds); architecture, unchanged source limits, and 19 policy/artifact
+tests also pass. These timings are test execution, not an application benchmark.
+
 The real loopback TCP tests import an actual CCv3 PNG, list the exact safe projection, read the
 thumbnail with private/no-store, CORS, disposition, and `nosniff` headers, reject missing thumbnails,
 prove ticket replay failure, prove crossed-ticket consumption before malformed body handling, and

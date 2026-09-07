@@ -129,7 +129,7 @@ async fn load_room_agent_ids(
     let mut agent_ids = Vec::new();
     for row in rows {
         let participant = serde_json::from_str::<agentsassemble_domain::Participant>(
-            row.get::<String, _>("participant_json").as_str(),
+            row.get::<&str, _>("participant_json"),
         )?;
         if participant.status != agentsassemble_domain::ParticipantStatus::Kicked
             && !participant.muted
@@ -248,7 +248,7 @@ async fn load_context(
         if selected.len() >= MAX_CONTEXT_MESSAGES {
             break;
         }
-        let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+        let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
         if (!replay_canonical_context
             && event.actor.participant_id == session.public.participant_id)
             || !message_has_visible_payload(&event)?

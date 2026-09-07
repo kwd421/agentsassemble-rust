@@ -266,7 +266,7 @@ pub(crate) async fn load_local_operator_profile(
             "Local user profile does not own the operator participant.",
         ));
     }
-    let profile: UserProfile = serde_json::from_str(row.get::<String, _>("profile_json").as_str())?;
+    let profile: UserProfile = serde_json::from_str(row.get::<&str, _>("profile_json"))?;
     if profile.revision < 1 {
         return Err(rejected(
             "invalid_state",
@@ -293,9 +293,9 @@ pub(crate) async fn load_profile_for_identity(
                 )
             })?;
     decode_bound_profile(
-        row.get::<String, _>("participant_id").as_str(),
+        row.get::<&str, _>("participant_id"),
         participant_id,
-        row.get::<String, _>("profile_json").as_str(),
+        row.get::<&str, _>("profile_json"),
     )
 }
 
@@ -334,9 +334,9 @@ pub(crate) async fn project_profile_into_rooms(
     let mut events = Vec::new();
     for row in rows {
         let room_id = row.get::<String, _>("room_id");
-        let room: Room = serde_json::from_str(row.get::<String, _>("room_json").as_str())?;
+        let room: Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
         let mut participant: Participant =
-            serde_json::from_str(row.get::<String, _>("participant_json").as_str())?;
+            serde_json::from_str(row.get::<&str, _>("participant_json"))?;
         if room.room_id != room_id || participant.room_id != room_id {
             return Err(rejected(
                 "invalid_state",

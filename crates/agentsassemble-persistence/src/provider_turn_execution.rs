@@ -679,7 +679,7 @@ pub(crate) async fn load_execution_in(
         execution_id: row.get("execution_id"),
         participant_id: row.get("participant_id"),
         turn_id: row.get("turn_id"),
-        phase: ProviderTurnExecutionPhase::parse(row.get::<String, _>("phase").as_str())?,
+        phase: ProviderTurnExecutionPhase::parse(row.get::<&str, _>("phase"))?,
         runtime_handle_id: row.get("runtime_handle_id"),
         runtime_owner_id: row.get("runtime_owner_id"),
         runtime_lease_token: row.get("runtime_lease_token"),

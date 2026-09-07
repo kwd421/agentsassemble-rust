@@ -157,12 +157,12 @@ impl SqliteStore {
             &content_type,
             size,
             i64::try_from(content.len()).unwrap_or(i64::MAX),
-            row.get::<String, _>("created_at").as_str(),
+            row.get::<&str, _>("created_at"),
         )?;
         Ok(ProfileAttachment {
             metadata: attachment_metadata(
                 attachment_id.to_owned(),
-                sanitize_filename(row.get::<String, _>("filename").as_str()),
+                sanitize_filename(row.get::<&str, _>("filename")),
                 content.len(),
             ),
             content,

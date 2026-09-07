@@ -504,7 +504,7 @@ async fn read_bound_message_attachment(
     .ok_or_else(message_attachment_missing)?;
     let stored = stored_metadata(attachment_id, &row)?;
     let event_seq = row.get::<i64, _>("event_seq");
-    let event: RoomEvent = serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+    let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
     let event_attachments = message_attachments_from_event(&event)?;
     if event.room_id != room_id
         || event.seq != event_seq

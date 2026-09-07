@@ -41,8 +41,7 @@ impl SqliteStore {
         let mut events = Vec::with_capacity(rows.len());
         for row in rows {
             let stored_seq = row.get::<i64, _>("seq");
-            let event: RoomEvent =
-                serde_json::from_str(row.get::<String, _>("event_json").as_str())?;
+            let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
             if stored_seq != expected || event.seq != stored_seq || event.room_id != room_id {
                 return Err(invalid_publication_state());
             }

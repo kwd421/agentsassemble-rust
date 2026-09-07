@@ -408,7 +408,7 @@ async fn inspect_complete(
     if row.get::<String, _>("participant_id") != LOCAL_OPERATOR_PARTICIPANT_ID {
         return Err(bootstrap_repair_required());
     }
-    let profile: UserProfile = serde_json::from_str(row.get::<String, _>("profile_json").as_str())
+    let profile: UserProfile = serde_json::from_str(row.get::<&str, _>("profile_json"))
         .map_err(|_| bootstrap_repair_required())?;
     if profile.revision < 1 {
         return Err(bootstrap_repair_required());
