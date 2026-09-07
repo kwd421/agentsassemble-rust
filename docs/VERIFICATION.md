@@ -4214,6 +4214,48 @@ also reproduced both baseline failures while its 243 existing persistence tests,
 58 domain tests, 664 frontend tests, and 25 desktop tests passed; final Rust checks
 continue on the corrected source without repeating unaffected frontend/desktop runs.
 
+The duplicate-code inventory also found identical participant-loading SQL in
+`agent_configuration` and `agent_lifecycle`, and identical start-receipt conversion
+in `agent_create_runtime` and `room_agent_lifecycle_runtime`. Both paths now call
+their existing lifecycle owner, removing two implementations and 26 net production
+lines without another module, generic framework, public wire type, or behavioral
+branch. Configuration/start authorization and create-versus-start transitions stay
+with their original callers.
+
+Audit coverage and disposition (repository inventory plus owner/call-site inspection,
+not a claim that every line received an independent security audit):
+
+| Area | Inspected costs and ownership | Disposition |
+| --- | --- | --- |
+| Domain | Public projection, canonical JSON, redaction, room/persona values | Remove repeated JSON copies; retain canonical encoding and privacy policy. |
+| Persistence | Context candidates, row decoding, creation transactions, lifecycle helpers, history/catch-up/search, asset references | Apply the measured simplifications and cancellation correction above; retain atomic authority and sequence checks. |
+| Provider | Registration/catalog, common HTTP completion, exact turns, process custody/leases, portal lifetime and recovery waits | Keep provider-specific protocol owners and bounded cleanup; no speculative consolidation of different process authorities. |
+| Server | Room mutation/event publication, reconciliation scans, HTTP body/error handling, lifecycle execution | Share identical receipt conversion; keep failure-only publication retries and the cancellable bounded reconciliation owner. Similar HTTP error branches retain route-specific messages and authorization. |
+| Protocol | Surface descriptors, generated bindings, digest construction | Preserve one Rust contract and derived frontend types. |
+| Frontend | Reachable polling consumers, ingress readiness, invite expiry, appearance asset ownership, history merge/projection | Admin polling observes external status; ingress polling is operation-bounded; expiry uses the nearest deadline. Async request generations and object-URL ownership remain necessary. Dormant game/voice paths are not treated as active timers. |
+| Desktop | IPC admission/workers, runtime supervision, attachment saving | Keep caller checks at each IPC boundary and owned attachment bytes crossing the blocking worker. No new dispatcher abstraction. |
+| Scripts/build | Architecture/source checks, physical artifact accounting and cleanup | Preserve all limits and cleanup authority; no new scan or gate. |
+
+The previously identified Custom API routed-model rejection remains a Phase 1
+contract-review finding: this optimization pass does not widen response-model
+identity acceptance. The provider's documented distinction between requested
+`openrouter/auto` and the resolved response model was reconfirmed in its
+[Auto Router response contract](https://openrouter.ai/docs/guides/routing/routers/auto-router#response).
+No paid provider request or new packaged/real-provider flow was run in this pass.
+
+Final corrected-source verification passes all 682 Rust unit/integration/doc tests,
+including real local TCP/WebSocket boundaries, in 231.16 seconds with
+2,055,192,576-byte maximum RSS. Warning-denied workspace/all-target/all-feature
+Clippy, formatting, architecture/source-growth, the 19 policy/artifact tests, and
+diff checks pass. The unchanged frontend/desktop paths reuse this pass's successful
+664 frontend and 25 desktop tests, TypeScript/Vite/CSS build, generated-binding
+comparison, and desktop check. Total passing tests across these suites: 1,390.
+The final artifact check passes at 18,470,367,232 physical bytes (17.20 GiB), below
+the unchanged 18 GiB limit; the active build cache is retained for subsequent work.
+These composed checks complete local optimization acceptance. Whole-Phase-1
+GPT-6 Pro and Daybreak Blue `xhigh` review remains pending at its existing phase
+gate; no reviewer approval or whole-product parity is claimed by these commits.
+
 The real loopback TCP tests import an actual CCv3 PNG, list the exact safe projection, read the
 thumbnail with private/no-store, CORS, disposition, and `nosniff` headers, reject missing thumbnails,
 prove ticket replay failure, prove crossed-ticket consumption before malformed body handling, and

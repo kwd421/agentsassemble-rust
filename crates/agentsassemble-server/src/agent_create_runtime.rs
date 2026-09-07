@@ -1,7 +1,7 @@
 use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
 use agentsassemble_persistence::{
-    AgentCreateStartEffect, AgentCreateStartPlan, AgentRuntimeStarted, CommandOutcome,
-    LiveRuntimeReconciliation, PersistenceError, SqliteStore,
+    AgentCreateStartEffect, AgentCreateStartPlan, CommandOutcome, LiveRuntimeReconciliation,
+    PersistenceError, SqliteStore,
 };
 use agentsassemble_provider::{
     ProviderAdapter, ProviderAdapterError, ProviderCatalogService, ProviderRuntimeStarted,
@@ -11,7 +11,8 @@ use serde_json::Value;
 use tokio::sync::broadcast;
 
 use crate::{
-    room_command_result::CommandFailure, runtime_reconciliation::recover_exact_lifecycle_command,
+    room_agent_lifecycle_runtime::persisted_start, room_command_result::CommandFailure,
+    runtime_reconciliation::recover_exact_lifecycle_command,
 };
 
 pub(crate) struct AgentCreateExecution {
@@ -354,18 +355,6 @@ fn success(outcome: CommandOutcome, advance_ordered_floor: bool) -> AgentCreateE
         reply: Ok(outcome),
         committed_events,
         advance_ordered_floor,
-    }
-}
-
-fn persisted_start(started: ProviderRuntimeStarted) -> AgentRuntimeStarted {
-    AgentRuntimeStarted {
-        runtime_handle_id: started.runtime_handle_id,
-        runtime_owner_id: started.runtime_owner_id,
-        runtime_lease_token: started.runtime_lease_token,
-        provider_session_id: started.provider_session_id,
-        runtime_reused: started.runtime_reused,
-        provider_session_reused: started.provider_session_reused,
-        provider_session_active: started.provider_session_active,
     }
 }
 

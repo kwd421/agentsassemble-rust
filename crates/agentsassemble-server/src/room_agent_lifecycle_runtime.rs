@@ -493,7 +493,7 @@ fn rejected(code: &'static str, message: &str) -> PersistenceError {
     }
 }
 
-fn persisted_start(started: ProviderRuntimeStarted) -> AgentRuntimeStarted {
+pub(crate) fn persisted_start(started: ProviderRuntimeStarted) -> AgentRuntimeStarted {
     AgentRuntimeStarted {
         runtime_handle_id: started.runtime_handle_id,
         runtime_owner_id: started.runtime_owner_id,

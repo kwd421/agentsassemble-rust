@@ -1,14 +1,14 @@
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionDraft,
     AgentSessionStatus, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, ClientKind,
-    DurableAgentSession, Participant, canonical_payload_hash,
+    DurableAgentSession, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
 
 use crate::{
     CommandOutcome, PersistenceError, SqliteStore,
-    agent_lifecycle::{load_session, save_session},
+    agent_lifecycle::{load_participant, load_session, save_session},
     agent_lifecycle_events::{append_state_event, store_result},
     authority::active_room_for_principal,
     command_admission::admit_non_lifecycle_command,
@@ -227,22 +227,6 @@ fn require_stopped_profile(session: &DurableAgentSession) -> Result<(), Persiste
         ));
     }
     Ok(())
-}
-
-async fn load_participant(
-    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
-    room_id: &str,
-    participant_id: &str,
-) -> Result<Participant, PersistenceError> {
-    let encoded = sqlx::query_scalar::<_, String>(
-        "SELECT participant_json FROM participants WHERE room_id = ? AND participant_id = ?",
-    )
-    .bind(room_id)
-    .bind(participant_id)
-    .fetch_optional(&mut **transaction)
-    .await?
-    .ok_or(PersistenceError::ParticipantMissing)?;
-    Ok(serde_json::from_str(&encoded)?)
 }
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {

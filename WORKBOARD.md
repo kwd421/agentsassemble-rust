@@ -2,14 +2,14 @@
 
 ## Active work
 
-- User-requested repository-wide optimization is active. Preserve reachable behavior,
-  remove demonstrated duplicate work, and verify affected contracts; scope and evidence:
+- User-requested repository-wide optimization is locally complete: measured duplicate
+  work removed and creation cancellation fixed; scope, verification, and remaining finding:
   [optimization audit](docs/VERIFICATION.md#repository-wide-optimization-audit-2026-09-07).
 - Phase 1 provider-first implementation has met its local exit contract; whole-phase
   external cross-review remains pending. Phase 0A and finite Phase 0B are complete.
 - Next: review the complete Phase 1 candidate, correct review findings, and obtain
-  both reviewers' approval before starting Phase 2. This documentation cleanup does
-  not change implementation status or claim new runtime verification.
+  both reviewers' approval before starting Phase 2. The optimization pass does not
+  change phase approval status or claim new packaged/real-provider verification.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:
