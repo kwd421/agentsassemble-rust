@@ -46,6 +46,7 @@ export type StartupRoute = {
 
 export type ServerRoomDockSource = {
   cleanup_pending?: boolean;
+  deletion_pending?: boolean;
   room_id: string;
   room_uid?: string;
   label?: string;

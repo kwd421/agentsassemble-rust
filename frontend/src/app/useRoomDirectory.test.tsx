@@ -70,6 +70,7 @@ function serverRoom(roomId: string, label = roomId) {
     last_active_at: "2026-07-12T00:00:00Z",
     archived: false,
     cleanup_pending: false,
+    deletion_pending: false,
     status: "active",
     origin: "test",
   };

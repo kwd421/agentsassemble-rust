@@ -210,6 +210,7 @@ fn room_payload(room: &StoredRoomSummary, origin: &str) -> Result<Value, Directo
         );
     let mut payload = room_identity_payload(&room.room, &room.settings, origin);
     payload["cleanup_pending"] = json!(room.cleanup_pending);
+    payload["deletion_pending"] = json!(room.deletion_pending);
     payload
         .as_object_mut()
         .ok_or_else(DirectoryHttpError::internal)?

@@ -9,7 +9,6 @@ export * from "./api/identity";
 export * from "./api/messagePins";
 export * from "./api/messageAttachments";
 export * from "./api/messageSearch";
-export * from "./api/moderation";
 export * from "./api/personas";
 export * from "./api/providerCredentials";
 export * from "./api/room";

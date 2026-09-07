@@ -23,4 +23,12 @@ it("binds lifecycle confirmation to the authority, incarnation and published roo
     vi.mocked(postJsonServerOperator).mockResolvedValueOnce(copy);
     await expect(changeRoomLifecycle(intent, vi.fn())).rejects.toThrow();
   }
+  const deletedRoom = { ...room, status: "closed" };
+  const terminal = { ...event, type: "room_closed", room: deletedRoom };
+  const deletion = { ...intent, action: "room.delete" as const, confirmationName: "General" };
+  const completed = { ...response, action: "room.delete", result: { room: deletedRoom, deleted: true, event: terminal, event_seq: terminal.seq, events: [terminal] } };
+  vi.mocked(postJsonServerOperator).mockResolvedValueOnce(completed);
+  await expect(changeRoomLifecycle(deletion, vi.fn())).resolves.toEqual({ room: deletedRoom, cleanupPending: false, deleted: true });
+  vi.mocked(postJsonServerOperator).mockResolvedValueOnce({ ...completed, result: { ...completed.result, deleted: false } });
+  await expect(changeRoomLifecycle(deletion, vi.fn())).rejects.toThrow();
 });

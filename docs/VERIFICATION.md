@@ -7243,3 +7243,22 @@ an unrelated Agent Session, and the complete unit run passes. The 832-line room
 runtime remains the cohesive queue/publication/retirement owner; no forwarding-only
 module or additional scheduler was introduced. Deletion UI and direct packaged app
 verification remain before Phase 4 review.
+
+Deletion UI now requires the exact current room name, retains uncertain request
+identity, displays server-owned deletion/cleanup state and accepts only a completed
+deletion result. The native HTML dialog owns modal focus/inert behavior; its surface
+uses existing approved modal/card/button/input styles. Unit rendering supplies only
+jsdom's missing dialog methods, so it does not claim native focus proof. All 34
+affected frontend cases, production build/CSS, three directory TCP cases, affected
+Clippy and unchanged architecture/source/format/diff plus 19 policy/artifact gates
+pass. Direct packaged interaction remains the next Phase 4 gate.
+
+The retained host-claim behavior already belongs to `StartupIdentityGate` → native
+bootstrap status/initialize → the durable local bootstrap/profile owner. Original
+`room_invite.py` host claim created the local operator from a host-authorized browser
+device credential; Rust's reachable startup establishes that owner directly through
+the native authority and binds the verified room directory lineage. The current
+invite controller no longer calls legacy host claim. Removed the now-unreferenced
+`api/moderation.ts` archive/claim wrappers and barrel export; no second device-token
+identity, absent-route request or authentication compatibility path was introduced.
+First-run local identity and room management will be included in packaged proof.

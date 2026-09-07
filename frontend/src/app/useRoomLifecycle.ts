@@ -55,7 +55,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
       validateRoomDirectoryContinuity(continuity);
       pendingRef.current = null;
       setPending(null);
-      setNotice(response.cleanupPending ? "방 상태가 변경됐습니다. 실행 중이던 에이전트 정리를 기다리고 있습니다." : "방 상태가 변경됐습니다.");
+      setNotice(response.deleted ? "방이 삭제됐습니다." : response.cleanupPending ? "방 상태가 변경됐습니다. 실행 중이던 에이전트 정리를 기다리고 있습니다." : "방 상태가 변경됐습니다.");
       directoryInvalidatedRef.current = false;
       const refreshed = await refreshRoomDirectory(continuity);
       if (!refreshed.ok) throw refreshed.error;
@@ -64,7 +64,10 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
         pendingRef.current = null;
         setPending(null);
       }
-      setError(failure instanceof Error ? failure.message : "방 관리 결과를 확인하지 못했습니다.");
+      if (failure instanceof ApiError && failure.code === "room_deletion_pending" && failure.resolution === "unresolved") {
+        setNotice("방 삭제를 처리하고 있습니다. 에이전트 정리가 끝난 뒤 같은 요청으로 완료 여부를 확인할 수 있습니다.");
+        directoryInvalidatedRef.current = true;
+      } else setError(failure instanceof Error ? failure.message : "방 관리 결과를 확인하지 못했습니다.");
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -75,13 +78,14 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
     }
   }, [enabled, captureRoomDirectoryContinuity, validateRoomDirectoryContinuity, refreshRoomDirectory, refresh]);
 
-  function change(room: ServerRoomDockSource, action: "close" | "archive" | "restore") {
+  function change(room: ServerRoomDockSource, action: "close" | "archive" | "restore" | "delete", confirmationName?: string) {
     if (!authorityReady || !room.room_uid || pendingRef.current || !managementRooms.some((candidate) => candidate.room_id === room.room_id && candidate.room_uid === room.room_uid)) return;
+    if (action === "delete" && confirmationName !== room.label) return;
     const authority = currentRoomDirectoryAuthority();
     if (!authority) return;
     void submit({ serverId: authority.server_id, authorityLineageId: authority.authority_lineage_id, requestId: createSecureRequestId(), roomId: room.room_id, roomUid: room.room_uid,
-      action: action === "close" ? "room.close" : "room.archive",
-      ...(action === "close" ? {} : { archived: action === "archive" }) });
+      action: action === "delete" ? "room.delete" : action === "close" ? "room.close" : "room.archive",
+      ...(action === "delete" ? { confirmationName } : action === "close" ? {} : { archived: action === "archive" }) });
   }
 
   return { enabled, canChange: enabled && authorityReady, open, busy, pending, error, notice, rooms: managementRooms,

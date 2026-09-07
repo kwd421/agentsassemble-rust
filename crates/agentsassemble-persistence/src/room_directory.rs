@@ -17,6 +17,7 @@ pub struct StoredRoomSummary {
     pub room: Room,
     pub settings: RoomSettings,
     pub cleanup_pending: bool,
+    pub deletion_pending: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -58,7 +59,7 @@ impl SqliteStore {
         &self,
         include_archived: bool,
     ) -> Result<Vec<StoredRoomSummary>, PersistenceError> {
-        let rows = sqlx::query("SELECT room_id, room_json, settings_json, EXISTS(SELECT 1 FROM room_runtime_cleanup cleanup WHERE cleanup.room_id = rooms.room_id) AS cleanup_pending FROM rooms")
+        let rows = sqlx::query("SELECT room_id, room_json, settings_json, EXISTS(SELECT 1 FROM room_runtime_cleanup cleanup WHERE cleanup.room_id = rooms.room_id) AS cleanup_pending, EXISTS(SELECT 1 FROM room_delete_results deletion WHERE deletion.room_id = rooms.room_id AND deletion.state = 'pending') AS deletion_pending FROM rooms")
             .fetch_all(&self.pool)
             .await?;
         let mut rooms = Vec::with_capacity(rows.len());
@@ -74,6 +75,7 @@ impl SqliteStore {
                     room,
                     settings,
                     cleanup_pending: row.get("cleanup_pending"),
+                    deletion_pending: row.get("deletion_pending"),
                 });
             }
         }

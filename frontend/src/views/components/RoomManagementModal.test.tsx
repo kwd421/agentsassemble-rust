@@ -1,9 +1,19 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import { afterEach, expect, it, vi } from "vitest";
+import { afterAll, afterEach, beforeAll, expect, it, vi } from "vitest";
 import RoomManagementModal from "./RoomManagementModal";
 import type { useRoomLifecycle } from "../../app/useRoomLifecycle";
 
 afterEach(cleanup);
+
+// jsdom has no native modal top layer. Packaged verification owns focus behavior.
+beforeAll(() => {
+  Object.defineProperty(HTMLDialogElement.prototype, "showModal", { configurable: true, value(this: HTMLDialogElement) { this.open = true; } });
+  Object.defineProperty(HTMLDialogElement.prototype, "close", { configurable: true, value(this: HTMLDialogElement) { this.open = false; } });
+});
+afterAll(() => {
+  Reflect.deleteProperty(HTMLDialogElement.prototype, "showModal");
+  Reflect.deleteProperty(HTMLDialogElement.prototype, "close");
+});
 
 it("shows inactive rooms, confirms restoration and keeps uncertain requests locked", () => {
   const room = { room_id: "general", room_uid: "room-one", label: "General", status: "archived", cleanup_pending: false };
@@ -18,6 +28,12 @@ it("shows inactive rooms, confirms restoration and keeps uncertain requests lock
   expect(controller.change).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "확인" }));
   expect(controller.change).toHaveBeenCalledWith(room, "restore");
+  fireEvent.click(screen.getByRole("button", { name: "방 삭제" }));
+  fireEvent.change(screen.getByLabelText("현재 방 이름"), { target: { value: "Wrong" } });
+  expect((screen.getByRole("button", { name: "확인" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.change(screen.getByLabelText("현재 방 이름"), { target: { value: "General" } });
+  fireEvent.click(screen.getByRole("button", { name: "확인" }));
+  expect(controller.change).toHaveBeenCalledWith(room, "delete", "General");
   rerender(<RoomManagementModal controller={{ ...controller, error: "응답 미확인", pending: {
     serverId: "server", authorityLineageId: "lineage", requestId: "retry", roomId: "general", roomUid: "room-one", action: "room.archive", archived: false,
   } }} />);
