@@ -207,3 +207,11 @@ revalidate it in their transaction. No paired public route is enabled by this st
 slice: ready ingress validation, exact revocation publication, remaining privileged
 command owners, pre-effect cancellation, departure and frontend connection still
 must be completed before remote operator dispatch is enabled.
+
+Stopped creation, stopped-profile selection/configuration, create/start inspection,
+preparation and pre-provider approval now preserve the same request provenance.
+Creation revalidates both its replay snapshot and its commit after filesystem
+selection validation. Filesystem checks remain outside write transactions; server
+selection is preceded by the guarded inspection/candidate owner. The existing agent
+control capability check is shared across these mutation owners. Post-effect
+completion/failure retains the exact durable operation rather than a new request.

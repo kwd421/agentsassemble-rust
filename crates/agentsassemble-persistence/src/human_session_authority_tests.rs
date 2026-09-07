@@ -49,6 +49,12 @@ async fn lifecycle_preparation_and_effect_dispatch_revalidate_the_request_sessio
             store.prepare_agent_stop(authority, "stop", &payload).await,
             expected,
         );
+        assert_rejected_code(
+            store
+                .agent_configuration_candidate(authority, &payload)
+                .await,
+            expected,
+        );
         set_participant_status(&store, ParticipantStatus::Left).await;
     }
     assert_rejected_code(

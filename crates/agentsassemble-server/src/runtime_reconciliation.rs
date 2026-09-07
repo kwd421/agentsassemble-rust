@@ -404,7 +404,7 @@ pub(crate) mod tests {
         );
         let created = store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-safe-failure-agent",
                 &json!({"provider_id": "opencode"}),
                 &failed_draft,
@@ -501,7 +501,7 @@ pub(crate) mod tests {
         let principal = local_principal();
         let created = store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-dynamic-agent",
                 &json!({"provider_id": "codex"}),
                 &draft(

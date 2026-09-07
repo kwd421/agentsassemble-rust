@@ -38,7 +38,7 @@ async fn production_replay_helper_observes_gone_before_reenabling_start() {
     let principal = local_principal();
     let created = store
         .execute_agent_create(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-recovery-agent",
             &json!({"provider_id": "codex"}),
             &draft(
@@ -144,7 +144,7 @@ async fn create_live_scan_agent() -> (
     let principal = local_principal();
     let created = store
         .execute_agent_create(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-live-provider-agent",
             &json!({"provider_id": "opencode"}),
             &draft(

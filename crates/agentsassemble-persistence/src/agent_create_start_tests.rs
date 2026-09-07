@@ -134,7 +134,7 @@ async fn authorize_create_start(
 ) {
     store
         .authorize_agent_create_start_effect(
-            principal,
+            TrustedPrincipal(principal),
             request_id,
             payload,
             &effect.operation_id,
@@ -187,14 +187,14 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
     assert_principal_budget(&store, &principal, &payload, true).await;
     assert!(matches!(
         store
-            .inspect_agent_create_start(&principal, "create-start-1", &payload)
+            .inspect_agent_create_start(TrustedPrincipal(&principal), "create-start-1", &payload)
             .await
             .unwrap_or_else(|error| panic!("inspect new command: {error}")),
         AgentCreateStartPlan::Select
     ));
     let first = store
         .prepare_agent_create_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-start-1",
             &payload,
             &draft(directory.path()),
@@ -205,7 +205,7 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
         panic!("new create/start must own a start effect");
     };
     let replay = store
-        .inspect_agent_create_start(&principal, "create-start-1", &payload)
+        .inspect_agent_create_start(TrustedPrincipal(&principal), "create-start-1", &payload)
         .await
         .unwrap_or_else(|error| panic!("inspect committed intent: {error}"));
     let AgentCreateStartPlan::Start(replay) = replay else {
@@ -248,7 +248,7 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
     assert_completed_create_start(&commit);
 
     let replay = store
-        .inspect_agent_create_start(&principal, "create-start-1", &payload)
+        .inspect_agent_create_start(TrustedPrincipal(&principal), "create-start-1", &payload)
         .await
         .unwrap_or_else(|error| panic!("replay completed command: {error}"));
     let AgentCreateStartPlan::Outcome(replay) = replay else {
@@ -275,7 +275,7 @@ async fn safe_start_failure_replays_the_same_terminal_rejection() {
     let payload = json!({"start": true, "provider_id": "codex"});
     let plan = store
         .prepare_agent_create_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-start-safe-failure",
             &payload,
             &draft(directory.path()),
@@ -287,7 +287,7 @@ async fn safe_start_failure_replays_the_same_terminal_rejection() {
     };
     store
         .authorize_agent_create_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-start-safe-failure",
             &payload,
             &effect.operation_id,
@@ -320,7 +320,7 @@ async fn safe_start_failure_replays_the_same_terminal_rejection() {
 
     assert!(matches!(
         store
-            .inspect_agent_create_start(&principal, "create-start-safe-failure", &payload)
+            .inspect_agent_create_start(TrustedPrincipal(&principal), "create-start-safe-failure", &payload)
             .await,
         Err(crate::PersistenceError::StoredCommandRejected { code, message })
             if code == failure.code && message == failure.message
@@ -363,7 +363,7 @@ async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
     let payload = json!({"start": true, "provider_id": "codex"});
     let plan = store
         .prepare_agent_create_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-start-uncertain",
             &payload,
             &draft(directory.path()),
@@ -375,7 +375,7 @@ async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
     };
     store
         .authorize_agent_create_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-start-uncertain",
             &payload,
             &effect.operation_id,
@@ -413,7 +413,11 @@ async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
     for _ in 0..2 {
         assert!(matches!(
             store
-                .inspect_agent_create_start(&principal, "create-start-uncertain", &payload)
+                .inspect_agent_create_start(
+                    TrustedPrincipal(&principal),
+                    "create-start-uncertain",
+                    &payload
+                )
                 .await,
             Err(crate::PersistenceError::CommandUnresolved {
                 code: "runtime_effect_unconfirmed",
@@ -456,7 +460,7 @@ async fn startup_gone_keeps_created_identity_and_terminalizes_its_old_start() {
     let payload = json!({"start": true, "provider_id": "codex"});
     let AgentCreateStartPlan::Start(effect) = store
         .prepare_agent_create_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-start-abandoned",
             &payload,
             &draft(directory.path()),
@@ -468,7 +472,7 @@ async fn startup_gone_keeps_created_identity_and_terminalizes_its_old_start() {
     };
     store
         .authorize_agent_create_start_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-start-abandoned",
             &payload,
             &effect.operation_id,
@@ -504,7 +508,7 @@ async fn startup_gone_keeps_created_identity_and_terminalizes_its_old_start() {
         .unwrap_or_else(|error| panic!("terminalize create/start: {error}"));
     assert!(matches!(
         store
-            .inspect_agent_create_start(&principal, "create-start-abandoned", &payload)
+            .inspect_agent_create_start(TrustedPrincipal(&principal), "create-start-abandoned", &payload)
             .await,
         Err(PersistenceError::StoredCommandRejected {
             code,
@@ -523,4 +527,70 @@ async fn startup_gone_keeps_created_identity_and_terminalizes_its_old_start() {
             .unwrap_or_else(|error| panic!("start retained created session: {error}")),
         AgentStartPlan::Start(_)
     ));
+}
+
+#[tokio::test]
+async fn paired_create_start_rechecks_session_before_replay_and_provider_authorization() {
+    let (store, principal, directory) = fixture().await;
+    let manager = store
+        .authorize_local_room_manager(
+            &principal.room_id,
+            &principal.principal_id,
+            &principal.participant_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("manager: {error}"));
+    let now = chrono::Utc::now();
+    let origin = "https://room.example.test";
+    let pairing = store
+        .create_operator_pairing(&manager, &[1; 32], origin, now)
+        .await
+        .unwrap_or_else(|error| panic!("pairing: {error}"));
+    let redeemed = store
+        .redeem_operator_pairing(&[1; 32], &[2; 32], origin, now)
+        .await
+        .unwrap_or_else(|error| panic!("redeem: {error}"));
+    let authority = crate::RoomMutationAuthority::OperatorSession(&redeemed.authorization);
+    let payload = json!({"start": true, "provider_id": "codex"});
+    let session = draft(directory.path());
+    let first = store
+        .prepare_agent_create_start(authority, "paired-start", &payload, &session)
+        .await
+        .unwrap_or_else(|error| panic!("prepare: {error}"));
+    let AgentCreateStartPlan::Start(first) = first else {
+        panic!("prepared effect required");
+    };
+    store
+        .revoke_operator_pairing(&manager, pairing.pairing_id)
+        .await
+        .unwrap_or_else(|error| panic!("revoke: {error}"));
+    let errors = [
+        store
+            .inspect_agent_create_start(authority, "paired-start", &payload)
+            .await
+            .err(),
+        store
+            .prepare_agent_create_start(authority, "paired-start", &payload, &session)
+            .await
+            .err(),
+        store
+            .authorize_agent_create_start_effect(
+                authority,
+                "paired-start",
+                &payload,
+                &first.operation_id,
+                ("handle", "owner", "lease"),
+            )
+            .await
+            .err(),
+    ];
+    for error in errors {
+        assert!(matches!(
+            error,
+            Some(PersistenceError::CommandRejected {
+                code: "session_revoked",
+                ..
+            })
+        ));
+    }
 }

@@ -7692,3 +7692,18 @@ and remaining pairing-integration limits as the launch entry apply.
   growth, 19 policy tests, formatting, diff and artifact checks pass. The storage cap
   bounds retained records to 128/server and 32/room; expiry cleanup runs on creation,
   with no polling/task/process added. No HTTP or packaged pairing flow is claimed.
+
+### Phase 5 creation and configuration session provenance (2026-09-08)
+
+- Create/configure and create-with-start now retain request authority through
+  queued dispatch, private profile selection, replay, committing transactions and
+  provider-effect approval. Mutable filesystem validation stays outside the write
+  transaction; current session and agent-control authority precede commit/replay.
+- All 277 persistence tests pass (3.13 seconds). Paired sessions can create/configure
+  while live; revoke blocks those results, private profile reads and create/start
+  approval. Ordinary admitted humans still cannot configure Agent Sessions.
+- All five create/start HTTP boundary cases pass (32.51 seconds), including nested
+  result replay, shutdown during initialization and same-runtime recovery after
+  browser identity loss. Affected Clippy, architecture/source growth, 19 policy
+  tests, format/diff and artifact checks pass. No new task, retry or process owner;
+  public pairing transport and pre-effect authorization-failure cleanup remain open.

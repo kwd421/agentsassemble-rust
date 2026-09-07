@@ -78,7 +78,7 @@ async fn stage_pre_slot_interrupt() -> PreSlotFixture {
     let principal = local_principal();
     let created = store
         .execute_agent_create(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-pre-slot-interrupt-agent",
             &json!({"provider_id": "opencode"}),
             &draft(

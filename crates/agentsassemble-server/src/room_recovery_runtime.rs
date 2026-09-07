@@ -199,7 +199,7 @@ mod tests {
         let principal = local_principal();
         let created = store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-recovery-publication-agent",
                 &json!({"provider_id": "opencode"}),
                 &draft(

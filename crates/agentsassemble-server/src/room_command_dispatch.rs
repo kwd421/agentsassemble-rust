@@ -435,9 +435,7 @@ async fn execute_agent_create_command(
         provider_catalog,
         provider_adapter,
         event_tx,
-        &command.principal,
-        &command.request_id,
-        &command.payload,
+        command,
     )
     .await
     {
@@ -464,7 +462,7 @@ async fn execute_agent_configure(
 ) -> Result<CommandExecution, PersistenceError> {
     if let Some(outcome) = store
         .replay_command(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             command.action.as_str(),
             &command.payload,
@@ -474,7 +472,7 @@ async fn execute_agent_configure(
         return Ok(CommandExecution::success(outcome));
     }
     let current = store
-        .agent_configuration_candidate(&command.principal, &command.payload)
+        .agent_configuration_candidate(command.mutation_authority(), &command.payload)
         .await?;
     let expected_profile_key = current.runtime_profile_key.clone();
     let selection = provider_catalog
@@ -492,7 +490,7 @@ async fn execute_agent_configure(
         })?;
     store
         .execute_agent_configuration(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             &command.payload,
             &expected_profile_key,

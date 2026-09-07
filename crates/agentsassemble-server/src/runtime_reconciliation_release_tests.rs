@@ -155,7 +155,7 @@ async fn confirmed_absence_fixture(id_suffix: &str) -> ConfirmedAbsenceFixture {
     );
     let created = store
         .execute_agent_create(
-            &principal,
+            TrustedPrincipal(&principal),
             &format!("create-confirmed-absence-{id_suffix}"),
             &json!({"provider_id": "opencode"}),
             &failed_draft,

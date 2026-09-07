@@ -1,14 +1,15 @@
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionDraft,
-    AgentSessionStatus, AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, ClientKind,
-    DurableAgentSession, canonical_payload_hash,
+    AgentSessionStatus, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession,
+    canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore,
+    CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore,
     agent_lifecycle::{load_participant, load_session, save_session},
+    agent_lifecycle_authority::authorize_control,
     agent_lifecycle_events::{append_state_event, store_result},
     authority::active_room_for_principal,
     command_admission::admit_non_lifecycle_command,
@@ -27,12 +28,14 @@ impl SqliteStore {
     /// Returns authorization, payload, or stopped-state failures.
     pub async fn agent_configuration_candidate(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         payload: &Value,
     ) -> Result<DurableAgentSession, PersistenceError> {
-        require_agent_control(principal)?;
-        let agent_id = required_agent_id(payload)?;
         let mut transaction = self.pool.begin().await?;
+        let principal = authority.resolve(&mut transaction).await?;
+        let principal = principal.as_ref();
+        authorize_control(principal)?;
+        let agent_id = required_agent_id(payload)?;
         active_room_for_principal(&mut transaction, principal).await?;
         let session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_stopped_profile(&session)?;
@@ -47,16 +50,18 @@ impl SqliteStore {
     /// Returns authorization, replay, changed-authority, filesystem, or persistence failures.
     pub async fn execute_agent_configuration(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         expected_profile_key: &str,
         draft: &AgentSessionDraft,
     ) -> Result<CommandOutcome, PersistenceError> {
-        require_agent_control(principal)?;
         revalidate_runtime_authority(draft).await?;
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
+        let principal = authority.resolve(&mut transaction).await?;
+        let principal = principal.as_ref();
+        authorize_control(principal)?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = admit_non_lifecycle_command(
             &mut transaction,
@@ -177,16 +182,6 @@ fn apply_draft(
     session.lifecycle_intent_action = AgentLifecycleAction::None;
     session.lifecycle_intent_id.clear();
     session.lifecycle_intent_status = AgentLifecycleIntentStatus::None;
-}
-
-fn require_agent_control(principal: &AuthenticatedPrincipal) -> Result<(), PersistenceError> {
-    if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.agent_control {
-        return Err(rejected(
-            "permission_denied",
-            "agent.control permission is required.",
-        ));
-    }
-    Ok(())
 }
 
 fn required_agent_id(payload: &Value) -> Result<String, PersistenceError> {

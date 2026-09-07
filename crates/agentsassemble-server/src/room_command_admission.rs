@@ -228,7 +228,7 @@ mod tests {
         let create_payload = json!({"provider_id": "codex", "catalog_revision": "catalog-1"});
         store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-agent",
                 &create_payload,
                 &draft(directory.path()),

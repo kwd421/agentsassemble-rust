@@ -12,7 +12,7 @@ use tokio::sync::broadcast;
 
 use crate::{
     room_agent_lifecycle_runtime::persisted_start, room_command_result::CommandFailure,
-    runtime_reconciliation::recover_exact_lifecycle_command,
+    room_runtime::RoomCommand, runtime_reconciliation::recover_exact_lifecycle_command,
 };
 
 pub(crate) struct AgentCreateExecution {
@@ -26,10 +26,11 @@ pub(crate) async fn execute_agent_create(
     provider_catalog: &ProviderCatalogService,
     provider_adapter: &ProviderAdapter,
     event_tx: &broadcast::Sender<RoomEvent>,
-    principal: &AuthenticatedPrincipal,
-    request_id: &str,
-    payload: &Value,
+    command: &RoomCommand,
 ) -> Result<AgentCreateExecution, CommandFailure> {
+    let principal = &command.principal;
+    let request_id = command.request_id.as_str();
+    let payload = &command.payload;
     let start_requested = creation_start_requested(payload)
         .map_err(|error| CommandFailure::rejected(selection_error(error)))?;
     if start_requested {
@@ -38,14 +39,17 @@ pub(crate) async fn execute_agent_create(
             provider_catalog,
             provider_adapter,
             event_tx,
-            principal,
-            request_id,
-            payload,
+            command,
         )
         .await;
     }
     if let Some(outcome) = store
-        .replay_command(principal, request_id, "agent.create", payload)
+        .replay_command(
+            command.mutation_authority(),
+            request_id,
+            "agent.create",
+            payload,
+        )
         .await
         .map_err(CommandFailure::transactional)?
     {
@@ -61,7 +65,12 @@ pub(crate) async fn execute_agent_create(
         .await
         .map_err(|error| CommandFailure::rejected(selection_error(error)))?;
     let outcome = store
-        .execute_agent_create(principal, request_id, payload, &selection.into())
+        .execute_agent_create(
+            command.mutation_authority(),
+            request_id,
+            payload,
+            &selection.into(),
+        )
         .await
         .map_err(CommandFailure::transactional)?;
     Ok(success(outcome, false))
@@ -72,19 +81,13 @@ async fn execute_agent_create_start(
     provider_catalog: &ProviderCatalogService,
     provider_adapter: &ProviderAdapter,
     event_tx: &broadcast::Sender<RoomEvent>,
-    principal: &AuthenticatedPrincipal,
-    request_id: &str,
-    payload: &Value,
+    command: &RoomCommand,
 ) -> Result<AgentCreateExecution, CommandFailure> {
-    let plan = resolve_create_start_plan(
-        store,
-        provider_catalog,
-        provider_adapter,
-        principal,
-        request_id,
-        payload,
-    )
-    .await?;
+    let principal = &command.principal;
+    let request_id = command.request_id.as_str();
+    let payload = &command.payload;
+    let plan =
+        resolve_create_start_plan(store, provider_catalog, provider_adapter, command).await?;
     let effect = match plan {
         AgentCreateStartPlan::Outcome(outcome) => return Ok(success(*outcome, false)),
         AgentCreateStartPlan::Start(effect) => effect,
@@ -117,7 +120,7 @@ async fn execute_agent_create_start(
     };
     let authorized = store
         .authorize_agent_create_start_effect(
-            principal,
+            command.mutation_authority(),
             request_id,
             payload,
             &effect.operation_id,
@@ -172,12 +175,13 @@ async fn resolve_create_start_plan(
     store: &SqliteStore,
     provider_catalog: &ProviderCatalogService,
     provider_adapter: &ProviderAdapter,
-    principal: &AuthenticatedPrincipal,
-    request_id: &str,
-    payload: &Value,
+    command: &RoomCommand,
 ) -> Result<AgentCreateStartPlan, CommandFailure> {
+    let principal = &command.principal;
+    let request_id = command.request_id.as_str();
+    let payload = &command.payload;
     let mut inspected = store
-        .inspect_agent_create_start(principal, request_id, payload)
+        .inspect_agent_create_start(command.mutation_authority(), request_id, payload)
         .await;
     if inspected.as_ref().is_err_and(|error| {
         matches!(
@@ -200,7 +204,7 @@ async fn resolve_create_start_plan(
         {
             Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
                 store
-                    .inspect_agent_create_start(principal, request_id, payload)
+                    .inspect_agent_create_start(command.mutation_authority(), request_id, payload)
                     .await
             }
             Ok(LiveRuntimeReconciliation::StillUnresolved) => inspected,
@@ -225,7 +229,12 @@ async fn resolve_create_start_plan(
                 )));
             }
             store
-                .prepare_agent_create_start(principal, request_id, payload, &selection.into())
+                .prepare_agent_create_start(
+                    command.mutation_authority(),
+                    request_id,
+                    payload,
+                    &selection.into(),
+                )
                 .await
                 .map_err(CommandFailure::transactional)?
         }

@@ -1,11 +1,10 @@
-use agentsassemble_domain::{
-    AgentSessionDraft, AuthenticatedPrincipal, ClientKind, canonical_payload_hash,
-};
+use agentsassemble_domain::{AgentSessionDraft, canonical_payload_hash};
 use serde_json::Value;
 
 use crate::{
-    CommandOutcome, PersistenceError, SqliteStore,
+    CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore,
     agent_creation_records::create_or_reuse_agent_records,
+    agent_lifecycle_authority::authorize_control,
     agent_lifecycle_events::store_result,
     authority::active_room_for_principal,
     command_admission::{admit_non_lifecycle_command, inspect_non_lifecycle_command},
@@ -21,13 +20,15 @@ impl SqliteStore {
     /// Returns a conflict, inactive-session rejection, or persistence failure.
     pub async fn replay_command(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         action: &str,
         payload: &Value,
     ) -> Result<Option<CommandOutcome>, PersistenceError> {
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
+        let principal = authority.resolve(&mut transaction).await?;
+        let principal = principal.as_ref();
         active_room_for_principal(&mut transaction, principal).await?;
         let outcome = inspect_non_lifecycle_command(
             &mut transaction,
@@ -49,22 +50,18 @@ impl SqliteStore {
     /// Returns authorization, identity, idempotency, or persistence failures.
     pub async fn execute_agent_create(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         draft: &AgentSessionDraft,
     ) -> Result<CommandOutcome, PersistenceError> {
         const ACTION: &str = "agent.create";
-        if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.agent_control
-        {
-            return Err(PersistenceError::CommandRejected {
-                code: "permission_denied",
-                message: "agent.control permission is required.".to_owned(),
-            });
-        }
         let payload_hash = canonical_payload_hash(payload);
         {
             let mut transaction = self.pool.begin().await?;
+            let principal = authority.resolve(&mut transaction).await?;
+            let principal = principal.as_ref();
+            authorize_control(principal)?;
             active_room_for_principal(&mut transaction, principal).await?;
             let outcome = inspect_non_lifecycle_command(
                 &mut transaction,
@@ -82,6 +79,9 @@ impl SqliteStore {
         }
         revalidate_runtime_authority(draft).await?;
         let mut transaction = self.pool.begin().await?;
+        let principal = authority.resolve(&mut transaction).await?;
+        let principal = principal.as_ref();
+        authorize_control(principal)?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = admit_non_lifecycle_command(
             &mut transaction,
@@ -116,6 +116,7 @@ impl SqliteStore {
 
 #[cfg(test)]
 mod tests {
+    use crate::RoomMutationAuthority::TrustedPrincipal;
     use std::{collections::BTreeMap, fs::File, path::Path};
 
     use agentsassemble_domain::{
@@ -127,6 +128,88 @@ mod tests {
     use serde_json::json;
 
     use crate::{ImportedPersonaAsset, PersistenceError, SqliteStore};
+
+    #[tokio::test]
+    async fn paired_creation_configuration_and_replay_stop_at_session_revocation() {
+        let (store, principal, directory) = fixture().await;
+        let manager = store
+            .authorize_local_room_manager(
+                &principal.room_id,
+                &principal.principal_id,
+                &principal.participant_id,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("manager: {error}"));
+        let now = chrono::Utc::now();
+        let origin = "https://room.example.test";
+        let pairing = store
+            .create_operator_pairing(&manager, &[1; 32], origin, now)
+            .await
+            .unwrap_or_else(|error| panic!("pairing: {error}"));
+        let redeemed = store
+            .redeem_operator_pairing(&[1; 32], &[2; 32], origin, now)
+            .await
+            .unwrap_or_else(|error| panic!("redeem: {error}"));
+        let authority = crate::RoomMutationAuthority::OperatorSession(&redeemed.authorization);
+        let session = draft(directory.path().to_str().unwrap_or_else(|| panic!("path")));
+        let payload = json!({"provider_id": "api"});
+        store
+            .execute_agent_create(authority, "paired-create", &payload, &session)
+            .await
+            .unwrap_or_else(|error| panic!("create: {error}"));
+        let configuration = json!({"agent_id": session.agent_id});
+        store
+            .agent_configuration_candidate(authority, &configuration)
+            .await
+            .unwrap_or_else(|error| panic!("candidate: {error}"));
+        store
+            .execute_agent_configuration(
+                authority,
+                "paired-configure",
+                &configuration,
+                &session.runtime_profile_key,
+                &session,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("configure: {error}"));
+        store
+            .revoke_operator_pairing(&manager, pairing.pairing_id)
+            .await
+            .unwrap_or_else(|error| panic!("revoke: {error}"));
+        let errors = [
+            store
+                .execute_agent_create(authority, "paired-create", &payload, &session)
+                .await
+                .err(),
+            store
+                .replay_command(authority, "paired-create", "agent.create", &payload)
+                .await
+                .err(),
+            store
+                .agent_configuration_candidate(authority, &configuration)
+                .await
+                .err(),
+            store
+                .execute_agent_configuration(
+                    authority,
+                    "paired-configure",
+                    &configuration,
+                    &session.runtime_profile_key,
+                    &session,
+                )
+                .await
+                .err(),
+        ];
+        for error in errors {
+            assert!(matches!(
+                error,
+                Some(PersistenceError::CommandRejected {
+                    code: "session_revoked",
+                    ..
+                })
+            ));
+        }
+    }
 
     async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile::TempDir) {
         let directory =
@@ -239,11 +322,11 @@ mod tests {
             .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
         let session = draft(workspace);
         let first = store
-            .execute_agent_create(&principal, "create-1", &payload, &session)
+            .execute_agent_create(TrustedPrincipal(&principal), "create-1", &payload, &session)
             .await
             .unwrap_or_else(|error| panic!("create session: {error}"));
         let retry = store
-            .execute_agent_create(&principal, "create-1", &payload, &session)
+            .execute_agent_create(TrustedPrincipal(&principal), "create-1", &payload, &session)
             .await
             .unwrap_or_else(|error| panic!("retry session: {error}"));
         assert!(!first.deduplicated);
@@ -281,7 +364,7 @@ mod tests {
         assert!(matches!(
             store
                 .replay_command(
-                    &principal,
+                    TrustedPrincipal(&principal),
                     "create-1",
                     "agent.create",
                     &json!({"provider_id": "changed"})
@@ -346,7 +429,7 @@ mod tests {
         selected.runtime_profile_key = "profile-guide".to_owned();
         let created = store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-persona",
                 &json!({"provider_id": "api", "persona_card_id": "guide"}),
                 &selected,
@@ -363,7 +446,7 @@ mod tests {
         missing.runtime_profile_key = "profile-missing".to_owned();
         let error = store
             .execute_agent_configuration(
-                &principal,
+                TrustedPrincipal(&principal),
                 "configure-missing-persona",
                 &json!({"agent_id": selected.agent_id.as_str(), "persona_card_id": "missing"}),
                 &selected.runtime_profile_key,
@@ -405,7 +488,7 @@ mod tests {
         cleared.runtime_profile_key = "profile-clear".to_owned();
         let outcome = store
             .execute_agent_configuration(
-                &principal,
+                TrustedPrincipal(&principal),
                 "configure-clear-persona",
                 &json!({"agent_id": selected.agent_id.as_str(), "persona_card_id": ""}),
                 &selected.runtime_profile_key,
@@ -432,7 +515,7 @@ mod tests {
             .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
         let result = store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-fails",
                 &json!({"provider_id": "codex"}),
                 &draft(workspace),
@@ -469,7 +552,7 @@ mod tests {
         assert!(matches!(
             store
                 .execute_agent_create(
-                    &principal,
+                    TrustedPrincipal(&principal),
                     "reserved-create",
                     &json!({"provider_id": "codex"}),
                     &draft(workspace),
@@ -504,7 +587,7 @@ mod tests {
 
         let result = store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-changed-executable",
                 &json!({"provider_id": "codex"}),
                 &session,
@@ -545,7 +628,7 @@ mod tests {
             .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
         let outcome = store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-capacity",
                 &json!({"provider_id": "codex"}),
                 &draft(workspace),
@@ -583,7 +666,7 @@ mod tests {
             .unwrap_or_else(|| panic!("test workspace path must be UTF-8"));
         let result = store
             .execute_agent_create(
-                &principal,
+                TrustedPrincipal(&principal),
                 "create-denied",
                 &json!({"provider_id": "codex"}),
                 &draft(workspace),

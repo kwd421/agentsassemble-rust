@@ -8,7 +8,8 @@ use chrono::Utc;
 use serde_json::Value;
 
 use crate::{
-    AgentLaunchFailureCommit, AgentRuntimeStarted, CommandOutcome, PersistenceError, SqliteStore,
+    AgentLaunchFailureCommit, AgentRuntimeStarted, CommandOutcome, PersistenceError,
+    RoomMutationAuthority, SqliteStore,
     agent_creation_records::create_or_reuse_agent_records,
     agent_launch_events::{append_launch_events, launch_result},
     agent_lifecycle::{apply_runtime_started, load_participant, load_session, save_session},
@@ -59,13 +60,15 @@ impl SqliteStore {
     /// Returns authorization, request-conflict, or inconsistent durable-authority failures.
     pub async fn inspect_agent_create_start(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<AgentCreateStartPlan, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal = authority.resolve(&mut transaction).await?;
+        let principal = principal.as_ref();
         authorize_control(principal)?;
         let payload_hash = canonical_payload_hash(payload);
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
             &mut transaction,
@@ -101,16 +104,18 @@ impl SqliteStore {
     /// Returns selection-authority, request-conflict, collision, or persistence failures.
     pub async fn prepare_agent_create_start(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         draft: &AgentSessionDraft,
     ) -> Result<AgentCreateStartPlan, PersistenceError> {
+        revalidate_runtime_authority(draft).await?;
+        let mut transaction = self.pool.begin().await?;
+        let principal = authority.resolve(&mut transaction).await?;
+        let principal = principal.as_ref();
         authorize_control(principal)?;
         let payload_hash = canonical_payload_hash(payload);
         let operation_id = lifecycle_operation_id(principal, request_id, CREATE);
-        revalidate_runtime_authority(draft).await?;
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
             &mut transaction,
@@ -179,12 +184,16 @@ impl SqliteStore {
     /// Returns an exact reservation, authority, state, or persistence failure.
     pub async fn authorize_agent_create_start_effect(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
         runtime_authority: (&str, &str, &str),
     ) -> Result<AgentCreateStartEffect, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let principal = authority.resolve(&mut transaction).await?;
+        let principal = principal.as_ref();
+        authorize_control(principal)?;
         let (runtime_handle_id, runtime_owner_id, runtime_lease_token) = runtime_authority;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, CREATE);
@@ -194,7 +203,6 @@ impl SqliteStore {
                 "Provider start authorization does not match its create request.",
             ));
         }
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         let stored =
             required_create_reservation(&mut transaction, principal, request_id, &payload_hash)

@@ -18,7 +18,7 @@ pub(crate) async fn execute_room_random(
 ) -> Result<CommandOutcome, PersistenceError> {
     if let Some(outcome) = store
         .replay_command(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             command.action.as_str(),
             &command.payload,

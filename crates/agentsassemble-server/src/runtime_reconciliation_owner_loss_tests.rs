@@ -129,7 +129,7 @@ async fn owner_loss_fixture(root: &Path) -> (SqliteStore, AuthenticatedPrincipal
     let principal = local_principal();
     let created = store
         .execute_agent_create(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-owner-loss-agent",
             &json!({"provider_id": "opencode"}),
             &draft(root, "codex-00000000-0000-5000-8000-000000000203"),

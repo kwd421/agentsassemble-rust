@@ -476,7 +476,7 @@ async fn pending_lifecycle_request_blocks_non_lifecycle_command_admission() {
     assert!(matches!(
         store
             .replay_command(
-                &principal,
+                TrustedPrincipal(&principal),
                 "shared-command-request",
                 "agent.create",
                 &json!({"provider_id": "codex"}),
