@@ -96,6 +96,7 @@ export default function GuestIdentityRecoveryPanel({
         <label className="dc-guest-recovery-code">
           {recovered ? "새 복구 코드" : "복구 코드"}
           <input
+            style={{ minHeight: 44 }}
             value={recoveryCode}
             readOnly={busy || Boolean(recovered)}
             autoComplete="one-time-code"
@@ -110,11 +111,11 @@ export default function GuestIdentityRecoveryPanel({
               이전 코드는 폐기됐습니다. 다음 복구에 쓸 새 코드를 지금 안전한 곳에 보관하세요.
             </p>
             <div className="dc-guest-recovery-actions">
-              <button type="button" onClick={() => void copyReplacementCode()}>
+              <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => void copyReplacementCode()}>
                 <Copy size={16} />
                 {copied ? "복사됨" : "새 코드 복사"}
               </button>
-              <button type="button" onClick={() => onRecovered(recovered)}>
+              <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => onRecovered(recovered)}>
                 방으로 계속
               </button>
             </div>
@@ -123,6 +124,7 @@ export default function GuestIdentityRecoveryPanel({
           <button
             type="button"
             className="dc-guest-recovery-submit"
+            style={{ minWidth: 44, minHeight: 44 }}
             disabled={busy || !recoveryCode.trim()}
             onClick={() => void recover()}
           >
@@ -130,7 +132,7 @@ export default function GuestIdentityRecoveryPanel({
             신원 복구
           </button>
         )}
-        {status && <p className="dc-member-session-status preserve-words">{status}</p>}
+        {status && <p className="dc-member-session-status preserve-words" role="status">{status}</p>}
       </section>
     </div>
   );

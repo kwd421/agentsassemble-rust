@@ -41,7 +41,7 @@ export default function GuestRecoverySettings({
       if (scope !== generation.current) return;
       setCode(result.recovery_code);
       setRecoveryUrl(result.recovery_url);
-      setStatus("새 코드가 발급됐습니다. 이전 복구 코드는 더 이상 사용할 수 없습니다.");
+      setStatus("새 코드를 만들었어요. 이전 코드는 더 이상 사용할 수 없어요.");
     } catch (error) {
       if (scope !== generation.current) return;
       setStatus(error instanceof Error ? error.message : "복구 코드를 만들지 못했습니다.");
@@ -58,7 +58,7 @@ export default function GuestRecoverySettings({
     try {
       await navigator.clipboard.writeText(value);
       if (scope !== generation.current) return;
-      setStatus(`${label}을 복사했습니다.`);
+      setStatus(`${label}를 복사했어요.`);
     } catch {
       if (scope !== generation.current) return;
       setStatus("값을 직접 선택해 복사해 주세요.");
@@ -71,13 +71,13 @@ export default function GuestRecoverySettings({
         <KeyRound size={18} />
         <div>
           <h3>게스트 신원 복구</h3>
-          <p>다른 기기에서도 지금 이름과 방 멤버십을 그대로 이어갑니다.</p>
+          <p>다른 기기에서도 지금 이름과 참여한 방을 이어갈 수 있어요.</p>
         </div>
       </header>
       <p className="dc-guest-recovery-warning">
-        새 코드를 만들면 이전 코드는 즉시 폐기됩니다. 서버에는 코드 원문을 저장하지 않습니다.
+        새 코드를 만들면 이전 코드는 더 이상 사용할 수 없어요.
       </p>
-      <button type="button" className="dc-guest-recovery-issue" disabled={busy} onClick={() => void issue()}>
+      <button style={{ minWidth: 44, minHeight: 44 }} type="button" className="dc-guest-recovery-issue" disabled={busy} onClick={() => void issue()}>
         <KeyRound size={16} />
         {busy ? "발급 중..." : code ? "새 코드로 교체" : "복구 코드 만들기"}
       </button>
@@ -86,19 +86,19 @@ export default function GuestRecoverySettings({
           <label>
             일회용 복구 코드
             <span>
-              <input value={code} readOnly spellCheck={false} />
-              <button type="button" aria-label="복구 코드 복사" onClick={() => void copy(code, "복구 코드")}>
+              <input style={{ minHeight: 44 }} value={code} readOnly spellCheck={false} />
+              <button style={{ minWidth: 44, minHeight: 44 }} type="button" aria-label="복구 코드 복사" onClick={() => void copy(code, "복구 코드")}>
                 <Copy size={16} />
               </button>
             </span>
           </label>
-          <button type="button" onClick={() => void copy(recoveryUrl, "복구 링크")}>
+          <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => void copy(recoveryUrl, "복구 링크")}>
             <Link2 size={16} />
             복구 링크 복사
           </button>
         </div>
       )}
-      {status && <p className="dc-member-session-status preserve-words">{status}</p>}
+      {status && <p className="dc-member-session-status preserve-words" role="status">{status}</p>}
     </div>
   );
 }

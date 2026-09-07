@@ -1,4 +1,5 @@
-import { Camera, Headphones, Mic, MicOff, Palette, UserCircle } from "lucide-react";
+import { useEffect, useRef, type RefObject } from "react";
+import { X, Camera, Headphones, Mic, MicOff, Palette, UserCircle } from "lucide-react";
 
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
@@ -10,17 +11,16 @@ export type UserSettingsSection = "account" | "profile" | "voice" | "recovery";
 const USER_SETTINGS_SECTIONS: Array<{
   id: UserSettingsSection;
   label: string;
-  helper: string;
 }> = [
-  { id: "account", label: "계정", helper: "이름, 핸들, 현재 표시 상태" },
-  { id: "profile", label: "프로필", helper: "배너, 아바타, 상태 문구" },
-  { id: "voice", label: "음성", helper: "마이크와 헤드셋 표시" },
-  { id: "recovery", label: "복구", helper: "다른 기기에서 신원 이어가기" },
+  { id: "account", label: "계정" },
+  { id: "profile", label: "프로필" },
+  { id: "voice", label: "음성" },
+  { id: "recovery", label: "복구" },
 ];
 
 export default function UserSettingsPanel({
   draft,
-  saving,
+  saving, onClose, changed, returnFocusRef,
   profileError,
   settingsSection,
   onSectionChange,
@@ -31,6 +31,9 @@ export default function UserSettingsPanel({
   profileIdentity,
   displayResourceBase,
 }: {
+  onClose: () => void;
+  returnFocusRef: RefObject<HTMLButtonElement | null>;
+  changed: boolean;
   draft: UserProfile;
   saving: boolean;
   profileError: string;
@@ -43,6 +46,11 @@ export default function UserSettingsPanel({
   profileIdentity?: UserProfileIdentity;
   displayResourceBase: string;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  useEffect(() => {
+    const dialog = dialogRef.current; dialog?.showModal();
+    return () => { dialog?.close(); returnFocusRef.current?.focus(); };
+  }, [returnFocusRef]);
   const sections = profileIdentity?.sessionToken
     ? USER_SETTINGS_SECTIONS
     : USER_SETTINGS_SECTIONS.filter((section) => section.id !== "recovery");
@@ -51,36 +59,49 @@ export default function UserSettingsPanel({
     displayResourceBase
   );
   return (
-    <div className="dc-user-settings-panel" aria-label="사용자 설정">
-      <div className="dc-user-settings-shell">
-        <nav className="dc-user-settings-nav" aria-label="사용자 설정 섹션">
+    <dialog ref={dialogRef} className="dc-profile-settings-modal" aria-label="사용자 설정"
+      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(620px, calc(100vw - 32px))", height: "min(720px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)", color: "var(--color-text-primary)" }}
+      onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
+      onCancel={(event) => { event.preventDefault(); if (!saving) onClose(); }}
+      onClick={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
+      <header className="dc-profile-settings-header" style={{ padding: "16px 24px" }}>
+        <h2>사용자 설정</h2>
+        <button type="button" className="dc-profile-settings-close" style={{ minWidth: 44, minHeight: 44 }} disabled={saving} aria-label="사용자 설정 닫기" onClick={onClose}><X size={18} /></button>
+      </header>
+    <div className="dc-user-settings-panel" aria-label="사용자 설정" style={{ gridTemplateRows: "minmax(0, 1fr) auto auto" }}>
+      <div className="dc-user-settings-shell" style={{ gridTemplateColumns: "minmax(0, 1fr)", gridTemplateRows: "auto minmax(0, 1fr)", gap: 20, padding: "20px 24px 0" }}>
+        <nav className="dc-user-settings-nav" aria-label="사용자 설정 섹션" style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingBottom: 0 }}>
           {sections.map((section) => (
             <button
               key={section.id}
+              style={{ minWidth: 44, minHeight: 44, padding: "8px 12px" }}
+              disabled={saving}
               type="button"
               aria-current={settingsSection === section.id ? "page" : undefined}
               onClick={() => onSectionChange(section.id)}
             >
               <span>{section.label}</span>
-              <small>{section.helper}</small>
+
             </button>
           ))}
         </nav>
 
-        <section className="dc-user-settings-section">
+        <section className="dc-user-settings-section" style={{ paddingRight: 4, paddingBottom: 24 }}>
           {settingsSection === "account" && (
             <>
               <header>
                 <UserCircle size={18} />
                 <div>
                   <h3>계정</h3>
-                  <p>서버와 방에서 함께 사용하는 내 사용자 정보를 저장합니다.</p>
+                  <p>이 서버에서 사용할 이름과 표시 상태를 바꿔요.</p>
                 </div>
               </header>
               <div className="dc-user-settings-grid">
                 <label>
                   표시 이름
                   <input
+                    style={{ minHeight: 44 }}
+                    disabled={saving}
                     value={draft.displayName}
                     onChange={(event) => onDraftChange({ ...draft, displayName: event.target.value })}
                     maxLength={120}
@@ -89,6 +110,8 @@ export default function UserSettingsPanel({
                 <label>
                   핸들
                   <input
+                    style={{ minHeight: 44 }}
+                    disabled={saving}
                     value={draft.handle}
                     onChange={(event) => onDraftChange({ ...draft, handle: event.target.value })}
                     maxLength={120}
@@ -97,6 +120,8 @@ export default function UserSettingsPanel({
                 <label>
                   상태
                   <select
+                    style={{ minHeight: 44, appearance: "none" }}
+                    disabled={saving}
                     value={draft.status}
                     onChange={(event) =>
                       onDraftChange({
@@ -122,13 +147,14 @@ export default function UserSettingsPanel({
                 <Palette size={18} />
                 <div>
                   <h3>프로필</h3>
-                  <p>Discord식 카드에 표시되는 배너와 짧은 상태를 조정합니다.</p>
+                  <p>프로필 카드의 배너와 상태 문구를 바꿔요.</p>
                 </div>
               </header>
               <div className="dc-user-settings-grid">
                 <button
                   type="button"
                   className="dc-user-settings-avatar-action"
+                  style={{ minHeight: 44 }} disabled={saving}
                   onClick={onEditAvatar}
                   aria-label="프로필 사진 변경"
                 >
@@ -148,13 +174,15 @@ export default function UserSettingsPanel({
                   </span>
                   <span>
                     <strong>프로필 사진 변경</strong>
-                    <small>이미지를 선택하고 표시 영역을 조정합니다.</small>
+                    <small>사진을 고르고 표시할 영역을 조정해요.</small>
                   </span>
                   <Camera size={17} aria-hidden />
                 </button>
                 <label>
                   사용자 지정 상태
                   <input
+                    style={{ minHeight: 44 }}
+                    disabled={saving}
                     value={draft.customStatus}
                     onChange={(event) => onDraftChange({ ...draft, customStatus: event.target.value })}
                     maxLength={160}
@@ -163,6 +191,8 @@ export default function UserSettingsPanel({
                 <label>
                   배너
                   <select
+                    style={{ minHeight: 44, appearance: "none" }}
+                    disabled={saving}
                     value={draft.bannerPreset}
                     onChange={(event) =>
                       onDraftChange({
@@ -181,6 +211,8 @@ export default function UserSettingsPanel({
                 <label>
                   아바타 라벨
                   <input
+                    style={{ minHeight: 44 }}
+                    disabled={saving}
                     value={draft.avatarLabel}
                     onChange={(event) => onDraftChange({ ...draft, avatarLabel: event.target.value })}
                     maxLength={2}
@@ -189,6 +221,8 @@ export default function UserSettingsPanel({
                 <label>
                   포인트 색상
                   <input
+                    style={{ minHeight: 44 }}
+                    disabled={saving}
                     type="color"
                     value={draft.accentColor}
                     onChange={(event) => onDraftChange({ ...draft, accentColor: event.target.value })}
@@ -210,6 +244,7 @@ export default function UserSettingsPanel({
               <div className="dc-user-settings-toggles">
                 <button
                   type="button"
+                  style={{ minHeight: 44 }} disabled={saving}
                   aria-pressed={draft.micMuted}
                   onClick={() => onDraftChange({ ...draft, micMuted: !draft.micMuted })}
                 >
@@ -218,6 +253,7 @@ export default function UserSettingsPanel({
                 </button>
                 <button
                   type="button"
+                  style={{ minHeight: 44 }} disabled={saving}
                   aria-pressed={draft.deafened}
                   onClick={() => onDraftChange({ ...draft, deafened: !draft.deafened })}
                 >
@@ -233,17 +269,18 @@ export default function UserSettingsPanel({
           )}
         </section>
       </div>
-      {profileError && <p className="dc-user-settings-error">{profileError}</p>}
+      <div>{profileError && <p className="dc-user-settings-error" role="alert" style={{ position: "relative", inset: "auto", padding: "12px 24px", whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }}>{profileError}</p>}</div>
       {settingsSection !== "recovery" && (
-        <div className="dc-user-settings-actions">
-          <button type="button" onClick={onReset} disabled={saving}>
+        <div className="dc-user-settings-actions" style={{ padding: "16px 24px", gap: 12 }}>
+          <button type="button" onClick={onReset} style={{ minWidth: 44, minHeight: 44 }} disabled={saving || !changed}>
             되돌리기
           </button>
-          <button type="button" onClick={onSave} disabled={saving}>
+          <button type="button" onClick={onSave} style={{ minWidth: 44, minHeight: 44 }} disabled={saving || !changed || !draft.displayName.trim()}>
             {saving ? "저장 중" : "저장"}
           </button>
         </div>
       )}
     </div>
+    </dialog>
   );
 }

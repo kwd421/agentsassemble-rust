@@ -7980,3 +7980,21 @@ Whole-phase acceptance remains open: real recovery issuance and old-session
 revocation work, but continuing recovery clears startup readiness before the room
 socket is enabled. Correct that current-session boundary and complete paired and
 account/recovery layout verification before requesting the phase review.
+
+
+## Phase 5 packaged account settings (2026-09-08)
+
+The isolated packaged app now uses a centered native settings dialog with 24px
+inner padding, 16px outer clearance, 44px controls, scrollable content and one
+wrapping section navigation. Unchanged/blank-name saves are disabled; pending
+saves prevent duplicate edits, and failure text wraps in the dialog. Recovery
+controls use the same minimum targets and expose their result as status text.
+
+Direct 390px and desktop manipulation confirmed draft cancellation, a committed
+name change retained after restart, last profile controls and disabled unchanged
+actions. Escape originally returned focus to the document in WebKit; an explicit
+settings-button return reference fixes that and fresh packaged verification confirms
+focus on the settings button. UserPanel/GoogleAccount suites pass 13 cases (1.38s);
+prior account/recovery suites pass 15 cases. Fresh packaging, TypeScript, approved
+CSS, architecture/source policy and formatting pass. Public recovery continuation
+and paired browser acceptance remain part of Phase 5 closure.

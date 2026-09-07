@@ -81,6 +81,7 @@ export default function UserPanel({
   const [profileError, setProfileError] = useState("");
   const [profileHydrated, setProfileHydrated] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const settingsButtonRef = useRef<HTMLButtonElement>(null);
   const profileSnapshotRef = useRef<UserProfileSnapshot | null>(null);
   const profileScopeGeneration = useRef(0);
   const profileIntentGeneration = useRef(0);
@@ -569,22 +570,10 @@ export default function UserPanel({
       )}
 
       {settingsOpen && (
-        <section className="dc-profile-settings-modal" role="dialog" aria-modal="true" aria-label="사용자 설정">
-          <header className="dc-profile-settings-header">
-            <div>
-              <span>내 계정</span>
-              <h2>사용자 설정</h2>
-            </div>
-            <button
-              type="button"
-              className="dc-profile-settings-close"
-              onClick={() => setSettingsOpen(false)}
-              aria-label="사용자 설정 닫기"
-            >
-              <X size={18} />
-            </button>
-          </header>
           <UserSettingsPanel
+            returnFocusRef={settingsButtonRef}
+            onClose={() => setSettingsOpen(false)}
+            changed={JSON.stringify(draft) !== JSON.stringify(profile)}
             draft={draft}
             saving={saving}
             profileError={profileError}
@@ -597,7 +586,6 @@ export default function UserPanel({
             profileIdentity={profileIdentity}
             displayResourceBase={displayResourceBase}
           />
-        </section>
       )}
 
       <div className="dc-current-user">
@@ -658,7 +646,7 @@ export default function UserPanel({
           >
             <ChevronDown size={14} />
           </button>
-          <button type="button" aria-label="사용자 설정" onClick={() => openSettings("account")}>
+          <button ref={settingsButtonRef} type="button" aria-label="사용자 설정" onClick={() => openSettings("account")}>
             <Settings size={16} />
           </button>
         </div>
