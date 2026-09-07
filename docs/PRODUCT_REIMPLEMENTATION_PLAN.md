@@ -611,7 +611,7 @@ or in-scope threat and compare the smallest fail-closed alternative; future risk
 the word security alone is not approval evidence. Findings and final disposition
 are recorded without copying full review prose into multiple product documents.
 
-The reviewers have distinct primary duties. Critical-web remains on Pro for every
+The reviewers have distinct primary duties. Critical-web uses GPT-6 Pro for every
 phase and reviews the complete inventory, original-to-Rust coverage, phase placement,
 observable product behavior, SSoT/DDD boundaries, and overimplementation. Daybreak
 Blue at `xhigh` manually reviews the actual source and diff for authorization,

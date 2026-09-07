@@ -6316,3 +6316,31 @@ success. Current production search found no provider-history transcript, scrapin
 print execution, silent completion fallback, or ownerless reachable cleanup edge.
 Together with the authorized real matrix above, the local Phase 1 exit contract is
 satisfied pending whole-phase Critical-web Pro and Daybreak Blue `xhigh` review.
+
+### Repository-wide optimization audit: 2026-09-07
+
+The user explicitly requested a whole-codebase optimization pass, especially removal
+of overimplementation. This reopens measured simplifications before Phase 2 without
+claiming Phase 1 external approval or changing the retained product scope. Inventory
+covers domain, persistence, provider, protocol, server, desktop, frontend, and scripts.
+Acceptance: remove concrete duplicate work at its existing owner; preserve entry
+points, output, authority, transaction/retry semantics, boundedness, and cleanup;
+pass affected regressions and mandatory gates. New mechanisms, compatibility
+fallbacks, automated security scans, and mechanical file splitting are out of scope.
+External reviews retain the product plan's phase cadence and GPT-6 Pro setting.
+
+First measured candidate: `room_turn_context.rs` deep-copies all selected events for
+every candidate in both pending-prefix and historical-context selection. With fifty
+fitting pending events, the first loop alone clones 1,275 events before rendering.
+The existing owner can borrow pending events and tentatively insert/remove historical
+events instead. Rendering, fifty-message and character limits, persona application,
+ordered/ambient selection, mandatory inputs, transaction boundaries, and errors stay
+authoritative. Pending-prefix candidate event copies fall from 1,275 to zero at
+fifty fitting messages; historical candidates no longer clone the selected map and
+then clone it again into a temporary vector. Rendering remains bounded quadratic
+work; this change makes no end-to-end latency claim. The only rollback is local
+candidate selection, including restoration of an existing same-sequence value.
+All 243 persistence regressions passed (2.34 seconds test execution), including
+fifty-message splitting, character limits, stateless replay, persona context,
+authorization, and storage rollback. No new task, cache, timer, or public API owner
+was added.

@@ -2,6 +2,9 @@
 
 ## Active work
 
+- User-requested repository-wide optimization is active. Preserve reachable behavior,
+  remove demonstrated duplicate work, and verify affected contracts; scope and evidence:
+  [optimization audit](docs/VERIFICATION.md#repository-wide-optimization-audit-2026-09-07).
 - Phase 1 provider-first implementation has met its local exit contract; whole-phase
   external cross-review remains pending. Phase 0A and finite Phase 0B are complete.
 - Next: review the complete Phase 1 candidate, correct review findings, and obtain

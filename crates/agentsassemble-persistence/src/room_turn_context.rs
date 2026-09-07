@@ -192,20 +192,20 @@ fn bounded_pending_prefix<'a>(
         if event.input.delivery_kind != first.input.delivery_kind {
             break;
         }
-        let mut candidate = selected.clone();
-        candidate.push(event);
-        let candidate_events = candidate
-            .iter()
-            .map(|value| value.event.clone())
-            .collect::<Vec<_>>();
-        if render_room_view(room, session, room_agent_ids, &candidate_events)?
-            .chars()
-            .count()
+        selected.push(event);
+        if render_room_view(
+            room,
+            session,
+            room_agent_ids,
+            selected.iter().map(|value| &value.event),
+        )?
+        .chars()
+        .count()
             > MAX_ROOM_VIEW_CHARACTERS
         {
+            selected.pop();
             break;
         }
-        selected = candidate;
     }
     if selected.is_empty() {
         return Err(rejected(
@@ -255,15 +255,18 @@ async fn load_context(
         {
             continue;
         }
-        let mut candidate = selected.clone();
-        candidate.insert(event.seq, event);
-        let values = candidate.values().cloned().collect::<Vec<_>>();
-        if render_room_view(room, session, room_agent_ids, &values)?
+        let seq = event.seq;
+        let previous = selected.insert(seq, event);
+        if render_room_view(room, session, room_agent_ids, selected.values())?
             .chars()
             .count()
-            <= MAX_ROOM_VIEW_CHARACTERS
+            > MAX_ROOM_VIEW_CHARACTERS
         {
-            selected = candidate;
+            if let Some(previous) = previous {
+                selected.insert(seq, previous);
+            } else {
+                selected.remove(&seq);
+            }
         }
     }
     if mandatory_ids
@@ -278,12 +281,13 @@ async fn load_context(
     Ok(selected.into_values().collect())
 }
 
-fn render_room_view(
+fn render_room_view<'a>(
     room: &Room,
     session: &DurableAgentSession,
     room_agent_ids: &[String],
-    context: &[RoomEvent],
+    context: impl IntoIterator<Item = &'a RoomEvent>,
 ) -> Result<String, PersistenceError> {
+    let mut context = context.into_iter().peekable();
     let mut lines = vec![
         format!("Room: {}", room.label),
         format!("You are: {}", session.public.display_name),
@@ -302,7 +306,7 @@ fn render_room_view(
         session.public.last_provider_sync_seq
     };
     if context
-        .first()
+        .peek()
         .is_some_and(|event| event.seq > context_floor.saturating_add(1))
     {
         lines.push("[Earlier room updates are outside this bounded observation.]".to_owned());
