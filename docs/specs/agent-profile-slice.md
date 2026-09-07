@@ -1,6 +1,6 @@
 # Agent profile and avatar ownership
 
-Status: Phase 3 local implementation and acceptance complete; whole-phase Daybreak review pending.
+Status: Phase 3 locally complete and Daybreak approved through `b8fd15b` at C0/H0/M0/L0.
 
 ## Retained behavior and boundary
 

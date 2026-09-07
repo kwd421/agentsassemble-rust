@@ -8,7 +8,7 @@ order below. The provider-first ordering has prior manual documentation cross-re
 the current checkpoint records later findings, not a new approval.
 Phase 1's corrected local contract is closed through `2a49599`: the completed Pro
 review's three medium findings are resolved, and Daybreak approved all 136 commits,
-the cumulative phase, final HEAD and complete local product contract. Phase 2 is closed through `5c8d17b`; Phase 3 is active.
+the cumulative phase, final HEAD and complete local product contract. Phases 2 and 3 are closed through `5c8d17b` and `b8fd15b`; Phase 4 is active.
 Subsequent phases require Daybreak only; new Pro review waits until the full
 reimplementation is complete, as owned below.
 Freebuff is excluded; Antigravity moves exclusively to
@@ -294,7 +294,7 @@ taxonomy redesign waits until post-parity.
 
 ## Ordered implementation phases
 
-Current execution checkpoint (2026-09-07, Phase 3 active):
+Current execution checkpoint (2026-09-07, Phase 4 active):
 
 1. Custom API's completion-contract correction is locally complete. Its specification
    now owns requested-versus-resolved identity while preserving request/session
