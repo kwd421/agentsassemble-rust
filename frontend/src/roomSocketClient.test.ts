@@ -709,7 +709,7 @@ describe("bounded canonical room socket", () => {
     handle.close();
   });
 
-  it("finishes a delivered leave ACK before the server closes", async () => {
+  it.each(["human", "paired"])("finishes a delivered %s leave ACK before the server closes", async (kind) => {
     vi.useFakeTimers();
     const { handle, sockets } = openHarness();
     await flushPromises();
@@ -723,7 +723,19 @@ describe("bounded canonical room socket", () => {
     await vi.waitFor(() => expect(sockets[0].sent).toHaveLength(2));
     const command = sentClientFrame(sockets[0]);
 
-    receiveServerFrame(sockets[0], leaveAck(command.request_id));
+    const ack = leaveAck(command.request_id);
+    if (kind === "paired") {
+      const event = ack.result.event as Record<string, unknown>;
+      ack.result = {
+        status: "left", participant_id: "operator-local", event_seq: event.seq,
+        event: {
+          v: event.v, id: event.id, created_at: event.created_at,
+          room_id: event.room_id, seq: event.seq, type: "operator_session_ended",
+          actor: event.actor, actor_id: "operator-local", actor_type: "human",
+        },
+      };
+    }
+    receiveServerFrame(sockets[0], ack);
     sockets[0].close();
 
     await expect(pendingLeave).resolves.toMatchObject({

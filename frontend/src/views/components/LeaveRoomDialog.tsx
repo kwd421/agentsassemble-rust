@@ -3,37 +3,30 @@ import { LogOut, X } from "lucide-react";
 
 export default function LeaveRoomDialog({
   roomLabel,
+  pairedDevice: initialPairedDevice = false,
   onClose,
   onConfirm,
 }: {
   roomLabel: string;
+  pairedDevice?: boolean;
   onClose: () => void;
   onConfirm: () => Promise<void>;
 }) {
   const titleId = useId();
-  const cancelRef = useRef<HTMLButtonElement>(null);
-  const busyRef = useRef(false);
+  const [pairedDevice] = useState(initialPairedDevice);
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [opener] = useState(() => document.activeElement);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
 
   useEffect(() => {
-    busyRef.current = busy;
-  }, [busy]);
-
-  useEffect(() => {
-    const previouslyFocused = document.activeElement as HTMLElement | null;
-    cancelRef.current?.focus();
-
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape" && !busyRef.current) onClose();
-    }
-
-    window.addEventListener("keydown", closeOnEscape);
+    const dialog = dialogRef.current;
+    dialog?.showModal();
     return () => {
-      window.removeEventListener("keydown", closeOnEscape);
-      if (previouslyFocused?.isConnected) previouslyFocused.focus();
+      dialog?.close();
+      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
     };
-  }, [onClose]);
+  }, [opener]);
 
   async function confirmLeave() {
     if (busy) return;
@@ -53,28 +46,23 @@ export default function LeaveRoomDialog({
   }
 
   return (
-    <div
-      className="dc-modal-backdrop"
-      role="presentation"
-      onMouseDown={() => {
-        if (!busy) onClose();
-      }}
+    <dialog
+      ref={dialogRef}
+      className="dc-create-channel-modal"
+      aria-labelledby={titleId}
+      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(480px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", padding: 24, color: "var(--color-text-primary)" }}
+      onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
+      onClick={(event) => { if (event.target === event.currentTarget && !busy) onClose(); }}
     >
-      <section
-        className="dc-create-channel-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby={titleId}
-        onMouseDown={(event) => event.stopPropagation()}
-      >
         <header className="dc-create-channel-head">
-          <h2 id={titleId}>{roomLabel} 서버에서 나갈까요?</h2>
+          <h2 id={titleId}>{roomLabel}{pairedDevice ? " 기기 연결을 해제할까요?" : " 서버에서 나갈까요?"}</h2>
           <button
             type="button"
             className="dc-settings-close"
             onClick={onClose}
             disabled={busy}
             aria-label="서버 나가기 취소"
+            style={{ minWidth: 44, minHeight: 44 }}
           >
             <X size={18} />
           </button>
@@ -82,13 +70,13 @@ export default function LeaveRoomDialog({
 
         <div className="grid gap-2 text-[14px] leading-6 text-text-muted">
           <p className="preserve-words">
-            나간 뒤 다시 들어오려면 유효한 초대 링크가 필요합니다.
+            {pairedDevice ? "이 기기에서 다시 연결하려면 호스트 앱의 새 기기 연결 링크가 필요해요." : "나간 뒤 다시 들어오려면 유효한 초대 링크가 필요해요."}
           </p>
           <p className="preserve-words font-bold text-text-primary">
-            내가 소유한 에이전트도 모두 함께 나가며, 실행 중인 Agent Session은 종료됩니다.
+            {pairedDevice ? "이 기기의 방 접속만 끝나요. 호스트와 에이전트는 계속 참여해요." : "내가 소유한 에이전트도 모두 함께 나가며, 실행 중인 Agent Session은 종료됩니다."}
           </p>
           <p className="preserve-words">
-            나와 에이전트가 남긴 기존 대화 기록은 서버에 보존됩니다.
+            기존 대화 기록은 서버에 남아요.
           </p>
         </div>
 
@@ -100,9 +88,10 @@ export default function LeaveRoomDialog({
 
         <div className="dc-create-channel-actions">
           <button
-            ref={cancelRef}
+            autoFocus
             type="button"
-            className="ops-button"
+            className="dc-agent-create-secondary"
+            style={{ minHeight: 44 }}
             onClick={onClose}
             disabled={busy}
           >
@@ -110,15 +99,15 @@ export default function LeaveRoomDialog({
           </button>
           <button
             type="button"
-            className="ops-cta dc-leave-room-confirm inline-flex items-center justify-center gap-2"
+            className="dc-agent-create-primary"
+            style={{ minHeight: 44 }}
             onClick={() => void confirmLeave()}
             disabled={busy}
           >
             <LogOut size={16} />
-            {busy ? "나가는 중..." : "서버 나가기"}
+            {busy ? "나가는 중..." : pairedDevice ? "연결 해제" : "서버 나가기"}
           </button>
         </div>
-      </section>
-    </div>
+    </dialog>
   );
 }

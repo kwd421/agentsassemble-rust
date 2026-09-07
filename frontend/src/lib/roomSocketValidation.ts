@@ -368,6 +368,14 @@ export function commandAckResultIsValid(
     );
   }
   if (action === "participant.leave") {
+    if (event?.type === "operator_session_ended") {
+      return Boolean(
+        hasDurableEvent && result.status === "left" &&
+        result.participant_id === expectedParticipantId &&
+        isRecord(event.actor) && event.actor.participant_id === expectedParticipantId &&
+        event.actor.participant_type === "human"
+      );
+    }
     const participant = participantIsValid(result.participant, expectedRoomId)
       ? result.participant
       : null;

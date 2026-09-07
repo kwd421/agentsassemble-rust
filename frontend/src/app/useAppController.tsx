@@ -462,7 +462,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   function exitGuestSurface() {
     clearGuestSession();
     const url = new URL(window.location.href);
-    url.pathname = "/";
+    url.pathname = "/join";
     url.search = "";
     url.hash = "";
     window.location.href = url.toString();

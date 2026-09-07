@@ -33,6 +33,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
         {leaveRoomTarget && (
           <LeaveRoomDialog
             roomLabel={leaveRoomTarget.label}
+            pairedDevice={guestSession?.operator === true}
             onClose={() => setLeaveRoomTargetId("")}
             onConfirm={() => leaveRoom(leaveRoomTarget.id)}
           />

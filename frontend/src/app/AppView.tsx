@@ -316,6 +316,12 @@ export default function AppView({ controller }: { controller: AppController }) {
         <Suspense fallback={<DeferredViewFallback />}>
           {friendsOpen && roomLifecycle.enabled ? (
             <FriendsView onClose={() => setFriendsOpen(false)} />
+          ) : guestExpired ? (
+            <section className="dc-disconnected-room" role="status" style={{ padding: 24 }}>
+              <h1>방 접속이 끝났어요</h1>
+              <p>{GUEST_SESSION_EXPIRED_MESSAGE}</p>
+              <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 44, marginTop: 20 }} onClick={exitGuestSurface}>접속 화면 나가기</button>
+            </section>
           ) : activeRoomDisconnected ? (
             <DisconnectedRoomView room={activeRoom} />
           ) : adminOpen ? (
@@ -346,9 +352,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                 Boolean(canonicalRoom.capabilities["message.modify"])
               }
               postingMode={lobbyPostingState.mode}
-              composerDisabledReason={
-                guestExpired ? GUEST_SESSION_EXPIRED_MESSAGE : lobbyPostingState.disabledReason
-              }
+              composerDisabledReason={lobbyPostingState.disabledReason}
               membersOpen={membersOpen}
               onToggleMembers={toggleMembers}
               headerActions={channelHeaderActions("lobby")}

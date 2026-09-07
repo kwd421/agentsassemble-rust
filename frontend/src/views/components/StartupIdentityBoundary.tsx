@@ -65,14 +65,14 @@ export default function StartupIdentityBoundary({
           aria-label="브라우저 직접 시작 사용 불가"
         >
           <h1 className="text-2xl font-black text-text-primary">
-            데스크톱 앱에서 시작해 주세요
+            접속 링크를 열어 주세요
           </h1>
           <p
             role="alert"
             className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
           >
-            이 브라우저에는 서버가 소유하는 시작 권위가 없습니다. 방 초대·운영자 연결·복구
-            링크로 들어오거나 데스크톱 앱을 사용해 주세요.
+            이 화면에서는 방에 바로 들어갈 수 없어요. 호스트에게 받은 초대·기기 연결·복구
+            링크를 열어 주세요.
           </p>
         </main>
       </div>

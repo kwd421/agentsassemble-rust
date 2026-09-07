@@ -1,5 +1,5 @@
 export const GUEST_SESSION_EXPIRED_MESSAGE =
-  "Guest session expired or was revoked. Ask the host for a new invite.";
+  "방 접속이 만료되거나 해제됐어요. 호스트에서 새 접속 링크를 받아 주세요.";
 
 export class ApiError extends Error {
   status: number;
