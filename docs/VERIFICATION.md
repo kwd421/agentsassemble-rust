@@ -7,8 +7,8 @@ Status: current real-client verification owner
 Verification claims only the boundary actually observed. Build, lint, unit tests, simulated sockets, responsive browser emulation, and real provider runs are separate evidence classes and cannot substitute for one another.
 
 Historical entries below retain their contemporaneous batch and review wording as
-evidence. They do not own current commit, push, or review timing; only the active
-`Standing project workflow` in `AGENTS.md` does.
+evidence. They do not own current commit, push, or review timing; those are owned by
+`docs/PRODUCT_REIMPLEMENTATION_PLAN.md` under `Per-slice execution gate`.
 
 The active comparison baseline is original
 `d5046473010d1353a81ee38337360e6d98f7bd6f`, audited Rust product behavior
@@ -109,19 +109,21 @@ Only verification-owned data may be destroyed.
 
 ## Real Agent matrix
 
-Frontend flows that require real Agent Sessions use exactly this matrix:
+Use the exact final matrix and timing in
+[Verification execution scope](PRODUCT_REIMPLEMENTATION_PLAN.md#verification-execution-scope-user-decision-2026-09-07).
+That user-owned section is the sole provider-run authorization list. Real providers
+and packaged flows run after the retained implementation is complete; other providers
+use their original-contract implementation and local verification only.
 
-- Grok: exact installed official-client model selected for the run;
-- Codex: Luna;
-- OpenCode: Muse Spark contributor free.
+Antigravity must be exercised through the Phase 7 externally launched CLI and Room
+Connector invitation flow in that final matrix. It has no managed Agent Session,
+launch, PTY/ConPTY, or hook verification path. Freebuff is excluded. Earlier managed
+provider runs remain historical evidence and cannot change this scope.
 
-Antigravity is excluded from the active real-provider verification matrix until the
-user reopens it; this does not erase it from the retained parity inventory or rewrite
-historical Antigravity evidence. The verification records the exact provider/model
-identifiers exposed by the installed runtime at execution time. Missing login,
-unavailable official Grok client, unavailable capability, unsupported model, or
-provider failure remains visible as failed or `unknown`; it never triggers model
-substitution, a mock pass, or a fallback provider.
+Record the exact provider/model identifiers exposed by the selected runtime at
+execution time. Missing login, client, capability, unsupported model, or provider
+failure remains visible as failed or `unknown`; it never triggers model substitution,
+a mock pass, or a fallback provider.
 
 Provider credentials, private conversation state, hidden reasoning, and provider-private identifiers are excluded from screenshots, logs, fixtures, public events, and committed artifacts.
 
@@ -6783,7 +6785,9 @@ remaining phase boundaries. Private Antigravity helper/hook/PTY requirements are
 removed from active contracts; dated original/native observations remain explicitly
 historical, including persona registry provenance. Shared attachment budgets, room
 tool authority, vote mutation ownership, and exact interrupt receipts remain intact.
-All active spec/exposure references were inspected; no retained provider is replaced
-with a terminal helper or an external admission identity. Architecture/source-growth,
+The affected spec/exposure references were inspected; the current verification matrix
+also derives from the plan's exact final authorization instead of retaining its older
+three-provider list. No retained provider is replaced with a terminal helper or an
+external admission identity. Architecture/source-growth,
 19 policy tests, formatting, diff, and artifact gates pass. No runtime code changes
 or new actual-provider runs are part of this correction.
