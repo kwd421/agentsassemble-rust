@@ -7,15 +7,15 @@ and their whole-phase cross-review are complete. Work now follows the provider-f
 order below. The provider-first ordering has prior manual documentation cross-review;
 the current checkpoint records later findings, not a new approval.
 Phase 1's local contract has Daybreak approval at `2ee7fd6`. Read and triage the
-already-running Pro review before Phase 2; any correction and all subsequent reviews
-use Daybreak alone under the user's decision in the per-slice execution gate below.
+already-running Pro review before Phase 2 and close supported findings. Phase 1 and
+subsequent phases require both reviewers under the per-slice execution gate below.
 Freebuff is excluded; Antigravity moves exclusively to
 Phase 7's externally launched CLI and Room Connector invitation flow. Its removed
 resident-adapter requirement no longer blocks Phase 1, but the external flow remains
 required for final parity. Earlier local verification remains evidence for its scope.
 The user also directs real-provider and packaged end-to-end verification to the final
 post-implementation stage. Intermediate phases retain local tests, mandatory gates,
-and phase code review; they do not claim new real-client proof.
+and both phase code reviewers; they do not claim new real-client proof.
 
 Comparison baseline: original product commit
 `d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust baseline `8a5f75a`.
@@ -311,8 +311,8 @@ Current execution checkpoint (2026-09-07, Phase 1 local closeout):
    final HEAD, and the local Phase 1 contract at C0/H0/M0/L0, including the subsequent
    optimization/test/security corrections and the user's one-commit generated-lockfile
    exception. Read and triage the already-running Pro review as the user requested;
-   any resulting correction is reviewed by Daybreak without a new Pro request.
-   Then close Phase 1 and proceed to Phase 2. New real-client and
+   any resulting correction is reviewed by both reviewers. Obtain both approvals
+   for the corrected phase before closing Phase 1 and proceeding to Phase 2. New real-client and
    packaged-flow evidence is deferred to the final stage under the verification scope
    above; valid earlier evidence remains bounded to the tested revision and flow.
 4. Continue the retained phase order below. The repository-wide optimization and
@@ -655,7 +655,7 @@ Correction substage:
   evidence where its required external client/API is installed and explicitly
   authorized. Unavailable external dependencies have explicit static/contract
   evidence and a truthful unavailable state. Every excluded/deferred surface is
-  inactive and explicit, the designated manual reviewer approves the exact pushed range, and
+  inactive and explicit, both manual reviewers approve the exact pushed range, and
   no Python/legacy fallback remains.
 
 At that exit, stop and report parity before beginning a repository-wide size-warning
@@ -690,7 +690,7 @@ complete phase passes its local flows and affected gates, cross-review every ind
 phase commit, the cumulative phase range, final HEAD, and resulting product behavior.
 A correction required by that review is pushed and re-reviewed before the phase closes.
 Real-provider and packaged-flow runs follow the user-owned final-stage verification
-scope above. The reviewer must distinguish static/local approval from that pending
+scope above. Both reviewers must distinguish static/local approval from that pending
 real-client evidence; the final phase cannot close until its authorized flows pass.
 
 When that workflow invokes review, the request covers individual commits and the
@@ -702,16 +702,21 @@ or in-scope threat and compare the smallest fail-closed alternative; future risk
 the word security alone is not approval evidence. Findings and final disposition
 are recorded without copying full review prose into multiple product documents.
 
-User decision (2026-09-07): Daybreak Blue at `xhigh` is the sole required manual
-reviewer for new reviews and correction re-reviews. The one already-running Pro
-review is read to completion and its supported findings are addressed before Phase 2;
-their corrections are reviewed by Daybreak alone. No new Pro/web review is requested.
+Latest user decision (2026-09-07): retain GPT-6 Pro and Daybreak Blue at `xhigh`
+for every whole-phase review and correction re-review. This supersedes the brief
+Daybreak-only instruction. Intermediate commits and pushes still do not trigger
+Pro reviews; the phase completion cadence above remains the owner.
+Read the already-running Pro review to completion, address supported findings,
+and obtain both reviewers' approval of the corrected Phase 1 before Phase 2.
 Incomplete or pending answers are not approvals.
-Daybreak reviews the complete inventory, original-to-Rust coverage, phase placement,
-observable product behavior, SSoT/DDD boundaries, overimplementation, and actual source
-and diff for authorization, async/process/TCP/WebSocket failure paths, lifecycle
-cleanup, polling/timers, fallback, and swallowed failure. This reviewer change does
-not waive phase coverage, correction re-review, security/structure gates, or final
-real-client evidence. A diff approval never proves plan or phase completeness. The implementing
+The reviewers have distinct primary duties. Critical-web uses GPT-6 Pro and reviews
+the complete inventory, original-to-Rust coverage, phase placement, observable
+product behavior, SSoT/DDD boundaries, and overimplementation. Daybreak Blue manually
+reviews actual source and diff for authorization, async/process/TCP/WebSocket
+failure paths, lifecycle cleanup, polling/timers, fallback, and swallowed failure.
+Both inspect the complete phase and may report cross-cutting ownership or duplication
+defects. Very-high web review is not used. Security/structure gates and final
+real-client evidence remain required. A diff approval never proves plan or phase
+completeness. The implementing
 agent independently verifies the original entry point, owner, transition, failure
 semantics, and real UI flow.

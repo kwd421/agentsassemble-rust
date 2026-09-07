@@ -15,8 +15,9 @@
   and Daybreak's whole-phase review through `2ee7fd6`.
 - Next: follow the [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases),
   read the already-running Pro review and address supported findings, then implement
-  Phase 2's missing Agent Session controls. Phase 0A and finite Phase 0B remain complete.
-  The user's change to Daybreak-only new reviews is owned by the per-slice gate below.
+  Phase 2's missing Agent Session controls after both whole-phase reviewers approve
+  the corrected Phase 1. Phase 0A and finite Phase 0B remain complete.
+  The restored Pro plus Daybreak review policy is owned by the per-slice gate below.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:
