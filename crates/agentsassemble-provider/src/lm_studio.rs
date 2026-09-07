@@ -39,6 +39,7 @@ pub(crate) static PROVIDER: ProviderRegistration = ProviderRegistration {
     executable_required: true,
     probe_executable: "lms",
     credential_available: false,
+    turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
     configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_registered,
     launch: launch_registered,

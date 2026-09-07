@@ -38,6 +38,7 @@ const GENERATED_PROVIDER_KEYS = [
   "connection_kind",
   "default_model",
   "interactive",
+  "turn_interrupt",
   "startable",
   "available",
   "discovery_status",
@@ -152,6 +153,7 @@ function providerIsValid(value: unknown): boolean {
     Boolean(provider.runtime_kind) &&
     Boolean(provider.connection_kind) &&
     booleanKeys.every((key) => typeof provider[key] === "boolean") &&
+    (provider.turn_interrupt === "unsupported" || provider.turn_interrupt === "retained_runtime") &&
     ["custom_endpoint", "custom_model"].every(
       (key) => provider[key] === undefined || typeof provider[key] === "boolean",
     ) &&

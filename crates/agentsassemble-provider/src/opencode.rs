@@ -613,7 +613,9 @@ fn isolated_environment(
 
 impl ProviderDriver for OpenCodeDriver {
     fn retains_runtime_after_turn_interrupt(&self) -> bool {
-        true
+        crate::registration::OPENCODE_PROVIDER
+            .turn_interrupt
+            .retains_runtime()
     }
 
     fn attach_session<'a>(

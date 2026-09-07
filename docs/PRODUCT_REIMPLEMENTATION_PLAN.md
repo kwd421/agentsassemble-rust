@@ -6,9 +6,9 @@ defines the production roadmap. The finite Phase 0B prerequisites F-14 and F-16
 and their whole-phase cross-review are complete. Work now follows the provider-first
 order below. The provider-first ordering has prior manual documentation cross-review;
 the current checkpoint records later findings, not a new approval.
-Phase 1's corrected local contract has Daybreak approval through `cae1f90`. Its
-completed Pro review of `2ee7fd6` returned C0/H0/M3/L0. The supported findings
-are corrected locally; Daybreak correction approval is pending before Phase 2.
+Phase 1's corrected local contract is closed through `2a49599`: the completed Pro
+review's three medium findings are resolved, and Daybreak approved all 136 commits,
+the cumulative phase, final HEAD and complete local product contract. Phase 2 is active.
 Subsequent phases require Daybreak only; new Pro review waits until the full
 reimplementation is complete, as owned below.
 Freebuff is excluded; Antigravity moves exclusively to
@@ -294,7 +294,7 @@ taxonomy redesign waits until post-parity.
 
 ## Ordered implementation phases
 
-Current execution checkpoint (2026-09-07, Phase 1 local closeout):
+Current execution checkpoint (2026-09-07, Phase 2 active):
 
 1. Custom API's completion-contract correction is locally complete. Its specification
    now owns requested-versus-resolved identity while preserving request/session
@@ -310,18 +310,15 @@ Current execution checkpoint (2026-09-07, Phase 1 local closeout):
    CLI must later consume the distinct Room Connector invitation in Phase 7; it does
    not use human admission or regain managed-session controls. Keep its earlier
    native-receipt investigation as historical evidence, not a current phase blocker.
-3. Daybreak approved all 133 individual commits, cumulative `5d0a636..cae1f90`,
-   final HEAD, and the corrected local Phase 1 contract at C0/H0/M0/L0. This includes
-   the Codex native terminal-status correction and the user's one-commit generated-
-   lockfile exception. Pro completed its immutable `2ee7fd6` review with C0/H0/M3/L0:
-   default-only model selection, Claude cleanup receipt, and the already-corrected
-   Codex terminal-status finding. The two remaining source defects are corrected
-   locally; obtain Daybreak correction approval before Phase 2. The
-   [correction evidence](VERIFICATION.md#completed-pro-review-corrections-2026-09-07)
-   owns the final disposition. No new Pro request is made before full
-   reimplementation. Daybreak reviews each subsequent phase. Final Pro review,
-   real-client, and packaged proof remain required at final closeout. Earlier evidence
-   remains bounded to its tested revision and flow.
+3. Pro completed its immutable `2ee7fd6` review with C0/H0/M3/L0. Default-only
+   selection and Claude cleanup are corrected in `2a49599`; Codex terminal status
+   was already corrected in `cae1f90`. Daybreak approved all 136 individual commits,
+   cumulative `5d0a636..2a49599`, final HEAD and complete local Phase 1 product contract
+   at C0/H0/M0/L0. Phase 1 is closed; Phase 2 now owns re-add and accurate control
+   advertisement while preserving verified pause/resume/stop and exact interrupt.
+   [Correction evidence](VERIFICATION.md#completed-pro-review-corrections-2026-09-07)
+   owns the final dispositions. New Pro, real-client and packaged proof remain due
+   at full closeout; each intermediate phase receives Daybreak review.
 4. Continue the retained phase order below. The repository-wide optimization and
    test/security-duplication passes are complete for their recorded scope, not a new
    recurring prerequisite. Reopen their owners only for a concrete new failure,

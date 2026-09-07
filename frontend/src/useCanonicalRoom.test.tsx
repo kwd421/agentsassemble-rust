@@ -253,6 +253,7 @@ describe("useCanonicalRoom", () => {
             connection_kind: "native_cli_bridge",
             default_model: "gpt-live",
             interactive: true,
+            turn_interrupt: "unsupported",
             startable: true,
             available: true,
             discovery_status: "ready",

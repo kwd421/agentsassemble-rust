@@ -15,13 +15,14 @@
   and Daybreak's whole-phase review through `cae1f90`.
 - Codex native terminal-status correction passes affected local verification;
   [failure/publication and interrupt evidence](docs/VERIFICATION.md#codex-native-terminal-status-correction-2026-09-07).
-- Completed Pro review returned three medium findings; the Codex finding was
-  already corrected, and default-only selection plus Claude cleanup are now corrected
-  locally. [Disposition and verification](docs/VERIFICATION.md#completed-pro-review-corrections-2026-09-07).
-- Next: obtain Daybreak correction approval, then implement Phase 2's missing Agent
-  Session controls using the [current execution checkpoint](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#ordered-implementation-phases).
-  Subsequent phases use Daybreak only.
-  New Pro review waits until full reimplementation, under the per-slice gate below.
+- Phase 1 is closed through `2a49599`: Pro's three supported findings are resolved;
+  Daybreak approved all 136 commits, cumulative phase, final HEAD and complete local
+  contract. [Disposition and verification](docs/VERIFICATION.md#completed-pro-review-corrections-2026-09-07).
+- Active: Phase 2, exact Agent Session controls. Complete stored-session re-add and
+  provider-owned interrupt advertisement, preserving existing pause/resume/stop and
+  exact native interrupt. [Contract](docs/specs/agent-session-slice.md#phase-2-exact-controls-and-re-add).
+  Phase 2 starts at `2a49599`; Daybreak review is required after its local acceptance.
+  New Pro review and authorized real-provider/packaged proof wait until full closeout.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:

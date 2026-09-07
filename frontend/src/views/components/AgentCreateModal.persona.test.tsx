@@ -84,6 +84,7 @@ function deepSeekProvider(): NativeCliProviderAvailability {
     connection_kind: "native_cli_bridge",
     default_model: "deepseek-chat",
     interactive: true,
+    turn_interrupt: "unsupported",
     startable: true,
     available: true,
     discovery_status: "ready",

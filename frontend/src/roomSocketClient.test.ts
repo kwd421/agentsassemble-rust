@@ -67,6 +67,7 @@ function providerAvailability() {
     connection_kind: "native_cli_bridge",
     default_model: "gpt-5.6-luna",
     interactive: true,
+    turn_interrupt: "unsupported",
     startable: true,
     available: true,
     discovery_status: "ready",

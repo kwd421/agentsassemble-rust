@@ -60,7 +60,7 @@ pub use model::{
     CURRENT_RUNTIME_PROFILE_VERSION, CapabilitySet, ClientKind, DurableAgentSession, InviteScope,
     LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, Participant, ParticipantRole,
     ParticipantStatus, ProviderAvailability, ProviderCatalog, ProviderControl,
-    ProviderControlOption, Room, RoomEvent, RoomStatus, SnapshotMode,
+    ProviderControlOption, ProviderTurnInterrupt, Room, RoomEvent, RoomStatus, SnapshotMode,
 };
 pub use persona::{
     MAX_PERSONA_CONTEXT_CHARACTERS, MAX_PERSONA_ID_CHARACTERS, MAX_PERSONA_LORE_CHARACTERS,

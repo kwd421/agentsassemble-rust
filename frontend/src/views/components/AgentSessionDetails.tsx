@@ -109,7 +109,8 @@ export default function AgentSessionDetails({
     (!session.external_owned &&
       hasRunBefore &&
       ["stopped", "error", "disconnected", "available"].includes(status || ""));
-  const canInterrupt = status === "busy" && !session.recovery_required;
+  const canInterrupt =
+    provider?.turn_interrupt === "retained_runtime" && status === "busy" && !session.recovery_required;
   const continuity = providerSessionContinuity(session);
   const canConfigure =
     !session.enabled &&

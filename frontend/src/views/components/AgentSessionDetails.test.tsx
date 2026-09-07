@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { agentSessionFixture } from "../../test/agentSession";
+import { codexProvider } from "./AgentCreateModal.testProviders";
 import AgentSessionDetails from "./AgentSessionDetails";
 
 const personaApi = vi.hoisted(() => ({
@@ -67,6 +68,29 @@ describe("AgentSessionDetails diagnostics", () => {
     ).toBeTruthy();
   });
 
+  it.each([undefined, false, true])("requires advertised interrupt support (%s)", async (support) => {
+    const onControl = vi.fn().mockResolvedValue(undefined);
+    const session = agentSessionFixture({ runtime_status: "busy", enabled: true });
+    const provider = support === undefined ? undefined : {
+      ...codexProvider(),
+      turn_interrupt: support ? "retained_runtime" as const : "unsupported" as const,
+    };
+    const { rerender } = render(
+      <AgentSessionDetails session={session} provider={provider} onControl={onControl} />
+    );
+    const interrupt = screen.getByRole("button", { name: "응답 중단" }) as HTMLButtonElement;
+    expect(interrupt.disabled).toBe(support !== true);
+    await userEvent.click(interrupt);
+    if (support === true) {
+      expect(onControl).toHaveBeenCalledWith(session, "interrupt");
+      await waitFor(() => expect(interrupt.disabled).toBe(false));
+      rerender(<AgentSessionDetails session={{ ...session, recovery_required: true }} provider={provider} onControl={onControl} />);
+      expect(interrupt.disabled).toBe(true);
+    } else {
+      expect(onControl).not.toHaveBeenCalled();
+    }
+  });
+
   it("replaces the applied bot card on a stopped API session", async () => {
     const onConfigure = vi.fn().mockResolvedValue(undefined);
     const provider: NativeCliProviderAvailability = {
@@ -79,6 +103,7 @@ describe("AgentSessionDetails diagnostics", () => {
       default_model: "deepseek-chat",
       catalog_group: "api",
       interactive: true,
+      turn_interrupt: "unsupported",
       startable: true,
       available: true,
       discovery_status: "ready",

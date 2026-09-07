@@ -393,3 +393,45 @@ gate then passed.
 - WebSocket boundary test: create/replay/conflict/reconnect/restart against a real SQLite file.
 - Browser/Tauri real flow: select discovered provider/model, add stopped session, and observe it after runtime restart.
 - Slice-exit provider run: the exact three-provider matrix above, with owned-process identity and cleanup evidence.
+
+## Phase 2 exact controls and re-add
+
+Definition (2026-09-07, baseline `2a49599`): finish the missing copied Agent Session
+control flows after Phase 1. Original `d504647` exposes stored-session selection
+in Agent Add, sending one `agent.readd` command with optional start; the current
+Rust frontend removed that selector while its server contract was missing. Existing
+idle pause/resume, stopped launch and exact busy-turn interruption remain with
+their verified owners and are revalidated, not rewritten.
+
+- Provider registration owns static retained-turn interrupt support. Both the
+  actual driver capability and public catalog use that same policy. The copied
+  control requires this advertised support plus busy/non-recovery session state;
+  missing provider authority keeps it unavailable. The server still proves the
+  exact active runtime/turn before accepting every fresh interrupt. No provider
+  list or inferred capability is added in React, and a catalog capability never
+  substitutes for native quiescence or custody proof.
+- Re-add uses the same durable Agent Session and room-owned participant, preserving
+  profile, persona, provider conversation, canonical history/cursors, queued input,
+  role and mute. Only an inactive server-owned session without active-turn or
+  runtime/lease authority and a detached/kicked agent participant is eligible.
+  Human re-admission and external connectors remain separate later phases.
+- One canonical command owns optional start, exact request/payload replay and
+  conflict handling. Re-add without start restores an available disabled listing;
+  re-add with start uses the existing reserved lifecycle effect and its exact
+  authorization, uncertain failure, cleanup and restart-recovery owners. React
+  sends no second start command and fabricates no participant/session transition.
+  Launch success alone joins the participant. Failed/uncertain launch remains
+  visible and cannot cause duplicate provider starts on replay.
+- Stored profiles remain strict; no catalog substitution, model fallback, new
+  process manager, compatibility conversion, schema migration or polling is in
+  scope. Existing server access, admission/budget and lifecycle gates apply.
+
+Acceptance: supported/unsupported controls are rendered and rejected correctly;
+re-add without/with start preserves exact identities and participant authority;
+replay, changed-payload conflict, concurrent control and interrupted launch recover
+without duplicate events/effects. Verify at persistence and TCP/WebSocket boundaries
+and across Rust restart, with copied frontend behavior tests, affected mandatory
+checks and phase-wide Daybreak review. Actual providers and packaged flows remain
+in the final-stage matrix. Cost review covers bounded catalog projection, one
+command/transaction/effect chain and existing resource ownership; no background
+work or new external dependency is needed.

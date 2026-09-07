@@ -566,6 +566,7 @@ fn large_provider_catalog() -> ProviderCatalog {
             executable_identity: String::new(),
             default_model: "owner/model-0".to_owned(),
             interactive: true,
+            turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
             startable: true,
             available: true,
             discovery_status: "ready".to_owned(),

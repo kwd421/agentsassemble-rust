@@ -57,7 +57,9 @@ impl CursorAcpDriver {
 
 impl ProviderDriver for CursorAcpDriver {
     fn retains_runtime_after_turn_interrupt(&self) -> bool {
-        true
+        crate::registration::CURSOR_PROVIDER
+            .turn_interrupt
+            .retains_runtime()
     }
 
     fn attach_session<'a>(

@@ -463,7 +463,9 @@ fn is_room_portal_approval(message: &Value) -> bool {
 
 impl ProviderDriver for CodexDriver {
     fn retains_runtime_after_turn_interrupt(&self) -> bool {
-        true
+        crate::registration::CODEX_PROVIDER
+            .turn_interrupt
+            .retains_runtime()
     }
 
     fn attach_session<'a>(

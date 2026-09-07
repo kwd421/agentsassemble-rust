@@ -401,6 +401,7 @@ mod tests {
                 executable_identity,
                 default_model: "gpt-5.6-terra".to_owned(),
                 interactive: true,
+                turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
                 startable: true,
                 available: true,
                 discovery_status: "ready".to_owned(),

@@ -284,6 +284,20 @@ pub struct ProviderControl {
     pub default_value: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum ProviderTurnInterrupt {
+    Unsupported,
+    RetainedRuntime,
+}
+
+impl ProviderTurnInterrupt {
+    #[must_use]
+    pub const fn retains_runtime(self) -> bool {
+        matches!(self, Self::RetainedRuntime)
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[allow(clippy::struct_excessive_bools)] // Public provider capabilities are independent facts.
 pub struct ProviderAvailability {
@@ -302,6 +316,7 @@ pub struct ProviderAvailability {
     pub executable_identity: String,
     pub default_model: String,
     pub interactive: bool,
+    pub turn_interrupt: ProviderTurnInterrupt,
     pub startable: bool,
     pub available: bool,
     pub discovery_status: String,

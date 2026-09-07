@@ -66,7 +66,9 @@ impl GrokAcpDriver {
 
 impl ProviderDriver for GrokAcpDriver {
     fn retains_runtime_after_turn_interrupt(&self) -> bool {
-        true
+        crate::registration::GROK_PROVIDER
+            .turn_interrupt
+            .retains_runtime()
     }
 
     fn attach_session<'a>(

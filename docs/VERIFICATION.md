@@ -6882,4 +6882,25 @@ Cost: default-only catalogs gain one bounded single-option control. Cleanup uses
 its existing shutdown/process/portal operations and completed task state, with no
 new loop, timer, background task, provider probe or external dependency. Real
 providers, packaged flows and new automated security scans were not run.
-Daybreak correction disposition is pending.
+Daybreak completed its read-only correction review: APPROVE C0/H0/M0/L0 for
+`4b16cf6`, `a204e13`, `2a49599` individually, incremental `cae1f90..2a49599`, all
+136 commits and cumulative `5d0a636..2a49599`, final HEAD and the complete local
+Phase 1 product contract. M01/M02 are closed by `2a49599`; M03 remains closed by
+`cae1f90`. Phase 1 is closed for local implementation and phase review. Final
+Pro, authorized six-provider and packaged verification remain due at full closeout.
+
+## Phase 2 exact Agent Session controls (2026-09-07)
+
+Phase baseline is `2a49599`. The first slice publishes retained-turn interrupt
+capability from provider registration and makes the existing Codex/OpenCode/Cursor/
+Grok driver methods use that same policy. The generated catalog contract requires
+the typed unsupported/retained-runtime capability, and Agent Session Details enables interrupt only with advertised
+support and a busy, non-recovery session. The exact server/runtime/turn proof is
+unchanged; neither catalog discovery failure nor UI state grants that authority.
+
+Local slice evidence: workspace all-target check, provider registration inventory,
+frontend TypeScript/production build, 50 affected UI/socket tests, workspace
+all-target/all-feature clippy, format, architecture/source-growth, 19 policy/artifact
+tests and diff checks pass. Whole-phase verification remains pending. Cost is one two-state capability per fourteen catalog entries;
+there is no new process, database state, probe, timer or network request. Re-add,
+full Phase 2 acceptance and Daybreak review remain outstanding.
