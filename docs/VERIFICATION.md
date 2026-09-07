@@ -7952,3 +7952,31 @@ terminal reply, and device replacement. TypeScript, Vite and unchanged CSS passe
 structure, 19 policy, format and artifact gates passed. No new timer, storage or
 background task. Actual packaged account/friend/invite/pairing and recovery acceptance
 remains pending; source/UI tests do not close Phase 5.
+
+
+## Phase 5 packaged social controls — 2026-09-08
+
+The isolated release app exposed full-width native selects, inline friend edit/delete
+buttons and settings focus loss. Friend rows now use the same overflow/right-click
+menu, native focused dialogs and existing primary/danger styles. Invite and public
+confirmation dialogs own focus; native selects and actions have 44px targets.
+The unchanged CSS cascade is preserved.
+
+Direct packaged evidence covers friend creation, restart persistence, editing,
+cancel, save, deletion, search and saved-status filtering; 390px and 620px-height
+checks confirm menu bounds, dialog margins and Escape focus restoration. The
+public invite screen selects the saved human, scrolls to its final controls and
+creates a real temporary ingress invitation. A separate browser admits a human
+and publishes a message observed at the native host. The local test fixture is
+not a real AI provider.
+
+Three focused frontend suites pass 15 cases (1.37s), including retained failed-write
+drafts/retries and human-only friend selection. The package build and original
+CSS, architecture/source policy, formatting, artifact and diff gates pass. An
+external SQLite trigger injection did not produce the expected packaged save
+failure and was removed; it is not counted as failure-path UI proof.
+
+Whole-phase acceptance remains open: real recovery issuance and old-session
+revocation work, but continuing recovery clears startup readiness before the room
+socket is enabled. Correct that current-session boundary and complete paired and
+account/recovery layout verification before requesting the phase review.

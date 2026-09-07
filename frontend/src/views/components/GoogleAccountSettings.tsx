@@ -126,7 +126,7 @@ export default function GoogleAccountSettings({ identity }: { identity: UserProf
       {status && !status.account && !desktop && (!status.google.enabled
         ? <p>이 서버에는 Google 로그인이 설정되지 않았어요.</p>
         : <>
-          {!challenge && <button type="button" className="ops-button is-primary" style={{ minHeight: 44 }} disabled={busy} onClick={() => void prepare()}>
+          {!challenge && <button type="button" className="dc-agent-create-primary" style={{ minHeight: 44 }} disabled={busy} onClick={() => void prepare()}>
             {busy ? "로그인 준비 중…" : "Google 로그인 준비"}
           </button>}
           {challenge && <GoogleButton challenge={challenge} onCredential={acceptCredential} onError={reportGoogleError} />}
@@ -175,7 +175,7 @@ function AccountSwitchConfirmation({ busy, onCancel, onConnect }: { busy: boolea
       <p style={{ margin: 0, fontSize: 14, lineHeight: 1.7 }}>이미 이 서버에서 쓰던 계정이면 그 계정으로 전환돼요. 현재 게스트 프로필, 방 참여와 복구 코드는 폐기되며, 다시 참여하려면 새 초대가 필요해요. 이전 대화 기록은 남아요.</p>
       <div className="dc-create-channel-actions" style={{ gap: 12 }}>
         <button type="button" className="ops-button" style={{ minHeight: 44 }} disabled={busy} onClick={onCancel} autoFocus>취소</button>
-        <button type="button" className="ops-button is-primary" style={{ minHeight: 44 }} disabled={busy} onClick={onConnect}>{busy ? "연결 중…" : "연결"}</button>
+        <button type="button" className="dc-agent-create-primary" style={{ minHeight: 44 }} disabled={busy} onClick={onConnect}>{busy ? "연결 중…" : "연결"}</button>
       </div>
     </section>
   </dialog></div>;

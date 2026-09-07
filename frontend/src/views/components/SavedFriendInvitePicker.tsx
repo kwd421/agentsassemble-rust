@@ -7,7 +7,7 @@ export default function SavedFriendInvitePicker({ onSelect }: { onSelect: (name?
   const people = directory.friends.filter((friend) => friend.details.participant_type === "human");
   return <section style={{ display: "grid", gap: 12 }}>
     <label style={{ display: "grid", gap: 8 }}>사람 친구 초대
-      <select className="ops-input" style={{ minHeight: 44, maxWidth: "100%" }} disabled={directory.busy || !directory.loaded}
+      <select className="ops-input" style={{ minHeight: 44, maxWidth: "100%", appearance: "none", padding: "8px 12px" }} disabled={directory.busy || !directory.loaded}
         value={selectedId} onChange={(event) => {
           const id = event.target.value;
           const friend = people.find((person) => person.friend_id === id);

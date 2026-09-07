@@ -24,10 +24,11 @@ it("keeps a failed creation draft and its ID for retry, then cancels an edit wit
   fireEvent.click(screen.getByRole("button", { name: "저장" }));
   await screen.findByText("저장 실패");
   expect((screen.getByLabelText("이름") as HTMLInputElement).value).toBe("새 친구");
-  expect(screen.queryByRole("button", { name: "새 친구 편집" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "새 친구 더보기" })).toBeNull();
   const original = api.save.mock.calls[0][0];
   fireEvent.click(screen.getByRole("button", { name: "저장" }));
-  fireEvent.click(await screen.findByRole("button", { name: "새 친구 편집" }));
+  fireEvent.click(await screen.findByRole("button", { name: "새 친구 더보기" }));
+  fireEvent.click(within(screen.getByRole("dialog", { name: "친구 동작" })).getByRole("button", { name: "편집" }));
   expect(api.save.mock.calls[1][0]).toEqual(original);
   expect((screen.getByRole("button", { name: "저장" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(screen.getByLabelText("이름"), { target: { value: "취소할 수정" } });
@@ -46,7 +47,8 @@ it("requires a successful initial read and keeps failed deletion pending until a
   fireEvent.click(screen.getByRole("button", { name: "친구 추가" }));
   fireEvent.change(screen.getByLabelText("이름"), { target: { value: "지울 친구" } });
   fireEvent.click(screen.getByRole("button", { name: "저장" }));
-  fireEvent.click(await screen.findByRole("button", { name: "지울 친구 삭제" }));
+  fireEvent.click(await screen.findByRole("button", { name: "지울 친구 더보기" }));
+  fireEvent.click(within(screen.getByRole("dialog", { name: "친구 동작" })).getByRole("button", { name: "삭제" }));
   expect(api.remove).not.toHaveBeenCalled();
   api.remove.mockRejectedValueOnce(new Error("삭제 실패"));
   let dialog = screen.getByRole("dialog", { name: "친구를 삭제할까요?" });

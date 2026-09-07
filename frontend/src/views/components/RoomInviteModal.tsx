@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Copy, Globe2, LoaderCircle, LockKeyhole, X } from "lucide-react";
 import type { PublicInviteStatus } from "../../api";
 import type {
@@ -66,6 +66,12 @@ export default function RoomInviteModal({
   onStartTunnel: () => void;
   onStopTunnel: () => void;
 }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [opener] = useState(() => document.activeElement);
+  useEffect(() => {
+    const dialog = dialogRef.current; dialog?.showModal();
+    return () => { dialog?.close(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
+  }, [opener]);
   const [humanMaxUses, setHumanMaxUses] = useState(1);
   const [friendDisplayName, setFriendDisplayName] = useState<string>();
   const [humanTtlSeconds, setHumanTtlSeconds] = useState(86400);
@@ -103,40 +109,31 @@ export default function RoomInviteModal({
     if (!action) return;
     onGenerateSecureInvite(action.options, true);
   }
-  useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
-      if (pendingPublicAction) {
-        setPendingPublicAction(null);
-        return;
-      }
-      onClose();
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose, pendingPublicAction]);
 
   return (
     <div className="dc-modal-backdrop" role="presentation" onClick={onClose}>
-      <section
+      <dialog
+        ref={dialogRef}
         className="dc-invite-modal"
-        role="dialog"
+        style={{ margin: "auto", padding: 24, maxHeight: "calc(100dvh - 32px)", color: "var(--color-text-primary)" }}
+        onCancel={(event) => { event.preventDefault(); onClose(); }}
         aria-modal="true"
         aria-labelledby="room-invite-title"
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
       >
         <header className="flex items-start justify-between gap-4">
           <div className="min-w-0">
-            <h2 id="room-invite-title" className="truncate text-[18px] font-black text-text-primary preserve-words">
+            <h2 id="room-invite-title" className="text-[18px] font-black text-text-primary preserve-words" style={{ overflowWrap: "anywhere" }}>
               {roomLabel} 초대 및 연결
             </h2>
             <p className="mt-1 text-[13px] text-text-muted preserve-words">
-              브라우저에서 참가할 사람의 보안 초대 링크를 관리합니다.
+              사람을 초대하거나 내 다른 기기를 연결해요.
             </p>
           </div>
           <button
             type="button"
             className="dc-modal-close"
+            style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
             onClick={onClose}
             aria-label="초대 닫기"
           >
@@ -171,10 +168,10 @@ export default function RoomInviteModal({
                       : "외부 접속 꺼짐"}
               </span>
             </div>
-            <p>
+            <p style={{ whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }}>
               {publicAccessRunning
-                ? publicUrl || tunnelStatus?.public_url || "외부 주소가 연결되어 있습니다."
-                : "서버를 공개하지 않아도 이 컴퓨터의 룸과 에이전트는 그대로 작동합니다."}
+                ? publicUrl || tunnelStatus?.public_url || "외부 주소가 연결되어 있어요."
+                : "외부 접속을 꺼도 이 컴퓨터에서는 계속 대화할 수 있어요."}
             </p>
             {tunnelStatus?.last_error && (
               <span className="mt-1 text-[12px] font-bold text-offline preserve-words">
@@ -186,6 +183,7 @@ export default function RoomInviteModal({
             <button
               type="button"
               className="dc-invite-copy-button"
+              style={{ minWidth: 44, minHeight: 44 }}
               disabled={
                 publicAccessBusy ||
                 publicAccessRunning ||
@@ -199,6 +197,7 @@ export default function RoomInviteModal({
             <button
               type="button"
               className="dc-invite-copy-button"
+              style={{ minWidth: 44, minHeight: 44 }}
               disabled={
                 publicAccessStopping ||
                 (!publicAccessStarting && !publicTunnelActive) ||
@@ -216,7 +215,7 @@ export default function RoomInviteModal({
             <div>
               <h3 id="human-invite-heading">사람 초대</h3>
               <p>
-                브라우저에서 여는 보안 링크입니다. 초대 인원과 만료 시간을 선택할 수 있습니다.
+                초대받은 사람은 브라우저에서 참가해요.
                 {readOnlyInvite ? " 이 방에서는 읽기 전용으로 참가합니다." : ""}
               </p>
             </div>
@@ -225,6 +224,7 @@ export default function RoomInviteModal({
               <label>
                 <span>초대 가능 인원</span>
                 <select
+                  style={{ minHeight: 44, appearance: "none" }}
                   value={humanMaxUses}
                   onChange={(event) => setHumanMaxUses(Number(event.currentTarget.value))}
                 >
@@ -236,6 +236,7 @@ export default function RoomInviteModal({
               <label>
                 <span>링크 유효시간</span>
                 <select
+                  style={{ minHeight: 44, appearance: "none" }}
                   value={humanTtlSeconds}
                   onChange={(event) => setHumanTtlSeconds(Number(event.currentTarget.value))}
                 >
@@ -256,6 +257,7 @@ export default function RoomInviteModal({
               <button
                 type="button"
                 className="dc-invite-copy-button"
+                style={{ minWidth: 44, minHeight: 44 }}
                 aria-label="사람 초대 링크 생성"
                 onClick={() => requestPublicAction({ kind: "human", options: currentHumanOptions })}
               >
@@ -264,6 +266,7 @@ export default function RoomInviteModal({
               <button
                 type="button"
                 className="dc-invite-copy-button"
+                style={{ minWidth: 44, minHeight: 44 }}
                 aria-label="현재 사람 초대 링크 복사"
                 disabled={!secureInviteReady || !selectedHumanInvite}
                 onClick={() => {
@@ -284,8 +287,8 @@ export default function RoomInviteModal({
                     const revokeBusy = invite.revocation === "in_flight";
                     const revokeDead = invite.revocation === "dead";
                     return (
-                      <div className="dc-invite-friend-row" role="listitem" key={invite.key}>
-                        <span className="min-w-0 flex-1">
+                      <div className="dc-invite-friend-row" style={{ flexWrap: "wrap" }} role="listitem" key={invite.key}>
+                        <span className="min-w-0 flex-1" style={{ flexBasis: 160 }}>
                           <span className="dc-invite-friend-name preserve-words">
                             {invite.displayName}
                           </span>
@@ -298,6 +301,7 @@ export default function RoomInviteModal({
                           <button
                             type="button"
                             className="dc-invite-copy-button"
+                            style={{ minWidth: 44, minHeight: 44 }}
                             aria-label={`사람 초대 ${index + 1} 링크 복사`}
                             disabled={!invite.copyUrl}
                             onClick={() => onCopyHumanInvite(invite.key)}
@@ -308,6 +312,7 @@ export default function RoomInviteModal({
                           <button
                             type="button"
                             className="dc-invite-copy-button"
+                            style={{ minWidth: 44, minHeight: 44 }}
                             aria-label={`사람 초대 ${index + 1} 폐기`}
                             disabled={revokeBusy || revokeDead}
                             onClick={() => onRevokeHumanInvite(invite.key)}
@@ -346,8 +351,8 @@ export default function RoomInviteModal({
               {operatorPairings.length > 0 && (
                 <div className="grid gap-2" role="list" aria-label="이 앱에서 발급한 기기 연결">
                   {operatorPairings.map((pairing, index) => (
-                    <div className="dc-invite-friend-row" role="listitem" key={pairing.key}>
-                      <span className="min-w-0 flex-1">
+                    <div className="dc-invite-friend-row" style={{ flexWrap: "wrap" }} role="listitem" key={pairing.key}>
+                      <span className="min-w-0 flex-1" style={{ flexBasis: 160 }}>
                         <span className="dc-invite-friend-name">기기 연결 {index + 1}</span>
                         <span className="dc-invite-friend-handle preserve-words">
                           {pairing.state === "revoked" ? "연결 해제됨"
@@ -376,25 +381,14 @@ export default function RoomInviteModal({
           )}
         </div>
 
-        <p className="mt-3 text-[12px] text-text-muted preserve-words">
+        <p className="mt-3 text-[12px] text-text-muted preserve-words" role="status">
           {copyStatus ||
             (readOnlyInvite
               ? "이 방의 사람 초대는 읽기 전용 권한으로 발급됩니다."
-              : "사람은 보안 /join?token=... 링크로 입장합니다. 오프라인 AI는 provider/CLI 세션을 먼저 시작하거나 resume해야 합니다.")}
+              : "초대 링크는 참가할 사람에게만 보내 주세요.")}
         </p>
         {pendingPublicAction && (
-          <div
-            className="dc-invite-confirm-backdrop"
-            role="presentation"
-            onClick={() => setPendingPublicAction(null)}
-          >
-            <section
-              className="dc-invite-confirm"
-              role="alertdialog"
-              aria-modal="true"
-              aria-labelledby="public-access-confirm-title"
-              onClick={(event) => event.stopPropagation()}
-            >
+          <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>
               <h3 id="public-access-confirm-title">외부 접속을 열까요?</h3>
               <p>
                 이 컴퓨터의 서버에 임시 공개 주소를 연결한 뒤 사람 초대 링크를 만듭니다. 링크를 가진 사람만 참가할 수 있습니다.
@@ -402,7 +396,9 @@ export default function RoomInviteModal({
               <div className="dc-invite-confirm-actions">
                 <button
                   type="button"
-                  className="dc-invite-copy-button"
+                  className="dc-agent-create-secondary"
+                  style={{ minWidth: 44, minHeight: 44 }}
+                  autoFocus
                   onClick={() => setPendingPublicAction(null)}
                 >
                   취소
@@ -410,15 +406,28 @@ export default function RoomInviteModal({
                 <button
                   type="button"
                   className="dc-invite-confirm-primary"
+                  style={{ minWidth: 44, minHeight: 44 }}
                   onClick={confirmPublicAction}
                 >
                   외부 접속 열고 링크 만들기
                 </button>
               </div>
-            </section>
-          </div>
+          </PublicAccessConfirmation>
         )}
-      </section>
+      </dialog>
     </div>
   );
+}
+
+function PublicAccessConfirmation({ onCancel, children }: { onCancel: () => void; children: ReactNode }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const [opener] = useState(() => document.activeElement);
+  useEffect(() => {
+    const dialog = ref.current; dialog?.showModal();
+    return () => { dialog?.close(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
+  }, [opener]);
+  return <dialog ref={ref} className="dc-invite-confirm" role="alertdialog" aria-labelledby="public-access-confirm-title"
+    style={{ margin: "auto", width: "min(430px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", overflowY: "auto", padding: 24 }}
+    onCancel={(event) => { event.preventDefault(); event.stopPropagation(); onCancel(); }}
+    onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onCancel(); }}>{children}</dialog>;
 }

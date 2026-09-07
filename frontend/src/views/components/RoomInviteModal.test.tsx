@@ -1,3 +1,4 @@
+import "../../test/nativeDialog";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
