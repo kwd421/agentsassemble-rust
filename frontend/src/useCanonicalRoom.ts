@@ -296,19 +296,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
           currentSocket.resync?.();
           return false;
         }
-        let snapshotParticipants: RoomMember[];
-        try {
-          snapshotParticipants = normalizeActiveRoomParticipants(snapshot.participants || []);
-        } catch {
-          const error = new RoomSocketSayError(
-            "The server returned an invalid participant role; reconnecting.",
-            "participant_role_snapshot_invalid"
-          );
-          setLastError(error);
-          callbacksRef.current.onError?.(error);
-          currentSocket.resync?.();
-          return false;
-        }
+        const snapshotParticipants = snapshot.participants || [];
         roomSettingsSeqRef.current = {
           ...roomSettingsSeqRef.current,
           [roomId]: Number(snapshot.last_seq || 0),
@@ -701,7 +689,8 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   );
 
   const events = projectionIsCurrent ? eventsByRoom[roomId] || [] : [];
-  const participants = projectionIsCurrent ? participantsByRoom[roomId] || [] : [];
+  const participantRecords = projectionIsCurrent ? participantsByRoom[roomId] || [] : [];
+  const participants = useMemo(() => normalizeActiveRoomParticipants(participantRecords), [participantRecords]);
   const agentSessions = projectionIsCurrent ? sessionsByRoom[roomId] || [] : [];
   const participantProfiles = useMemo(() => {
     return canonicalParticipantProfiles(
@@ -748,6 +737,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     displayResourceBase:
       projectionIsCurrent ? acceptedProjection.displayResourceBase : "",
     participants,
+    participantRecords,
     participantProfiles,
     roomSettings: projectionIsCurrent ? roomSettingsByRoom[roomId] || null : null,
     agentSessions,

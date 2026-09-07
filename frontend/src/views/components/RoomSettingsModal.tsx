@@ -37,6 +37,7 @@ type RoomSettingsSectionId =
 
 export default function RoomSettingsModal({
   room,
+  mobileViewport = false,
   initialSectionId,
   appearance,
   appearanceAssetError,
@@ -62,6 +63,7 @@ export default function RoomSettingsModal({
   onRetryAppearance,
 }: {
   room: RoomDockItem;
+  mobileViewport?: boolean;
   initialSectionId?: RoomSettingsSectionId;
   appearance: RoomAppearance;
   appearanceAssetError: string;
@@ -90,6 +92,7 @@ export default function RoomSettingsModal({
   onRetryAppearance: () => void;
 }) {
   const [uploadStatus, setUploadStatus] = useState("");
+  const dialogRef = useRef<HTMLDialogElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const routingSettingsReady = settingsStatus === "ready";
   const preferenceSettingsReady = preferenceStatus === "ready";
@@ -115,12 +118,10 @@ export default function RoomSettingsModal({
             : "";
 
   useEffect(() => {
-    function closeOnEscape(event: KeyboardEvent) {
-      if (event.key === "Escape") onClose();
-    }
-    window.addEventListener("keydown", closeOnEscape);
-    return () => window.removeEventListener("keydown", closeOnEscape);
-  }, [onClose]);
+    const dialog = dialogRef.current;
+    dialog?.showModal();
+    return () => dialog?.close();
+  }, []);
 
   useEffect(() => {
     if (!initialSectionId) return;
@@ -160,33 +161,48 @@ export default function RoomSettingsModal({
 
   return (
     <div className="dc-settings-backdrop" role="presentation" onClick={onClose}>
-      <section
+      <dialog
+        ref={dialogRef}
         className="dc-settings-modal"
-        role="dialog"
+        style={{
+          border: 0, padding: 0, color: "inherit", maxWidth: "none", maxHeight: "none",
+          ...(mobileViewport ? {
+            gridTemplateColumns: "minmax(0, 1fr)", gridTemplateRows: "auto minmax(0, 1fr)",
+            width: "calc(100vw - 32px)", height: "calc(100dvh - 32px)",
+          } : {}),
+        }}
+        onCancel={(event) => { event.preventDefault(); onClose(); }}
         aria-modal="true"
         aria-labelledby="room-settings-title"
-        onClick={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (event.target !== event.currentTarget) return;
+          const rect = event.currentTarget.getBoundingClientRect();
+          if (event.clientX < rect.left || event.clientX > rect.right ||
+              event.clientY < rect.top || event.clientY > rect.bottom) onClose();
+        }}
       >
-        <aside className="dc-settings-nav">
-          <p className="dc-settings-nav-label preserve-words">{room.label}</p>
-          <a href="#settings-overview">개요</a>
-          <a href="#settings-appearance">외형</a>
-          <a href="#settings-channels">채널</a>
-          <a href="#settings-notify">알림</a>
-          <a href="#settings-invite">초대</a>
+        <aside className="dc-settings-nav" style={mobileViewport ? {
+          display: "flex", justifyContent: "space-between", overflowX: "auto", padding: "12px 16px",
+        } : undefined}>
+          {!mobileViewport && <p className="dc-settings-nav-label preserve-words">{room.label}</p>}
+          <a href="#settings-overview" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>개요</a>
+          <a href="#settings-appearance" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>외형</a>
+          <a href="#settings-channels" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널</a>
+          <a href="#settings-notify" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>알림</a>
+          <a href="#settings-invite" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>초대</a>
         </aside>
-        <div ref={bodyRef} className="dc-settings-body chat-scroll">
-          <header className="dc-settings-titlebar">
+        <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
+          <header className="dc-settings-titlebar" style={{ flexShrink: 0, padding: mobileViewport ? "20px 24px 0" : "54px 56px 0" }}>
             <div>
               <h2 id="room-settings-title">서버 설정</h2>
-              <p className="preserve-words">방 이름, 배너, 초대 범위를 이 화면에서 바로 바꿉니다.</p>
             </div>
-            <button type="button" className="dc-settings-close" onClick={onClose} aria-label="설정 닫기">
+            <button type="button" className="dc-settings-close" style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }} autoFocus onClick={onClose} aria-label="설정 닫기">
               <X size={18} />
               <span>ESC</span>
             </button>
           </header>
-
+          <div ref={bodyRef} className="dc-settings-body chat-scroll" style={{ padding: mobileViewport ? "0 24px 32px" : "0 56px 72px" }}>
           <section id="settings-overview" className="dc-settings-section">
             <h3>개요</h3>
             <label>
@@ -486,8 +502,9 @@ export default function RoomSettingsModal({
               </button>
             )}
           </section>
+          </div>
         </div>
-      </section>
+      </dialog>
     </div>
   );
 }

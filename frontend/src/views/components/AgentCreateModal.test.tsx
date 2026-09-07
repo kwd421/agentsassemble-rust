@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import AgentCreateModal from "./AgentCreateModal";
 import { agentSessionFixture } from "../../test/agentSession";
+import { participantFixture } from "../../test/participant";
 import {
   cerebrasProvider,
   claudeProvider,
@@ -53,9 +54,13 @@ describe("AgentCreateModal", () => {
     render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
       providers={[codexProvider()]} onClose={() => {}} onCreate={onCreate}
       existingSessions={[agentSessionFixture({ room_id: "room-a", session_id: "stored-codex",
-        display_name: "Stored Codex", model: "stored-model" })]} />);
+        display_name: "Stored Codex", model: "stored-model" }),
+        agentSessionFixture({ room_id: "room-a", session_id: "exported-codex", participant_id: "exported-codex", display_name: "Exported Codex", model: "stored-model" })]}
+      participants={[participantFixture({ room_id: "room-a", participant_id: "exported-codex", status: "exported" })]} />);
     await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
-    await chooseProviderControl("기존 세션", "Stored Codex · stored-model");
+    await userEvent.click(screen.getByRole("combobox", { name: "기존 세션" }));
+    expect(screen.queryByRole("option", { name: "Exported Codex · stored-model" })).toBeNull();
+    await userEvent.click(screen.getByRole("option", { name: "Stored Codex · stored-model" }));
     expect((screen.getByPlaceholderText("방에 표시될 이름") as HTMLInputElement).disabled).toBe(true);
     await userEvent.click(screen.getByRole("switch", { name: "추가하자마자 실행" }));
     await userEvent.click(primaryActionButton());

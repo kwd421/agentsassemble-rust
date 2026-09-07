@@ -65,6 +65,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
         참가 종료
       </button>
       {confirmAction && createPortal(
+        <div className="dc-modal-backdrop" role="presentation">
         <dialog ref={dialogRef} className="dc-member-detail-modal fixed inset-0 text-text-primary" style={{ margin: "auto" }}
           aria-label={confirmAction === "kick" ? "참가자 강퇴 확인" : "참가 종료 확인"}
           onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) { setConfirmAction(null); setError(""); } }}>
@@ -75,7 +76,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
             <button type="button" autoFocus className="dc-agent-create-secondary" style={{ minHeight: 44 }} disabled={busy} onClick={() => { setConfirmAction(null); setError(""); }}>취소</button>
             <button type="button" className="dc-member-session-button" data-variant="danger" style={{ minHeight: 44 }} disabled={busy} onClick={() => void remove(confirmAction)}>{busy ? "처리 중…" : confirmAction === "kick" ? "강퇴" : "참가 종료"}</button>
           </div>
-        </dialog>, document.body
+        </dialog></div>, document.body
       )}
     </div>
   );

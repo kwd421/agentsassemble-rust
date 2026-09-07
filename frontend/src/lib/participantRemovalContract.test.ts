@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { RoomEvent } from "../api";
 import { participantFixture } from "../test/participant";
-import { applyParticipantEvents } from "./canonicalRoomProjection";
+import { applyParticipantEvents, normalizeActiveRoomParticipants } from "./canonicalRoomProjection";
 import { commandAckResultIsValid, publicRoomEventIsValid } from "./roomSocketValidation";
 
 describe("canonical participant removal", () => {
@@ -18,7 +18,9 @@ describe("canonical participant removal", () => {
     const result = { participant, revoked_sessions: 1, cleanup_pending: false, event, event_seq: 3, events: [event] };
     const valid = (candidate: unknown) => commandAckResultIsValid(`participant.${action}`, payload, candidate, "general", "operator-local");
     expect(valid(result)).toBe(true);
-    expect(applyParticipantEvents([participantFixture({ participant_id: "guest" })], [event])).toEqual([]);
+    const records = applyParticipantEvents([participantFixture({ participant_id: "guest" })], [event]);
+    expect(records).toEqual([participant]);
+    expect(normalizeActiveRoomParticipants(records)).toEqual([]);
     expect(valid({ ...result, participant: { ...participant, participant_id: "other" } })).toBe(false);
     expect(valid({ ...result, participant: { ...participant, status: "joined" } })).toBe(false);
     expect(publicRoomEventIsValid({ ...event, room_id: "other-room" }, "general")).toBe(false);

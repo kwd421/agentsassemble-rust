@@ -18,7 +18,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
     guestPreflightRetryable, guestJoinRetryable,
     guestRecoveryRequest, guestSession,
     inviteCopyStatus, inviteModalAppearance, inviteModalRoom, invitePublicUrl,
-    inviteRoom, leaveRoom, leaveRoomTarget,
+    inviteRoom, leaveRoom, leaveRoomTarget, mobileViewport,
     operatorPairingPending, operatorPairingState,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
@@ -67,6 +67,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
         {settingsModalRoom && (
           <RoomSettingsModal
             room={settingsModalRoom}
+            mobileViewport={mobileViewport}
             initialSectionId={settingsModalInitialSectionId}
             appearance={roomAppearanceAssets.appearanceFor(settingsModalRoom)}
             appearanceAssetError={roomAppearanceAssets.errorFor(settingsModalRoom)}
@@ -130,6 +131,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
           providers={canonicalRoom.availableProviders}
           catalogRevision={canonicalRoom.providerCatalog.catalog_revision}
           existingSessions={canonicalRoom.agentSessions}
+          participants={canonicalRoom.participantRecords}
           onClose={() => setAgentCreateOpen(false)}
           onCreate={async (request) => {
             if (!roomSocket?.ready()) {

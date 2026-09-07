@@ -6,6 +6,7 @@ import {
   setProviderCredential,
   type FrontendLiveAgentCreateRequest,
   type RoomAgentSession,
+  type RoomMember,
   type ProviderCredentialStatus,
 } from "../../api";
 import type { NativeCliProviderAvailability, ProviderControl } from "../../roomSocketClient";
@@ -40,6 +41,7 @@ type AgentCreateModalProps = {
   roomLabel: string;
   providers: NativeCliProviderAvailability[];
   existingSessions?: RoomAgentSession[];
+  participants?: RoomMember[];
   catalogRevision?: string;
   onClose: () => void;
   onCreate: (request: FrontendLiveAgentCreateRequest) => Promise<void>;
@@ -52,6 +54,7 @@ export default function AgentCreateModal({
   roomLabel,
   providers,
   existingSessions = [],
+  participants = [],
   catalogRevision = "",
   onClose,
   onCreate,
@@ -82,7 +85,9 @@ export default function AgentCreateModal({
   const eligibleStoredSessions = existingSessions.filter((session) =>
     session.room_id === meetingId && !session.external_owned && session.process_ownership === "server" &&
     ["stopped", "error"].includes(session.runtime_status) && !session.enabled &&
-    !session.recovery_required && !session.provider_session_active && !session.active_turn_id
+    !session.recovery_required && !session.provider_session_active && !session.active_turn_id &&
+    !participants.some((participant) => participant.room_id === session.room_id &&
+      participant.participant_id === session.participant_id && participant.status === "exported")
   );
   const reusableSessions = eligibleStoredSessions.filter((session) =>
     session.provider_kind === selectedProvider?.provider_kind

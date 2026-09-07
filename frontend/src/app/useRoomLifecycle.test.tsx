@@ -37,6 +37,8 @@ describe("room lifecycle request ownership", () => {
     expect(vi.mocked(changeRoomLifecycle).mock.calls[1][0]).toEqual(intent);
     expect(refreshRoomDirectory).toHaveBeenCalledTimes(2);
     expect(result.current.notice).toContain("정리");
+    await act(async () => { await result.current.refresh(); });
+    expect(result.current.notice).toBe("");
     vi.mocked(changeRoomLifecycle).mockRejectedValueOnce(new ApiError(409, "stale room", "room_incarnation_changed", "rejected"));
     act(() => result.current.change(room, "close"));
     await waitFor(() => expect(result.current.error).toBe("stale room"));

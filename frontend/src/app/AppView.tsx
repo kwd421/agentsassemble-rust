@@ -5,7 +5,6 @@ import {
   CalendarDays,
   ChevronDown,
   Search,
-  Settings,
   UserPlus,
   UserRound,
   X,
@@ -19,7 +18,7 @@ import ChannelContextMenu from "../views/components/ChannelContextMenu";
 import RoomConnectionPanel from "../views/components/RoomConnectionPanel";
 import DisconnectedRoomView from "../views/components/DisconnectedRoomView";
 import MobileRoomInfoPanel from "../views/components/MobileRoomInfoPanel";
-import RoomRail from "../views/components/RoomRail";
+import RoomRail, { MOBILE_ROOM_RAIL_WIDTH } from "../views/components/RoomRail";
 import RoomSyncNotice from "../views/components/RoomSyncNotice";
 import UserPanel from "../views/components/UserPanel";
 import { SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_MIN } from "../lib/sidebarResizeModel";
@@ -50,7 +49,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     loadCanonicalRoomHistory, lobbyPostingState, markChannelRead,
     markRoomRead, membersOpen, menuChannelDisplay, menuRoom,
     messageSearchChannelLabels, messageSearchScope, mobileRoomInfoOpen,
-    mobileSidebarOpen, openAgentCreate,
+    mobileSidebarOpen, mobileViewport, openAgentCreate,
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
@@ -64,6 +63,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     toggleMembers, typingIndicators, updateMemberRole,
     visibleChannels, visibleRoomTimelineEvents,
   } = controller;
+  const hasRoom = Boolean(activeRoom.meetingId);
   return (
     <RoomSocketProvider socket={roomSocket}>
     <div
@@ -87,6 +87,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         adminOpen={adminOpen}
         menuRoom={menuRoom}
         roomMenu={roomMenu}
+        mobileViewport={mobileViewport}
         onSelectRoom={selectRoom}
         onAddRoom={addFreshRoom}
         onManageRooms={roomLifecycle.enabled ? roomLifecycle.show : undefined}
@@ -102,11 +103,13 @@ export default function AppView({ controller }: { controller: AppController }) {
 
       <AppOverlays controller={controller} />
       {/* Channel sidebar */}
-      <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록">
+      <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록"
+        style={mobileViewport ? { left: MOBILE_ROOM_RAIL_WIDTH, width: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, minWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, maxWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)` } : undefined}>
           <header className="dc-sidebar-head shrink-0" data-tone={activeRoom.tone}>
             <button
               type="button"
               className="dc-server-header-button"
+              disabled={!hasRoom}
               onClick={(event) => openRoomMenu(event, activeRoom)}
               onContextMenu={(event) => openRoomMenu(event, activeRoom)}
               aria-label={`${activeRoom.label} 서버 메뉴 열기`}
@@ -114,17 +117,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               <span className="truncate preserve-words">{activeRoom.label}</span>
               <ChevronDown size={16} />
             </button>
-            {!guestLocked && (
-              <button
-                type="button"
-                className="dc-mobile-room-settings"
-                onClick={() => openRoomSettings(activeRoom.id)}
-                aria-label="서버 설정 열기"
-                title="서버 설정"
-              >
-                <Settings size={17} />
-              </button>
-            )}
             <div className="dc-sidebar-banner">
               <span
                 className="dc-sidebar-server-icon"
@@ -140,7 +132,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                   {activeRoom.topic}
                 </p>
               </div>
-              {!guestLocked && (
+              {hasRoom && !guestLocked && (
                 <button
                   type="button"
                   className="dc-sidebar-invite-button"
@@ -155,7 +147,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                 </button>
               )}
             </div>
-            <div className="dc-mobile-channel-tools" aria-label="모바일 채널 도구">
+            {hasRoom && <div className="dc-mobile-channel-tools" aria-label="모바일 채널 도구">
               <label className="dc-mobile-channel-search">
                 <span className="sr-only">채널 검색</span>
                 <Search size={18} />
@@ -186,11 +178,11 @@ export default function AppView({ controller }: { controller: AppController }) {
               >
                 <CalendarDays size={18} />
               </button>
-            </div>
+            </div>}
           </header>
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3 chat-scroll" aria-label="채널">
-          {CHANNEL_SECTIONS.map((section) => {
+          {hasRoom && CHANNEL_SECTIONS.map((section) => {
             const channels = section.channels
               .map((id) => visibleChannels.find((item) => item.id === id))
               .filter((item) => {
@@ -259,7 +251,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           )}
         </nav>
 
-        <footer className="dc-user-area shrink-0">
+        <footer className="dc-user-area shrink-0" style={{ zIndex: 30 }}>
           <UserPanel
             onlineCount={scopedOnlineCount}
             agentCount={scopedAgents.length || 0}
@@ -273,7 +265,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           />
         </footer>
         <nav className="dc-mobile-bottom-nav" aria-label="모바일 하단 탐색">
-          <button type="button" onClick={() => markChannelRead(channel)}>
+          <button type="button" disabled={!hasRoom} onClick={() => markChannelRead(channel)}>
             <Bell size={19} />
             <span>알림</span>
           </button>
@@ -310,6 +302,15 @@ export default function AppView({ controller }: { controller: AppController }) {
             <DisconnectedRoomView room={activeRoom} />
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} activeMeetingId={activeRoom.meetingId} />
+          ) : !hasRoom ? (
+            <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
+              <h1 id="empty-room-title">열려 있는 방이 없어요</h1>
+              <p>새 방을 만들거나 방 관리에서 보관한 방을 복원할 수 있어요.</p>
+              <div className="flex flex-wrap gap-3" style={{ justifyContent: "center", marginTop: 20 }}>
+                {!guestLocked && <button type="button" className="dc-agent-create-primary" onClick={addFreshRoom}>새 방 만들기</button>}
+                {roomLifecycle.enabled && <button type="button" className="dc-agent-create-secondary" onClick={roomLifecycle.show}>방 관리</button>}
+              </div>
+            </section>
           ) : channel === "lobby" ? (
             <LobbyView
               activeRoom={activeRoom}
@@ -363,7 +364,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         </Suspense>
       </main>
 
-      {mobileRoomInfoOpen && (
+      {hasRoom && mobileRoomInfoOpen && (
         <MobileRoomInfoPanel
           room={activeRoom}
           appearance={activeAppearance}
@@ -392,7 +393,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       {roomLifecycle.open && <RoomManagementModal controller={roomLifecycle} />}
 
       {/* Right panel */}
-      {showMembers && membersOpen && (
+      {hasRoom && showMembers && membersOpen && (
         <aside
           className="dc-members hidden shrink-0 xl:flex xl:flex-col"
           aria-label="방 연결 정보"

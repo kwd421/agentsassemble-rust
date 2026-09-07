@@ -7372,3 +7372,40 @@ retains its already-lost custody as unresolved; it was not silently repaired.
 Remaining Phase 4 UI acceptance includes permanent participant export, room close
 and exact-name deletion, empty-room presentation, and the user's newly reported
 bottom-left profile stacking correction.
+
+### Phase 4 mobile settings, terminal candidates and empty rooms (2026-09-08)
+
+- Packaged 390×640 verification exposed an oversized room rail, duplicate settings
+  entry and desktop settings columns clipping the content and close control. The
+  existing mobile-panel media query now supplies the layout decision; settings use
+  horizontal navigation, 16px outer/24px content margins, and a fixed title/close
+  area above the scrolling settings. Native dialog modality excludes the background.
+  The base profile footer stays beneath overlay backdrops. Existing CSS remains frozen.
+- Direct manipulation confirmed mobile overview/input, last invite section/button,
+  visible close control, Escape, persisted topic after reopening and desktop layout.
+  Participant confirmation visibly dims the base profile; room menus omit their
+  redundant target title. The previously verified profile and session flows remain
+  recorded in the preceding Phase 4 entries.
+- Exporting the local LM Studio fixture removed its roster row but previously left
+  its stopped session offered for re-add; the server correctly rejected that request.
+  The existing canonical participant collection now retains removed records from
+  both snapshots and events, deriving active roster rows separately. The create
+  dialog excludes exported candidates from that authority. After packaged restart,
+  the exported fixture was absent from re-add choices; no server terminal rule changed.
+- In the isolated new room, close first showed pending cleanup, then refreshed to
+  closed with no restore action. Wrong deletion name kept deletion disabled;
+  cancel/reopen cleared the draft. Exact-name deletion returned unresolved, then
+  the same-request check confirmed deletion and removed the room from management.
+  Closing management showed the empty-room view with create/manage actions and no
+  stale channel/member controls. An earlier isolated ambiguous-custody record stayed
+  pending and unrestorable; no guessed repair or user data migration was performed.
+- Verification: exported candidate regression (24 cases), settings (11), and earlier
+  affected mobile/lifecycle/projection cases passed. The earlier full frontend run
+  passed 109 files/696 cases with one test-query failure corrected in the targeted
+  24-case rerun; this is not represented as a new single full-suite pass. Final
+  TypeScript/production CSS/package build and unchanged architecture/source gates,
+  19 policy/artifact tests, format, diff and artifact checks passed.
+- Resource sample after deletion: app 0.0% CPU/125088 KiB RSS, owned launcher
+  0.1%/9600 KiB and owned server 0.3%/43344 KiB (178032 KiB combined). This is a
+  point sample of the app-owned process tree, not a claim about shared WebKit costs.
+  LM Studio used only the owned loopback fixture; real providers were not executed.

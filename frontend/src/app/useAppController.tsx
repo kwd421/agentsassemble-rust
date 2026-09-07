@@ -131,6 +131,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     eventId: string;
   } | null>(null);
   const {
+    mobileViewport,
     mobileSidebarOpen,
     mobileRoomInfoOpen,
     openMobileSidebar,
@@ -566,7 +567,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     leaveRoom, leaveRoomTarget, loadCanonicalRoomHistory,
     lobbyPostingState, markChannelRead, markRoomRead,
     membersOpen, menuChannelDisplay, menuRoom, messageSearchChannelLabels,
-    messageSearchScope, mobileRoomInfoOpen, mobileSidebarOpen,
+    messageSearchScope, mobileRoomInfoOpen, mobileSidebarOpen, mobileViewport,
     openAgentCreate, openChannelMenu,
     openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo, openMobileSidebar,
     openRoomMenu, openRoomSettings, operatorPairingPending, operatorPairingState,

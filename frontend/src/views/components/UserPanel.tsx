@@ -399,6 +399,7 @@ export default function UserPanel({
         <section
           className="dc-profile-card"
           aria-label="내 프로필 카드"
+          style={{ left: 8, maxWidth: "calc(100% - 16px)" }}
         >
           <div
             className="dc-profile-banner"

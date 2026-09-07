@@ -21,6 +21,8 @@ export type RoomMenuState = {
   y: number;
 } | null;
 
+export const MOBILE_ROOM_RAIL_WIDTH = 68;
+
 export default function RoomRail({
   rooms,
   activeRoom,
@@ -29,6 +31,7 @@ export default function RoomRail({
   adminOpen,
   menuRoom,
   roomMenu,
+  mobileViewport = false,
   onSelectRoom,
   onAddRoom, onManageRooms,
   onOpenRoomMenu,
@@ -44,6 +47,7 @@ export default function RoomRail({
   adminOpen: boolean;
   menuRoom?: RoomDockItem;
   roomMenu: RoomMenuState;
+  mobileViewport?: boolean;
   onSelectRoom: (roomId: string) => void;
   onAddRoom: () => void;
   onManageRooms?: () => void;
@@ -53,10 +57,12 @@ export default function RoomRail({
   onOpenRoomSettings: (roomId: string) => void;
   onLeaveRoom: (roomId: string) => void;
 }) {
+  const buttonStyle = mobileViewport ? { width: 44, height: 44, flexBasis: 44 } : undefined;
   return (
     <nav
       className="dc-rail flex shrink-0 flex-col items-center gap-2 py-3"
       aria-label="룸 레일"
+      style={mobileViewport ? { width: MOBILE_ROOM_RAIL_WIDTH } : undefined}
     >
       <div className="dc-room-stack min-h-0 flex-1 overflow-y-auto chat-scroll" aria-label="방 목록">
         {rooms.map((room) => {
@@ -79,7 +85,7 @@ export default function RoomRail({
               data-tone={room.tone}
               data-has-image={Boolean(roomAppearance.iconImage)}
               data-connection-state={disconnected ? "disconnected" : room.connectionState || "local"}
-              style={roomAppearanceStyle(roomAppearance)}
+              style={{ ...roomAppearanceStyle(roomAppearance), ...buttonStyle }}
               className="dc-server-btn"
               aria-label={`${room.label}${disconnected ? " · 연결이 끊긴 서버" : ""}`}
               title={`${room.label} · ${disconnected ? "연결이 끊긴 서버" : room.topic}`}
@@ -97,12 +103,13 @@ export default function RoomRail({
             className="dc-server-btn dc-server-add"
             aria-label="새 방 만들기"
             title="새 방"
+            style={buttonStyle}
           >
             <Plus size={20} />
           </button>
         )}
       </div>
-      {onManageRooms && <button type="button" className="dc-server-btn" style={{ marginBottom: 80 }} aria-label="방 관리" title="방 관리" onClick={onManageRooms}><Settings size={20} /></button>}
+      {onManageRooms && <button type="button" className="dc-server-btn" style={{ marginBottom: 80, ...buttonStyle }} aria-label="방 관리" title="방 관리" onClick={onManageRooms}><Settings size={20} /></button>}
       {menuRoom && roomMenu && (
         <div
           className="dc-context-menu"
@@ -117,7 +124,6 @@ export default function RoomRail({
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <p className="dc-context-title preserve-words">{menuRoom.label}</p>
           <button type="button" role="menuitem" onClick={() => onMarkRoomRead(menuRoom.id)}>
             <Check size={16} />
             읽음으로 표시하기

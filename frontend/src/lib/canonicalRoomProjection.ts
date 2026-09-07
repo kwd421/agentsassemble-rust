@@ -197,7 +197,8 @@ export function applyParticipantEvents(
     }
     if (event.type === "participant_kicked" || event.type === "participant_exported") {
       const removed = removedParticipantFromEvent(event);
-      changed = byId.delete(removed.participant_id) || changed;
+      byId.set(removed.participant_id, removed);
+      changed = true;
       continue;
     }
     if (event.type === "participant_muted") {

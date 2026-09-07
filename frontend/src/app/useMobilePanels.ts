@@ -9,15 +9,17 @@ type MobilePanelDragState = {
 
 const MOBILE_SWIPE_THRESHOLD = 42;
 const MOBILE_SWIPE_VERTICAL_TOLERANCE = 80;
+const MOBILE_VIEWPORT_QUERY = "(max-width: 760px)";
 
 export function mobileViewportMatches() {
   return (
     typeof window !== "undefined" &&
-    window.matchMedia?.("(max-width: 760px)").matches
+    window.matchMedia?.(MOBILE_VIEWPORT_QUERY).matches
   );
 }
 
 export function useMobilePanels({ canOpenRoomInfo }: { canOpenRoomInfo: boolean }) {
+  const [mobileViewport, setMobileViewport] = useState(mobileViewportMatches);
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(mobileViewportMatches);
   const [mobileRoomInfoOpen, setMobileRoomInfoOpen] = useState(false);
   const mobilePanelDragRef = useRef<MobilePanelDragState | null>(null);
@@ -103,18 +105,24 @@ export function useMobilePanels({ canOpenRoomInfo }: { canOpenRoomInfo: boolean 
   }
 
   useEffect(() => {
+    const query = window.matchMedia?.(MOBILE_VIEWPORT_QUERY);
+    if (!query) return;
+    function updateViewport(event: MediaQueryListEvent) {
+      setMobileViewport(event.matches);
+      if (!event.matches) closeMobileOverlays();
+    }
+    query.addEventListener("change", updateViewport);
+    return () => query.removeEventListener("change", updateViewport);
+  }, []);
+
+  useEffect(() => {
     if (!mobileSidebarOpen && !mobileRoomInfoOpen) return;
     function closeOnEscape(event: KeyboardEvent) {
       if (event.key === "Escape") closeMobileOverlays();
     }
-    function closeOnDesktopResize() {
-      if (!mobileViewportIsActive()) closeMobileOverlays();
-    }
     window.addEventListener("keydown", closeOnEscape);
-    window.addEventListener("resize", closeOnDesktopResize);
     return () => {
       window.removeEventListener("keydown", closeOnEscape);
-      window.removeEventListener("resize", closeOnDesktopResize);
     };
   }, [mobileRoomInfoOpen, mobileSidebarOpen]);
 
@@ -162,6 +170,7 @@ export function useMobilePanels({ canOpenRoomInfo }: { canOpenRoomInfo: boolean 
   }, [mobileRoomInfoOpen, mobileSidebarOpen]);
 
   return {
+    mobileViewport,
     mobileSidebarOpen,
     mobileRoomInfoOpen,
     openMobileSidebar,

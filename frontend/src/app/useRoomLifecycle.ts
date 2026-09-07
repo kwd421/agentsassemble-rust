@@ -31,6 +31,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
         const result = await refreshRoomDirectory(captureRoomDirectoryContinuity());
         if (!result.ok) throw result.error;
       } while (directoryInvalidatedRef.current);
+      if (!pendingRef.current) setNotice("");
     } catch (failure) {
       if (!(failure instanceof RoomDirectoryOperationSuperseded)) {
         setError(failure instanceof Error ? failure.message : "방 목록을 확인하지 못했습니다.");
