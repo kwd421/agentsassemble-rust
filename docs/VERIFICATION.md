@@ -7450,3 +7450,24 @@ The artifact gate initially reported 19,787,407,360 bytes above its unchanged
 19,327,352,832-byte limit. With no Cargo/Tauri process active, the repository's
 `make artifact-prune` removed 18.2 GiB of regenerable artifacts; artifact-check then
 passed. User source, data and unrelated processes were not cleanup targets.
+
+### Phase 5 signed human invite claim consumers (2026-09-08)
+
+D-07 finite consumer audit: the current frontend `humanInviteManager` checks the
+opaque signed envelope and never interprets its JSON claims. The server's dedicated
+human credential parser checks signature, canonical encoding/target/URL/time/scope;
+preflight maps authenticated identity/scope/time to the persistence evidence that
+must match the current invite row. No retained client consumes the nine fixed
+self-description fields removed from `InviteClaims` and its nested records. The
+single permission field is now direct; the redundant admission-description record
+and literal-validation function are removed. Unknown fields remain rejected; no
+old-token parser, compatibility fallback or rowless admission is introduced.
+
+The independently calculated fixed HMAC vector changed from 1049 to 536 bytes;
+the separate 24-byte random join code is unchanged. Four credential tests and six
+TCP admission/manager boundary tests passed, including exact retry, read-only
+authorization, replacement-session closure, current ingress and create/revoke.
+The reduction concerns token bytes and serialization work only; no CPU or latency
+improvement is claimed. Whole-phase packaged admission proof remains required.
+Affected server Clippy and unchanged architecture/source, 19 policy/artifact tests,
+format, diff and artifact gates passed after the claim change.

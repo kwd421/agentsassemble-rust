@@ -1504,8 +1504,8 @@ remains cheaper than the required byte-copy boundary. Keep the one-second cadenc
 
 ### D-07 — invite self-description claims have no proven consumer
 
-Disposition: `Unknown; prove or remove`; Phase 5 human admission. It does not gate
-the provider foundation.
+Disposition: `Completed in Phase 5`; fixed token self-description with no current
+consumer is removed. Checked dynamic authority and credential binding remain.
 
 The signed human-invite token contains fixed descriptive claims such as
 `host_verifies`. Room, server, lineage, scope, expiry, and credential binding have

@@ -1,7 +1,7 @@
 # Human Invite, Admission, and Room Session Slice
 
-Status: implementation evidence retained; current contract remains reopened by
-repository audit D-07. The D-02 frame correction and D-03 direct remote HTTP target
+Status: admission implementation retained; Phase 5 removes D-07 unconsumed signed
+claim self-description. The D-02 frame correction and D-03 direct remote HTTP target
 authorization are implemented. Human admission/session, the one-use WebSocket
 exchange, and desktop private-control purpose tickets remain.
 
@@ -222,10 +222,17 @@ Human invite creation preserves both current credentials. `invite_token` is the
 signed `aai1.<claims>.<HMAC-SHA256>` value, while `join_code` is `aaj1_` plus exactly
 24 operating-system-random bytes encoded as unpadded base64url; `join_url` carries
 the latter. Both are accepted by browser admission, resolve the same durable invite,
-and remain distinct opaque values. At the audited baseline, the signed claims include
-schema, room/display identity, URLs, expiry, nonce, permissions, and fixed descriptive
-fields. D-07 requires a finite current consumer for every retained claim; unconsumed
-self-description is removed rather than preserved for a possible future reader.
+and remain distinct opaque values. The current signed claims retain permission mode,
+room/participant/display identity, URLs and checked host scope, issue/expiry times,
+and the credential-uniqueness nonce. The frontend treats the signed token as opaque;
+preflight/admission consume authenticated target/scope/time/identity fields and bind
+them to the durable invite. Human admission has one dedicated issuer/parser, while
+its signed prefix already owns protocol discrimination. Fixed `schema`, `mode`,
+`client_kind`, agent `provider_kind`, `host_verifies`, `identity_proof`,
+`provider_execution`, `remote_http_bridge` and `remote_transport` have no finite
+production consumer beyond literal self-comparison and are removed. No generic
+admission-description wrapper remains; permission mode is a direct claim. The exact
+current parser rejects unknown fields instead of importing older token shapes.
 Verification must still find the exact current row and match every retained canonical
 authority field before admission. No rowless signed-token or old-token compatibility
 path is introduced.

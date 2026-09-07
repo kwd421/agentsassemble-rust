@@ -18,10 +18,6 @@ use url::{Host, Url};
 
 use crate::ingress_trust::is_loopback_http_host;
 
-const CLAIM_SCHEMA: &str = "agentsassemble.lan_invite.v1";
-const CLAIM_MODE: &str = "lan_invite_token";
-const CLAIM_CLIENT_KIND: &str = "native_remote_room_client";
-const HUMAN_PROVIDER_KIND: &str = "manual";
 const SIGNED_NONCE_BYTES: usize = 18;
 const MAX_PUBLIC_ROOM_URL_CHARS: usize = 200;
 
@@ -252,30 +248,16 @@ impl VerifiedHumanInviteClaims {
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct InviteClaims {
-    admission: AdmissionClaims,
+    permission_mode: String,
     agent: AgentClaims,
-    client_kind: String,
     expires_at: String,
     issued_at: String,
     meeting_id: String,
-    mode: String,
     nonce: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     public_room_url: Option<String>,
     room_host_scope: String,
     room_url: String,
-    schema: String,
-}
-
-#[derive(Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct AdmissionClaims {
-    host_verifies: [String; 4],
-    identity_proof: String,
-    permission_mode: String,
-    provider_execution: String,
-    remote_http_bridge: bool,
-    remote_transport: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -283,7 +265,6 @@ struct AdmissionClaims {
 struct AgentClaims {
     agent_id: String,
     display_name: String,
-    provider_kind: String,
 }
 
 impl InviteClaims {
@@ -304,36 +285,31 @@ impl InviteClaims {
         }
         let (room_url, room_host_scope) = normalize_room_url(&draft.room_url)?;
         Ok(Self {
-            admission: admission_claims(draft.invite_scope),
+            permission_mode: match draft.invite_scope {
+                InviteScope::ReadWrite => "participant",
+                InviteScope::ReadOnly => "meeting_read_only",
+            }
+            .to_owned(),
             agent: AgentClaims {
                 agent_id: draft.base_participant_id.clone(),
                 display_name: draft.display_name.clone(),
-                provider_kind: HUMAN_PROVIDER_KIND.to_owned(),
             },
-            client_kind: CLAIM_CLIENT_KIND.to_owned(),
             expires_at: format_invite_timestamp(draft.expires_at),
             issued_at: format_invite_timestamp(draft.issued_at),
             meeting_id: draft.room_id.clone(),
-            mode: CLAIM_MODE.to_owned(),
             nonce: URL_SAFE_NO_PAD.encode(nonce),
             public_room_url: (!draft.public_room_url.is_empty())
                 .then(|| draft.public_room_url.clone()),
             room_host_scope,
             room_url,
-            schema: CLAIM_SCHEMA.to_owned(),
         })
     }
 
     fn authenticate(self) -> Result<VerifiedHumanInviteClaims, HumanInviteCredentialError> {
-        if self.schema != CLAIM_SCHEMA
-            || self.mode != CLAIM_MODE
-            || self.client_kind != CLAIM_CLIENT_KIND
-            || self.agent.provider_kind != HUMAN_PROVIDER_KIND
-            || !canonical_text(&self.meeting_id, 128)
+        if !canonical_text(&self.meeting_id, 128)
             || !canonical_text(&self.agent.agent_id, 64)
             || !canonical_text(&self.agent.display_name, 128)
             || !is_canonical_nonce(&self.nonce)
-            || !admission_is_current(&self.admission)
             || self
                 .public_room_url
                 .as_ref()
@@ -350,7 +326,7 @@ impl InviteClaims {
         if expires_at <= issued_at {
             return Err(HumanInviteCredentialError::UnsupportedClaims);
         }
-        let invite_scope = match self.admission.permission_mode.as_str() {
+        let invite_scope = match self.permission_mode.as_str() {
             "participant" => InviteScope::ReadWrite,
             "meeting_read_only" => InviteScope::ReadOnly,
             _ => return Err(HumanInviteCredentialError::UnsupportedClaims),
@@ -366,38 +342,6 @@ impl InviteClaims {
             expires_at,
         })
     }
-}
-
-fn admission_claims(invite_scope: InviteScope) -> AdmissionClaims {
-    AdmissionClaims {
-        host_verifies: [
-            "token_signature".to_owned(),
-            "token_expiry".to_owned(),
-            "meeting_id".to_owned(),
-            "agent_id".to_owned(),
-        ],
-        identity_proof: "hmac_sha256_invite_token".to_owned(),
-        permission_mode: match invite_scope {
-            InviteScope::ReadWrite => "participant",
-            InviteScope::ReadOnly => "meeting_read_only",
-        }
-        .to_owned(),
-        provider_execution: "not_started_by_invite".to_owned(),
-        remote_http_bridge: false,
-        remote_transport: CLAIM_CLIENT_KIND.to_owned(),
-    }
-}
-
-fn admission_is_current(claims: &AdmissionClaims) -> bool {
-    claims.host_verifies == ["token_signature", "token_expiry", "meeting_id", "agent_id"]
-        && claims.identity_proof == "hmac_sha256_invite_token"
-        && matches!(
-            claims.permission_mode.as_str(),
-            "participant" | "meeting_read_only"
-        )
-        && claims.provider_execution == "not_started_by_invite"
-        && !claims.remote_http_bridge
-        && claims.remote_transport == CLAIM_CLIENT_KIND
 }
 
 fn verify_join_code(
@@ -600,22 +544,13 @@ mod tests {
         assert_eq!(
             issued.invite_token(),
             concat!(
-                "aai1.eyJhZG1pc3Npb24iOnsiaG9zdF92ZXJpZmllcyI6WyJ0b2tlbl9zaWduYXR1cmUiLC",
-                "J0b2tlbl9leHBpcnkiLCJtZWV0aW5nX2lkIiwiYWdlbnRfaWQiXSwiaWRlbnRpdHlf",
-                "cHJvb2YiOiJobWFjX3NoYTI1Nl9pbnZpdGVfdG9rZW4iLCJwZXJtaXNzaW9uX21vZG",
-                "UiOiJtZWV0aW5nX3JlYWRfb25seSIsInByb3ZpZGVyX2V4ZWN1dGlvbiI6Im5vdF9z",
-                "dGFydGVkX2J5X2ludml0ZSIsInJlbW90ZV9odHRwX2JyaWRnZSI6ZmFsc2UsInJlbW",
-                "90ZV90cmFuc3BvcnQiOiJuYXRpdmVfcmVtb3RlX3Jvb21fY2xpZW50In0sImFnZW50",
-                "Ijp7ImFnZW50X2lkIjoiZ3Vlc3QtYWJjZDEyMzQiLCJkaXNwbGF5X25hbWUiOiJHdWV",
-                "zdCBIdW1hbiIsInByb3ZpZGVyX2tpbmQiOiJtYW51YWwifSwiY2xpZW50X2tpbmQiOi",
-                "JuYXRpdmVfcmVtb3RlX3Jvb21fY2xpZW50IiwiZXhwaXJlc19hdCI6IjIwMjYtMDgtMj",
-                "ZUMDI6MDI6MDMrMDA6MDAiLCJpc3N1ZWRfYXQiOiIyMDI2LTA4LTI2VDAxOjAyOjAz",
-                "KzAwOjAwIiwibWVldGluZ19pZCI6ImdlbmVyYWwiLCJtb2RlIjoibGFuX2ludml0ZV9",
-                "0b2tlbiIsIm5vbmNlIjoiSWlJaUlpSWlJaUlpSWlJaUlpSWlJaUlpIiwicHVibGljX3",
-                "Jvb21fdXJsIjoiaHR0cHM6Ly9yb29tLmV4YW1wbGUudGVzdCIsInJvb21faG9zdF9zY",
-                "29wZSI6Imhvc3Rfb3JfbGFuX2lwIiwicm9vbV91cmwiOiJodHRwczovLzE5Mi4xNjgu",
-                "MS41MDo4NzY1Iiwic2NoZW1hIjoiYWdlbnRzYXNzZW1ibGUubGFuX2ludml0ZS52MS",
-                "J9.ttXkmpTI7aLBEesDWlP4Vm3Ce2JLNiZn1PBW0z2JZL8"
+                "aai1.eyJwZXJtaXNzaW9uX21vZGUiOiJtZWV0aW5nX3JlYWRfb25seSIsImFnZW50Ijp7ImFnZW50X2l",
+                "kIjoiZ3Vlc3QtYWJjZDEyMzQiLCJkaXNwbGF5X25hbWUiOiJHdWVzdCBIdW1hbiJ9LCJleHBpcmVzX2F",
+                "0IjoiMjAyNi0wOC0yNlQwMjowMjowMyswMDowMCIsImlzc3VlZF9hdCI6IjIwMjYtMDgtMjZUMDE6MDI",
+                "6MDMrMDA6MDAiLCJtZWV0aW5nX2lkIjoiZ2VuZXJhbCIsIm5vbmNlIjoiSWlJaUlpSWlJaUlpSWlJaUl",
+                "pSWlJaUlpIiwicHVibGljX3Jvb21fdXJsIjoiaHR0cHM6Ly9yb29tLmV4YW1wbGUudGVzdCIsInJvb21",
+                "faG9zdF9zY29wZSI6Imhvc3Rfb3JfbGFuX2lwIiwicm9vbV91cmwiOiJodHRwczovLzE5Mi4xNjguMS4",
+                "1MDo4NzY1In0.oAfLyGNqgQtvsBf0jP56VDeMWv5Z4BLneq2iG3IPatQ"
             )
         );
         assert_eq!(
