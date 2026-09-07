@@ -40,7 +40,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     activeRoomHistory, activeRoomMembers, addFreshRoom,
     adjustSidebarWidthWithKeyboard, adminOpen,
     admittedSessionToken, agentActivityVisibility, cancelMobileShellPointer,
-    canonicalRoom, changeAgentActivityVisibility, channel,
+    canonicalRoom, canManageActiveRoom, changeAgentActivityVisibility, channel,
     channelHeaderActions, channelMenu, channelSearchNeedle, channelSearchQuery,
     channelSidebarWidth, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     deviceToken, exitGuestSurface,
@@ -98,6 +98,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
         onInviteRoom={inviteRoom}
+        canManageActiveRoom={canManageActiveRoom}
         onOpenRoomSettings={openRoomSettings}
         onLeaveRoom={(roomId) => {
           setLeaveRoomTargetId(roomId);
@@ -327,7 +328,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               roomDeviceToken={deviceToken}
               messagePinsAuthority={roomHttpAuthority}
               viewerParticipantId={guestSession?.agentId || "operator-local"}
-              canManageRoom={!guestLocked && !activeRoomDisconnected}
+              canManageRoom={canManageActiveRoom}
               canPostMessages={lobbyPostingState.canPost}
               canModifyMessages={
                 !activeRoomDisconnected &&
@@ -382,8 +383,9 @@ export default function AppView({ controller }: { controller: AppController }) {
           displayResourceBase={canonicalRoom.displayResourceBase}
           guestLocked={guestLocked}
           onClose={closeMobileRoomInfo}
+          onStartAddAgent={openAgentCreate}
           onInvite={guestLocked ? undefined : () => inviteRoom(activeRoom.id)}
-          onOpenSettings={guestLocked ? undefined : () => openRoomSettings(activeRoom.id)}
+          onOpenSettings={!guestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined}
           agentSessions={activeRoomAgentSessions}
           availableProviders={canonicalRoom.availableProviders}
           capabilities={activeRoomCapabilities}
@@ -442,7 +444,6 @@ export default function AppView({ controller }: { controller: AppController }) {
               viewerParticipantId={guestSession?.agentId || "operator-local"}
               displayResourceBase={canonicalRoom.displayResourceBase}
               onRoleChange={updateMemberRole}
-              guestLocked={guestLocked}
               channelNotifications={activeChannelSettings}
               onStartAddAgent={openAgentCreate}
               agentSessions={activeRoomAgentSessions}

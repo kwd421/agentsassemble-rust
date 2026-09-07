@@ -28,6 +28,7 @@ export default function RoomRail({
   activeRoom,
   roomAppearances,
   guestLocked,
+  canManageActiveRoom = false,
   adminOpen,
   menuRoom,
   roomMenu,
@@ -44,6 +45,7 @@ export default function RoomRail({
   activeRoom: RoomDockItem;
   roomAppearances: Record<string, RoomAppearance>;
   guestLocked: boolean;
+  canManageActiveRoom?: boolean;
   adminOpen: boolean;
   menuRoom?: RoomDockItem;
   roomMenu: RoomMenuState;
@@ -137,7 +139,7 @@ export default function RoomRail({
               서버에 초대하기
             </button>
           )}
-          {!guestLocked && menuRoom && !roomIsDisconnected(menuRoom) && (
+          {(!guestLocked || (canManageActiveRoom && menuRoom.id === activeRoom.id)) && !roomIsDisconnected(menuRoom) && (
             <button type="button" role="menuitem" onClick={() => onOpenRoomSettings(menuRoom.id)}>
               <Settings size={16} />
               서버 설정

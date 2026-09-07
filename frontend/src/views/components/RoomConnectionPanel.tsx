@@ -23,7 +23,6 @@ type RoomConnectionPanelProps = {
   viewerParticipantId?: string;
   displayResourceBase?: string;
   onRoleChange?: (memberId: string, role: RoleId) => void;
-  guestLocked?: boolean;
   channelNotifications?: Record<string, { notifications: ChannelNotificationSetting; lastReadAt?: string }>;
   onSessionActionComplete?: () => void;
   onStartAddAgent?: () => void;
@@ -59,7 +58,6 @@ export default function RoomConnectionPanel({
   viewerParticipantId = "operator-local",
   displayResourceBase = "",
   onRoleChange,
-  guestLocked = false,
   channelNotifications,
   onSessionActionComplete,
   onStartAddAgent,
@@ -78,7 +76,7 @@ export default function RoomConnectionPanel({
 
   return (
     <div className="dc-room-connection-panel">
-      {!guestLocked && onStartAddAgent && (
+      {capabilities["agent.control"] && onStartAddAgent && (
         <div className="dc-room-agent-add-row">
           <button type="button" className="dc-agent-add-entry" onClick={onStartAddAgent}>
             <Plus size={16} />

@@ -11,7 +11,7 @@ import RoomSettingsModal from "../views/components/RoomSettingsModal";
 export default function AppOverlays({ controller }: { controller: AppController }) {
   const {
     acceptRecoveredSession, activeRoom, agentCreateOpen,
-    canonicalRoom, closeInviteModal,
+    canonicalRoom, canControlActiveAgents, closeInviteModal,
     deviceToken, clientId,
     generateInviteLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
@@ -130,7 +130,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
         )}
 
         <AgentCreateModal
-          open={agentCreateOpen && !guestLocked}
+          open={agentCreateOpen && canControlActiveAgents}
           meetingId={activeRoom.meetingId}
           roomLabel={activeRoom.label}
           providers={canonicalRoom.availableProviders}

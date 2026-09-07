@@ -325,6 +325,12 @@ export function useAppController(deviceToken: string, clientId: string) {
     agentActivityVisibility,
     setAgentActivityVisibility,
   });
+  const canManageActiveRoom = !activeRoomDisconnected && Boolean(activeRoomCapabilities["room.manage"]);
+  const canControlActiveAgents = !activeRoomDisconnected && Boolean(activeRoomCapabilities["agent.control"]);
+  useEffect(() => {
+    if (!canControlActiveAgents) setAgentCreateOpen(false);
+    if (guestLocked && !canManageActiveRoom) setSettingsModal(null);
+  }, [canControlActiveAgents, canManageActiveRoom, guestLocked]);
   const saveAgentAvatar = useCallback(async (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => {
     if (!managerAuthorityCurrent || session.room_id !== activeOperationalMeetingId || !roomSocket?.ready()) {
       throw new Error("현재 방의 에이전트 프로필 업로드 권위를 사용할 수 없습니다.");
@@ -413,6 +419,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   function openAgentCreate() {
+    if (!canControlActiveAgents) return;
     setAgentCreateOpen(true);
     closeMobileOverlays();
     setRoomMenu(null);
@@ -420,7 +427,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   function openRoomSettings(roomId: string, initialSectionId: RoomSettingsSectionId = "settings-overview") {
-    if (guestLocked) return;
+    if (guestLocked && (roomId !== activeRoom.id || !canManageActiveRoom)) return;
     setActiveRoomId(roomId);
     setAdminOpen(false);
     setSettingsModal({ roomId, initialSectionId });
@@ -487,7 +494,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   const toggleMembers = useCallback(() => setMembersOpen((value) => !value), []);
   const showMembers = !adminOpen;
   const inviteModalRoom = inviteModal ? rooms.find((room) => room.id === inviteModal.roomId) : undefined;
-  const settingsModalRoom = settingsModal
+  const settingsModalRoom = settingsModal && (!guestLocked || canManageActiveRoom)
     ? rooms.find((room) => room.id === settingsModal.roomId)
     : undefined;
   const leaveRoomTarget = rooms.find((room) => room.id === leaveRoomTargetId);
@@ -533,7 +540,7 @@ export function useAppController(deviceToken: string, clientId: string) {
       lastReadSummary: channelLastReadSummary(setting),
       lastReadCursor: setting?.lastReadAt || "",
       onMarkRead: roomSettings.preferenceStateFor(activeRoom).status === "ready" ? (cursor) => markChannelRead(channelId, cursor) : undefined,
-      onOpenSettings: guestLocked ? undefined : () => openRoomSettings(activeRoom.id),
+      onOpenSettings: !guestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined,
     };
   }
 
@@ -548,6 +555,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     roomLifecycle,
     acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings,
+    canManageActiveRoom, canControlActiveAgents,
     activeRoom, activeRoomAgentSessions, activeRoomCapabilities,
     activeRoomDisconnected, activeRoomHistory, activeRoomMembers,
     addFreshRoom, adjustSidebarWidthWithKeyboard,

@@ -317,3 +317,17 @@ owner unmount. It neither polls ingress nor infers that the grant was redeemed.
 Expired links retain the separate revocation action because a consumed session can
 outlive its link. Actual paired operator controls and packaged desktop/mobile flows
 remain part of whole-phase acceptance.
+
+### Paired room management presentation
+
+The active canonical snapshot owns room-management and agent-control presentation.
+Remote routing remains session-bound; its browser session never becomes native
+manager authority. Desktop and mobile settings/agent-creation entries use the
+current room capabilities. A retired projection removes those entries and dismisses
+remote settings/agent creation. Existing WebSocket command and persistence owners
+remain responsible for committing authorization. Native server directory, friends,
+and invitation creation retain their separate host boundary.
+
+This presentation adds no credential, storage, timer or retry owner. Room/agent
+image upload and remote lifecycle HTTP controls still require their complete owner
+connection, followed by packaged desktop/mobile verification before phase closure.

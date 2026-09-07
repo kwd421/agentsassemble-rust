@@ -317,7 +317,7 @@ export default function MobileRoomInfoPanel({
   guestLocked = false,
   onClose,
   onInvite,
-  onOpenSettings,
+  onOpenSettings, onStartAddAgent,
   agentSessions = [],
   availableProviders = [],
   capabilities = {},
@@ -339,6 +339,7 @@ export default function MobileRoomInfoPanel({
   onClose: () => void;
   onInvite?: () => void;
   onOpenSettings?: () => void;
+  onStartAddAgent?: () => void;
   agentSessions?: RoomAgentSession[];
   availableProviders?: NativeCliProviderAvailability[];
   capabilities?: Record<string, boolean>;
@@ -386,7 +387,7 @@ export default function MobileRoomInfoPanel({
         <button type="button" aria-label="알림 설정">
           <Bell size={22} />
         </button>
-        {!guestLocked && onOpenSettings && (
+        {(!guestLocked || capabilities["room.manage"]) && onOpenSettings && (
           <button type="button" onClick={onOpenSettings} aria-label="방 설정">
             <Settings size={22} />
           </button>
@@ -456,6 +457,13 @@ export default function MobileRoomInfoPanel({
           </section>
         ) : (
           <>
+          {capabilities["agent.control"] && onStartAddAgent && (
+            <button type="button" className="dc-mobile-info-invite" onClick={onStartAddAgent}>
+              <Bot size={24} />
+              <span>에이전트 추가</span>
+              <span aria-hidden>›</span>
+            </button>
+          )}
           {!guestLocked && onInvite && (
             <button type="button" className="dc-mobile-info-invite" onClick={onInvite}>
               <UserPlus size={24} />

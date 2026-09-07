@@ -7868,3 +7868,17 @@ pass. The browser adds one nearest-expiry deadline while copyable grants remain,
 unmount cleanup and no recurring ingress requests. Final emitted main JS is 867.19 kB
 (261.76 kB gzip); no server task or storage mechanism was added by this UI change.
 Paired control exposure and direct packaged desktop/mobile verification remain pending.
+
+## Phase 5 paired room management presentation (2026-09-08)
+
+Canonical `room.manage` and `agent.control` capabilities now expose paired room
+settings and agent creation in desktop/mobile entry points without changing remote
+session routing. Capability retirement hides entries and dismisses transient
+management dialogs. Native directory/invite/account authority remains separate.
+
+Affected component and canonical projection/creation suites: 4 suites, 34 tests
+passed (1.55s). The component cases exercise absent, granted and retired capability;
+existing canonical isolation cases cover device/session projection retirement.
+TypeScript, Vite and unchanged approved CSS cascade passed (193ms Vite; 867.80 kB
+main JS, 261.97 kB gzip). No new task, timer, storage or retry. Remote image uploads,
+lifecycle HTTP connection and direct packaged whole-phase acceptance remain pending.

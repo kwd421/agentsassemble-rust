@@ -49,6 +49,26 @@ const STALE_MEMBER: RoomMember = participantFixture({
 afterEach(cleanup);
 
 describe("MobileRoomInfoPanel", () => {
+  it("opens paired room settings only with the current server capability", () => {
+    const open = vi.fn();
+    const create = vi.fn();
+    const props = {
+      room: { id: "room-1", label: "Room One", meetingId: "room-1", topic: "" },
+      appearance: DEFAULT_ROOM_APPEARANCE, channelLabel: "general",
+      agents: [], members: [], guestLocked: true, onClose: vi.fn(), onOpenSettings: open, onStartAddAgent: create,
+    };
+    const view = render(<MobileRoomInfoPanel {...props} />);
+    expect(screen.queryByRole("button", { name: "방 설정" })).toBeNull();
+    view.rerender(<MobileRoomInfoPanel {...props} capabilities={{ "room.manage": true, "agent.control": true }} />);
+    fireEvent.click(screen.getByRole("button", { name: "방 설정" }));
+    expect(open).toHaveBeenCalledOnce();
+    fireEvent.click(screen.getByRole("button", { name: /에이전트 추가/ }));
+    expect(create).toHaveBeenCalledOnce();
+    view.rerender(<MobileRoomInfoPanel {...props} capabilities={{}} />);
+    expect(screen.queryByRole("button", { name: /에이전트 추가/ })).toBeNull();
+    expect(screen.queryByRole("button", { name: "방 설정" })).toBeNull();
+  });
+
   it("does not expose Agent Session controls without the room capability", () => {
     const view = render(
       <MobileRoomInfoPanel

@@ -9,6 +9,19 @@ import RoomConnectionPanel from "./RoomConnectionPanel";
 
 afterEach(cleanup);
 
+it("exposes agent creation only while the server grants agent control", () => {
+  const create = vi.fn();
+  const props = { room, agents: [], members: [], onStartAddAgent: create };
+  const view = render(<RoomConnectionPanel {...props} />);
+  expect(screen.queryByRole("button", { name: "에이전트 추가" })).toBeNull();
+  view.rerender(<RoomConnectionPanel {...props} capabilities={{ "agent.control": true }} />);
+  fireEvent.click(screen.getByRole("button", { name: "에이전트 추가" }));
+  expect(create).toHaveBeenCalledOnce();
+  view.rerender(<RoomConnectionPanel {...props} capabilities={{}} />);
+  expect(screen.queryByRole("button", { name: "에이전트 추가" })).toBeNull();
+});
+
+
 const room = {
   id: "general",
   label: "general",
@@ -194,7 +207,6 @@ describe("RoomConnectionPanel", () => {
         agents={[]}
         members={[]}
         agentSessions={[]}
-        guestLocked
       />
     );
 
