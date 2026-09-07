@@ -237,14 +237,19 @@ async fn recovered_confirmed_stop_releases_ordered_floor_in_its_final_uow() {
 
     let payload = json!({"agent_id": AGENT_ID});
     let crate::AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "stop-floor-owner", &payload)
+        .prepare_agent_stop(TrustedPrincipal(&principal), "stop-floor-owner", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare floor stop: {error}"))
     else {
         panic!("active floor owner must require provider stop");
     };
     store
-        .authorize_agent_stop_effect(&principal, "stop-floor-owner", &payload, &stop.operation_id)
+        .authorize_agent_stop_effect(
+            TrustedPrincipal(&principal),
+            "stop-floor-owner",
+            &payload,
+            &stop.operation_id,
+        )
         .await
         .unwrap_or_else(|error| panic!("authorize floor stop: {error}"));
     store
@@ -300,7 +305,11 @@ async fn normal_confirmed_stop_assigns_the_next_floor_once_with_its_command_resu
 
     let payload = json!({"agent_id": AGENT_ID});
     let crate::AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "normal-stop-floor-owner", &payload)
+        .prepare_agent_stop(
+            TrustedPrincipal(&principal),
+            "normal-stop-floor-owner",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare normal floor stop: {error}"))
     else {
@@ -308,7 +317,7 @@ async fn normal_confirmed_stop_assigns_the_next_floor_once_with_its_command_resu
     };
     store
         .authorize_agent_stop_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "normal-stop-floor-owner",
             &payload,
             &stop.operation_id,

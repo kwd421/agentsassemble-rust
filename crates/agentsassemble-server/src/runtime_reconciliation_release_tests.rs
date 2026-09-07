@@ -26,7 +26,11 @@ async fn exact_live_stop_releases_its_captured_tombstone_after_commit() {
     let fixture = confirmed_absence_fixture("000000000205").await;
     let AgentStopPlan::Stop(effect) = fixture
         .store
-        .prepare_agent_stop(&fixture.principal, "lost-stop-checkpoint", &fixture.payload)
+        .prepare_agent_stop(
+            TrustedPrincipal(&fixture.principal),
+            "lost-stop-checkpoint",
+            &fixture.payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare exact stop: {error}"))
     else {
@@ -35,7 +39,7 @@ async fn exact_live_stop_releases_its_captured_tombstone_after_commit() {
     fixture
         .store
         .authorize_agent_stop_effect(
-            &fixture.principal,
+            TrustedPrincipal(&fixture.principal),
             "lost-stop-checkpoint",
             &fixture.payload,
             &effect.operation_id,
@@ -59,7 +63,11 @@ async fn exact_live_stop_releases_its_captured_tombstone_after_commit() {
     assert!(matches!(
         fixture
             .store
-            .prepare_agent_stop(&fixture.principal, "lost-stop-checkpoint", &fixture.payload,)
+            .prepare_agent_stop(
+                TrustedPrincipal(&fixture.principal),
+                "lost-stop-checkpoint",
+                &fixture.payload,
+            )
             .await
             .unwrap_or_else(|error| panic!("reload exact stop: {error}")),
         AgentStopPlan::Finalize

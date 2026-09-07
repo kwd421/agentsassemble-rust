@@ -18,7 +18,7 @@ const JOIN: [u8; 32] = [0x42; 32];
 const BROWSER: [u8; 32] = [0x43; 32];
 
 #[tokio::test]
-async fn launch_preparation_and_effect_dispatch_revalidate_the_request_session() {
+async fn lifecycle_preparation_and_effect_dispatch_revalidate_the_request_session() {
     let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
     let authorization = store
         .authorize_human_session(&session_fingerprint(&store).await)
@@ -45,6 +45,10 @@ async fn launch_preparation_and_effect_dispatch_revalidate_the_request_session()
                 .await,
             expected,
         );
+        assert_rejected_code(
+            store.prepare_agent_stop(authority, "stop", &payload).await,
+            expected,
+        );
         set_participant_status(&store, ParticipantStatus::Left).await;
     }
     assert_rejected_code(
@@ -59,6 +63,12 @@ async fn launch_preparation_and_effect_dispatch_revalidate_the_request_session()
                 "owner",
                 "lease",
             )
+            .await,
+        "session_revoked",
+    );
+    assert_rejected_code(
+        store
+            .authorize_agent_stop_effect(authority, "stop", &payload, "operation")
             .await,
         "session_revoked",
     );

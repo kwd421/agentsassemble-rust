@@ -71,7 +71,11 @@ async fn restart_rejects_a_pre_effect_stop_without_claiming_runtime_shutdown() {
         .await
         .unwrap_or_else(|error| panic!("complete start: {error}"));
     let AgentStopPlan::Stop(_) = store
-        .prepare_agent_stop(&principal, "prepared-stop-owner-lost", &payload)
+        .prepare_agent_stop(
+            TrustedPrincipal(&principal),
+            "prepared-stop-owner-lost",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare stop: {error}"))
     else {
@@ -87,7 +91,7 @@ async fn restart_rejects_a_pre_effect_stop_without_claiming_runtime_shutdown() {
     );
     assert!(matches!(
         store
-            .prepare_agent_stop(&principal, "prepared-stop-owner-lost", &payload)
+            .prepare_agent_stop(TrustedPrincipal(&principal), "prepared-stop-owner-lost", &payload)
             .await,
         Err(PersistenceError::StoredCommandRejected { code, .. })
             if code == "runtime_stop_abandoned_before_effect"

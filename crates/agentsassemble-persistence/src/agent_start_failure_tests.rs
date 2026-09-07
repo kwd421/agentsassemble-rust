@@ -77,7 +77,11 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
     assert_terminal_start_failure(&store, &principal, &payload, &failure).await;
     assert!(matches!(
         store
-            .prepare_agent_stop(&principal, "stop-after-failed-start", &payload)
+            .prepare_agent_stop(
+                TrustedPrincipal(&principal),
+                "stop-after-failed-start",
+                &payload
+            )
             .await,
         Err(PersistenceError::CommandRejected {
             code: "runtime_handle_unavailable",

@@ -99,14 +99,19 @@ async fn start_then_stop(store: &SqliteStore, principal: &AuthenticatedPrincipal
         .unwrap_or_else(|error| panic!("complete initial start: {error}"));
 
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(principal, "stop-before-resume", payload)
+        .prepare_agent_stop(TrustedPrincipal(principal), "stop-before-resume", payload)
         .await
         .unwrap_or_else(|error| panic!("prepare stop: {error}"))
     else {
         panic!("running session must require exact stop effect");
     };
     store
-        .authorize_agent_stop_effect(principal, "stop-before-resume", payload, &stop.operation_id)
+        .authorize_agent_stop_effect(
+            TrustedPrincipal(principal),
+            "stop-before-resume",
+            payload,
+            &stop.operation_id,
+        )
         .await
         .unwrap_or_else(|error| panic!("authorize stop: {error}"));
     store

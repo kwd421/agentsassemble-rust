@@ -1,3 +1,4 @@
+use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{AgentLifecycleAction, AgentLifecycleIntentStatus, ParticipantRole};
 use chrono::Utc;
 use serde_json::json;
@@ -35,6 +36,7 @@ async fn count_events_containing(store: &crate::SqliteStore, text: &str) -> i64 
 #[tokio::test]
 async fn runtime_gone_checkpoint_yields_to_an_inflight_stop_owner() {
     let (store, principal, _directory) = fixture().await;
+    let authority = TrustedPrincipal(&principal);
     insert_waiting_agent(&store).await;
 
     let active = store
@@ -79,14 +81,14 @@ async fn runtime_gone_checkpoint_yields_to_an_inflight_stop_owner() {
 
     let payload = json!({"agent_id": AGENT_ID});
     let crate::AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "stop-gone-owner", &payload)
+        .prepare_agent_stop(authority, "stop-gone-owner", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare stop-race owner: {error}"))
     else {
         panic!("busy runtime must require an exact stop effect");
     };
     store
-        .authorize_agent_stop_effect(&principal, "stop-gone-owner", &payload, &stop.operation_id)
+        .authorize_agent_stop_effect(authority, "stop-gone-owner", &payload, &stop.operation_id)
         .await
         .unwrap_or_else(|error| panic!("authorize stop-race owner: {error}"));
 
@@ -173,7 +175,7 @@ async fn runtime_gone_rejects_a_stop_intent_without_its_exact_reservation() {
 
     let payload = json!({"agent_id": AGENT_ID});
     let crate::AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "forged-stop-owner", &payload)
+        .prepare_agent_stop(TrustedPrincipal(&principal), "forged-stop-owner", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare forged-stop owner: {error}"))
     else {
@@ -181,7 +183,7 @@ async fn runtime_gone_rejects_a_stop_intent_without_its_exact_reservation() {
     };
     store
         .authorize_agent_stop_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "forged-stop-owner",
             &payload,
             &stop.operation_id,

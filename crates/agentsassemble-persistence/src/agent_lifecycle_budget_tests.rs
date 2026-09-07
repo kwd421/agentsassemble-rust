@@ -13,6 +13,7 @@ use super::{
 async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() {
     let payload = json!({"agent_id": AGENT_ID});
     let (stopped_store, stopped_principal, _stopped_directory) = fixture().await;
+    let stopped_authority = TrustedPrincipal(&stopped_principal);
     assert!(
         stopped_store
             .command_requires_principal_budget(
@@ -26,7 +27,7 @@ async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() 
     );
     assert!(matches!(
         stopped_store
-            .prepare_agent_stop(&stopped_principal, "stopped-noop", &payload)
+            .prepare_agent_stop(stopped_authority, "stopped-noop", &payload)
             .await
             .unwrap_or_else(|error| panic!("stop stopped session: {error}")),
         AgentStopPlan::Outcome(_)
@@ -51,6 +52,7 @@ async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() 
     assert_eq!(stopped_budget, 1);
 
     let (running_store, running_principal, _running_directory) = fixture().await;
+    let running_authority = TrustedPrincipal(&running_principal);
     let mut transaction = running_store
         .pool
         .begin()
@@ -84,7 +86,7 @@ async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() 
     );
     assert!(matches!(
         running_store
-            .prepare_agent_stop(&running_principal, "owned-cleanup", &payload)
+            .prepare_agent_stop(running_authority, "owned-cleanup", &payload)
             .await
             .unwrap_or_else(|error| panic!("prepare owned cleanup: {error}")),
         AgentStopPlan::Stop(_)

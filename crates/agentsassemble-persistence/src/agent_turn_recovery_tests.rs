@@ -138,7 +138,7 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
     assert_eq!(recovered.session.runtime_owner_id, "previous-supervisor");
 
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "stop-blocking-turn", &payload)
+        .prepare_agent_stop(TrustedPrincipal(&principal), "stop-blocking-turn", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare blocking-turn stop: {error}"))
     else {
@@ -146,7 +146,7 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
     };
     store
         .authorize_agent_stop_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "stop-blocking-turn",
             &payload,
             &stop.operation_id,
@@ -291,7 +291,11 @@ async fn prepared_stop_suppresses_a_late_ordinary_provider_final() {
         .await
         .unwrap_or_else(|error| panic!("mark late-final turn running: {error}"));
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "stop-before-late-final", &payload)
+        .prepare_agent_stop(
+            TrustedPrincipal(&principal),
+            "stop-before-late-final",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare stop before late final: {error}"))
     else {
@@ -329,7 +333,7 @@ async fn prepared_stop_suppresses_a_late_ordinary_provider_final() {
 
     store
         .authorize_agent_stop_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "stop-before-late-final",
             &payload,
             &stop.operation_id,
@@ -386,7 +390,11 @@ async fn ambiguous_stop_preserves_blocking_turn_authority_for_provider_reconcili
         .await
         .unwrap_or_else(|error| panic!("authorize ambiguous provider turn: {error}"));
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "ambiguous-busy-stop", &payload)
+        .prepare_agent_stop(
+            TrustedPrincipal(&principal),
+            "ambiguous-busy-stop",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare ambiguous busy stop: {error}"))
     else {
@@ -394,7 +402,7 @@ async fn ambiguous_stop_preserves_blocking_turn_authority_for_provider_reconcili
     };
     store
         .authorize_agent_stop_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "ambiguous-busy-stop",
             &payload,
             &stop.operation_id,

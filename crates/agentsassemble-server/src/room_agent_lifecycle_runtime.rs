@@ -342,7 +342,7 @@ pub(crate) async fn execute_agent_stop(
         AgentStopPlan::Stop(effect) => {
             let effect = match store
                 .authorize_agent_stop_effect(
-                    &command.principal,
+                    command.mutation_authority(),
                     &command.request_id,
                     &command.payload,
                     &effect.operation_id,
@@ -421,7 +421,11 @@ async fn prepare_agent_stop_with_recovery(
     command: &RoomCommand,
 ) -> Result<AgentStopPlan, PersistenceError> {
     let plan = store
-        .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
+        .prepare_agent_stop(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+        )
         .await;
     if !plan.as_ref().is_err_and(unconfirmed_effect) {
         return plan;
@@ -438,7 +442,11 @@ async fn prepare_agent_stop_with_recovery(
     {
         Ok(LiveRuntimeReconciliation::RetryOriginalEffect) => {
             store
-                .prepare_agent_stop(&command.principal, &command.request_id, &command.payload)
+                .prepare_agent_stop(
+                    command.mutation_authority(),
+                    &command.request_id,
+                    &command.payload,
+                )
                 .await
         }
         Ok(LiveRuntimeReconciliation::StillUnresolved) => plan,

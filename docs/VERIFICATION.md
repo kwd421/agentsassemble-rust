@@ -7664,3 +7664,16 @@ validation; accepted local requests retain borrowed principals and the same quer
 No new polling or durable state was added. Pairing, stop/create/configuration
 provenance and prepared-intent revocation cleanup still require integration before
 privileged remote dispatch or packaged pairing acceptance can be claimed.
+
+## Phase 5 agent stop session provenance (2026-09-08)
+
+Stop preparation, recovered retry and exact pre-provider stop authorization now
+retain request session provenance. The existing lifecycle authority regression
+covers ordinary-human denial and revoked-session rejection at both stop boundaries.
+Already accepted stop confirmation, finalization and reconciliation retain their
+exact durable effect owner. All 271 persistence tests and the two server release
+reconciliation tests passed, including captured stop-tombstone release after commit.
+Affected Clippy and unchanged architecture/source, 19 policy, format, diff and
+artifact gates passed. Logs: `/tmp/aa-phase5-stop-authority-{tests,runtime-tests,clippy,gates}.log`.
+No new runtime tasks or persisted state are introduced; the same transaction timing
+and remaining pairing-integration limits as the launch entry apply.

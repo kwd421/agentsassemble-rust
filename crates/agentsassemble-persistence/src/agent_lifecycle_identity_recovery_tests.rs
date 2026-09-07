@@ -39,7 +39,11 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
         .await
         .unwrap_or_else(|error| panic!("complete first start: {error}"));
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "stop-between-starts", &payload)
+        .prepare_agent_stop(
+            TrustedPrincipal(&principal),
+            "stop-between-starts",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare stop: {error}"))
     else {
@@ -47,7 +51,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
     };
     store
         .authorize_agent_stop_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "stop-between-starts",
             &payload,
             &stop.operation_id,

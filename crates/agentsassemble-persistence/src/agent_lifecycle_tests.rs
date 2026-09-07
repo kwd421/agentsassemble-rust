@@ -243,7 +243,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     assert!(replay.deduplicated);
 
     let stop = store
-        .prepare_agent_stop(&principal, "stop-lifecycle", &payload)
+        .prepare_agent_stop(TrustedPrincipal(&principal), "stop-lifecycle", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare stop: {error}"));
     let AgentStopPlan::Stop(effect) = stop else {
@@ -252,7 +252,12 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
     assert_eq!(effect.runtime_handle_id, "owned-runtime-1");
     assert_eq!(effect.runtime_owner_id, "supervisor-instance-1");
     let effect = store
-        .authorize_agent_stop_effect(&principal, "stop-lifecycle", &payload, &effect.operation_id)
+        .authorize_agent_stop_effect(
+            TrustedPrincipal(&principal),
+            "stop-lifecycle",
+            &payload,
+            &effect.operation_id,
+        )
         .await
         .unwrap_or_else(|error| panic!("authorize stop effect: {error}"));
     store
@@ -261,7 +266,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         .unwrap_or_else(|error| panic!("record stop effect: {error}"));
     assert!(matches!(
         store
-            .prepare_agent_stop(&principal, "stop-lifecycle", &payload)
+            .prepare_agent_stop(TrustedPrincipal(&principal), "stop-lifecycle", &payload)
             .await
             .unwrap_or_else(|error| panic!("recover stop: {error}")),
         AgentStopPlan::Finalize
@@ -540,7 +545,7 @@ async fn restart_retains_ambiguous_stop_authority_until_gone_is_proven() {
     mark_ambiguous_stop(&store, &principal, &payload).await;
     assert!(matches!(
         store
-            .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
+            .prepare_agent_stop(TrustedPrincipal(&principal), "ambiguous-stop", &payload)
             .await,
         Err(PersistenceError::CommandUnresolved {
             code: "runtime_effect_unconfirmed",
@@ -556,7 +561,7 @@ async fn restart_retains_ambiguous_stop_authority_until_gone_is_proven() {
     );
     assert!(matches!(
         store
-            .prepare_agent_stop(&principal, "ambiguous-stop", &payload)
+            .prepare_agent_stop(TrustedPrincipal(&principal), "ambiguous-stop", &payload)
             .await,
         Err(PersistenceError::CommandUnresolved {
             code: "runtime_effect_unconfirmed",
@@ -658,14 +663,19 @@ async fn mark_ambiguous_stop(
         .await
         .unwrap_or_else(|error| panic!("complete start: {error}"));
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(principal, "ambiguous-stop", payload)
+        .prepare_agent_stop(TrustedPrincipal(principal), "ambiguous-stop", payload)
         .await
         .unwrap_or_else(|error| panic!("prepare stop: {error}"))
     else {
         panic!("running session must require stop");
     };
     store
-        .authorize_agent_stop_effect(principal, "ambiguous-stop", payload, &stop.operation_id)
+        .authorize_agent_stop_effect(
+            TrustedPrincipal(principal),
+            "ambiguous-stop",
+            payload,
+            &stop.operation_id,
+        )
         .await
         .unwrap_or_else(|error| panic!("authorize ambiguous stop: {error}"));
     store

@@ -11,7 +11,7 @@ use serde_json::{Value, json};
 use sqlx::{Sqlite, Transaction};
 
 use crate::{
-    PersistenceError, RoomCommandMutation, SqliteStore,
+    PersistenceError, RoomCommandMutation, RoomMutationAuthority, SqliteStore,
     agent_lifecycle::{
         AgentStopPlan, invalid_turn_queue, load_participant, load_session, merged_turn_queue,
         require_valid_turn_authority, save_session, unresolved_effect,
@@ -43,15 +43,17 @@ impl SqliteStore {
     /// Returns authorization, idempotency, payload, state, or storage failures.
     pub async fn prepare_agent_stop(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<AgentStopPlan, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let resolved = authority.resolve(&mut transaction).await?;
+        let principal = resolved.as_ref();
         authorize_control(principal)?;
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let operation_id = lifecycle_operation_id(principal, request_id, STOP);
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         if let Some(outcome) = existing_command(
             &mut transaction,

@@ -1,7 +1,7 @@
 use crate::room_runtime_cleanup::load_launch_session;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
-    AuthenticatedPrincipal, DurableAgentSession, canonical_payload_hash,
+    DurableAgentSession, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -146,11 +146,14 @@ impl SqliteStore {
     /// Returns a stale-effect, authority, or persistence failure.
     pub async fn authorize_agent_stop_effect(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
     ) -> Result<AgentStopEffect, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let resolved = authority.resolve(&mut transaction).await?;
+        let principal = resolved.as_ref();
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, STOP);
@@ -160,7 +163,6 @@ impl SqliteStore {
                 "Provider stop authorization does not match its request.",
             ));
         }
-        let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
         let reservation = load_lifecycle_reservation(
             &mut transaction,

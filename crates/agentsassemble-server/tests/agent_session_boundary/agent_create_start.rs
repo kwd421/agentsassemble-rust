@@ -372,7 +372,11 @@ async fn exact_stop_replay_releases_its_tombstone_before_a_fresh_start() {
     let payload = json!({"agent_id": session_id});
     let principal = local_principal();
     let agentsassemble_persistence::AgentStopPlan::Stop(effect) = recovery_store
-        .prepare_agent_stop(&principal, "stop-with-lost-checkpoint", &payload)
+        .prepare_agent_stop(
+            TrustedPrincipal(&principal),
+            "stop-with-lost-checkpoint",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("prepare stop with lost checkpoint: {error}"))
     else {
@@ -380,7 +384,7 @@ async fn exact_stop_replay_releases_its_tombstone_before_a_fresh_start() {
     };
     let effect = recovery_store
         .authorize_agent_stop_effect(
-            &principal,
+            TrustedPrincipal(&principal),
             "stop-with-lost-checkpoint",
             &payload,
             &effect.operation_id,

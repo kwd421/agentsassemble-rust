@@ -62,7 +62,7 @@ async fn oversized_turn_queue_fails_before_lifecycle_or_reconciliation_effects()
             .await
             .map(|_| ()),
         store
-            .prepare_agent_stop(&principal, "oversized-stop", &payload)
+            .prepare_agent_stop(TrustedPrincipal(&principal), "oversized-stop", &payload)
             .await
             .map(|_| ()),
         store
@@ -268,13 +268,10 @@ async fn reconciliation_rejects_competing_pending_lifecycle_authority() {
 #[tokio::test]
 async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_repeating_effect() {
     let (store, principal, _directory) = fixture().await;
+    let authority = TrustedPrincipal(&principal);
     let payload = json!({"agent_id": AGENT_ID});
     let AgentStartPlan::Start(start) = store
-        .prepare_agent_start(
-            TrustedPrincipal(&principal),
-            "start-before-observation",
-            &payload,
-        )
+        .prepare_agent_start(authority, "start-before-observation", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare start: {error}"))
     else {
@@ -306,7 +303,7 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
         .pop()
         .unwrap_or_else(|| panic!("live runtime had no candidate"));
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "stop-after-observation", &payload)
+        .prepare_agent_stop(authority, "stop-after-observation", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare stop: {error}"))
     else {
@@ -314,7 +311,7 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
     };
     store
         .authorize_agent_stop_effect(
-            &principal,
+            authority,
             "stop-after-observation",
             &payload,
             &stop.operation_id,
@@ -349,7 +346,7 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
         .await
         .unwrap_or_else(|error| panic!("apply gone observation: {error}"));
     let AgentStopPlan::Outcome(outcome) = store
-        .prepare_agent_stop(&principal, "stop-after-observation", &payload)
+        .prepare_agent_stop(authority, "stop-after-observation", &payload)
         .await
         .unwrap_or_else(|error| panic!("replay observed stop: {error}"))
     else {
@@ -571,7 +568,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
             .await
             .map(|_| ()),
         store
-            .prepare_agent_stop(&principal, "opposite-stop", &payload)
+            .prepare_agent_stop(TrustedPrincipal(&principal), "opposite-stop", &payload)
             .await
             .map(|_| ()),
     ] {
@@ -604,7 +601,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
         .unwrap_or_else(|error| panic!("complete owned start: {error}"));
 
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "owned-stop", &payload)
+        .prepare_agent_stop(TrustedPrincipal(&principal), "owned-stop", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare owned stop: {error}"))
     else {
@@ -616,7 +613,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
             .await
             .map(|_| ()),
         store
-            .prepare_agent_stop(&principal, "different-stop", &payload)
+            .prepare_agent_stop(TrustedPrincipal(&principal), "different-stop", &payload)
             .await
             .map(|_| ()),
     ] {
@@ -629,7 +626,12 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
         ));
     }
     store
-        .authorize_agent_stop_effect(&principal, "owned-stop", &payload, &stop.operation_id)
+        .authorize_agent_stop_effect(
+            TrustedPrincipal(&principal),
+            "owned-stop",
+            &payload,
+            &stop.operation_id,
+        )
         .await
         .unwrap_or_else(|error| panic!("authorize owned stop: {error}"));
     store
@@ -647,7 +649,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
     ));
     assert!(matches!(
         store
-            .prepare_agent_stop(&principal, "owned-stop", &payload)
+            .prepare_agent_stop(TrustedPrincipal(&principal), "owned-stop", &payload)
             .await
             .unwrap_or_else(|error| panic!("recover owned stop: {error}")),
         AgentStopPlan::Finalize
@@ -685,14 +687,19 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
         .await
         .unwrap_or_else(|error| panic!("complete start: {error}"));
     let AgentStopPlan::Stop(stop) = store
-        .prepare_agent_stop(&principal, "confirmed-stop", &payload)
+        .prepare_agent_stop(TrustedPrincipal(&principal), "confirmed-stop", &payload)
         .await
         .unwrap_or_else(|error| panic!("prepare stop: {error}"))
     else {
         panic!("running session must require stop");
     };
     store
-        .authorize_agent_stop_effect(&principal, "confirmed-stop", &payload, &stop.operation_id)
+        .authorize_agent_stop_effect(
+            TrustedPrincipal(&principal),
+            "confirmed-stop",
+            &payload,
+            &stop.operation_id,
+        )
         .await
         .unwrap_or_else(|error| panic!("authorize confirmed stop: {error}"));
     store
@@ -729,7 +736,7 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     assert!(durable.runtime_owner_id.is_empty());
     assert!(!durable.public.provider_session_active);
     let AgentStopPlan::Outcome(outcome) = store
-        .prepare_agent_stop(&principal, "confirmed-stop", &payload)
+        .prepare_agent_stop(TrustedPrincipal(&principal), "confirmed-stop", &payload)
         .await
         .unwrap_or_else(|error| panic!("replay confirmed stop: {error}"))
     else {
