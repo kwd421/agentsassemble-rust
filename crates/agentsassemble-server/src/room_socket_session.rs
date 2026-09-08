@@ -102,11 +102,13 @@ pub(crate) async fn run(
                             if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), CommandResolution::Rejected, ProtocolError::new("unsupported_transport", "This action uses the authenticated HTTP management endpoint."))).await.is_none() { return; }
                             continue;
                         }
-                        if action == RoomAction::RoomHistory {
+                        if matches!(action, RoomAction::RoomHistory | RoomAction::ChannelHistory) {
                             match read_history_frame(
                                 &state.store,
                                 &state.socket_admission,
                                 &principal,
+                                room_session.as_ref(),
+                                action,
                                 &request_id,
                                 &payload,
                             ).await {

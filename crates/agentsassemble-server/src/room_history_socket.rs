@@ -1,5 +1,10 @@
-use agentsassemble_domain::{AuthenticatedPrincipal, RoomHistoryPage, RoomHistoryRequest};
-use agentsassemble_persistence::{PersistenceError, SqliteStore};
+use agentsassemble_domain::{
+    AuthenticatedPrincipal, ChannelHistoryPage, ChannelHistoryRequest, RoomHistoryPage,
+    RoomHistoryRequest,
+};
+use agentsassemble_persistence::{
+    PersistenceError, RoomMutationAuthority, RoomSessionAuthorization, SqliteStore,
+};
 use agentsassemble_protocol::{CommandAck, CommandResolution, RoomAction, ServerFrame};
 use serde_json::Value;
 
@@ -13,12 +18,22 @@ pub(crate) async fn read_history_frame(
     store: &SqliteStore,
     admission: &SocketAdmission,
     principal: &AuthenticatedPrincipal,
+    room_session: Option<&RoomSessionAuthorization>,
+    action: RoomAction,
     request_id: &str,
     payload: &Value,
 ) -> Result<ServerFrame, CommandFailure> {
     validate_command_envelope(request_id).map_err(CommandFailure::rejected)?;
-    let request =
-        RoomHistoryRequest::from_payload(payload).map_err(CommandFailure::domain_rejected)?;
+    let (channel_id, request) = if action == RoomAction::ChannelHistory {
+        let request = ChannelHistoryRequest::from_payload(payload)
+            .map_err(CommandFailure::domain_rejected)?;
+        (Some(request.channel_id), request.page)
+    } else {
+        (
+            None,
+            RoomHistoryRequest::from_payload(payload).map_err(CommandFailure::domain_rejected)?,
+        )
+    };
     let requested_events = usize::try_from(request.limit).map_err(|_| {
         CommandFailure::rejected(PersistenceError::CommandRejected {
             code: "bad_request",
@@ -33,6 +48,19 @@ pub(crate) async fn read_history_frame(
             },
         ));
     }
+    if let Some(channel_id) = channel_id {
+        let authority = room_session.map_or(
+            RoomMutationAuthority::TrustedPrincipal(principal),
+            RoomSessionAuthorization::mutation_authority,
+        );
+        let page = store
+            .channel_history_page(authority, &channel_id, request)
+            .await
+            .map_err(CommandFailure::transactional)?;
+        return fit_bounded_history(page.events.len(), |dropped| {
+            channel_history_ack(request_id, &page, dropped)
+        });
+    }
     let page = store
         .room_history_page(principal, request)
         .await
@@ -44,22 +72,31 @@ fn fit_history_ack(
     request_id: &str,
     page: &RoomHistoryPage,
 ) -> Result<ServerFrame, CommandFailure> {
-    let full = history_ack(request_id, page, 0)?;
+    fit_bounded_history(page.events.len(), |dropped| {
+        history_ack(request_id, page, dropped)
+    })
+}
+
+fn fit_bounded_history(
+    event_count: usize,
+    encode: impl Fn(usize) -> Result<ServerFrame, CommandFailure>,
+) -> Result<ServerFrame, CommandFailure> {
+    let full = encode(0)?;
     if encode_server_frame(&full).is_ok() {
         return Ok(full);
     }
-    if page.events.len() < 2 {
+    if event_count < 2 {
         return Err(oversize_failure());
     }
 
     // Exact frame size depends on JSON escaping and request-id length. Search the bounded
     // 200-event page rather than estimating bytes or introducing a second transport limit.
     let mut first = 1;
-    let mut last = page.events.len() - 1;
+    let mut last = event_count - 1;
     let mut fitted = None;
     while first <= last {
         let dropped = first + (last - first) / 2;
-        let candidate = history_ack(request_id, page, dropped)?;
+        let candidate = encode(dropped)?;
         if encode_server_frame(&candidate).is_ok() {
             fitted = Some(candidate);
             if dropped == 1 {
@@ -71,6 +108,33 @@ fn fit_history_ack(
         }
     }
     fitted.ok_or_else(oversize_failure)
+}
+
+fn channel_history_ack(
+    request_id: &str,
+    page: &ChannelHistoryPage,
+    dropped: usize,
+) -> Result<ServerFrame, CommandFailure> {
+    let events = page.events[dropped..].to_vec();
+    let result = ChannelHistoryPage {
+        room_id: page.room_id.clone(),
+        channel_id: page.channel_id.clone(),
+        oldest_seq: events.first().map_or(0, |event| event.seq),
+        events,
+        last_seq: page.last_seq,
+        has_more_before: dropped > 0 || page.has_more_before,
+    };
+    let result = serde_json::to_value(result)
+        .map_err(PersistenceError::from)
+        .map_err(CommandFailure::unresolved)?;
+    Ok(ServerFrame::Ack(CommandAck {
+        request_id: request_id.to_owned(),
+        accepted: true,
+        resolution: CommandResolution::Committed,
+        action: RoomAction::ChannelHistory.as_str().to_owned(),
+        result,
+        deduplicated: false,
+    }))
 }
 
 fn history_ack(
@@ -160,6 +224,46 @@ mod tests {
         assert_eq!(result.events.len(), 200);
         assert_eq!(result.oldest_seq, 1);
         assert!(!result.has_more_before);
+    }
+
+    #[test]
+    fn channel_page_keeps_its_scope_and_noncontiguous_sequences_when_fitted() {
+        let page = agentsassemble_domain::ChannelHistoryPage {
+            room_id: "general".to_owned(),
+            channel_id: "c0123456789ab".to_owned(),
+            events: (1..=80)
+                .map(|index| event(index * 3, &"😀".repeat(2000)))
+                .collect(),
+            oldest_seq: 3,
+            last_seq: 250,
+            has_more_before: false,
+        };
+        let frame = super::fit_bounded_history(page.events.len(), |dropped| {
+            super::channel_history_ack("channel-large", &page, dropped)
+        })
+        .unwrap_or_else(|failure| panic!("fit channel page: {}", failure.error));
+        assert!(encode_server_frame(&frame).is_ok());
+        let agentsassemble_protocol::ServerFrame::Ack(ack) = frame else {
+            panic!("missing ACK")
+        };
+        let fitted: agentsassemble_domain::ChannelHistoryPage = serde_json::from_value(ack.result)
+            .unwrap_or_else(|error| panic!("decode channel history: {error}"));
+        assert_eq!(fitted.room_id, page.room_id);
+        assert_eq!(fitted.channel_id, page.channel_id);
+        assert!(fitted.events.len() < 80);
+        assert!(fitted.has_more_before);
+        assert_eq!(fitted.last_seq, 250);
+        assert_eq!(fitted.events.last().map(|event| event.seq), Some(240));
+        assert_eq!(
+            fitted.oldest_seq,
+            fitted.events.first().map_or(0, |event| event.seq)
+        );
+        assert!(
+            fitted
+                .events
+                .windows(2)
+                .all(|pair| pair[1].seq - pair[0].seq == 3)
+        );
     }
 
     #[test]

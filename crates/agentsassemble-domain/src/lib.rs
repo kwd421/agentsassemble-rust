@@ -36,8 +36,8 @@ pub use agent_session_state::{
 };
 pub use asset::MAX_ATTACHMENT_BYTES;
 pub use channel_messages::{
-    CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE, ChannelHistoryPage, ChannelMessageSend,
-    prepare_channel_message_event,
+    CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE, ChannelHistoryPage,
+    ChannelHistoryRequest, ChannelMessageSend, prepare_channel_message_event,
 };
 pub use command::{
     AGENT_CONTROL_ID_KEYS, CommandRejection, MessageSend, canonical_payload_hash,

@@ -13,6 +13,34 @@ use crate::{
 pub const CHANNEL_HISTORY_PAGE_SIZE: i64 = 80;
 pub const CHANNEL_MESSAGE_EVENT_TYPE: &str = "channel_message_final";
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChannelHistoryRequest {
+    pub channel_id: String,
+    pub page: crate::RoomHistoryRequest,
+}
+
+impl ChannelHistoryRequest {
+    /// Parses one channel selector with the shared bounded history cursor policy.
+    ///
+    /// # Errors
+    /// Rejects invalid channel identifiers, unknown fields and malformed cursors.
+    pub fn from_payload(payload: &Value) -> Result<Self, CommandRejection> {
+        let mut fields = payload.as_object().cloned().ok_or_else(|| {
+            CommandRejection::new("bad_request", "Channel history payload must be an object.")
+        })?;
+        let channel_id = fields
+            .remove("channel_id")
+            .and_then(|value| value.as_str().map(str::to_owned))
+            .filter(|value| is_custom_channel_id(value))
+            .ok_or_else(|| CommandRejection::new("bad_request", "Channel id is invalid."))?;
+        fields
+            .entry("limit")
+            .or_insert(json!(CHANNEL_HISTORY_PAGE_SIZE));
+        let page = crate::RoomHistoryRequest::from_payload(&Value::Object(fields))?;
+        Ok(Self { channel_id, page })
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Deserialize, Serialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct ChannelMessageSend {
@@ -87,6 +115,26 @@ pub struct ChannelHistoryPage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn channel_history_uses_the_shared_cursor_policy_and_own_default() {
+        let request = ChannelHistoryRequest::from_payload(&json!({"channel_id":"c0123456789ab"}))
+            .unwrap_or_else(|error| panic!("channel history: {error}"));
+        assert_eq!(
+            request.page,
+            crate::RoomHistoryRequest {
+                before_seq: 0,
+                limit: 80
+            }
+        );
+        for payload in [
+            json!({"channel_id":"lobby"}),
+            json!({"channel_id":"c0123456789ab","room_id":"other"}),
+            json!({"channel_id":"c0123456789ab","limit":"80"}),
+        ] {
+            assert!(ChannelHistoryRequest::from_payload(&payload).is_err());
+        }
+    }
 
     #[test]
     fn text_channel_payload_is_bounded_and_cannot_borrow_attachment_or_lobby_identity() {

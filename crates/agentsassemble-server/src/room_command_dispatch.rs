@@ -45,13 +45,9 @@ pub(crate) async fn execute_command(
         RoomAction::AgentConfigure => execute_agent_configure(store, provider_catalog, command)
             .await
             .unwrap_or_else(CommandExecution::transactional_failure),
-        RoomAction::AgentProfileUpdate => match store
-            .execute_agent_profile_update(authority, &command.request_id, &command.payload)
-            .await
-        {
-            Ok(outcome) => CommandExecution::success(outcome),
-            Err(error) => CommandExecution::transactional_failure(error),
-        },
+        RoomAction::AgentProfileUpdate
+        | RoomAction::ChannelMessageSend
+        | RoomAction::ParticipantRoleUpdate => execute_atomic_update(store, command).await,
         RoomAction::AgentPause => {
             crate::room_agent_lifecycle_runtime::execute_agent_pause(
                 store,
@@ -97,13 +93,6 @@ pub(crate) async fn execute_command(
         RoomAction::MessageEdit | RoomAction::MessageDelete => {
             execute_message_mutation(store, command).await
         }
-        RoomAction::ParticipantRoleUpdate => match store
-            .execute_participant_role_update(authority, &command.request_id, &command.payload)
-            .await
-        {
-            Ok(outcome) => CommandExecution::success(outcome),
-            Err(error) => CommandExecution::transactional_failure(error),
-        },
         RoomAction::ParticipantMute => {
             execute_participant_mute(store, provider_adapter, command).await
         }
@@ -111,10 +100,38 @@ pub(crate) async fn execute_command(
         RoomAction::ParticipantKick | RoomAction::ParticipantExport => {
             execute_participant_removal(store, provider_adapter, command).await
         }
-        RoomAction::RoomHistory | RoomAction::RoomVoteSummary => {
+        RoomAction::RoomHistory | RoomAction::ChannelHistory | RoomAction::RoomVoteSummary => {
             misrouted_direct_read(command.action)
         }
     }
+}
+
+// These commands own one authority transaction and publication, with no additional
+// provider effect or scheduler transition to reconcile after the commit.
+async fn execute_atomic_update(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
+    let authority = command.mutation_authority();
+    let result = match command.action {
+        RoomAction::AgentProfileUpdate => {
+            store
+                .execute_agent_profile_update(authority, &command.request_id, &command.payload)
+                .await
+        }
+        RoomAction::ChannelMessageSend => {
+            store
+                .execute_channel_message(authority, &command.request_id, &command.payload)
+                .await
+        }
+        RoomAction::ParticipantRoleUpdate => {
+            store
+                .execute_participant_role_update(authority, &command.request_id, &command.payload)
+                .await
+        }
+        _ => return misrouted_direct_read(command.action),
+    };
+    result.map_or_else(
+        CommandExecution::transactional_failure,
+        CommandExecution::success,
+    )
 }
 
 async fn execute_room_delete(store: &SqliteStore, command: &RoomCommand) -> CommandExecution {
@@ -369,6 +386,10 @@ fn requires_session_dispatch(
     authorization: &agentsassemble_persistence::RoomSessionAuthorization,
     action: RoomAction,
 ) -> bool {
+    if action == RoomAction::ChannelMessageSend {
+        // This owner resolves native, paired and human authority in its transaction.
+        return false;
+    }
     matches!(
         authorization,
         agentsassemble_persistence::RoomSessionAuthorization::Human(_)

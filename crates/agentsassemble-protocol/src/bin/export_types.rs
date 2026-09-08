@@ -37,6 +37,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     PersonaAssetSummary::export_all(&config)?;
     agentsassemble_domain::SavedFriend::export_all(&config)?;
     agentsassemble_domain::SaveFriend::export_all(&config)?;
+    agentsassemble_domain::ChannelHistoryPage::export_all(&config)?;
+    agentsassemble_domain::ChannelMessageSend::export_all(&config)?;
     Subscribed::export_all(&config)?;
     CommandAck::export_all(&config)?;
     TicketResponse::export_all(&config)?;

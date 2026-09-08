@@ -144,3 +144,31 @@ read-only fixture derives capabilities using the production scope constructor.
 This foundation adds no timer, task or provider execution. Retained message lookup
 is bounded by 200 entries; bootstrap clones at most 200 text messages. Transport
 and packaged UI acceptance remain open until subsequent Phase 6 slices.
+
+## Channel transport
+
+`channel.message.send` enters the existing bounded room command/admission and durable
+publication owner, using the channel transaction for native, paired and human
+authority. It creates no provider assignment. `channel.history` uses the existing
+socket history budget, current session authority and shared cursor parser, with
+the original 80-message default. Both are declared by the canonical product surface
+and generated action types. Channel result/message types are generated from Rust.
+
+History frame fitting now takes the bounded page encoder as its sole variable:
+the existing exact-size binary search keeps the newest events and updates the
+oldest cursor/more flag for either page shape. Channel identity and shared room
+high water survive fitting, including noncontiguous channel sequences. The 256 KiB
+frame gate is unchanged; no estimate or oversized frame bypass was added.
+
+Actual TCP/WebSocket acceptance passes for native append/replay/live events,
+read-write and read-only human history/send, and channel removal followed by denied
+history/replay (0.08 s). All three existing room-history boundaries still pass
+(0.37 s). Three frame-fitting cases pass, including an 80-message Unicode channel
+page (0.13 s); shared channel parsing cases pass. Frontend production build and
+CSS gate pass with generated actions; mounted channel UI remains a later slice.
+Forty affected socket/directory frontend cases pass after recomputing both fixed
+surface digests (ordinary and intentionally downgraded) for the new action registry.
+Digest and bootstrap-authority rejection assertions are preserved. All affected
+Rust targets/features pass Clippy; unchanged structure, 19 policy, formatting,
+diff and artifact gates pass. The dispatch groups atomic updates without runtime
+follow-up under one match, preserving profile/role command behavior and line gates.
