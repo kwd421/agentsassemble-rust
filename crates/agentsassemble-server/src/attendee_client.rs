@@ -203,8 +203,8 @@ impl RoomAttendeeClient {
         &self,
         connection: Uuid,
         request: &AttendeeToolReadRequest,
-    ) -> Result<Value, AttendeeClientError> {
-        self.post("tool/read", Some(connection), request).await
+    ) -> Result<crate::AttendeeToolReadResponse, AttendeeClientError> {
+        decode(self.post("tool/read", Some(connection), request).await?)
     }
 
     /// Obtains the server-owned random result; retries must retain this exact request.

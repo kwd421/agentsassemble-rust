@@ -21,16 +21,22 @@ pub(crate) async fn handle_provider_attachment_read(
             command.attachment_id(),
         )
         .await
-        .map(|attachment| ProviderAttachment {
-            id: attachment.metadata.id,
-            filename: attachment.metadata.filename,
-            content_type: attachment.metadata.content_type,
-            size: attachment.metadata.size,
-            is_image: attachment.metadata.is_image,
-            content: attachment.content,
-        })
+        .map(into_provider_attachment)
         .map_err(public_read_error);
     command.complete(result);
+}
+
+pub(crate) fn into_provider_attachment(
+    attachment: agentsassemble_persistence::MessageAttachment,
+) -> ProviderAttachment {
+    ProviderAttachment {
+        id: attachment.metadata.id,
+        filename: attachment.metadata.filename,
+        content_type: attachment.metadata.content_type,
+        size: attachment.metadata.size,
+        is_image: attachment.metadata.is_image,
+        content: attachment.content,
+    }
 }
 
 fn public_read_error(error: PersistenceError) -> ProviderAttachmentReadError {

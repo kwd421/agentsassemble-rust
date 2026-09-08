@@ -116,6 +116,25 @@ Clippy and unchanged mandatory gates pass. This adds one owned task per active t
 retaining bounded assignment/result data, with no timer or room-state polling.
 Interrupt/tool/request relay and CLI/packet entry remain in progress.
 
+Native portal tool calls now retain their existing reservation while crossing the
+attendee HTTP boundary. Read responses share one typed server/client codec. Random
+calls fix one request UUID and canonical payload when the native reservation enters
+execution; a retry changes only current connection custody. The caller explicitly
+completes the native reply after a result, preserving uncertainty until its owner
+resolves or rejects it. Attachment decoding shares the managed provider projection;
+its native command still validates exact attachment ID, metadata and byte bounds.
+No retry loop, extra room queue or provider process is added by this relay.
+
+The existing local child-process/socket test now exercises native MCP search,
+message context, randomness and bound attachment reading through real HTTP. It
+verifies one random result/event across a repeated call, exact attachment bytes,
+one native execution and one terminal room result across reconnect. It passes in
+3.32 seconds, alongside all four existing attendee socket cases. The test's initial
+random-event assertion used the wrong event type; it now checks the canonical
+`message_final` projection's `message_source=room_tool_result`. Affected Clippy and
+unchanged mandatory gates pass. Interrupt/request handling and CLI/packaged entry
+remain pending; no real provider was executed.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing

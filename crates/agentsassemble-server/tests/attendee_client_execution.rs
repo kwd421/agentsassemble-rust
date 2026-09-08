@@ -24,6 +24,9 @@ mod room_portal_fixture;
 #[path = "support/room_socket_peer.rs"]
 mod room_socket_peer;
 
+#[path = "attendee_client_execution/tools.rs"]
+mod tool_relay;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
@@ -43,36 +46,16 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     let server = human_invite::start(store.clone()).await;
     let url = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
     let mut client = RoomAttendeeClient::new(&url, "codex", "External Execution")?;
-    let joined = client.join().await?;
-    let draft = catalog
-        .validate_creation(
-            &joined.room_id,
-            &joined.participant_id,
-            &Uuid::new_v4().to_string(),
-            &json!({
-                "provider":"codex", "catalog_revision":catalog.snapshot().catalog_revision,
-                "display_name":"External Execution", "workspace":directory.path()
-            }),
-        )
-        .await?
-        .into();
-    let adapter = ProviderAdapter::with_guardian_executable(std::path::Path::new(env!(
-        "CARGO_BIN_EXE_agentsassemble-server"
-    )));
-    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter)?;
-    runtime.start().await?;
+    let mut runtime = prepare_runtime(&mut client, &catalog, directory.path()).await?;
     let mut socket = ready_socket(&client, &mut runtime).await?;
-    let mut human = local_socket::connect(&server.base_url, server.state(), "general").await;
-    human.subscribe(0).await;
-    let _snapshot = human.receive_json().await;
-    human.send_json(&json!({"op":"command", "request_id":"external-execution-input", "action":"message.send", "payload":{"content":"Reply through the external runtime"}})).await;
+    let (mut human, attachment_id) = send_input(&server, &store).await?;
     let Frame::Turn { assignment } =
         tokio::time::timeout(Duration::from_secs(10), socket.receive()).await??
     else {
         return Err("turn missing".into());
     };
-    let (tools, _tools_rx) = ProviderRoomToolIngress::channel(4);
-    let (attachments, _attachments_rx) = ProviderAttachmentReadIngress::channel(4);
+    let (tools, mut tools_rx) = ProviderRoomToolIngress::channel(4);
+    let (attachments, mut attachments_rx) = ProviderAttachmentReadIngress::channel(4);
     let mut execution = runtime
         .execute(*assignment, tools.clone(), attachments.clone())
         .await?;
@@ -94,6 +77,15 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     assert!(!execution.matches_delivery(&assignment));
     let endpoint = room_portal_fixture::wait_for_value(&endpoint, "endpoint").await;
     let token = room_portal_fixture::wait_for_value(&token, "token").await;
+    tool_relay::verify(
+        &client,
+        replacement.connection_id(),
+        &endpoint,
+        &token,
+        &mut tools_rx,
+        (&attachment_id, &mut attachments_rx),
+    )
+    .await?;
     let view =
         room_portal_fixture::publish(&endpoint, &token, "Exactly one external execution").await;
     assert!(view.contains("Reply through the external runtime"));
@@ -107,6 +99,18 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
             .events
             .iter()
             .filter(|event| event.content.as_deref() == Some("Exactly one external execution"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        snapshot
+            .events
+            .iter()
+            .filter(|event| event
+                .extra
+                .get("message_source")
+                .and_then(serde_json::Value::as_str)
+                == Some("room_tool_result"))
             .count(),
         1
     );
@@ -184,4 +188,69 @@ async fn recover_report(
     execution.acknowledge(runtime, request.request_id()).await?;
     replacement.close().await?;
     Ok(())
+}
+
+async fn prepare_runtime(
+    client: &mut RoomAttendeeClient,
+    catalog: &ProviderCatalogService,
+    workspace: &std::path::Path,
+) -> Result<AttendeeRuntime, Box<dyn std::error::Error>> {
+    let joined = client.join().await?;
+    let draft = catalog
+        .validate_creation(
+            &joined.room_id,
+            &joined.participant_id,
+            &Uuid::new_v4().to_string(),
+            &json!({
+                "provider":"codex", "catalog_revision":catalog.snapshot().catalog_revision,
+                "display_name":"External Execution", "workspace":workspace
+            }),
+        )
+        .await?
+        .into();
+    let adapter = ProviderAdapter::with_guardian_executable(std::path::Path::new(env!(
+        "CARGO_BIN_EXE_agentsassemble-server"
+    )));
+    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter)?;
+    runtime.start().await?;
+    Ok(runtime)
+}
+
+async fn send_input(
+    server: &human_invite::RunningServer,
+    store: &agentsassemble_persistence::SqliteStore,
+) -> Result<
+    (
+        room_socket_peer::RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>,
+        String,
+    ),
+    Box<dyn std::error::Error>,
+> {
+    let mut human = local_socket::connect(&server.base_url, server.state(), "general").await;
+    human.subscribe(0).await;
+    let snapshot = human.receive_json().await;
+    human.send_json(&json!({"op":"command", "request_id":"native-tools-mode", "action":"room.settings.update", "payload":{
+        "expected_revision":snapshot["room_settings"]["settings_revision"], "tool_mode":"tabletop"
+    }})).await;
+    loop {
+        let frame = human
+            .receive_json_with_timeout(Duration::from_secs(2))
+            .await;
+        if frame["op"] == "ack" {
+            break;
+        }
+        assert_ne!(frame["op"], "nack");
+    }
+    let attachment = store
+        .store_local_message_attachment(
+            "general",
+            agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+            agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+            "external-proof.txt",
+            "text/plain",
+            b"external attachment proof".to_vec(),
+        )
+        .await?;
+    human.send_json(&json!({"op":"command", "request_id":"external-execution-input", "action":"message.send", "payload":{"content":"Reply through the external runtime", "attachment_ids":[attachment.id]}})).await;
+    Ok((human, attachment.id))
 }

@@ -11,14 +11,14 @@ use serde_json::{Value, json};
 
 use super::{AttendeeHttpError, connection_id};
 use crate::{
-    AppState,
+    AppState, AttendeeToolReadResponse,
     http_api::{decode_json_body, purpose_bearer_fingerprint},
 };
 
 pub(super) async fn read(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<Value>, AttendeeHttpError> {
+) -> Result<Json<AttendeeToolReadResponse>, AttendeeHttpError> {
     let fingerprint = purpose_bearer_fingerprint(request.headers(), ATTENDEE_SESSION_PREFIX)
         .ok_or_else(|| {
             AttendeeHttpError::rejected(StatusCode::UNAUTHORIZED, "attendee_credential_required")
@@ -32,14 +32,15 @@ pub(super) async fn read(
         .map_err(AttendeeHttpError::from_persistence)?;
     Ok(Json(match result {
         AttendeeToolReadResult::SearchMessages(page) => {
-            json!({"kind":"search_messages", "result":page})
+            AttendeeToolReadResponse::SearchMessages { result: page }
         }
         AttendeeToolReadResult::MessageContext(context) => {
-            json!({"kind":"message_context", "result":context})
+            AttendeeToolReadResponse::MessageContext { result: context }
         }
-        AttendeeToolReadResult::Attachment(attachment) => {
-            json!({"kind":"attachment", "metadata":attachment.metadata, "content_base64":STANDARD.encode(attachment.content)})
-        }
+        AttendeeToolReadResult::Attachment(attachment) => AttendeeToolReadResponse::Attachment {
+            metadata: attachment.metadata,
+            content_base64: STANDARD.encode(attachment.content),
+        },
     }))
 }
 
