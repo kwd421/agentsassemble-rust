@@ -67,6 +67,7 @@ mod account_web;
 mod central_registration_web;
 mod connection_admission;
 pub mod connector_client;
+mod connector_invite_manager_web;
 pub mod connector_mcp;
 mod connector_web;
 mod event_publication;
@@ -162,11 +163,12 @@ pub use ticket_issuer::{
     ManagerRoomAuthorityRequest, TicketIssueError, issue_agent_avatar_upload_ticket,
     issue_appearance_bound_read_ticket, issue_appearance_pending_read_ticket,
     issue_appearance_upload_ticket, issue_central_registration_ticket,
-    issue_human_invite_create_ticket, issue_human_invite_revoke_ticket,
-    issue_local_operator_http_ticket, issue_local_ticket, issue_message_attachment_read_ticket,
-    issue_message_attachment_upload_ticket, issue_message_pins_read_ticket,
-    issue_message_pins_write_ticket, issue_message_search_read_ticket,
-    issue_preferences_read_ticket, issue_preferences_write_ticket,
-    issue_settings_directory_read_ticket, issue_side_chat_read_ticket,
+    issue_connector_invite_create_ticket, issue_human_invite_create_ticket,
+    issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
+    issue_message_attachment_read_ticket, issue_message_attachment_upload_ticket,
+    issue_message_pins_read_ticket, issue_message_pins_write_ticket,
+    issue_message_search_read_ticket, issue_preferences_read_ticket,
+    issue_preferences_write_ticket, issue_settings_directory_read_ticket,
+    issue_side_chat_read_ticket,
 };
 pub use web::{ServeError, router, serve};

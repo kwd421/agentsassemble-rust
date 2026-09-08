@@ -267,6 +267,23 @@ async fn runtime_message_attachment_read_ticket(
 }
 
 #[tauri::command(rename_all = "camelCase")]
+async fn runtime_connector_invite_create_ticket(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    authority: ManagerRoomAuthority,
+) -> Result<HttpTicketGrant, String> {
+    caller_is_bundled_ui(&window)?;
+    let runtime_app = app.clone();
+    tauri::async_runtime::spawn_blocking(move || {
+        runtime_app
+            .state::<LocalRuntime>()
+            .issue_connector_invite_create_ticket(&runtime_app, authority)
+    })
+    .await
+    .map_err(|error| format!("runtime connector invite create ticket worker failed: {error}"))?
+}
+
+#[tauri::command(rename_all = "camelCase")]
 async fn runtime_human_invite_create_ticket(
     window: WebviewWindow,
     app: tauri::AppHandle,
@@ -528,7 +545,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 26);
+        assert_eq!(surface.commands.len(), 27);
         assert!(
             surface
                 .commands

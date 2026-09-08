@@ -224,3 +224,23 @@ external providers remain user-owned. Three local tests, affected all-target/all
 Clippy and unchanged architecture/format/diff gates pass. The repository artifact
 owner cleaned the 18.97 GiB cache after builds stopped, as required by its existing
 18 GiB gate. Invitation UI and the other two Phase 7 custody targets remain next.
+
+## Connector invitation management
+
+The bundled manager now issues an exact connector-create ticket through the local
+control pipe. Its private HTTP endpoint revalidates current room-manager authority,
+requires ready public ingress and calls the existing one-hour, one-use creation
+receipt owner. Human and connector creation tickets cannot cross purposes. Request
+and response bindings derive from the Rust protocol. The shared consumed local
+manager ticket wrapper is named for its existing cross-domain responsibility.
+
+The invite dialog adds a separate current-AI invitation card. A dedicated hook owns
+unconfirmed creation identities, link custody and one expiry deadline. Creation
+retries preserve the request UUID; copy rechecks current manager authority and
+fresh public ingress immediately before clipboard dispatch. Tokens are not rendered
+in the card or persisted by the frontend. The native invite codec is separated from
+the control pipe owner after its added purpose reached existing function-size gates;
+no gate was relaxed. One real-HTTP creation/admission test and 41 affected frontend
+tests pass. Server/protocol and desktop Clippy, 28 desktop tests and unchanged
+architecture/format/diff gates pass. Packaged desktop/mobile proof is in progress;
+external attendee and managed bridge custody remain pending.

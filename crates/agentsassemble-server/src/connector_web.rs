@@ -124,21 +124,21 @@ pub(crate) struct ConnectorHttpError {
 }
 
 impl ConnectorHttpError {
-    fn invalid() -> Self {
+    pub(crate) fn invalid() -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
             code: "invalid_connector_request",
             resolution: CommandResolution::Rejected,
         }
     }
-    fn unauthorized() -> Self {
+    pub(crate) fn unauthorized() -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
             code: "connector_credential_required",
             resolution: CommandResolution::Rejected,
         }
     }
-    fn from_persistence(error: PersistenceError) -> Self {
+    pub(crate) fn from_persistence(error: PersistenceError) -> Self {
         Self::from_failure(&CommandFailure::transactional(error))
     }
     fn from_failure(failure: &CommandFailure) -> Self {

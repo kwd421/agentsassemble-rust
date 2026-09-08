@@ -279,6 +279,24 @@ pub async fn issue_message_attachment_read_ticket(
     Ok(operator_http_response(state, issued))
 }
 
+/// Issues an exact connector-invite-create credential for the current local room manager.
+///
+/// # Errors
+///
+/// Returns a bounded room, manager, persistence, or ticket-capacity error.
+pub async fn issue_connector_invite_create_ticket(
+    state: &AppState,
+    requested: &ManagerRoomAuthorityRequest,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let authority = resolve_local_room_manager(state, requested).await?;
+    let issued = state
+        .tickets
+        .issue_connector_invite_create(authority)
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
 /// Issues an exact invite-create credential for the current local room manager.
 ///
 /// # Errors

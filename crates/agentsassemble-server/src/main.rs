@@ -15,10 +15,11 @@ use agentsassemble_protocol::{
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{
     AppState, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError, TicketStore,
-    issue_central_registration_ticket, issue_human_invite_create_ticket,
-    issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
-    issue_preferences_read_ticket, issue_preferences_write_ticket,
-    issue_settings_directory_read_ticket, local_bind_is_supported, serve,
+    issue_central_registration_ticket, issue_connector_invite_create_ticket,
+    issue_human_invite_create_ticket, issue_human_invite_revoke_ticket,
+    issue_local_operator_http_ticket, issue_local_ticket, issue_preferences_read_ticket,
+    issue_preferences_write_ticket, issue_settings_directory_read_ticket, local_bind_is_supported,
+    serve,
 };
 use anyhow::Context;
 use clap::Parser;
@@ -301,7 +302,8 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         | LocalControlRequest::IssueMessageAttachmentReadTicket { .. }) => {
             message_attachments_control::response(state, request_id, request).await
         }
-        request @ (LocalControlRequest::IssueHumanInviteCreateTicket { .. }
+        request @ (LocalControlRequest::IssueConnectorInviteCreateTicket { .. }
+        | LocalControlRequest::IssueHumanInviteCreateTicket { .. }
         | LocalControlRequest::IssueHumanInviteRevokeTicket { .. }) => {
             invite_ticket_control_request(state, request_id, request).await
         }
@@ -394,6 +396,7 @@ async fn bootstrap_control_response(
 }
 
 enum InviteTicketRequest {
+    ConnectorCreate(ManagerRoomAuthorityRequest),
     Create(ManagerRoomAuthorityRequest),
     Revoke(ManagerRoomAuthorityRequest),
 }
@@ -404,6 +407,18 @@ async fn invite_ticket_control_request(
     request: LocalControlRequest,
 ) -> LocalControlResponse {
     let request = match request {
+        LocalControlRequest::IssueConnectorInviteCreateTicket {
+            server_id,
+            authority_lineage_id,
+            meeting_id,
+            room_uid,
+            ..
+        } => InviteTicketRequest::ConnectorCreate(ManagerRoomAuthorityRequest {
+            server_id,
+            authority_lineage_id,
+            room_id: meeting_id,
+            room_uid,
+        }),
         LocalControlRequest::IssueHumanInviteCreateTicket {
             server_id,
             authority_lineage_id,
@@ -438,29 +453,36 @@ async fn invite_ticket_control_response(
     request_id: String,
     request: InviteTicketRequest,
 ) -> LocalControlResponse {
-    let (create, ticket) = match request {
-        InviteTicketRequest::Create(authority) => (
-            true,
-            issue_human_invite_create_ticket(state, &authority).await,
-        ),
-        InviteTicketRequest::Revoke(authority) => (
-            false,
-            issue_human_invite_revoke_ticket(state, &authority).await,
-        ),
+    let result = match request {
+        InviteTicketRequest::ConnectorCreate(authority) => {
+            issue_connector_invite_create_ticket(state, &authority)
+                .await
+                .map(|ticket| LocalControlResponse::ConnectorInviteCreateOk {
+                    request_id: request_id.clone(),
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                })
+        }
+        InviteTicketRequest::Create(authority) => {
+            issue_human_invite_create_ticket(state, &authority)
+                .await
+                .map(|ticket| LocalControlResponse::HumanInviteCreateOk {
+                    request_id: request_id.clone(),
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                })
+        }
+        InviteTicketRequest::Revoke(authority) => {
+            issue_human_invite_revoke_ticket(state, &authority)
+                .await
+                .map(|ticket| LocalControlResponse::HumanInviteRevokeOk {
+                    request_id: request_id.clone(),
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                })
+        }
     };
-    match (create, ticket) {
-        (true, Ok(ticket)) => LocalControlResponse::HumanInviteCreateOk {
-            request_id,
-            ticket: ticket.ticket,
-            ttl_seconds: ticket.ttl_seconds,
-        },
-        (false, Ok(ticket)) => LocalControlResponse::HumanInviteRevokeOk {
-            request_id,
-            ticket: ticket.ticket,
-            ttl_seconds: ticket.ttl_seconds,
-        },
-        (_, Err(error)) => control_error(request_id, error),
-    }
+    result.unwrap_or_else(|error| control_error(request_id, error))
 }
 
 enum SettingsTicketRequest {
@@ -523,6 +545,7 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::IssueSideChatReadTicket { request_id, .. }
         | LocalControlRequest::IssueMessageAttachmentUploadTicket { request_id, .. }
         | LocalControlRequest::IssueMessageAttachmentReadTicket { request_id, .. }
+        | LocalControlRequest::IssueConnectorInviteCreateTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteCreateTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteRevokeTicket { request_id, .. }
         | LocalControlRequest::IssueAgentAvatarUploadTicket { request_id, .. }

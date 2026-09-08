@@ -18,7 +18,7 @@ use crate::{
         BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body, exact_tauri_cors,
     },
     human_invite_credentials::{HumanInviteCredentialDraft, format_invite_timestamp},
-    ticket::ConsumedHumanInviteManagerTicket,
+    ticket::ConsumedLocalRoomManagerTicket,
 };
 
 const MAX_MANAGER_BODY_BYTES: usize = 8 * 1024;
@@ -179,7 +179,7 @@ async fn revoke_invite(
 async fn consume_create_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedHumanInviteManagerTicket, InviteManagerHttpError> {
+) -> Result<ConsumedLocalRoomManagerTicket, InviteManagerHttpError> {
     let ticket = bearer_credential(headers).ok_or_else(InviteManagerHttpError::unauthorized)?;
     state
         .tickets
@@ -191,7 +191,7 @@ async fn consume_create_ticket(
 async fn consume_revoke_ticket(
     state: &AppState,
     headers: &axum::http::HeaderMap,
-) -> Result<ConsumedHumanInviteManagerTicket, InviteManagerHttpError> {
+) -> Result<ConsumedLocalRoomManagerTicket, InviteManagerHttpError> {
     let ticket = bearer_credential(headers).ok_or_else(InviteManagerHttpError::unauthorized)?;
     state
         .tickets
@@ -201,7 +201,7 @@ async fn consume_revoke_ticket(
 }
 
 fn bound_room_id(
-    grant: &ConsumedHumanInviteManagerTicket,
+    grant: &ConsumedLocalRoomManagerTicket,
     requested: &str,
 ) -> Result<String, InviteManagerHttpError> {
     let room_id = validate_room_id(requested)

@@ -15,6 +15,7 @@ import {
   useManagedHumanInvites,
 } from "./useManagedHumanInvites";
 import { createOperatorPairing } from "../api/operatorPairing";
+import { useConnectorInvites } from "./useConnectorInvites";
 import { useManagedOperatorPairings } from "./useManagedOperatorPairings";
 
 type InviteModalState = { roomId: string } | null;
@@ -94,6 +95,15 @@ export function useRoomInviteController({
     publishStatus: setCopyStatus,
   });
   const managedPairings = useManagedOperatorPairings({
+    roomDockId: modal?.roomId || "",
+    publicOrigin: publicInviteStatus?.public_url || "",
+    resolveManager: resolveManagerRoomAuthority,
+    copyText,
+    captureOriginRefresh: captureCurrentPublicOriginRefresh,
+    publishStatus: setCopyStatus,
+  });
+
+  const connectorInvites = useConnectorInvites({
     roomDockId: modal?.roomId || "",
     publicOrigin: publicInviteStatus?.public_url || "",
     resolveManager: resolveManagerRoomAuthority,
@@ -464,6 +474,7 @@ export function useRoomInviteController({
     generateSecureInvite,
     copyHumanInvite: managedHumanInvites.copy,
     revokeHumanInvite: managedHumanInvites.revoke,
+    connectorInvites,
     pairings: managedPairings.pairings,
     pairingCreating,
     generatePairing,

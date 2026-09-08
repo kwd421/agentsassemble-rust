@@ -66,6 +66,7 @@ pub(super) enum LocalRoomManagerPurpose {
     MessageSearchRead,
     SideChatRead,
     HumanInviteCreate,
+    ConnectorInviteCreate,
     HumanInviteRevoke,
     AppearanceUpload,
     AgentAvatarUpload { session_id: String },
@@ -109,7 +110,7 @@ pub struct ConsumedRoomHttpTicket {
     pub participant_id: String,
 }
 
-pub(crate) struct ConsumedHumanInviteManagerTicket {
+pub(crate) struct ConsumedLocalRoomManagerTicket {
     pub authority: LocalRoomManagerAuthority,
 }
 
@@ -286,6 +287,19 @@ impl TicketStore {
         authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
         self.issue_local_room_manager(authority, LocalRoomManagerPurpose::MessageSearchRead)
+            .await
+    }
+
+    /// Issues one exact connector-invite creation credential for a resolved room manager.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_connector_invite_create(
+        &self,
+        authority: LocalRoomManagerAuthority,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_local_room_manager(authority, LocalRoomManagerPurpose::ConnectorInviteCreate)
             .await
     }
 
@@ -589,6 +603,19 @@ impl TicketStore {
             .map(|grant| grant.authority)
     }
 
+    /// Consumes only an exact connector-invite creation credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_connector_invite_create(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedLocalRoomManagerTicket, TicketError> {
+        self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::ConnectorInviteCreate)
+            .await
+    }
+
     /// Consumes only an exact human-invite creation credential.
     ///
     /// # Errors
@@ -597,7 +624,7 @@ impl TicketStore {
     pub(crate) async fn consume_human_invite_create(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
+    ) -> Result<ConsumedLocalRoomManagerTicket, TicketError> {
         self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::HumanInviteCreate)
             .await
     }
@@ -610,7 +637,7 @@ impl TicketStore {
     pub(crate) async fn consume_human_invite_revoke(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
+    ) -> Result<ConsumedLocalRoomManagerTicket, TicketError> {
         self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::HumanInviteRevoke)
             .await
     }
@@ -674,12 +701,12 @@ impl TicketStore {
         &self,
         ticket: &str,
         expected: &LocalRoomManagerPurpose,
-    ) -> Result<ConsumedHumanInviteManagerTicket, TicketError> {
+    ) -> Result<ConsumedLocalRoomManagerTicket, TicketError> {
         let grant = self.consume_grant(ticket).await?;
         let TicketAuthority::LocalRoomManager(manager) = grant.authority else {
             return Err(TicketError::Invalid);
         };
-        Ok(ConsumedHumanInviteManagerTicket {
+        Ok(ConsumedLocalRoomManagerTicket {
             authority: resolve_local_room_manager_authority(manager, expected)?,
         })
     }

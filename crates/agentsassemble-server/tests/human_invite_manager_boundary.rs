@@ -295,3 +295,6 @@ async fn start(ready: bool) -> RunningServer {
         task,
     }
 }
+
+#[path = "human_invite_manager_boundary/connector.rs"]
+mod connector_invite_manager;

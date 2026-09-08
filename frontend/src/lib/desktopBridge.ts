@@ -77,6 +77,7 @@ type DesktopHttpTicketCommand =
   | "runtime_message_attachment_upload_ticket"
   | "runtime_message_attachment_read_ticket"
   | "runtime_human_invite_create_ticket"
+  | "runtime_connector_invite_create_ticket"
   | "runtime_human_invite_revoke_ticket"
   | "runtime_agent_avatar_upload_ticket"
   | "runtime_appearance_upload_ticket"
@@ -503,6 +504,17 @@ export async function saveDesktopMessageAttachment(
     throw new Error("데스크톱 첨부 저장 응답 계약이 올바르지 않습니다.");
   }
   return saved;
+}
+
+export function requestDesktopConnectorInviteCreateTicket(
+  authority: DesktopManagerRoomAuthority
+): Promise<DesktopOperatorHttpTicket> {
+  const verified = parseDesktopManagerRoomAuthority(authority);
+  return requestDesktopHttpTicket(
+    "runtime_connector_invite_create_ticket",
+    { authority: verified },
+    "외부 AI 초대 생성 티켓"
+  );
 }
 
 export function requestDesktopHumanInviteCreateTicket(

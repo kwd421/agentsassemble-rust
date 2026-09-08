@@ -1,3 +1,6 @@
+#[path = "control_invites.rs"]
+mod invites;
+
 use std::{io::Write, time::Duration};
 
 use agentsassemble_protocol::{LocalBootstrapGrant, LocalControlRequest, LocalControlResponse};
@@ -179,6 +182,13 @@ pub(super) fn request_message_attachment_read_ticket(
     )
 }
 
+pub(super) fn request_connector_invite_create_ticket(
+    runtime: &mut RuntimeProcess,
+    authority: &ManagerRoomAuthority,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::ConnectorInviteCreate(authority))
+}
+
 pub(super) fn request_human_invite_create_ticket(
     runtime: &mut RuntimeProcess,
     authority: &ManagerRoomAuthority,
@@ -251,6 +261,7 @@ enum HttpTicketKind<'a> {
     MessageAttachmentUpload(&'a str),
     MessageAttachmentRead(&'a str, &'a str),
     HumanInviteCreate(&'a ManagerRoomAuthority),
+    ConnectorInviteCreate(&'a ManagerRoomAuthority),
     HumanInviteRevoke(&'a ManagerRoomAuthority),
     AgentAvatarUpload(&'a ManagerRoomAuthority, &'a str),
     AppearanceUpload(&'a ManagerRoomAuthority),
@@ -319,24 +330,9 @@ fn http_ticket_request(kind: HttpTicketKind<'_>, request_id: &str) -> LocalContr
         | HttpTicketKind::AgentAvatarUpload(_, _) => {
             unreachable!("asset requests are decoded above")
         }
-        HttpTicketKind::HumanInviteCreate(authority) => {
-            LocalControlRequest::IssueHumanInviteCreateTicket {
-                request_id: request_id.to_owned(),
-                server_id: authority.server_id.clone(),
-                authority_lineage_id: authority.authority_lineage_id.clone(),
-                meeting_id: authority.room_id.clone(),
-                room_uid: authority.room_uid.clone(),
-            }
-        }
-        HttpTicketKind::HumanInviteRevoke(authority) => {
-            LocalControlRequest::IssueHumanInviteRevokeTicket {
-                request_id: request_id.to_owned(),
-                server_id: authority.server_id.clone(),
-                authority_lineage_id: authority.authority_lineage_id.clone(),
-                meeting_id: authority.room_id.clone(),
-                room_uid: authority.room_uid.clone(),
-            }
-        }
+        HttpTicketKind::ConnectorInviteCreate(_)
+        | HttpTicketKind::HumanInviteCreate(_)
+        | HttpTicketKind::HumanInviteRevoke(_) => invites::request(kind, request_id),
         HttpTicketKind::AppearanceUpload(authority) => {
             LocalControlRequest::IssueAppearanceUploadTicket {
                 request_id: request_id.to_owned(),
@@ -421,6 +417,11 @@ fn decode_http_ticket_response(
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
     match kind {
+        HttpTicketKind::ConnectorInviteCreate(_)
+        | HttpTicketKind::HumanInviteCreate(_)
+        | HttpTicketKind::HumanInviteRevoke(_) => {
+            return invites::response(kind, request_id, response);
+        }
         HttpTicketKind::MessageSearchRead(_) | HttpTicketKind::SideChatRead(_) => {
             return decode_chat_read_ticket_response(kind, request_id, response);
         }
@@ -454,22 +455,6 @@ fn decode_http_ticket_response(
         | (
             HttpTicketKind::PreferencesWrite(_),
             LocalControlResponse::PreferencesWriteOk {
-                request_id: response_id,
-                ticket,
-                ttl_seconds,
-            },
-        )
-        | (
-            HttpTicketKind::HumanInviteCreate(_),
-            LocalControlResponse::HumanInviteCreateOk {
-                request_id: response_id,
-                ticket,
-                ttl_seconds,
-            },
-        )
-        | (
-            HttpTicketKind::HumanInviteRevoke(_),
-            LocalControlResponse::HumanInviteRevokeOk {
                 request_id: response_id,
                 ticket,
                 ttl_seconds,

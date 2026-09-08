@@ -3,17 +3,34 @@ use tauri::AppHandle;
 
 use super::{
     HttpTicketGrant, LocalRuntime, ManagerRoomAuthority,
-    control::{request_human_invite_create_ticket, request_human_invite_revoke_ticket},
+    control::{
+        request_connector_invite_create_ticket, request_human_invite_create_ticket,
+        request_human_invite_revoke_ticket,
+    },
     ensure_runtime, handle_ticket_result,
 };
 
 #[derive(Clone, Copy)]
 enum InviteTicketKind {
     Create,
+    ConnectorCreate,
     Revoke,
 }
 
 impl LocalRuntime {
+    /// Issues an connector-invite-create-only HTTP ticket for one validated room manager.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error for an invalid room, rejected manager authority, or broken owned runtime.
+    pub(crate) fn issue_connector_invite_create_ticket(
+        &self,
+        app: &AppHandle,
+        authority: ManagerRoomAuthority,
+    ) -> Result<HttpTicketGrant, String> {
+        self.issue_human_invite_ticket(app, authority, InviteTicketKind::ConnectorCreate)
+    }
+
     /// Issues an invite-create-only HTTP ticket for one validated room manager.
     ///
     /// # Errors
@@ -53,6 +70,9 @@ impl LocalRuntime {
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
         let runtime = ensure_runtime(&mut process, app)?;
         let result = match kind {
+            InviteTicketKind::ConnectorCreate => {
+                request_connector_invite_create_ticket(runtime, &authority)
+            }
             InviteTicketKind::Create => request_human_invite_create_ticket(runtime, &authority),
             InviteTicketKind::Revoke => request_human_invite_revoke_ticket(runtime, &authority),
         };

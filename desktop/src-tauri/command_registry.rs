@@ -14,6 +14,7 @@ desktop_commands! {
     runtime_message_attachment_upload_ticket => "allow-runtime-message-attachment-upload-ticket",
     runtime_message_attachment_read_ticket => "allow-runtime-message-attachment-read-ticket",
     save_message_attachment => "allow-save-message-attachment",
+    runtime_connector_invite_create_ticket => "allow-runtime-connector-invite-create-ticket",
     runtime_human_invite_create_ticket => "allow-runtime-human-invite-create-ticket",
     runtime_human_invite_revoke_ticket => "allow-runtime-human-invite-revoke-ticket",
     runtime_agent_avatar_upload_ticket => "allow-runtime-agent-avatar-upload-ticket",
