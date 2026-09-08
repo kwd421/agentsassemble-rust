@@ -1,4 +1,4 @@
-pub const MAX_LOBBY_MESSAGE_PINS: i64 = 64;
+pub const MAX_CHANNEL_MESSAGE_PINS: i64 = 64;
 pub const MAX_MESSAGE_EVENT_ID_BYTES: usize = 128;
 
 #[must_use]

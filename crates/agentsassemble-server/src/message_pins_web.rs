@@ -1,5 +1,5 @@
 use agentsassemble_domain::validate_room_id;
-use agentsassemble_persistence::{PersistenceError, PinnedLobbyMessage};
+use agentsassemble_persistence::{PersistenceError, PinnedMessage};
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
@@ -22,7 +22,6 @@ use crate::{
     ticket::RoomSessionHttpAuthority,
 };
 
-const LOBBY_CHANNEL_ID: &str = "lobby";
 const MAX_MESSAGE_PIN_BODY_BYTES: usize = 4 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -43,40 +42,13 @@ struct PinMutation {
 
 #[derive(Serialize)]
 struct PinListResponse {
-    pins: Vec<PinProjection>,
+    pins: Vec<PinnedMessage>,
 }
 
 #[derive(Serialize)]
 struct PinMutationResponse {
     pinned: bool,
-    pins: Vec<PinProjection>,
-}
-
-#[derive(Serialize)]
-struct PinProjection {
-    event_id: String,
-    channel_id: &'static str,
-    pinned_at: String,
-    seq: i64,
-    author: String,
-    content: String,
-    created_at: String,
-    attachment_filenames: Vec<String>,
-}
-
-impl From<PinnedLobbyMessage> for PinProjection {
-    fn from(pin: PinnedLobbyMessage) -> Self {
-        Self {
-            event_id: pin.event_id,
-            channel_id: LOBBY_CHANNEL_ID,
-            pinned_at: pin.pinned_at,
-            seq: pin.seq,
-            author: pin.author,
-            content: pin.content,
-            created_at: pin.created_at,
-            attachment_filenames: pin.attachment_filenames,
-        }
-    }
+    pins: Vec<PinnedMessage>,
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -101,7 +73,7 @@ async fn list_pins(
 ) -> Result<Json<PinListResponse>, MessagePinsHttpError> {
     let grant =
         resolve_read_authority(&state, request.headers(), request.extensions().get()).await?;
-    let room_id = require_lobby_request(&grant, &query.room_id, &query.channel_id)?;
+    let room_id = require_room_request(&grant, &query.room_id)?;
     ensure_empty_body(request, MAX_MESSAGE_PIN_BODY_BYTES)
         .await
         .map_err(MessagePinsHttpError::from_body)?;
@@ -109,24 +81,23 @@ async fn list_pins(
         RoomSessionHttpAuthority::LocalTicket(grant) => {
             state
                 .store
-                .local_lobby_message_pins(
+                .local_message_pins(
                     &grant.room_id,
                     &grant.principal_id,
                     &grant.participant_id,
+                    &query.channel_id,
                 )
                 .await?
         }
         RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .room_session_lobby_message_pins(authorization)
+                .room_session_message_pins(authorization, &query.channel_id)
                 .await?
         }
     };
     debug_assert_eq!(room_id, grant_room_id(&grant));
-    Ok(Json(PinListResponse {
-        pins: pins.into_iter().map(Into::into).collect(),
-    }))
+    Ok(Json(PinListResponse { pins }))
 }
 
 async fn set_pin(
@@ -139,15 +110,16 @@ async fn set_pin(
     let payload: PinMutation = decode_json_body(request, MAX_MESSAGE_PIN_BODY_BYTES)
         .await
         .map_err(MessagePinsHttpError::from_body)?;
-    require_lobby_request(&grant, &payload.room_id, &payload.channel_id)?;
+    require_room_request(&grant, &payload.room_id)?;
     let pins = match &grant {
         RoomSessionHttpAuthority::LocalTicket(grant) => {
             state
                 .store
-                .set_local_lobby_message_pin(
+                .set_local_message_pin(
                     &grant.room_id,
                     &grant.principal_id,
                     &grant.participant_id,
+                    &payload.channel_id,
                     &payload.event_id,
                     payload.pinned,
                 )
@@ -156,8 +128,9 @@ async fn set_pin(
         RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .set_room_session_lobby_message_pin(
+                .set_room_session_message_pin(
                     authorization,
+                    &payload.channel_id,
                     &payload.event_id,
                     payload.pinned,
                 )
@@ -166,7 +139,7 @@ async fn set_pin(
     };
     Ok(Json(PinMutationResponse {
         pinned: payload.pinned,
-        pins: pins.into_iter().map(Into::into).collect(),
+        pins,
     }))
 }
 
@@ -240,20 +213,14 @@ async fn reauthorize_write(
     Ok(())
 }
 
-fn require_lobby_request<'a>(
+fn require_room_request<'a>(
     grant: &'a RoomSessionHttpAuthority,
     requested_room_id: &str,
-    channel_id: &str,
 ) -> Result<&'a str, MessagePinsHttpError> {
     let room_id = validate_room_id(requested_room_id)
         .map_err(|error| MessagePinsHttpError::bad_request(error.message))?;
     if room_id != grant_room_id(grant) {
         return Err(MessagePinsHttpError::unauthorized());
-    }
-    if channel_id != LOBBY_CHANNEL_ID {
-        return Err(MessagePinsHttpError::not_found(
-            "Only the lobby message stream is available.",
-        ));
     }
     Ok(grant_room_id(grant))
 }
@@ -359,7 +326,7 @@ impl From<PersistenceError> for MessagePinsHttpError {
                 ..
             } => Self::forbidden(),
             PersistenceError::CommandRejected {
-                code: "message_missing",
+                code: "message_missing" | "channel_not_found" | "channel_unavailable",
                 message,
             } => Self::not_found(message),
             PersistenceError::CommandRejected {

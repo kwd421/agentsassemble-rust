@@ -20,10 +20,11 @@ async fn edit_replaces_history_search_and_pin_once_without_floor_work() {
         .unwrap_or_else(|error| panic!("send edit target: {error}"));
     let target_id = sent.outcome.event.id;
     store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &target_id,
             true,
         )
@@ -40,10 +41,11 @@ async fn edit_replaces_history_search_and_pin_once_without_floor_work() {
     assert_eq!(search_count(&store, "originalneedle").await, 0);
     assert_eq!(search_count(&store, "revisedneedle").await, 1);
     let pins = store
-        .local_lobby_message_pins(
+        .local_message_pins(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
         )
         .await
         .unwrap_or_else(|error| panic!("read edited pin: {error}"));
@@ -107,10 +109,11 @@ async fn delete_rolls_back_then_removes_exact_attachment_search_and_pin() {
         .unwrap_or_else(|error| panic!("send delete target: {error}"));
     let target_id = sent.outcome.event.id;
     store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &target_id,
             true,
         )

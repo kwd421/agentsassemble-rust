@@ -160,7 +160,7 @@ pub use human_session_authority::HumanSessionAuthorization;
 pub use message_attachments::{
     MessageAttachment, MessageAttachmentMetadata, ProviderAttachmentReadAuthority,
 };
-pub use message_pins::PinnedLobbyMessage;
+pub use message_pins::PinnedMessage;
 pub use message_search::ProviderMessageSearchAuthority;
 pub use participant_leave::ParticipantLeaveMutation;
 pub use participant_mute::ParticipantMuteMutation;

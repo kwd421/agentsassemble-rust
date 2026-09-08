@@ -10,7 +10,7 @@ import {
 } from "../lib/strictJsonContract";
 import { isUnicodeScalarString } from "../lib/unicodeScalarString";
 import {
-  MAX_LOBBY_MESSAGE_PINS,
+  MAX_CHANNEL_MESSAGE_PINS,
   MAX_MESSAGE_EVENT_ID_BYTES,
 } from "../types/generated/MESSAGE_PINS_WIRE";
 import { queryString, responseError } from "./http";
@@ -108,7 +108,7 @@ function parsePin(value: unknown): MessagePin {
 }
 
 function parsePins(value: unknown): MessagePin[] {
-  if (!Array.isArray(value) || value.length > MAX_LOBBY_MESSAGE_PINS) {
+  if (!Array.isArray(value) || value.length > MAX_CHANNEL_MESSAGE_PINS) {
     invalidResponse();
   }
   const pins = value.map(parsePin);

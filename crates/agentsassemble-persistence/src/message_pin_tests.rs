@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
-    LOCAL_OPERATOR_USER_ID, MAX_LOBBY_MESSAGE_PINS,
+    LOCAL_OPERATOR_USER_ID, MAX_CHANNEL_MESSAGE_PINS,
 };
 use chrono::{Duration, Utc};
 use serde_json::json;
@@ -21,10 +21,11 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
     let second = send(&store, &principal, "message-2", "second").await;
 
     store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &first.id,
             true,
         )
@@ -36,10 +37,11 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
         .await
         .unwrap_or_else(|error| panic!("age first pin: {error}"));
     let pins = store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &second.id,
             true,
         )
@@ -60,10 +62,11 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
         .await
         .unwrap_or_else(|error| panic!("bound second pin timestamp: {error}"));
     let repinned = store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &first.id,
             true,
         )
@@ -72,10 +75,11 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
     assert_eq!(repinned.len(), 2);
     assert_eq!(repinned[0].event_id, first.id);
     let remaining = store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &second.id,
             false,
         )
@@ -83,10 +87,11 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
         .unwrap_or_else(|error| panic!("unpin second: {error}"));
     assert_eq!(remaining.len(), 1);
     let unchanged = store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &second.id,
             false,
         )
@@ -123,10 +128,11 @@ async fn attachment_only_pin_projects_canonical_filenames() {
         .event;
 
     let pins = store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &event.id,
             true,
         )
@@ -152,10 +158,11 @@ async fn attachment_only_pin_projects_canonical_filenames() {
         .unwrap_or_else(|error| panic!("store corrupt attachment event: {error}"));
     assert_rejection_code(
         store
-            .local_lobby_message_pins(
+            .local_message_pins(
                 "general",
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
+                "lobby",
             )
             .await,
         "invalid_state",
@@ -178,10 +185,11 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
         for event_id in ["missing", room_created.id.as_str(), "bad\0id"] {
             assert!(
                 store
-                    .set_local_lobby_message_pin(
+                    .set_local_message_pin(
                         "general",
                         LOCAL_OPERATOR_USER_ID,
                         LOCAL_OPERATOR_PARTICIPANT_ID,
+                        "lobby",
                         event_id,
                         pinned,
                     )
@@ -198,10 +206,11 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
     assert_eq!(before, 0);
 
     store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &valid.id,
             true,
         )
@@ -220,10 +229,11 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
         .unwrap_or_else(|error| panic!("remove target content: {error}"));
     assert_rejection_code(
         store
-            .set_local_lobby_message_pin(
+            .set_local_message_pin(
                 "general",
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
+                "lobby",
                 &valid.id,
                 false,
             )
@@ -233,10 +243,11 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
     assert_eq!(pin_count(&store).await, 1);
     assert_rejection_code(
         store
-            .local_lobby_message_pins(
+            .local_message_pins(
                 "general",
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
+                "lobby",
             )
             .await,
         "invalid_state",
@@ -248,10 +259,11 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
         .unwrap_or_else(|error| panic!("corrupt target event: {error}"));
     assert!(matches!(
         store
-            .local_lobby_message_pins(
+            .local_message_pins(
                 "general",
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
+                "lobby",
             )
             .await,
         Err(PersistenceError::Json(_))
@@ -261,10 +273,10 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
 #[tokio::test]
 async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
     let (store, principal) = fixture().await;
-    let pin_limit = usize::try_from(MAX_LOBBY_MESSAGE_PINS)
+    let pin_limit = usize::try_from(MAX_CHANNEL_MESSAGE_PINS)
         .unwrap_or_else(|error| panic!("convert pin limit: {error}"));
     let mut messages = Vec::new();
-    for index in 0..=MAX_LOBBY_MESSAGE_PINS {
+    for index in 0..=MAX_CHANNEL_MESSAGE_PINS {
         messages.push(
             send(
                 &store,
@@ -277,23 +289,25 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
     }
     for message in messages.iter().take(pin_limit) {
         store
-            .set_local_lobby_message_pin(
+            .set_local_message_pin(
                 "general",
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
+                "lobby",
                 &message.id,
                 true,
             )
             .await
             .unwrap_or_else(|error| panic!("fill pin capacity: {error}"));
     }
-    assert_eq!(pin_count(&store).await, MAX_LOBBY_MESSAGE_PINS);
+    assert_eq!(pin_count(&store).await, MAX_CHANNEL_MESSAGE_PINS);
     assert_rejection_code(
         store
-            .set_local_lobby_message_pin(
+            .set_local_message_pin(
                 "general",
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
+                "lobby",
                 &messages
                     .last()
                     .unwrap_or_else(|| panic!("extra message missing"))
@@ -304,10 +318,11 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
         "pin_limit_reached",
     );
     let repinned = store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &messages[0].id,
             true,
         )
@@ -315,20 +330,22 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
         .unwrap_or_else(|error| panic!("re-pin at capacity: {error}"));
     assert_eq!(repinned.len(), pin_limit);
     store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &messages[0].id,
             false,
         )
         .await
         .unwrap_or_else(|error| panic!("unpin at capacity: {error}"));
     let refilled = store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &messages
                 .last()
                 .unwrap_or_else(|| panic!("extra message missing"))
@@ -338,6 +355,7 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
         .await
         .unwrap_or_else(|error| panic!("refill pin capacity: {error}"));
     assert_eq!(refilled.len(), pin_limit);
+    assert_channel_capacity_is_independent(&store, &principal).await;
 }
 
 #[tokio::test]
@@ -345,10 +363,11 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
     let (read_only_store, local) = admitted_fixture(InviteScope::ReadOnly).await;
     let message = send(&read_only_store, &local, "read-only-target", "target").await;
     read_only_store
-        .set_local_lobby_message_pin(
+        .set_local_message_pin(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &message.id,
             true,
         )
@@ -357,9 +376,10 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
     let read_only = human_authorization(&read_only_store).await;
     assert_eq!(
         read_only_store
-            .room_session_lobby_message_pins(&crate::RoomSessionAuthorization::Human(
-                read_only.clone()
-            ))
+            .room_session_message_pins(
+                &crate::RoomSessionAuthorization::Human(read_only.clone()),
+                "lobby"
+            )
             .await
             .unwrap_or_else(|error| panic!("read pins through read-only session: {error}"))
             .len(),
@@ -367,8 +387,9 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
     );
     assert_rejection_code(
         read_only_store
-            .set_room_session_lobby_message_pin(
+            .set_room_session_message_pin(
                 &crate::RoomSessionAuthorization::Human(read_only.clone()),
+                "lobby",
                 &message.id,
                 false,
             )
@@ -381,8 +402,9 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
     let message = send(&writable_store, &local, "writable-target", "target").await;
     let writable = human_authorization(&writable_store).await;
     writable_store
-        .set_room_session_lobby_message_pin(
+        .set_room_session_message_pin(
             &crate::RoomSessionAuthorization::Human(writable.clone()),
+            "lobby",
             &message.id,
             true,
         )
@@ -394,8 +416,9 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
         .unwrap_or_else(|error| panic!("end human session: {error}"));
     assert_rejection_code(
         writable_store
-            .set_room_session_lobby_message_pin(
+            .set_room_session_message_pin(
                 &crate::RoomSessionAuthorization::Human(writable.clone()),
+                "lobby",
                 &message.id,
                 false,
             )
@@ -403,6 +426,47 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
         "session_revoked",
     );
     assert_eq!(pin_count(&writable_store).await, 1);
+}
+
+async fn assert_channel_capacity_is_independent(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+) {
+    use crate::RoomMutationAuthority::TrustedPrincipal;
+    let snapshot = store
+        .snapshot_for(principal, 0, 1)
+        .await
+        .unwrap_or_else(|error| panic!("pin channel snapshot: {error}"));
+    let revision = agentsassemble_domain::public_settings(&snapshot.settings)
+        .unwrap_or_else(|error| panic!("pin channel settings: {error}"))
+        .settings_revision;
+    store.execute_room_settings_update(TrustedPrincipal(principal), "channel-capacity-settings", &json!({
+        "expected_revision":revision,"channels":[{"id":"c0123456789ab","name":"Pins","type":"text","position":0,"created_at":"2026-09-08T00:00:00Z"}]
+    })).await.unwrap_or_else(|error| panic!("pin channel create: {error}"));
+    let message = store
+        .execute_channel_message(
+            TrustedPrincipal(principal),
+            "channel-capacity-message",
+            &json!({
+                "channel_id":"c0123456789ab","content":"separate capacity"
+            }),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("pin channel message: {error}"));
+    let pins = store
+        .set_local_message_pin(
+            &principal.room_id,
+            &principal.principal_id,
+            &principal.participant_id,
+            "c0123456789ab",
+            &message.event.id,
+            true,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("pin separate channel: {error}"));
+    assert_eq!(pins.len(), 1);
+    assert_eq!(pins[0].channel_id, "c0123456789ab");
+    assert_eq!(pin_count(store).await, MAX_CHANNEL_MESSAGE_PINS + 1);
 }
 
 async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {

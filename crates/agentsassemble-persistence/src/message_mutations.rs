@@ -13,7 +13,7 @@ use crate::{
     authority::load_active_participant,
     command_admission::{admit_non_lifecycle_command, store_command_result},
     message_attachments::{delete_bound_message_attachments, message_attachments_from_event},
-    message_pins::remove_lobby_message_pin,
+    message_pins::remove_message_pin,
     message_search_index::{remove_room_message_index, replace_room_message_index},
     room_event_sequence::next_sequence,
     room_turns::remove_pending_input_reference,
@@ -177,7 +177,7 @@ async fn delete_message(
     .await?;
     let kind = authorize_message_delete(principal, target, &author).map_err(rejection)?;
     let attachment_ids = delete_bound_message_attachments(transaction, target).await?;
-    remove_lobby_message_pin(transaction, &principal.room_id, &target.id).await?;
+    remove_message_pin(transaction, &principal.room_id, &target.id).await?;
     remove_room_message_index(transaction, target).await?;
     if kind == MutableMessageKind::Vote {
         delete_vote_projection(transaction, &principal.room_id, &target.id, target.seq).await?;

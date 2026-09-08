@@ -327,3 +327,26 @@ unchanged structure/19 policy cases, format, diff and artifact checks pass. The
 search owner exceeds 500 lines because it cohesively owns the bounded query and
 context paths; the transport projection was reduced by 81 lines. Frontend channel
 search parsing, pins, mounting and packaged acceptance remain open.
+
+## Channel-scoped pins
+
+The existing pin pointer transaction now takes one concrete message channel. Current
+registration, exact event/channel identity, read/write session authority and the
+64-pin limit are checked at their existing owners; each channel has its own capacity.
+Read and mutation responses serialize the canonical pin projection directly with its
+channel ID. Search/context and pins share the persisted event-channel selector,
+while custom history retains its dedicated indexed query. There is no copied pin
+table, additional cache, poll or subscription. Removal uses the channel retirement
+transaction's existing pin cleanup; reopening the database preserves surviving pins.
+
+Four actual HTTP pin cases pass (0.07 s), including independent channels, wrong-channel
+unpin rejection, lobby isolation and retirement. The five search HTTP cases remain
+passing (0.10 s). Eleven affected persistence cases pass (0.21 s), including canonical
+attachment projection, mutation rollback, read-only/revoked authority and a custom
+pin when the lobby already holds all 64 pins. Four channel cases pass (0.05 s), with
+history, search and pins checked after a file database reopen. Generated pin bounds,
+15 frontend pin regressions (1.03 s), production build/CSS, affected Rust all-target/
+all-feature Clippy and unchanged structure/19 policy/format/diff/artifact gates pass.
+Pin reads remain at most 64 projections; the room-owned pointer scan can cover the
+bounded set of 50 custom channels plus lobby. The public client parser and custom
+channel mounting remain the next slice; packaged acceptance is still pending.

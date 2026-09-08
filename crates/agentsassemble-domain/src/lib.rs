@@ -60,7 +60,7 @@ pub use message_mutations::{
     authorize_message_edit, prepare_deleted_message, prepare_message_deleted_event,
     prepare_message_updated_event, prepare_updated_message, require_mutable_message,
 };
-pub use message_pins::{MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_EVENT_ID_BYTES, is_message_event_id};
+pub use message_pins::{MAX_CHANNEL_MESSAGE_PINS, MAX_MESSAGE_EVENT_ID_BYTES, is_message_event_id};
 pub use message_search::{
     MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS, MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS,
     MAX_MESSAGE_SEARCH_CURSOR_BYTES, MAX_MESSAGE_SEARCH_QUERY_CHARACTERS, MESSAGE_CONTEXT_RADIUS,

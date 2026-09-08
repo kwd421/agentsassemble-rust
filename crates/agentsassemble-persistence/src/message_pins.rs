@@ -1,18 +1,21 @@
 use agentsassemble_domain::{
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, MAX_LOBBY_MESSAGE_PINS, RoomEvent,
-    has_visible_text, is_message_event_id,
+    CHANNEL_MESSAGE_EVENT_TYPE, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
+    MAX_CHANNEL_MESSAGE_PINS, RoomEvent, has_visible_text, is_message_event_id,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
+use serde::Serialize;
+use serde_json::Value;
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     PersistenceError, RoomSessionAuthorization, SqliteStore,
     message_attachments::{MessageAttachmentMetadata, message_attachments_from_event},
+    room_channels::{MESSAGE_CHANNEL_SQL, require_message_channel},
     room_turns::support::load_event,
     room_user_identity::resolve_local_room_manager,
 };
 
-pub(crate) async fn remove_lobby_message_pin(
+pub(crate) async fn remove_message_pin(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     event_id: &str,
@@ -25,8 +28,9 @@ pub(crate) async fn remove_lobby_message_pin(
     Ok(())
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct PinnedLobbyMessage {
+#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+pub struct PinnedMessage {
+    pub channel_id: String,
     pub event_id: String,
     pub pinned_at: String,
     pub seq: i64,
@@ -37,34 +41,37 @@ pub struct PinnedLobbyMessage {
 }
 
 impl SqliteStore {
-    /// Lists lobby pins while the canonical local operator remains this room's manager.
+    /// Lists channel pins while the canonical local operator remains this room's manager.
     ///
     /// # Errors
     ///
     /// Fails when local authority, a stored pointer, its event, or persistence is invalid.
-    pub async fn local_lobby_message_pins(
+    pub async fn local_message_pins(
         &self,
         room_id: &str,
         user_id: &str,
         participant_id: &str,
-    ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
+        channel_id: &str,
+    ) -> Result<Vec<PinnedMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         authorize_local_operator(&mut transaction, room_id, user_id, participant_id).await?;
-        let pins = load_pins(&mut transaction, room_id).await?;
+        require_message_channel(&mut transaction, room_id, channel_id).await?;
+        let pins = load_pins(&mut transaction, room_id, channel_id).await?;
         transaction.commit().await?;
         Ok(pins)
     }
 
-    /// Lists lobby pins while an exact room session retains room-history permission.
+    /// Lists channel pins while an exact room session retains room-history permission.
     ///
     /// # Errors
     ///
     /// Fails when session authority, permission, a stored pointer, its event, or persistence is
     /// invalid.
-    pub async fn room_session_lobby_message_pins(
+    pub async fn room_session_message_pins(
         &self,
         expected: &RoomSessionAuthorization,
-    ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
+        channel_id: &str,
+    ) -> Result<Vec<PinnedMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let principal = expected
             .mutation_authority()
@@ -74,43 +81,54 @@ impl SqliteStore {
             principal.capabilities.room_history,
             "This room session cannot read message history.",
         )?;
-        let pins = load_pins(&mut transaction, &principal.room_id).await?;
+        require_message_channel(&mut transaction, &principal.room_id, channel_id).await?;
+        let pins = load_pins(&mut transaction, &principal.room_id, channel_id).await?;
         transaction.commit().await?;
         Ok(pins)
     }
 
-    /// Pins or unpins one lobby message as the canonical local operator.
+    /// Pins or unpins one channel message as the canonical local operator.
     ///
     /// # Errors
     ///
     /// Fails without writing when local authority or the target message is invalid.
-    pub async fn set_local_lobby_message_pin(
+    pub async fn set_local_message_pin(
         &self,
         room_id: &str,
         user_id: &str,
         participant_id: &str,
+        channel_id: &str,
         event_id: &str,
         pinned: bool,
-    ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
+    ) -> Result<Vec<PinnedMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         authorize_local_operator(&mut transaction, room_id, user_id, participant_id).await?;
-        set_pin(&mut transaction, room_id, event_id, pinned, Utc::now()).await?;
-        let pins = load_pins(&mut transaction, room_id).await?;
+        set_pin(
+            &mut transaction,
+            room_id,
+            channel_id,
+            event_id,
+            pinned,
+            Utc::now(),
+        )
+        .await?;
+        let pins = load_pins(&mut transaction, room_id, channel_id).await?;
         transaction.commit().await?;
         Ok(pins)
     }
 
-    /// Pins or unpins one lobby message while an exact room session remains writable.
+    /// Pins or unpins one channel message while an exact room session remains writable.
     ///
     /// # Errors
     ///
     /// Fails without writing when session authority, permission, or the target message is invalid.
-    pub async fn set_room_session_lobby_message_pin(
+    pub async fn set_room_session_message_pin(
         &self,
         expected: &RoomSessionAuthorization,
+        channel_id: &str,
         event_id: &str,
         pinned: bool,
-    ) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
+    ) -> Result<Vec<PinnedMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let principal = expected
             .mutation_authority()
@@ -123,12 +141,13 @@ impl SqliteStore {
         set_pin(
             &mut transaction,
             &principal.room_id,
+            channel_id,
             event_id,
             pinned,
             Utc::now(),
         )
         .await?;
-        let pins = load_pins(&mut transaction, &principal.room_id).await?;
+        let pins = load_pins(&mut transaction, &principal.room_id, channel_id).await?;
         transaction.commit().await?;
         Ok(pins)
     }
@@ -161,12 +180,14 @@ fn require_permission(allowed: bool, message: &'static str) -> Result<(), Persis
 async fn set_pin(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
+    channel_id: &str,
     event_id: &str,
     pinned: bool,
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
+    require_message_channel(transaction, room_id, channel_id).await?;
     validate_event_id(event_id)?;
-    let event = load_target_message(transaction, room_id, event_id).await?;
+    let event = load_target_message(transaction, room_id, channel_id, event_id).await?;
     if !pinned {
         sqlx::query("DELETE FROM room_message_pins WHERE room_id = ? AND event_id = ?")
             .bind(room_id)
@@ -175,7 +196,7 @@ async fn set_pin(
             .await?;
         return Ok(());
     }
-    ensure_pin_capacity(transaction, room_id, event_id).await?;
+    ensure_pin_capacity(transaction, room_id, channel_id, event_id).await?;
     sqlx::query(
         "INSERT INTO room_message_pins(room_id, event_id, event_seq, pinned_at) VALUES (?, ?, ?, ?) ON CONFLICT(room_id, event_id) DO UPDATE SET event_seq = excluded.event_seq, pinned_at = excluded.pinned_at",
     )
@@ -191,19 +212,22 @@ async fn set_pin(
 async fn ensure_pin_capacity(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
+    channel_id: &str,
     event_id: &str,
 ) -> Result<(), PersistenceError> {
-    let other_pins = sqlx::query_scalar::<_, i64>(
-        "SELECT COUNT(*) FROM room_message_pins WHERE room_id = ? AND event_id != ?",
-    )
-    .bind(room_id)
-    .bind(event_id)
-    .fetch_one(&mut **transaction)
-    .await?;
-    if other_pins >= MAX_LOBBY_MESSAGE_PINS {
+    let sql = format!(
+        "SELECT COUNT(*) FROM room_message_pins AS pins JOIN room_events AS events ON events.room_id = pins.room_id AND events.seq = pins.event_seq WHERE pins.room_id = ? AND pins.event_id != ? AND {MESSAGE_CHANNEL_SQL} = ?"
+    );
+    let other_pins = sqlx::query_scalar::<_, i64>(sqlx::AssertSqlSafe(sql))
+        .bind(room_id)
+        .bind(event_id)
+        .bind(channel_id)
+        .fetch_one(&mut **transaction)
+        .await?;
+    if other_pins >= MAX_CHANNEL_MESSAGE_PINS {
         return Err(rejected(
             "pin_limit_reached",
-            "This room has reached the message pin limit.",
+            "This channel has reached the message pin limit.",
         ));
     }
     Ok(())
@@ -212,29 +236,33 @@ async fn ensure_pin_capacity(
 async fn load_target_message(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
+    channel_id: &str,
     event_id: &str,
 ) -> Result<RoomEvent, PersistenceError> {
     let event = load_event(transaction, room_id, event_id)
         .await?
         .ok_or_else(|| rejected("message_missing", "The message was not found."))?;
-    let _ = require_message_event(&event, room_id, event_id, event.seq)?;
+    let _ = require_message_event(&event, room_id, channel_id, event_id, event.seq)?;
     Ok(event)
 }
 
 async fn load_pins(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
-) -> Result<Vec<PinnedLobbyMessage>, PersistenceError> {
-    let rows = sqlx::query(
-        "SELECT pins.event_id, pins.event_seq, pins.pinned_at, events.event_json FROM room_message_pins AS pins JOIN room_events AS events ON events.room_id = pins.room_id AND events.seq = pins.event_seq WHERE pins.room_id = ? ORDER BY pins.pinned_at DESC, pins.event_id ASC LIMIT ?",
-    )
-    .bind(room_id)
-    .bind(MAX_LOBBY_MESSAGE_PINS + 1)
-    .fetch_all(&mut **transaction)
-    .await?;
+    channel_id: &str,
+) -> Result<Vec<PinnedMessage>, PersistenceError> {
+    let sql = format!(
+        "SELECT pins.event_id, pins.event_seq, pins.pinned_at, events.event_json FROM room_message_pins AS pins JOIN room_events AS events ON events.room_id = pins.room_id AND events.seq = pins.event_seq WHERE pins.room_id = ? AND {MESSAGE_CHANNEL_SQL} = ? ORDER BY pins.pinned_at DESC, pins.event_id ASC LIMIT ?"
+    );
+    let rows = sqlx::query(sqlx::AssertSqlSafe(sql))
+        .bind(room_id)
+        .bind(channel_id)
+        .bind(MAX_CHANNEL_MESSAGE_PINS + 1)
+        .fetch_all(&mut **transaction)
+        .await?;
     if i64::try_from(rows.len())
         .map_err(|_| invalid_state("Stored message pin count is invalid."))?
-        > MAX_LOBBY_MESSAGE_PINS
+        > MAX_CHANNEL_MESSAGE_PINS
     {
         return Err(invalid_state("Stored message pin count exceeds its limit."));
     }
@@ -244,17 +272,19 @@ async fn load_pins(
             let event_seq = row.get::<i64, _>("event_seq");
             let pinned_at = row.get::<i64, _>("pinned_at");
             let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
-            let attachments = require_message_event(&event, room_id, &event_id, event_seq)?;
-            project_pin(event, pinned_at, attachments)
+            let attachments =
+                require_message_event(&event, room_id, channel_id, &event_id, event_seq)?;
+            project_pin(event, channel_id, pinned_at, attachments)
         })
         .collect()
 }
 
 fn project_pin(
     event: RoomEvent,
+    channel_id: &str,
     pinned_at_micros: i64,
     attachments: Vec<MessageAttachmentMetadata>,
-) -> Result<PinnedLobbyMessage, PersistenceError> {
+) -> Result<PinnedMessage, PersistenceError> {
     let pinned_at = DateTime::from_timestamp_micros(pinned_at_micros)
         .ok_or_else(|| invalid_state("Stored message pin timestamp is invalid."))?;
     let author = event
@@ -263,7 +293,8 @@ fn project_pin(
         .or_else(|| (!event.actor.participant_id.is_empty()).then_some(event.actor.participant_id))
         .unwrap_or_else(|| "Room".to_owned());
     let content = event.content.unwrap_or_default();
-    Ok(PinnedLobbyMessage {
+    Ok(PinnedMessage {
+        channel_id: channel_id.to_owned(),
         event_id: event.id,
         pinned_at: pinned_at.to_rfc3339_opts(SecondsFormat::AutoSi, true),
         seq: event.seq,
@@ -282,13 +313,21 @@ fn project_pin(
 fn require_message_event(
     event: &RoomEvent,
     room_id: &str,
+    channel_id: &str,
     event_id: &str,
     seq: i64,
 ) -> Result<Vec<MessageAttachmentMetadata>, PersistenceError> {
     if event.room_id != room_id || event.id != event_id || event.seq != seq {
         return Err(invalid_state("Stored message pin target is inconsistent."));
     }
-    if !event.is_current_lobby_message() {
+    let matches_channel = if channel_id == "lobby" {
+        event.is_current_lobby_message()
+    } else {
+        event.event_type == CHANNEL_MESSAGE_EVENT_TYPE
+            && event.extra.get("channel_id").and_then(Value::as_str) == Some(channel_id)
+            && event.extra.get("message_deleted") != Some(&Value::Bool(true))
+    };
+    if !matches_channel {
         return Err(rejected("message_missing", "The message was not found."));
     }
     let attachments = message_attachments_from_event(event)?;

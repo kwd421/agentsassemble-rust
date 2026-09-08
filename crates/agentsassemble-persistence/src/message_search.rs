@@ -12,13 +12,11 @@ use crate::{
     PersistenceError, RoomSessionAuthorization, SqliteStore,
     agent_lifecycle::load_session,
     message_search_index::{canonical_created_at_nanos, searchable_room_message},
-    room_channels::require_text_channel,
+    room_channels::{MESSAGE_CHANNEL_SQL, require_message_channel},
     room_turns::support::{load_participant, provider_room_principal},
     room_user_identity::resolve_local_room_manager,
     turn_authority::require_provider_room_tool_authority,
 };
-
-const MESSAGE_CHANNEL_SQL: &str = "CASE json_extract(events.event_json, '$.type') WHEN 'channel_message_final' THEN json_extract(events.event_json, '$.channel_id') ELSE 'lobby' END";
 
 #[derive(Debug, Clone, Copy)]
 pub struct ProviderMessageSearchAuthority<'a> {
@@ -445,7 +443,7 @@ async fn require_search_channel<'a>(
                 "A concrete channel_id is required.",
             ));
         }
-        _ => require_text_channel(transaction, room_id, channel_id).await?,
+        _ => require_message_channel(transaction, room_id, channel_id).await?,
     }
     Ok(channel_id)
 }

@@ -219,6 +219,85 @@ async fn tcp_boundary_rejects_missing_message_targets_for_pin_and_unpin() {
     server.stop().await;
 }
 
+#[tokio::test]
+async fn custom_channel_pins_bind_targets_and_retire_with_the_channel()
+-> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
+    let server = start().await;
+    let principal = local_principal();
+    let snapshot = server.store.snapshot_for(&principal, 0, 1).await?;
+    let revision = agentsassemble_domain::public_settings(&snapshot.settings)?.settings_revision;
+    let channels = json!([
+        {"id":"c0123456789ab","name":"First","type":"text","position":0,"created_at":"2026-09-08T00:00:00Z"},
+        {"id":"c0123456789ac","name":"Second","type":"text","position":1,"created_at":"2026-09-08T00:00:00Z"}
+    ]);
+    let settings = server
+        .store
+        .execute_room_settings_update(
+            TrustedPrincipal(&principal),
+            "pin-channels",
+            &json!({"expected_revision":revision,"channels":channels}),
+        )
+        .await?;
+    let client = reqwest::Client::new();
+    let path = format!("{}/api/room-pins", server.base_url);
+    for channel in ["c0123456789ab", "c0123456789ac"] {
+        let event = server
+            .store
+            .execute_channel_message(
+                TrustedPrincipal(&principal),
+                channel,
+                &json!({"channel_id":channel,"content":"channel pin"}),
+            )
+            .await?
+            .event;
+        let pinned: Value = client.post(&path)
+            .bearer_auth(issue_write(&server.tickets, "general").await)
+            .json(&json!({"room_id":"general","channel_id":channel,"event_id":event.id,"pinned":true}))
+            .send().await?.error_for_status()?.json().await?;
+        assert_eq!(pinned["pins"].as_array().map(Vec::len), Some(1));
+        assert_eq!(pinned["pins"][0]["channel_id"], channel);
+        assert_eq!(pinned["pins"][0]["event_id"], event.id);
+        for wrong in [
+            "lobby",
+            if channel.ends_with('b') {
+                "c0123456789ac"
+            } else {
+                "c0123456789ab"
+            },
+        ] {
+            let rejected = client.post(&path)
+                .bearer_auth(issue_write(&server.tickets, "general").await)
+                .json(&json!({"room_id":"general","channel_id":wrong,"event_id":event.id,"pinned":false}))
+                .send().await?;
+            assert_eq!(rejected.status(), StatusCode::NOT_FOUND);
+        }
+    }
+    assert_eq!(pin_count(&server.store).await, 0);
+    let mut retained = channels[1].clone();
+    retained["position"] = json!(0);
+    server.store.execute_room_settings_update(TrustedPrincipal(&principal), "retire-pinned-channel",
+        &json!({"expected_revision":settings.result["room_settings"]["settings_revision"],"channels":[retained]})).await?;
+    for (channel, status) in [
+        ("c0123456789ab", StatusCode::NOT_FOUND),
+        ("c0123456789ac", StatusCode::OK),
+    ] {
+        let response = client
+            .get(format!("{path}?room_id=general&channel_id={channel}"))
+            .bearer_auth(issue_read(&server.tickets, "general").await)
+            .send()
+            .await?;
+        assert_eq!(response.status(), status);
+        if status == StatusCode::OK {
+            let value: Value = response.json().await?;
+            assert_eq!(value["pins"].as_array().map(Vec::len), Some(1));
+            assert_eq!(value["pins"][0]["channel_id"], channel);
+        }
+    }
+    server.stop().await;
+    Ok(())
+}
+
 async fn start() -> RunningServer {
     let store = SqliteStore::open("sqlite::memory:")
         .await
@@ -328,10 +407,11 @@ async fn json_body(response: reqwest::Response) -> Value {
 
 async fn pin_count(store: &SqliteStore) -> i64 {
     let pins = store
-        .local_lobby_message_pins(
+        .local_message_pins(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
         )
         .await
         .unwrap_or_else(|error| panic!("list stored pins: {error}"));

@@ -165,11 +165,43 @@ async fn channels_have_independent_history_replay_and_restart_without_lobby_turn
         )
         .await,
     );
+    checked(
+        store
+            .set_local_message_pin(
+                &principal.room_id,
+                &principal.principal_id,
+                &principal.participant_id,
+                "c0123456789ab",
+                &repeated.event.id,
+                true,
+            )
+            .await,
+    );
     drop(store);
-    let reopened = checked(SqliteStore::open_path(&directory.path().join("room.sqlite3")).await);
-    let history = checked(page(&reopened, &principal, "c0123456789ab", 0, 80).await);
+    verify_reopened_channel(directory.path(), &principal, &repeated.event.id).await;
+}
+
+async fn verify_reopened_channel(
+    directory: &std::path::Path,
+    principal: &AuthenticatedPrincipal,
+    event_id: &str,
+) {
+    let reopened = checked(SqliteStore::open_path(&directory.join("room.sqlite3")).await);
+    let history = checked(page(&reopened, principal, "c0123456789ab", 0, 80).await);
+    let pins = checked(
+        reopened
+            .local_message_pins(
+                &principal.room_id,
+                &principal.principal_id,
+                &principal.participant_id,
+                "c0123456789ab",
+            )
+            .await,
+    );
+    assert_eq!(pins.len(), 1);
+    assert_eq!(pins[0].event_id, event_id);
     assert_eq!(history.events.len(), 2);
-    assert_eq!(history.events[0].id, repeated.event.id);
+    assert_eq!(history.events[0].id, event_id);
     let search = checked(
         reopened
             .search_local_messages(
@@ -183,10 +215,10 @@ async fn channels_have_independent_history_replay_and_restart_without_lobby_turn
             .await,
     );
     assert_eq!(search.results.len(), 1);
-    assert_eq!(search.results[0].event_id, repeated.event.id);
+    assert_eq!(search.results[0].event_id, event_id);
     assert_eq!(search.results[0].channel_id, "c0123456789ab");
     assert!(
-        page(&reopened, &principal, "c000000000000", 0, 80)
+        page(&reopened, principal, "c000000000000", 0, 80)
             .await
             .is_err()
     );

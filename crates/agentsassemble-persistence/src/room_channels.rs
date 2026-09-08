@@ -3,6 +3,19 @@ use sqlx::{Sqlite, Transaction};
 
 use crate::PersistenceError;
 
+pub(crate) const MESSAGE_CHANNEL_SQL: &str = "CASE json_extract(events.event_json, '$.type') WHEN 'channel_message_final' THEN json_extract(events.event_json, '$.channel_id') ELSE 'lobby' END";
+
+pub(crate) async fn require_message_channel(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    channel_id: &str,
+) -> Result<(), PersistenceError> {
+    if channel_id == "lobby" {
+        return Ok(());
+    }
+    require_text_channel(tx, room_id, channel_id).await
+}
+
 pub(crate) async fn require_text_channel(
     tx: &mut Transaction<'_, Sqlite>,
     room_id: &str,
