@@ -86,8 +86,10 @@ export default function AppView({ controller }: { controller: AppController }) {
     canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
       participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
   const companionInvites = useCompanionInvites(canPostHumanMessage && canonicalRoom.connectionState === "connected" &&
-    guestSession && !guestSession.operator && guestSession.roomUid === activeRoom.roomUid && guestSession.meetingId === activeRoom.meetingId
-    ? guestSession : null);
+    guestSession && !guestSession.operator && guestSession.meetingId === activeRoom.meetingId &&
+    canonicalRoom.room?.room_id === guestSession.meetingId
+    // Ordinary admission has no room UID; the accepted authenticated snapshot owns it.
+    ? { ...guestSession, roomUid: canonicalRoom.room.room_uid } : null);
   useLayoutEffect(() => { setCreateChannelScope(""); setSideChatScope(""); }, [channelScope]);
   // Recovery owns the entrance until its current session surface is accepted.
   // Do not mount native directory/profile controls beneath that entrance.

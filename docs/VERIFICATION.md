@@ -8277,3 +8277,20 @@ instead of a connector link. The new transport regression failed before correcti
 owner changed. Corrected packaged human/companion and 390px verification remain next.
 The app, its tunnel and owned children were stopped; its isolated data is retained
 only for the continuing verification run.
+
+The corrected package at `6a2c594` admitted another human, displayed the existing
+messages and members, accepted their ordinary message, and restored that same view
+after browser reload. The next real action exposed a separate consumer defect:
+ordinary human admission does not carry `room_uid`, so companion creation rejected
+the stored session before sending its request. `AppView` now supplies the room UID
+from the accepted authenticated canonical snapshot, with the current session/room,
+joined-human and message capability checks. It does not infer a UID or change the
+admission credential, wire payload, storage, or server authorization owner.
+
+The rebuilt package plus this correction successfully generated a companion packet
+for a newly admitted human and copied its participant instructions. Chrome at
+390×420 exercised the mobile channel-info entry, scrolling to the final packet copy
+button and copying again; the controls retained visible margins. The ten affected
+tests, production build/CSS and unchanged mandatory gates pass. These are local
+packet/UI checks, not an actual external provider run. The browser viewport was
+reset and its verification tab and the isolated package were normally closed.
