@@ -1357,3 +1357,19 @@ Acceptance uses an actual managed worker killed while idle, an unsolicited room
 state event, unchanged runtime identity, no provider re-entry, and explicit confirmed
 stop. Existing active-turn and normal-stop cases remain applicable. Rebuilt packaged
 controls must show recovery required without a new message or lifecycle command.
+
+### Windows custody completion
+
+The external attendee owns its native provider directly. Its Unix constructor binds
+the guardian executable; Windows uses the existing native Job Object owner. Calling
+the Unix-only constructor unconditionally is a compilation defect, not an admission
+or runtime authority difference. The CLI now selects those existing platform owners.
+
+The managed worker remains a separate required boundary on Windows. Its parent must
+retain the real runtime lease and prove the entire owned Job Object empty before
+releasing custody. Native launch inside that worker must not manufacture a second
+lease merely to satisfy a factory signature. Shared protocol, requests and room
+authorization retain their existing owners. Private IPC must prevent native children
+from inheriting bridge credentials. Positive cleanup must survive cancellation; a
+cached leader exit alone cannot prove descendant absence. Windows compile and local
+process tests require an actual Windows runner; macOS passing tests are insufficient.

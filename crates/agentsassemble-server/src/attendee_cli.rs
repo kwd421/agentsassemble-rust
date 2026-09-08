@@ -115,11 +115,12 @@ async fn run_owned(
                 &payload,
             )
             .await?;
-        runtime = Some(AttendeeRuntime::new(
-            &joined,
-            selection.into(),
-            ProviderAdapter::with_guardian_executable(&std::env::current_exe()?),
-        )?);
+        #[cfg(unix)]
+        let adapter = ProviderAdapter::with_guardian_executable(&std::env::current_exe()?);
+        // Windows native drivers already own their process trees through Job Objects.
+        #[cfg(not(unix))]
+        let adapter = ProviderAdapter::new();
+        runtime = Some(AttendeeRuntime::new(&joined, selection.into(), adapter)?);
         let owned = runtime.as_mut().context("attendee_runtime_missing")?;
         eprintln!("Room admission confirmed; starting the selected provider.");
         Ok::<_, anyhow::Error>(run_attendee_session(client, &joined, owned, cancellation).await?)
