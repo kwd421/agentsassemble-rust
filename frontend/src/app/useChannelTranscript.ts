@@ -64,7 +64,7 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
   const receive = useCallback((incoming: RoomEvent[]) => {
     const owner = ownerRef.current;
     if (!owner || !current(owner)) return;
-    const events = incoming.filter((event) => event.type === CHANNEL_MESSAGE_EVENT_TYPE && event.room_id === roomId && event.channel_id === channelId);
+    const events = incoming.filter((event) => event.type === CHANNEL_MESSAGE_EVENT_TYPE && event.message_deleted !== true && event.room_id === roomId && event.channel_id === channelId);
     if (!events.length) return;
     if (!owner.window) {
       const merged = mergeEvents(owner.buffer, events);

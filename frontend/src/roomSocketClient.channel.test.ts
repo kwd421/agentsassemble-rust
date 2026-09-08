@@ -59,6 +59,9 @@ describe("custom-channel wire projection", () => {
     expect(publicRoomEventIsValid({ ...event, actor_id: "other" }, "general")).toBe(false);
     expect(publicRoomEventIsValid({ ...event, attachments: [] }, "general")).toBe(false);
     expect(commandAckResultIsValid("channel.message.send", { channel_id: "c111111111111" }, { channel_id: channelId, event, event_seq: 4 }, "general", "operator-local")).toBe(false);
+    const retired = { ...event, content: "", message_deleted: true };
+    expect(publicRoomEventIsValid(retired, "general")).toBe(true);
+    expect(commandAckResultIsValid("channel.message.send", { channel_id: channelId }, { channel_id: channelId, event: retired, event_seq: 4 }, "general", "operator-local")).toBe(false);
     const payload = { channel_id: channelId, before_seq: 8, limit: 80 };
     const page = { room_id: "general", channel_id: channelId, events: [channelMessage(2), event], oldest_seq: 2, last_seq: 9, has_more_before: true };
     const valid = (value: unknown) => commandAckResultIsValid("channel.history", payload, value, "general", "operator-local");
@@ -68,6 +71,7 @@ describe("custom-channel wire projection", () => {
       { ...page, oldest_seq: 1 }, { ...page, events: [channelMessage(8)] },
       { ...page, events: [event, event] }, { ...page, last_seq: 3 },
       { ...page, events: [{ ...event, type: "message_final" }] },
+      { ...page, events: [retired], oldest_seq: 4 },
     ]) expect(valid(malformed)).toBe(false);
     expect(valid({ ...page, events: [], oldest_seq: 0, has_more_before: false })).toBe(true);
   });

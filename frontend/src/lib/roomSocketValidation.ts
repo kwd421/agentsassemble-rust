@@ -302,7 +302,7 @@ function channelHistoryResultIsValid(
       !isSequence(result.oldest_seq) || !isSequence(result.last_seq) || typeof result.has_more_before !== "boolean") return false;
     const events = result.events;
     if (!events.every((event) => publicRoomEventIsValid(event, roomId) && event.type === CHANNEL_MESSAGE_EVENT_TYPE &&
-      event.channel_id === channelId && event.seq <= Number(result.last_seq) && (before === 0 || event.seq < before))) return false;
+      event.channel_id === channelId && event.message_deleted !== true && event.seq <= Number(result.last_seq) && (before === 0 || event.seq < before))) return false;
     return result.oldest_seq === (events[0]?.seq ?? 0) && (!result.has_more_before || events.length > 0) &&
       new Set(events.map((event) => event.id)).size === events.length &&
       events.every((event, index) => index === 0 || event.seq > events[index - 1].seq);
@@ -337,7 +337,7 @@ export function commandAckResultIsValid(
     try {
       assertExactKeys(result, ["channel_id", "event", "event_seq"], "channel message ACK");
       return Boolean(hasDurableEvent && event?.type === CHANNEL_MESSAGE_EVENT_TYPE &&
-        event.channel_id === payload.channel_id && result.channel_id === payload.channel_id && event.participant_id === expectedParticipantId);
+        event.message_deleted !== true && event.channel_id === payload.channel_id && result.channel_id === payload.channel_id && event.participant_id === expectedParticipantId);
     } catch { return false; }
   }
   if (action === "message.send" || action.startsWith("room.random.")) {

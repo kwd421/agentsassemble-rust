@@ -294,3 +294,8 @@ incarnation case); the production frontend build/CSS and protocol Clippy pass.
 The added window remains bounded at 200 events; the 300-message burst test confirms
 retention. Unchanged structure, 19 policy, formatting and artifact gates pass.
 Channel mounting, search/pins and packaged acceptance remain subsequent work.
+
+Retired channel tombstones remain valid room-history sequence records after the
+server erases their text, but are rejected as current channel history or send ACKs
+and never enter the selected-channel feed. Six affected client cases, the
+production build/CSS and unchanged mandatory gates pass for this correction.
