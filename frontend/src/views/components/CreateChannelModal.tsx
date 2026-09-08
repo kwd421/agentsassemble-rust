@@ -7,6 +7,7 @@ export default function CreateChannelModal({ onClose, onCreate }: {
 }) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
   const [opener] = useState(() => document.activeElement);
   const [name, setName] = useState("");
   const [busy, setBusy] = useState(false);
@@ -18,10 +19,14 @@ export default function CreateChannelModal({ onClose, onCreate }: {
     active.current = true;
     const dialog = dialogRef.current;
     dialog?.showModal();
+    inputRef.current?.focus();
     return () => {
       active.current = false;
       dialog?.close();
-      if (opener instanceof HTMLElement && opener.isConnected) opener.focus();
+      if (opener instanceof HTMLElement && opener.isConnected) {
+        const bounds = opener.getBoundingClientRect();
+        if (bounds.right > 0 && bounds.left < window.innerWidth && bounds.bottom > 0 && bounds.top < window.innerHeight) opener.focus();
+      }
     };
   }, [opener]);
   async function submit() {
@@ -54,7 +59,7 @@ export default function CreateChannelModal({ onClose, onCreate }: {
       </header>
       <label className="dc-create-channel-name">
         채널 이름
-        <input className="ops-input" autoFocus value={name} maxLength={120}
+        <input ref={inputRef} className="ops-input" autoFocus value={name} maxLength={120}
           disabled={busy} placeholder="구현방" style={{ minHeight: 44 }}
           onChange={(event) => setName(event.target.value)}
           onKeyDown={(event) => {
@@ -66,8 +71,8 @@ export default function CreateChannelModal({ onClose, onCreate }: {
       {[...name.trim()].length > 60 && <p role="alert">채널 이름은 60자까지 입력할 수 있어요.</p>}
       {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
       <div className="dc-create-channel-actions">
-        <button type="button" className="ops-button" disabled={busy} onClick={onClose} style={{ minHeight: 44 }}>취소</button>
-        <button type="button" className="ops-cta" disabled={busy || !validName} onClick={() => void submit()} style={{ minHeight: 44 }}>
+        <button type="button" className="ops-button" disabled={busy} onClick={onClose} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>취소</button>
+        <button type="button" className="ops-cta" disabled={busy || !validName} onClick={() => void submit()} style={{ minHeight: 44, minWidth: 72, padding: "0 16px" }}>
           {busy ? "만드는 중..." : "만들기"}
         </button>
       </div>

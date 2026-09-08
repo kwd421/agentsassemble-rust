@@ -40,6 +40,7 @@ function renderSettings(
 ) {
   render(
     <RoomSettingsModal
+      channelOptions={[{ id: "lobby", label: "general" }, { id: "c000000000001", label: "토론" }]}
       room={room}
       appearance={DEFAULT_ROOM_APPEARANCE}
       appearanceAssetError=""
@@ -211,6 +212,7 @@ describe("RoomSettingsModal conversation mode", () => {
     const onChannelSettingChange = vi.fn().mockResolvedValue(undefined);
     render(
       <RoomSettingsModal
+        channelOptions={[{ id: "lobby", label: "general" }, { id: "c000000000001", label: "토론" }]}
         room={room}
         appearance={DEFAULT_ROOM_APPEARANCE}
         appearanceAssetError=""
@@ -240,10 +242,10 @@ describe("RoomSettingsModal conversation mode", () => {
     const section = screen.getByRole("heading", { name: "채널 설정" }).closest("section");
     if (!section) throw new Error("Channel settings section was not rendered");
     const channelControls = within(section).getAllByRole("combobox");
-    expect(channelControls).toHaveLength(1);
+    expect(channelControls).toHaveLength(2);
 
-    await userEvent.selectOptions(channelControls[0], "mentions");
-    expect(onChannelSettingChange).toHaveBeenCalledWith("lobby", {
+    await userEvent.selectOptions(channelControls[1], "mentions");
+    expect(onChannelSettingChange).toHaveBeenCalledWith("c000000000001", {
       notifications: "mentions",
     });
   });
@@ -251,6 +253,7 @@ describe("RoomSettingsModal conversation mode", () => {
   it("keeps notification controls disabled when preference authority is unavailable", () => {
     render(
       <RoomSettingsModal
+        channelOptions={[{ id: "lobby", label: "general" }, { id: "c000000000001", label: "토론" }]}
         room={room}
         appearance={DEFAULT_ROOM_APPEARANCE}
         appearanceAssetError=""
@@ -277,7 +280,9 @@ describe("RoomSettingsModal conversation mode", () => {
       />
     );
 
-    expect((screen.getByRole("combobox") as HTMLSelectElement).disabled).toBe(true);
+    for (const control of screen.getAllByRole("combobox")) {
+      expect((control as HTMLSelectElement).disabled).toBe(true);
+    }
     for (const radio of screen.getAllByRole("radio", { name: /모든 메시지|@멘션만|알림 끔/ })) {
       expect((radio as HTMLInputElement).disabled).toBe(true);
     }

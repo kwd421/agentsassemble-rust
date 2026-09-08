@@ -33,10 +33,11 @@
   the cumulative 44-commit phase, exact HEAD and whole local contract at C0/H0/M0/L0.
   [Review disposition](docs/VERIFICATION.md#phase-5-whole-phase-review-corrections-2026-09-08)
   and [account/social/human contract](docs/specs/identity-accounts-friends-slice.md).
-- Active: Phase 6 completes custom text-channel history/events/search/pins and
-  human-only ephemeral side chat through their own server owners.
-  [Contract and acceptance](docs/specs/custom-channels-side-chat-slice.md).
-  Apply the frontend UX guide and verify packaged desktop/mobile flows before review.
+- Active: Phase 6 custom text channels and human-only side chat pass local
+  acceptance, including corrected packaged desktop/390px layouts and real human
+  boundaries. Whole-phase Daybreak review is pending.
+  [Contract](docs/specs/custom-channels-side-chat-slice.md) and
+  [packaged evidence](docs/VERIFICATION.md#phase-6-packaged-channel-and-side-chat-acceptance-2026-09-08).
   New Pro review and authorized real-provider proof remain at full closeout.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).

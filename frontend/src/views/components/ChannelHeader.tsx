@@ -256,6 +256,7 @@ export default function ChannelHeader({
           type="button"
           className="dc-head-icon"
           aria-label="고정 메시지"
+          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", minWidth: 44, minHeight: 44 }}
           aria-pressed={activePanel === "pins"}
           onClick={() => {
             if (activePanel !== "pins") headerActions?.onOpenPins?.();
@@ -338,8 +339,8 @@ export default function ChannelHeader({
                 ) : headerActions?.pinnedItems?.length ? (
                   <div className="dc-head-search-results" role="list" aria-label="고정 메시지 목록">
                     {headerActions.pinnedItems.map((pin) => (
-                      <div className="dc-pinned-message-card" role="listitem" key={pin.event_id}>
-                        <button type="button" onClick={() => headerActions.onSelectPin?.(pin)}>
+                      <div className="dc-pinned-message-card" role="listitem" key={pin.event_id} style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                        <button type="button" style={{ display: "flex", flexDirection: "column", alignItems: "stretch", gap: 6, minWidth: 0, minHeight: 44, textAlign: "left" }} onClick={() => headerActions.onSelectPin?.(pin)}>
                           <span className="dc-head-search-result-author preserve-words">
                             {pin.author || "Room"}
                           </span>
@@ -354,6 +355,7 @@ export default function ChannelHeader({
                           <button
                             type="button"
                             className="dc-pinned-message-remove"
+                            style={{ alignSelf: "flex-end", minHeight: 44, padding: "0 12px" }}
                             onClick={() => headerActions.onUnpin?.(pin)}
                             aria-label={`${pin.author || "Room"} 메시지 고정 해제`}
                           >

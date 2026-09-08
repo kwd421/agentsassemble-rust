@@ -33,6 +33,7 @@ export default function RoomRail({
   menuRoom,
   roomMenu,
   mobileViewport = false,
+  inert = false,
   onSelectRoom,
   onAddRoom, onManageRooms, onOpenFriends, friendsOpen = false,
   onOpenRoomMenu,
@@ -50,6 +51,7 @@ export default function RoomRail({
   menuRoom?: RoomDockItem;
   roomMenu: RoomMenuState;
   mobileViewport?: boolean;
+  inert?: boolean;
   onSelectRoom: (roomId: string) => void;
   onAddRoom: () => void;
   onManageRooms?: () => void;
@@ -66,6 +68,7 @@ export default function RoomRail({
     <nav
       className="dc-rail flex shrink-0 flex-col items-center gap-2 py-3"
       aria-label="룸 레일"
+      inert={inert}
       style={mobileViewport ? { width: MOBILE_ROOM_RAIL_WIDTH } : undefined}
     >
       {onOpenFriends && <button type="button" className="dc-server-btn" style={buttonStyle} aria-label="친구" title="친구" aria-pressed={friendsOpen} data-active={friendsOpen} onClick={onOpenFriends}><Users size={20} /></button>}

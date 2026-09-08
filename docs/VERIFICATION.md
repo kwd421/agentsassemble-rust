@@ -8149,3 +8149,47 @@ cumulative `53a82f1..1e24adf`, exact HEAD `1e24adf522882393f71a93e3bdb0b0017732f
 and WHOLE LOCAL PHASE 5 at C0/H0/M0/L0. It reused the prior 42-commit and original
 parity evidence and explicitly closed both historical findings. Phase 5 is closed;
 real Google/configured AI-provider and final Pro limits remain as stated above.
+
+## Phase 6 packaged channel and side-chat acceptance (2026-09-08)
+
+The isolated `AgentsAssemble Phase6 Verify` release app uses its own identity/data
+store and the actual Rust sidecar. No AI provider was launched. Native desktop and
+390px public human/read-only clients exercised channel creation, independent history,
+live cross-client messages, older/latest paging, all-channel search and concrete
+context navigation, pins, private side-chat reads/writes and read-only/leave changes.
+The reader's leave did not close the other human's side chat; stopping the owned
+public tunnel made its remote client unavailable. Those two verification tabs and
+the owned tunnel were closed after that run.
+
+Packaged 390×420 inspection then exposed a collapsed main transcript and side-chat
+input. The corrected native modal keeps its own scrolling transcript and fixed
+composer. Actual multi-line send, receipt clear/focus, Escape, close/reopen draft,
+close-button and desktop resizing were exercised. The compact mobile sidebar now
+scrolls to lower channels; inactive mobile surfaces are inert. Selecting the custom
+channel visibly closes navigation and shows its full message body and composer.
+Mobile pin cards show author/date/body at readable width; selecting a persisted pin
+then dismissing the menu focused its actual context and exposed the latest action.
+Restart retained 88 custom-channel events and the pin while side chat began empty.
+The actual settings screen displayed all three current channels; changing only the
+custom channel to mentions left both other selectors at their defaults.
+
+The fixture database/WAL/SHM total was 725,528 bytes; durable room events contained
+zero `SideOnly` markers after the private conversation. The release app occupied
+57,012 KiB. An idle sample after manipulation showed desktop 105.94 MiB RSS,
+supervisor 7.92 MiB and Rust server 28.33 MiB, each at 0.0% CPU; these three owned
+processes launched no provider. Shared WebKit process attribution is unknown and
+is excluded from that sum. The multi-line send plus resulting accessibility read
+completed in 0.889 s including automation overhead; this is an observed upper bound,
+not an isolated server latency benchmark. Channel history remains one bounded
+window under the existing room stream; side-chat retention is bounded at its owner,
+and the replacement views add no polling/heartbeat, process or per-channel cache.
+
+The final affected layout/settings/channel run passed 24 tests in six suites
+(1.97 s); pin/header regression passed seven tests (1.08 s), including the existing
+missing-context error. Earlier backend/protocol/transport/index tests and their
+scope are recorded in the phase contract. Production/package builds, the unchanged
+CSS cascade, structure/19 policy, formatting, diff and artifact gates pass. The final mobile room-info entry uses the same scoped dialog owner and passed
+actual 390px entry/focus verification; its four affected suites passed 18 tests
+(1.56 s). These
+are local phase results; whole-phase Daybreak approval, final Pro review and the
+six authorized real-provider runs remain separate requirements.

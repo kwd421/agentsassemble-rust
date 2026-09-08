@@ -1,6 +1,6 @@
 # Custom text channels and ephemeral side chat
 
-Status: Phase 6 definition after Phase 5 approval at `1e24adf`.
+Status: Phase 6 locally verified; whole-phase Daybreak review pending.
 
 ## Definition and observed contract
 
@@ -33,7 +33,8 @@ to Agent Sessions and provider tools. The original UI explicitly promises that i
 disappears on server restart and retains at most 200 messages from the last 24
 hours. Its 2,000-character composer supports ordinary mention/emoji text but does
 not trigger agents. Read-only humans may read and cannot post. Room deletion clears
-its data. The original desktop right dock and mobile room-info entry are retained.
+its data. Side chat remains reachable from the conversation and mobile room info.
+The packaged layout correction below replaces the stacked dock with a dialog.
 
 ## Authority, lifetime and failure boundary
 
@@ -237,8 +238,12 @@ formatting, diff and artifact gates pass. Packaged UI acceptance remains pending
 
 ## Side-chat frontend connection
 
-The human dock is mounted below the active channel and can be expanded without
-covering its conversation. It restores the original human-only notice, plain-text
+The human dock has a compact entry below the active channel. It opens a native
+modal conversation panel with its own scrolling transcript and fixed composer;
+expansion never consumes the main transcript layout. This replaces the original
+stacked implementation after packaged 390px/420px inspection exposed collapsed
+message and input areas. The panel has at least 16px outer and 24px inner margins,
+Escape/outside/close dismissal, background inertness and focus restoration. It restores the original human-only notice, plain-text
 mention/emoji insertion and scoped drafts. Current canonical membership, mute and
 message capability control its composer; failure retains the draft and success
 clears it only after the server receipt. No author name is supplied by the client.
@@ -435,3 +440,34 @@ checks pass. React review confirms one channel window under the existing socket,
 without polling, per-channel cache or another subscription. Mounted code adds
 about 4.15 KiB compressed to the main bundle. Packaged desktop/mobile acceptance
 and complete-phase resource measurement remain open.
+
+## Packaged layout correction
+
+Direct 390×420 interaction exposed a second constraint: the mobile room banner
+and fixed header left almost no channel selection area. Mobile navigation now
+uses a compact room heading and its search/tools; the banner remains on desktop
+and room appearance remains available through room information. The channel list
+scrolls independently. Closed mobile navigation is inert, and its open state makes
+the underlying transcript inert, so keyboard/accessibility focus cannot return to
+an offscreen channel item after selection. This removed the observed stale visible
+sidebar after selecting a channel in the packaged app.
+
+Side chat now opens one native dialog, with a scrolling message list, a 64px input
+area and separate 44px controls that do not shrink. Native 390×420 manipulation
+confirmed multiple-line sends, receipt-based clearing, Escape, opener focus and
+close/reopen draft preservation. The same small window showed the complete custom
+message and composer after selecting a scrolled channel. Mobile header pins are
+now reachable, and their cards use a vertical layout so metadata and the unpin
+button cannot squeeze message text into a narrow column. Channel creation restores
+visible opener focus and shows 44px padded buttons; settings derive notification
+choices from current text channels instead of a lobby-only constant.
+
+The modal adds no request, timer, cache or subscription; its effects own native
+focus and scroll adjustment only. Server authority, message limits and private
+side-chat custody remain unchanged. The packaged review still owns final pixel
+acceptance and the phase review remains pending until all local evidence closes.
+
+Both the conversation footer and mobile room-info button open the same dialog
+state, scoped to room UID and HTTP authority. The packaged 390px room-info route
+closed the info surface and focused this single composer. Its final four affected
+suites passed 18 tests (1.56 s); production/package build and unchanged gates pass.

@@ -8,6 +8,7 @@ import {
   Hash,
   Image as ImageIcon,
   Link2,
+  MessageSquare,
   Pin,
   Search,
   Settings,
@@ -317,7 +318,7 @@ export default function MobileRoomInfoPanel({
   guestLocked = false,
   onClose,
   onInvite,
-  onOpenSettings, onStartAddAgent,
+  onOpenSettings, onStartAddAgent, onOpenSideChat,
   agentSessions = [],
   availableProviders = [],
   capabilities = {},
@@ -337,6 +338,7 @@ export default function MobileRoomInfoPanel({
   displayResourceBase?: string;
   guestLocked?: boolean;
   onClose: () => void;
+  onOpenSideChat?: () => void;
   onInvite?: () => void;
   onOpenSettings?: () => void;
   onStartAddAgent?: () => void;
@@ -381,6 +383,7 @@ export default function MobileRoomInfoPanel({
           <ArrowLeft size={26} />
         </button>
         <span className="min-w-0 flex-1" />
+        {onOpenSideChat && <button type="button" aria-label="사이드챗 열기" onClick={onOpenSideChat} style={{ minWidth: 44, minHeight: 44 }}><MessageSquare size={22} /></button>}
         <button type="button" aria-label="채널 검색">
           <Search size={22} />
         </button>

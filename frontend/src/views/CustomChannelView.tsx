@@ -143,7 +143,7 @@ export default function CustomChannelView({
       else if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }}>{transcript.newMessages ? "새 메시지 · 최신으로" : "최신 메시지"}</button>}
     {transcript.error && <div role="alert" style={{ padding: "0 24px 12px" }}>{transcript.error} <button type="button" className="ops-button" style={buttonStyle} disabled={transcript.sending} onClick={transcript.latest}>다시 불러오기</button></div>}
-    <div style={{ padding: "12px 24px 16px", display: "flex", gap: 12, alignItems: "flex-end" }}>
+    <div style={{ padding: "12px 24px 16px", flexShrink: 0, display: "flex", gap: 12, alignItems: "flex-end" }}>
       <textarea ref={inputRef} className="ops-input" style={{ minHeight: 44, maxHeight: 120, minWidth: 0, flex: 1, resize: "vertical" }} rows={2}
         aria-label="채널 메시지 입력" placeholder={!channel || !transcript.ready ? "채널 연결을 기다리고 있어요" : canPost ? "메시지 보내기" : "이 채널에서는 보기만 할 수 있어요"}
         value={value} disabled={disabled} maxLength={MAX_TEXT_CHAT_CHARACTERS * 2} onChange={(event) => setDraft({ identity, value: event.target.value })}

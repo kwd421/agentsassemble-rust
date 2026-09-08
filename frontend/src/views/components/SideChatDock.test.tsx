@@ -1,9 +1,10 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 import SideChatDock from "./SideChatDock";
 import { useRoomSideChat } from "../../app/useRoomSideChat";
 import type { RoomSocketHandle } from "../../roomSocketTypes";
+import "../../test/nativeDialog";
 vi.mock("../../api/sideChat", () => ({ fetchSideChatSnapshot: vi.fn(async () => ({
   room_id: "general", room_uid: "uid", generation: "00000000-0000-4000-8000-000000000001", retained_after_seq: 0, latest_seq: 0, messages: [],
 })) }));
@@ -13,17 +14,24 @@ it("retains a rejected draft, confirms a successful send, and disables the read-
   const command = vi.fn().mockRejectedValueOnce(new Error("보낼 권한이 없어요."));
   const socket = { ready: () => true, command } as unknown as RoomSocketHandle;
   function Fixture({ canPost }: { canPost: boolean }) {
+    const [open, setOpen] = useState(false);
     const chat = useRoomSideChat("general", { kind: "local" });
     useEffect(() => chat.connect("uid"), [chat.connect]);
-    return <SideChatDock chat={chat} socket={socket} canPost={canPost} mentionables={[]} />;
+    return <SideChatDock open={open} onOpenChange={setOpen} chat={chat} socket={socket} canPost={canPost} mentionables={[]} />;
   }
   const view = render(<Fixture canPost />);
   fireEvent.click(screen.getByRole("button", { name: "사이드챗 열기" }));
-  const input = await screen.findByRole("textbox", { name: "비공식 사이드챗 입력" });
+  let input = await screen.findByRole("textbox", { name: "비공식 사이드챗 입력" });
   await waitFor(() => expect((input as HTMLTextAreaElement).disabled).toBe(false));
   fireEvent.change(input, { target: { value: "keep my text" } });
   await act(async () => fireEvent.keyDown(input, { key: "Enter" }));
   expect((await screen.findByRole("alert")).textContent).toContain("보낼 권한이 없어요.");
+  expect((input as HTMLTextAreaElement).value).toBe("keep my text");
+  fireEvent.click(screen.getByRole("button", { name: "사이드챗 닫기" }));
+  expect(screen.queryByRole("dialog", { name: "사이드챗" })).toBeNull();
+  expect(document.activeElement).toBe(screen.getByRole("button", { name: "사이드챗 열기" }));
+  fireEvent.click(screen.getByRole("button", { name: "사이드챗 열기" }));
+  input = screen.getByRole("textbox", { name: "비공식 사이드챗 입력" });
   expect((input as HTMLTextAreaElement).value).toBe("keep my text");
   command.mockResolvedValueOnce({ result: { update: {
     room_id: "general", generation: "00000000-0000-4000-8000-000000000001", retained_after_seq: 0,

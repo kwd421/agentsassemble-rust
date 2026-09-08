@@ -14,10 +14,6 @@ import {
 import type { RoomDockItem } from "../../lib/roomDockModel";
 import RoomSettingTextInput from "./RoomSettingTextInput";
 
-const ROOM_CHANNEL_OPTIONS = [
-  { id: "lobby", label: "general" },
-];
-
 const CHANNEL_NOTIFICATION_LABELS: Array<{
   value: ChannelNotificationSetting;
   label: string;
@@ -41,6 +37,7 @@ export default function RoomSettingsModal({
   initialSectionId,
   appearance,
   appearanceAssetError,
+  channelOptions,
   channelSettings,
   settingsStatus,
   settingsError,
@@ -67,6 +64,7 @@ export default function RoomSettingsModal({
   initialSectionId?: RoomSettingsSectionId;
   appearance: RoomAppearance;
   appearanceAssetError: string;
+  channelOptions: Array<{ id: string; label: string }>;
   channelSettings: Record<string, ChannelSettings>;
   settingsStatus: "loading" | "ready" | "saving" | "stale" | "error";
   settingsError: string;
@@ -399,7 +397,7 @@ export default function RoomSettingsModal({
               </div>
             )}
             <div className="dc-channel-settings-list">
-              {ROOM_CHANNEL_OPTIONS.map((channel) => {
+              {channelOptions.map((channel) => {
                 const setting = channelSettings[channel.id] || { notifications: "default" };
                 return (
                   <label key={channel.id} className="dc-channel-settings-row">

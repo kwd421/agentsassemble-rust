@@ -76,6 +76,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
             initialSectionId={settingsModalInitialSectionId}
             appearance={roomAppearanceAssets.appearanceFor(settingsModalRoom)}
             appearanceAssetError={roomAppearanceAssets.errorFor(settingsModalRoom)}
+            channelOptions={controller.visibleChannels}
             channelSettings={roomSettings.channelSettingsFor(settingsModalRoom)}
             settingsStatus={roomSettings.settingsStateFor(settingsModalRoom).status}
             settingsError={roomSettings.settingsStateFor(settingsModalRoom).error?.message || ""}

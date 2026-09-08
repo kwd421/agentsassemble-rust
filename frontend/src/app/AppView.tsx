@@ -36,6 +36,7 @@ const FriendsView = lazy(() => import("../views/FriendsView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [sideChatScope, setSideChatScope] = useState("");
   const [createChannelScope, setCreateChannelScope] = useState("");
   const [messageAttachmentReadOwner] = useState(
     () => createMessageAttachmentReadOwner()
@@ -82,7 +83,7 @@ export default function AppView({ controller }: { controller: AppController }) {
   const canPostHumanMessage = lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) &&
     canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
       participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
-  useLayoutEffect(() => { setCreateChannelScope(""); }, [channelScope]);
+  useLayoutEffect(() => { setCreateChannelScope(""); setSideChatScope(""); }, [channelScope]);
   // Recovery owns the entrance until its current session surface is accepted.
   // Do not mount native directory/profile controls beneath that entrance.
   if (controller.guestRecoveryRequest) return <GuestIdentityRecoveryPanel
@@ -93,6 +94,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       });
     }} />;
   const hasRoom = Boolean(activeRoom.meetingId);
+  const canOpenSideChat = hasRoom && !guestExpired && !activeRoomDisconnected && !adminOpen && !friendsOpen;
   return (
     <RoomSocketProvider socket={roomSocket}>
     <div
@@ -117,6 +119,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         menuRoom={menuRoom}
         roomMenu={roomMenu}
         mobileViewport={mobileViewport}
+        inert={mobileViewport && !mobileSidebarOpen}
         onSelectRoom={(roomId) => { setFriendsOpen(false); selectRoom(roomId); }}
         friendsOpen={friendsOpen && roomLifecycle.enabled}
         onOpenFriends={roomLifecycle.enabled ? () => { setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
@@ -135,12 +138,13 @@ export default function AppView({ controller }: { controller: AppController }) {
 
       <AppOverlays controller={controller} />
       {/* Channel sidebar */}
-      <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록"
+      <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록" inert={mobileViewport && !mobileSidebarOpen}
         style={mobileViewport ? { left: MOBILE_ROOM_RAIL_WIDTH, width: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, minWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, maxWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)` } : undefined}>
-          <header className="dc-sidebar-head shrink-0" data-tone={activeRoom.tone}>
+          <header className="dc-sidebar-head shrink-0" data-tone={activeRoom.tone} style={mobileViewport ? { minHeight: 0 } : undefined}>
             <button
               type="button"
               className="dc-server-header-button"
+              style={mobileViewport ? { height: 44 } : undefined}
               disabled={!hasRoom}
               onClick={(event) => openRoomMenu(event, activeRoom)}
               onContextMenu={(event) => openRoomMenu(event, activeRoom)}
@@ -149,7 +153,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               <span className="truncate preserve-words">{activeRoom.label}</span>
               <ChevronDown size={16} />
             </button>
-            <div className="dc-sidebar-banner">
+            <div className="dc-sidebar-banner" style={mobileViewport ? { display: "none" } : undefined}>
               <span
                 className="dc-sidebar-server-icon"
                 data-has-image={Boolean(activeAppearance.iconImage)}
@@ -241,7 +245,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                 {canManageActiveRoom && <button type="button" aria-label="텍스트 채널 만들기"
                   disabled={!canCreateChannel} style={{ minWidth: 44, minHeight: 44 }}
                   className="flex items-center justify-center text-text-muted"
-                  onClick={() => setCreateChannelScope(channelScope)}><Plus size={18} /></button>}
+                  onClick={(event) => { event.currentTarget.focus(); setCreateChannelScope(channelScope); }}><Plus size={18} /></button>}
                 </div>
                 {visibleSectionChannels.map((channelConfig) => {
                   const { id, label, icon: Icon } = channelConfig;
@@ -328,7 +332,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       />
 
       {/* Central channel column */}
-      <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용">
+      <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" inert={mobileViewport && (mobileSidebarOpen || mobileRoomInfoOpen)}>
         <Suspense fallback={<DeferredViewFallback />}>
           {friendsOpen && roomLifecycle.enabled ? (
             <FriendsView onClose={() => setFriendsOpen(false)} />
@@ -419,7 +423,8 @@ export default function AppView({ controller }: { controller: AppController }) {
             <DeferredViewFallback />
           )}
         </Suspense>
-        {hasRoom && !guestExpired && !activeRoomDisconnected && !adminOpen && !friendsOpen && <SideChatDock
+        {canOpenSideChat && <SideChatDock
+          open={sideChatScope === channelScope} onOpenChange={(open) => setSideChatScope(open ? channelScope : "")}
           chat={controller.sideChat} socket={roomSocket}
           canPost={canPostHumanMessage}
           mentionables={scopedMentionables} />}
@@ -437,6 +442,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           guestLocked={guestLocked}
           onClose={closeMobileRoomInfo}
           onStartAddAgent={openAgentCreate}
+          onOpenSideChat={canOpenSideChat ? () => { closeMobileRoomInfo(); setSideChatScope(channelScope); } : undefined}
           onInvite={guestLocked ? undefined : () => inviteRoom(activeRoom.id)}
           onOpenSettings={!guestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined}
           agentSessions={activeRoomAgentSessions}
