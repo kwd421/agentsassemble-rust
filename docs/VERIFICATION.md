@@ -8368,3 +8368,11 @@ shared WebKit processes outside the owned ancestry were not included.
 Windows cross-check reached native dependencies with the installed Rustup target
 but could not proceed without `x86_64-w64-mingw32-gcc`. Windows managed-process
 custody and whole-phase acceptance remain open; macOS evidence does not close them.
+
+The repository's enabled GitHub Actions service provides a Windows runner. A manual
+`Windows contract verification` workflow compiles the locked server and test targets
+on Windows with stable Rust. It has read-only repository permission, does not retain
+checkout credentials, invokes no provider/account, and changes no required gate or
+branch rule. Its YAML and unchanged local policy gates pass. This provides the
+missing platform compilation path; a dispatched result is recorded separately and
+does not by itself establish managed-process cleanup or packaged Windows behavior.

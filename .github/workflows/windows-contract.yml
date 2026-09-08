@@ -1,0 +1,20 @@
+name: Windows contract verification
+
+"on":
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  server:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - name: Install stable Rust
+        run: rustup update stable --no-self-update
+      - name: Compile server and its test targets
+        run: cargo +stable check --locked -p agentsassemble-server --all-targets
