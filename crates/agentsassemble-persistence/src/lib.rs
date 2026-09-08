@@ -1,6 +1,7 @@
 mod attendee_interrupt;
 #[cfg(test)]
 mod attendee_interrupt_tests;
+mod attendee_leave;
 pub use attendee_interrupt::{
     AttendeeInterruptDelivery, AttendeeInterruptReport, AttendeeInterruptedRuntime,
 };

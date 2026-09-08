@@ -45,6 +45,7 @@ registered_routes! {
         same_origin_public "/api/room-attendee/ws" => get(upgrade_socket),
         same_origin_public "/api/room-attendee/cleanup" => get(cleanup::read).post(cleanup::report),
         same_origin_public "/api/room-attendee/interrupt" => post(interrupt::report),
+        same_origin_public "/api/room-attendee/leave" => post(cleanup::leave),
     }
 }
 

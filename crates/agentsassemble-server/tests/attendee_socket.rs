@@ -191,8 +191,15 @@ async fn verify_started_and_result(peer: &mut Peer, turn: &Value) {
 }
 
 #[tokio::test]
-async fn kicked_external_runtime_stays_pending_until_its_cleanup_report_is_published() -> TestResult
-{
+async fn departed_external_runtime_stays_pending_until_its_cleanup_report_is_published()
+-> TestResult {
+    for self_leave in [false, true] {
+        departed_cleanup(self_leave).await?;
+    }
+    Ok(())
+}
+
+async fn departed_cleanup(self_leave: bool) -> TestResult {
     let (store, invite) = attendee::fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let client = Client::new();
@@ -216,17 +223,15 @@ async fn kicked_external_runtime_stays_pending_until_its_cleanup_report_is_publi
     let mut manager = local_socket::connect(&server.base_url, server.state(), "general").await;
     manager.subscribe(0).await;
     manager.receive_json().await;
-    manager.send_json(&json!({"op":"command", "request_id":"external-runtime-kick", "action":"participant.kick", "payload":{"participant_id":joined["participant_id"]}})).await;
-    loop {
-        let frame = manager
-            .receive_json_with_timeout(Duration::from_secs(2))
-            .await;
-        if frame["op"] == "ack" {
-            assert_eq!(frame["result"]["cleanup_pending"], true);
-            break;
-        }
-        assert_ne!(frame["op"], "error");
-    }
+    request_departure(
+        self_leave,
+        &client,
+        &server.base_url,
+        bearer,
+        &joined,
+        &mut manager,
+    )
+    .await?;
     assert!(tokio::time::timeout(Duration::from_secs(2), external.wait_closed()).await?);
     let pending = store.snapshot("general", 0, 200).await?;
     assert!(pending.agent_sessions[0].provider_session_active);
@@ -283,6 +288,39 @@ async fn kicked_external_runtime_stays_pending_until_its_cleanup_report_is_publi
     assert!(completed["stop"].is_null());
     manager.close().await;
     server.stop().await;
+    Ok(())
+}
+
+async fn request_departure(
+    self_leave: bool,
+    client: &Client,
+    base: &str,
+    bearer: &str,
+    joined: &Value,
+    manager: &mut Peer,
+) -> TestResult {
+    if self_leave {
+        let leave = format!("{base}/api/room-attendee/leave");
+        report_cleanup_retry(
+            client,
+            &leave,
+            bearer,
+            &json!({"request_id":Uuid::new_v4()}),
+        )
+        .await?;
+    } else {
+        manager.send_json(&json!({"op":"command", "request_id":"external-runtime-kick", "action":"participant.kick", "payload":{"participant_id":joined["participant_id"]}})).await;
+        loop {
+            let frame = manager
+                .receive_json_with_timeout(Duration::from_secs(2))
+                .await;
+            if frame["op"] == "ack" {
+                assert_eq!(frame["result"]["cleanup_pending"], true);
+                break;
+            }
+            assert_ne!(frame["op"], "error");
+        }
+    }
     Ok(())
 }
 

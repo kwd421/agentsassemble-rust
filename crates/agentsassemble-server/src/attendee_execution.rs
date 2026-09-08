@@ -10,6 +10,10 @@ use super::{RoomCommandOwners, RoomMutation, RoomRuntime};
 use crate::event_publication::PublicationAttempt;
 
 pub enum AttendeeOperation {
+    Leave {
+        authority: AttendeeCleanupAuthorization,
+        request_id: Uuid,
+    },
     Interrupt {
         authority: AttendeeCleanupAuthorization,
         connection_id: Uuid,
@@ -39,9 +43,9 @@ pub enum AttendeeOperation {
 impl AttendeeOperation {
     fn room_id(&self) -> &str {
         match self {
-            Self::Cleanup { authority, .. } | Self::Interrupt { authority, .. } => {
-                authority.room_id()
-            }
+            Self::Cleanup { authority, .. }
+            | Self::Interrupt { authority, .. }
+            | Self::Leave { authority, .. } => authority.room_id(),
             Self::Connect { session, .. } => &session.principal().room_id,
             Self::Ready { connection, .. }
             | Self::Report { connection, .. }
@@ -134,6 +138,12 @@ async fn apply(
         next_assignments: Vec::new(),
     };
     match operation {
+        AttendeeOperation::Leave {
+            authority,
+            request_id,
+        } => Ok(reported(
+            store.leave_attendee(&authority, request_id).await?,
+        )),
         AttendeeOperation::Interrupt {
             authority,
             connection_id,

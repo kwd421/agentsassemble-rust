@@ -9,6 +9,101 @@ use uuid::Uuid;
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
+async fn expired_attendee_can_leave_once_without_fabricating_runtime_absence() -> TestResult {
+    let (store, connection, turn, now) = assigned_report().await?;
+    let fingerprint = connection.session().session_fingerprint();
+    sqlx::query(
+        "UPDATE room_attendee_invites SET session_expires_at=? WHERE session_fingerprint=?",
+    )
+    .bind((now - chrono::Duration::seconds(1)).timestamp_micros())
+    .bind(fingerprint.as_slice())
+    .execute(&store.pool)
+    .await?;
+    assert!(
+        store
+            .authorize_attendee_session(fingerprint, now)
+            .await
+            .is_err()
+    );
+    let authority = store.authorize_attendee_cleanup(fingerprint).await?;
+    let request = Uuid::new_v4();
+    let (one, two) = tokio::join!(
+        store.leave_attendee(&authority, request),
+        store.leave_attendee(&authority, request),
+    );
+    let one = one?;
+    let two = two?;
+    assert_ne!(one.outcome.deduplicated, two.outcome.deduplicated);
+    assert_eq!(one.outcome.event.id, two.outcome.event.id);
+    assert_eq!(one.outcome.event.event_type, "participant_left");
+    assert_eq!(one.outcome.event.participant_type.as_deref(), Some("agent"));
+    assert!(
+        store
+            .leave_attendee(&authority, Uuid::new_v4())
+            .await
+            .is_err()
+    );
+    let stopped = store
+        .load_attendee_cleanup(&authority)
+        .await?
+        .ok_or("cleanup missing")?;
+    assert_eq!(stopped.runtime_handle_id, turn.runtime_handle_id);
+    assert!(
+        store
+            .finish_room_runtime_cleanup(&authority.key)
+            .await?
+            .is_none()
+    );
+    assert!(
+        store
+            .record_attendee_turn_report(&connection, &turn, now)
+            .await
+            .is_err()
+    );
+    store
+        .record_attendee_cleanup(
+            &authority,
+            &AttendeeCleanupReport {
+                request_id: Uuid::new_v4(),
+                stopped,
+            },
+        )
+        .await?;
+    let replay = store.leave_attendee(&authority, request).await?;
+    assert!(replay.outcome.deduplicated);
+    assert!(store.load_attendee_cleanup(&authority).await?.is_none());
+    let snapshot = store.snapshot("general", 0, 200).await?;
+    assert_eq!(
+        snapshot
+            .events
+            .iter()
+            .filter(|event| event.event_type == "participant_left")
+            .count(),
+        1
+    );
+    assert_eq!(
+        snapshot
+            .events
+            .iter()
+            .filter(|event| event.event_type == "turn_finished")
+            .count(),
+        1
+    );
+    assert!(
+        snapshot
+            .participants
+            .iter()
+            .any(
+                |participant| participant.participant_id == authority.key.session_id
+                    && participant.status == ParticipantStatus::Left
+            )
+    );
+    let encoded = serde_json::to_string(&one.outcome.result)?;
+    assert!(!encoded.contains(&turn.runtime_lease_token));
+    Ok(())
+}
+
+#[tokio::test]
 async fn revoked_attendee_cleanup_requires_its_exact_external_stop_and_retries_atomically()
 -> TestResult {
     let (store, connection, turn, now) = assigned_report().await?;

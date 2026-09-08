@@ -66,6 +66,16 @@ cannot claim another participant, room, Agent Session, turn, execution or launch
 
 ## Failure, concurrency and lifecycle
 
+The attendee's explicit leave uses its sealed cleanup custody, including after
+ordinary session expiry. It revokes only that membership and requests the existing
+exact runtime cleanup in the same transaction as the public leave event and retry
+receipt. It does not grant room reads or complete shutdown without the external
+owner's report. A transient socket disconnect continues to preserve runtime custody.
+The expired-session concurrent leave/cleanup test and existing local TCP cleanup
+flow extended to both kick and self-leave pass. The latter verifies private HTTP
+retry acknowledgments, socket closure and canonical cleanup publication. Affected
+all-target/all-feature Clippy and unchanged architecture/format/artifact gates pass.
+
 One-use admission has one winner. A lost response may be retried only by the same
 client with the same operation identity; a retry must recover the committed result
 without admitting again or resetting expiry. Wrong-purpose/provider/room requests

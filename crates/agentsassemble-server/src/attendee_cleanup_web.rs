@@ -44,6 +44,29 @@ pub(super) async fn report(
     acknowledge(result)
 }
 
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct LeaveRequest {
+    request_id: uuid::Uuid,
+}
+
+pub(super) async fn leave(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<Value>, AttendeeHttpError> {
+    let authority = authorize(&state, request.headers()).await?;
+    let body: LeaveRequest = decode_json_body(request, 1024).await?;
+    let result = state
+        .rooms
+        .execute_attendee(AttendeeOperation::Leave {
+            authority,
+            request_id: body.request_id,
+        })
+        .await
+        .map_err(AttendeeHttpError::from_persistence)?;
+    acknowledge(result)
+}
+
 pub(super) fn acknowledge(
     result: AttendeeOperationResult,
 ) -> Result<Json<Value>, AttendeeHttpError> {
