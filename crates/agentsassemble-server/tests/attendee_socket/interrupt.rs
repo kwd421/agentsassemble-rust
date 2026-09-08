@@ -9,7 +9,7 @@ use serde_json::json;
 async fn external_interrupt_and_mute_deliver_exact_effect_and_publish_http_quiescence() -> TestResult
 {
     for (muted, runtime) in [(false, "retained"), (true, "retained"), (false, "gone")] {
-        run_case(muted, runtime).await?;
+        Box::pin(run_case(muted, runtime)).await?;
     }
     Ok(())
 }

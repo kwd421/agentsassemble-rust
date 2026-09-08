@@ -54,6 +54,23 @@ client/retry tests pass against the shared transport and loss-injection helper.
 Affected all-target/all-feature Clippy and unchanged mandatory gates pass. Native
 attendee socket/runtime integration and packaged entry packets remain in progress.
 
+The native attendee socket now uses the same typed request/frame codec as the
+server. A fresh private-header handshake claims only network custody. TCP/TLS,
+upgrade and the initial claim have one ten-second deadline; writes are bounded by
+ten seconds and frames by the existing 256 KiB protocol limit. WSS uses rustls with
+WebPKI roots. Send and receive remain separate so interrupts cannot be consumed as
+an assumed ACK. Ping/pong maintains network liveness only; socket closure never
+asserts runtime shutdown. The client adds no polling, provider process, queue or
+background task. Pending requests and local runtime ownership stay with its caller.
+
+The local native-client socket test passes admission-before-connect rejection,
+ready acknowledgment, connection replacement, ping and cleanup retaining the exact
+runtime identity after socket close. All four existing attendee socket flows pass
+with the shared codec, including turn/result retry, stop and interrupt. TLS increased
+one integration-test future to 20,408 bytes; it is boxed at that test's case boundary
+without changing a gate. Affected Clippy and mandatory gates pass. Provider runtime
+execution, request relay and packaged entry flows still remain before acceptance.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing

@@ -1,9 +1,9 @@
 use std::time::Duration;
 
+use crate::attendee_wire::AttendeeSocketFrame as Frame;
 use agentsassemble_persistence::{AttendeeConnectionAuthorization, AttendeeSessionAuthorization};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{StreamExt, stream::SplitSink};
-use serde_json::{Value, json};
 use tokio::sync::broadcast;
 use uuid::Uuid;
 
@@ -67,7 +67,9 @@ async fn run_connected(
         state,
         connection,
         &mut sender,
-        json!({"type":"connected", "connection_id":connection.connection_id()}),
+        Frame::Connected {
+            connection_id: connection.connection_id(),
+        },
     )
     .await
     .is_none()
@@ -183,7 +185,9 @@ async fn deliver_interrupt(
             state,
             connection,
             sender,
-            json!({"type":"interrupt", "interrupt":interrupt}),
+            Frame::Interrupt {
+                interrupt: Box::new(interrupt),
+            },
         )
         .await?;
         *delivered = Some(effect_id);
@@ -205,13 +209,7 @@ async fn deliver_stop(
     let Some(stop) = stop else {
         return Some(false);
     };
-    send(
-        state,
-        connection,
-        sender,
-        json!({"type":"stop", "stop":stop}),
-    )
-    .await?;
+    send(state, connection, sender, Frame::Stop { stop }).await?;
     // The positive report uses HTTP so revocation cannot lose its acknowledgement.
     Some(true)
 }
@@ -245,7 +243,9 @@ async fn deliver(
         state,
         connection,
         sender,
-        json!({"type":"turn", "assignment":assignment}),
+        Frame::Turn {
+            assignment: Box::new(assignment),
+        },
     )
     .await?;
     *delivered = Some(execution_id);
@@ -256,7 +256,7 @@ async fn send(
     state: &AppState,
     connection: &AttendeeConnectionAuthorization,
     sender: &mut SplitSink<WebSocket, Message>,
-    value: Value,
+    value: Frame,
 ) -> Option<()> {
     state
         .store

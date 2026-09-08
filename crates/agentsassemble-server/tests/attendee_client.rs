@@ -78,3 +78,55 @@ async fn attendee_client_recovers_lost_admission_leave_and_cleanup_acknowledgmen
     server.stop().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn attendee_native_socket_replaces_custody_and_keeps_runtime_until_exact_cleanup()
+-> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_server::{AttendeeSocketFrame as Frame, AttendeeSocketRequest as Request};
+    use std::time::Duration;
+    let (store, invite) = attendee::fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let url = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
+    let mut client = RoomAttendeeClient::new(&url, "codex", "Socket Client")?;
+    assert!(client.connect().await.is_err());
+    client.join().await?;
+    let mut old = client.connect().await?;
+    let request_id = Uuid::new_v4();
+    let request: Request = serde_json::from_value(serde_json::json!({
+        "action":"ready", "request_id":request_id, "report":{
+            "runtime_handle_id":"client-runtime", "runtime_owner_id":"client-owner",
+            "runtime_lease_token":"client-lease", "provider_session_id":"client-session",
+            "model":"contract-model", "reasoning_effort":"", "service_tier":"", "variant":"",
+            "execution_harness":"builtin", "permission_mode":"meeting_read_only",
+            "max_output_tokens":0, "retained_interrupt":true
+        }
+    }))?;
+    old.send(&request).await?;
+    assert!(matches!(old.receive().await?, Frame::Ack { request_id: id, .. } if id == request_id));
+    let mut current = client.connect().await?;
+    assert_ne!(old.connection_id(), current.connection_id());
+    assert!(
+        tokio::time::timeout(Duration::from_secs(2), old.receive())
+            .await?
+            .is_err()
+    );
+    current.ping().await?;
+    current.send(&request).await?;
+    assert!(
+        matches!(current.receive().await?, Frame::Ack { request_id: id, .. } if id == request_id)
+    );
+    current.close().await?;
+    client.leave(Uuid::new_v4()).await?;
+    let stopped = client.cleanup().await?.ok_or("cleanup missing")?;
+    assert_eq!(stopped.runtime_handle_id, "client-runtime");
+    assert_eq!(stopped.runtime_lease_token, "client-lease");
+    client
+        .report_cleanup(&AttendeeCleanupReport {
+            request_id: Uuid::new_v4(),
+            stopped,
+        })
+        .await?;
+    assert!(client.cleanup().await?.is_none());
+    server.stop().await;
+    Ok(())
+}
