@@ -93,11 +93,16 @@ async fn login(
     let input: ProviderOperationRequest = decode_json_body(request, 4096)
         .await
         .map_err(ProviderOperationHttpError::from_body)?;
-    state
+    let outcome = state
         .provider_login
         .login(&input.provider_id)
         .await
         .map_err(ProviderOperationHttpError::from_login)?;
+    if outcome == agentsassemble_provider::ProviderLoginOutcome::Started {
+        return Ok(Json(
+            json!({"provider_id":input.provider_id, "status":"started"}),
+        ));
+    }
     let refreshed = state.provider_catalog.refresh().await;
     if !refreshed.is_ok_and(|catalog| catalog.status == "ready") {
         return Err(ProviderOperationHttpError {
@@ -211,6 +216,11 @@ impl ProviderOperationHttpError {
                 StatusCode::BAD_REQUEST,
                 "provider_login_unsupported",
                 "This provider does not support local login.",
+            ),
+            ProviderLoginError::HandoffUnconfirmed => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_login_handoff_unconfirmed",
+                "The terminal may have opened. Check it and refresh the catalog before retrying.",
             ),
             ProviderLoginError::Missing => (
                 StatusCode::SERVICE_UNAVAILABLE,

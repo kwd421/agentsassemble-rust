@@ -15,7 +15,7 @@ async function providerLoginOperation(providerId: string, cancel: boolean): Prom
   );
   if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("Provider login response is invalid.");
   const value = result as Record<string, unknown>;
-  const statuses = cancel ? ["cancelled", "not_running"] : ["authenticated"];
+  const statuses = cancel ? ["cancelled", "not_running"] : ["authenticated", "started"];
   if (Object.keys(value).length !== 2 || value.provider_id !== providerId ||
       typeof value.status !== "string" || !statuses.includes(value.status)) {
     throw new Error("Provider login response is invalid.");
@@ -23,8 +23,8 @@ async function providerLoginOperation(providerId: string, cancel: boolean): Prom
   return value.status;
 }
 
-export async function loginProvider(providerId: string): Promise<void> {
-  await providerLoginOperation(providerId, false);
+export async function loginProvider(providerId: string): Promise<"authenticated" | "started"> {
+  return await providerLoginOperation(providerId, false) as "authenticated" | "started";
 }
 
 export async function cancelProviderLogin(providerId: string): Promise<boolean> {

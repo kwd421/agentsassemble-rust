@@ -144,7 +144,7 @@ Packaged operation proof and whole-phase cost measurement remain pending.
 Codex, Claude, Grok and Cursor registrations now own their original login arguments;
 the public optional `login_supported` flag is derived from those registrations.
 API/local providers, Freebuff and managed Antigravity do not gain login authority.
-OpenCode's separate interactive authentication entry remains the next login target.
+OpenCode's separate interactive authentication entry is implemented below.
 
 One login owner coalesces repeated requests for the same provider and retains the
 bounded native command across response loss. Explicit cancellation and runtime
@@ -217,7 +217,7 @@ five frontend response/rendering cases, generated bindings, frontend build/CSS,
 provider/server all-target/all-feature Clippy and unchanged mandatory gates pass.
 The SDK fixture proves the actual bridge selects quota fields and exits; it does not
 prove live Claude authentication or availability. Direct packaged phase acceptance
-and the remaining Codex reader are pending.
+is pending; the Codex reader is implemented below.
 
 ## Codex account rate limits implementation
 
@@ -243,3 +243,35 @@ cancellation, durable resume and descendant cleanup. Four process cases pass (0.
 including exact inspection process absence after success and cancellation. Existing
 provider/server Clippy and mandatory gates pass. No real Codex/account is invoked;
 packaged phase and final real-provider evidence remain pending.
+
+## Interactive login custody decision
+
+OpenCode's original interactive login hands a graphical terminal to the operator;
+its receipt means the native launch was accepted, not authentication or visible UI
+completion. macOS uses Terminal's native scripting entry, Windows uses documented
+`Start-Process` new-window launch, and Linux selects the first installed terminal
+from the original four command definitions. A present terminal's failed launch is
+not retried through another terminal. Shell command text is never supplied by HTTP.
+
+Only the short-lived native launcher belongs to the app. It is bounded, cancelled
+and reaped separately; the new terminal belongs to the operator and is not placed
+inside an app-owned provider process group/Job. Linux transfers the terminal child
+after the successful native spawn receipt, using Tokio's child-reaping support.
+Closing the app or cancelling after handoff must not terminate that user terminal.
+A lost/failed launcher receipt reports an unconfirmed handoff, never authenticated;
+completion is observed by the operator's subsequent explicit catalog refresh.
+
+OpenCode's terminal handoff is now wired through the registration, login owner,
+operator HTTP response and creation dialog. macOS uses a constant AppleScript with
+separately passed shell-quoted arguments; Windows uses a constant PowerShell script
+with executable/argument data in the sanitized launch environment, following
+[Start-Process's native new-window contract](https://learn.microsoft.com/en-us/powershell/module/microsoft.powershell.management/start-process).
+Linux retains the original installed-terminal selection and required GUI session
+environment. No terminal or real provider was opened during local verification.
+
+Local helper fixtures distinguish successful native receipt, unconfirmed receipt
+and exact helper cleanup on cancellation (2 login tests, 0.01s). The actual frontend
+API decoder/rendering path distinguishes started from authenticated (26 affected
+frontend tests); HTTP operation regression (0.04s), frontend build/CSS, Clippy and
+mandatory gates pass. Packaged terminal launch and cross-platform runtime evidence
+remain phase acceptance work.

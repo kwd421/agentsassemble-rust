@@ -97,6 +97,7 @@ pub(crate) static CODEX_PROVIDER: ProviderRegistration = ProviderRegistration {
     remote_spec: None,
     usage: Some(crate::codex::usage::read),
     login: Some(crate::provider_login::ProviderLoginSpec {
+        flow: crate::provider_login::ProviderLoginFlow::BrowserOauth,
         arguments: &["login"],
         environment: Some(crate::codex::config::login_environment),
     }),
@@ -120,6 +121,7 @@ pub(crate) static CLAUDE_PROVIDER: ProviderRegistration = ProviderRegistration {
     remote_spec: None,
     usage: Some(crate::claude_usage::read),
     login: Some(crate::provider_login::ProviderLoginSpec {
+        flow: crate::provider_login::ProviderLoginFlow::BrowserOauth,
         arguments: &["auth", "login"],
         environment: None,
     }),
@@ -142,7 +144,11 @@ pub(crate) static OPENCODE_PROVIDER: ProviderRegistration = ProviderRegistration
     probe_executable: "opencode",
     remote_spec: None,
     usage: None,
-    login: None,
+    login: Some(crate::provider_login::ProviderLoginSpec {
+        flow: crate::provider_login::ProviderLoginFlow::InteractiveTerminal,
+        arguments: &["auth", "login"],
+        environment: None,
+    }),
     turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::RetainedRuntime,
     configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_opencode_registered,
@@ -163,6 +169,7 @@ pub(crate) static CURSOR_PROVIDER: ProviderRegistration = ProviderRegistration {
     remote_spec: None,
     usage: None,
     login: Some(crate::provider_login::ProviderLoginSpec {
+        flow: crate::provider_login::ProviderLoginFlow::BrowserOauth,
         arguments: &["login"],
         environment: None,
     }),
@@ -186,6 +193,7 @@ pub(crate) static GROK_PROVIDER: ProviderRegistration = ProviderRegistration {
     remote_spec: None,
     usage: None,
     login: Some(crate::provider_login::ProviderLoginSpec {
+        flow: crate::provider_login::ProviderLoginFlow::BrowserOauth,
         arguments: &["login"],
         environment: None,
     }),

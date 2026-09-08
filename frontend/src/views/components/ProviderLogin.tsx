@@ -10,10 +10,10 @@ export default function ProviderLogin({ providerId, displayName }: { providerId:
 
   async function login() {
     setBusy(true);
-    setStatus("브라우저에서 로그인을 마쳐 주세요.");
+    setStatus("로그인 창에서 안내를 따라 주세요.");
     try {
-      await loginProvider(providerId);
-      setStatus("로그인을 완료했어요.");
+      const outcome = await loginProvider(providerId);
+      setStatus(outcome === "started" ? "터미널에서 로그인을 마친 뒤 카탈로그를 갱신해 주세요." : "로그인을 완료했어요.");
     } catch (error) {
       setStatus(error instanceof Error ? error.message : "로그인하지 못했어요.");
     } finally {

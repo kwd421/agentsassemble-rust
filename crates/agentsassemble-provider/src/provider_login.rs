@@ -15,7 +15,19 @@ use crate::{
 
 type LoginEnvironment = fn() -> Result<Vec<(String, String)>, crate::runtime::DriverError>;
 
+pub(crate) enum ProviderLoginFlow {
+    BrowserOauth,
+    InteractiveTerminal,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderLoginOutcome {
+    Authenticated,
+    Started,
+}
+
 pub(crate) struct ProviderLoginSpec {
+    pub(crate) flow: ProviderLoginFlow,
     pub(crate) arguments: &'static [&'static str],
     pub(crate) environment: Option<LoginEnvironment>,
 }
@@ -24,6 +36,10 @@ pub(crate) struct ProviderLoginSpec {
 pub enum ProviderLoginError {
     #[error("This provider does not support local login.")]
     Unsupported,
+    #[error(
+        "The terminal may have opened, but its launch could not be confirmed. Check it before retrying."
+    )]
+    HandoffUnconfirmed,
     #[error("The provider login executable is unavailable.")]
     Missing,
     #[error("Provider login timed out.")]
@@ -36,7 +52,7 @@ pub enum ProviderLoginError {
     CleanupUnconfirmed,
 }
 
-type LoginResult = Shared<BoxFuture<'static, Result<(), ProviderLoginError>>>;
+type LoginResult = Shared<BoxFuture<'static, Result<ProviderLoginOutcome, ProviderLoginError>>>;
 
 struct LoginRun {
     cancellation: CancellationToken,
@@ -70,7 +86,10 @@ impl ProviderLoginService {
     ///
     /// # Errors
     /// Reports unsupported, missing, failed, cancelled and unconfirmed cleanup states.
-    pub async fn login(&self, provider_id: &str) -> Result<(), ProviderLoginError> {
+    pub async fn login(
+        &self,
+        provider_id: &str,
+    ) -> Result<ProviderLoginOutcome, ProviderLoginError> {
         let registration = provider_registration_by_id(provider_id)
             .filter(|registration| registration.login.is_some())
             .ok_or(ProviderLoginError::Unsupported)?;
@@ -80,7 +99,7 @@ impl ProviderLoginService {
     async fn login_registered(
         &self,
         registration: &'static ProviderRegistration,
-    ) -> Result<(), ProviderLoginError> {
+    ) -> Result<ProviderLoginOutcome, ProviderLoginError> {
         let result = {
             let mut runs = self.0.runs.lock().await;
             if self.0.cancellation.is_cancelled() {
@@ -135,7 +154,7 @@ impl ProviderLoginService {
         };
         match result.await {
             Err(ProviderLoginError::Cancelled) => Ok(true),
-            Ok(()) => Ok(false),
+            Ok(_) => Ok(false),
             Err(error) => Err(error),
         }
     }
@@ -159,7 +178,7 @@ impl ProviderLoginService {
 async fn run_login(
     registration: &ProviderRegistration,
     cancellation: &CancellationToken,
-) -> Result<(), ProviderLoginError> {
+) -> Result<ProviderLoginOutcome, ProviderLoginError> {
     let spec = registration
         .login
         .as_ref()
@@ -167,6 +186,10 @@ async fn run_login(
     let (executable, _) = provider_executable(registration.probe_executable, cancellation)
         .await
         .map_err(login_failure)?;
+    if matches!(spec.flow, ProviderLoginFlow::InteractiveTerminal) {
+        crate::terminal_login::launch(&executable, spec.arguments, cancellation).await?;
+        return Ok(ProviderLoginOutcome::Started);
+    }
     let environment = spec
         .environment
         .map_or_else(|| Ok(Vec::new()), |environment| environment())
@@ -180,11 +203,11 @@ async fn run_login(
         &environment,
     )
     .await
-    .map(|_| ())
+    .map(|_| ProviderLoginOutcome::Authenticated)
     .map_err(login_failure)
 }
 
-fn login_failure(error: ProbeFailure) -> ProviderLoginError {
+pub(crate) fn login_failure(error: ProbeFailure) -> ProviderLoginError {
     match error {
         ProbeFailure::Missing => ProviderLoginError::Missing,
         ProbeFailure::Timeout => ProviderLoginError::Timeout,
@@ -204,6 +227,7 @@ mod tests {
     static SUCCESS: ProviderRegistration = ProviderRegistration {
         probe_executable: "/usr/bin/true",
         login: Some(ProviderLoginSpec {
+            flow: ProviderLoginFlow::BrowserOauth,
             arguments: &[],
             environment: None,
         }),
@@ -212,6 +236,7 @@ mod tests {
     static FAILURE: ProviderRegistration = ProviderRegistration {
         probe_executable: "/bin/sh",
         login: Some(ProviderLoginSpec {
+            flow: ProviderLoginFlow::BrowserOauth,
             arguments: &["-c", "printf 'private-login-diagnostic' >&2; exit 1"],
             environment: None,
         }),
@@ -225,7 +250,13 @@ mod tests {
             service.login_registered(&SUCCESS),
             service.login_registered(&SUCCESS)
         );
-        assert_eq!((first, retry), (Ok(()), Ok(())));
+        assert_eq!(
+            (first, retry),
+            (
+                Ok(ProviderLoginOutcome::Authenticated),
+                Ok(ProviderLoginOutcome::Authenticated)
+            )
+        );
         assert_eq!(
             service.login_registered(&FAILURE).await,
             Err(ProviderLoginError::Failed)
