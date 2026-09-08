@@ -44,7 +44,7 @@ security-framework = { git = "https://github.com/kwd421/rust-security-framework"
 security-framework-sys = { git = "https://github.com/kwd421/rust-security-framework", rev = "85407d113b978b27728e162c8485c11e233c3e3e" }
 serde = { version = "1.0.229", features = ["derive"] }
 serde_json = "1.0.151"
-reqwest = { version = "0.13.4", default-features = false, features = ["json", "rustls", "stream"] }
+reqwest = { version = "0.13.4", default-features = false, features = ["json", "query", "rustls", "stream"] }
 regex = "1.12"
 rand = "0.10.2"
 ring = "0.17.14"

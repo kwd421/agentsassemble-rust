@@ -10,7 +10,7 @@ use serde_json::{Value, json};
 use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
-    PersistenceError, RoomSessionAuthorization, SqliteStore,
+    PersistenceError, RoomMutationAuthority, SqliteStore,
     message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
     room_turns::support::insert_event,
     room_user_identity::resolve_local_room_manager,
@@ -62,16 +62,13 @@ impl SqliteStore {
     ///
     /// Rejects changed or ended session provenance, missing permission, invalid identifiers,
     /// missing votes, malformed projection state, or storage failure without a partial summary.
-    pub async fn room_session_room_vote_summary(
+    pub async fn authorized_room_vote_summary(
         &self,
-        expected: &RoomSessionAuthorization,
+        expected: RoomMutationAuthority<'_>,
         vote_id: &str,
     ) -> Result<VoteSummary, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let current = expected
-            .mutation_authority()
-            .resolve(&mut transaction)
-            .await?;
+        let current = expected.resolve(&mut transaction).await?;
         let summary = read_vote_summary(&mut transaction, &current, vote_id).await?;
         transaction.commit().await?;
         Ok(summary)

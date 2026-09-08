@@ -5,31 +5,16 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+#[path = "support/human_invite.rs"]
+mod human_invite;
+#[path = "support/room_socket_peer.rs"]
+mod room_socket_peer;
 
 #[tokio::test]
 async fn connector_http_keeps_agent_custody_and_publishes_exact_commands()
 -> Result<(), Box<dyn std::error::Error>> {
-    let store = SqliteStore::open("sqlite::memory:").await?;
-    store
-        .bootstrap_local_authority(&Uuid::new_v4().to_string(), "Host")
-        .await?;
-    store
-        .create_room_for_local_operator(&Uuid::new_v4().to_string(), "general", "General")
-        .await?;
-    let manager = RoomManagerAuthority::Local(
-        store
-            .authorize_local_room_manager(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
-            )
-            .await?,
-    );
-    let server = support::human_invite::start(store.clone()).await;
+    let (store, manager) = fixture().await?;
+    let server = human_invite::start(store.clone()).await;
     let client = Client::new();
     let mut events = server.rooms().subscribe("general").await;
     for scope in [InviteScope::ReadWrite, InviteScope::ReadOnly] {
@@ -143,3 +128,26 @@ async fn verify_commands(
     );
     Ok(())
 }
+
+async fn fixture() -> Result<(SqliteStore, RoomManagerAuthority), Box<dyn std::error::Error>> {
+    let store = SqliteStore::open("sqlite::memory:").await?;
+    store
+        .bootstrap_local_authority(&Uuid::new_v4().to_string(), "Host")
+        .await?;
+    store
+        .create_room_for_local_operator(&Uuid::new_v4().to_string(), "general", "General")
+        .await?;
+    let manager = RoomManagerAuthority::Local(
+        store
+            .authorize_local_room_manager(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await?,
+    );
+    Ok((store, manager))
+}
+
+#[path = "connector_boundary/reads.rs"]
+mod reads;

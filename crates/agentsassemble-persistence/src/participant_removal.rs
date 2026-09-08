@@ -82,7 +82,14 @@ impl SqliteStore {
             load_participant(&mut transaction, &principal.room_id, &target_id).await?;
         require_removal_transition(participant.status, status)?;
         let mut events = Vec::new();
-        let cleanup = if participant.participant_type == "agent" {
+        let cleanup = if participant.participant_type == "agent"
+            && !crate::connector_session::owns_participant(
+                &mut transaction,
+                &principal.room_id,
+                &target_id,
+            )
+            .await?
+        {
             let mut session =
                 load_session(&mut transaction, &principal.room_id, &target_id).await?;
             request_runtime_cleanup(&mut transaction, &mut session).await?;
@@ -190,9 +197,11 @@ pub(crate) async fn revoke_participant_access(
     room_id: &str,
     participant_id: &str,
 ) -> Result<Vec<[u8; 32]>, PersistenceError> {
-    let fingerprints = sqlx::query_scalar::<_, Vec<u8>>(
+    let mut fingerprints = sqlx::query_scalar::<_, Vec<u8>>(
         "UPDATE human_room_sessions SET state = 'ended' WHERE room_id = ? AND participant_id = ? AND state = 'active' RETURNING session_fingerprint",
     ).bind(room_id).bind(participant_id).fetch_all(&mut **transaction).await?;
+    fingerprints.extend(sqlx::query_scalar::<_, Vec<u8>>("UPDATE room_connector_invites SET revoked=1 WHERE room_id=? AND participant_id=? AND revoked=0 RETURNING session_fingerprint")
+        .bind(room_id).bind(participant_id).fetch_all(&mut **transaction).await?);
     sqlx::query("UPDATE room_invites SET revoked = 1 WHERE room_id = ? AND base_participant_id = ? AND revoked = 0")
         .bind(room_id).bind(participant_id).execute(&mut **transaction).await?;
     fingerprints

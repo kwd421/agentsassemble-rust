@@ -21,7 +21,7 @@ pub(crate) async fn read_vote_summary_frame(
     let summary = match room_session {
         Some(authorization) => {
             store
-                .room_session_room_vote_summary(authorization, &request.vote_id)
+                .authorized_room_vote_summary(authorization.mutation_authority(), &request.vote_id)
                 .await
         }
         None => {

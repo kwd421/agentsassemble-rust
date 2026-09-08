@@ -147,3 +147,28 @@ whole-phase acceptance. The local HTTP join/send/replay/read-only/leave boundary
 passes, alongside both existing queue tests and exact-session transaction checks.
 Affected all-target/all-feature Clippy and unchanged architecture gates pass.
 Manager UI, bounded reads/wait, MCP and other two custody targets remain pending.
+
+## Connector public reads and moderation
+
+Snapshot, search/context and vote summary use the existing read owners with exact
+session provenance resolved in the read transaction. Native and paired snapshot
+callers now pass their existing authority explicitly. Connector responses omit
+Agent Session configuration, provider catalog and side chat; event visibility uses
+the canonical public projection. `read` retains the original last fifty messages.
+`wait` returns the bounded pending range (at most the existing 200-event snapshot
+window), excluding the caller's own messages; a gap or invalid cursor requires
+explicit resynchronization instead of silently dropping pending messages.
+
+A wait registers its room event and revocation receivers before the snapshot and
+then awaits events, revocation, exact session expiry or shutdown. HTTP cancellation
+drops the wait and its existing room connection lease. Existing connection and
+history admission owners bound concurrency and read work; no polling, heartbeat,
+credential cache or independently spawned task is added. Reqwest's query feature
+uses maintained URL serialization for the client read protocol.
+
+Mute/kick/export distinguish persistent Connector custody from managed Agent
+Sessions. They preserve room permissions, revoke exact connector access and report
+no fabricated provider cleanup. Local TCP wait/search/context/vote checks pass
+alongside a moderation transaction test and seven affected existing search/pairing
+checks. All-target/all-feature Clippy, architecture/format/diff and artifact checks
+pass. Actual MCP/current-conversation and packaged invitation flows remain pending.

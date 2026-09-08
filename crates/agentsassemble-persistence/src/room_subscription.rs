@@ -134,7 +134,11 @@ mod tests {
     async fn catch_up_fixes_one_exact_bounded_contiguous_range() {
         let (store, principal) = fixture().await;
         let snapshot = store
-            .snapshot_for(&principal, 0, 200)
+            .snapshot_for(
+                crate::RoomMutationAuthority::TrustedPrincipal(&principal),
+                0,
+                200,
+            )
             .await
             .unwrap_or_else(|error| panic!("snapshot catch-up fixture: {error}"));
         assert_eq!(snapshot.last_seq, 1);

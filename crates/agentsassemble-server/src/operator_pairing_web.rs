@@ -136,7 +136,16 @@ async fn redeem(
         .redeem_operator_pairing(&fingerprint, &device, &origin, Utc::now())
         .await?;
     let principal = redemption.authorization.principal();
-    let snapshot = state.store.snapshot_for(principal, 0, 0).await?;
+    let snapshot = state
+        .store
+        .snapshot_for(
+            agentsassemble_persistence::RoomMutationAuthority::OperatorSession(
+                &redemption.authorization,
+            ),
+            0,
+            0,
+        )
+        .await?;
     let bootstrap = state.store.local_bootstrap_status().await?;
     state
         .store

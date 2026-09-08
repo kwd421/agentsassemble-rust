@@ -328,7 +328,10 @@ async fn custom_channel_search_context_and_retirement_are_exact_over_http()
         {"id":SECOND,"name":"Second","type":"text","position":1,"created_at":"2026-09-08T00:00:00Z"}
     ]);
     let revision = agentsassemble_domain::public_settings(
-        &store.snapshot_for(&principal, 0, 1).await?.settings,
+        &store
+            .snapshot_for(TrustedPrincipal(&principal), 0, 1)
+            .await?
+            .settings,
     )?
     .settings_revision;
     let settings = store

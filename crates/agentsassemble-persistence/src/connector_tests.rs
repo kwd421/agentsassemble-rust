@@ -170,3 +170,86 @@ async fn fixture() -> Result<(crate::SqliteStore, RoomManagerAuthority), Box<dyn
     let authority = crate::room_user_identity::test_authority(&store).await;
     Ok((store, RoomManagerAuthority::Local(authority)))
 }
+
+#[tokio::test]
+async fn connector_moderation_controls_membership_without_claiming_a_provider_process() -> TestResult
+{
+    let (store, manager) = fixture().await?;
+    let now = Utc::now();
+    let invite = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadWrite, now)
+        .await?;
+    let fingerprint = Sha256::digest(invite.invite_bearer.as_bytes()).into();
+    let admitted = store
+        .admit_connector(&fingerprint, &[4; 32], Uuid::new_v4(), "Moderated AI", now)
+        .await?;
+    let local = crate::room_user_identity::test_authority(&store).await;
+    let mut tx = store.pool.begin().await?;
+    let principal = local.resolve(&mut tx).await?;
+    tx.commit().await?;
+    let target = &admitted.authorization.principal().participant_id;
+    let muted = store
+        .execute_participant_mute(
+            crate::RoomMutationAuthority::TrustedPrincipal(&principal),
+            "mute-connector",
+            &serde_json::json!({"participant_id":target,"muted":true}),
+        )
+        .await?;
+    assert!(muted.interrupt_effect.is_none());
+    assert!(muted.assignments.is_empty());
+    assert!(
+        store
+            .execute_authorized_message_with_turn(
+                crate::RoomMutationAuthority::ConnectorSession(&admitted.authorization),
+                "muted-write",
+                "message.send",
+                &serde_json::json!({"content":"must not send"})
+            )
+            .await
+            .is_err()
+    );
+    let removed = store
+        .execute_participant_removal(
+            crate::RoomMutationAuthority::TrustedPrincipal(&principal),
+            "kick-connector",
+            "participant.kick",
+            &serde_json::json!({"participant_id":target}),
+        )
+        .await?;
+    assert!(removed.cleanup.is_none());
+    assert_eq!(
+        removed.revoked_session_fingerprints,
+        vec![*admitted.authorization.session_fingerprint()]
+    );
+    assert!(
+        store
+            .snapshot_for(
+                crate::RoomMutationAuthority::ConnectorSession(&admitted.authorization),
+                0,
+                200
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .execute_authorized_message_with_turn(
+                crate::RoomMutationAuthority::ConnectorSession(&admitted.authorization),
+                "removed-write",
+                "message.send",
+                &serde_json::json!({"content":"must not send"})
+            )
+            .await
+            .is_err()
+    );
+    let exported = store
+        .execute_participant_removal(
+            crate::RoomMutationAuthority::TrustedPrincipal(&principal),
+            "export-connector",
+            "participant.export",
+            &serde_json::json!({"participant_id":target}),
+        )
+        .await?;
+    assert!(exported.cleanup.is_none());
+    Ok(())
+}

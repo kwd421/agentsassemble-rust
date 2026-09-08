@@ -20,6 +20,9 @@ use sha2::{Digest, Sha256};
 use tower_http::set_header::SetResponseHeaderLayer;
 use uuid::Uuid;
 
+#[path = "connector_read_web.rs"]
+mod read;
+
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct JoinRequest {
@@ -38,6 +41,11 @@ struct CommandRequest {
 
 registered_routes! {
     fn connector_routes<AppState>() {
+        same_origin_public "/api/room-connector/read" => get(read::snapshot),
+        same_origin_public "/api/room-connector/wait" => get(read::wait),
+        same_origin_public "/api/room-connector/search" => get(read::search),
+        same_origin_public "/api/room-connector/context" => get(read::context),
+        same_origin_public "/api/room-connector/vote" => get(read::vote),
         same_origin_public "/api/room-connector/join" => post(join),
         same_origin_public "/api/room-connector/command" => post(command),
     }
@@ -135,6 +143,11 @@ impl ConnectorHttpError {
     }
     fn from_failure(failure: &CommandFailure) -> Self {
         let (status, code) = match failure.error {
+            PersistenceError::InvalidCursor { .. }
+            | PersistenceError::SubscriptionCatchUpExceeded { .. }
+            | PersistenceError::SubscriptionSequenceGap { .. } => {
+                (StatusCode::CONFLICT, "connector_resync_required")
+            }
             PersistenceError::CommandConflict => (StatusCode::CONFLICT, "command_conflict"),
             PersistenceError::CommandRejected { code, .. } => (StatusCode::FORBIDDEN, code),
             PersistenceError::RoomMissing | PersistenceError::ParticipantMissing => {

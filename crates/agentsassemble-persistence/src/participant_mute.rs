@@ -139,6 +139,16 @@ async fn prepare_participant_mute(
     require_target_membership(&participant, &principal.room_id, &update.participant_id)?;
     let mut agent_session = match participant.participant_type.as_str() {
         "human" => None,
+        "agent"
+            if crate::connector_session::owns_participant(
+                transaction,
+                &principal.room_id,
+                &participant.participant_id,
+            )
+            .await? =>
+        {
+            None
+        }
         "agent" => Some(
             load_agent_session_for_participant(
                 transaction,

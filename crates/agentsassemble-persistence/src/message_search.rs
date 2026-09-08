@@ -9,7 +9,7 @@ use chrono::SecondsFormat;
 use sqlx::{Row, Sqlite, Transaction, sqlite::SqliteRow};
 
 use crate::{
-    PersistenceError, RoomSessionAuthorization, SqliteStore,
+    PersistenceError, RoomMutationAuthority, SqliteStore,
     agent_lifecycle::load_session,
     message_search_index::{canonical_created_at_nanos, searchable_room_message},
     room_channels::{MESSAGE_CHANNEL_SQL, require_message_channel},
@@ -52,18 +52,15 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Rejects revoked history permission, invalid input, or inconsistent stored projections.
-    pub async fn search_room_session_messages(
+    pub async fn search_authorized_messages(
         &self,
-        expected: &RoomSessionAuthorization,
+        expected: RoomMutationAuthority<'_>,
         channel_id: &str,
         query: &str,
         cursor: &str,
     ) -> Result<RoomMessageSearchPage, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let principal = expected
-            .mutation_authority()
-            .resolve(&mut transaction)
-            .await?;
+        let principal = expected.resolve(&mut transaction).await?;
         let page = search_in(&mut transaction, &principal, channel_id, query, cursor).await?;
         transaction.commit().await?;
         Ok(page)
@@ -92,17 +89,14 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Rejects revoked history permission, unknown targets, or inconsistent stored projections.
-    pub async fn room_session_message_context(
+    pub async fn authorized_message_context(
         &self,
-        expected: &RoomSessionAuthorization,
+        expected: RoomMutationAuthority<'_>,
         channel_id: &str,
         event_id: &str,
     ) -> Result<RoomMessageContext, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let principal = expected
-            .mutation_authority()
-            .resolve(&mut transaction)
-            .await?;
+        let principal = expected.resolve(&mut transaction).await?;
         let context = context_in(&mut transaction, &principal, channel_id, event_id).await?;
         transaction.commit().await?;
         Ok(context)

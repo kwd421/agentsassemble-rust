@@ -19,6 +19,15 @@ pub enum RoomMutationAuthority<'a> {
 }
 
 impl<'a> RoomMutationAuthority<'a> {
+    pub(crate) const fn principal(self) -> &'a AuthenticatedPrincipal {
+        match self {
+            Self::TrustedPrincipal(principal) => principal,
+            Self::HumanSession(session) => session.principal(),
+            Self::OperatorSession(session) => session.principal(),
+            Self::ConnectorSession(session) => session.principal(),
+        }
+    }
+
     pub(crate) async fn resolve(
         self,
         transaction: &mut Transaction<'_, Sqlite>,

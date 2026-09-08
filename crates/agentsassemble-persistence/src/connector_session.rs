@@ -214,3 +214,18 @@ pub(super) fn rejected(code: &'static str, message: &str) -> PersistenceError {
         message: message.to_owned(),
     }
 }
+
+// Agent participant kind does not imply custody of a server-managed provider process.
+pub(crate) async fn owns_participant(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<bool, PersistenceError> {
+    Ok(sqlx::query_scalar(
+        "SELECT EXISTS(SELECT 1 FROM room_connector_invites WHERE room_id=? AND participant_id=?)",
+    )
+    .bind(room_id)
+    .bind(participant_id)
+    .fetch_one(&mut **tx)
+    .await?)
+}

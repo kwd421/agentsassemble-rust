@@ -398,7 +398,11 @@ async fn assert_channel_capacity_is_independent(
 ) {
     use crate::RoomMutationAuthority::TrustedPrincipal;
     let snapshot = store
-        .snapshot_for(principal, 0, 1)
+        .snapshot_for(
+            crate::RoomMutationAuthority::TrustedPrincipal(principal),
+            0,
+            1,
+        )
         .await
         .unwrap_or_else(|error| panic!("pin channel snapshot: {error}"));
     let revision = agentsassemble_domain::public_settings(&snapshot.settings)

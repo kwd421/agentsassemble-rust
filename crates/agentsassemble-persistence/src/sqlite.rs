@@ -236,18 +236,23 @@ impl SqliteStore {
     /// Returns a stable session rejection, cursor error, or persistence error.
     pub async fn snapshot_for(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: crate::RoomMutationAuthority<'_>,
         resume_from_seq: i64,
         limit: i64,
     ) -> Result<RoomSnapshotData, PersistenceError> {
-        self.snapshot_inner(&principal.room_id, Some(principal), resume_from_seq, limit)
-            .await
+        self.snapshot_inner(
+            &authority.principal().room_id,
+            Some(authority),
+            resume_from_seq,
+            limit,
+        )
+        .await
     }
 
     async fn snapshot_inner(
         &self,
         room_id: &str,
-        principal: Option<&AuthenticatedPrincipal>,
+        authority: Option<crate::RoomMutationAuthority<'_>>,
         resume_from_seq: i64,
         limit: i64,
     ) -> Result<RoomSnapshotData, PersistenceError> {
@@ -258,8 +263,15 @@ impl SqliteStore {
         }
         let limit = limit.max(1);
         let mut transaction = self.pool.begin().await?;
-        if let Some(principal) = principal {
-            authorize_session(&mut transaction, principal).await?;
+        if let Some(authority) = authority {
+            match authority {
+                crate::RoomMutationAuthority::TrustedPrincipal(principal) => {
+                    authorize_session(&mut transaction, principal).await?;
+                }
+                _ => {
+                    authority.resolve(&mut transaction).await?;
+                }
+            }
         }
         let row = sqlx::query("SELECT room_json, settings_json FROM rooms WHERE room_id = ?")
             .bind(room_id)

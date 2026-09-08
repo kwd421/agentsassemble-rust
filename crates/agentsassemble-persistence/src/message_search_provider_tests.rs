@@ -154,7 +154,11 @@ async fn create_channel_message(
 ) -> agentsassemble_domain::RoomEvent {
     use crate::RoomMutationAuthority::TrustedPrincipal;
     let snapshot = store
-        .snapshot_for(principal, 0, 1)
+        .snapshot_for(
+            crate::RoomMutationAuthority::TrustedPrincipal(principal),
+            0,
+            1,
+        )
         .await
         .unwrap_or_else(|error| panic!("channel settings: {error}"));
     let revision = agentsassemble_domain::public_settings(&snapshot.settings)

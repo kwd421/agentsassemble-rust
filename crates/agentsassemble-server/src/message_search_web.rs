@@ -85,8 +85,8 @@ async fn search_messages(
         RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .search_room_session_messages(
-                    authorization,
+                .search_authorized_messages(
+                    authorization.mutation_authority(),
                     &query.channel_id,
                     &query.q,
                     &query.cursor,
@@ -118,7 +118,11 @@ async fn message_context(
         RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .room_session_message_context(authorization, &query.channel, &query.event)
+                .authorized_message_context(
+                    authorization.mutation_authority(),
+                    &query.channel,
+                    &query.event,
+                )
                 .await?
         }
     };

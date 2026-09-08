@@ -252,7 +252,13 @@ async fn revoked_participant_cannot_receive_an_authorized_snapshot() {
     .await
     .unwrap_or_else(|error| panic!("revoke participant: {error}"));
     assert!(matches!(
-        store.snapshot_for(&principal, 0, 200).await,
+        store
+            .snapshot_for(
+                crate::RoomMutationAuthority::TrustedPrincipal(&principal),
+                0,
+                200
+            )
+            .await,
         Err(PersistenceError::CommandRejected {
             code: "session_revoked",
             ..

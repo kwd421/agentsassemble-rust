@@ -308,25 +308,29 @@ where
     })
 }
 
-async fn prepare_snapshot<S>(
+async fn read_subscription_snapshot<S>(
     sender: &mut S,
     state: &AppState,
     principal: &mut AuthenticatedPrincipal,
     room_session: &mut Option<RoomSessionAuthorization>,
     resume_from_seq: i64,
-) -> Option<PreparedSnapshot>
+) -> Option<agentsassemble_persistence::RoomSnapshotData>
 where
     S: Sink<Message, Error = axum::Error> + Unpin,
 {
-    // Register the live receiver before taking any durable snapshot. It buffers every event
-    // committed between the snapshot boundary and completion of finite catch-up delivery.
-    let events = state.rooms.subscribe(&principal.room_id).await;
-    let snapshot_data = match state
+    match state
         .store
-        .snapshot_for(principal, resume_from_seq, 200)
+        .snapshot_for(
+            room_session.as_ref().map_or(
+                agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(principal),
+                RoomSessionAuthorization::mutation_authority,
+            ),
+            resume_from_seq,
+            200,
+        )
         .await
     {
-        Ok(snapshot) => snapshot,
+        Ok(snapshot) => Some(snapshot),
         Err(PersistenceError::InvalidCursor { durable_last_seq }) => {
             let _ = send_authorized_plain_frame(
                 sender,
@@ -340,7 +344,7 @@ where
                 },
             )
             .await;
-            return None;
+            None
         }
         Err(error) => {
             log_internal_persistence_error(&error, "room snapshot failed");
@@ -352,9 +356,26 @@ where
                 ("snapshot_failed", "Room snapshot failed."),
             )
             .await;
-            return None;
+            None
         }
-    };
+    }
+}
+
+async fn prepare_snapshot<S>(
+    sender: &mut S,
+    state: &AppState,
+    principal: &mut AuthenticatedPrincipal,
+    room_session: &mut Option<RoomSessionAuthorization>,
+    resume_from_seq: i64,
+) -> Option<PreparedSnapshot>
+where
+    S: Sink<Message, Error = axum::Error> + Unpin,
+{
+    // Register the live receiver before taking any durable snapshot. It buffers every event
+    // committed between the snapshot boundary and completion of finite catch-up delivery.
+    let events = state.rooms.subscribe(&principal.room_id).await;
+    let snapshot_data =
+        read_subscription_snapshot(sender, state, principal, room_session, resume_from_seq).await?;
     let settings = match public_settings(&snapshot_data.settings) {
         Ok(settings) => settings,
         Err(error) => {

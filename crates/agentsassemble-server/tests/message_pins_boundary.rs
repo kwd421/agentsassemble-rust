@@ -231,7 +231,14 @@ async fn custom_channel_pins_bind_targets_and_retire_with_the_channel()
     use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
     let server = start().await;
     let principal = local_principal();
-    let snapshot = server.store.snapshot_for(&principal, 0, 1).await?;
+    let snapshot = server
+        .store
+        .snapshot_for(
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
+            0,
+            1,
+        )
+        .await?;
     let revision = agentsassemble_domain::public_settings(&snapshot.settings)?.settings_revision;
     let channels = json!([
         {"id":"c0123456789ab","name":"First","type":"text","position":0,"created_at":"2026-09-08T00:00:00Z"},
