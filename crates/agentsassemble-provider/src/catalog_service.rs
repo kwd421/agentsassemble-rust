@@ -16,7 +16,10 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     catalog::catalog_revision,
-    registration::{discover_provider, loading_provider, provider_registrations},
+    registration::{
+        ProviderRegistration, discover_provider, loading_provider, provider_registration_by_id,
+        provider_registrations,
+    },
     selection::{ProviderSelection, ProviderSelectionError},
 };
 
@@ -45,13 +48,28 @@ impl Drop for CatalogOwner {
 impl ProviderCatalogService {
     #[must_use]
     pub fn discovering() -> Self {
-        let initial = loading_catalog();
+        Self::discovering_registrations(provider_registrations().to_vec())
+    }
+
+    /// Discovers only the explicitly selected external attendee provider.
+    ///
+    /// # Errors
+    /// Rejects unknown or excluded providers before any discovery work starts.
+    pub fn discovering_selected(provider_id: &str) -> Result<Self, ProviderSelectionError> {
+        let registration = provider_registration_by_id(provider_id).ok_or_else(|| {
+            ProviderSelectionError::new("unsupported_provider", "Provider is not supported.")
+        })?;
+        Ok(Self::discovering_registrations(vec![registration]))
+    }
+
+    fn discovering_registrations(registrations: Vec<&'static ProviderRegistration>) -> Self {
+        let initial = loading_catalog(&registrations);
         let (sender, receiver) = watch::channel(initial);
         let refresh_sender = sender.clone();
         let cancellation = CancellationToken::new();
         let discovery_cancellation = cancellation.clone();
         let task = tokio::spawn(async move {
-            let catalog = discover_catalog(&discovery_cancellation).await;
+            let catalog = discover_catalog(&registrations, &discovery_cancellation).await;
             if !discovery_cancellation.is_cancelled() {
                 let _ = refresh_sender.send(catalog);
             }
@@ -125,9 +143,12 @@ impl ProviderCatalogService {
     }
 }
 
-async fn discover_catalog(cancellation: &CancellationToken) -> ProviderCatalog {
+async fn discover_catalog(
+    registrations: &[&'static ProviderRegistration],
+    cancellation: &CancellationToken,
+) -> ProviderCatalog {
     let providers = futures_util::future::join_all(
-        provider_registrations()
+        registrations
             .iter()
             .map(|registration| discover_provider(registration, cancellation)),
     )
@@ -157,14 +178,51 @@ fn bound_catalog(catalog: ProviderCatalog) -> ProviderCatalog {
     catalog
 }
 
-fn loading_catalog() -> ProviderCatalog {
+fn loading_catalog(registrations: &[&'static ProviderRegistration]) -> ProviderCatalog {
     ProviderCatalog {
         status: "loading".to_owned(),
         catalog_revision: String::new(),
         discovered_at: String::new(),
-        providers: provider_registrations()
+        providers: registrations
             .iter()
             .map(|registration| loading_provider(registration))
             .collect(),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::ProviderCatalogService;
+
+    #[tokio::test]
+    async fn selected_discovery_rejects_excluded_providers_and_only_publishes_selection() {
+        for provider in ["freebuff", "antigravity", "unknown"] {
+            assert!(ProviderCatalogService::discovering_selected(provider).is_err());
+        }
+        // Custom API discovery is local metadata only; no CLI or remote catalog is needed.
+        let service = ProviderCatalogService::discovering_selected("custom_api")
+            .unwrap_or_else(|error| panic!("select custom API: {error}"));
+        let mut updates = service.subscribe();
+        let catalog = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+            loop {
+                let catalog = updates.borrow_and_update().clone();
+                if catalog.status != "loading" {
+                    break catalog;
+                }
+                updates
+                    .changed()
+                    .await
+                    .unwrap_or_else(|error| panic!("catalog: {error}"));
+            }
+        })
+        .await
+        .unwrap_or_else(|error| panic!("catalog deadline: {error}"));
+        assert_eq!(catalog.status, "ready");
+        assert_eq!(catalog.providers.len(), 1);
+        assert_eq!(catalog.providers[0].id, "custom_api");
+        service
+            .shutdown()
+            .await
+            .unwrap_or_else(|error| panic!("catalog shutdown: {error}"));
     }
 }

@@ -154,6 +154,24 @@ interrupt and reuses the canonical bounded quiescence wait, with no room polling
 CLI entry/event-loop integration, provider-request handling, entry packets and
 managed bridges remain pending; real providers have not run.
 
+External CLI discovery now selects one existing provider registration before starting
+the catalog owner's discovery task. The managed app still discovers all registered
+providers through the same owner. Unknown/excluded providers fail before any probe;
+the selected path does not probe unrelated providers or fetch their remote catalogs.
+The local Custom API selection test verifies the one-provider publication and
+excluded-provider rejection without launching a CLI or contacting a provider.
+Thirteen existing catalog cases and this selection case pass, along with affected
+Clippy and unchanged mandatory gates. An initial empty test-name filter was corrected;
+the reported counts are from the actual matched tests.
+
+The CLI execution loop will own socket replacement and retained execution/interrupt
+receipts until committed acknowledgements. Reconnection uses the original one-second
+delay, bounded by admission expiry and cancellation. Network keepalive derives from
+the server's idle deadline; no room-state polling is introduced. Exit stops the exact
+local provider before submitting positive cleanup; uncertain cleanup preserves owned
+workspace artifacts and remains visible. Shutdown receipt recovery has a finite
+thirty-second budget and retains request identity throughout.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing
