@@ -33,13 +33,12 @@
   the cumulative 44-commit phase, exact HEAD and whole local contract at C0/H0/M0/L0.
   [Review disposition](docs/VERIFICATION.md#phase-5-whole-phase-review-corrections-2026-09-08)
   and [account/social/human contract](docs/specs/identity-accounts-friends-slice.md).
-- Active: Phase 6 custom text channels and human-only side chat pass local
-  acceptance, including corrected packaged desktop/390px layouts and real human
-  boundaries. Daybreak found one native HTTP incarnation issue; the correction passes local
-  boundary verification and awaits re-review.
-  [Contract](docs/specs/custom-channels-side-chat-slice.md) and
-  [packaged evidence](docs/VERIFICATION.md#phase-6-packaged-channel-and-side-chat-acceptance-2026-09-08).
-  [Review correction](docs/VERIFICATION.md#phase-6-whole-phase-review-correction-http-incarnation-2026-09-08).
+- Phase 6 is closed through `25c7961`: Daybreak approved all 17 commits,
+  cumulative phase, exact HEAD and complete local contract at C0/H0/M0/L0.
+  [Correction and approval](docs/VERIFICATION.md#phase-6-whole-phase-review-correction-http-incarnation-2026-09-08).
+- Active: Phase 7 external AI admission and bridges. Define all three custody
+  boundaries, implement Room Connector first, then external attendee and managed
+  bridge flows. [Contract](docs/specs/external-ai-admission-slice.md).
   New Pro review and authorized real-provider proof remain at full closeout.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).

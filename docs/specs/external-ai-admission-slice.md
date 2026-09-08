@@ -1,0 +1,111 @@
+# External AI admission and bridges
+
+Status: Phase 7 contract and dependency skeleton; implementation begins after the
+approved Phase 6 checkpoint `25c7961`.
+
+## Definition and observed entry points
+
+The original checkout is verified at `d504647`. Retained owners are
+`application/room_connector.py`, `providers/room_connector_mcp.py`,
+`application/room_attendee.py`, `application/agent_bridge_entrypoint.py`,
+`providers/agent_bridge.py`, `admission/remote_room_client_packet.py`,
+`admission/invite_service.py`, the room invite/realtime handlers and their mounted
+frontend invite/connection controls. Preserve these product contracts without
+copying Python threads, polling, config files or launch-secret transport.
+
+Three custody boundaries must all exist before whole-phase acceptance:
+
+1. Room Connector admits the current external AI conversation as an agent
+   participant through its own one-use invite and MCP tools. It reads bounded
+   ordinary room context, searches/reads message context, speaks, votes, uses room
+   randomness, waits for new public messages, reconnects and leaves. Ordinary
+   room permissions apply; it never becomes a human session or managed Agent
+   Session. Antigravity exists only here, launched externally with the current
+   conversation's MCP registration. The app does not choose its model or stop its
+   CLI. The original visible invitation defaults to one use and one hour.
+2. External `assemble room attend --provider <provider>` owns its invitation,
+   WebSocket, provider credential, workspace and provider session. Saved-AI-friend
+   invites and an admitted human's companion packet target this owner. The provider
+   is explicit and must match the invite. The client receives a bounded room view
+   and exact assigned turn, returns authenticated reports/outcomes, relays supported
+   provider requests, reconnects and cleans up its owned runtime on leave/stop.
+   An entry packet never starts a provider or transfers host filesystem authority.
+3. Server-managed AgentBridge owns its launched process and private startup
+   handoff. Existing Agent Session lifecycle/turn/provider owners remain canonical;
+   the child adapter cannot mint external attendee or connector authority. Launch,
+   readiness, turn/report/request, stop, crash/reconnect and verified process
+   cleanup remain tied to the exact Agent Session and launch generation.
+
+Freebuff and managed Antigravity remain excluded. Scripted meetings, automatic
+research/synthesis/task assignment, voice, Mafia and RimWorld remain out of scope.
+Real provider execution waits until final closeout under the configured six-provider
+matrix; local acceptance must not claim those client runs.
+
+## Authority and data ownership
+
+Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing
+purpose-ticket, session-bearer, room-event, receipt, turn and provider mechanisms.
+Keep product identities and credentials explicit. Human invite payloads and human
+browser sessions must not admit any agent path. A saved friend is metadata, not
+admission authority; a companion derives only the admitted human's allowed room
+scope, never local-manager authority or a provider credential.
+
+The persistent admission owner binds invitations and admitted sessions to server
+identity, current room UID, participant, scope, expiry and client custody kind.
+Use distinct credential purposes and fingerprint storage; credentials stay out of
+public events, provider prompts, logs and committed files. The provider-specific
+model/runtime contract remains with the provider owner, not generic admission.
+Room membership and visible participant transitions commit with their durable
+room event and retry result. The normal room owner publishes committed changes.
+
+Revalidate exact session and current membership in the transaction for every room
+operation. Deletion/recreation, archive, revocation, kick, mute and read-only state
+must not be bypassed by an old credential or cached MCP view. Side chat and private
+provider data are unavailable to connectors and attendees. AgentBridge reports
+cannot claim another participant, room, Agent Session, turn, execution or launch.
+
+## Failure, concurrency and lifecycle
+
+One-use admission has one winner. A lost response may be retried only by the same
+client with the same operation identity; a retry must recover the committed result
+without admitting again or resetting expiry. Wrong-purpose/provider/room requests
+fail before effects. Expired, revoked and changed-incarnation credentials fail
+explicitly. No bearer or provider failure falls back to a human or host principal.
+
+MCP wait and room synchronization are event driven with bounded retained history
+and explicit resync when a cursor falls outside retention. Disconnect is distinct
+from leave. Reconnect preserves identity and committed command/report receipts;
+uncertain in-flight effects are resolved at their owner. Queue/backpressure and
+session limits follow concrete protocol/custody requirements and have explicit
+failure and cleanup; no speculative periodic work is introduced.
+
+External clients own their provider processes and private state. A server stop
+request is a request to that owner; completion requires its authenticated exact
+report, never a fabricated local process result. Managed children are stopped and
+reaped by the existing process owner before custody is released. Cleanup failure
+remains observable and retryable. Provider content is not inferred from terminal
+text when a native transport contract exists.
+
+## Dependency order and acceptance
+
+First connect the shared admission/session and room-operation boundaries. Complete
+one vertical Room Connector flow, then the external attendee/entry-packet flow and
+managed bridge flow using existing provider contracts. Build all three before
+polishing or optimizing one target.
+
+Verify exact credential domains, one-use concurrency and response-loss retry,
+provider matching, bounded views and permitted tools, publication through the room
+owner, reconnect/resync and receipts, read-only/mute/revoke/room-recreation behavior,
+private-data exclusion, stop/crash and process custody. Reuse existing contract tests
+and add only cases missing for these new boundaries. Never launch a real provider
+as a local test substitute or simulate a provider's claimed external acceptance.
+
+Direct packaged desktop/mobile verification must create/copy the connector invite,
+show the actual admitted connector participant and public message, and verify its
+leave. Exercise saved-friend and admitted-human companion packets and the visible
+managed bridge controls once connected. Use isolated app data and owned local
+protocol clients; final actual provider clients add integrated acceptance later.
+Measure CPU, memory, latency, disk and process/task costs at owning boundaries.
+Run affected verification and unchanged architecture/security/structure gates,
+then obtain Daybreak approval of every phase commit, cumulative range, exact HEAD
+and whole local Phase 7 before Phase 8.

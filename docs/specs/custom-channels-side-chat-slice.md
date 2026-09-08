@@ -1,6 +1,6 @@
 # Custom text channels and ephemeral side chat
 
-Status: Phase 6 HTTP incarnation correction locally verified; Daybreak re-review pending.
+Status: Phase 6 approved through `25c7961`, C0/H0/M0/L0 after incarnation correction.
 
 ## Definition and observed contract
 
