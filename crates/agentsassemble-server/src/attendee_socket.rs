@@ -1,3 +1,7 @@
+#[path = "attendee_socket_requests.rs"]
+mod requests;
+pub(super) use requests::SocketRequests;
+
 use std::time::Duration;
 
 use crate::attendee_wire::AttendeeSocketFrame as Frame;
@@ -76,6 +80,7 @@ async fn run_connected(
     {
         return;
     }
+    let mut requests = SocketRequests::new();
     let mut ready = false;
     let mut delivered = None;
     let mut delivered_interrupt = None;
@@ -105,8 +110,11 @@ async fn run_connected(
             message = receiver.next() => {
                 let Some(Ok(message)) = message else { break; };
                 idle.as_mut().reset(tokio::time::Instant::now() + crate::attendee_wire::SOCKET_IDLE);
-                let Some(became_ready) = receive(state, connection, &mut sender, message).await else { break; };
+                let Some(became_ready) = receive(state, connection, &mut sender, &mut requests, message).await else { break; };
                 ready |= became_ready;
+            }
+            response = requests.next(), if requests.is_pending() => {
+                if send(state, connection, &mut sender, response).await.is_none() { break; }
             }
             event = events.recv() => {
                 if matches!(event, Err(broadcast::error::RecvError::Closed)) { break; }
@@ -131,6 +139,7 @@ async fn receive(
     state: &AppState,
     connection: &AttendeeConnectionAuthorization,
     sender: &mut SplitSink<WebSocket, Message>,
+    requests: &mut SocketRequests,
     message: Message,
 ) -> Option<bool> {
     let (bytes, control) = match &message {
@@ -150,7 +159,7 @@ async fn receive(
     };
     let request: Request = serde_json::from_str(&encoded).ok()?;
     let request_id = request.request_id();
-    let (response, ready) = match request.apply(state, connection).await {
+    let (response, ready) = match request.apply(state, connection, requests).await {
         Ok(result) => result,
         Err(error) => (failure(request_id, error), false),
     };

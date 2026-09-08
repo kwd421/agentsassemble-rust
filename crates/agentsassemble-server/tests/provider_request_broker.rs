@@ -21,6 +21,9 @@ mod local_socket;
 #[path = "support/room_socket_peer.rs"]
 mod room_socket_peer;
 
+#[path = "provider_request_broker/socket.rs"]
+mod request_socket;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
@@ -158,7 +161,7 @@ async fn stored_deadline_expires_the_live_recipient() -> TestResult {
 async fn authenticated_socket_routes_owner_answers_outside_generic_receipts() -> TestResult {
     let (store, human, bearer) = admitted_human().await?;
     let server = human_invite::start(store.clone()).await;
-    let (connection, request) = assigned_request(&store, &human).await?;
+    let (connection, request, _) = assigned_request(&store, &human).await?;
     let id = request.request.provider_request_id;
     let opened = server
         .rooms()
@@ -219,7 +222,7 @@ async fn fixture() -> Result<
     Box<dyn std::error::Error>,
 > {
     let (store, human, _) = admitted_human().await?;
-    let (connection, request) = assigned_request(&store, &human).await?;
+    let (connection, request, _) = assigned_request(&store, &human).await?;
     let rooms = RoomRuntime::new(
         store.clone(),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
@@ -236,7 +239,10 @@ async fn fixture() -> Result<
 async fn assigned_request(
     store: &SqliteStore,
     human: &agentsassemble_persistence::HumanSessionAuthorization,
-) -> Result<(AttendeeConnectionAuthorization, OpenProviderRequest), Box<dyn std::error::Error>> {
+) -> Result<
+    (AttendeeConnectionAuthorization, OpenProviderRequest, String),
+    Box<dyn std::error::Error>,
+> {
     let now = chrono::Utc::now();
     let invite = store
         .create_companion_attendee_invite(
@@ -266,24 +272,7 @@ async fn assigned_request(
         .await?
         .authorization;
     store
-        .record_attendee_ready(
-            &connection,
-            &AttendeeRuntimeReady {
-                retained_interrupt: true,
-                runtime_handle_id: "request-runtime".to_owned(),
-                runtime_owner_id: "request-owner".to_owned(),
-                runtime_lease_token: "request-lease".to_owned(),
-                provider_session_id: "request-provider".to_owned(),
-                model: "fixture".to_owned(),
-                reasoning_effort: "high".to_owned(),
-                service_tier: String::new(),
-                variant: String::new(),
-                execution_harness: "builtin".to_owned(),
-                permission_mode: "meeting_read_only".to_owned(),
-                max_output_tokens: 0,
-            },
-            now,
-        )
+        .record_attendee_ready(&connection, &ready_report(), now)
         .await?;
     store
         .execute_authorized_message_with_turn(
@@ -322,7 +311,7 @@ async fn assigned_request(
             },
         },
     };
-    Ok((connection, request))
+    Ok((connection, request, admitted.session_bearer))
 }
 
 async fn admitted_human() -> Result<
@@ -358,4 +347,21 @@ async fn admitted_human() -> Result<
         .authorize_human_session(&Sha256::digest(admitted.session_bearer().as_bytes()).into())
         .await?;
     Ok((store, human, admitted.session_bearer().to_owned()))
+}
+
+fn ready_report() -> AttendeeRuntimeReady {
+    AttendeeRuntimeReady {
+        retained_interrupt: true,
+        runtime_handle_id: "request-runtime".to_owned(),
+        runtime_owner_id: "request-owner".to_owned(),
+        runtime_lease_token: "request-lease".to_owned(),
+        provider_session_id: "request-provider".to_owned(),
+        model: "fixture".to_owned(),
+        reasoning_effort: "high".to_owned(),
+        service_tier: String::new(),
+        variant: String::new(),
+        execution_harness: "builtin".to_owned(),
+        permission_mode: "meeting_read_only".to_owned(),
+        max_output_tokens: 0,
+    }
 }

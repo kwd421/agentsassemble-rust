@@ -82,6 +82,11 @@ impl ProviderRequestExchange {
         result
     }
 
+    /// Wakes when the broker or native owner ends this request.
+    pub async fn cancelled(&self) {
+        self.cancellation.cancelled().await;
+    }
+
     /// Reports actual upstream delivery and waits for its durable completion.
     /// Retain this exchange across cancellation of the wait; the report is sent only once.
     ///

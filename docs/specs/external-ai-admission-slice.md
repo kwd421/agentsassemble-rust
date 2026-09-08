@@ -400,6 +400,19 @@ the three broker cases still pass. Generated action bindings, frontend productio
 build/CSS check, server Clippy and unchanged architecture/19 policy and artifact
 gates pass. Visible request controls and attendee/native relay remain pending.
 
+
+The attendee socket now opens provider requests and relays the one live answer on
+its exact connection. Native delivery reports are acknowledged only after the broker's
+durable completion. The connection retains one metadata-only delivery receipt for
+exact ACK-loss retry; changed reports conflict. Replacement cancels the old exchange
+and cannot inherit its answer. Failed/unconfirmed delivery produces an explicit
+unresolved response. Waiting for answer, acknowledgement or cancellation adds no task
+or polling loop. The socket fixture verifies the secret answer round trip, both
+retry points, changed delivery rejection, and replacement fencing. All nine affected
+broker/attendee socket cases pass, as do server Clippy and unchanged architecture/19
+policy, format and artifact gates. CLI/native request creation and visible controls
+remain pending; ordinary native sessions still reject unsolicited response frames.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

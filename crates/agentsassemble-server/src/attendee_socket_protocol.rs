@@ -10,6 +10,7 @@ impl Request {
         self,
         state: &AppState,
         connection: &AttendeeConnectionAuthorization,
+        requests: &mut super::socket::SocketRequests,
     ) -> Result<(Frame, bool), PersistenceError> {
         let request_id = self.request_id();
         if request_id.is_nil() {
@@ -20,6 +21,31 @@ impl Request {
         }
         let mut ready = false;
         let result = match self {
+            Self::ProviderRequestOpen {
+                request_id,
+                request,
+            } => {
+                return requests
+                    .open(state, connection, request_id, *request)
+                    .await
+                    .map(|frame| (frame, false));
+            }
+            Self::ProviderRequestDelivered {
+                request_id,
+                provider_request_id,
+                delivered,
+            } => {
+                return requests
+                    .complete(
+                        state,
+                        connection,
+                        request_id,
+                        provider_request_id,
+                        delivered,
+                    )
+                    .await
+                    .map(|frame| (frame, false));
+            }
             Self::Ready { report, .. } => {
                 let result = state
                     .rooms

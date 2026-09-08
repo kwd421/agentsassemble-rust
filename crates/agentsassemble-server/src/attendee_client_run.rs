@@ -154,6 +154,9 @@ impl Session<'_> {
         frame: Frame,
     ) -> Result<Option<AttendeeCleanupDelivery>, AttendeeClientError> {
         match frame {
+            Frame::ProviderResponse { .. } | Frame::ProviderRequestClosed { .. } => {
+                return Err(error("unexpected_provider_response"));
+            }
             Frame::Stop { stop } => return Ok(Some(stop)),
             Frame::Connected { .. } => return Err(error("unexpected_attendee_connection")),
             Frame::Nack {
@@ -189,6 +192,10 @@ impl Session<'_> {
                     return Err(error("attendee_ack_mismatch"));
                 }
                 match pending {
+                    Request::ProviderRequestOpen { .. }
+                    | Request::ProviderRequestDelivered { .. } => {
+                        return Err(error("unexpected_provider_request_ack"));
+                    }
                     Request::Report { .. } => {
                         let execution = self
                             .execution

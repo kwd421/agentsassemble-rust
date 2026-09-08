@@ -12,6 +12,15 @@ pub(crate) const SOCKET_IDLE: std::time::Duration = std::time::Duration::from_mi
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AttendeeSocketRequest {
+    ProviderRequestOpen {
+        request_id: Uuid,
+        request: Box<agentsassemble_persistence::OpenProviderRequest>,
+    },
+    ProviderRequestDelivered {
+        request_id: Uuid,
+        provider_request_id: Uuid,
+        delivered: bool,
+    },
     Ready {
         request_id: Uuid,
         report: Box<AttendeeRuntimeReady>,
@@ -30,7 +39,10 @@ impl AttendeeSocketRequest {
     #[must_use]
     pub fn request_id(&self) -> Uuid {
         match self {
-            Self::Ready { request_id, .. } | Self::Started { request_id, .. } => *request_id,
+            Self::Ready { request_id, .. }
+            | Self::Started { request_id, .. }
+            | Self::ProviderRequestOpen { request_id, .. }
+            | Self::ProviderRequestDelivered { request_id, .. } => *request_id,
             Self::Report { report } => report.request_id,
         }
     }
@@ -39,6 +51,13 @@ impl AttendeeSocketRequest {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AttendeeSocketFrame {
+    ProviderResponse {
+        provider_request_id: Uuid,
+        resolution: agentsassemble_domain::ProviderRequestResolution,
+    },
+    ProviderRequestClosed {
+        provider_request_id: Uuid,
+    },
     Connected {
         connection_id: Uuid,
     },
