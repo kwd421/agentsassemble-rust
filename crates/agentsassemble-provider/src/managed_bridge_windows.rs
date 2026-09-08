@@ -57,7 +57,7 @@ pub(super) async fn spawn(
     factory: &ProductionDriverFactory,
     session: &DurableAgentSession,
     lease: &HeldRuntimeLease,
-) -> Result<Spawn<impl Future<Output = Connection>>, DriverLaunchError> {
+) -> Result<Spawn<impl Future<Output = Connection> + use<>>, DriverLaunchError> {
     if session.runtime_lease_token != lease.token()
         || session.runtime_handle_id != lease.new_runtime_handle_id()
     {

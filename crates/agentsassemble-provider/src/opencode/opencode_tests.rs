@@ -5,9 +5,12 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use super::{
     SessionCreationAuthority, guarded_session_creation, isolated_config_root, isolated_environment,
-    observe_startup, server_arguments, server_password,
+    server_arguments, server_password,
 };
-use crate::{loopback_http::LoopbackHttp, opencode_protocol::http_driver_error};
+use crate::{
+    loopback_http::LoopbackHttp, opencode_protocol::http_driver_error,
+    opencode_startup::observe_startup,
+};
 
 #[test]
 fn server_launch_disables_external_and_project_configuration() {
