@@ -1,3 +1,5 @@
+import { useFriendsDirectory } from "../../app/useFriendsDirectory";
+import { AttendeeFriendInviteCard, type AttendeeInviteControls } from "./AttendeeFriendInviteCard";
 import { ConnectorInviteCard, type ConnectorInviteControls } from "./ConnectorInviteCard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { Copy, Globe2, LoaderCircle, LockKeyhole, X } from "lucide-react";
@@ -32,6 +34,7 @@ export default function RoomInviteModal({
   roomLabel,
   humanInvites = [],
   connectorInvites,
+  attendeeInvites,
   operatorPairings = [],
   pairingCreating = false,
   onCreatePairing,
@@ -52,6 +55,7 @@ export default function RoomInviteModal({
   roomLabel: string;
   humanInvites?: readonly HumanInvitePresentation[];
   connectorInvites?: ConnectorInviteControls;
+  attendeeInvites?: AttendeeInviteControls;
   operatorPairings?: readonly OperatorPairingPresentation[];
   pairingCreating?: boolean;
   onCreatePairing?: () => void;
@@ -69,6 +73,7 @@ export default function RoomInviteModal({
   onStartTunnel: () => void;
   onStopTunnel: () => void;
 }) {
+  const friendsDirectory = useFriendsDirectory();
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [opener] = useState(() => document.activeElement);
   useEffect(() => {
@@ -223,7 +228,7 @@ export default function RoomInviteModal({
               </p>
             </div>
             <div className="dc-invite-options">
-              <SavedFriendInvitePicker onSelect={setFriendDisplayName} />
+              <SavedFriendInvitePicker directory={friendsDirectory} onSelect={setFriendDisplayName} />
               <label>
                 <span>초대 가능 인원</span>
                 <select
@@ -337,6 +342,7 @@ export default function RoomInviteModal({
             )}
           </section>
 
+          {attendeeInvites && <AttendeeFriendInviteCard directory={friendsDirectory} controls={attendeeInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
           {connectorInvites && <ConnectorInviteCard controls={connectorInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
           {onCreatePairing && onCopyPairing && onRevokePairing && (
             <section className="dc-invite-card" aria-labelledby="operator-pairing-heading">

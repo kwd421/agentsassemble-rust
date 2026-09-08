@@ -225,8 +225,23 @@ production frontend/CSS, unchanged architecture/19 policy, format, diff and arti
 checks pass. Adding the native command required updating its exact expected inventory
 to 28. Private-control decoding now owns its typed rejection instead of passing an
 untyped error tuple to the dispatch owner; its existing ten boundary tests pass.
-No provider turn ran in these packet tests. Packet creation/copy UI and its direct
-packaged verification remain next; full Phase 7 acceptance is still pending.
+No provider turn ran in these packet tests.
+
+The manager invite modal now shares one saved-friend directory between its human
+and AI selectors, and one manager/origin/expiry owner between connector and attendee
+packets. Uncertain receipts are retained per friend and purpose. Admitted posting
+humans have a companion card in desktop and mobile member panels, backed by one
+state owner for both layouts. It preserves form-specific retry receipts, drops
+responses from retired sessions, and copies only current, unexpired packets. The
+existing clipboard dispatch owner is shared without changing its behavior.
+
+Affected frontend verification passes 53 cases, including per-friend receipt
+identity, full packet copying, companion retry/expiry/session replacement, contact
+selection and existing invite/member panels. Production frontend and CSS checks
+pass; unchanged architecture/19 policy, format, diff and artifact checks pass.
+The companion UI adds no polling or provider process; its single expiry deadline
+is derived from returned packets. Direct packaged entry-packet verification and
+full Phase 7 acceptance remain pending.
 
 ## Authority and data ownership
 

@@ -1,3 +1,5 @@
+import CompanionInviteCard from "./CompanionInviteCard";
+import type { CompanionInviteControls } from "../../app/useCompanionInvites";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import { useMemo, useState } from "react";
 import {
@@ -308,6 +310,7 @@ function MobileMemberList({
 }
 
 export default function MobileRoomInfoPanel({
+  companionInvites,
   room,
   appearance,
   channelLabel,
@@ -330,6 +333,7 @@ export default function MobileRoomInfoPanel({
   onAgentActivityVisibilityChange,
 }: {
   room: MobileRoomSummary;
+  companionInvites?: CompanionInviteControls;
   appearance: RoomAppearance;
   channelLabel: string;
   agents: LiveAgent[];
@@ -474,6 +478,7 @@ export default function MobileRoomInfoPanel({
               <span aria-hidden>›</span>
             </button>
           )}
+      {companionInvites && <CompanionInviteCard controls={companionInvites} />}
           <MobileMemberList
             onParticipantRemove={capabilities["room.manage"] ? onParticipantRemove : undefined}
             groups={memberGroups}

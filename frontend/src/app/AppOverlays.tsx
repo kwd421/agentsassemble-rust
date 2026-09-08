@@ -44,6 +44,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
             roomLabel={inviteModalRoom.label}
             humanInvites={roomInvite.humanInvites}
             connectorInvites={roomInvite.connectorInvites}
+            attendeeInvites={roomInvite.attendeeInvites}
             operatorPairings={roomInvite.pairings}
             pairingCreating={roomInvite.pairingCreating}
             onCreatePairing={() => void roomInvite.generatePairing(inviteModalRoom)}

@@ -1,10 +1,11 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { useConnectorInvites } from "./useConnectorInvites";
+import { useManagedAiInvites } from "./useManagedAiInvites";
 
-const api = vi.hoisted(() => ({ create: vi.fn() }));
+const api = vi.hoisted(() => ({ create: vi.fn(), friend: vi.fn() }));
 vi.mock("../api/connectorInvite", () => ({ createConnectorInvite: api.create }));
-afterEach(() => { vi.useRealTimers(); api.create.mockReset(); });
+vi.mock("../api/attendeeInvite", async (importOriginal) => ({ ...await importOriginal<typeof import("../api/attendeeInvite")>(), createFriendAttendeeInvite: api.friend }));
+afterEach(() => { vi.useRealTimers(); api.create.mockReset(); api.friend.mockReset(); });
 
 it("retries uncertain creation with the same identity and guards copying by refreshed origin and expiry", async () => {
   vi.useFakeTimers(); vi.setSystemTime(new Date("2026-09-08T00:00:00Z"));
@@ -12,7 +13,7 @@ it("retries uncertain creation with the same identity and guards copying by refr
   let origin = "https://public.example.test";
   const copied: string[] = [];
   const publishStatus = vi.fn();
-  const hook = renderHook(() => useConnectorInvites({
+  const hook = renderHook(() => useManagedAiInvites({
     roomDockId: "general", publicOrigin: origin, resolveManager: () => authority,
     captureOriginRefresh: () => async () => ({ publicOrigin: origin, isCurrent: () => true }),
     copyText: async (text, prepare) => { const guard = await prepare(); guard(); copied.push(text); return true; },
@@ -42,7 +43,7 @@ it("blocks a retired creation after ticket acquisition and before dispatch", asy
   let current = true;
   const publishStatus = vi.fn();
   const authority = { server_id: "server", authority_lineage_id: "lineage", room_id: "general", room_uid: "uid" };
-  const hook = renderHook(() => useConnectorInvites({
+  const hook = renderHook(() => useManagedAiInvites({
     roomDockId: "general", publicOrigin: "https://public.example.test", resolveManager: () => authority,
     captureOriginRefresh: () => async () => ({ publicOrigin: "https://public.example.test", isCurrent: () => current }),
     copyText: vi.fn(), publishStatus,
@@ -52,4 +53,30 @@ it("blocks a retired creation after ticket acquisition and before dispatch", asy
   expect(hook.result.current.invites).toEqual([]);
   expect(publishStatus).not.toHaveBeenCalled();
   hook.unmount();
+});
+
+it("retains distinct retry receipts for each AI friend and copies the full attendee packet", async () => {
+  const authority = { server_id: "server", authority_lineage_id: "lineage", room_id: "general", room_uid: "uid" };
+  const origin = "https://public.example.test";
+  const copied: string[] = [];
+  const hook = renderHook(() => useManagedAiInvites({ roomDockId: "general", publicOrigin: origin, resolveManager: () => authority,
+    captureOriginRefresh: () => async () => ({ publicOrigin: origin, isCurrent: () => true }), publishStatus: vi.fn(),
+    copyText: async (text, prepare) => { (await prepare())(); copied.push(text); return true; } }));
+  api.friend.mockRejectedValue(new Error("response lost"));
+  await act(() => hook.result.current.create("friend-a"));
+  await act(() => hook.result.current.create("friend-b"));
+  api.friend.mockImplementationOnce(async (_authority, request, guard) => {
+    guard(); return { origin, expiresAtMs: Date.now() + 60_000, result: { ...request, room_id: "general", room_uid: "uid",
+      invite_id: "invite-a", display_name: "Friend A", provider: "codex", attend_command: "assemble room attend --provider codex",
+      join_url: `${origin}/join?token=fixture`, expires_at: new Date(Date.now() + 60_000).toISOString() } };
+  });
+  await act(() => hook.result.current.create("friend-a"));
+  expect(api.friend.mock.calls[0][1]).toEqual(api.friend.mock.calls[2][1]);
+  expect(api.friend.mock.calls[0][1].request_id).not.toBe(api.friend.mock.calls[1][1].request_id);
+  expect(api.create).not.toHaveBeenCalled();
+  expect(hook.result.current.invites).toEqual([]);
+  expect(hook.result.current.attendeeInvites[0].displayName).toBe("Friend A");
+  await act(() => hook.result.current.copy("invite-a"));
+  expect(copied[0]).toContain("assemble room attend --provider codex");
+  expect(copied[0]).toContain(`${origin}/join?token=fixture`);
 });

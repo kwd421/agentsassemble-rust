@@ -1,8 +1,7 @@
-import { useFriendsDirectory } from "../../app/useFriendsDirectory";
+import type { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import { useState } from "react";
 
-export default function SavedFriendInvitePicker({ onSelect }: { onSelect: (name?: string) => void }) {
-  const directory = useFriendsDirectory();
+export default function SavedFriendInvitePicker({ onSelect, directory }: { onSelect: (name?: string) => void; directory: ReturnType<typeof useFriendsDirectory> }) {
   const [selectedId, setSelectedId] = useState("");
   const people = directory.friends.filter((friend) => friend.details.participant_type === "human");
   return <section style={{ display: "grid", gap: 12 }}>

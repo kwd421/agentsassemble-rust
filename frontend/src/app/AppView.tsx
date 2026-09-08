@@ -1,3 +1,4 @@
+import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
 import CustomChannelView from "../views/CustomChannelView";
 import { isCustomChannelId } from "../lib/customChannelId";
@@ -83,6 +84,9 @@ export default function AppView({ controller }: { controller: AppController }) {
   const canPostHumanMessage = lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) &&
     canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
       participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
+  const companionInvites = useCompanionInvites(canPostHumanMessage && canonicalRoom.connectionState === "connected" &&
+    guestSession && !guestSession.operator && guestSession.roomUid === activeRoom.roomUid && guestSession.meetingId === activeRoom.meetingId
+    ? guestSession : null);
   useLayoutEffect(() => { setCreateChannelScope(""); setSideChatScope(""); }, [channelScope]);
   // Recovery owns the entrance until its current session surface is accepted.
   // Do not mount native directory/profile controls beneath that entrance.
@@ -432,6 +436,7 @@ export default function AppView({ controller }: { controller: AppController }) {
 
       {hasRoom && mobileRoomInfoOpen && (
         <MobileRoomInfoPanel
+          companionInvites={companionInvites.available ? companionInvites : undefined}
           room={activeRoom}
           appearance={activeAppearance}
           channelLabel={activeChannelDisplay.label}
@@ -506,6 +511,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             data-testid="room-info-panel"
           >
             <RoomConnectionPanel
+              companionInvites={companionInvites.available ? companionInvites : undefined}
               room={activeRoom}
               agents={scopedAgents}
               members={activeRoomMembers}

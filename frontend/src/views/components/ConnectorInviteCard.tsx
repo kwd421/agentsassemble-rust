@@ -1,4 +1,4 @@
-import type { ConnectorInvitePresentation } from "../../app/useConnectorInvites";
+import type { ConnectorInvitePresentation } from "../../app/useManagedAiInvites";
 
 export type ConnectorInviteControls = {
   invites: readonly ConnectorInvitePresentation[];
@@ -14,7 +14,7 @@ export function ConnectorInviteCard({ controls, disabled }: { controls: Connecto
       <p>Room Connector를 연결한 AI 대화에 링크를 전달해 주세요. 한 번 사용할 수 있고 1시간 뒤 만료돼요.</p>
     </div>
     <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
-      disabled={disabled || controls.creating} onClick={controls.create}>
+      disabled={disabled || controls.creating} onClick={() => controls.create()}>
       {controls.creating ? "초대 만드는 중" : "외부 AI 초대 만들기"}
     </button>
     {controls.invites.length > 0 && <div role="list">

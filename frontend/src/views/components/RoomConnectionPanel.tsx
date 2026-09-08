@@ -1,3 +1,5 @@
+import CompanionInviteCard from "./CompanionInviteCard";
+import type { CompanionInviteControls } from "../../app/useCompanionInvites";
 import { Plus } from "lucide-react";
 import {
   type ChannelNotificationSetting,
@@ -18,6 +20,7 @@ type RoomSummary = {
 
 type RoomConnectionPanelProps = {
   room: RoomSummary;
+  companionInvites?: CompanionInviteControls;
   agents: LiveAgent[];
   members: RoomMember[];
   viewerParticipantId?: string;
@@ -52,6 +55,7 @@ function mutedChannelCount(
 }
 
 export default function RoomConnectionPanel({
+  companionInvites,
   room,
   agents,
   members,
@@ -85,6 +89,7 @@ export default function RoomConnectionPanel({
           {mutedCount > 0 && <span className="dc-room-muted-count">{mutedCount} muted</span>}
         </div>
       )}
+      {companionInvites && <CompanionInviteCard controls={companionInvites} />}
       <MemberList
         agents={agents}
         members={members}
