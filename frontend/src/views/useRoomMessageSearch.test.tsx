@@ -91,13 +91,26 @@ describe("useRoomMessageSearch authority lifecycle", () => {
     expect(hook.result.current.results).toEqual([]);
   });
 
+  it("resolves an all-channel result through its concrete channel and retires old room context", async () => {
+    let complete!: (value: RoomMessageContext) => void;
+    api.context.mockImplementationOnce(() => new Promise<RoomMessageContext>((resolve) => { complete = resolve; }));
+    const hook = renderHook(({ roomUid }) => useRoomMessageSearch({
+      roomId: "general", roomUid, channelId: "all", authority: { kind: "local" },
+    }), { initialProps: { roomUid: "first-room" } });
+    const pending = hook.result.current.readContext("event-1", "c0123456789ab");
+    expect(api.context).toHaveBeenCalledWith(expect.objectContaining({ channelId: "c0123456789ab" }));
+    hook.rerender({ roomUid: "recreated-room" });
+    await act(async () => complete({ channel_id: "c0123456789ab", event_id: "event-1", events: [] }));
+    await expect(pending).resolves.toBeNull();
+  });
+
   it("does not return delayed context after the authority changes", async () => {
     let resolveContext: (value: RoomMessageContext) => void = () => undefined;
     api.context.mockReturnValueOnce(new Promise<RoomMessageContext>((resolve) => {
       resolveContext = resolve;
     }));
     const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
-    const context = hook.result.current.readContext("event-1");
+    const context = hook.result.current.readContext("event-1", "lobby");
 
     hook.rerender({
       currentAuthority: { kind: "remote", sessionToken: "session-b" },
@@ -117,7 +130,7 @@ describe("useRoomMessageSearch authority lifecycle", () => {
       rejectContext = reject;
     }));
     const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
-    const context = hook.result.current.readContext("event-1");
+    const context = hook.result.current.readContext("event-1", "lobby");
 
     hook.rerender({
       currentAuthority: { kind: "remote", sessionToken: "session-b" },
@@ -133,8 +146,8 @@ describe("useRoomMessageSearch authority lifecycle", () => {
       resolvers.push(resolve);
     }));
     const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
-    const first = hook.result.current.readContext("event-1");
-    const second = hook.result.current.readContext("event-2");
+    const first = hook.result.current.readContext("event-1", "lobby");
+    const second = hook.result.current.readContext("event-2", "lobby");
     const secondContext: RoomMessageContext = {
       channel_id: "lobby",
       event_id: "event-2",
@@ -164,8 +177,8 @@ describe("useRoomMessageSearch authority lifecycle", () => {
         events: [],
       });
     const hook = renderSearch({ kind: "remote", sessionToken: "session-a" });
-    const first = hook.result.current.readContext("event-1");
-    const second = hook.result.current.readContext("event-2");
+    const first = hook.result.current.readContext("event-1", "lobby");
+    const second = hook.result.current.readContext("event-2", "lobby");
 
     await expect(second).resolves.toMatchObject({ event_id: "event-2" });
     await act(async () => rejectFirst(new Error("earlier selection failed")));

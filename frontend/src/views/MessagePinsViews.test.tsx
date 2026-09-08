@@ -191,9 +191,10 @@ describe("message-pin view ownership", () => {
         canonicalHasMoreHistory={false}
       />
     );
+    api.fetchLobbyPins.mockResolvedValueOnce([]);
     fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
     fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
-    expect(api.fetchLobbyPins).toHaveBeenCalledOnce();
+    await waitFor(() => expect(api.fetchLobbyPins).toHaveBeenCalledTimes(2));
     await act(async () => releaseGrant?.());
 
     expect(screen.queryByRole("list", { name: "고정 메시지 목록" })).toBeNull();

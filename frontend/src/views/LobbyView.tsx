@@ -1,11 +1,10 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useMessagePins } from "./useMessagePins";
+import { useEffect, useMemo, useState } from "react";
 import { Hash } from "lucide-react";
 import {
   type LiveAgent,
   type LobbyEvent,
   type MessageAttachmentAuthority,
-  fetchMessagePins,
-  setMessagePinned,
   type MessagePin,
   type MessagePinsAuthority,
   type RoomSearchResult,
@@ -40,19 +39,9 @@ import {
 import type { MessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
 import { isVoteTransitionKind } from "../lib/voteEventKind";
 
-type PinOperation = { retired: boolean };
-
-function requireCurrentPinOperation(
-  operation: PinOperation,
-  current: PinOperation | null
-) {
-  if (operation.retired || current !== operation) {
-    throw new Error("로비 메시지 핀 요청 권위가 변경되었습니다.");
-  }
-}
-
 export default function LobbyView({
   activeRoom,
+  roomUid = "",
   agents,
   messageAttachmentReadOwner,
   mentionables: roomMentionables,
@@ -91,6 +80,7 @@ export default function LobbyView({
   onOpenCrossChannelSearchResult,
 }: {
   activeRoom: RoomDockItem;
+  roomUid?: string;
   agents: LiveAgent[];
   messageAttachmentReadOwner: MessageAttachmentReadOwner;
   typingIndicators?: RoomTypingIndicator[];
@@ -161,11 +151,9 @@ export default function LobbyView({
     participantProfiles,
     loadCanonicalHistory,
   });
-  const [pinnedItems, setPinnedItems] = useState<MessagePin[]>([]);
-  const [pinsLoading, setPinsLoading] = useState(false);
-  const [pinsError, setPinsError] = useState("");
-  const [pinBusyIds, setPinBusyIds] = useState<Set<string>>(() => new Set());
-  const activePinOperation = useRef<PinOperation | null>(null);
+  const { pinnedItems, pinsLoading, pinsError, pinBusyIds, reloadPins, setPinned, setPinsError } = useMessagePins({
+    roomId: activeRoom.meetingId, roomUid, channelId: "lobby", authority: messagePinsAuthority,
+  });
   const [pendingMessageTarget, setPendingMessageTarget] = useState("");
   const localMessageSearch = useRoomMessageSearch({
     roomId: activeRoom.meetingId,
@@ -216,50 +204,6 @@ export default function LobbyView({
       event_id: event.record_id || event.id,
     });
   }
-
-  useLayoutEffect(() => {
-    setPinnedItems([]);
-    setPinsLoading(false);
-    setPinsError("");
-    setPinBusyIds(new Set());
-    return () => {
-      if (activePinOperation.current) activePinOperation.current.retired = true;
-    };
-  }, [
-    activeRoom.meetingId,
-    messagePinsAuthority?.kind,
-    messagePinsAuthority?.kind === "remote"
-      ? JSON.stringify([messagePinsAuthority.sessionToken, messagePinsAuthority.deviceToken ?? ""])
-      : "",
-  ]);
-
-  const reloadPins = useCallback(async () => {
-    if (!messagePinsAuthority || activePinOperation.current) return;
-    const operation: PinOperation = { retired: false };
-    activePinOperation.current = operation;
-    setPinsLoading(true);
-    setPinsError("");
-    try {
-      const pins = await fetchMessagePins({
-        channelId: "lobby",
-        roomId: activeRoom.meetingId,
-        authority: messagePinsAuthority,
-        beforeDispatch: () => requireCurrentPinOperation(operation, activePinOperation.current),
-      });
-      if (!operation.retired && activePinOperation.current === operation) setPinnedItems(pins);
-    } catch (error) {
-      if (!operation.retired && activePinOperation.current === operation) {
-        setPinsError(
-          error instanceof Error ? error.message : "고정 메시지를 불러오지 못했습니다."
-        );
-      }
-    } finally {
-      if (activePinOperation.current === operation) {
-        activePinOperation.current = null;
-        if (!operation.retired) setPinsLoading(false);
-      }
-    }
-  }, [activeRoom.meetingId, messagePinsAuthority]);
 
   const mentionables = useMemo(
     () =>
@@ -380,7 +324,7 @@ export default function LobbyView({
   }, [pendingMessageTarget, visibleEvents]);
 
   async function navigateToSearchResult(eventId: string) {
-    const context = await messageSearch.readContext(eventId);
+    const context = await messageSearch.readContext(eventId, "lobby");
     if (!context) return;
     suppressAutomaticHistoryLoad();
     setPendingMessageTarget(eventId);
@@ -417,36 +361,6 @@ export default function LobbyView({
       return;
     }
     jumpToEvent(event.id);
-  }
-
-  async function setPinned(eventId: string, pinned: boolean) {
-    if (!eventId || !messagePinsAuthority || activePinOperation.current) return;
-    const operation: PinOperation = { retired: false };
-    activePinOperation.current = operation;
-    setPinBusyIds(new Set([eventId]));
-    setPinsError("");
-    try {
-      const pins = await setMessagePinned({
-        channelId: "lobby",
-        roomId: activeRoom.meetingId,
-        eventId,
-        pinned,
-        authority: messagePinsAuthority,
-        beforeDispatch: () => requireCurrentPinOperation(operation, activePinOperation.current),
-      });
-      if (!operation.retired && activePinOperation.current === operation) setPinnedItems(pins);
-    } catch (error) {
-      if (!operation.retired && activePinOperation.current === operation) {
-        setPinsError(
-          error instanceof Error ? error.message : "고정 상태를 바꾸지 못했습니다."
-        );
-      }
-    } finally {
-      if (activePinOperation.current === operation) {
-        activePinOperation.current = null;
-        if (!operation.retired) setPinBusyIds(new Set());
-      }
-    }
   }
 
   const pinnedEventIds = useMemo(

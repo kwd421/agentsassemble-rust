@@ -9,10 +9,12 @@ import {
 
 export function useRoomMessageSearch({
   roomId,
+  roomUid = "",
   channelId,
   authority,
 }: {
   roomId: string;
+  roomUid?: string;
   channelId: string;
   authority?: MessageSearchAuthority;
 }) {
@@ -51,7 +53,7 @@ export function useRoomMessageSearch({
       requestVersionRef.current += 1;
       contextVersionRef.current += 1;
     };
-  }, [authorityKind, authorityToken, channelId, roomId]);
+  }, [authorityKind, authorityToken, channelId, roomId, roomUid]);
 
   useEffect(() => {
     const cleanQuery = query.trim();
@@ -62,7 +64,7 @@ export function useRoomMessageSearch({
     }
     if (!authority) {
       setLoading(false);
-      setError("이 환경에서는 로비 메시지 검색을 사용할 수 없습니다.");
+      setError("이 환경에서는 메시지 검색을 사용할 수 없습니다.");
       return undefined;
     }
     setLoading(true);
@@ -95,7 +97,7 @@ export function useRoomMessageSearch({
         });
     }, 250);
     return () => window.clearTimeout(timer);
-  }, [authorityKind, authorityToken, channelId, query, roomId]);
+  }, [authorityKind, authorityToken, channelId, query, roomId, roomUid]);
 
   const loadMore = useCallback(async () => {
     const cleanQuery = query.trim();
@@ -127,15 +129,15 @@ export function useRoomMessageSearch({
     }
   }, [authority, channelId, loadingMore, nextCursor, query, roomId]);
 
-  const readContext = useCallback(async (eventId: string) => {
+  const readContext = useCallback(async (eventId: string, targetChannelId: string) => {
     if (!authority) {
-      throw new Error("이 환경에서는 로비 메시지 검색을 사용할 수 없습니다.");
+      throw new Error("이 환경에서는 메시지 검색을 사용할 수 없습니다.");
     }
     const version = ++contextVersionRef.current;
     try {
       const context = await fetchRoomMessageContext({
         roomId,
-        channelId,
+        channelId: targetChannelId,
         eventId,
         authority,
         beforeDispatch: () => {
@@ -149,7 +151,7 @@ export function useRoomMessageSearch({
       if (contextVersionRef.current !== version) return null;
       throw reason;
     }
-  }, [authority, channelId, roomId]);
+  }, [authority, roomId, roomUid]);
 
   return {
     error,

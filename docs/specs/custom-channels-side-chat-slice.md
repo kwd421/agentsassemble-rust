@@ -368,3 +368,25 @@ Production frontend build and unchanged CSS, structure/19 policy and diff gates 
 React review found no added state, effects or subscription; this extends existing
 bounded projections and adds approximately 0.14 KiB compressed code. The custom
 channel screen and packaged verification remain the next work.
+
+## Shared pin lifecycle and explicit context selection
+
+Lobby and custom channels share one on-demand pin hook scoped to room UID, channel
+and HTTP authority. It owns the bounded visible list, operation/error state and
+pre-dispatch/late-response fences. A retired request cannot block or overwrite the
+new channel's request; the lobby's duplicated pin plumbing is removed. No automatic
+refresh, cache, timer or subscription is introduced.
+
+Context reads now take the selected result's concrete channel separately from the
+search scope. This fixes the reachable `all` search path which previously sent
+`all` to the concrete-context endpoint. Room UID changes retire pending context and
+search state. The selected-channel window can display that bounded server context
+and return to latest history; it does not invent a context paging flag. An explicit
+context selection invalidates a pending history page's publication, while preserving
+send ownership and keeping later live arrivals indicated outside the older window.
+
+All 39 affected hook/view cases pass (1.72 s), including late context/history ordering,
+room-recreation/login/channel pin custody and independent new-scope reads. Production
+build/CSS and unchanged structure/19 policy/diff gates pass. React review confirms
+that operation state belongs to the scoped hook, with cleanup and no added periodic
+work. Mounting and direct packaged acceptance remain open.

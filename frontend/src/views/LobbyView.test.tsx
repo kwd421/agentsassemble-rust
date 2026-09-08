@@ -178,7 +178,7 @@ describe("LobbyView active provider turn", () => {
       target: { value: "카나리아" },
     });
     expect(
-      await screen.findByText("이 환경에서는 로비 메시지 검색을 사용할 수 없습니다.")
+      await screen.findByText("이 환경에서는 메시지 검색을 사용할 수 없습니다.")
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", {

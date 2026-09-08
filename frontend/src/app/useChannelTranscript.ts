@@ -6,7 +6,7 @@ import { CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE } from "../types/
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 
 type Window = { events: RoomEvent[]; hasMore: boolean; following: boolean; newMessages: boolean };
-type Owner = { scope: object; window: Window | null; buffer: RoomEvent[]; trimmed: boolean; reading: boolean; sending: boolean; active: boolean };
+type Owner = { scope: object; window: Window | null; buffer: RoomEvent[]; trimmed: boolean; reading: boolean; readVersion: number; sending: boolean; active: boolean };
 type View = { scope: object; window: Window | null; loading: boolean; sending: boolean; error: string };
 function mergeEvents(older: RoomEvent[], newer: RoomEvent[]) {
   const bySeq = new Map(older.map((event) => [event.seq, event]));
@@ -28,10 +28,12 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
   }, [current, scope]);
   const read = useCallback(async (owner: Owner, before: number) => {
     if (!current(owner) || !socket?.ready()) return;
+    const version = ++owner.readVersion;
+    const currentRead = () => current(owner) && owner.readVersion === version;
     owner.reading = true; publish(owner, "");
     try {
       const ack = await socket.command("channel.history", { channel_id: channelId, before_seq: before, limit: CHANNEL_HISTORY_PAGE_SIZE });
-      if (!current(owner)) return;
+      if (!currentRead()) return;
       // The command ACK validator binds the exact room, channel and requested page.
       const page = ack.result as unknown as ChannelHistoryPage;
       const previous = before > 0 ? owner.window?.events ?? [] : [];
@@ -43,16 +45,16 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
       };
       owner.buffer = [];
     } catch (error) {
-      if (current(owner)) { owner.reading = false; publish(owner, error instanceof Error ? error.message : "채널 기록을 불러오지 못했어요."); }
+      if (currentRead()) { owner.reading = false; publish(owner, error instanceof Error ? error.message : "채널 기록을 불러오지 못했어요."); }
       return;
     }
-    if (current(owner)) { owner.reading = false; publish(owner, ""); }
+    if (currentRead()) { owner.reading = false; publish(owner, ""); }
   }, [channelId, current, publish, socket]);
   const latest = useCallback(() => {
     if (currentScope.current !== scope || !roomId || !roomUid || !channelId || !connected || !socket?.ready()) return;
     if (ownerRef.current?.sending) return;
     if (ownerRef.current) ownerRef.current.active = false;
-    const owner: Owner = { scope, window: null, buffer: [], trimmed: false, reading: false, sending: false, active: true };
+    const owner: Owner = { scope, window: null, buffer: [], trimmed: false, reading: false, readVersion: 0, sending: false, active: true };
     ownerRef.current = owner;
     void read(owner, 0);
   }, [channelId, connected, read, roomId, roomUid, scope, socket]);
@@ -88,6 +90,15 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
       await read(owner, before);
     }
   }, [current, read]);
+  const showContext = useCallback((events: RoomEvent[]) => {
+    const owner = ownerRef.current;
+    if (!owner || !current(owner)) return;
+    // Context has its own bounded server projection, without a history paging flag.
+    // A pending page must not replace a later explicit context selection.
+    owner.readVersion += 1; owner.reading = false; owner.buffer = [];
+    owner.window = { events, following: false, hasMore: false, newMessages: false };
+    publish(owner, "");
+  }, [current, publish]);
   const send = useCallback(async (content: string) => {
     const owner = ownerRef.current;
     if (!owner || !current(owner) || !owner.window || owner.sending || !socket?.ready()) throw new Error("채널 연결이 완료된 뒤 보내 주세요.");
@@ -99,7 +110,7 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
     } finally { owner.sending = false; publish(owner); }
   }, [channelId, current, publish, socket]);
   const visible = view.scope === scope ? view : null;
-  return { scope, receive, latest, earlier, send,
+  return { scope, receive, latest, earlier, showContext, send,
     events: visible?.window?.events ?? [], hasMore: visible?.window?.hasMore ?? false,
     following: visible?.window?.following ?? true, newMessages: visible?.window?.newMessages ?? false,
     ready: Boolean(visible?.window), loading: visible?.loading ?? false,

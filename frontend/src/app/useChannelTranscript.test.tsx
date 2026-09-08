@@ -52,6 +52,22 @@ describe("selected channel transcript", () => {
     hook.unmount();
   });
 
+  it("keeps an explicit context selection when an earlier history request finishes later", async () => {
+    const initial = deferred<RoomCommandAck>();
+    const socket = { ready: () => true, command: vi.fn(() => initial.promise) } as unknown as RoomSocketHandle;
+    const hook = renderHook(() => useChannelTranscript(options(socket)));
+    act(() => hook.result.current.showContext([channelMessage(7), channelMessage(9)]));
+    await act(async () => initial.resolve(page([100, 101])));
+    expect(hook.result.current.events.map((event) => event.seq)).toEqual([7, 9]);
+    expect(hook.result.current.loading).toBe(false);
+    expect(hook.result.current.following).toBe(false);
+    expect(hook.result.current.hasMore).toBe(false);
+    act(() => hook.result.current.receive([channelMessage(102)]));
+    expect(hook.result.current.events.map((event) => event.seq)).toEqual([7, 9]);
+    expect(hook.result.current.newMessages).toBe(true);
+    hook.unmount();
+  });
+
   it("hides a stale page on channel, room incarnation and connection changes", async () => {
     const initial = deferred<RoomCommandAck>();
     const command = vi.fn().mockReturnValueOnce(initial.promise).mockResolvedValue(page([20]));
