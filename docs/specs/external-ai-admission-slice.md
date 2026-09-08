@@ -485,6 +485,21 @@ and 102 affected frontend tests plus frontend build/CSS and unchanged architectu
 19 policy, format and artifact gates pass. Visible request controls remain pending.
 
 
+Owned pending requests now project from every accepted room snapshot and ordered
+live event; switching room/principal clears the current projection. Open events carry
+their authoritative session ID. The browser validates these events before projection.
+The room exposes permission choices, ordinary/secret question inputs and HTTPS action
+acknowledgement in one keyboard-accessible dialog. Disconnection/posting restrictions
+block submission. Unknown outcomes retain the same volatile answer for exact retry;
+ACK clears entered values and shows receipt-only waiting, while canonical closed
+events distinguish delivered, failed, cancelled and expired outcomes.
+106 affected frontend tests, frontend build/CSS, five affected storage tests,
+persistence all-target/all-feature Clippy and unchanged mandatory gates pass.
+The shared mechanism adds no timer or persisted browser answer. Packaged desktop and
+390px manipulation, remaining native request consumers and managed bridge integration
+remain pending; this checkpoint does not close Phase 7.
+
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

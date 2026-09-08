@@ -1,3 +1,4 @@
+import ProviderRequestsPanel from "../views/components/ProviderRequestsPanel";
 import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
 import CustomChannelView from "../views/CustomChannelView";
@@ -337,6 +338,9 @@ export default function AppView({ controller }: { controller: AppController }) {
 
       {/* Central channel column */}
       <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" inert={mobileViewport && (mobileSidebarOpen || mobileRoomInfoOpen)}>
+        {hasRoom && canonicalRoom.room && <ProviderRequestsPanel key={`${canonicalRoom.room.room_uid}:${guestSession?.agentId || "operator-local"}`}
+          requests={canonicalRoom.providerRequests} socket={canonicalRoom.socket} events={canonicalRoom.events}
+          connected={canonicalRoom.connectionState === "connected"} canPost={canonicalRoom.capabilities["message.send"] === true} />}
         <Suspense fallback={<DeferredViewFallback />}>
           {friendsOpen && roomLifecycle.enabled ? (
             <FriendsView onClose={() => setFriendsOpen(false)} />

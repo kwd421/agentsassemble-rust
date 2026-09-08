@@ -1,3 +1,4 @@
+import { providerRequestEventIsValid } from "./providerRequestProjection";
 import { channelMessageFieldsAreValid } from "./channelMessageContract";
 import { pendingProviderRequestsAreValid } from "./providerRequestContract";
 import { isCustomChannelId } from "./customChannelId";
@@ -231,6 +232,7 @@ export function publicRoomEventIsValid(value: unknown, expectedRoomId: string): 
     ) &&
     isSequence(value.seq) &&
     value.seq > 0 &&
+    providerRequestEventIsValid(value as unknown as RoomEvent) &&
     eventProjectionIsValid(value as unknown as RoomEvent)
   );
 }

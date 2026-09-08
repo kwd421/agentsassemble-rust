@@ -1,3 +1,5 @@
+import { applyProviderRequestEvents } from "./lib/providerRequestProjection";
+import type { PendingProviderRequest } from "./types/generated/PendingProviderRequest";
 import { isRoomLifecycleEvent, roomFromLifecycleEvent } from "./lib/roomLifecycleContract";
 import type { Room } from "./types/generated/Room";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -256,11 +258,13 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     scopeIsAccepted,
     socketIsAccepted,
   } = useAcceptedRoomProjection(projectionScopeKey);
+  const [providerRequests, setProviderRequests] = useState<PendingProviderRequest[]>([]);
   const authKey = projectionScopeKey;
   const projectionIsCurrent =
     Boolean(projectionScopeKey) && acceptedProjection.scope === projectionScopeKey;
 
   useEffect(() => {
+    setProviderRequests([]);
     if (!roomId || !auth || !serverSurface) {
       connectionGenerationRef.current += 1;
       clearAcceptedProjection();
@@ -368,6 +372,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
             ? previous
             : null
         );
+        setProviderRequests(snapshot.provider_requests);
         acceptedRoomUid = snapshot.room.room_uid;
         acceptProjection(currentSocket, displayResourceBase, snapshot.room);
         return true;
@@ -383,6 +388,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
             currentSocket.resync?.();
             return;
           }
+          setProviderRequests((previous) => applyProviderRequestEvents(previous, events, viewerParticipantId));
           applyEvents(roomId, events);
           callbacksRef.current.onRoomEvents?.(events);
           if (terminalRoom) {
@@ -758,6 +764,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     participantProfiles,
     roomSettings: projectionIsCurrent ? roomSettingsByRoom[roomId] || null : null,
     agentSessions,
+    providerRequests: projectionIsCurrent ? providerRequests : [],
     capabilities: projectionIsCurrent ? capabilitiesByRoom[roomId] || {} : {},
     availableProviders: projectionIsCurrent
       ? providerCatalogByRoom[roomId]?.providers || []

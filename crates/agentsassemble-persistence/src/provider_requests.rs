@@ -210,6 +210,7 @@ async fn open_in(
         BTreeMap::from([
             ("visibility".to_owned(), json!("owner")),
             ("owner_id".to_owned(), json!(participant.owner_id)),
+            ("session_id".to_owned(), json!(session.public.session_id)),
             ("provider_request".to_owned(), json!(input.request)),
             ("expires_at".to_owned(), json!(expires_at)),
         ]),
