@@ -11,6 +11,12 @@ use fs2::FileExt;
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
+#[cfg(windows)]
+#[path = "runtime_lease_windows.rs"]
+mod windows;
+#[cfg(windows)]
+pub(crate) use windows::WindowsRuntimeCustody;
+
 const MAX_LEASE_MARKER_BYTES: u64 = 256;
 #[cfg(unix)]
 const CLEANUP_RECEIPT_LOCK_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(2);
@@ -38,7 +44,8 @@ pub(crate) struct HeldRuntimeLease {
     #[cfg(unix)]
     boot_identity: String,
     token: String,
-    file: Option<File>,
+    #[cfg(windows)]
+    custody: Option<std::sync::Arc<WindowsRuntimeCustody>>,
 }
 
 impl HeldRuntimeLease {
@@ -77,7 +84,6 @@ impl HeldRuntimeLease {
             launch_lifetime: Mutex::new(Some(lifetime)),
             boot_identity,
             token,
-            file: None,
         })
     }
 
@@ -99,11 +105,14 @@ impl HeldRuntimeLease {
         write_marker(&mut file, &format!("pending:{token}"))?;
         #[cfg(windows)]
         {
-            write_marker(&mut file, &format!("windows:{token}"))?;
+            write_marker(&mut file, &format!("windows-pending:{token}"))?;
             Ok(Self {
                 path,
+                custody: Some(std::sync::Arc::new(WindowsRuntimeCustody::new(
+                    file,
+                    token.clone(),
+                )?)),
                 token,
-                file: Some(file),
             })
         }
         #[cfg(not(windows))]
@@ -116,7 +125,6 @@ impl HeldRuntimeLease {
                 launch_lifetime: Mutex::new(None),
                 boot_identity,
                 token,
-                file: None,
             })
         }
     }
@@ -164,10 +172,8 @@ impl HeldRuntimeLease {
             }
             *launch_lifetime = Some(lifetime);
         }
-        #[cfg(not(unix))]
-        if self.file.is_none() {
-            return Err(io::Error::other("provider launch lease is unavailable"));
-        }
+        #[cfg(windows)]
+        self.windows_custody()?.begin_launch_effect()?;
         Ok(())
     }
 
@@ -182,22 +188,39 @@ impl HeldRuntimeLease {
             unix_cleanup_receipt_is_present(&self.path, &self.token),
             Ok(true)
         );
-        #[cfg(not(unix))]
-        no_cleanup_receipt(self)
+        #[cfg(windows)]
+        self.windows_custody()
+            .is_ok_and(|custody| custody.is_gone())
     }
 
-    pub(crate) fn cleanup_pre_effect(mut self) {
+    pub(crate) fn cleanup_pre_effect(self) {
+        #[cfg(windows)]
+        let mut self_ = self;
+        #[cfg(windows)]
+        {
+            self_.custody.take();
+            self_.remove_files();
+        }
         #[cfg(unix)]
-        self.release_launch_lifetime();
-        self.file.take();
-        self.remove_files();
+        {
+            self.release_launch_lifetime();
+            self.remove_files();
+        }
     }
 
     pub(crate) fn release_and_remove(&mut self) {
         #[cfg(unix)]
         self.release_launch_lifetime();
-        self.file.take();
+        #[cfg(windows)]
+        self.custody.take();
         self.remove_files();
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn windows_custody(&self) -> io::Result<&std::sync::Arc<WindowsRuntimeCustody>> {
+        self.custody
+            .as_ref()
+            .ok_or_else(|| io::Error::other("provider launch lease is unavailable"))
     }
 
     fn remove_files(&self) {
@@ -205,11 +228,6 @@ impl HeldRuntimeLease {
         #[cfg(unix)]
         remove_runtime_lease(&self.lifetime_path, &self.token);
     }
-}
-
-#[cfg(not(unix))]
-const fn no_cleanup_receipt(_lease: &HeldRuntimeLease) -> bool {
-    false
 }
 
 #[cfg(unix)]
@@ -342,7 +360,7 @@ fn classify_unlocked_marker(path: &Path, marker: io::Result<String>) -> LeaseObs
         {
             classify_unlocked_launch_marker(path, token)
         }
-        (Some("windows" | "gone"), Some(token), None, None, None)
+        (Some("windows-pending" | "gone"), Some(token), None, None, None)
             if validate_token(token).is_ok() =>
         {
             LeaseObservation::GenerationGone {
@@ -501,11 +519,13 @@ fn remove_runtime_lease(path: &Path, token: &str) {
 fn marker_token(marker: &str) -> Option<&str> {
     let mut parts = marker.split(':');
     match (parts.next(), parts.next()) {
-        (Some("pending" | "launching" | "windows" | "unix" | "lifetime" | "gone"), Some(token))
-            if validate_token(token).is_ok() =>
-        {
-            Some(token)
-        }
+        (
+            Some(
+                "pending" | "launching" | "windows" | "windows-pending" | "windows-active" | "unix"
+                | "lifetime" | "gone",
+            ),
+            Some(token),
+        ) if validate_token(token).is_ok() => Some(token),
         _ => None,
     }
 }

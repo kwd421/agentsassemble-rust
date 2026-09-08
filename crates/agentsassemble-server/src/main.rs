@@ -59,7 +59,6 @@ struct Args {
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     run_internal_provider_mode();
-    #[cfg(unix)]
     if let Some(code) = agentsassemble_provider::run_managed_bridge_if_requested().await {
         std::process::exit(code);
     }

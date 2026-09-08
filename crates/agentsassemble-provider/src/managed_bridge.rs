@@ -21,7 +21,11 @@ mod parent_callbacks;
 mod parent_process;
 #[path = "managed_bridge_pipe.rs"]
 mod pipe;
+#[cfg(unix)]
 #[path = "managed_bridge_unix.rs"]
+mod platform;
+#[cfg(windows)]
+#[path = "managed_bridge_windows.rs"]
 mod platform;
 #[path = "managed_bridge_turn.rs"]
 mod turn;
@@ -58,6 +62,7 @@ async fn run<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     let mut input = wire::reader(input);
     let mut output = wire::writer(output);
     let launch: Launch = read(&mut input).await?.ok_or_else(protocol_error)?;
+    #[cfg(unix)]
     let Ok(runtime_lease) = HeldRuntimeLease::from_private_handoff(&launch.session) else {
         return write(
             &mut output,
@@ -72,9 +77,9 @@ async fn run<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     };
     write(&mut output, &Event::Acquired).await?;
     let credentials = ProviderCredentialStore::from_private_handoff(launch.credential);
-    #[cfg(test)]
+    #[cfg(any(test, windows))]
     let mut factory = ProductionDriverFactory::local(credentials);
-    #[cfg(not(test))]
+    #[cfg(all(not(test), unix))]
     let mut factory = {
         let executable = crate::guardian::reexecution_path().map_err(|_| protocol_error())?;
         let mut factory = ProductionDriverFactory::with_guardian(&executable);
@@ -86,6 +91,7 @@ async fn run<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         &mut input,
         &mut output,
         &launch.session,
+        #[cfg(unix)]
         &runtime_lease,
         &factory,
     )
@@ -96,12 +102,16 @@ async fn run_launch<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     input: &mut Reader<R>,
     output: &mut Writer<W>,
     session: &DurableAgentSession,
-    lease: &HeldRuntimeLease,
+    #[cfg(unix)] lease: &HeldRuntimeLease,
     factory: &ProductionDriverFactory,
 ) -> Result<(), DriverError> {
     // A lost pipe does not abandon an in-flight native launch. Its owner first returns
     // the driver or its exact safe/uncertain launch failure, then performs cleanup.
-    let launch = factory.launch_native(session, lease);
+    let launch = factory.launch_native(
+        session,
+        #[cfg(unix)]
+        lease,
+    );
     tokio::pin!(launch);
     let (result, parent_gone) = tokio::select! {
         result = &mut launch => (result, false),
@@ -145,11 +155,11 @@ fn same_runtime(left: &DurableAgentSession, right: &DurableAgentSession) -> bool
         && left.runtime_profile_key == right.runtime_profile_key
 }
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "managed_bridge_tests.rs"]
 mod tests;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 #[path = "managed_bridge_process_tests.rs"]
 mod process_tests;
 
@@ -184,3 +194,23 @@ pub(crate) async fn launch_managed(
     )
     .await
 }
+
+/// Native configuration locations cross only this private worker boundary.
+pub(crate) fn environment() -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
+    let mut environment = crate::process::sanitized_environment();
+    for name in [
+        crate::codex::config::HOME_ENV,
+        crate::grok::HOME_ENV,
+        crate::grok_acp::AUTH_PATH_ENV,
+        crate::claude_sdk_assets::RUNTIME_ENV,
+    ] {
+        if let Some(value) = std::env::var_os(name) {
+            environment.push((name.into(), value));
+        }
+    }
+    environment
+}
+
+#[cfg(all(test, windows))]
+#[path = "managed_bridge_windows_tests.rs"]
+mod windows_tests;

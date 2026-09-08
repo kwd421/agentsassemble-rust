@@ -41,7 +41,7 @@ async fn managed_api_lifecycle(secret: Result<String, ProviderCredentialError>) 
     let mut lease = HeldRuntimeLease::prepare(&session.public.room_id, &session.public.session_id)?;
     session.runtime_handle_id = lease.new_runtime_handle_id();
     session.runtime_lease_token = lease.token().to_owned();
-    session.runtime_owner_id = "api-parent".to_owned();
+    "api-parent".clone_into(&mut session.runtime_owner_id);
     lease.begin_launch_effect()?;
     match factory.launch(&session, &lease).await {
         Ok(mut driver) => {
@@ -101,7 +101,7 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     let mut lease = HeldRuntimeLease::prepare(&session.public.room_id, &session.public.session_id)?;
     session.runtime_handle_id = lease.new_runtime_handle_id();
     session.runtime_lease_token = lease.token().to_owned();
-    session.runtime_owner_id = "fixture-parent".to_owned();
+    "fixture-parent".clone_into(&mut session.runtime_owner_id);
     lease.begin_launch_effect()?;
     let (_binding, mut worker, parent) = super::process_tests::spawn_worker()?;
     let (parent_input, parent_output) = parent.into_split();
@@ -141,7 +141,7 @@ async fn native_lifecycle(termination: &str) -> TestResult {
         matches!(read_event(&mut input).await?, Some(Event::Attached { id: 1, result: Ok(attachment) }) if attachment.provider_session_id == "thread-1")
     );
     let next_id = if turn_case {
-        session.provider_session_id = "thread-1".to_owned();
+        "thread-1".clone_into(&mut session.provider_session_id);
         native_request_turn(
             &mut input,
             &mut output,
@@ -162,7 +162,7 @@ async fn native_lifecycle(termination: &str) -> TestResult {
             ));
         }
         "wrong_owner" => {
-            session.runtime_owner_id = "different-parent".to_owned();
+            "different-parent".clone_into(&mut session.runtime_owner_id);
             write(
                 &mut output,
                 &Command::Attach {

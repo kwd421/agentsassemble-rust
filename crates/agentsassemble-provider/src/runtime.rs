@@ -232,10 +232,12 @@ impl ProviderAdapter {
 
     /// Binds the host binary that implements the private managed-worker entry.
     #[doc(hidden)]
-    #[cfg(unix)]
     #[must_use]
     pub fn with_managed_executable(executable: &Path) -> Self {
+        #[cfg(unix)]
         let mut factory = ProductionDriverFactory::with_guardian(executable);
+        #[cfg(windows)]
+        let mut factory = ProductionDriverFactory::with_worker(executable);
         factory.managed = true;
         Self::with_factory(Arc::new(factory))
     }

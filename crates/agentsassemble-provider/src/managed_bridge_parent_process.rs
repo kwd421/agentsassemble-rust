@@ -28,18 +28,35 @@ pub(super) async fn launch(
     launch: Launch,
     lease: &HeldRuntimeLease,
 ) -> Result<Box<dyn ProviderDriver>, DriverLaunchError> {
+    let spawned = platform::spawn(
+        factory,
+        &launch.session,
+        #[cfg(windows)]
+        lease,
+    );
+    #[cfg(windows)]
+    let spawned = spawned.await;
     let Spawn {
         mut child,
         connection,
         proof,
-    } = platform::spawn(factory, &launch.session)?;
-    let ready = tokio::time::timeout(super::CONTROL_TIMEOUT, connect(connection, &launch, lease))
-        .await
-        .unwrap_or_else(|_| Err(DriverLaunchError::uncertain(protocol_error())));
+    } = spawned?;
+    let ready = tokio::time::timeout(
+        super::CONTROL_TIMEOUT,
+        connect(
+            connection,
+            &launch,
+            #[cfg(unix)]
+            lease,
+        ),
+    )
+    .await
+    .unwrap_or_else(|_| Err(DriverLaunchError::uncertain(protocol_error())));
     let (mut input, mut output, facts) = match ready {
         Ok(connected) => connected,
         Err(error) => {
             // Failed/cancelled handshakes have already dropped both pipe halves.
+            #[cfg(unix)]
             lease.release_launch_lifetime();
             let reaped = child.kill().await.is_ok();
             return Err(if reaped && proof.is_gone() {
@@ -80,7 +97,7 @@ pub(super) async fn launch(
 async fn connect<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     connection: impl Future<Output = Result<(R, W), DriverError>>,
     launch: &Launch,
-    lease: &HeldRuntimeLease,
+    #[cfg(unix)] lease: &HeldRuntimeLease,
 ) -> Result<(wire::Reader<R>, wire::Writer<W>, Facts), DriverLaunchError> {
     let (input, output) = connection.await.map_err(DriverLaunchError::uncertain)?;
     let mut input = wire::reader(input);
@@ -92,7 +109,10 @@ async fn connect<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         .await
         .map_err(DriverLaunchError::uncertain)?
     {
-        Some(Event::Acquired) => lease.release_launch_lifetime(),
+        Some(Event::Acquired) => {
+            #[cfg(unix)]
+            lease.release_launch_lifetime();
+        }
         Some(Event::Ready { result: Err(error) }) => return Err(error),
         _ => return Err(DriverLaunchError::uncertain(protocol_error())),
     }
@@ -124,7 +144,8 @@ async fn finish(
     if let Ok((reply, Event::Stopped { id, result })) = result {
         let status = tokio::time::timeout(super::CONTROL_TIMEOUT, child.wait()).await;
         let verified = matches!(status, Ok(Ok(_)));
-        let exited_successfully = matches!(status, Ok(Ok(status)) if status.success());
+        let exited_successfully =
+            matches!(status, Ok(Ok(status)) if platform::exited_successfully(status));
         let result = result.and_then(|()| {
             if exited_successfully && proof.is_gone() {
                 Ok(())

@@ -482,7 +482,6 @@ impl DriverFactory for ProductionDriverFactory {
         session: &'a DurableAgentSession,
         runtime_lease: &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
-        #[cfg(unix)]
         if self.managed {
             return Box::pin(crate::managed_bridge::launch_managed(
                 self,

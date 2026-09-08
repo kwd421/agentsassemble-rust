@@ -1409,3 +1409,21 @@ has one registration owner. The outer supervisor factory retains the real lease
 parameter on every platform; only the native entry omits it on Windows. The five
 managed cases, affected Clippy and unchanged mandatory gates pass again after this
 call-path change. No provider execution or public wire behavior changed.
+
+The Windows implementation now retains that Job with the exclusive lease, uses
+`windows-active` before launch and writes an exact `gone` receipt only after a live
+Job query reports no members. Worker creation uses ProcessKit's Command entry to
+preserve `CREATE_NO_WINDOW` alongside suspended assignment. No capture, timeout or
+watchdog is configured in that library; the existing bridge deadline remains the
+owner. Interprocess enforces local non-inherited pipes, and both peers check kernel
+PID identity before launch credentials. Windows-specific API lifecycle and cancelled
+handshake tests use private synthetic credentials without making provider requests.
+The prior Windows compile run at `565fa42` passed; these new runtime checks are
+pending Windows CI and do not inherit that result.
+
+The new pre-effect marker is `windows-pending`. An old `windows` marker cannot
+prove absence because the earlier native owner used it after launch as well; it
+now remains unknown. The bound worker connects once to the already-created local
+pipe with zero connection wait, so an occupied or missing endpoint fails without
+starting the library's blocking connection retry. Native children inherit neither
+side's pipe handle.

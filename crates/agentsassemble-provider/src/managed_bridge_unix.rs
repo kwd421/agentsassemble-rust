@@ -66,3 +66,7 @@ pub(super) async fn run_worker() -> Result<(), DriverError> {
     let (input, output) = socket.into_split();
     super::run(input, output).await
 }
+
+pub(super) fn exited_successfully(status: std::process::ExitStatus) -> bool {
+    status.success()
+}

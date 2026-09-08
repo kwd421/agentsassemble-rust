@@ -1,4 +1,3 @@
-#[cfg(unix)]
 use crate::driver::DriverError;
 use std::path::{Path, PathBuf};
 
@@ -12,7 +11,6 @@ use crate::{
     launch_error::DriverLaunchError,
     runtime_lease::HeldRuntimeLease,
 };
-#[cfg(unix)]
 use std::sync::OnceLock;
 
 pub(crate) trait DriverFactory: Send + Sync {
@@ -26,10 +24,11 @@ pub(crate) trait DriverFactory: Send + Sync {
 pub(crate) struct ProductionDriverFactory {
     pub(crate) credentials: ProviderCredentialStore,
     pub(crate) state_root: Option<PathBuf>,
-    #[cfg(unix)]
     pub(crate) managed: bool,
     #[cfg(unix)]
     pub(crate) guardian: OnceLock<Result<GuardianLaunch, DriverError>>,
+    #[cfg(windows)]
+    worker: OnceLock<Result<crate::filesystem::BoundExecutable, DriverError>>,
 }
 
 impl ProductionDriverFactory {
@@ -37,10 +36,11 @@ impl ProductionDriverFactory {
         Self {
             credentials,
             state_root: None,
-            #[cfg(unix)]
             managed: true,
             #[cfg(unix)]
             guardian: OnceLock::new(),
+            #[cfg(windows)]
+            worker: OnceLock::new(),
         }
     }
 
@@ -60,6 +60,29 @@ impl ProductionDriverFactory {
                 GuardianLaunch::production(executable).map_err(|_| custody_binding_failed()),
             ),
         }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn with_worker(executable: &Path) -> Self {
+        let mut factory = Self::local(ProviderCredentialStore::production());
+        factory.worker = OnceLock::from(
+            crate::filesystem::bind_helper_executable_sync(executable)
+                .map_err(|_| custody_binding_failed()),
+        );
+        factory
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn worker(&self) -> Result<&crate::filesystem::BoundExecutable, DriverError> {
+        self.worker
+            .get_or_init(|| {
+                let executable =
+                    std::env::current_exe().map_err(|_| custody_reexecution_failed())?;
+                crate::filesystem::bind_helper_executable_sync(&executable)
+                    .map_err(|_| custody_binding_failed())
+            })
+            .as_ref()
+            .map_err(Clone::clone)
     }
 
     #[cfg(unix)]
@@ -83,7 +106,7 @@ fn bind_current_guardian() -> Result<GuardianLaunch, DriverError> {
         })
 }
 
-#[cfg(all(unix, not(test)))]
+#[cfg(any(windows, all(unix, not(test))))]
 const fn custody_reexecution_failed() -> DriverError {
     DriverError::new(
         "provider_custody_reexecution_failed",
@@ -91,7 +114,6 @@ const fn custody_reexecution_failed() -> DriverError {
     )
 }
 
-#[cfg(unix)]
 const fn custody_binding_failed() -> DriverError {
     DriverError::new(
         "provider_custody_binding_failed",
