@@ -41,6 +41,19 @@ research/synthesis/task assignment, voice, Mafia and RimWorld remain out of scop
 Real provider execution waits until final closeout under the configured six-provider
 matrix; local acceptance must not claim those client runs.
 
+The external attendee client retains one provider-bound admission request/client
+secret through response loss, then retains only the admitted session bearer.
+It shares URL normalization, bounded JSON response reading and redacted rejection
+decoding with Connector while retaining separate credential purposes and client
+state. HTTP redirects are disabled. Tool/control retries use caller-retained exact
+request identities; transport errors never expose a credential-bearing URL or raw
+remote diagnostics. The client does not open a room database or infer host authority.
+The local TCP client test drops admission, leave and cleanup acknowledgments after
+their upstream commit and recovers each original receipt. Both existing Connector
+client/retry tests pass against the shared transport and loss-injection helper.
+Affected all-target/all-feature Clippy and unchanged mandatory gates pass. Native
+attendee socket/runtime integration and packaged entry packets remain in progress.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing

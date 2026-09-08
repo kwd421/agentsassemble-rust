@@ -157,6 +157,8 @@ mod connector_client;
 
 #[path = "connector_boundary/client_retry.rs"]
 mod client_retry;
+#[path = "support/lossy_http.rs"]
+mod lossy_http;
 
 #[path = "connector_boundary/mcp.rs"]
 mod mcp;
