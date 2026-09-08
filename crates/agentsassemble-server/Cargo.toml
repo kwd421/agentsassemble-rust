@@ -3,6 +3,7 @@ name = "agentsassemble-server"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+default-run = "agentsassemble-server"
 
 [dependencies]
 agentsassemble-domain = { path = "../agentsassemble-domain" }
@@ -22,6 +23,7 @@ http-cache-semantics = "3.0.0"
 governor = { version = "0.10.4", default-features = false, features = ["std"] }
 jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
 reqwest.workspace = true
+rmcp = { workspace = true, features = ["transport-io"] }
 hmac.workspace = true
 parking_lot.workspace = true
 process-wrap.workspace = true

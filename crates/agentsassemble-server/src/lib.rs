@@ -67,6 +67,7 @@ mod account_web;
 mod central_registration_web;
 mod connection_admission;
 pub mod connector_client;
+pub mod connector_mcp;
 mod connector_web;
 mod event_publication;
 mod friends_web;

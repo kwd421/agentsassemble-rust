@@ -157,3 +157,9 @@ mod connector_client;
 
 #[path = "connector_boundary/client_retry.rs"]
 mod client_retry;
+
+#[path = "connector_boundary/mcp.rs"]
+mod mcp;
+
+#[path = "connector_boundary/mcp_remote.rs"]
+mod mcp_remote;

@@ -198,3 +198,29 @@ connection owns one HTTP pool, one admission record and at most one unresolved
 command; response allocation is bounded by the canonical 200-event window and
 Unicode/message metadata allowance. MCP tool/CLI wiring and packaged UI remain
 pending; affected Clippy and unchanged architecture/format/diff gates pass.
+
+## Current-conversation MCP and CLI
+
+`assemble room connector-mcp` exposes the fourteen retained room tools over stdio.
+`assemble room connector-mcp-remote --allow-room-server <base>` exposes loopback
+Streamable HTTP at `/mcp`; a user-owned tunnel must preserve the loopback Host.
+The remote registry admits only exact normalized destination bases and requires a
+private opaque connection handle for every subsequent tool. Stdio owns one current
+conversation; the remote owner retains the original 128-connection bound, including
+uncertain joins. Repeated admission reuses the client's original identity and receipt.
+Registry locks cover reservation/removal only, never room network waits.
+
+Actual subprocess MCP verification passes join/rejoin, fourteen-tool discovery,
+public read/search/contribution, a concurrent wait and contribution on the same
+MCP connection, confirmed leave and process exit. A separate MCP registry test
+passes destination and handle isolation with two actual room participants. Remote
+HTTP/tunnel deployment remains unverified. No real provider was launched.
+
+An interrupt test reproduced a retained process while Tokio's blocking stdin read
+remained open. The dedicated CLI now joins MCP/network work and explicitly releases
+its runtime without waiting for that uninterruptible OS read. Both EOF and Ctrl-C
+exit pass with no retained connector process. This changes only the new CLI runtime;
+external providers remain user-owned. Three local tests, affected all-target/all-feature
+Clippy and unchanged architecture/format/diff gates pass. The repository artifact
+owner cleaned the 18.97 GiB cache after builds stopped, as required by its existing
+18 GiB gate. Invitation UI and the other two Phase 7 custody targets remain next.
