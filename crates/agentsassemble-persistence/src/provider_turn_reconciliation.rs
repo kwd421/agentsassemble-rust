@@ -261,22 +261,7 @@ impl SqliteStore {
         if participant.status != ParticipantStatus::Joined || participant.muted {
             return Err(stale_reconciliation());
         }
-        let assignment_json = sqlx::query_scalar::<_, String>(
-            "SELECT assignment_json FROM provider_turn_executions \
-             WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
-             AND execution_id = ? AND phase = 'assigned'",
-        )
-        .bind(&expected.room_id)
-        .bind(&expected.session_id)
-        .bind(generation_i64(expected.turn_generation)?)
-        .bind(&expected.execution_id)
-        .fetch_optional(&mut *transaction)
-        .await?
-        .ok_or_else(stale_reconciliation)?;
-        let assignment = serde_json::from_str::<
-            crate::provider_turn_execution::ProviderTurnAssignmentEnvelope,
-        >(&assignment_json)?;
-        validate_assignment_envelope(&mut transaction, &session, &assignment).await?;
+        let assignment = load_assignment_in(&mut transaction, &session, &execution).await?;
         transaction.commit().await?;
         Ok(AgentTurnAssignment {
             session,
@@ -635,6 +620,22 @@ async fn finalize_runtime_gone_session(
         events,
         next_assignments: scheduled.next_assignments,
     })
+}
+
+pub(crate) async fn load_assignment_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &DurableAgentSession,
+    execution: &ProviderTurnExecution,
+) -> Result<crate::provider_turn_execution::ProviderTurnAssignmentEnvelope, PersistenceError> {
+    let assignment_json = sqlx::query_scalar::<_, String>(
+        "SELECT assignment_json FROM provider_turn_executions WHERE room_id=? AND session_id=? AND turn_generation=? AND execution_id=? AND phase=?",
+    ).bind(&execution.room_id).bind(&execution.session_id)
+        .bind(generation_i64(execution.turn_generation)?).bind(&execution.execution_id)
+        .bind(execution.phase.as_str()).fetch_optional(&mut **transaction).await?
+        .ok_or_else(stale_reconciliation)?;
+    let assignment = serde_json::from_str(&assignment_json)?;
+    validate_assignment_envelope(transaction, session, &assignment).await?;
+    Ok(assignment)
 }
 
 async fn validate_assignment_envelope(

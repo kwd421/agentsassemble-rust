@@ -144,7 +144,7 @@ async fn attendee_reports_share_vote_decline_and_failure_terminal_owners() -> Te
     Ok(())
 }
 
-async fn assigned_report() -> Result<
+pub(super) async fn assigned_report() -> Result<
     (
         SqliteStore,
         AttendeeConnectionAuthorization,
@@ -173,16 +173,22 @@ async fn assigned_report() -> Result<
         )
         .await?;
     let assigned = sent.assignments.first().ok_or("assignment missing")?;
-    let start = store
-        .authorize_provider_turn_start(
-            "general",
-            &assigned.session.public.session_id,
-            assigned.turn_generation,
-            &assigned.turn_id,
-        )
-        .await?;
+    let delivery = store
+        .deliver_attendee_turn(&connection, now)
+        .await?
+        .ok_or("delivery missing")?;
+    assert!(!delivery.resume);
+    assert_eq!(delivery.authority.execution_id, assigned.execution_id);
+    assert_eq!(delivery.input.provider_input, assigned.provider_input);
+    let retry = store
+        .deliver_attendee_turn(&connection, now)
+        .await?
+        .ok_or("retry missing")?;
+    assert!(retry.resume);
+    assert_eq!(retry.authority, delivery.authority);
+    let start = delivery.authority;
     store
-        .mark_provider_turn_running(&start, "external-provider-turn")
+        .record_attendee_turn_started(&connection, &start, "external-provider-turn", now)
         .await?;
     let report = AttendeeTurnReport {
         request_id: Uuid::new_v4(),

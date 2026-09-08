@@ -419,3 +419,24 @@ architecture/format/diff/artifact gates pass. Each report uses one existing dura
 receipt and room write budget, without a new queue, timer, or process. Network turn
 assignment, WebSocket reporting and external cleanup are still pending; this is a
 storage boundary checkpoint rather than external CLI acceptance.
+
+## Exact external turn delivery
+
+The current ready connection can now consume or recover its one canonical assigned
+execution. First delivery calls the shared transaction-local start owner. Repeated
+delivery and reconnect retain the original nonce, execution, provider turn and
+immutable bounded input, explicitly marked for client-owned resume/reconciliation.
+The projection contains only that attendee's runtime authority and existing room
+assignment envelope; no durable host session configuration crosses this boundary.
+Interrupt/recovery effects retain their separate lifecycle owner rather than being
+returned as fresh work. Started acknowledgements revalidate the connection in the
+same transaction and permit only an exact Running replay.
+
+The start owner is separated from execution finalization, and both managed recovery
+and external delivery share stored-envelope loading and validation. Three external
+turn tests and forty-four existing managed room-turn cases pass, including report
+completion through the new delivery/start APIs, response-loss recovery, readiness,
+replacement, changed start IDs and foreign-room rejection. Affected Clippy and
+unchanged architecture/format/diff/artifact gates pass. There is no new persisted
+queue, worker or timer. RoomRuntime/WebSocket integration and client runtime cleanup
+remain pending before the external attendee flow can meet acceptance.

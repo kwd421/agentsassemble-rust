@@ -227,3 +227,10 @@ pub use sqlite::{
 pub use room_turns::{AttendeeTurnOutcome, AttendeeTurnReport};
 #[cfg(test)]
 mod attendee_turn_report_tests;
+
+mod attendee_turn_delivery;
+pub use attendee_turn_delivery::AttendeeTurnDelivery;
+pub use provider_turn_execution::ProviderTurnAssignmentEnvelope;
+
+#[cfg(test)]
+mod attendee_turn_delivery_tests;
