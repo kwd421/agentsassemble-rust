@@ -96,6 +96,18 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
+        if session.public.external_owned && session.public.process_ownership == "external" {
+            let events = crate::attendee_stop::prepare_in(
+                &mut transaction,
+                principal,
+                &mut session,
+                &operation_id,
+            )
+            .await?;
+            transaction.commit().await?;
+            return Ok(AgentStopPlan::ExternalPending(events));
+        }
+        crate::room_runtime_cleanup::require_server_custody(&session)?;
         if !lifecycle_intent_is_empty(&session) {
             require_matching_operation(&session, AgentLifecycleAction::Stop, &operation_id)?;
             if session.lifecycle_intent_status == AgentLifecycleIntentStatus::EffectApplied {
@@ -297,7 +309,6 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
     ) -> Result<RoomCommandMutation, PersistenceError> {
-        let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
@@ -318,48 +329,8 @@ impl SqliteStore {
             });
         }
         let (room, settings) = load_active_room(&mut transaction, &principal.room_id).await?;
-        let mut session = load_session(&mut transaction, &principal.room_id, &agent_id).await?;
-        let operation_id = lifecycle_operation_id(principal, request_id, STOP);
-        require_intent(
-            &session,
-            AgentLifecycleAction::Stop,
-            &operation_id,
-            AgentLifecycleIntentStatus::EffectApplied,
-            "stale_stop_confirmation",
-        )?;
-        let reservation = LifecycleReservation::new(
-            principal,
-            request_id,
-            STOP,
-            &payload_hash,
-            &agent_id,
-            &operation_id,
-        );
-        finish_lifecycle_command(&mut transaction, &reservation).await?;
-        let events =
-            detach_confirmed_session(&mut transaction, principal, &agent_id, &mut session).await?;
-        let result = json!({
-            "agent_session": session.public,
-            "process": {
-                "stopped": true,
-                "alive": false,
-                "ownership": "server",
-                "confirmed": true,
-            },
-            "revoked_sessions": 0,
-            "events": events,
-            "event": events.last(),
-        });
-        let mut outcome = store_result(
-            &mut transaction,
-            principal,
-            request_id,
-            STOP,
-            payload_hash,
-            result,
-            events,
-        )
-        .await?;
+        let mut outcome =
+            finalize_stop_in(&mut transaction, principal, request_id, payload).await?;
         let scheduled = assign_pending_in(&mut transaction, &room, &settings).await?;
         outcome.events.extend(scheduled.events);
         transaction.commit().await?;
@@ -368,6 +339,58 @@ impl SqliteStore {
             assignments: scheduled.next_assignments,
         })
     }
+}
+
+pub(crate) async fn finalize_stop_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    request_id: &str,
+    payload: &Value,
+) -> Result<crate::CommandOutcome, PersistenceError> {
+    let agent_id = payload_agent_id(payload)?;
+    let payload_hash = canonical_payload_hash(payload);
+    let mut session = load_session(transaction, &principal.room_id, &agent_id).await?;
+    let operation_id = lifecycle_operation_id(principal, request_id, STOP);
+    require_intent(
+        &session,
+        AgentLifecycleAction::Stop,
+        &operation_id,
+        AgentLifecycleIntentStatus::EffectApplied,
+        "stale_stop_confirmation",
+    )?;
+    let reservation = LifecycleReservation::new(
+        principal,
+        request_id,
+        STOP,
+        &payload_hash,
+        &agent_id,
+        &operation_id,
+    );
+    finish_lifecycle_command(transaction, &reservation).await?;
+    let events = detach_confirmed_session(transaction, principal, &agent_id, &mut session).await?;
+    let result = json!({
+        "agent_session": session.public,
+        "process": {
+            "stopped": true,
+            "alive": false,
+            "ownership": session.public.process_ownership,
+            "confirmed": true,
+        },
+        "revoked_sessions": 0,
+        "events": events,
+        "event": events.last(),
+    });
+    let outcome = store_result(
+        transaction,
+        principal,
+        request_id,
+        STOP,
+        payload_hash,
+        result,
+        events,
+    )
+    .await?;
+    Ok(outcome)
 }
 
 async fn detach_confirmed_session(

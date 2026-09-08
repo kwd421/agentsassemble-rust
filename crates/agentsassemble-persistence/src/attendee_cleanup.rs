@@ -234,6 +234,10 @@ async fn checkpoint_absence(
     tx: &mut Transaction<'_, Sqlite>,
     key: &RoomRuntimeCleanupKey,
 ) -> Result<AgentTurnCommit, PersistenceError> {
+    let mut session = load_session(tx, &key.room_id, &key.session_id).await?;
+    if session.lifecycle_intent_action == agentsassemble_domain::AgentLifecycleAction::Stop {
+        return crate::attendee_stop::confirm_in(tx, session).await;
+    }
     if let Some(candidate) = crate::provider_turn_reconciliation::load_active_candidate_in(
         tx,
         &key.room_id,
@@ -248,7 +252,6 @@ async fn checkpoint_absence(
         )
         .await;
     }
-    let mut session = load_session(tx, &key.room_id, &key.session_id).await?;
     if !crate::agent_lifecycle_authority::lifecycle_intent_is_empty(&session) {
         return Err(stale_cleanup());
     }

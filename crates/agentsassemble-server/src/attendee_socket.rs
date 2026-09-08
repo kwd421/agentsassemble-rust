@@ -79,6 +79,16 @@ async fn run_connected(
     let idle = tokio::time::sleep(Duration::from_mins(5));
     tokio::pin!(idle);
     loop {
+        if deliver_stop(state, connection, &mut sender).await != Some(false) {
+            break;
+        }
+        if ready
+            && deliver(state, connection, &mut sender, &mut delivered)
+                .await
+                .is_none()
+        {
+            break;
+        }
         tokio::select! {
             () = state.shutdown.cancelled() => break,
             () = &mut expiry => break,
@@ -102,13 +112,6 @@ async fn run_connected(
             .revalidate_attendee_connection(connection, chrono::Utc::now())
             .await
             .is_err()
-        {
-            break;
-        }
-        if ready
-            && deliver(state, connection, &mut sender, &mut delivered)
-                .await
-                .is_none()
         {
             break;
         }
@@ -144,6 +147,31 @@ async fn receive(
     };
     send(state, connection, sender, response).await?;
     Some(ready)
+}
+
+async fn deliver_stop(
+    state: &AppState,
+    connection: &AttendeeConnectionAuthorization,
+    sender: &mut SplitSink<WebSocket, Message>,
+) -> Option<bool> {
+    let authority = state
+        .store
+        .authorize_attendee_cleanup(connection.session().session_fingerprint())
+        .await
+        .ok()?;
+    let stop = state.store.load_attendee_cleanup(&authority).await.ok()?;
+    let Some(stop) = stop else {
+        return Some(false);
+    };
+    send(
+        state,
+        connection,
+        sender,
+        json!({"type":"stop", "stop":stop}),
+    )
+    .await?;
+    // The positive report uses HTTP so revocation cannot lose its acknowledgement.
+    Some(true)
 }
 
 async fn deliver(

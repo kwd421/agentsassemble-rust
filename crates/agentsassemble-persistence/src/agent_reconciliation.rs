@@ -254,6 +254,24 @@ pub(crate) async fn load_candidate(
         return Ok(None);
     }
     crate::room_runtime_cleanup::require_server_custody(&session)?;
+    let reservations = load_pending_reservations(transaction, room_id, session_id).await?;
+    let reservation = validate_candidate_authority(&session, &reservations)?;
+    let cas_token = canonical_payload_hash(&json!({
+        "session": serde_json::from_str::<Value>(&encoded_session)?,
+        "reservations": reservations,
+    }));
+    Ok(Some(RuntimeReconciliationCandidate {
+        session,
+        reservation,
+        cas_token,
+    }))
+}
+
+pub(crate) async fn load_pending_reservations(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    session_id: &str,
+) -> Result<Vec<Value>, PersistenceError> {
     let reservation_rows = sqlx::query(
         "SELECT principal_id, request_id, action, payload_hash, principal_json, payload_json, supervisor_generation, operation_id, status, phase, prepared_result_json, failure_code, failure_message FROM lifecycle_command_reservations WHERE room_id = ? AND session_id = ? AND status = 'pending' ORDER BY principal_id, request_id",
     )
@@ -281,19 +299,10 @@ pub(crate) async fn load_candidate(
             })
         })
         .collect::<Vec<Value>>();
-    let reservation = validate_candidate_authority(&session, &reservations)?;
-    let cas_token = canonical_payload_hash(&json!({
-        "session": serde_json::from_str::<Value>(&encoded_session)?,
-        "reservations": reservations,
-    }));
-    Ok(Some(RuntimeReconciliationCandidate {
-        session,
-        reservation,
-        cas_token,
-    }))
+    Ok(reservations)
 }
 
-fn validate_candidate_authority(
+pub(crate) fn validate_candidate_authority(
     session: &DurableAgentSession,
     reservations: &[Value],
 ) -> Result<Option<RuntimeReconciliationReservation>, PersistenceError> {

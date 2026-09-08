@@ -139,6 +139,7 @@ impl SqliteStore {
             }
             if row.get::<String, _>("status") == "pending"
                 && stored_generation != supervisor_generation
+                && !crate::attendee_stop::owns_pending_reservation(transaction, reservation).await?
             {
                 return Err(PersistenceError::CommandUnresolved {
                     code: "runtime_effect_unconfirmed",

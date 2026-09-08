@@ -365,6 +365,14 @@ pub(crate) async fn execute_agent_stop(
     };
     match plan {
         AgentStopPlan::Outcome(outcome) => CommandExecution::success(*outcome),
+        AgentStopPlan::ExternalPending(events) => CommandExecution::unresolved_failure_with_events(
+            PersistenceError::CommandUnresolved {
+                code: "external_stop_pending",
+                message: "The external attendee must confirm its exact runtime has stopped."
+                    .to_owned(),
+            },
+            events,
+        ),
         AgentStopPlan::Finalize => {
             match store
                 .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
@@ -375,86 +383,95 @@ pub(crate) async fn execute_agent_stop(
             }
         }
         AgentStopPlan::Stop(effect) => {
-            let effect = match store
-                .authorize_agent_stop_effect(
-                    command.mutation_authority(),
-                    &command.request_id,
-                    &command.payload,
-                    &effect.operation_id,
-                )
-                .await
-            {
-                Ok(effect) => effect,
-                Err(error) => {
-                    return record_agent_stop_authorization_failure(
-                        store,
-                        command,
-                        &effect.operation_id,
-                        error,
-                    )
-                    .await;
-                }
-            };
-            let stop = provider_adapter
-                .stop(
-                    &command.principal.room_id,
-                    &effect.session_id,
-                    &effect.runtime_handle_id,
-                    &effect.runtime_owner_id,
-                    &effect.runtime_lease_token,
-                )
-                .await;
-            if let Err(error) = stop {
-                let events = match store
-                    .mark_agent_stop_unconfirmed(
-                        &command.principal,
-                        &effect.session_id,
-                        &effect.operation_id,
-                        error.code,
-                        error.message,
-                    )
-                    .await
-                {
-                    Ok(events) => events,
-                    Err(recording_error) => {
-                        return CommandExecution::unresolved_failure(recording_error);
-                    }
-                };
-                return CommandExecution::unresolved_failure_with_events(
-                    PersistenceError::CommandRejected {
-                        code: error.code,
-                        message: error.message.to_owned(),
-                    },
-                    events,
-                );
-            }
-            if let Err(error) = store
-                .record_agent_stop_effect(
-                    &command.principal.room_id,
-                    &effect.session_id,
-                    &effect.operation_id,
-                )
-                .await
-            {
-                return CommandExecution::unresolved_failure(error);
-            }
-            provider_adapter
-                .release_confirmed_stop(
-                    &command.principal.room_id,
-                    &effect.session_id,
-                    &effect.runtime_handle_id,
-                    &effect.runtime_owner_id,
-                    &effect.runtime_lease_token,
-                )
-                .await;
-            match store
-                .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
-                .await
-            {
-                Ok(mutation) => CommandExecution::mutation(mutation),
-                Err(error) => CommandExecution::unresolved_failure(error),
-            }
+            execute_managed_stop(store, provider_adapter, command, effect).await
         }
+    }
+}
+
+async fn execute_managed_stop(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    command: &RoomCommand,
+    effect: agentsassemble_persistence::AgentStopEffect,
+) -> CommandExecution {
+    let effect = match store
+        .authorize_agent_stop_effect(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+            &effect.operation_id,
+        )
+        .await
+    {
+        Ok(effect) => effect,
+        Err(error) => {
+            return record_agent_stop_authorization_failure(
+                store,
+                command,
+                &effect.operation_id,
+                error,
+            )
+            .await;
+        }
+    };
+    let stop = provider_adapter
+        .stop(
+            &command.principal.room_id,
+            &effect.session_id,
+            &effect.runtime_handle_id,
+            &effect.runtime_owner_id,
+            &effect.runtime_lease_token,
+        )
+        .await;
+    if let Err(error) = stop {
+        let events = match store
+            .mark_agent_stop_unconfirmed(
+                &command.principal,
+                &effect.session_id,
+                &effect.operation_id,
+                error.code,
+                error.message,
+            )
+            .await
+        {
+            Ok(events) => events,
+            Err(recording_error) => {
+                return CommandExecution::unresolved_failure(recording_error);
+            }
+        };
+        return CommandExecution::unresolved_failure_with_events(
+            PersistenceError::CommandRejected {
+                code: error.code,
+                message: error.message.to_owned(),
+            },
+            events,
+        );
+    }
+    if let Err(error) = store
+        .record_agent_stop_effect(
+            &command.principal.room_id,
+            &effect.session_id,
+            &effect.operation_id,
+        )
+        .await
+    {
+        return CommandExecution::unresolved_failure(error);
+    }
+    provider_adapter
+        .release_confirmed_stop(
+            &command.principal.room_id,
+            &effect.session_id,
+            &effect.runtime_handle_id,
+            &effect.runtime_owner_id,
+            &effect.runtime_lease_token,
+        )
+        .await;
+    match store
+        .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
+        .await
+    {
+        Ok(mutation) => CommandExecution::mutation(mutation),
+        Err(error) => CommandExecution::unresolved_failure(error),
     }
 }
 

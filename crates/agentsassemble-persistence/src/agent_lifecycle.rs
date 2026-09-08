@@ -3,7 +3,7 @@ use crate::room_runtime_cleanup::load_launch_session;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
     AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
-    ParticipantStatus, canonical_payload_hash,
+    ParticipantStatus, RoomEvent, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -53,6 +53,7 @@ pub enum AgentStartPlan {
 pub enum AgentStopPlan {
     Outcome(Box<CommandOutcome>),
     Stop(AgentStopEffect),
+    ExternalPending(Vec<RoomEvent>),
     Finalize,
 }
 

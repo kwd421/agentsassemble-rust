@@ -526,3 +526,28 @@ wrong-purpose rejection, private/no-store responses, replay identity and no publ
 runtime-lease disclosure. All four attendee HTTP/queue/socket tests and affected
 all-target/all-feature Clippy pass. External CLI and explicit stop/interrupt controls
 remain pending; no real provider process was started for this local proof.
+
+### External operator stop checkpoint (2026-09-08)
+
+`agent.stop` now reserves its canonical command and marks external custody pending
+without calling a host provider adapter. Its existing cleanup request reaches the
+exact attendee socket before turn delivery; that socket closes after delivery and
+the positive report uses the post-revocation HTTP boundary. Retry preserves the
+same cleanup identity across a changed server runtime generation. This exception
+is owned by the exact pending external stop, with the normal reservation hash and
+operation checks intact; managed effects still require host reconciliation.
+
+The sealed cleanup report reuses canonical lifecycle reservation validation, exact
+turn terminalization and stop finalization in its transaction. Original operator
+and cleanup-report receipts commit together, including after room archival. The
+stored operator identity only identifies the previously authorized command. No new
+room authority, provider process, queue, worker or timer is introduced. Host stop
+dispatch is separated from its custody routing; no structure gate was changed.
+
+All 310 persistence tests pass, including exact report/retry, changed-generation
+custody and archive completion. The three real local attendee socket cases pass,
+including operator stop delivery and recovery of its committed command receipt.
+The new socket test initially waited for the wrong response operation; using the
+canonical `nack` shape resolved that test failure. Affected all-target/all-feature
+Clippy passes. Interrupt/mute effects, provider-request relay, CLI, entry packets
+and managed bridge acceptance remain pending; real providers have not run.

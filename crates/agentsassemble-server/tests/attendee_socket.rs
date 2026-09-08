@@ -306,3 +306,68 @@ async fn report_cleanup_retry(
     }
     Ok(event_id)
 }
+
+#[tokio::test]
+async fn operator_stop_reaches_external_socket_and_original_command_replays_after_report()
+-> TestResult {
+    let (store, invite) = attendee::fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let client = Client::new();
+    let joined: Value = client.post(format!("{}/api/room-attendee/join", server.base_url))
+        .bearer_auth(&invite.invite_bearer)
+        .json(&json!({"request_id":Uuid::new_v4(),"client_secret":URL_SAFE_NO_PAD.encode([11;32]),"provider":"codex","display_name":"Stop AI"}))
+        .send().await?.error_for_status()?.json().await?;
+    let bearer = joined["session_bearer"].as_str().ok_or("bearer missing")?;
+    let mut external = connect(&server.base_url, bearer).await?;
+    ready(&mut external).await;
+    let mut manager = local_socket::connect(&server.base_url, server.state(), "general").await;
+    manager.subscribe(0).await;
+    manager.receive_json().await;
+    let command = json!({"op":"command","request_id":"external-operator-stop","action":"agent.stop","payload":{"agent_id":joined["participant_id"]}});
+    manager.send_json(&command).await;
+    loop {
+        let frame = manager
+            .receive_json_with_timeout(Duration::from_secs(2))
+            .await;
+        if frame["op"] == "nack" {
+            assert_eq!(frame["error"]["code"], "external_stop_pending");
+            break;
+        }
+        assert_ne!(frame["op"], "ack");
+    }
+    let stop = external
+        .receive_json_with_timeout(Duration::from_secs(2))
+        .await;
+    assert_eq!(stop["type"], "stop");
+    assert_eq!(stop["stop"]["runtime_lease_token"], "external-lease");
+    assert!(tokio::time::timeout(Duration::from_secs(2), external.wait_closed()).await?);
+    let snapshot = store.snapshot("general", 0, 200).await?;
+    assert!(snapshot.agent_sessions[0].provider_session_active);
+    assert_eq!(
+        snapshot.agent_sessions[0].runtime_status,
+        agentsassemble_domain::AgentRuntimeStatus::Stopping
+    );
+    let endpoint = format!("{}/api/room-attendee/cleanup", server.base_url);
+    report_cleanup_retry(
+        &client,
+        &endpoint,
+        bearer,
+        &json!({"request_id":Uuid::new_v4(),"stopped":stop["stop"]}),
+    )
+    .await?;
+    manager.send_json(&command).await;
+    loop {
+        let frame = manager
+            .receive_json_with_timeout(Duration::from_secs(2))
+            .await;
+        if frame["op"] == "ack" {
+            assert_eq!(frame["result"]["process"]["ownership"], "external");
+            assert_eq!(frame["result"]["process"]["confirmed"], true);
+            break;
+        }
+        assert_ne!(frame["op"], "nack");
+    }
+    manager.close().await;
+    server.stop().await;
+    Ok(())
+}
