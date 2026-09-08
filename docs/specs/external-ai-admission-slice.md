@@ -172,3 +172,29 @@ no fabricated provider cleanup. Local TCP wait/search/context/vote checks pass
 alongside a moderation transaction test and seven affected existing search/pairing
 checks. All-target/all-feature Clippy, architecture/format/diff and artifact checks
 pass. Actual MCP/current-conversation and packaged invitation flows remain pending.
+
+## Current-conversation transport client
+
+The external client owns HTTP transport, private admission/session state and one
+pending command receipt; it never opens the room store or launches a provider.
+URL parsing and bounded response decoding are separate from connection lifecycle.
+Redirects are disabled so admission and session credentials remain on the chosen
+server. Remote-service destination lists compare normalized exact server bases;
+credential purpose remains enforced by the server's existing admission owner.
+
+Uncertain admission retains its original request UUID and client secret. Once
+admitted, failed initial observation retries only the read. Repeated joins check
+current authority rather than reporting a cached live membership. One unresolved
+command retains its exact request and payload; a different command is rejected
+until that receipt is resolved. Wait observation has separate custody, so a pending
+wait does not block a contribution or explicit leave. Reads do not consume pending
+observations. Close cancels owned transport and never claims a provider stop.
+
+Direct local-client flow and a controlled HTTP relay pass. The relay invalidates
+responses only after the real server commits admission and publication; retries
+recover the original participant and command receipt, with exactly one message.
+The client introduces no worker process, background retry or polling task. Each
+connection owns one HTTP pool, one admission record and at most one unresolved
+command; response allocation is bounded by the canonical 200-event window and
+Unicode/message metadata allowance. MCP tool/CLI wiring and packaged UI remain
+pending; affected Clippy and unchanged architecture/format/diff gates pass.

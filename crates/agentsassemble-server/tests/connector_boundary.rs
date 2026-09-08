@@ -151,3 +151,9 @@ async fn fixture() -> Result<(SqliteStore, RoomManagerAuthority), Box<dyn std::e
 
 #[path = "connector_boundary/reads.rs"]
 mod reads;
+
+#[path = "connector_boundary/client.rs"]
+mod connector_client;
+
+#[path = "connector_boundary/client_retry.rs"]
+mod client_retry;
