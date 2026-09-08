@@ -8251,3 +8251,29 @@ frontend's all-agents-require-managed-sessions assumption and the persisted owne
 identity-domain error. No real AI provider ran. Affected tests, Clippy and unchanged
 gates pass; isolated app and owned-process cleanup is complete. The other two
 Phase 7 custody targets and whole-phase review remain pending.
+
+## Phase 7 managed requests and hidden-event correction — 2026-09-09
+
+The isolated package at `e52fc40` created a saved external AI friend, generated its
+attendee packet and exercised copying. A clearly labelled local Codex protocol peer
+was discovered through the normal executable/catalog owner and started through the
+packaged managed worker. Its native question reached the room owner and desktop
+dialog; the selected answer was delivered, authenticated Room Portal read/publication
+produced the visible room message, the session returned to idle, and the normal stop
+control removed its owned processes. No real model or provider account was used.
+An initial peer omitted the required terminal room-tool action: the app retained
+recovery custody, displayed its diagnostic in session details and stopped correctly.
+After correcting that peer, ordinary restart retried the retained input successfully.
+
+A separately admitted human then received repeated successful WebSocket upgrades
+and complete snapshots, but the browser rejected the server's `event_hidden` cursor
+markers because their deliberately empty actors failed ordinary-event validation.
+The browser now accepts that exact anonymous actor for owner-only hidden events,
+retains nonempty actors for ordinary events, and exposes connection errors until a
+current snapshot is accepted. Saved-friend copying now reports a participant packet
+instead of a connector link. The new transport regression failed before correction;
+115 affected frontend tests, production build/CSS, architecture/source-growth,
+19 policy checks, formatting, diff and artifact gates pass. No polling or authority
+owner changed. Corrected packaged human/companion and 390px verification remain next.
+The app, its tunnel and owned children were stopped; its isolated data is retained
+only for the continuing verification run.

@@ -744,12 +744,12 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
     syncIssue:
       Boolean(roomId && auth) &&
       lastError instanceof RoomSocketSayError &&
-      [
+      (!projectionIsCurrent || connectionState !== "connected" || [
         "event_sequence_gap", "event_sequence_invalid", "room_scope_changed",
         "plugin_event_gap", "resync_required",
         "settings_ack_invalid", "settings_conflict", "settings_snapshot_invalid",
         "authorization_failed", "socket_connection_failed",
-      ].includes(lastError.category)
+      ].includes(lastError.category))
         ? {
             category: lastError.category,
             message: lastError.message,

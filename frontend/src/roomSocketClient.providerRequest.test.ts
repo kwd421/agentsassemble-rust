@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { flushPromises, handshakeFrames, openHarness } from "./test/roomSocketHarness";
+import { event, flushPromises, handshakeFrames, openHarness } from "./test/roomSocketHarness";
 import { commandAckResultIsValid } from "./lib/roomSocketValidation";
 
 const requestId = "00000000-0000-4000-8000-000000000001";
@@ -10,6 +10,40 @@ const ack = {
 };
 
 describe("provider request response transport", () => {
+  it("keeps another viewer's hidden request events in snapshot, live and history cursors", async () => {
+    const hidden = (seq: number) => {
+      const { content: _content, ...base } = event(seq);
+      return { ...base, type: "event_hidden", visibility: "owner", actor: { participant_id: "", participant_type: "" } };
+    };
+    const onRoomSnapshot = vi.fn();
+    const onRoomEvents = vi.fn();
+    const onError = vi.fn();
+    const { handle, sockets } = openHarness({ onRoomSnapshot, onRoomEvents, onError });
+    try {
+      await flushPromises(); sockets[0].open();
+      const first = handshakeFrames(2, 2);
+      sockets[0].receive(first.receipt);
+      sockets[0].receive({ ...first.snap, events: [event(1), hidden(2)] });
+      await flushPromises();
+      expect(onError).not.toHaveBeenCalled();
+      expect(handle.ready()).toBe(true);
+      expect(onRoomSnapshot).toHaveBeenCalledOnce();
+      sockets[0].receive({ op: "event", stream: "room_events", events: [hidden(3), event(4)], latest_seq: 4 });
+      await flushPromises();
+      expect(onRoomEvents).toHaveBeenCalledWith([hidden(3), event(4)]);
+      expect(commandAckResultIsValid("room.history", { before_seq: 4, limit: 3 }, {
+        events: [event(1), hidden(2), hidden(3)], oldest_seq: 1, last_seq: 4, has_more_before: false,
+      }, "general", "operator-local")).toBe(true);
+      // Ordinary events still require their actual actor; hidden events cannot carry one.
+      for (const invalid of [
+        { ...event(5), actor: hidden(5).actor },
+        { ...hidden(5), actor: event(5).actor },
+      ]) expect(commandAckResultIsValid("room.history", { before_seq: 0, limit: 1 }, {
+        events: [invalid], oldest_seq: 5, last_seq: 5, has_more_before: true,
+      }, "general", "operator-local")).toBe(false);
+    } finally { handle.close(); }
+  });
+
   it("retains the original identity and answer across reconnect without overwriting a pending response", async () => {
     vi.useFakeTimers();
     const { handle, sockets, opened } = openHarness({});

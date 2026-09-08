@@ -269,7 +269,10 @@ describe("useCanonicalRoom synchronization", () => {
     expect(result.current.syncIssue).toBeNull();
   });
 
-  it("keeps a failed WebSocket connection visible until a snapshot connects", async () => {
+  it.each([
+    ["transport failure", new Event("error"), "socket_connection_failed"],
+    ["rejected snapshot", new RoomSocketSayError("Invalid snapshot event", "snapshot_event_invalid"), "snapshot_event_invalid"],
+  ])("keeps %s visible until a snapshot connects", async (_case, failure, category) => {
     const harness = socketHarness();
     const { result } = renderHook(() =>
       useCanonicalRoom({
@@ -281,11 +284,11 @@ describe("useCanonicalRoom synchronization", () => {
     );
     await waitFor(() => expect(harness.openSocket).toHaveBeenCalledOnce());
 
-    act(() => harness.handlers()?.onError?.(new Event("error")));
-    expect(result.current.syncIssue?.category).toBe("socket_connection_failed");
+    act(() => harness.handlers()?.onError?.(failure));
+    expect(result.current.syncIssue?.category).toBe(category);
 
     act(() => harness.handlers()?.onOpen?.());
-    expect(result.current.syncIssue?.category).toBe("socket_connection_failed");
+    expect(result.current.syncIssue?.category).toBe(category);
 
     act(() =>
       harness

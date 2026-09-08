@@ -94,7 +94,7 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, resolveManager, 
         }
         assertCurrent(); return assertCurrent;
       });
-      if (active.current && proof !== null && (proof as OriginProof).isCurrent()) publishStatus(copied ? "외부 AI 초대 링크를 복사했어요." : "링크를 복사하지 못했어요.");
+      if (active.current && proof !== null && (proof as OriginProof).isCurrent()) publishStatus(copied ? record.kind === "attendee" ? "참가 안내를 복사했어요." : "외부 AI 초대 링크를 복사했어요." : "초대 내용을 복사하지 못했어요.");
     } catch (error) {
       if (active.current) publishStatus(error instanceof Error ? error.message : "링크를 복사하지 못했어요.");
     }

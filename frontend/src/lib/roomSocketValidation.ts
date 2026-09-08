@@ -222,8 +222,12 @@ export function publicRoomEventIsValid(value: unknown, expectedRoomId: string): 
     actor &&
     Object.keys(actor).length === ACTOR_KEYS.length &&
     ACTOR_KEYS.every(
-      (key) => typeof actor[key] === "string" && Boolean(actor[key])
+      (key) => typeof actor[key] === "string" && (
+        // The server retains the cursor of an owner-only event while removing its actor.
+        value.type === "event_hidden" ? actor[key] === "" : Boolean(actor[key])
+      )
     ) &&
+    (value.type !== "event_hidden" || value.visibility === "owner") &&
     ROOM_EVENT_OPTIONAL_STRING_KEYS.every(
       (key) =>
         value[key] === undefined ||
