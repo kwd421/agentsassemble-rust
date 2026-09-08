@@ -195,6 +195,7 @@ struct OwnedRuntime {
     turn_cancellation: CancellationToken,
     runtime_lease: Option<HeldRuntimeLease>,
     active_turn: Option<Box<runtime_exact_turn::ActiveProviderTurnSlot>>,
+    failure_signal: Option<CancellationToken>,
 }
 
 impl ProviderAdapter {
@@ -551,6 +552,8 @@ impl Default for ProviderAdapter {
 #[cfg(all(test, unix))]
 #[path = "runtime_codex_request_tests.rs"]
 pub(crate) mod codex_request_tests;
+#[path = "runtime_failure.rs"]
+mod failure;
 #[cfg(all(test, unix))]
 #[path = "runtime_fixture.rs"]
 mod fixture;
@@ -573,6 +576,7 @@ mod provider_turn_exact_tests;
 mod provider_turn_tests;
 #[path = "runtime_resident.rs"]
 mod resident;
+pub use failure::ProviderRuntimeFailure;
 #[cfg(all(test, unix))]
 #[path = "runtime_resident_tests.rs"]
 mod resident_tests;

@@ -14,6 +14,7 @@ use crate::{
 use agentsassemble_domain::DurableAgentSession;
 use std::sync::Arc;
 use tokio::sync::{mpsc, oneshot, watch};
+use tokio_util::sync::CancellationToken;
 use tokio_util::task::AbortOnDropHandle;
 
 struct Pending {
@@ -23,6 +24,7 @@ struct Pending {
 pub(super) struct ManagedDriver {
     calls: mpsc::Sender<Call>,
     facts: watch::Receiver<Facts>,
+    failure: CancellationToken,
     actor: Option<AbortOnDropHandle<Exit>>,
     exit_verified: bool,
     session: Arc<DurableAgentSession>,
@@ -35,12 +37,14 @@ impl ManagedDriver {
     pub(super) fn new(
         calls: mpsc::Sender<Call>,
         facts: watch::Receiver<Facts>,
+        failure: CancellationToken,
         actor: AbortOnDropHandle<Exit>,
         session: Arc<DurableAgentSession>,
     ) -> Self {
         Self {
             calls,
             facts,
+            failure,
             actor: Some(actor),
             session,
             exit_verified: false,
@@ -135,6 +139,9 @@ impl ManagedDriver {
     }
 }
 impl ProviderDriver for ManagedDriver {
+    fn runtime_failure_signal(&self) -> Option<CancellationToken> {
+        Some(self.failure.clone())
+    }
     fn retains_runtime_after_turn_interrupt(&self) -> bool {
         self.facts.has_changed().is_ok() && self.facts.borrow().retains_runtime_after_turn_interrupt
     }

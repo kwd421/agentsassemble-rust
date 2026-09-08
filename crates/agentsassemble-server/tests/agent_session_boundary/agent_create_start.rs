@@ -412,7 +412,13 @@ async fn exact_stop_replay_releases_its_tombstone_before_a_fresh_start() {
         &payload,
     )
     .await;
-    let stopped = receive_until_ack(&mut socket, 3).await;
+    let stopped = receive_stop_receipt(
+        &mut socket,
+        "stop-with-lost-checkpoint",
+        &session_id,
+        "runtime_recovery_in_progress",
+    )
+    .await;
     assert_eq!(
         stopped["result"]["agent_session"]["runtime_status"],
         "stopped"

@@ -9,6 +9,65 @@ use crate::{
 };
 
 impl SqliteStore {
+    /// Records an observed idle managed-process failure without claiming native absence.
+    /// Active turn and lifecycle operations retain their existing completion owners.
+    ///
+    /// # Errors
+    /// Rejects a stale candidate or a persistence failure before public state changes.
+    pub async fn record_idle_runtime_failure(
+        &self,
+        candidate: &RuntimeReconciliationCandidate,
+    ) -> Result<(), PersistenceError> {
+        use crate::{
+            agent_reconciliation::{
+                detach_participant, retain_uncertain_runtime, save_reconciled_session,
+            },
+            room_turns::support::{error_event, internal_event, session_state_event},
+        };
+        let mut transaction = self.pool.begin().await?;
+        let current =
+            crate::agent_reconciliation_recovery::current_candidate(&mut transaction, candidate)
+                .await?;
+        let mut session = current.session;
+        if !session.lifecycle_intent_status.is_none()
+            || session.public.recovery_required
+            || crate::provider_turn_execution::blocking_execution_exists(
+                &mut transaction,
+                &session.public.room_id,
+                &session.public.session_id,
+            )
+            .await?
+        {
+            transaction.commit().await?;
+            return Ok(());
+        }
+        retain_uncertain_runtime(&mut session)?;
+        let code = "managed_bridge_exited";
+        let message = "The managed provider bridge ended unexpectedly. Stop it before restarting.";
+        code.clone_into(&mut session.public.last_error_code);
+        message.clone_into(&mut session.public.last_error);
+        save_reconciled_session(&mut transaction, &session).await?;
+        detach_participant(
+            &mut transaction,
+            &session.public.room_id,
+            &session.public.participant_id,
+        )
+        .await?;
+        error_event(&mut transaction, &session, "", code, message).await?;
+        internal_event(
+            &mut transaction,
+            &session,
+            "session_detached",
+            false,
+            None,
+            std::collections::BTreeMap::from([("reason".to_owned(), serde_json::json!(code))]),
+        )
+        .await?;
+        session_state_event(&mut transaction, &session).await?;
+        transaction.commit().await?;
+        Ok(())
+    }
+
     /// Loads one exact current-supervisor candidate for a lifecycle command replay.
     ///
     /// # Errors

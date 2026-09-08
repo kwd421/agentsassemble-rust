@@ -16,6 +16,10 @@ pub(crate) const ROOM_PORTAL_UNAVAILABLE: DriverError = DriverError::new(
 pub(crate) type DriverFuture<'a, T> = Pin<Box<dyn Future<Output = T> + Send + 'a>>;
 
 pub(crate) trait ProviderDriver: Send {
+    /// Retained notification of an owned process/transport failure, not absence proof.
+    fn runtime_failure_signal(&self) -> Option<tokio_util::sync::CancellationToken> {
+        None
+    }
     fn retains_runtime_after_turn_interrupt(&self) -> bool {
         false
     }

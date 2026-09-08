@@ -276,7 +276,7 @@ pub(crate) async fn apply_live_reconciliation(
     })
 }
 
-async fn current_candidate(
+pub(crate) async fn current_candidate(
     transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
     candidate: &RuntimeReconciliationCandidate,
 ) -> Result<RuntimeReconciliationCandidate, PersistenceError> {

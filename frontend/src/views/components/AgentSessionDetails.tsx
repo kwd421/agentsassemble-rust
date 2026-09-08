@@ -57,6 +57,9 @@ function actionCompletedLabel(action: AgentSessionControlAction) {
 }
 
 function sessionErrorMessage(session: RoomAgentSession) {
+  if (session.last_error_code === "managed_bridge_exited") {
+    return "에이전트 연결이 끊겼어요. 중지한 뒤 재개해 주세요.";
+  }
   if (session.last_error_code === "provider_turn_recovery_required") {
     return "Provider 응답 결과가 불확실해 런타임 복구가 필요합니다.";
   }
@@ -103,19 +106,20 @@ export default function AgentSessionDetails({
       session.last_seen_event_id
   );
   const canStart =
-    !hasRunBefore && ["", "available", "stopped", "error", "disconnected"].includes(status || "");
-  const canPause = status === "idle";
-  const canStop = agentSessionIsPresent(status) || status === "error";
+    !session.recovery_required && !hasRunBefore &&
+    ["", "available", "stopped", "error", "disconnected"].includes(status || "");
+  const canPause = status === "idle" && !session.recovery_required;
+  const canStop = agentSessionIsPresent(status) || status === "error" || session.recovery_required;
   const canResume =
-    status === "paused" ||
+    !session.recovery_required && (status === "paused" ||
     (!session.external_owned &&
       hasRunBefore &&
-      ["stopped", "error", "disconnected", "available"].includes(status || ""));
+      ["stopped", "error", "disconnected", "available"].includes(status || "")));
   const canInterrupt =
     provider?.turn_interrupt === "retained_runtime" && status === "busy" && !session.recovery_required;
   const continuity = providerSessionContinuity(session);
   const canConfigure =
-    !session.enabled &&
+    !session.enabled && !session.recovery_required &&
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
   const runtimeSettingLabels =
     (provider?.controls || []).map((control) => control.label).join("·") || "런타임 설정";

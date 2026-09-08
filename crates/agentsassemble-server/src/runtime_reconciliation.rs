@@ -244,7 +244,14 @@ fn reconcile_dynamic_candidates<'a>(
                     commit_abandoned_pre_effect(store, rooms, &candidate).await;
                 }
                 AgentLifecycleIntentStatus::EffectApplied => {
-                    commit_and_publish_gone(store, provider_adapter, rooms, &candidate).await;
+                    commit_and_publish_gone(
+                        store,
+                        provider_adapter,
+                        rooms,
+                        &candidate,
+                        command_owner,
+                    )
+                    .await;
                 }
                 AgentLifecycleIntentStatus::EffectInflight
                 | AgentLifecycleIntentStatus::Unconfirmed => {
@@ -266,13 +273,20 @@ fn reconcile_dynamic_candidates<'a>(
             .buffer_unordered(RECOVERY_OBSERVATION_CONCURRENCY)
             .collect::<Vec<_>>()
             .await;
-        for (candidate, _command_owner, observation) in observed {
+        for (candidate, command_owner, observation) in observed {
             if cancellation.is_cancelled() {
                 continue;
             }
             match observation {
                 Some(ProviderRuntimeObservation::Gone) => {
-                    commit_and_publish_gone(store, provider_adapter, rooms, &candidate).await;
+                    commit_and_publish_gone(
+                        store,
+                        provider_adapter,
+                        rooms,
+                        &candidate,
+                        command_owner,
+                    )
+                    .await;
                 }
                 Some(
                     observation @ (ProviderRuntimeObservation::Adopted { .. }
@@ -284,6 +298,7 @@ fn reconcile_dynamic_candidates<'a>(
                         rooms,
                         &candidate,
                         observation,
+                        command_owner,
                     )
                     .await;
                 }

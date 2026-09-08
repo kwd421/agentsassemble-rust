@@ -111,7 +111,7 @@ pub use room_portal::{
 };
 pub use runtime::{
     ProviderAdapter, ProviderAdapterError, ProviderExactTurnAuthority, ProviderPreparedTurn,
-    ProviderResidentRuntime, ProviderRoomObservation, ProviderRuntimeGone,
+    ProviderResidentRuntime, ProviderRoomObservation, ProviderRuntimeFailure, ProviderRuntimeGone,
     ProviderRuntimeObservation, ProviderRuntimeStarted, ProviderShutdownOutcome,
     ProviderStartReservation, ProviderTurnCompleted, ProviderTurnControl,
     ProviderTurnInterruptDisposition, ProviderTurnNotStartedProof, ProviderTurnQuiescence,

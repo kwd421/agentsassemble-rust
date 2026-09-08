@@ -37,6 +37,26 @@ beforeEach(() => {
 });
 
 describe("AgentSessionDetails diagnostics", () => {
+  it.each([0, 2])("requires cleanup before restarting a disconnected session (%s turns)", async (turnCount) => {
+    const onControl = vi.fn().mockResolvedValue(undefined);
+    const session = agentSessionFixture({
+      runtime_status: "disconnected", enabled: false, recovery_required: true,
+      turn_count: turnCount, last_error_code: "managed_bridge_exited",
+    });
+    const { rerender } = render(<AgentSessionDetails session={session} provider={codexProvider()}
+      onControl={onControl} onConfigure={vi.fn()} />);
+    expect(screen.queryByRole("button", { name: "시작" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "재개" })).toBeNull();
+    fireEvent.click(screen.getByText("실행 설정"));
+    expect((screen.getByRole("button", { name: "런타임 설정 저장" }) as HTMLButtonElement).disabled).toBe(true);
+    await userEvent.click(screen.getByRole("button", { name: "중지" }));
+    expect(onControl).toHaveBeenCalledWith(session, "stop");
+    rerender(<AgentSessionDetails session={{ ...session, runtime_status: "stopped", recovery_required: false }}
+      provider={codexProvider()} onControl={onControl} />);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "중지" })).toBeNull());
+    expect(screen.getByRole("button", { name: turnCount ? "재개" : "시작" })).toBeTruthy();
+  });
+
   it("shows only diagnostics owned by the current Agent Session contract", () => {
     const session: RoomAgentSession = agentSessionFixture({
       room_id: "room-1",

@@ -1337,3 +1337,23 @@ and also verifies a real reject response with an available but unused room ingre
 All nine affected ACP cases, provider Clippy and unchanged mandatory gates pass.
 This corrects the earlier statement that Cursor's requests were generally brokered;
 its current read-only contract still rejects native permission requests.
+
+### Idle managed-worker termination
+
+The original GUI connects the process manager's exit listener to
+`AgentLifecycle.bridge_process_exited`, including when no turn is running. The
+managed Rust transport already observes EOF, but an idle room has no consumer for
+that observation. Connect that existing process owner to the room actor with an
+awaited, retained failure signal; do not add health polling or infer native absence.
+The exact runtime generation identifies the notification. Its delivery is acknowledged
+only after the room owner records recovery-required state or identifies an existing
+turn/lifecycle owner or a retired generation. A persistence failure stops that room
+owner and preserves the signal for its replacement. Active turns keep their existing
+failure/publication path. Idle failure retains runtime custody, disables scheduling,
+detaches the participant and publishes the canonical session state. Explicit stop
+still requires independent positive process cleanup before restart.
+
+Acceptance uses an actual managed worker killed while idle, an unsolicited room
+state event, unchanged runtime identity, no provider re-entry, and explicit confirmed
+stop. Existing active-turn and normal-stop cases remain applicable. Rebuilt packaged
+controls must show recovery required without a new message or lifecycle command.

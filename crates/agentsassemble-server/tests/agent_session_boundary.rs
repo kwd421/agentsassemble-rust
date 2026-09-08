@@ -56,6 +56,10 @@ mod participant_removal;
 #[path = "agent_session_boundary/managed_tools.rs"]
 mod managed_tools;
 
+#[cfg(unix)]
+#[path = "agent_session_boundary/managed_failure.rs"]
+mod managed_failure;
+
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 struct RunningServer {
@@ -711,4 +715,52 @@ async fn wait_for_file(path: &Path) {
 #[cfg(unix)]
 fn shell_quote(path: &Path) -> String {
     format!("'{}'", path.to_string_lossy().replace('\'', "'\\''"))
+}
+
+#[cfg(unix)]
+async fn receive_stop_receipt<S>(
+    socket: &mut RoomSocketPeer<S>,
+    request_id: &str,
+    session_id: &str,
+    failure_code: &str,
+) -> Value
+where
+    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
+{
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let mut cleanup_published = false;
+        let mut response = None;
+        while response.is_none() || !cleanup_published {
+            let frame = receive_json(socket).await;
+            cleanup_published |= frame["events"].as_array().is_some_and(|events| {
+                events.iter().any(|event| {
+                    event["type"] == "agent_session_state"
+                        && event["agent_session"]["session_id"] == session_id
+                        && event["agent_session"]["runtime_status"] == "stopped"
+                })
+            });
+            if matches!(frame["op"].as_str(), Some("ack" | "nack")) {
+                assert_eq!(frame["request_id"], request_id);
+                response = Some(frame);
+            }
+        }
+        let response = response.unwrap_or_else(|| panic!("stop receipt missing"));
+        if response["op"] == "ack" {
+            return response;
+        }
+        assert_eq!(response["error"]["code"], failure_code);
+        // Cleanup publication follows durable receipt commit and command-claim release.
+        send_command(
+            socket,
+            request_id,
+            "agent.stop",
+            &json!({"agent_id":session_id}),
+        )
+        .await;
+        let replay = receive_command_ack(socket).await;
+        assert_eq!(replay["deduplicated"], true);
+        replay
+    })
+    .await
+    .unwrap_or_else(|_| panic!("exact cleanup receipt was not recovered"))
 }

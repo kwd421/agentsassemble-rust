@@ -669,7 +669,9 @@ fn reconcile_confirmed_stop(session: &mut DurableAgentSession) -> Result<(), Per
     Ok(())
 }
 
-fn retain_uncertain_runtime(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+pub(crate) fn retain_uncertain_runtime(
+    session: &mut DurableAgentSession,
+) -> Result<(), PersistenceError> {
     merge_inflight_events(session)?;
     if matches!(
         session.lifecycle_intent_action,

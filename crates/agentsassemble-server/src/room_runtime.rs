@@ -52,6 +52,9 @@ pub(crate) mod connector;
 #[path = "side_chat_runtime.rs"]
 mod side_chat;
 
+#[path = "room_runtime_failure.rs"]
+mod runtime_failure;
+
 #[path = "provider_request_broker.rs"]
 mod provider_requests;
 pub use provider_requests::{LiveProviderRequest, ResolvedProviderRequest};
@@ -306,9 +309,6 @@ impl RoomRuntime {
                     .map(|guard| RecoveredAssignment { assignment, guard })
             })
             .collect::<Vec<_>>();
-        if assignments.is_empty() {
-            return Ok(());
-        }
         let handle = self.handle(room_id).await;
         let (reply, response) = oneshot::channel();
         handle
@@ -480,6 +480,17 @@ fn spawn_room_task(
                 () = context.cancellation.cancelled() => {
                     abort_provider_turns(&mut turn_tasks).await;
                     break;
+                }
+                failure = context.provider_adapter.wait_for_runtime_failure(&context.room_id) => {
+                    if let Err(error) = runtime_failure::record(
+                        &context.store, &context.provider_adapter, &context.room_id, &failure,
+                    ).await {
+                        tracing::error!(%error, room_id = %context.room_id,
+                            "managed runtime failure could not commit; room owner is stopping");
+                        abort_provider_turns(&mut turn_tasks).await;
+                        break;
+                    }
+                    RoomInput::Publication
                 }
                 request = request_rx.native.recv() => {
                     let Some(request) = request else { break; };

@@ -8326,3 +8326,45 @@ RSS before the crash; this is a sample, not a performance improvement claim. The
 checks used only the labelled local protocol peer, without a real AI provider/account.
 Isolated data remains for the continuing Phase 7 verification; platform custody and
 whole-phase review are not closed by this record.
+
+## Phase 7 idle worker failure and cleanup publication — 2026-09-09
+
+An idle worker's observed transport failure now wakes its room owner through a
+retained signal tied to the exact runtime generation. The durable transaction
+retains custody, disables scheduling, detaches the participant and publishes recovery
+state. Active execution and lifecycle completion retain their existing owners.
+No timer, polling loop or additional spawned task was added. Immediate stop during
+native cleanup also exposed an existing empty-assignment publication omission;
+confirmed cleanup now publishes even without resumed turns, after its durable
+receipt, custody release and lifecycle command-claim release.
+
+The managed-worker integration test kills only its ancestry-verified worker while
+idle, receives unsolicited canonical recovery state, checks unchanged custody and
+one native start, then confirms stop and exact receipt replay. The initial boundary
+suite passed 16 of 17 cases; correcting the asynchronous receipt expectation made
+the remaining stop-replay case pass, and the idle case passed again. Five affected
+reconciliation tests, seven session-details tests, affected all-target/all-feature
+Clippy, production frontend build/CSS and unchanged mandatory gates pass.
+
+Direct manipulation of the rebuilt 390×420 macOS package exposed and corrected
+disconnected recovery controls: it now offers stop, blocks premature restart and
+configuration, and displays the localized connection failure. A second verified idle
+worker kill visibly changed the profile to recovery required without a user command.
+Stop displayed stopped; resume launched a new worker and returned to idle; normal
+stop and app quit removed all thirteen recorded app/server/worker/descendant PIDs.
+Computer Use was reset. Only that run's isolated app data, preferences, caches,
+bundle, local protocol fixture/configuration and one abandoned test directory were
+removed after process and path checks; absence was verified. Active shared build
+outputs and verification logs were retained. No real provider/account was used.
+
+One debug/local-peer sample measured 258.3 MiB aggregate RSS across eight owned
+processes and 72 OS threads, including a 26.6 MiB worker; over 37.473 seconds their
+CPU time increased by 0.16 seconds (0.427% of one core). The isolated app data used
+932 KiB and debug bundle 188.8 MiB at measurement. A separate socket integration
+sample delivered failure state 7.898 ms after initiating the kill command. These
+are local samples, not release/provider performance or UI latency measurements;
+shared WebKit processes outside the owned ancestry were not included.
+
+Windows cross-check reached native dependencies with the installed Rustup target
+but could not proceed without `x86_64-w64-mingw32-gcc`. Windows managed-process
+custody and whole-phase acceptance remain open; macOS evidence does not close them.

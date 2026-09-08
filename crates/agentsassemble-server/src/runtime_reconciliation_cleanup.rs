@@ -59,6 +59,7 @@ pub(super) async fn recover_dynamic_observed_runtime(
     rooms: &RoomRuntime,
     candidate: &RuntimeReconciliationCandidate,
     observation: ProviderRuntimeObservation,
+    command_owner: crate::lifecycle_command_tracker::LifecycleCommandGuard,
 ) {
     let room_id = &candidate.session.public.room_id;
     let session_id = &candidate.session.public.session_id;
@@ -68,6 +69,7 @@ pub(super) async fn recover_dynamic_observed_runtime(
     {
         Ok(assignments) if !assignments.is_empty() => {
             release_checkpointed_absence(provider_adapter, candidate).await;
+            drop(command_owner);
             if let Err(error) = rooms
                 .publish_then_resume_assigned_turns(room_id, assignments)
                 .await
@@ -123,7 +125,7 @@ pub(super) async fn recover_dynamic_observed_runtime(
         );
         return;
     }
-    commit_and_publish_gone(store, provider_adapter, rooms, &current).await;
+    commit_and_publish_gone(store, provider_adapter, rooms, &current, command_owner).await;
 }
 
 pub(super) async fn commit_and_publish_gone(
@@ -131,12 +133,16 @@ pub(super) async fn commit_and_publish_gone(
     provider_adapter: &ProviderAdapter,
     rooms: &RoomRuntime,
     candidate: &RuntimeReconciliationCandidate,
+    command_owner: crate::lifecycle_command_tracker::LifecycleCommandGuard,
 ) -> bool {
     let room_id = candidate.session.public.room_id.clone();
     let session_id = candidate.session.public.session_id.clone();
     match commit_dynamic_gone(store, candidate).await {
         Ok(Some(assignments)) => {
             release_checkpointed_absence(provider_adapter, candidate).await;
+            // The durable receipt and custody release complete this command. Do not
+            // hold its claim while awaiting the room actor's publication queue.
+            drop(command_owner);
             match rooms
                 .publish_then_resume_assigned_turns(&room_id, assignments)
                 .await

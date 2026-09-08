@@ -17,7 +17,7 @@ use tokio::{
     process::Child,
     sync::{mpsc, watch},
 };
-use tokio_util::task::AbortOnDropHandle;
+use tokio_util::{sync::CancellationToken, task::AbortOnDropHandle};
 
 pub(super) struct Exit {
     pub(super) verified: bool,
@@ -89,6 +89,9 @@ pub(super) async fn launch(
     let (facts_tx, facts_rx) = watch::channel(facts);
     let session = Arc::new(*launch.session);
     let owner = session.clone();
+    let failure = CancellationToken::new();
+    let failure_owner = failure.clone();
+    let failure_guard = failure_owner.clone().drop_guard();
     let actor = AbortOnDropHandle::new(tokio::spawn(async move {
         let result = parent_actor::serve(
             &mut input,
@@ -100,10 +103,12 @@ pub(super) async fn launch(
         .await;
         drop(input);
         drop(output);
-        finish(&mut child, result, &facts_tx, &owner).await
+        let exit = finish(&mut child, result, &facts_tx, &owner, &failure_owner).await;
+        failure_guard.disarm();
+        exit
     }));
     Ok(Box::new(ManagedDriver::new(
-        sender, facts_rx, actor, session,
+        sender, facts_rx, failure, actor, session,
     )))
 }
 
@@ -112,6 +117,7 @@ async fn finish(
     result: Result<(tokio::sync::oneshot::Sender<Event>, Event), DriverError>,
     facts: &watch::Sender<Facts>,
     session: &DurableAgentSession,
+    failure: &CancellationToken,
 ) -> Exit {
     if let Ok((reply, Event::Stopped { id, result })) = result {
         let status = tokio::time::timeout(super::CONTROL_TIMEOUT, child.wait()).await;
@@ -126,6 +132,7 @@ async fn finish(
         });
         if result.is_err() {
             facts.send_replace(failed_facts());
+            failure.cancel();
         }
         if !verified {
             let _ = child.kill().await;
@@ -134,6 +141,7 @@ async fn finish(
         Exit { verified }
     } else {
         facts.send_replace(failed_facts());
+        failure.cancel();
         Exit {
             verified: child.kill().await.is_ok(),
         }

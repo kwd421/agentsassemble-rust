@@ -58,9 +58,12 @@ fn executable_identity(path: &Path) -> String {
         .unwrap_or_else(|error| panic!("hash test executable: {error}"))
 }
 
+#[cfg(unix)]
+pub const CODEX_FIXTURE: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n";
+
 pub fn agent_catalog(root: &Path, fixture_override: Option<&[u8]>) -> ProviderCatalog {
     #[cfg(unix)]
-    let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n";
+    let fixture = CODEX_FIXTURE;
     #[cfg(not(unix))]
     let fixture: &[u8] = b"provider fixture";
     let fixture = fixture_override.unwrap_or(fixture);

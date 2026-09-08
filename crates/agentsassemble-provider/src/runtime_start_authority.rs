@@ -214,15 +214,11 @@ impl ProviderAdapter {
                     unreachable!("authorized provider runtime must remain launching");
                 };
                 runtime.effect_started = true;
-                let launch = {
-                    let RuntimeState::Launching(runtime) = &slot.state else {
-                        unreachable!("authorized provider runtime must be launching");
-                    };
-                    self.owner
-                        .factory
-                        .launch(session, &runtime.runtime_lease)
-                        .await
-                };
+                let launch = self
+                    .owner
+                    .factory
+                    .launch(session, &runtime.runtime_lease)
+                    .await;
                 let driver = match launch {
                     Ok(driver) => driver,
                     Err(failure) if failure.effect_uncertain => {
@@ -266,6 +262,7 @@ impl ProviderAdapter {
                     lease_token: runtime.runtime_lease.token().to_owned(),
                     profile_key: session.runtime_profile_key.clone(),
                     retained_interrupt: driver.retains_runtime_after_turn_interrupt(),
+                    failure_signal: driver.runtime_failure_signal(),
                     driver: super::runtime_driver::DriverCell::new(driver),
                     turn_cancellation: CancellationToken::new(),
                     runtime_lease: Some(runtime.runtime_lease),
