@@ -2,6 +2,7 @@ import type { ServerRoomDockSource } from "./roomDockModel";
 import type { ServerProductSurface } from "../types/generated/ServerProductSurface";
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 import { ROOM_ACTIONS } from "../types/generated/ROOM_ACTIONS";
+import { ROOM_STREAMS } from "../types/generated/ROOM_STREAMS";
 import { lengthDelimitedTranscript, sha256Hex } from "./lengthDelimitedCrypto";
 import {
   assertExactKeys as exactKeys,
@@ -227,7 +228,7 @@ function validateServerProductSurface(value: unknown): ServerProductSurface {
   const actions = surface.websocket_actions;
   if (
     !Array.isArray(streams) ||
-    streams.some((stream) => stream !== "room_events") ||
+    streams.some((stream) => !(ROOM_STREAMS as readonly unknown[]).includes(stream)) ||
     !Array.isArray(actions) ||
     actions.some(
       (action) =>

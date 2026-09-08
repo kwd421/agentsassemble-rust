@@ -17,6 +17,7 @@ import type { ProviderControl as GeneratedProviderControl } from "./types/genera
 import type { ProviderControlOption as GeneratedProviderControlOption } from "./types/generated/ProviderControlOption";
 import type { ServerProductSurface } from "./types/generated/ServerProductSurface";
 import type { RoomRuntimeTicket } from "./lib/roomRuntimeTicket";
+import type { SideChatUpdate } from "./types/generated/SideChatUpdate";
 
 export interface RoomSocketHandlers {
   onRoomSnapshot?: (
@@ -25,6 +26,7 @@ export interface RoomSocketHandlers {
   ) => boolean | void;
   onProviderCatalog?: (catalog: ProviderCatalogSnapshot) => void;
   onRoomEvents?: (events: RoomEvent[]) => void;
+  onSideChat?: (update: SideChatUpdate) => void;
   onPlugin?: (events: PluginEnvelope[], snapshot: boolean) => void;
   onOpen?: () => void;
   onClose?: () => void;

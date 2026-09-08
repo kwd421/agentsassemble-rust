@@ -199,3 +199,38 @@ The full bootstrap travels over HTTP because 200 Unicode text messages can excee
 256 KiB. Live delivery will send one bounded update per WebSocket frame after
 subscription-before-bootstrap; no enlarged frame gate or polling was introduced.
 The dock and live mutation/subscription remain subsequent Phase 6 work.
+
+## Side-chat live transport
+
+Human room sockets may explicitly request `side_chat` beside `room_events`. The
+memory subscription is installed before the subscription receipt and room bootstrap
+finish, so a subsequent HTTP side-chat bootstrap overlaps the live stream safely.
+Both subscription and each private delivery revalidate human read authority and
+the exact room UID. Bootstrap now includes its authoritative `room_uid`; the client
+parser requires the expected UID, distinguishing a recreated room from a restarted
+process. An old room subscription cannot attach to a newly created namesake.
+
+`side_chat.send` uses the existing principal mutation/inflight budget and the memory
+append owner. It never enters the durable room queue/result or provider publication
+owner. Its ACK contains one private update; live frames carry one update and never
+advance the room event cursor. A lagged private receiver emits an explicit private
+resync request and closes for bootstrap/reconnect. No timer or independent task is
+added. Shared direct socket dispatch handles history, vote summaries and ephemeral
+sends while their distinct owners retain their contracts.
+
+The frontend negotiates only declared streams, validates private updates and ACK
+generation/author scope, and rejects unsolicited private frames. Sequence checking
+is shared; side-chat snapshot validation additionally requires the complete retained
+prefix. Rust generates stream lists, side-chat types and bounds. The dock has not
+yet been mounted, and bootstrap merging/composer/packaged acceptance remain open.
+
+Actual TCP tests pass for bootstrap overlap, exact replay, reconnect, non-subscribed
+observers, absence from durable history, read-only delivery/post denial and leave
+closure (0.06 s). HTTP bootstrap still passes (0.19 s), as does the affected vote
+route (0.05 s). Four memory-owner cases pass (0.10 s), including rejection of a
+retired UID after same-name room recreation. Existing room-history transport cases
+and six protocol cases also pass.
+
+Affected Rust all-target Clippy, 44 frontend transport/surface cases (3.48 s),
+the production frontend build and CSS check pass. Unchanged structure, 19 policy,
+formatting, diff and artifact gates pass. Packaged UI acceptance remains pending.

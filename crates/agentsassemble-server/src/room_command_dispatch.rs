@@ -100,9 +100,10 @@ pub(crate) async fn execute_command(
         RoomAction::ParticipantKick | RoomAction::ParticipantExport => {
             execute_participant_removal(store, provider_adapter, command).await
         }
-        RoomAction::RoomHistory | RoomAction::ChannelHistory | RoomAction::RoomVoteSummary => {
-            misrouted_direct_read(command.action)
-        }
+        RoomAction::RoomHistory
+        | RoomAction::ChannelHistory
+        | RoomAction::RoomVoteSummary
+        | RoomAction::SideChatSend => misrouted_durable_command(command.action),
     }
 }
 
@@ -126,7 +127,7 @@ async fn execute_atomic_update(store: &SqliteStore, command: &RoomCommand) -> Co
                 .execute_participant_role_update(authority, &command.request_id, &command.payload)
                 .await
         }
-        _ => return misrouted_direct_read(command.action),
+        _ => return misrouted_durable_command(command.action),
     };
     result.map_or_else(
         CommandExecution::transactional_failure,
@@ -339,10 +340,13 @@ async fn execute_message_mutation(store: &SqliteStore, command: &RoomCommand) ->
     }
 }
 
-fn misrouted_direct_read(action: RoomAction) -> CommandExecution {
+fn misrouted_durable_command(action: RoomAction) -> CommandExecution {
     CommandExecution::transactional_failure(PersistenceError::CommandRejected {
-        code: "read_action_misrouted",
-        message: format!("{} cannot enter the room mutation owner.", action.as_str()),
+        code: "command_action_misrouted",
+        message: format!(
+            "{} cannot enter the durable room mutation owner.",
+            action.as_str()
+        ),
     })
 }
 

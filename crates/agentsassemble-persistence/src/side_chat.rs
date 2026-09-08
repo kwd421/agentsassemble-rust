@@ -68,9 +68,10 @@ impl SideChatRoom {
         }
     }
 
-    fn snapshot(&self, room_id: String) -> SideChatSnapshot {
+    fn snapshot(&self, incarnation: Uuid, room_id: String) -> SideChatSnapshot {
         SideChatSnapshot {
             room_id,
+            room_uid: incarnation,
             generation: self.generation,
             retained_after_seq: self.retained_after_seq,
             latest_seq: self.latest_seq,
@@ -143,7 +144,7 @@ impl SqliteStore {
         let mut rooms = self.side_chat.rooms.lock().await;
         let room = rooms.entry(incarnation).or_default();
         room.prune(now);
-        room.snapshot(room_id)
+        room.snapshot(incarnation, room_id)
     }
 
     /// Registers live delivery before the caller obtains its HTTP/bootstrap snapshot.
@@ -153,9 +154,13 @@ impl SqliteStore {
     pub async fn subscribe_side_chat(
         &self,
         authority: RoomMutationAuthority<'_>,
+        incarnation: Uuid,
     ) -> Result<broadcast::Receiver<SideChatUpdate>, PersistenceError> {
         let mut tx = self.pool.begin().await?;
         let (room_uid, _, _) = human_authority(&mut tx, authority, false).await?;
+        if room_uid != incarnation {
+            return Err(retired_room());
+        }
         let receiver = self
             .side_chat
             .rooms
@@ -167,6 +172,24 @@ impl SqliteStore {
             .subscribe();
         tx.commit().await?;
         Ok(receiver)
+    }
+
+    /// Revalidates a live human reader against the subscription's room incarnation.
+    ///
+    /// # Errors
+    /// Rejects revoked/non-human readers or a retired room before private delivery.
+    pub async fn authorize_side_chat_delivery(
+        &self,
+        authority: RoomMutationAuthority<'_>,
+        incarnation: Uuid,
+    ) -> Result<(), PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        let (current, _, _) = human_authority(&mut tx, authority, false).await?;
+        if current != incarnation {
+            return Err(retired_room());
+        }
+        tx.commit().await?;
+        Ok(())
     }
 
     /// Appends one human message in memory while the single `SQLite` connection holds current authority.
@@ -302,6 +325,13 @@ fn expired_retry() -> PersistenceError {
         message:
             "This side-chat lifetime or retry window ended. Refresh before starting a new message."
                 .to_owned(),
+    }
+}
+
+fn retired_room() -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: "session_revoked",
+        message: "The side-chat room lifetime ended.".to_owned(),
     }
 }
 

@@ -37,7 +37,10 @@ async fn bootstrap_overlap_replay_and_mutable_human_authority() -> TestResult {
     let (store, principal, _directory) = fixture().await?;
     let now = Utc::now();
     let mut live = store
-        .subscribe_side_chat(TrustedPrincipal(&principal))
+        .subscribe_side_chat(
+            TrustedPrincipal(&principal),
+            store.snapshot("general", 0, 1).await?.room.room_uid,
+        )
         .await?;
     let initial = store
         .side_chat_snapshot(TrustedPrincipal(&principal), now)
@@ -88,7 +91,7 @@ async fn bootstrap_overlap_replay_and_mutable_human_authority() -> TestResult {
     restricted.client_kind = ClientKind::AgentBridge;
     assert!(
         store
-            .subscribe_side_chat(TrustedPrincipal(&restricted))
+            .subscribe_side_chat(TrustedPrincipal(&restricted), initial.room_uid)
             .await
             .is_err()
     );
@@ -225,7 +228,10 @@ async fn room_isolation_and_deletion_close_ephemeral_lifetime() -> TestResult {
     let (store, principal, _directory) = fixture().await?;
     let now = Utc::now();
     let mut live = store
-        .subscribe_side_chat(TrustedPrincipal(&principal))
+        .subscribe_side_chat(
+            TrustedPrincipal(&principal),
+            store.snapshot("general", 0, 1).await?.room.room_uid,
+        )
         .await?;
     let initial = store
         .side_chat_snapshot(TrustedPrincipal(&principal), now)
@@ -283,5 +289,11 @@ async fn room_isolation_and_deletion_close_ephemeral_lifetime() -> TestResult {
         .await?;
     assert!(recreated.messages.is_empty());
     assert_ne!(recreated.generation, initial.generation);
+    assert!(
+        store
+            .subscribe_side_chat(TrustedPrincipal(&principal), room.room_uid)
+            .await
+            .is_err()
+    );
     Ok(())
 }

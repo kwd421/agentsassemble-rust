@@ -30,6 +30,7 @@ pub(crate) struct EstablishedSubscription {
     pub events: broadcast::Receiver<RoomEvent>,
     pub catalog_updates: watch::Receiver<ProviderCatalog>,
     pub delivered_seq: i64,
+    pub side_chat: Option<broadcast::Receiver<agentsassemble_domain::SideChatUpdate>>,
 }
 
 struct ValidatedSubscription {
@@ -102,6 +103,33 @@ where
     )
     .await?;
     refresh_room_session(state, &mut principal, &mut room_session).await?;
+    let side_chat = if request.streams.contains(&RoomStream::SideChat) {
+        let authority = room_session.as_ref().map_or(
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
+            RoomSessionAuthorization::mutation_authority,
+        );
+        match state
+            .store
+            .subscribe_side_chat(authority, prepared.room_uid)
+            .await
+        {
+            Ok(receiver) => Some(receiver),
+            Err(error) => {
+                let (code, message) = persistence_error(&error);
+                let _ = send_subscription_nack(
+                    sender,
+                    state,
+                    &mut principal,
+                    &mut room_session,
+                    (&code, &message),
+                )
+                .await;
+                return None;
+            }
+        }
+    } else {
+        None
+    };
     let receipt = subscription_receipt(
         state,
         &principal,
@@ -130,6 +158,7 @@ where
         events: prepared.events,
         catalog_updates: prepared.catalog_updates,
         delivered_seq,
+        side_chat,
     })
 }
 
@@ -259,7 +288,7 @@ where
         .await;
         return None;
     };
-    if streams != [RoomStream::RoomEvents] || resume_from_seq < 0 {
+    if (streams != [RoomStream::RoomEvents] && streams != RoomStream::ALL) || resume_from_seq < 0 {
         let _ = send_subscription_nack(
             sender,
             state,

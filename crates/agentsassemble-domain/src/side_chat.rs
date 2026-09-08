@@ -24,6 +24,7 @@ pub struct SideChatMessage {
 #[serde(deny_unknown_fields)]
 pub struct SideChatSnapshot {
     pub room_id: String,
+    pub room_uid: Uuid,
     pub generation: Uuid,
     pub retained_after_seq: i64,
     pub latest_seq: i64,

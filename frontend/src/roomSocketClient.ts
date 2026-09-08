@@ -34,6 +34,9 @@ import { ROOM_HISTORY_MAX_EVENTS } from "./types/generated/ROOM_HISTORY_WIRE";
 import { MAX_ROOM_SOCKET_MESSAGE_BYTES } from "./types/generated/ROOM_SOCKET_WIRE";
 import { scheduleUncertainCommandRetry, type PendingCommandRetryState } from "./roomSocketRetryPolicy";
 import { createSecureRequestId } from "./lib/secureRequestId";
+import { ROOM_STREAMS } from "./types/generated/ROOM_STREAMS";
+import { parseSideChatUpdate } from "./lib/sideChatContract";
+import { assertExactKeys } from "./lib/strictJsonContract";
 
 export type { RoomSocketAuth } from "./api";
 export type { PluginEnvelope } from "./pluginSocketProtocol";
@@ -74,10 +77,11 @@ function validateClientAuthority(
     !isSha256Hex(surface.digest) ||
     !dependencies.expectedRoomId ||
     !dependencies.expectedParticipantId ||
-    streams.length !== 1 ||
     streams[0] !== "room_events" ||
-    surface.websocket_streams.length !== 1 ||
-    surface.websocket_streams[0] !== "room_events"
+    streams.length !== new Set(streams).size ||
+    streams.some((stream, index) => stream !== ROOM_STREAMS[index]) ||
+    surface.websocket_streams.length !== ROOM_STREAMS.length ||
+    surface.websocket_streams.some((stream, index) => stream !== ROOM_STREAMS[index])
   ) {
     throw new RoomSocketSayError(
       "The room transport is not bound to the canonical server product surface.",
@@ -443,6 +447,19 @@ export function openRoomSocket(
             );
           }
           handlers.onProviderCatalog?.(msg.catalog);
+          return;
+        }
+        if (msg.op === "side_chat_updated" || msg.op === "side_chat_resync_required") {
+          if (!streams.includes("side_chat")) {
+            throw new RoomSocketSayError("Side-chat delivery was not subscribed.", "unexpected_stream");
+          }
+          if (msg.op === "side_chat_resync_required") {
+            assertExactKeys(msg, ["op", "reason"], "side chat resync");
+            if (typeof msg.reason !== "string" || !msg.reason) throw new RoomSocketSayError("Side-chat resync frame was invalid.", "frame_schema_invalid");
+            throw new RoomSocketSayError(msg.reason, "side_chat_resync_required");
+          }
+          assertExactKeys(msg, ["op", "update"], "side chat delivery");
+          handlers.onSideChat?.(parseSideChatUpdate(msg.update, dependencies.expectedRoomId));
           return;
         }
         if (msg.op === "resync_required") {

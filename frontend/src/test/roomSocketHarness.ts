@@ -159,14 +159,14 @@ export function sentClientFrame(socket: FakeWebSocket, index = 1) {
   return socket.sent[index];
 }
 
-export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {}) {
+export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {}, streams = ["room_events"]) {
   const sockets: FakeWebSocket[] = [];
   let issued = 0;
   let reportOpened = () => {};
   const opened = new Promise<void>((resolve) => { reportOpened = resolve; });
   const handle = openRoomSocket(
     { kind: "host", meetingId: "general" },
-    ["room_events"],
+    streams,
     {
       ...handlers,
       onOpen: () => {

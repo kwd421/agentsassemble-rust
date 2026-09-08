@@ -13,12 +13,10 @@ use crate::{
     AppState,
     connection_admission::ConnectionLease,
     room_channel::{decode_client_frame, send_frame, send_nack},
-    room_history_socket::read_history_frame,
     room_socket::{
         EstablishedSubscription, establish, persistence_error, persistence_error_is_internal,
         refresh_room_session,
     },
-    room_vote_socket::read_vote_summary_frame,
     ticket::ConsumedSocketTicket,
 };
 
@@ -40,6 +38,7 @@ pub(crate) async fn run(
         mut events,
         mut catalog_updates,
         mut delivered_seq,
+        mut side_chat,
     }) = establish(&mut sender, &mut receiver, &state, grant).await
     else {
         return;
@@ -102,43 +101,14 @@ pub(crate) async fn run(
                             if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), CommandResolution::Rejected, ProtocolError::new("unsupported_transport", "This action uses the authenticated HTTP management endpoint."))).await.is_none() { return; }
                             continue;
                         }
-                        if matches!(action, RoomAction::RoomHistory | RoomAction::ChannelHistory) {
-                            match read_history_frame(
-                                &state.store,
-                                &state.socket_admission,
-                                &principal,
-                                room_session.as_ref(),
-                                action,
-                                &request_id,
-                                &payload,
-                            ).await {
+                        if let Some(result) = crate::room_socket_direct::command_frame(&state, &principal, room_session.as_ref(), &request_id, action, &payload).await {
+                            match result {
                                 Ok(frame) => {
                                     if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
                                 }
                                 Err(failure) => {
                                     if persistence_error_is_internal(&failure.error) {
-                                        tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room history read failed");
-                                    }
-                                    let (code, message) = persistence_error(&failure.error);
-                                    if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
-                                }
-                            }
-                            continue;
-                        }
-                        if action == RoomAction::RoomVoteSummary {
-                            match read_vote_summary_frame(
-                                &state.store,
-                                &principal,
-                                room_session.as_ref(),
-                                &request_id,
-                                &payload,
-                            ).await {
-                                Ok(frame) => {
-                                    if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
-                                }
-                                Err(failure) => {
-                                    if persistence_error_is_internal(&failure.error) {
-                                        tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "room vote summary read failed");
+                                        tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "direct room command failed");
                                     }
                                     let (code, message) = persistence_error(&failure.error);
                                     if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
@@ -259,6 +229,9 @@ pub(crate) async fn run(
                     }
                     Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
                 }
+            }
+            update = crate::side_chat_socket::receive_update(&mut side_chat), if side_chat.is_some() => {
+                if crate::side_chat_socket::deliver_update(&state, &mut principal, &mut room_session, room_uid, &mut sender, update).await.is_none() { return; }
             }
             changed = catalog_updates.changed() => {
                 if changed.is_err() {

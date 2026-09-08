@@ -205,6 +205,15 @@ pub async fn open_session_socket(
     base_url: &str,
     session_token: &str,
 ) -> RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
+    open_session_socket_with_streams(client, base_url, session_token, &["room_events"]).await
+}
+
+pub async fn open_session_socket_with_streams(
+    client: &Client,
+    base_url: &str,
+    session_token: &str,
+    streams: &[&str],
+) -> RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>> {
     let response = client
         .post(format!("{base_url}/api/session-tickets/socket"))
         .header("authorization", format!("Bearer {session_token}"))
@@ -229,7 +238,10 @@ pub async fn open_session_socket(
     .unwrap_or_else(|error| panic!("connect human room socket: {error}"))
     .0;
     let mut socket = RoomSocketPeer::new(socket);
-    let receipt = socket.subscribe(0).await;
+    socket
+        .send_json(&json!({"op":"subscribe", "streams":streams, "resume_from_seq":0}))
+        .await;
+    let receipt = socket.receive_json().await;
     assert_eq!(receipt["op"], "subscribed");
     assert_eq!(receipt["room_id"], "general");
     assert_eq!(socket.receive_json().await["op"], "snapshot");

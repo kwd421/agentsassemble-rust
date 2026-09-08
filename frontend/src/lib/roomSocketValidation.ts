@@ -1,3 +1,5 @@
+import { isSequence } from "./roomSequence";
+import { parseSideChatUpdate } from "./sideChatContract";
 import { isRoomLifecycleEvent, parsePublicRoom, roomFromLifecycleEvent } from "./roomLifecycleContract";
 import type { RoomEvent } from "../api";
 import { RoomSocketSayError } from "../roomSocketTypes";
@@ -99,9 +101,7 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
 }
 
-export function isSequence(value: unknown): value is number {
-  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
-}
+export { isSequence } from "./roomSequence";
 
 function publicRoomSettingsIsValid(value: unknown): value is PublicRoomSettings {
   try {
@@ -301,6 +301,15 @@ export function commandAckResultIsValid(
     publicRoomEventIsValid(event, expectedRoomId) &&
     result.event_seq === event.seq
   );
+  if (action === "side_chat.send") {
+    try {
+      assertExactKeys(result, ["update"], "side chat ACK");
+      const update = parseSideChatUpdate(result.update, expectedRoomId);
+      return update.generation === payload.generation && update.message.participant_id === expectedParticipantId;
+    } catch {
+      return false;
+    }
+  }
   if (action === "message.send" || action.startsWith("room.random.")) {
     return hasDurableEvent && event?.type === "message_final";
   }

@@ -39,6 +39,9 @@ use crate::{
 
 use crate::room_command_execution::CommandExecution;
 
+#[path = "side_chat_runtime.rs"]
+mod side_chat;
+
 const ROOM_QUEUE_CAPACITY: usize = 128;
 const ROOM_TOOL_QUEUE_CAPACITY: usize = 64;
 const EVENT_RECEIVER_CAPACITY: usize = 256;

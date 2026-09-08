@@ -82,21 +82,25 @@ impl HttpRouteSurface {
 #[serde(rename_all = "snake_case")]
 pub enum RoomStream {
     RoomEvents,
+    SideChat,
 }
 
 impl RoomStream {
-    pub const ALL: [Self; 1] = [Self::RoomEvents];
+    pub const ALL: [Self; 2] = [Self::RoomEvents, Self::SideChat];
 
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
             Self::RoomEvents => "room_events",
+            Self::SideChat => "side_chat",
         }
     }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 pub enum RoomAction {
+    #[serde(rename = "side_chat.send")]
+    SideChatSend,
     #[serde(rename = "channel.message.send")]
     ChannelMessageSend,
     #[serde(rename = "channel.history")]
@@ -159,7 +163,7 @@ impl RoomAction {
         !matches!(self, Self::RoomClose | Self::RoomArchive | Self::RoomDelete)
     }
 
-    pub const ALL: [Self; 27] = [
+    pub const ALL: [Self; 28] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
@@ -187,11 +191,13 @@ impl RoomAction {
         Self::RoomRandomRoll,
         Self::RoomSettingsUpdate,
         Self::RoomVoteSummary,
+        Self::SideChatSend,
     ];
 
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::SideChatSend => "side_chat.send",
             Self::ChannelMessageSend => "channel.message.send",
             Self::ChannelHistory => "channel.history",
             Self::MessageDelete => "message.delete",
@@ -322,6 +328,12 @@ pub enum ClientFrame {
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(tag = "op", rename_all = "snake_case")]
 pub enum ServerFrame {
+    SideChatUpdated {
+        update: agentsassemble_domain::SideChatUpdate,
+    },
+    SideChatResyncRequired {
+        reason: String,
+    },
     Subscribed(Box<Subscribed>),
     Snapshot(Box<RoomSnapshot>),
     Event {
