@@ -4,7 +4,6 @@ use axum::{
     Json, Router,
     extract::{Query, Request, State},
     http::{Method, StatusCode, header::CACHE_CONTROL},
-    response::{IntoResponse, Response},
 };
 use serde::Deserialize;
 use serde_json::json;
@@ -20,6 +19,9 @@ use crate::{
     },
     ticket::RoomSessionHttpAuthority,
 };
+
+// Keep errors as their status/body until Axum builds the final response.
+type Failure = (StatusCode, Json<serde_json::Value>);
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -45,7 +47,7 @@ registered_routes! {
 async fn read_side_chat(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<SideChatSnapshot>, Response> {
+) -> Result<Json<SideChatSnapshot>, Failure> {
     let credential = bearer_credential(request.headers()).ok_or_else(unauthorized)?;
     let grant = match resolve_room_session_bearer(
         &state,
@@ -121,7 +123,7 @@ async fn read_side_chat(
     Ok(Json(snapshot))
 }
 
-fn unauthorized() -> Response {
+fn unauthorized() -> Failure {
     error_response(
         StatusCode::UNAUTHORIZED,
         "unauthorized",
@@ -129,7 +131,7 @@ fn unauthorized() -> Response {
     )
 }
 
-fn persistence_error(error: PersistenceError) -> Response {
+fn persistence_error(error: PersistenceError) -> Failure {
     match error {
         PersistenceError::CommandRejected { code, message }
             if matches!(
@@ -163,10 +165,9 @@ fn persistence_error(error: PersistenceError) -> Response {
     }
 }
 
-fn error_response(status: StatusCode, code: &str, message: &str) -> Response {
+fn error_response(status: StatusCode, code: &str, message: &str) -> Failure {
     (
         status,
         Json(json!({"error":{"code":code,"message":message}})),
     )
-        .into_response()
 }

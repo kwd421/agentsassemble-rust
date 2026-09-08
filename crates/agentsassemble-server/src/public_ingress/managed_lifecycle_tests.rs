@@ -13,6 +13,7 @@ use super::{
 };
 use crate::product_surface::RouteExposure;
 
+#[cfg(unix)]
 pub(crate) fn started_projection(local_url: &str) -> (ManagedProjection, u64) {
     let mut projection = ManagedProjection::new(local_url, true);
     let generation = projection.begin_start();

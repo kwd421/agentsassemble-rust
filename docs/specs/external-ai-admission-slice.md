@@ -1,7 +1,10 @@
 # External AI admission and bridges
 
-Status: Phase 7 contract and dependency skeleton; implementation begins after the
-approved Phase 6 checkpoint `25c7961`.
+Status: all three custody implementations and local packaged user flows are complete
+through `fa691cd`. Windows runtime tests pass; final Windows Clippy is pending before
+whole-phase Daybreak review. Configured real-provider proof and Pro review remain
+final-closeout work. The dated implementation notes below retain their original
+intermediate verification status; this current status and the closure record govern.
 
 ## Definition and observed entry points
 
@@ -1483,3 +1486,37 @@ routing, protocol schemas and error/cleanup behavior remain library-owned; no li
 exception, toolchain downgrade or dependency fork is introduced. Nine ACP, seven
 Claude, six portal and two connector cases pass, including actual tools/list and
 read/publication flows; final Windows lint verification remains pending.
+
+## Whole-phase local acceptance record
+
+| Custody owner | Completed local flow and boundaries |
+| --- | --- |
+| Room Connector | Current conversation MCP/CLI admission, exact invite and session, bounded authorized reads/tools, ordinary publication, response-loss/reconnect and leave; packaged desktop and 390×420 controls. |
+| External attendee | Saved-friend and admitted-human companion packets, real `room attend` entry, provider-bound admission, exact native runtime/turn/request/report custody, reconnection and positive cleanup; packaged question/answer, authenticated publication, idle connection and participant-end flow. |
+| Managed bridge | Private credential handoff, bound worker, native callbacks and exact lifecycle, active and idle crash notification, positive whole-tree cleanup and recovery; packaged desktop/mobile controls and actual Windows Job/pipe execution. |
+
+The existing verification records contain the independent boundary cases and
+measured local costs. The final packaged run is recorded in
+[VERIFICATION](../VERIFICATION.md#phase-7-packaged-external-attendee-completion-2026-09-09).
+The pre-correction commit audit contains 91 implementation/evidence commits since `25c7961`,
+all under 1,000 changed lines (largest 986). Architecture, source growth, nineteen
+policy tests, formatting, diff and artifact checks remain unchanged and pass.
+The last source correction passes affected provider/server Clippy plus 24 ACP,
+Claude, Room Portal and Connector cases; the earlier frontend and attendee-flow
+corrections retain their separate passing evidence. Final Windows Clippy and
+whole-phase Daybreak disposition remain to be recorded.
+
+The `fa691cd` Windows run passes compilation, all six managed runtime cases, and
+provider Clippy. Server Clippy identifies Windows-only unused test imports/helpers
+and two routes storing complete 128-byte HTTP responses in their error variants.
+Friends and side-chat errors now retain the same status/JSON body until Axum builds
+the response; authentication, persistence errors, wire shape and ordering are
+unchanged. Test helper availability follows its existing Unix consumers. Windows
+Clippy runs before test code generation so a lint failure no longer spends another
+three minutes compiling already-passing runtime tests; all commands remain required
+for a successful workflow. The corrected Windows result is pending.
+
+The equivalent HTTP correction passes server all-target/all-feature Clippy, the
+friends one-use-authority HTTP boundary, and the side-chat bounded/private/exact
+authority HTTP boundary. Architecture, growth, nineteen policy tests, formatting
+and diff checks also pass; Windows verification remains pending.

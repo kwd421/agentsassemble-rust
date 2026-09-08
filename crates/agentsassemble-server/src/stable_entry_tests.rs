@@ -1,11 +1,15 @@
+#[cfg(unix)]
 use std::path::PathBuf;
 
 #[cfg(unix)]
 use std::time::Duration;
 
-use super::{StableEntry, StableEntryConfig, StableEntryFile};
+#[cfg(unix)]
+use super::StableEntry;
+use super::{StableEntryConfig, StableEntryFile};
 #[cfg(unix)]
 use crate::{AppState, TicketStore, serve};
+#[cfg(unix)]
 use crate::{
     public_ingress::{ManagedIngressConfig, PublicIngress, PublicIngressControlError},
     public_ingress_runtime::run_generation,
@@ -16,13 +20,18 @@ use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_persistence::SqliteStore;
 #[cfg(unix)]
 use agentsassemble_provider::ProviderCatalogService;
+#[cfg(unix)]
 use parking_lot::RwLock;
+#[cfg(unix)]
 use std::sync::Arc;
 #[cfg(unix)]
 use tokio::net::TcpListener;
+#[cfg(unix)]
 use tokio_util::sync::CancellationToken;
 
+#[cfg(unix)]
 const DIRECT_ORIGIN: &str = "https://quick-entry.trycloudflare.com";
+#[cfg(unix)]
 const SUCCESSOR_ORIGIN: &str = "https://successor-entry.trycloudflare.com";
 
 #[test]

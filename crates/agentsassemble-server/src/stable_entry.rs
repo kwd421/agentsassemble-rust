@@ -132,9 +132,9 @@ fn resolve_publisher() -> Option<std::path::PathBuf> {
 fn is_direct_publisher(path: &Path) -> bool {
     #[cfg(windows)]
     {
-        return !path.extension().is_some_and(|extension| {
+        !path.extension().is_some_and(|extension| {
             extension.eq_ignore_ascii_case("bat") || extension.eq_ignore_ascii_case("cmd")
-        });
+        })
     }
     #[cfg(not(windows))]
     {

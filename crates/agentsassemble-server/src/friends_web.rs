@@ -21,6 +21,9 @@ use crate::{
 
 const MAX_FRIEND_BODY_BYTES: usize = 16 * 1024;
 
+// Keep errors as their status/body until Axum builds the final response.
+type Failure = (StatusCode, Json<serde_json::Value>);
+
 pub(crate) fn routes() -> Router<AppState> {
     friend_routes()
         .layer(SetResponseHeaderLayer::overriding(
@@ -40,7 +43,7 @@ registered_routes! {
     }
 }
 
-async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), Response> {
+async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), Failure> {
     if consume_local_operator(state, headers).await.is_none() {
         return Err(failure(
             StatusCode::UNAUTHORIZED,
@@ -51,7 +54,7 @@ async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), Response
     Ok(())
 }
 
-async fn list(State(state): State<AppState>, request: Request) -> Result<Response, Response> {
+async fn list(State(state): State<AppState>, request: Request) -> Result<Response, Failure> {
     authorize(&state, request.headers()).await?;
     ensure_empty_body(request, MAX_FRIEND_BODY_BYTES)
         .await
@@ -60,7 +63,7 @@ async fn list(State(state): State<AppState>, request: Request) -> Result<Respons
     Ok(Json(json!({"friends": friends})).into_response())
 }
 
-async fn save(State(state): State<AppState>, request: Request) -> Result<Response, Response> {
+async fn save(State(state): State<AppState>, request: Request) -> Result<Response, Failure> {
     authorize(&state, request.headers()).await?;
     let body: SaveFriend = decode_json_body(request, MAX_FRIEND_BODY_BYTES)
         .await
@@ -83,7 +86,7 @@ async fn delete(
     State(state): State<AppState>,
     Query(query): Query<DeleteQuery>,
     request: Request,
-) -> Result<Response, Response> {
+) -> Result<Response, Failure> {
     authorize(&state, request.headers()).await?;
     ensure_empty_body(request, MAX_FRIEND_BODY_BYTES)
         .await
@@ -96,7 +99,7 @@ async fn delete(
     Ok(Json(json!({"deleted": deleted})).into_response())
 }
 
-fn storage_error(error: PersistenceError) -> Response {
+fn storage_error(error: PersistenceError) -> Failure {
     match error {
         PersistenceError::CommandRejected { code, message } => {
             let status = match code.as_bytes() {
@@ -114,7 +117,7 @@ fn storage_error(error: PersistenceError) -> Response {
     }
 }
 
-fn body_error(error: BodyDecodeError) -> Response {
+fn body_error(error: BodyDecodeError) -> Failure {
     let (status, code, message) = match error {
         BodyDecodeError::RequestTimeout => (
             StatusCode::REQUEST_TIMEOUT,
@@ -140,6 +143,6 @@ fn body_error(error: BodyDecodeError) -> Response {
     failure(status, code, message)
 }
 
-fn failure(status: StatusCode, code: &str, message: &str) -> Response {
-    (status, Json(json!({"code": code, "error": message}))).into_response()
+fn failure(status: StatusCode, code: &str, message: &str) -> Failure {
+    (status, Json(json!({"code": code, "error": message})))
 }
