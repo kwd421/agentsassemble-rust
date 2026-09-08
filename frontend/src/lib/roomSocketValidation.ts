@@ -567,16 +567,8 @@ export function snapshotValidationError(
     sessionIds.add(session.session_id);
     sessionParticipantIds.add(session.participant_id);
   }
-  if (
-    [...agentParticipantIds].some(
-      (participantId) => !sessionParticipantIds.has(participantId)
-    )
-  ) {
-    return new RoomSocketSayError(
-      "Room snapshot contained an Agent participant without its session; reconnecting.",
-      "snapshot_agent_session_invalid"
-    );
-  }
+  // Every reported Agent Session must bind an agent above. The reverse does not
+  // hold: current-conversation connectors have membership, not managed sessions.
   for (const event of value.events) {
     if (
       !publicRoomEventIsValid(event, expectedRoomId)

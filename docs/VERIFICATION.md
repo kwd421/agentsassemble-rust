@@ -8241,3 +8241,13 @@ stopped and Computer Use was reset. Only the isolated Phase 6 app's Application
 Support, Caches, WebKit directories and `AgentsAssemble Phase6 Verify.app` bundle
 were removed after non-symlink checks, with absence verified. Active Cargo build
 artifacts and verification logs were retained; unrelated apps/data were untouched.
+
+## Phase 7 Connector packaged flow and corrections — 2026-09-08
+
+The [Connector contract and packaged proof](specs/external-ai-admission-slice.md#packaged-connector-corrections-and-proof)
+records the directly exercised desktop and 390×420 invitation, admission, public
+message, member ownership and leave flow. Actual admission found and corrected the
+frontend's all-agents-require-managed-sessions assumption and the persisted owner
+identity-domain error. No real AI provider ran. Affected tests, Clippy and unchanged
+gates pass; isolated app and owned-process cleanup is complete. The other two
+Phase 7 custody targets and whole-phase review remain pending.

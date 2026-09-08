@@ -130,7 +130,7 @@ export default function RoomInviteModal({
               {roomLabel} 초대 및 연결
             </h2>
             <p className="mt-1 text-[13px] text-text-muted preserve-words">
-              사람을 초대하거나 내 다른 기기를 연결해요.
+              사람과 AI를 초대하거나 내 다른 기기를 연결해요.
             </p>
           </div>
           <button
@@ -389,7 +389,7 @@ export default function RoomInviteModal({
           {copyStatus ||
             (readOnlyInvite
               ? "이 방의 사람 초대는 읽기 전용 권한으로 발급됩니다."
-              : "초대 링크는 참가할 사람에게만 보내 주세요.")}
+              : "초대 링크는 참가할 사람이나 AI 대화에만 전달해 주세요.")}
         </p>
         {pendingPublicAction && (
           <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>

@@ -244,3 +244,41 @@ no gate was relaxed. One real-HTTP creation/admission test and 41 affected front
 tests pass. Server/protocol and desktop Clippy, 28 desktop tests and unchanged
 architecture/format/diff gates pass. Packaged desktop/mobile proof is in progress;
 external attendee and managed bridge custody remain pending.
+
+## Packaged Connector corrections and proof
+
+Actual connector admission exposed an invalid frontend assumption: every agent
+participant was required to have a managed Agent Session. This threw during mention
+projection and rejected later snapshots. Connector membership now uses the canonical
+Participant identity for mentions and ordinary member presentation. Every reported
+Agent Session still requires its exact agent participant and unique session binding;
+no provider/session data or process controls are synthesized for a connector.
+
+The live member panel also exposed a user/participant ID mix-up in invitation
+ownership. Admission now resolves the creating user's canonical profile binding to
+its participant ID before storing the member. The invitation receipt continues to
+use the creating user ID. The existing expiry/archive admission test checks this
+owner relationship. Button styles and dialog wording now include the AI invitation.
+Fifty-seven affected frontend tests, frontend build, the affected persistence test,
+and server/persistence all-target/all-feature Clippy pass.
+
+The isolated packaged app directly created and copied an invitation. Its persisted
+creation receipt was recovered through the normal store owner while the app was
+stopped, then used by the actual HTTP Connector client through the app's managed
+Cloudflare ingress; credentials remained in process memory. The client exposed the
+rendering defect. After correction, a separate same-owner invitation verified visible
+agent membership, public message and confirmed leave in the desktop package.
+At 390 by 420, direct manipulation verified invitation creation/copy, lower-card
+scrolling, Escape, visible conversation and member panel, correct grouping under the
+inviting human, and removal after confirmed leave. Clipboard success was observed
+through the app; raw clipboard contents were not inspected. No AI provider ran.
+
+A post-flow sample showed app RSS 122.4 MiB, supervisor 11.4 MiB, server 57.5 MiB and
+owned tunnel 43.3 MiB; CPU was 0/0/0.2/0 percent respectively. This is a point sample,
+not a whole-phase benchmark or total WebKit-memory measurement. The debug package
+occupied 177.8 MiB. All owned app/server/tunnel/probe processes ended before cleanup;
+only this run's app data, cache, WebKit data and bundle were removed. The existing
+artifact owner's measured cleanup plan removed the obsolete 1.1 GiB desktop target,
+retaining the below-limit shared target needed by ongoing work. Unchanged
+architecture/format/diff/artifact gates pass. External attendee and managed bridge
+flows remain the next Phase 7 targets; whole-phase review has not been requested.

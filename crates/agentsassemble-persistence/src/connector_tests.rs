@@ -102,6 +102,10 @@ async fn connector_expiry_archive_and_creation_replay_never_restore_authority() 
     let admitted = store
         .admit_connector(&fingerprint, &[3; 32], Uuid::new_v4(), "Reader AI", now)
         .await?;
+    assert_eq!(
+        admitted.event.extra["participant"]["owner_id"],
+        agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID
+    );
     assert!(!admitted.authorization.principal().capabilities.message_send);
     assert!(admitted.authorization.principal().capabilities.room_history);
     assert!(

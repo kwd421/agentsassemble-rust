@@ -225,6 +225,19 @@ async fn insert_connector_participant(
     creator_id: &str,
     now: DateTime<Utc>,
 ) -> Result<(Participant, RoomEvent), PersistenceError> {
+    // Invitation receipts identify the creating user; room ownership identifies
+    // that user's participant. Keep these identity domains separate.
+    let owner_id: String =
+        sqlx::query_scalar("SELECT participant_id FROM user_profiles WHERE user_id = ?")
+            .bind(creator_id)
+            .fetch_optional(&mut **tx)
+            .await?
+            .ok_or_else(|| {
+                rejected(
+                    "invite_owner_unavailable",
+                    "The invitation owner is unavailable.",
+                )
+            })?;
     let participant = Participant {
         room_id: room_id.to_owned(),
         participant_id: format!("connector-{}", Uuid::new_v4().simple()),
@@ -233,7 +246,7 @@ async fn insert_connector_participant(
         participant_type: "agent".to_owned(),
         status: ParticipantStatus::Joined,
         role: ParticipantRole::Agent,
-        owner_id: creator_id.to_owned(),
+        owner_id,
         muted: false,
         created_at: now,
         updated_at: now,

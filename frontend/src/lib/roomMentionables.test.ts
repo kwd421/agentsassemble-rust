@@ -157,3 +157,15 @@ describe("roomMentionables", () => {
     });
   });
 });
+
+it("uses the server-owned identity for a connector without provider or managed session data", () => {
+  const mentions = roomMentionables({
+    viewerParticipantId: "host", sessions: [], displayResourceBase: "",
+    members: [participantFixture({
+      participant_id: "connector-one", participant_type: "agent",
+      display_name: "Current AI", role: "agent",
+    })],
+  });
+  expect(mentions).toMatchObject([{ token: "connector-one", label: "Current AI", participantKind: "agent" }]);
+  expect(mentions[0].providerKind).toBeUndefined();
+});

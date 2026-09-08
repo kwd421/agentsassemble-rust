@@ -101,15 +101,22 @@ describe("Participant socket contract", () => {
         participant_id: "agent-one",
       })];
     }],
-    ["agent without a session", (snapshot: { participants: unknown[] }) => {
-      snapshot.participants = [participant({
-        participant_id: "agent-one",
-        participant_type: "agent",
-        role: "agent",
-      })];
-    }],
   ])("rejects a snapshot with %s", async (_label, mutate) => {
     await expectSnapshotRejected(mutate);
+  });
+
+  it("accepts connector membership without inventing a managed Agent Session", async () => {
+    const { handle, sockets } = openHarness();
+    await flushPromises();
+    sockets[0].open();
+    const frames = handshakeFrames(0, 0);
+    (frames.snap as { participants: unknown[] }).participants = [participant({
+      participant_id: "connector-one", participant_type: "agent", role: "agent",
+    })];
+    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.snap);
+    await vi.waitFor(() => expect(handle.ready()).toBe(true));
+    handle.close();
   });
 
   it("accepts one sequence-bound role update", async () => {

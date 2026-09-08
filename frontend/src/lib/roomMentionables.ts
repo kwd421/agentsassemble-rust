@@ -58,9 +58,8 @@ export function roomMentionables({
     const session = member.participant_type === "agent"
       ? sessionByParticipantId.get(participantId)
       : undefined;
-    if (member.participant_type === "agent" && !session) {
-      throw new Error("Room mention agent is missing its canonical Agent Session projection.");
-    }
+    // Room Connector is an agent participant without a managed Agent Session.
+    // Its canonical member identity remains sufficient for ordinary mentions.
     const displayName = clean(session ? session.display_name : member.display_name);
     const uniqueDisplayName =
       displayName && displayNameCounts.get(displayName.toLowerCase()) === 1;
