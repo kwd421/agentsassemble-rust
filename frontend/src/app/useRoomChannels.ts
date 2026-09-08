@@ -43,7 +43,7 @@ export function useRoomChannels({
     [activeChannels]
   );
   const create = useCallback(
-    async (params: { name: string; type: "text" | "voice" }) => {
+    async (params: { name: string; type: "text" }) => {
       if (!activeSettings) {
         throw new Error("방 설정 동기화가 완료된 뒤 다시 시도해 주세요.");
       }
@@ -57,7 +57,9 @@ export function useRoomChannels({
       const saved = await saveCanonicalSettings({
         channels: [...activeSettings.channels, channel],
       });
-      return saved.channels.find((item) => item.id === channel.id) || null;
+      const created = saved.channels.find((item) => item.id === channel.id);
+      if (!created) throw new Error("저장된 설정에서 새 채널을 확인하지 못했어요.");
+      return created;
     },
     [activeSettings, saveCanonicalSettings]
   );

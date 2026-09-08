@@ -17,7 +17,7 @@ const room: RoomDockItem = {
 };
 
 const firstChannel: RoomChannel = {
-  id: "channel-a",
+  id: "c000000000001",
   name: "notes",
   type: "text",
   position: 0,
@@ -73,12 +73,12 @@ describe("useRoomChannels", () => {
 
     let created: RoomChannel | null = null;
     await act(async () => {
-      created = await hook.result.current.create({ name: "voice", type: "voice" });
+      created = await hook.result.current.create({ name: "discussion", type: "text" });
     });
 
     expect(created).toMatchObject({
-      name: "voice",
-      type: "voice",
+      name: "discussion",
+      type: "text",
       position: 1,
     });
     expect(saveCanonicalSettings).toHaveBeenCalledWith({
@@ -86,8 +86,8 @@ describe("useRoomChannels", () => {
         firstChannel,
         expect.objectContaining({
           id: expect.stringMatching(/^c[0-9a-f]{12}$/),
-          name: "voice",
-          type: "voice",
+          name: "discussion",
+          type: "text",
           position: 1,
         }),
       ],
@@ -108,7 +108,7 @@ describe("useRoomChannels", () => {
 
     await expect(
       act(async () => {
-        await hook.result.current.create({ name: "voice", type: "voice" });
+        await hook.result.current.create({ name: "discussion", type: "text" });
       })
     ).rejects.toThrow("settings conflict");
     expect(hook.result.current.activeChannels).toEqual([firstChannel]);

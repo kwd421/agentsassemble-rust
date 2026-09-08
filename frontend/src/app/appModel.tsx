@@ -8,7 +8,7 @@ import type {
 } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
 
-export type Channel = "lobby";
+export type Channel = string;
 
 export type ChannelConfig = {
   id: Channel;
@@ -53,8 +53,7 @@ export const CHANNELS: ChannelConfig[] = [
 export const CHANNEL_SECTIONS: Array<{
   id: string;
   label: string;
-  channels: Channel[];
-}> = [{ id: "conversation", label: "Text Channels", channels: ["lobby"] }];
+}> = [{ id: "conversation", label: "Text Channels" }];
 
 const CHANNEL_NOTIFICATION_LABELS: Record<ChannelNotificationSetting, string> = {
   default: "서버 기본 알림",

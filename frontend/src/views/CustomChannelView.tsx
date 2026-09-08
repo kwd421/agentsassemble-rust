@@ -9,7 +9,6 @@ import ChannelHeader, { type ChannelHeaderActions, type ChannelSearchScope } fro
 import DiscordText from "./components/DiscordText";
 import { useMessagePins } from "./useMessagePins";
 import type { RoomMessageSearchController } from "./useRoomMessageSearch";
-import "../styles/custom-channel.css";
 
 type Transcript = ReturnType<typeof useChannelTranscript>;
 const buttonStyle = { minWidth: 44, minHeight: 44 };
@@ -129,10 +128,10 @@ export default function CustomChannelView({
       {transcript.ready && transcript.events.length === 0 && <p className="text-text-muted">첫 메시지를 남겨보세요.</p>}
       {transcript.events.map((event) => <article key={event.id} data-channel-event-id={event.id} data-search-target={selected?.scope === transcript.scope && selected.id === event.id} tabIndex={-1}
         className="dc-channel-message" style={{ padding: "8px 0", overflowWrap: "anywhere" }}>
-        <div className="dc-channel-message-author-line">
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <strong className="min-w-0 flex-1 preserve-words">{participantProfiles[event.actor.participant_id]?.displayName || event.display_name}</strong>
           <time dateTime={event.created_at} style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{new Date(event.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</time>
-          {canPin && authority && <button type="button" className="dc-channel-message-pin" style={{ ...buttonStyle, opacity: 1 }} aria-label={pinnedIds.has(event.id) ? "고정 해제" : "메시지 고정"}
+          {canPin && authority && <button type="button" className="ops-button" style={{ ...buttonStyle, color: pinnedIds.has(event.id) ? "var(--color-accent)" : "var(--color-text-muted)" }} aria-label={pinnedIds.has(event.id) ? "고정 해제" : "메시지 고정"}
             data-pinned={pinnedIds.has(event.id)} disabled={pins.pinsLoading || pins.pinBusyIds.size > 0} onClick={() => void pins.setPinned(event.id, !pinnedIds.has(event.id))}><Pin size={16} /></button>}
         </div>
         <DiscordText text={event.content || ""} mentionLabels={mentionLabels} />

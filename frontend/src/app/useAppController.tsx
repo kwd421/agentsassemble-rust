@@ -1,7 +1,11 @@
+import { Hash } from "lucide-react";
+import { isCustomChannelId } from "../lib/customChannelId";
+import { useRoomChannels } from "./useRoomChannels";
+import { useChannelTranscript } from "./useChannelTranscript";
 import { usePairedRoomLifecycle } from "./usePairedRoomLifecycle";
 import { useRoomLifecycle } from "./useRoomLifecycle";
 import { uploadAgentAvatar } from "../api/agentAvatar";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   CSSProperties,
   MouseEvent as ReactMouseEvent,
@@ -12,6 +16,7 @@ import {
   type RoomMember,
   type RoomAgentSession,
   type RoomSearchResult,
+  type RoomEvent,
 } from "../api";
 import { useRoomSideChat } from "./useRoomSideChat";
 import { resolveRoomHttpAuthority } from "../api/roomHttpAuthority";
@@ -254,18 +259,37 @@ export function useAppController(deviceToken: string, clientId: string) {
     startupIdentityResolved && roomSurfaceReady ? activeOperationalMeetingId : "",
     resolveRoomHttpAuthority(admittedSessionToken, !guestLocked && isDesktopWebview(), deviceToken),
   );
+  const channelReceiver = useRef<((events: RoomEvent[]) => void) | null>(null);
   const canonicalRoom = useCanonicalRoom({
     roomId: startupIdentityResolved && roomSurfaceReady ? activeOperationalMeetingId : "",
     auth: roomSurfaceReady ? canonicalRoomAuth : undefined,
     streams: serverProductSurface?.websocket_streams || [],
     serverSurface: serverProductSurface,
     viewerParticipantId: guestSession?.agentId || "operator-local",
+    onRoomEvents: (events) => channelReceiver.current?.(events),
     onSideChat: sideChat.receive,
     onSideChatReady: sideChat.connect,
     onSideChatClose: sideChat.disconnect,
     onUnauthorized: admittedSessionToken ? expireGuestSession : undefined,
     onRoomLifecycle: (room) => { roomLifecycle.onRoomLifecycle(); pairedRoomLifecycle.onRoomLifecycle(room); },
   });
+  const roomChannels = useRoomChannels({
+    activeRoom, canonicalSettings: canonicalRoom.roomSettings,
+    saveCanonicalSettings: canonicalRoom.sendRoomSettingsUpdate,
+  });
+  const activeCustomChannel = roomChannels.activeChannels.find((item) => item.id === channel && item.type === "text") ?? null;
+  const channelTranscript = useChannelTranscript({
+    roomId: activeOperationalMeetingId, roomUid: canonicalRoom.room?.room_uid ?? "",
+    channelId: activeCustomChannel?.id ?? "", socket: canonicalRoom.socket,
+    connected: canonicalRoom.connectionState === "connected",
+  });
+  channelReceiver.current = channelTranscript.receive;
+  useEffect(() => {
+    if (isCustomChannelId(channel) && canonicalRoom.roomSettings?.roomId === activeOperationalMeetingId && !activeCustomChannel) {
+      setChannel("lobby");
+      setPendingMessageSearchTarget(null);
+    }
+  }, [channel, canonicalRoom.roomSettings, activeOperationalMeetingId, activeCustomChannel]);
   const roomMembers = useRoomMembers({
     activeRoom,
     canonicalParticipants: canonicalRoom.participants,
@@ -367,24 +391,26 @@ export function useAppController(deviceToken: string, clientId: string) {
   const activeChannelSettings = roomSettings.channelSettingsFor(activeRoom);
   const { roomHttpAuthority, roomMessageSearch } = useAppMessageSearch({
     roomId: activeOperationalMeetingId,
+    roomUid: activeRoom.roomUid ?? "",
+    selectedChannelId: channel,
     scope: messageSearchScope,
     deviceToken,
     sessionToken: admittedSessionToken,
     localAvailable: !guestLocked && isDesktopWebview(),
   });
-  const messageSearchChannelLabels = { lobby: "general" };
+  const visibleChannels = [...CHANNELS, ...roomChannels.activeChannels.filter((item) => item.type === "text").map((item) => ({ id: item.id, label: item.name, icon: Hash }))];
+  const messageSearchChannelLabels = Object.fromEntries(visibleChannels.map((item) => [item.id, item.label]));
   useEffect(() => {
     setMessageSearchScope("all");
     setPendingMessageSearchTarget(null);
-  }, [activeRoom.meetingId]);
+  }, [activeRoom.meetingId, activeRoom.roomUid]);
   const menuRoom = roomMenu ? rooms.find((room) => room.id === roomMenu.roomId) : undefined;
   const menuChannel = channelMenu
-    ? CHANNELS.find((item) => item.id === channelMenu.channelId)
+    ? visibleChannels.find((item) => item.id === channelMenu.channelId)
     : undefined;
   const menuChannelDisplay = menuChannel;
   const activeChannelDisplay =
-    CHANNELS.find((item) => item.id === channel) || CHANNELS[0];
-  const visibleChannels = CHANNELS;
+    visibleChannels.find((item) => item.id === channel) ?? { id: channel, label: "채널 연결 중", icon: Hash };
   const channelSearchNeedle = channelSearchQuery.trim().toLowerCase();
 
   function selectRoom(roomId: string) {
@@ -502,7 +528,7 @@ export function useAppController(deviceToken: string, clientId: string) {
 
   function openCrossChannelSearchResult(result: RoomSearchResult) {
     const targetChannel = result.channel_id;
-    if (targetChannel !== "lobby") {
+    if (targetChannel !== "lobby" && !roomChannels.activeChannels.some((item) => item.id === targetChannel && item.type === "text")) {
       roomMessageSearch.setError("검색 결과의 채널을 더 이상 열 수 없습니다.");
       return;
     }
@@ -574,7 +600,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   return {
-    roomLifecycle, pairedRoomLifecycle,
+    roomLifecycle, pairedRoomLifecycle, roomChannels, activeCustomChannel, channelTranscript,
     acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings,
     canManageActiveRoom, canControlActiveAgents,

@@ -410,3 +410,28 @@ adds no poll, timer, socket or cache. Twelve affected view/pin/window cases pass
 mocked pin receipt to match its target. Production frontend build/CSS and unchanged
 structure/19 policy/diff gates pass. The view is not mounted in the app shell yet;
 that wiring, create-channel dialog and direct packaged acceptance remain open.
+
+## Mounted channel flow
+
+The app now derives its text-channel list and labels from accepted room settings,
+opens the canonical channel view, and feeds its single bounded window from accepted
+room events. Removing the selected channel returns to lobby after authoritative
+settings arrive; temporary disconnection keeps the same channel view and draft.
+Channel search uses the selected channel, room-wide results route to their concrete
+channel, and lobby/custom pin and context lifetimes receive the room UID.
+
+The create entry uses the existing settings command and its revision/receipt checks.
+A native modal owns focus, keeps failed drafts, blocks duplicate submission and
+dismissal while saving, and navigates only after the returned settings contain the
+created text channel. Room/login changes retire the modal and its navigation. The
+retired voice selector and unused custom pin stylesheet are removed; common styles
+and local layout preserve the unchanged approved CSS cascade.
+
+Twenty-five affected channel/view/search/model cases pass (the combined run took
+1.88 s); two new modal cases pass separately (0.54 s), covering failure/receipt,
+busy dismissal, composing Enter and late completion after unmount. Production
+build, unchanged CSS cascade, structure/19 policy, formatting, diff and artifact
+checks pass. React review confirms one channel window under the existing socket,
+without polling, per-channel cache or another subscription. Mounted code adds
+about 4.15 KiB compressed to the main bundle. Packaged desktop/mobile acceptance
+and complete-phase resource measurement remain open.

@@ -1,16 +1,20 @@
+import CreateChannelModal from "../views/components/CreateChannelModal";
+import CustomChannelView from "../views/CustomChannelView";
+import { isCustomChannelId } from "../lib/customChannelId";
 import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
 import RoomManagementModal from "../views/components/RoomManagementModal";
-import { lazy, Suspense, useState } from "react";
+import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import {
   Bell,
   CalendarDays,
   ChevronDown,
   Search,
+  Plus,
   UserPlus,
   UserRound,
   X,
 } from "lucide-react";
-import { CHANNEL_SECTIONS, DeferredViewFallback, type ChannelConfig } from "./appModel";
+import { CHANNEL_SECTIONS, DeferredViewFallback } from "./appModel";
 import type { AppController } from "./useAppController";
 import AppOverlays from "./AppOverlays";
 import SideChatDock from "../views/components/SideChatDock";
@@ -32,6 +36,7 @@ const FriendsView = lazy(() => import("../views/FriendsView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
   const [friendsOpen, setFriendsOpen] = useState(false);
+  const [createChannelScope, setCreateChannelScope] = useState("");
   const [messageAttachmentReadOwner] = useState(
     () => createMessageAttachmentReadOwner()
   );
@@ -67,6 +72,17 @@ export default function AppView({ controller }: { controller: AppController }) {
     toggleMembers, typingIndicators, updateMemberRole,
     visibleChannels, visibleRoomTimelineEvents,
   } = controller;
+  const channelScope = JSON.stringify([activeRoom.meetingId, activeRoom.roomUid, roomHttpAuthority]);
+  const currentChannelScope = useRef(channelScope); currentChannelScope.current = channelScope;
+  useLayoutEffect(() => {
+    currentChannelScope.current = channelScope;
+    return () => { currentChannelScope.current = ""; };
+  }, [channelScope]);
+  const canCreateChannel = canManageActiveRoom && canonicalRoom.connectionState === "connected";
+  const canPostHumanMessage = lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) &&
+    canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
+      participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
+  useLayoutEffect(() => { setCreateChannelScope(""); }, [channelScope]);
   // Recovery owns the entrance until its current session surface is accepted.
   // Do not mount native directory/profile controls beneath that entrance.
   if (controller.guestRecoveryRequest) return <GuestIdentityRecoveryPanel
@@ -199,14 +215,7 @@ export default function AppView({ controller }: { controller: AppController }) {
 
         <nav className="min-h-0 flex-1 overflow-y-auto px-2 py-3 chat-scroll" aria-label="채널">
           {hasRoom && CHANNEL_SECTIONS.map((section) => {
-            const channels = section.channels
-              .map((id) => visibleChannels.find((item) => item.id === id))
-              .filter((item) => {
-                if (!item || !channelSearchNeedle) return Boolean(item);
-                const display = item;
-                return display.label.toLowerCase().includes(channelSearchNeedle);
-              })
-              .filter(Boolean) as ChannelConfig[];
+            const channels = visibleChannels.filter((item) => !channelSearchNeedle || item.label.toLowerCase().includes(channelSearchNeedle));
             if (!channels.length) return null;
             const sectionCollapsed = Boolean(collapsedChannelSections[section.id]);
             const activeSectionChannel = channels.find((item) => item.id === channel);
@@ -218,6 +227,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                   : channels;
             return (
               <section key={section.id} className="dc-channel-section">
+                <div className="flex items-center justify-between">
                 <button
                   type="button"
                   className="dc-channel-category dc-channel-category-button"
@@ -228,6 +238,11 @@ export default function AppView({ controller }: { controller: AppController }) {
                   <ChevronDown size={12} />
                   {section.label}
                 </button>
+                {canManageActiveRoom && <button type="button" aria-label="텍스트 채널 만들기"
+                  disabled={!canCreateChannel} style={{ minWidth: 44, minHeight: 44 }}
+                  className="flex items-center justify-center text-text-muted"
+                  onClick={() => setCreateChannelScope(channelScope)}><Plus size={18} /></button>}
+                </div>
                 {visibleSectionChannels.map((channelConfig) => {
                   const { id, label, icon: Icon } = channelConfig;
                   return (
@@ -339,6 +354,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : channel === "lobby" ? (
             <LobbyView
               activeRoom={activeRoom}
+              roomUid={activeRoom.roomUid ?? ""}
               agents={scopedAgents}
               messageAttachmentReadOwner={messageAttachmentReadOwner}
               mentionables={scopedMentionables}
@@ -382,13 +398,30 @@ export default function AppView({ controller }: { controller: AppController }) {
               onSearchTargetHandled={() => setPendingMessageSearchTarget(null)}
               onOpenCrossChannelSearchResult={openCrossChannelSearchResult}
             />
+          ) : isCustomChannelId(channel) ? (
+            <CustomChannelView
+              key={JSON.stringify([channelScope, channel])}
+              channel={controller.activeCustomChannel} channelId={channel}
+              roomId={activeRoom.meetingId} roomUid={activeRoom.roomUid ?? ""}
+              transcript={controller.channelTranscript} authority={roomHttpAuthority}
+              messageSearch={roomMessageSearch} canPost={canPostHumanMessage}
+              canPin={Boolean(canonicalRoom.capabilities["message.modify"])}
+              participantProfiles={canonicalRoom.participantProfiles} mentionables={scopedMentionables}
+              searchLabel={activeRoom.label} membersOpen={membersOpen} onToggleMembers={toggleMembers}
+              onOpenMobileSidebar={openMobileSidebar} onOpenMobileInfo={openMobileRoomInfo}
+              headerActions={channelHeaderActions(channel)} messageSearchScope={messageSearchScope}
+              onMessageSearchScopeChange={setMessageSearchScope} messageSearchChannelLabels={messageSearchChannelLabels}
+              pendingSearchTargetEventId={pendingMessageSearchTarget?.channelId === channel ? pendingMessageSearchTarget.eventId : ""}
+              onSearchTargetHandled={() => setPendingMessageSearchTarget(null)}
+              onOpenCrossChannelSearchResult={openCrossChannelSearchResult}
+            />
           ) : (
             <DeferredViewFallback />
           )}
         </Suspense>
         {hasRoom && !guestExpired && !activeRoomDisconnected && !adminOpen && !friendsOpen && <SideChatDock
           chat={controller.sideChat} socket={roomSocket}
-          canPost={lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) && canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") && participant.participant_type === "human" && participant.status === "joined" && !participant.muted)}
+          canPost={canPostHumanMessage}
           mentionables={scopedMentionables} />}
       </main>
 
@@ -419,6 +452,14 @@ export default function AppView({ controller }: { controller: AppController }) {
         />
       )}
 
+      {createChannelScope === channelScope && <CreateChannelModal
+        key={channelScope} onClose={() => setCreateChannelScope("")}
+        onCreate={async (params) => {
+          if (!canCreateChannel) throw new Error("방 연결과 채널 생성 권한을 확인한 뒤 다시 시도해 주세요.");
+          const created = await controller.roomChannels.create(params);
+          if (currentChannelScope.current !== channelScope) return;
+          setFriendsOpen(false); goToChannel(created.id);
+        }} />}
       {roomLifecycle.open && <RoomManagementModal controller={roomLifecycle} />}
       {pairedRoomLifecycle.open && <RoomManagementModal controller={pairedRoomLifecycle} />}
 
