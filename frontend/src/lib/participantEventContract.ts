@@ -377,6 +377,7 @@ export function agentCreateAckProjectionsAreCoherent(
     }
     const created = agentCreationProjectionFromEvent(createdEvent);
     if (
+      created.agentSession.external_owned ||
       !participantProjectionsMatch(result.participant, createdEvent.participant) ||
       !eventProjectionsMatch(result.event, events.at(-1))
     ) {
@@ -540,12 +541,12 @@ export function participantRemovalAckProjectionsAreCoherent(
   }
 }
 
-function detachedAgentProjectionFromEvent(event: RoomEvent): {
+function initialAgentProjectionFromEvent(event: RoomEvent, externalAdmission: boolean): {
   participant: RoomMember;
   agentSession: RoomAgentSession;
 } {
   const eventRecord = event as unknown as Record<string, unknown>;
-  const participant = participantFromEvent(event, "detached");
+  const participant = participantFromEvent(event, externalAdmission ? "joined" : "detached");
   const session = exactAgentSession(
     eventRecord.agent_session,
     `${event.type} 이벤트에 Agent Session 투영이 없습니다.`,
@@ -560,13 +561,19 @@ function detachedAgentProjectionFromEvent(event: RoomEvent): {
     session.display_name !== event.display_name ||
     event.participant_type !== "agent" ||
     String(participant.participant_type) !== "agent" ||
-    session.status !== "available" ||
-    !(
-      (session.runtime_status === "stopped" && session.enabled === false) ||
-      (session.runtime_status === "starting" && session.enabled === true)
-    ) ||
-    session.external_owned !== false ||
-    session.process_ownership !== "server"
+    (externalAdmission ? (
+      session.status !== "attached" || session.runtime_status !== "disconnected" ||
+      session.enabled !== false || session.external_owned !== true ||
+      session.process_ownership !== "external" || session.runtime_kind !== "external_attendee" ||
+      session.connection_kind !== "canonical_room_websocket" || session.transport !== "websocket" ||
+      session.provider_session_active || session.recovery_required || session.active_turn_id !== ""
+    ) : (
+      session.status !== "available" ||
+      !(
+        (session.runtime_status === "stopped" && session.enabled === false) ||
+        (session.runtime_status === "starting" && session.enabled === true)
+      ) || session.external_owned !== false || session.process_ownership !== "server"
+    ))
   ) {
     throw new Error(`${event.type} 이벤트의 Agent Session 투영이 올바르지 않습니다.`);
   }
@@ -577,7 +584,9 @@ function detachedAgentProjectionFromEvent(event: RoomEvent): {
 }
 
 export function agentCreationProjectionFromEvent(event: RoomEvent) {
-  const projection = detachedAgentProjectionFromEvent(event);
+  const session = (event as unknown as Record<string, unknown>).agent_session;
+  const externalAdmission = strictRecord(session, "Agent Session 투영이 없습니다.").external_owned === true;
+  const projection = initialAgentProjectionFromEvent(event, externalAdmission);
   if (
     projection.agentSession.provider_kind !== event.provider_kind ||
     projection.agentSession.display_name !== projection.participant.display_name ||
@@ -587,7 +596,7 @@ export function agentCreationProjectionFromEvent(event: RoomEvent) {
 }
 
 export function agentReactivationProjectionFromEvent(event: RoomEvent) {
-  const projection = detachedAgentProjectionFromEvent(event);
+  const projection = initialAgentProjectionFromEvent(event, false);
   const session = projection.agentSession;
   if (
     session.runtime_status !== "stopped" || session.enabled ||

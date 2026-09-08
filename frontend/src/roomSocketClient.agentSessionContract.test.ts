@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { RoomSocketSayError } from "./roomSocketClient";
-import { commandAckResultIsValid } from "./lib/roomSocketValidation";
+import { commandAckResultIsValid, publicRoomEventIsValid, snapshotValidationError } from "./lib/roomSocketValidation";
 import { applyParticipantEvents, agentSessionUpdatesFromEvents } from "./lib/canonicalRoomProjection";
 import type { RoomEvent } from "./api";
 import { agentSessionFixture } from "./test/agentSession";
@@ -136,6 +136,37 @@ function creationStartRecords() {
 }
 
 describe("Agent Session socket contract", () => {
+  it("projects an admitted external attendee while rejecting mixed custody and managed creation ACKs", async () => {
+    const { participant, session, createdEvent } = creationRecords();
+    const joined = { ...participant, status: "joined" as const };
+    const external = { ...session, status: "attached", runtime_status: "disconnected",
+      enabled: false, external_owned: true, process_ownership: "external",
+      runtime_kind: "external_attendee", connection_kind: "canonical_room_websocket", transport: "websocket" };
+    const admitted = { ...createdEvent, participant: joined, agent_session: external } as RoomEvent;
+    expect(publicRoomEventIsValid(admitted, "general")).toBe(true);
+    expect(applyParticipantEvents([], [admitted])).toEqual([joined]);
+    expect(agentSessionUpdatesFromEvents([admitted])).toEqual([external]);
+    const frames = handshakeFrames(1, 1);
+    const snapshot = JSON.parse(frames.rawSnapshot);
+    Object.assign(snapshot, { participants: [joined], agent_sessions: [external], events: [admitted] });
+    expect(snapshotValidationError(snapshot, { expectedRoomId: "general", currentLastSeq: 0 })).toBeNull();
+    const errors: RoomSocketSayError[] = [];
+    const { handle, sockets } = await openReadyHarness(errors);
+    receiveServerFrame(sockets[0], { op: "event", stream: "room_events", events: [admitted], latest_seq: 1 });
+    expect(handle.ready()).toBe(true);
+    expect(errors).toEqual([]);
+    handle.close();
+    for (const conflict of [{ process_ownership: "server" }, { runtime_kind: "native_cli" },
+      { status: "available" }, { runtime_status: "idle" }, { enabled: true },
+      { provider_session_active: true }, { connection_kind: "native_cli_bridge" }]) {
+      expect(publicRoomEventIsValid({ ...admitted, agent_session: { ...external, ...conflict } }, "general")).toBe(false);
+    }
+    expect(publicRoomEventIsValid({ ...admitted, participant }, "general")).toBe(false);
+    expect(publicRoomEventIsValid({ ...admitted, type: "agent_session_reactivated" }, "general")).toBe(false);
+    expect(commandAckResultIsValid("agent.create", {}, { status: "created", participant: joined,
+      agent_session: external, event: admitted, events: [admitted] }, "general", "operator-local")).toBe(false);
+  });
+
   it("projects re-added membership without overwriting room role, mute or name and rejects mismatched ACKs", () => {
     const { participant, session, createdEvent } = creationRecords();
     const restored = { ...participant, display_name: "Room name", role: "director", muted: true };

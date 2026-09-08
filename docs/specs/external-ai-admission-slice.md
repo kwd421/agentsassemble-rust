@@ -1444,3 +1444,23 @@ error; the native test requires its exact fixture PIDs while allowing additional
 members. Whole-Job emptiness remains required for cleanup. Windows-only compilation
 also identified unused Unix helpers; their availability now follows their actual
 consumers. The corrected Windows runtime and Clippy result remains pending.
+
+### Packaged attendee creation event correction
+
+The packaged invitation successfully admitted the real `assemble room attend` CLI
+with a local native protocol peer. The browser then rejected its creation event:
+`agent_session_created` validation only accepted detached, server-owned sessions.
+The captured public WebSocket snapshot reproduced `snapshot_event_invalid`; its
+attendee state events were valid. Creation projection now recognizes the exact
+joined/attached, disconnected, disabled external-attendee admission state. Shared
+identity binding remains unchanged, and server-managed creation ACKs and reactivation
+still reject external custody. Live events and resumed snapshots share that owner.
+The captured snapshot now validates, the affected 30 frontend cases and build pass,
+and unchanged architecture, growth, policy, format and diff gates pass. Direct
+packaged continuation remains pending the rebuilt app.
+
+Windows run `1d406fc` passes five of six managed cases, including the corrected
+lease observation and complete native normal stop. The extra owned member is
+`conhost.exe`, verified from actual Job metadata. The remaining lost-pipe fixture
+forgot the shared worker's Facts frame before Attached; its expected sequence now
+matches the production actor. Final runtime and Windows Clippy await the next run.
