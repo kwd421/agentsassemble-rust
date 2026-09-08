@@ -19,6 +19,6 @@ jobs:
       - name: Compile server and its test targets
         run: cargo +stable check --locked -p agentsassemble-server --all-targets
       - name: Verify managed worker custody without real providers
-        run: cargo +stable test --locked -p agentsassemble-provider managed_bridge::windows_tests -- --nocapture
+        run: cargo +stable test --locked -p agentsassemble-provider managed_bridge:: -- --nocapture
       - name: Lint affected Windows targets
         run: cargo +stable clippy --locked -p agentsassemble-provider -p agentsassemble-server --all-targets --all-features -- -D warnings

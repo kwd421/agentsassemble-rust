@@ -226,7 +226,6 @@ impl ProviderCredential {
 }
 
 impl ProviderCredentialStore {
-    #[cfg(unix)]
     pub(crate) fn from_private_handoff(
         selected: Option<private_handoff::SelectedCredential>,
     ) -> Self {
@@ -358,7 +357,6 @@ fn validated_secret(value: &str) -> Result<String, ProviderCredentialError> {
     Ok(secret)
 }
 
-#[cfg(unix)]
 #[path = "credentials_private_handoff.rs"]
 pub(crate) mod private_handoff;
 

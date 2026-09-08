@@ -79,7 +79,9 @@ async fn managed_api_uses_private_credentials_and_confirms_whole_job_stop() -> T
 async fn cancelled_handshake_retains_real_job_cleanup_authority() -> TestResult {
     let factory = ProductionDriverFactory::local(ProviderCredentialStore::production());
     let (session, mut lease) = session()?;
-    let spawned = super::platform::spawn(&factory, &session, &lease).await?;
+    let spawned = super::platform::spawn(&factory, &session, &lease)
+        .await
+        .map_err(|failure| failure.error)?;
     assert!(!lease.cleanup_receipt_is_present());
     // No launch frame or credential was sent. Dropping the launch future's owned
     // child must still terminate it; the retained lease observes the actual Job.
@@ -99,5 +101,33 @@ async fn cancelled_handshake_retains_real_job_cleanup_authority() -> TestResult 
     drop(connection);
     drop(proof);
     lease.release_and_remove();
+    Ok(())
+}
+
+#[test]
+fn cold_recovery_requires_an_exact_receipt_after_activation() -> TestResult {
+    for state in ["pending", "active", "gone"] {
+        let room = uuid::Uuid::new_v4().to_string();
+        let lease = HeldRuntimeLease::prepare(&room, "cold-windows")?;
+        let token = lease.token().to_owned();
+        if state != "pending" {
+            lease.begin_launch_effect()?;
+        }
+        if state == "gone" {
+            assert!(lease.cleanup_receipt_is_present());
+        }
+        drop(lease);
+        assert_eq!(
+            observe_runtime_lease(&room, "cold-windows"),
+            if state == "active" {
+                LeaseObservation::Unknown
+            } else {
+                LeaseObservation::GenerationGone {
+                    launch_token: token,
+                }
+            }
+        );
+        crate::runtime_lease::cleanup_stale_runtime_lease(&room, "cold-windows");
+    }
     Ok(())
 }

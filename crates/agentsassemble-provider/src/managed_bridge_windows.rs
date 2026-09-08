@@ -161,3 +161,7 @@ pub(super) async fn run_worker() -> Result<(), DriverError> {
     let (input, output) = stream.split();
     super::run(input, output).await
 }
+
+#[cfg(test)]
+#[path = "managed_bridge_windows_native_tests.rs"]
+mod native_tests;

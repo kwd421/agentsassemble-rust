@@ -1427,3 +1427,12 @@ now remains unknown. The bound worker connects once to the already-created local
 pipe with zero connection wait, so an occupied or missing endpoint fails without
 starting the library's blocking connection retry. Native children inherit neither
 side's pipe handle.
+
+Windows CI exposed a remaining Unix-only gate on the already-shared selected-
+credential backend. Removing that gate makes the same private, read-only credential
+handoff available to the Windows worker; it adds no keyring access or fallback.
+The Windows suite also compiles a native Rust protocol fixture with a persistent
+child, checks all three actual Job members after attach, and exercises normal stop
+and lost private transport. Cold recovery distinguishes pre-effect reservation,
+activated owner loss, and a positively recorded cleanup receipt. Runtime results
+remain pending the updated Windows run.
