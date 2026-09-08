@@ -12,6 +12,10 @@ use crate::{
 
 #[path = "managed_bridge_callbacks.rs"]
 mod callbacks;
+#[path = "managed_bridge_exchange.rs"]
+mod exchange;
+#[path = "managed_bridge_pipe.rs"]
+mod pipe;
 #[path = "managed_bridge_turn.rs"]
 mod turn;
 #[path = "managed_bridge_wire.rs"]

@@ -1176,3 +1176,17 @@ wrong-owner rejection, one native input response, exact interruption and late
 interruption after a plain turn, with native absence receipts and no repeated turn/start. Affected Clippy and unchanged gates
 pass. This is child-side transport proof; parent callback integration, a separate
 managed-worker process and production cutover remain pending.
+
+Private pipe reads now advance queued writes concurrently, retaining the exact frame
+across cancellation and partial writes. Callback queues have one bounded live
+exchange owner; native custody and increasing identities are unchanged. Session
+attachment and interrupt waits continue serving callback replies, so an
+in-flight native request cannot depend on an unpolled room-owner exchange. Stop
+still completes its native cleanup before flushing the stop result.
+
+The 64-byte duplex fixture passes control reception while a 4 KiB write is blocked,
+then exact ordered delivery after cancelling the read. All managed-worker cases
+pass without assuming an interruption/delivery event order. Affected Clippy and unchanged
+mandatory gates pass. This adds a bounded frame queue and reuses the codec's write
+buffer; it adds no task or timer. Separate worker launch and parent integration remain
+pending.

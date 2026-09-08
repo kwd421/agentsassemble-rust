@@ -4,8 +4,9 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::{
     callbacks::Callbacks,
+    pipe::Pipe,
     same_runtime,
-    wire::{Command, Event, Facts, Reader, Writer, protocol_error, read, write},
+    wire::{Command, Event, Facts, Reader, Writer, protocol_error},
 };
 use crate::driver::{DriverError, ProviderDriver, ProviderTurnRequest};
 
@@ -28,11 +29,12 @@ pub(super) async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     launched: &DurableAgentSession,
     driver: &mut dyn ProviderDriver,
 ) -> Result<Result<(), DriverError>, DriverError> {
+    let mut pipe = Pipe::new(input, output);
     let mut expected = 1_u64;
     let mut callbacks = Callbacks::new();
     let mut active: Option<ActiveTurn> = None;
     loop {
-        let command = next(input, output, &mut callbacks).await?;
+        let command = next(&mut pipe, &mut callbacks).await?;
         check_sequence(&command, &mut expected)?;
         if let Command::Send { id, session } = command {
             if !same_runtime(launched, &session) {
@@ -40,24 +42,16 @@ pub(super) async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             }
             let turn = active.as_mut().ok_or_else(protocol_error)?;
             turn.session = session;
-            let command = send(
-                input,
-                output,
-                driver,
-                turn,
-                &mut callbacks,
-                id,
-                &mut expected,
-            )
-            .await?;
+            let command = send(&mut pipe, driver, turn, &mut callbacks, id, &mut expected).await?;
             if let Some(command) = command
                 && let Some(stopped) = execute(
                     command,
-                    output,
+                    &mut pipe,
                     launched,
                     driver,
                     &mut active,
                     &mut callbacks,
+                    &mut expected,
                 )
                 .await?
             {
@@ -65,11 +59,12 @@ pub(super) async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             }
         } else if let Some(stopped) = execute(
             command,
-            output,
+            &mut pipe,
             launched,
             driver,
             &mut active,
             &mut callbacks,
+            &mut expected,
         )
         .await?
         {
@@ -79,8 +74,7 @@ pub(super) async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
 }
 
 async fn next<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
-    input: &mut Reader<R>,
-    output: &mut Writer<W>,
+    pipe: &mut Pipe<'_, R, W>,
     callbacks: &mut Callbacks,
 ) -> Result<Command, DriverError> {
     loop {
@@ -89,9 +83,9 @@ async fn next<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             biased;
             event = callbacks.next() => {
                 let (id, callback) = event?;
-                write(output, &Event::Callback { id, callback }).await?;
+                pipe.queue(&Event::Callback { id, callback })?;
             }
-            command = read(input) => return command?.ok_or_else(protocol_error),
+            command = pipe.read() => return command?.ok_or_else(protocol_error),
         }
     }
 }
@@ -104,28 +98,25 @@ fn check_sequence(command: &Command, expected: &mut u64) -> Result<(), DriverErr
     Ok(())
 }
 
-async fn respond<W: AsyncWrite + Unpin>(
-    output: &mut Writer<W>,
-    driver: &mut dyn ProviderDriver,
-    event: Event,
+fn respond<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    pipe: &mut Pipe<'_, R, W>,
+    driver: &dyn ProviderDriver,
+    event: &Event,
 ) -> Result<(), DriverError> {
-    write(
-        output,
-        &Event::Facts {
-            facts: Facts::observe(driver),
-        },
-    )
-    .await?;
-    write(output, &event).await
+    pipe.queue(&Event::Facts {
+        facts: Facts::observe(driver),
+    })?;
+    pipe.queue(event)
 }
 
-async fn execute<W: AsyncWrite + Unpin>(
+async fn execute<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     command: Command,
-    output: &mut Writer<W>,
+    pipe: &mut Pipe<'_, R, W>,
     launched: &DurableAgentSession,
     driver: &mut dyn ProviderDriver,
     active: &mut Option<ActiveTurn>,
     callbacks: &mut Callbacks,
+    expected: &mut u64,
 ) -> Result<Option<Result<(), DriverError>>, DriverError> {
     let id = command.id();
     let event = match command {
@@ -135,7 +126,7 @@ async fn execute<W: AsyncWrite + Unpin>(
             }
             Event::Attached {
                 id,
-                result: driver.attach_session(&session).await,
+                result: drive(pipe, callbacks, expected, driver.attach_session(&session)).await?,
             }
         }
         Command::Prepare { turn, .. } => {
@@ -167,7 +158,13 @@ async fn execute<W: AsyncWrite + Unpin>(
             turn.session = session;
             Event::Interrupted {
                 id,
-                result: driver.interrupt_turn(&turn.session, &turn.request).await,
+                result: drive(
+                    pipe,
+                    callbacks,
+                    expected,
+                    driver.interrupt_turn(&turn.session, &turn.request),
+                )
+                .await?,
             }
         }
         Command::Finish { .. } => {
@@ -197,14 +194,14 @@ async fn execute<W: AsyncWrite + Unpin>(
             *callbacks = Callbacks::new();
             let result = driver.stop().await;
             respond(
-                output,
+                pipe,
                 driver,
-                Event::Stopped {
+                &Event::Stopped {
                     id,
                     result: result.clone(),
                 },
-            )
-            .await?;
+            )?;
+            pipe.flush().await?;
             return Ok(Some(result));
         }
         Command::Callback {
@@ -215,13 +212,12 @@ async fn execute<W: AsyncWrite + Unpin>(
         }
         Command::Send { .. } => return Err(protocol_error()),
     };
-    respond(output, driver, event).await?;
+    respond(pipe, driver, &event)?;
     Ok(None)
 }
 
 async fn send<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
-    input: &mut Reader<R>,
-    output: &mut Writer<W>,
+    pipe: &mut Pipe<'_, R, W>,
     driver: &mut dyn ProviderDriver,
     turn: &mut ActiveTurn,
     callbacks: &mut Callbacks,
@@ -244,9 +240,9 @@ async fn send<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
                 biased;
                 event = callbacks.next() => {
                     let (id, callback) = event?;
-                    write(output, &Event::Callback { id, callback }).await?;
+                    pipe.queue(&Event::Callback { id, callback })?;
                 }
-                command = read::<_, Command>(input) => {
+                command = pipe.read::<Command>() => {
                     let command = command?.ok_or_else(protocol_error)?;
                     check_sequence(&command, expected)?;
                     match command {
@@ -264,13 +260,37 @@ async fn send<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     match result {
         Exit::Completed(result) => {
             turn.execution = Execution::Returned;
-            respond(output, driver, Event::Turn { id, result }).await?;
+            respond(pipe, driver, &Event::Turn { id, result })?;
             Ok(None)
         }
         Exit::Control(command) => {
             // The native send future has been dropped before cancellation is reported.
-            write(output, &Event::TurnCancelled { id }).await?;
+            pipe.queue(&Event::TurnCancelled { id })?;
             Ok(Some(command))
+        }
+    }
+}
+
+async fn drive<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, T>(
+    pipe: &mut Pipe<'_, R, W>,
+    callbacks: &mut Callbacks,
+    expected: &mut u64,
+    mut operation: crate::driver::DriverFuture<'_, Result<T, DriverError>>,
+) -> Result<Result<T, DriverError>, DriverError> {
+    loop {
+        tokio::select! {
+            biased;
+            event = callbacks.next() => {
+                let (id, callback) = event?;
+                pipe.queue(&Event::Callback { id, callback })?;
+            }
+            command = pipe.read::<Command>() => {
+                let command = command?.ok_or_else(protocol_error)?;
+                check_sequence(&command, expected)?;
+                let Command::Callback { callback_id, reply, .. } = command else { return Err(protocol_error()); };
+                callbacks.reply(callback_id, reply)?;
+            }
+            result = &mut operation => return Ok(result),
         }
     }
 }

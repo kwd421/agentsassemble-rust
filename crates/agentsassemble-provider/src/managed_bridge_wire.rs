@@ -194,14 +194,18 @@ pub(super) async fn write<W: AsyncWrite + Unpin, T: Serialize>(
     output: &mut Writer<W>,
     value: &T,
 ) -> Result<(), DriverError> {
+    output
+        .send(encode(value)?)
+        .await
+        .map_err(|_| protocol_error())
+}
+
+pub(super) fn encode<T: Serialize>(value: &T) -> Result<Bytes, DriverError> {
     let bytes = serde_json::to_vec(value).map_err(|_| protocol_error())?;
     if bytes.len() > MAX_FRAME_BYTES {
         return Err(protocol_error());
     }
-    output
-        .send(Bytes::from(bytes))
-        .await
-        .map_err(|_| protocol_error())
+    Ok(Bytes::from(bytes))
 }
 
 pub(super) const fn protocol_error() -> DriverError {

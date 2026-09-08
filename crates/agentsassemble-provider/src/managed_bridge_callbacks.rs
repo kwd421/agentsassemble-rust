@@ -1,16 +1,16 @@
 //! Native callback custody survives until the parent returns the corresponding owner result.
-use std::collections::HashMap;
-
 use agentsassemble_domain::{ProviderRequest, ProviderRequestResolution};
-use futures_util::{StreamExt, stream::FuturesUnordered};
 use serde::{Deserialize, Serialize};
 use tokio::sync::mpsc;
 
-use super::wire::protocol_error;
+use super::{
+    exchange::{Exchange, Exchanges},
+    wire::protocol_error,
+};
 use crate::{
     ProviderRequestCommand, ProviderRequestExchange, ProviderRequestExchangeError,
     ProviderRequestIngress,
-    driver::{DriverError, DriverFuture},
+    driver::DriverError,
     room_attachment::{
         ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,
         ProviderAttachmentReadIngress,
@@ -20,10 +20,6 @@ use crate::{
         ProviderRoomToolRequest, ProviderRoomToolResult,
     },
 };
-
-// Bounded transport custody accommodates the broker's 64 requests, 32 portal tools
-// and all per-turn attachment reservations. It does not create new tool permission.
-pub(super) const MAX_CALLBACKS: usize = 128;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -88,11 +84,7 @@ pub(super) struct Callbacks {
     request_rx: mpsc::Receiver<ProviderRequestCommand>,
     attachment_rx: mpsc::Receiver<ProviderAttachmentReadCommand>,
     tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
-    events: mpsc::Sender<(u64, Callback)>,
-    event_rx: mpsc::Receiver<(u64, Callback)>,
-    replies: HashMap<u64, mpsc::Sender<Reply>>,
-    pending: FuturesUnordered<DriverFuture<'static, Result<u64, DriverError>>>,
-    next_id: u64,
+    exchanges: Exchanges<Callback, Reply>,
 }
 
 impl Callbacks {
@@ -100,7 +92,6 @@ impl Callbacks {
         let (requests, request_rx) = ProviderRequestIngress::channel(4);
         let (attachments, attachment_rx) = ProviderAttachmentReadIngress::channel(4);
         let (tools, tool_rx) = ProviderRoomToolIngress::channel(4);
-        let (events, event_rx) = mpsc::channel(4);
         Self {
             requests,
             attachments,
@@ -108,76 +99,33 @@ impl Callbacks {
             request_rx,
             attachment_rx,
             tool_rx,
-            events,
-            event_rx,
-            replies: HashMap::new(),
-            pending: FuturesUnordered::new(),
-            next_id: 1,
+            exchanges: Exchanges::new(),
         }
     }
 
     pub(super) fn reply(&mut self, id: u64, reply: Reply) -> Result<(), DriverError> {
-        self.replies
-            .get(&id)
-            .ok_or_else(protocol_error)?
-            .try_send(reply)
-            .map_err(|_| protocol_error())
+        self.exchanges.reply(id, reply)
     }
 
     pub(super) async fn next(&mut self) -> Result<(u64, Callback), DriverError> {
         loop {
             tokio::select! {
-                event = self.event_rx.recv() => return event.ok_or_else(protocol_error),
-                result = self.pending.next(), if !self.pending.is_empty() => {
-                    let id = result.ok_or_else(protocol_error)??;
-                    self.replies.remove(&id);
+                event = self.exchanges.next() => return event,
+                Some(command) = self.tool_rx.recv(), if self.exchanges.can_start() => {
+                    self.exchanges.start(|job| tool(job, command))?;
                 }
-                Some(command) = self.tool_rx.recv(), if self.pending.len() < MAX_CALLBACKS => {
-                    let job = self.job()?;
-                    self.pending.push(Box::pin(tool(job, command)));
+                Some(command) = self.attachment_rx.recv(), if self.exchanges.can_start() => {
+                    self.exchanges.start(|job| attachment(job, command))?;
                 }
-                Some(command) = self.attachment_rx.recv(), if self.pending.len() < MAX_CALLBACKS => {
-                    let job = self.job()?;
-                    self.pending.push(Box::pin(attachment(job, command)));
-                }
-                Some(command) = self.request_rx.recv(), if self.pending.len() < MAX_CALLBACKS => {
-                    let job = self.job()?;
-                    self.pending.push(Box::pin(request(job, command)));
+                Some(command) = self.request_rx.recv(), if self.exchanges.can_start() => {
+                    self.exchanges.start(|job| request(job, command))?;
                 }
             }
         }
     }
-
-    fn job(&mut self) -> Result<Job, DriverError> {
-        let id = self.next_id;
-        self.next_id = id.checked_add(1).ok_or_else(protocol_error)?;
-        let (sender, replies) = mpsc::channel(2);
-        self.replies.insert(id, sender);
-        Ok(Job {
-            id,
-            events: self.events.clone(),
-            replies,
-        })
-    }
 }
 
-struct Job {
-    id: u64,
-    events: mpsc::Sender<(u64, Callback)>,
-    replies: mpsc::Receiver<Reply>,
-}
-
-impl Job {
-    async fn send(&self, callback: Callback) -> Result<(), DriverError> {
-        self.events
-            .send((self.id, callback))
-            .await
-            .map_err(|_| protocol_error())
-    }
-    async fn receive(&mut self) -> Result<Reply, DriverError> {
-        self.replies.recv().await.ok_or_else(protocol_error)
-    }
-}
+type Job = Exchange<Callback, Reply>;
 
 async fn tool(mut job: Job, mut command: ProviderRoomToolCommand) -> Result<u64, DriverError> {
     job.send(Callback::Tool {

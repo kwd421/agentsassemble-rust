@@ -246,7 +246,7 @@ async fn native_request_turn<R: tokio::io::AsyncRead + Unpin, W: tokio::io::Asyn
         },
     )
     .await?;
-    if interrupt {
+    let early_delivery = if interrupt {
         write(
             output,
             &Command::Interrupt {
@@ -259,13 +259,7 @@ async fn native_request_turn<R: tokio::io::AsyncRead + Unpin, W: tokio::io::Asyn
             read_event(input).await?,
             Some(Event::TurnCancelled { id: 3 })
         ));
-        assert!(matches!(
-            read_event(input).await?,
-            Some(Event::Interrupted {
-                id: 5,
-                result: Ok(())
-            })
-        ));
+        await_interruption(input).await?
     } else {
         write(
             output,
@@ -280,13 +274,19 @@ async fn native_request_turn<R: tokio::io::AsyncRead + Unpin, W: tokio::io::Asyn
             },
         )
         .await?;
-    }
-    let Some(Event::Callback {
-        id: delivered_id,
-        callback: Callback::Delivered { delivered },
-    }) = read_event(input).await?
-    else {
-        return Err("expected native delivery acknowledgement".into());
+        None
+    };
+    let (delivered_id, delivered) = if let Some(delivery) = early_delivery {
+        delivery
+    } else {
+        let Some(Event::Callback {
+            id,
+            callback: Callback::Delivered { delivered },
+        }) = read_event(input).await?
+        else {
+            return Err("expected native delivery acknowledgement".into());
+        };
+        (id, delivered)
     };
     assert_eq!(delivered_id, id);
     assert_eq!(delivered, !interrupt);
@@ -361,4 +361,23 @@ fn prepare_turn(
         turn.observation = None;
     }
     Ok(Command::Prepare { id: 2, turn })
+}
+
+async fn await_interruption<R: tokio::io::AsyncRead + Unpin>(
+    input: &mut wire::Reader<R>,
+) -> Result<Option<(u64, bool)>, Box<dyn std::error::Error>> {
+    let mut delivery = None;
+    loop {
+        match read_event(input).await? {
+            Some(Event::Interrupted {
+                id: 5,
+                result: Ok(()),
+            }) => return Ok(delivery),
+            Some(Event::Callback {
+                id,
+                callback: super::callbacks::Callback::Delivered { delivered },
+            }) if delivery.is_none() => delivery = Some((id, delivered)),
+            _ => return Err("unexpected interrupt or delivery response".into()),
+        }
+    }
 }
