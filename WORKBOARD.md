@@ -35,9 +35,11 @@
   and [account/social/human contract](docs/specs/identity-accounts-friends-slice.md).
 - Active: Phase 6 custom text channels and human-only side chat pass local
   acceptance, including corrected packaged desktop/390px layouts and real human
-  boundaries. Whole-phase Daybreak review is pending.
+  boundaries. Daybreak found one native HTTP incarnation issue; the correction passes local
+  boundary verification and awaits re-review.
   [Contract](docs/specs/custom-channels-side-chat-slice.md) and
   [packaged evidence](docs/VERIFICATION.md#phase-6-packaged-channel-and-side-chat-acceptance-2026-09-08).
+  [Review correction](docs/VERIFICATION.md#phase-6-whole-phase-review-correction-http-incarnation-2026-09-08).
   New Pro review and authorized real-provider proof remain at full closeout.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).

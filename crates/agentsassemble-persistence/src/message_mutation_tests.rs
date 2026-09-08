@@ -21,9 +21,7 @@ async fn edit_replaces_history_search_and_pin_once_without_floor_work() {
     let target_id = sent.outcome.event.id;
     store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &target_id,
             true,
@@ -42,9 +40,7 @@ async fn edit_replaces_history_search_and_pin_once_without_floor_work() {
     assert_eq!(search_count(&store, "revisedneedle").await, 1);
     let pins = store
         .local_message_pins(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
         )
         .await
@@ -110,9 +106,7 @@ async fn delete_rolls_back_then_removes_exact_attachment_search_and_pin() {
     let target_id = sent.outcome.event.id;
     store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &target_id,
             true,
@@ -271,9 +265,7 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
 async fn search_count(store: &SqliteStore, query: &str) -> usize {
     store
         .search_local_messages(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(store).await,
             "lobby",
             query,
             "",

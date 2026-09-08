@@ -157,10 +157,10 @@ pub async fn issue_message_pins_read_ticket(
     state: &AppState,
     requested_room_id: &str,
 ) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
-    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    let authority = resolve_local_channel_authority(state, requested_room_id).await?;
     let issued = state
         .tickets
-        .issue_message_pins_read(identity.room_id, identity.user_id, identity.participant_id)
+        .issue_message_pins_read(authority)
         .await
         .map_err(|_| TicketIssueError::Unavailable)?;
     Ok(operator_http_response(state, issued))
@@ -175,10 +175,10 @@ pub async fn issue_message_pins_write_ticket(
     state: &AppState,
     requested_room_id: &str,
 ) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
-    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    let authority = resolve_local_channel_authority(state, requested_room_id).await?;
     let issued = state
         .tickets
-        .issue_message_pins_write(identity.room_id, identity.user_id, identity.participant_id)
+        .issue_message_pins_write(authority)
         .await
         .map_err(|_| TicketIssueError::Unavailable)?;
     Ok(operator_http_response(state, issued))
@@ -193,10 +193,10 @@ pub async fn issue_message_search_read_ticket(
     state: &AppState,
     requested_room_id: &str,
 ) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
-    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    let authority = resolve_local_channel_authority(state, requested_room_id).await?;
     let issued = state
         .tickets
-        .issue_message_search_read(identity.room_id, identity.user_id, identity.participant_id)
+        .issue_message_search_read(authority)
         .await
         .map_err(|_| TicketIssueError::Unavailable)?;
     Ok(operator_http_response(state, issued))
@@ -210,10 +210,10 @@ pub async fn issue_side_chat_read_ticket(
     state: &AppState,
     requested_room_id: &str,
 ) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
-    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    let authority = resolve_local_channel_authority(state, requested_room_id).await?;
     let issued = state
         .tickets
-        .issue_side_chat_read(identity.room_id, identity.user_id, identity.participant_id)
+        .issue_side_chat_read(authority)
         .await
         .map_err(|_| TicketIssueError::Unavailable)?;
     Ok(operator_http_response(state, issued))
@@ -448,6 +448,23 @@ pub async fn issue_central_registration_ticket(
         ticket: issued.ticket,
         ttl_seconds: state.tickets.ttl_seconds(),
     })
+}
+
+async fn resolve_local_channel_authority(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<agentsassemble_persistence::LocalRoomManagerAuthority, TicketIssueError> {
+    let room_id = validate_room_id(requested_room_id)
+        .map_err(|error| TicketIssueError::InvalidRoom(error.message))?;
+    state
+        .store
+        .authorize_local_room_manager(
+            &room_id,
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await
+        .map_err(map_room_identity_error)
 }
 
 async fn resolve_local_room_user(

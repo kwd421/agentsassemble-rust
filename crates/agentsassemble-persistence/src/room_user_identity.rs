@@ -177,20 +177,30 @@ pub(crate) async fn require_exact_local_room_manager(
     transaction: &mut Transaction<'_, Sqlite>,
     expected: &LocalRoomManagerAuthority,
 ) -> Result<RoomUserIdentity, PersistenceError> {
-    let (current, _) = resolve_local_room_manager(
-        transaction,
-        &expected.manager.room_id,
-        &expected.manager.user_id,
-        &expected.manager.participant_id,
-    )
-    .await?;
-    if current != *expected {
-        return Err(rejected(
-            "room_authority_changed",
-            "Room-manager authority changed before the mutation.",
-        ));
+    expected.resolve(transaction).await?;
+    Ok(expected.manager.clone())
+}
+
+impl LocalRoomManagerAuthority {
+    pub(crate) async fn resolve(
+        &self,
+        transaction: &mut Transaction<'_, Sqlite>,
+    ) -> Result<AuthenticatedPrincipal, PersistenceError> {
+        let (current, principal) = resolve_local_room_manager(
+            transaction,
+            &self.manager.room_id,
+            &self.manager.user_id,
+            &self.manager.participant_id,
+        )
+        .await?;
+        if current != *self {
+            return Err(rejected(
+                "room_authority_changed",
+                "Room-manager authority changed before the operation.",
+            ));
+        }
+        Ok(principal)
     }
-    Ok(current.manager)
 }
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
@@ -198,6 +208,18 @@ fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError 
         code,
         message: message.into(),
     }
+}
+
+#[cfg(test)]
+pub(crate) async fn test_authority(store: &SqliteStore) -> LocalRoomManagerAuthority {
+    store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("resolve test room authority: {error}"))
 }
 
 #[cfg(test)]

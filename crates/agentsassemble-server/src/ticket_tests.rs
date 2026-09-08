@@ -153,11 +153,7 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
     ));
 
     let pin_read = store
-        .issue_message_pins_read(
-            "general".to_owned(),
-            "operator-local-user".to_owned(),
-            "operator-local".to_owned(),
-        )
+        .issue_message_pins_read(manager_authority())
         .await
         .unwrap_or_else(|error| panic!("issue pin read: {error}"));
     assert!(matches!(
@@ -169,16 +165,12 @@ async fn room_http_purposes_and_asset_bindings_are_consumed_on_mismatch() {
         Err(TicketError::Invalid)
     ));
     let pin_write = store
-        .issue_message_pins_write(
-            "general".to_owned(),
-            "operator-local-user".to_owned(),
-            "operator-local".to_owned(),
-        )
+        .issue_message_pins_write(manager_authority())
         .await
         .unwrap_or_else(|error| panic!("issue pin write: {error}"));
     assert!(matches!(
         store.consume_message_pins_write(&pin_write.ticket).await,
-        Ok(crate::ticket::ConsumedRoomHttpTicket { .. })
+        Ok(agentsassemble_persistence::LocalRoomManagerAuthority { .. })
     ));
 
     let asset = store

@@ -41,7 +41,7 @@ async fn local_http_pin_lifecycle_uses_canonical_message_projection() {
             "{}/api/room-pins?room_id=general&channel_id=lobby",
             server.base_url
         ))
-        .bearer_auth(issue_read(&server.tickets, "general").await)
+        .bearer_auth(issue_read(&server, "general").await)
         .send()
         .await
         .unwrap_or_else(|error| panic!("read empty pins: {error}"));
@@ -49,7 +49,7 @@ async fn local_http_pin_lifecycle_uses_canonical_message_projection() {
     assert_eq!(empty.headers()["cache-control"], "private, no-store");
     assert_eq!(json_body(empty).await["pins"], json!([]));
 
-    let write_ticket = issue_write(&server.tickets, "general").await;
+    let write_ticket = issue_write(&server, "general").await;
     let pinned = client
         .post(format!("{}/api/room-pins", server.base_url))
         .bearer_auth(&write_ticket)
@@ -87,7 +87,7 @@ async fn local_http_pin_lifecycle_uses_canonical_message_projection() {
 
     let unpinned = client
         .post(format!("{}/api/room-pins", server.base_url))
-        .bearer_auth(issue_write(&server.tickets, "general").await)
+        .bearer_auth(issue_write(&server, "general").await)
         .json(&json!({
             "room_id": "general",
             "channel_id": "lobby",
@@ -138,7 +138,7 @@ async fn tcp_boundary_consumes_crossed_authority_and_authorizes_before_body() {
         .unwrap_or_else(|error| panic!("replay crossed preference ticket: {error}"));
     assert_eq!(crossed_replay.status(), StatusCode::UNAUTHORIZED);
 
-    let wrong_room = issue_read(&server.tickets, "general").await;
+    let wrong_room = issue_read(&server, "general").await;
     let rejected_room = client
         .get(format!(
             "{}/api/room-pins?room_id=other&channel_id=lobby",
@@ -160,13 +160,19 @@ async fn tcp_boundary_consumes_crossed_authority_and_authorizes_before_body() {
         .unwrap_or_else(|error| panic!("replay wrong-room ticket: {error}"));
     assert_eq!(replay.status(), StatusCode::UNAUTHORIZED);
 
+    let mut stale_authority = server
+        .store
+        .authorize_local_room_manager(
+            "general",
+            LOCAL_OPERATOR_USER_ID,
+            LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("resolve stale authority: {error}"));
+    stale_authority.manager.participant_id = "missing-participant".to_owned();
     let stale_identity = server
         .tickets
-        .issue_message_pins_write(
-            "general".to_owned(),
-            LOCAL_OPERATOR_USER_ID.to_owned(),
-            "missing-participant".to_owned(),
-        )
+        .issue_message_pins_write(stale_authority)
         .await
         .unwrap_or_else(|error| panic!("issue stale-identity ticket: {error}"))
         .ticket;
@@ -203,7 +209,7 @@ async fn tcp_boundary_rejects_missing_message_targets_for_pin_and_unpin() {
     ] {
         let missing_message = client
             .post(format!("{}/api/room-pins", server.base_url))
-            .bearer_auth(issue_write(&server.tickets, "general").await)
+            .bearer_auth(issue_write(&server, "general").await)
             .json(&json!({
                 "room_id": "general",
                 "channel_id": "lobby",
@@ -252,7 +258,7 @@ async fn custom_channel_pins_bind_targets_and_retire_with_the_channel()
             .await?
             .event;
         let pinned: Value = client.post(&path)
-            .bearer_auth(issue_write(&server.tickets, "general").await)
+            .bearer_auth(issue_write(&server, "general").await)
             .json(&json!({"room_id":"general","channel_id":channel,"event_id":event.id,"pinned":true}))
             .send().await?.error_for_status()?.json().await?;
         assert_eq!(pinned["pins"].as_array().map(Vec::len), Some(1));
@@ -267,7 +273,7 @@ async fn custom_channel_pins_bind_targets_and_retire_with_the_channel()
             },
         ] {
             let rejected = client.post(&path)
-                .bearer_auth(issue_write(&server.tickets, "general").await)
+                .bearer_auth(issue_write(&server, "general").await)
                 .json(&json!({"room_id":"general","channel_id":wrong,"event_id":event.id,"pinned":false}))
                 .send().await?;
             assert_eq!(rejected.status(), StatusCode::NOT_FOUND);
@@ -284,7 +290,7 @@ async fn custom_channel_pins_bind_targets_and_retire_with_the_channel()
     ] {
         let response = client
             .get(format!("{path}?room_id=general&channel_id={channel}"))
-            .bearer_auth(issue_read(&server.tickets, "general").await)
+            .bearer_auth(issue_read(&server, "general").await)
             .send()
             .await?;
         assert_eq!(response.status(), status);
@@ -374,24 +380,38 @@ async fn send_message(
         .event
 }
 
-async fn issue_read(tickets: &TicketStore, room_id: &str) -> String {
-    tickets
+async fn issue_read(server: &RunningServer, room_id: &str) -> String {
+    server
+        .tickets
         .issue_message_pins_read(
-            room_id.to_owned(),
-            LOCAL_OPERATOR_USER_ID.to_owned(),
-            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+            server
+                .store
+                .authorize_local_room_manager(
+                    room_id,
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("resolve ticket authority: {error}")),
         )
         .await
         .unwrap_or_else(|error| panic!("issue pin-read ticket: {error}"))
         .ticket
 }
 
-async fn issue_write(tickets: &TicketStore, room_id: &str) -> String {
-    tickets
+async fn issue_write(server: &RunningServer, room_id: &str) -> String {
+    server
+        .tickets
         .issue_message_pins_write(
-            room_id.to_owned(),
-            LOCAL_OPERATOR_USER_ID.to_owned(),
-            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+            server
+                .store
+                .authorize_local_room_manager(
+                    room_id,
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("resolve ticket authority: {error}")),
         )
         .await
         .unwrap_or_else(|error| panic!("issue pin-write ticket: {error}"))
@@ -408,9 +428,14 @@ async fn json_body(response: reqwest::Response) -> Value {
 async fn pin_count(store: &SqliteStore) -> i64 {
     let pins = store
         .local_message_pins(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &store
+                .authorize_local_room_manager(
+                    "general",
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("resolve pin authority: {error}")),
             "lobby",
         )
         .await

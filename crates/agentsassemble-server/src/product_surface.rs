@@ -88,7 +88,23 @@ mod tests {
     fn bundled_surface_adds_only_the_static_routes() {
         let server = server_product_surface(false, false);
         let bundled = server_product_surface(true, false);
-        assert_eq!(bundled.http_routes.len(), server.http_routes.len() + 11);
+        assert!(
+            server
+                .http_routes
+                .iter()
+                .all(|route| bundled.http_routes.contains(route))
+        );
+        let added: Vec<_> = bundled
+            .http_routes
+            .iter()
+            .filter(|route| !server.http_routes.contains(route))
+            .cloned()
+            .collect();
+        let mut expected = crate::web::static_frontend_surfaces();
+        expected.sort_by(|left, right| left.path.cmp(&right.path));
+        let mut added = added;
+        added.sort_by(|left, right| left.path.cmp(&right.path));
+        assert_eq!(added, expected);
         assert_ne!(bundled.digest, server.digest);
         assert!(
             bundled

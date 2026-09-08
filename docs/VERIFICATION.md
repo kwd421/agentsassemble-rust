@@ -8193,3 +8193,50 @@ actual 390px entry/focus verification; its four affected suites passed 18 tests
 (1.56 s). These
 are local phase results; whole-phase Daybreak approval, final Pro review and the
 six authorized real-provider runs remain separate requirements.
+
+## Phase 6 whole-phase review correction: HTTP incarnation (2026-09-08)
+
+Daybreak reviewed all 16 commits in `1e24adf..2822933`, the cumulative range,
+exact HEAD and whole Phase 6 against reachable original `d504647`. The result was
+C0/H0/M1/L0: native side-chat, search/context and pin purpose tickets discarded
+room UID, so a ticket issued before deletion could access a same-ID replacement
+room. Other reviewed Phase 6 behavior passed source review; this was not approval
+of the phase with the finding open.
+
+These four ticket purposes now reuse `LocalRoomManagerAuthority` and the existing
+manager-ticket owner. They retain room UID, bootstrap lineage and local identity;
+consumption still removes the exact purpose credential once. The shared exact
+manager resolver compares current authority inside each affected persistence
+transaction, before side-chat memory access, search/context reads or pin reads and
+writes. HTTP reports changed authority as unauthorized. Existing human/operator
+session authority remains separately typed and revalidated. No fallback, timer,
+process, migration or second authentication policy was added.
+
+`channel_http_incarnation_boundary` issues all five operation credentials, deletes
+and recreates the room through persistence lifecycle owners, and verifies actual
+HTTP rejection of old side-chat/search/context/pin-read/pin-write credentials.
+It proves that a rejected write leaves the new room unpinned and that fresh tickets
+read the replacement's data and successfully pin its message. Existing ticket
+purpose/reuse, custom-channel retirement and human/read-only live boundaries pass.
+The 100 server unit tests and 13 selected HTTP integration tests passed; 34 affected
+message persistence tests and four shared identity tests passed. The regression
+completed in 0.04 seconds (test harness time, not a latency benchmark).
+
+The initial broad unit run found a stale static-route count and runtime-authority
+capacity under default test concurrency. The former now compares exact added
+static routes to their existing manifest, preserving the server route subset.
+The latter passed with `RUST_TEST_THREADS=2`; no runtime limit or gate changed.
+Affected server/persistence all-target/all-feature Clippy passed with warnings
+denied. Architecture/source-growth, 19 policy/artifact tests, format, diff and
+artifact checks passed without exceptions. The correction adds bounded authority
+strings to existing short-lived tickets and reuses existing transaction reads;
+it adds no durable rows, background work or processes. Previous packaged layout
+and resource evidence remains applicable to the unchanged frontend; the new race
+is verified at the actual HTTP and persistence boundaries. Daybreak re-review is
+required before Phase 7.
+
+After the packaged acceptance run, the exact app and owned children were confirmed
+stopped and Computer Use was reset. Only the isolated Phase 6 app's Application
+Support, Caches, WebKit directories and `AgentsAssemble Phase6 Verify.app` bundle
+were removed after non-symlink checks, with absence verified. Active Cargo build
+artifacts and verification logs were retained; unrelated apps/data were untouched.

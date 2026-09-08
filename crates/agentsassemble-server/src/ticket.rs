@@ -61,6 +61,10 @@ pub(super) struct LocalRoomManagerGrant {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum LocalRoomManagerPurpose {
+    MessagePinsRead,
+    MessagePinsWrite,
+    MessageSearchRead,
+    SideChatRead,
     HumanInviteCreate,
     HumanInviteRevoke,
     AppearanceUpload,
@@ -72,10 +76,6 @@ pub(super) enum LocalRoomManagerPurpose {
 pub enum RoomHttpPurpose {
     PreferencesRead,
     PreferencesWrite,
-    MessagePinsRead,
-    MessagePinsWrite,
-    MessageSearchRead,
-    SideChatRead,
     MessageAttachmentUpload,
     BoundMessageAttachmentRead { attachment_id: String },
     BoundAppearanceRead { asset_id: String },
@@ -113,8 +113,8 @@ pub(crate) struct ConsumedHumanInviteManagerTicket {
     pub authority: LocalRoomManagerAuthority,
 }
 
-pub(crate) enum RoomSessionHttpAuthority {
-    LocalTicket(ConsumedRoomHttpTicket),
+pub(crate) enum RoomSessionHttpAuthority<T = ConsumedRoomHttpTicket> {
+    LocalTicket(T),
     Session(Box<RoomSessionAuthorization>),
 }
 
@@ -254,60 +254,39 @@ impl TicketStore {
     ///
     /// # Errors
     ///
-    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    /// Returns `Invalid` for exhausted ticket capacity; the operation revalidates authority.
     pub async fn issue_message_pins_read(
         &self,
-        room_id: String,
-        principal_id: String,
-        participant_id: String,
+        authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_room_http(
-            room_id,
-            principal_id,
-            participant_id,
-            RoomHttpPurpose::MessagePinsRead,
-        )
-        .await
+        self.issue_local_room_manager(authority, LocalRoomManagerPurpose::MessagePinsRead)
+            .await
     }
 
     /// Issues one exact message-pin write credential for a resolved room human.
     ///
     /// # Errors
     ///
-    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    /// Returns `Invalid` for exhausted ticket capacity; the operation revalidates authority.
     pub async fn issue_message_pins_write(
         &self,
-        room_id: String,
-        principal_id: String,
-        participant_id: String,
+        authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_room_http(
-            room_id,
-            principal_id,
-            participant_id,
-            RoomHttpPurpose::MessagePinsWrite,
-        )
-        .await
+        self.issue_local_room_manager(authority, LocalRoomManagerPurpose::MessagePinsWrite)
+            .await
     }
 
     /// Issues one exact lobby-message-search credential for a resolved room human.
     ///
     /// # Errors
     ///
-    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    /// Returns `Invalid` for exhausted ticket capacity; the operation revalidates authority.
     pub async fn issue_message_search_read(
         &self,
-        room_id: String,
-        principal_id: String,
-        participant_id: String,
+        authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
-        self.issue_room_http(
-            room_id,
-            principal_id,
-            participant_id,
-            RoomHttpPurpose::MessageSearchRead,
-        )
-        .await
+        self.issue_local_room_manager(authority, LocalRoomManagerPurpose::MessageSearchRead)
+            .await
     }
 
     /// Issues one exact human-invite creation credential for a resolved room manager.
@@ -576,9 +555,10 @@ impl TicketStore {
     pub(crate) async fn consume_message_pins_read(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(ticket, &RoomHttpPurpose::MessagePinsRead)
+    ) -> Result<LocalRoomManagerAuthority, TicketError> {
+        self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::MessagePinsRead)
             .await
+            .map(|grant| grant.authority)
     }
 
     /// Consumes only an exact message-pin write credential.
@@ -589,9 +569,10 @@ impl TicketStore {
     pub(crate) async fn consume_message_pins_write(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(ticket, &RoomHttpPurpose::MessagePinsWrite)
+    ) -> Result<LocalRoomManagerAuthority, TicketError> {
+        self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::MessagePinsWrite)
             .await
+            .map(|grant| grant.authority)
     }
 
     /// Consumes only an exact lobby-message-search credential.
@@ -602,9 +583,10 @@ impl TicketStore {
     pub(crate) async fn consume_message_search_read(
         &self,
         ticket: &str,
-    ) -> Result<ConsumedRoomHttpTicket, TicketError> {
-        self.consume_room_http(ticket, &RoomHttpPurpose::MessageSearchRead)
+    ) -> Result<LocalRoomManagerAuthority, TicketError> {
+        self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::MessageSearchRead)
             .await
+            .map(|grant| grant.authority)
     }
 
     /// Consumes only an exact human-invite creation credential.

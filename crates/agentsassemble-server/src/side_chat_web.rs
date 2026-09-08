@@ -78,7 +78,7 @@ async fn read_side_chat(
     let room_id = validate_room_id(&query.room_id)
         .map_err(|error| error_response(StatusCode::BAD_REQUEST, error.code, &error.message))?;
     let granted_room = match &grant {
-        RoomSessionHttpAuthority::LocalTicket(local) => &local.room_id,
+        RoomSessionHttpAuthority::LocalTicket(local) => &local.manager.room_id,
         RoomSessionHttpAuthority::Session(session) => &session.principal().room_id,
     };
     if room_id != *granted_room {
@@ -108,15 +108,7 @@ async fn read_side_chat(
     let now = chrono::Utc::now();
     let snapshot = match &grant {
         RoomSessionHttpAuthority::LocalTicket(local) => {
-            state
-                .store
-                .local_side_chat_snapshot(
-                    &local.room_id,
-                    &local.principal_id,
-                    &local.participant_id,
-                    now,
-                )
-                .await
+            state.store.local_side_chat_snapshot(local, now).await
         }
         RoomSessionHttpAuthority::Session(session) => {
             state
@@ -148,6 +140,7 @@ fn persistence_error(error: PersistenceError) -> Response {
         | PersistenceError::CommandRejected {
             code:
                 "session_revoked"
+                | "room_authority_changed"
                 | "room_inactive"
                 | "user_profile_missing"
                 | "profile_authority_mismatch",

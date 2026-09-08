@@ -97,21 +97,13 @@ impl SqliteStore {
     /// Rejects inactive local identity or room membership and database failures.
     pub async fn local_side_chat_snapshot(
         &self,
-        room_id: &str,
-        user_id: &str,
-        participant_id: &str,
+        expected: &crate::LocalRoomManagerAuthority,
         now: DateTime<Utc>,
     ) -> Result<SideChatSnapshot, PersistenceError> {
         let mut tx = self.pool.begin().await?;
-        let (authority, _) = crate::room_user_identity::resolve_local_room_manager(
-            &mut tx,
-            room_id,
-            user_id,
-            participant_id,
-        )
-        .await?;
+        expected.resolve(&mut tx).await?;
         let snapshot = self
-            .side_chat_snapshot_in_memory(authority.room_uid, room_id.to_owned(), now)
+            .side_chat_snapshot_in_memory(expected.room_uid, expected.manager.room_id.clone(), now)
             .await;
         tx.commit().await?;
         Ok(snapshot)

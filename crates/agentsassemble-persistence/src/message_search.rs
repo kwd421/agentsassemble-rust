@@ -14,7 +14,6 @@ use crate::{
     message_search_index::{canonical_created_at_nanos, searchable_room_message},
     room_channels::{MESSAGE_CHANNEL_SQL, require_message_channel},
     room_turns::support::{load_participant, provider_room_principal},
-    room_user_identity::resolve_local_room_manager,
     turn_authority::require_provider_room_tool_authority,
 };
 
@@ -36,16 +35,13 @@ impl SqliteStore {
     /// Rejects stale authority, invalid query/cursor input, or inconsistent stored projections.
     pub async fn search_local_messages(
         &self,
-        room_id: &str,
-        user_id: &str,
-        participant_id: &str,
+        expected: &crate::LocalRoomManagerAuthority,
         channel_id: &str,
         query: &str,
         cursor: &str,
     ) -> Result<RoomMessageSearchPage, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (_, principal) =
-            resolve_local_room_manager(&mut transaction, room_id, user_id, participant_id).await?;
+        let principal = expected.resolve(&mut transaction).await?;
         let page = search_in(&mut transaction, &principal, channel_id, query, cursor).await?;
         transaction.commit().await?;
         Ok(page)
@@ -80,15 +76,12 @@ impl SqliteStore {
     /// Rejects stale authority, unknown targets, or inconsistent stored projections.
     pub async fn local_message_context(
         &self,
-        room_id: &str,
-        user_id: &str,
-        participant_id: &str,
+        expected: &crate::LocalRoomManagerAuthority,
         channel_id: &str,
         event_id: &str,
     ) -> Result<RoomMessageContext, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let (_, principal) =
-            resolve_local_room_manager(&mut transaction, room_id, user_id, participant_id).await?;
+        let principal = expected.resolve(&mut transaction).await?;
         let context = context_in(&mut transaction, &principal, channel_id, event_id).await?;
         transaction.commit().await?;
         Ok(context)

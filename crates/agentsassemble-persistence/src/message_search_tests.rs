@@ -98,9 +98,7 @@ async fn complete_search_paginates_and_preserves_unicode_short_and_attachment_ma
     assert_rejection_code(
         store
             .search_local_messages(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &crate::room_user_identity::test_authority(&store).await,
                 "lobby",
                 "page marker",
                 "not-a-cursor",
@@ -144,9 +142,7 @@ async fn context_is_bounded_chronological_and_uses_public_event_projection() {
 
     let context = store
         .local_message_context(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &target.id,
         )
@@ -178,9 +174,7 @@ async fn context_is_bounded_chronological_and_uses_public_event_projection() {
     assert_rejection_code(
         store
             .local_message_context(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &crate::room_user_identity::test_authority(&store).await,
                 "lobby",
                 "missing-message",
             )
@@ -239,9 +233,7 @@ async fn polls_search_by_visible_question_without_indexing_private_transitions()
 
     let context = store
         .local_message_context(
-            &principal.room_id,
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &poll.id,
         )
@@ -310,9 +302,7 @@ async fn send(
 async fn search(store: &SqliteStore, query: &str, cursor: &str) -> crate::RoomMessageSearchPage {
     store
         .search_local_messages(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(store).await,
             "lobby",
             query,
             cursor,

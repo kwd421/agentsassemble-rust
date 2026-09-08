@@ -1,6 +1,6 @@
 # Custom text channels and ephemeral side chat
 
-Status: Phase 6 locally verified; whole-phase Daybreak review pending.
+Status: Phase 6 HTTP incarnation correction locally verified; Daybreak re-review pending.
 
 ## Definition and observed contract
 
@@ -471,3 +471,15 @@ Both the conversation footer and mobile room-info button open the same dialog
 state, scoped to room UID and HTTP authority. The packaged 390px room-info route
 closed the info surface and focused this single composer. Its final four affected
 suites passed 18 tests (1.56 s); production/package build and unchanged gates pass.
+
+## Whole-phase review correction: local HTTP incarnation
+
+Daybreak found that native side-chat, search/context and pin tickets retained only
+the room label and local identity. A ticket issued before deletion could therefore
+resolve a same-ID replacement room. These purposes use the existing exact
+local-manager authority grant, including room UID and bootstrap lineage, and
+revalidate it inside the read/write transaction before accessing data or memory.
+The existing single-use and purpose checks remain authoritative. No client fence,
+new credential mechanism, timer or compatibility path substitutes for this check.
+Acceptance verifies real HTTP stale-ticket cases after same-ID room recreation for
+side chat, search/context and pin read/write, including fresh-ticket success.

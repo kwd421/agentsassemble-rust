@@ -1,6 +1,6 @@
 use agentsassemble_domain::{
-    CHANNEL_MESSAGE_EVENT_TYPE, LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
-    MAX_CHANNEL_MESSAGE_PINS, RoomEvent, has_visible_text, is_message_event_id,
+    CHANNEL_MESSAGE_EVENT_TYPE, MAX_CHANNEL_MESSAGE_PINS, RoomEvent, has_visible_text,
+    is_message_event_id,
 };
 use chrono::{DateTime, SecondsFormat, Utc};
 use serde::Serialize;
@@ -12,7 +12,6 @@ use crate::{
     message_attachments::{MessageAttachmentMetadata, message_attachments_from_event},
     room_channels::{MESSAGE_CHANNEL_SQL, require_message_channel},
     room_turns::support::load_event,
-    room_user_identity::resolve_local_room_manager,
 };
 
 pub(crate) async fn remove_message_pin(
@@ -48,13 +47,12 @@ impl SqliteStore {
     /// Fails when local authority, a stored pointer, its event, or persistence is invalid.
     pub async fn local_message_pins(
         &self,
-        room_id: &str,
-        user_id: &str,
-        participant_id: &str,
+        expected: &crate::LocalRoomManagerAuthority,
         channel_id: &str,
     ) -> Result<Vec<PinnedMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        authorize_local_operator(&mut transaction, room_id, user_id, participant_id).await?;
+        expected.resolve(&mut transaction).await?;
+        let room_id = &expected.manager.room_id;
         require_message_channel(&mut transaction, room_id, channel_id).await?;
         let pins = load_pins(&mut transaction, room_id, channel_id).await?;
         transaction.commit().await?;
@@ -94,15 +92,14 @@ impl SqliteStore {
     /// Fails without writing when local authority or the target message is invalid.
     pub async fn set_local_message_pin(
         &self,
-        room_id: &str,
-        user_id: &str,
-        participant_id: &str,
+        expected: &crate::LocalRoomManagerAuthority,
         channel_id: &str,
         event_id: &str,
         pinned: bool,
     ) -> Result<Vec<PinnedMessage>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        authorize_local_operator(&mut transaction, room_id, user_id, participant_id).await?;
+        expected.resolve(&mut transaction).await?;
+        let room_id = &expected.manager.room_id;
         set_pin(
             &mut transaction,
             room_id,
@@ -151,22 +148,6 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(pins)
     }
-}
-
-async fn authorize_local_operator(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    user_id: &str,
-    participant_id: &str,
-) -> Result<(), PersistenceError> {
-    if user_id != LOCAL_OPERATOR_USER_ID || participant_id != LOCAL_OPERATOR_PARTICIPANT_ID {
-        return Err(rejected(
-            "permission_denied",
-            "Only the local room operator may use local pin authority.",
-        ));
-    }
-    resolve_local_room_manager(transaction, room_id, user_id, participant_id).await?;
-    Ok(())
 }
 
 fn require_permission(allowed: bool, message: &'static str) -> Result<(), PersistenceError> {

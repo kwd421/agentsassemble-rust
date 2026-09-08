@@ -168,9 +168,7 @@ async fn channels_have_independent_history_replay_and_restart_without_lobby_turn
     checked(
         store
             .set_local_message_pin(
-                &principal.room_id,
-                &principal.principal_id,
-                &principal.participant_id,
+                &crate::room_user_identity::test_authority(&store).await,
                 "c0123456789ab",
                 &repeated.event.id,
                 true,
@@ -191,9 +189,7 @@ async fn verify_reopened_channel(
     let pins = checked(
         reopened
             .local_message_pins(
-                &principal.room_id,
-                &principal.principal_id,
-                &principal.participant_id,
+                &crate::room_user_identity::test_authority(&reopened).await,
                 "c0123456789ab",
             )
             .await,
@@ -205,9 +201,7 @@ async fn verify_reopened_channel(
     let search = checked(
         reopened
             .search_local_messages(
-                &principal.room_id,
-                &principal.principal_id,
-                &principal.participant_id,
+                &crate::room_user_identity::test_authority(&reopened).await,
                 "c0123456789ab",
                 "first",
                 "",

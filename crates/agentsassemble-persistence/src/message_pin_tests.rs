@@ -22,9 +22,7 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
 
     store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &first.id,
             true,
@@ -38,9 +36,7 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
         .unwrap_or_else(|error| panic!("age first pin: {error}"));
     let pins = store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &second.id,
             true,
@@ -63,9 +59,7 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
         .unwrap_or_else(|error| panic!("bound second pin timestamp: {error}"));
     let repinned = store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &first.id,
             true,
@@ -76,9 +70,7 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
     assert_eq!(repinned[0].event_id, first.id);
     let remaining = store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &second.id,
             false,
@@ -88,9 +80,7 @@ async fn local_pin_lifecycle_projects_only_canonical_messages() {
     assert_eq!(remaining.len(), 1);
     let unchanged = store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &second.id,
             false,
@@ -129,9 +119,7 @@ async fn attachment_only_pin_projects_canonical_filenames() {
 
     let pins = store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &event.id,
             true,
@@ -159,9 +147,7 @@ async fn attachment_only_pin_projects_canonical_filenames() {
     assert_rejection_code(
         store
             .local_message_pins(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &crate::room_user_identity::test_authority(&store).await,
                 "lobby",
             )
             .await,
@@ -186,9 +172,7 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
             assert!(
                 store
                     .set_local_message_pin(
-                        "general",
-                        LOCAL_OPERATOR_USER_ID,
-                        LOCAL_OPERATOR_PARTICIPANT_ID,
+                        &crate::room_user_identity::test_authority(&store).await,
                         "lobby",
                         event_id,
                         pinned,
@@ -207,9 +191,7 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
 
     store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &valid.id,
             true,
@@ -230,9 +212,7 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
     assert_rejection_code(
         store
             .set_local_message_pin(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &crate::room_user_identity::test_authority(&store).await,
                 "lobby",
                 &valid.id,
                 false,
@@ -244,9 +224,7 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
     assert_rejection_code(
         store
             .local_message_pins(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &crate::room_user_identity::test_authority(&store).await,
                 "lobby",
             )
             .await,
@@ -260,9 +238,7 @@ async fn missing_nonmessage_and_invalid_targets_leave_no_pin() {
     assert!(matches!(
         store
             .local_message_pins(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &crate::room_user_identity::test_authority(&store).await,
                 "lobby",
             )
             .await,
@@ -290,9 +266,7 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
     for message in messages.iter().take(pin_limit) {
         store
             .set_local_message_pin(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &crate::room_user_identity::test_authority(&store).await,
                 "lobby",
                 &message.id,
                 true,
@@ -304,9 +278,7 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
     assert_rejection_code(
         store
             .set_local_message_pin(
-                "general",
-                LOCAL_OPERATOR_USER_ID,
-                LOCAL_OPERATOR_PARTICIPANT_ID,
+                &crate::room_user_identity::test_authority(&store).await,
                 "lobby",
                 &messages
                     .last()
@@ -319,9 +291,7 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
     );
     let repinned = store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &messages[0].id,
             true,
@@ -331,9 +301,7 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
     assert_eq!(repinned.len(), pin_limit);
     store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &messages[0].id,
             false,
@@ -342,9 +310,7 @@ async fn pin_limit_bounds_complete_list_without_blocking_repin_or_unpin() {
         .unwrap_or_else(|error| panic!("unpin at capacity: {error}"));
     let refilled = store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&store).await,
             "lobby",
             &messages
                 .last()
@@ -364,9 +330,7 @@ async fn human_session_permissions_and_revocation_are_rechecked_with_the_mutatio
     let message = send(&read_only_store, &local, "read-only-target", "target").await;
     read_only_store
         .set_local_message_pin(
-            "general",
-            LOCAL_OPERATOR_USER_ID,
-            LOCAL_OPERATOR_PARTICIPANT_ID,
+            &crate::room_user_identity::test_authority(&read_only_store).await,
             "lobby",
             &message.id,
             true,
@@ -455,9 +419,7 @@ async fn assert_channel_capacity_is_independent(
         .unwrap_or_else(|error| panic!("pin channel message: {error}"));
     let pins = store
         .set_local_message_pin(
-            &principal.room_id,
-            &principal.principal_id,
-            &principal.participant_id,
+            &crate::room_user_identity::test_authority(store).await,
             "c0123456789ab",
             &message.event.id,
             true,

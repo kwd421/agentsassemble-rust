@@ -1,5 +1,7 @@
 use agentsassemble_domain::validate_room_id;
-use agentsassemble_persistence::{PersistenceError, RoomMessageContext, RoomMessageSearchPage};
+use agentsassemble_persistence::{
+    LocalRoomManagerAuthority, PersistenceError, RoomMessageContext, RoomMessageSearchPage,
+};
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
@@ -77,14 +79,7 @@ async fn search_messages(
         RoomSessionHttpAuthority::LocalTicket(local) => {
             state
                 .store
-                .search_local_messages(
-                    &local.room_id,
-                    &local.principal_id,
-                    &local.participant_id,
-                    &query.channel_id,
-                    &query.q,
-                    &query.cursor,
-                )
+                .search_local_messages(local, &query.channel_id, &query.q, &query.cursor)
                 .await?
         }
         RoomSessionHttpAuthority::Session(authorization) => {
@@ -117,13 +112,7 @@ async fn message_context(
         RoomSessionHttpAuthority::LocalTicket(local) => {
             state
                 .store
-                .local_message_context(
-                    &local.room_id,
-                    &local.principal_id,
-                    &local.participant_id,
-                    &query.channel,
-                    &query.event,
-                )
+                .local_message_context(local, &query.channel, &query.event)
                 .await?
         }
         RoomSessionHttpAuthority::Session(authorization) => {
@@ -140,7 +129,7 @@ async fn resolve_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
     origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
-) -> Result<RoomSessionHttpAuthority, MessageSearchHttpError> {
+) -> Result<RoomSessionHttpAuthority<LocalRoomManagerAuthority>, MessageSearchHttpError> {
     let credential = bearer_credential(headers).ok_or_else(MessageSearchHttpError::unauthorized)?;
     match resolve_room_session_bearer(state, headers, origin, credential).await {
         Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
@@ -166,7 +155,7 @@ fn parse_query<T: for<'de> Deserialize<'de>>(
 }
 
 fn require_room(
-    grant: &RoomSessionHttpAuthority,
+    grant: &RoomSessionHttpAuthority<LocalRoomManagerAuthority>,
     requested_room_id: &str,
 ) -> Result<(), MessageSearchHttpError> {
     let room_id = validate_room_id(requested_room_id)
@@ -177,9 +166,9 @@ fn require_room(
     Ok(())
 }
 
-fn grant_room_id(grant: &RoomSessionHttpAuthority) -> &str {
+fn grant_room_id(grant: &RoomSessionHttpAuthority<LocalRoomManagerAuthority>) -> &str {
     match grant {
-        RoomSessionHttpAuthority::LocalTicket(local) => &local.room_id,
+        RoomSessionHttpAuthority::LocalTicket(local) => &local.manager.room_id,
         RoomSessionHttpAuthority::Session(authorization) => &authorization.principal().room_id,
     }
 }
@@ -259,6 +248,7 @@ impl From<PersistenceError> for MessageSearchHttpError {
             | PersistenceError::CommandRejected {
                 code:
                     "session_revoked"
+                    | "room_authority_changed"
                     | "room_inactive"
                     | "user_profile_missing"
                     | "profile_authority_mismatch",

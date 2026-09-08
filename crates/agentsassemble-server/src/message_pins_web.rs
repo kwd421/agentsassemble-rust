@@ -1,5 +1,5 @@
 use agentsassemble_domain::validate_room_id;
-use agentsassemble_persistence::{PersistenceError, PinnedMessage};
+use agentsassemble_persistence::{LocalRoomManagerAuthority, PersistenceError, PinnedMessage};
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
@@ -81,12 +81,7 @@ async fn list_pins(
         RoomSessionHttpAuthority::LocalTicket(grant) => {
             state
                 .store
-                .local_message_pins(
-                    &grant.room_id,
-                    &grant.principal_id,
-                    &grant.participant_id,
-                    &query.channel_id,
-                )
+                .local_message_pins(grant, &query.channel_id)
                 .await?
         }
         RoomSessionHttpAuthority::Session(authorization) => {
@@ -116,9 +111,7 @@ async fn set_pin(
             state
                 .store
                 .set_local_message_pin(
-                    &grant.room_id,
-                    &grant.principal_id,
-                    &grant.participant_id,
+                    grant,
                     &payload.channel_id,
                     &payload.event_id,
                     payload.pinned,
@@ -147,7 +140,7 @@ async fn resolve_read_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
     origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
-) -> Result<RoomSessionHttpAuthority, MessagePinsHttpError> {
+) -> Result<RoomSessionHttpAuthority<LocalRoomManagerAuthority>, MessagePinsHttpError> {
     let credential = bearer_credential(headers).ok_or_else(MessagePinsHttpError::unauthorized)?;
     match resolve_room_session_bearer(state, headers, origin, credential).await {
         Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
@@ -168,7 +161,7 @@ async fn resolve_write_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
     origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
-) -> Result<RoomSessionHttpAuthority, MessagePinsHttpError> {
+) -> Result<RoomSessionHttpAuthority<LocalRoomManagerAuthority>, MessagePinsHttpError> {
     let credential = bearer_credential(headers).ok_or_else(MessagePinsHttpError::unauthorized)?;
     match resolve_room_session_bearer(state, headers, origin, credential).await {
         Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
@@ -187,16 +180,16 @@ async fn resolve_write_authority(
 
 async fn reauthorize_write(
     state: &AppState,
-    grant: &RoomSessionHttpAuthority,
+    grant: &RoomSessionHttpAuthority<LocalRoomManagerAuthority>,
 ) -> Result<(), MessagePinsHttpError> {
     match grant {
         RoomSessionHttpAuthority::LocalTicket(grant) => {
             state
                 .store
                 .authorize_local_room_manager(
-                    &grant.room_id,
-                    &grant.principal_id,
-                    &grant.participant_id,
+                    &grant.manager.room_id,
+                    &grant.manager.user_id,
+                    &grant.manager.participant_id,
                 )
                 .await?;
         }
@@ -214,7 +207,7 @@ async fn reauthorize_write(
 }
 
 fn require_room_request<'a>(
-    grant: &'a RoomSessionHttpAuthority,
+    grant: &'a RoomSessionHttpAuthority<LocalRoomManagerAuthority>,
     requested_room_id: &str,
 ) -> Result<&'a str, MessagePinsHttpError> {
     let room_id = validate_room_id(requested_room_id)
@@ -225,9 +218,9 @@ fn require_room_request<'a>(
     Ok(grant_room_id(grant))
 }
 
-fn grant_room_id(grant: &RoomSessionHttpAuthority) -> &str {
+fn grant_room_id(grant: &RoomSessionHttpAuthority<LocalRoomManagerAuthority>) -> &str {
     match grant {
-        RoomSessionHttpAuthority::LocalTicket(grant) => &grant.room_id,
+        RoomSessionHttpAuthority::LocalTicket(grant) => &grant.manager.room_id,
         RoomSessionHttpAuthority::Session(authorization) => &authorization.principal().room_id,
     }
 }
@@ -316,6 +309,7 @@ impl From<PersistenceError> for MessagePinsHttpError {
             | PersistenceError::CommandRejected {
                 code:
                     "session_revoked"
+                    | "room_authority_changed"
                     | "room_inactive"
                     | "user_profile_missing"
                     | "profile_authority_mismatch",

@@ -52,7 +52,7 @@ async fn local_tcp_search_and_context_are_exact() {
         );
     }
     let client = Client::new();
-    let ticket = issue_search(&server.tickets, "general").await;
+    let ticket = issue_search(&server, "general").await;
     let first = client
         .get(format!(
             "{}/api/room-search?room_id=general&channel_id=all&q=tcp%20needle",
@@ -92,7 +92,7 @@ async fn local_tcp_search_and_context_are_exact() {
             "{}/api/room-search/context?room_id=general&channel_id=lobby&event_id={}",
             server.base_url, messages[20].id
         ))
-        .bearer_auth(issue_search(&server.tickets, "general").await)
+        .bearer_auth(issue_search(&server, "general").await)
         .send()
         .await
         .unwrap_or_else(|error| panic!("read context over TCP: {error}"));
@@ -108,7 +108,7 @@ async fn local_tcp_search_and_context_are_exact() {
 async fn malformed_query_and_oversized_body_consume_the_ticket() {
     let server = start().await;
     let client = Client::new();
-    let malformed_ticket = issue_search(&server.tickets, "general").await;
+    let malformed_ticket = issue_search(&server, "general").await;
     let malformed = client
         .get(format!(
             "{}/api/room-search?room_id=general&unknown=value",
@@ -130,7 +130,7 @@ async fn malformed_query_and_oversized_body_consume_the_ticket() {
         .unwrap_or_else(|error| panic!("replay malformed-query ticket: {error}"));
     assert_eq!(consumed.status(), StatusCode::UNAUTHORIZED);
 
-    let oversized_ticket = issue_search(&server.tickets, "general").await;
+    let oversized_ticket = issue_search(&server, "general").await;
     let oversized = client
         .get(format!(
             "{}/api/room-search?room_id=general&q=tcp",
@@ -190,7 +190,7 @@ async fn crossed_purpose_and_wrong_room_consume_the_ticket() {
         .unwrap_or_else(|error| panic!("replay crossed ticket: {error}"));
     assert_eq!(crossed_replay.status(), StatusCode::UNAUTHORIZED);
 
-    let wrong_room = issue_search(&server.tickets, "general").await;
+    let wrong_room = issue_search(&server, "general").await;
     let rejected = client
         .get(format!(
             "{}/api/room-search?room_id=other&q=tcp",
@@ -636,12 +636,19 @@ async fn send_message(
         .event
 }
 
-async fn issue_search(tickets: &TicketStore, room_id: &str) -> String {
-    tickets
+async fn issue_search(server: &RunningServer, room_id: &str) -> String {
+    server
+        .tickets
         .issue_message_search_read(
-            room_id.to_owned(),
-            LOCAL_OPERATOR_USER_ID.to_owned(),
-            LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
+            server
+                .store
+                .authorize_local_room_manager(
+                    room_id,
+                    LOCAL_OPERATOR_USER_ID,
+                    LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("resolve ticket authority: {error}")),
         )
         .await
         .unwrap_or_else(|error| panic!("issue search ticket: {error}"))
