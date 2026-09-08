@@ -23,6 +23,11 @@ mod persona;
 mod persona_text;
 mod profile;
 mod projection;
+mod provider_request;
+pub use provider_request::{
+    DurableProviderResolution, ProviderRequest, ProviderRequestKind, ProviderRequestOption,
+    ProviderRequestPrompt, ProviderRequestQuestion, ProviderRequestResolution,
+};
 mod provider_turn;
 mod room_history;
 mod room_preferences;

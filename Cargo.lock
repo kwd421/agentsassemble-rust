@@ -82,6 +82,7 @@ dependencies = [
  "thiserror",
  "ts-rs",
  "unicode-general-category",
+ "url",
  "uuid",
 ]
 

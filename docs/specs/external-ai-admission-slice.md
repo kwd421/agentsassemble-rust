@@ -292,6 +292,39 @@ must not be bypassed by an old credential or cached MCP view. Side chat and priv
 provider data are unavailable to connectors and attendees. AgentBridge reports
 cannot claim another participant, room, Agent Session, turn, execution or launch.
 
+## Shared provider-request contract
+
+The reachable original request owner allows permission choices, question answers
+(including secret answers) and HTTPS external-action acknowledgement. Only the
+current owning human may resolve a request; room management alone does not substitute
+for ownership. Open/resolve/closed transitions are tied to one exact session,
+launch and execution. There is at most one open request per session, with a bounded
+15–900 second deadline. Duplicate commands recover their existing result; changed
+payloads, replaced executions and expired authority fail before delivery.
+
+The Rust domain owns the typed request/answer validation and secret-free durable
+projection. The persistence transaction owns pending/resolving/terminal state and
+owner-only events; live delivery owns secret answers until completion or cancellation.
+Secret values never enter command receipts, event history or diagnostic output.
+A lost live secret delivery is an explicit failed resolution, requiring a new provider
+request instead of reconstructing answers from storage. Both managed and attendee
+transports consume these same owners. Native drivers translate supported upstream
+request/response shapes; unsupported requests fail explicitly rather than receiving
+an automatic permission grant. Stop, interrupt and runtime loss cancel live delivery.
+
+Acceptance includes an actual local request/owner response round trip, wrong-owner
+and replaced-launch rejection, concurrent/exact retry, deadline/stop cancellation,
+secret-free persisted state and ordinary-view projection, then packaged desktop and
+390px controls. These are pending until the transport and native consumers exist.
+
+The shared domain model now validates offered choices, exact question coverage,
+answer multiplicity and HTTPS action URLs. Its distinct durable resolution removes
+secret answer values and retains only answered question IDs. Two focused contract
+cases pass, including secret exclusion and invalid/duplicate choices. Domain
+all-target/all-feature Clippy and unchanged architecture/19 policy, format and
+artifact gates pass. Both Cargo lockfiles include the existing URL parser dependency;
+no gate was changed. Persistent state and live transport are the next consumers.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after
