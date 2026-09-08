@@ -29,6 +29,7 @@ impl AttendeeRuntime {
         delivery: AttendeeTurnDelivery,
         tools: ProviderRoomToolIngress,
         attachments: ProviderAttachmentReadIngress,
+        requests: Option<agentsassemble_provider::ProviderRequestIngress>,
     ) -> Result<AttendeeExecution, AttendeeClientError> {
         let start = &delivery.authority;
         if self.stopped
@@ -67,7 +68,7 @@ impl AttendeeRuntime {
             room_tool_ingress: Some(tools),
         });
         let request = ProviderTurnRequest {
-            request_ingress: None,
+            request_ingress: requests,
             turn_id: start.turn_id.clone(),
             turn_generation: start.turn_generation,
             execution_id: start.execution_id.clone(),

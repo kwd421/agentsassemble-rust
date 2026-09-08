@@ -51,14 +51,7 @@ async fn run_case(entered: bool, unconfirmed: bool) -> TestResult {
         "Interrupt Client",
     )?;
     let mut runtime = start_runtime(&mut client, &catalog, directory.path()).await?;
-    let mut socket = client.connect().await?;
-    socket
-        .send(&Request::Ready {
-            request_id: Uuid::new_v4(),
-            report: Box::new(runtime.start().await?),
-        })
-        .await?;
-    assert!(matches!(receive(&mut socket).await?, Frame::Ack { .. }));
+    let mut socket = connect_ready(&client, &mut runtime).await?;
     let mut manager = local_socket::connect(&server.base_url, server.state(), "general").await;
     manager.subscribe(0).await;
     let _snapshot = manager.receive_json().await;
@@ -70,7 +63,10 @@ async fn run_case(entered: bool, unconfirmed: bool) -> TestResult {
     let (tools, _tools_rx) = ProviderRoomToolIngress::channel(4);
     let (attachments, _attachments_rx) = ProviderAttachmentReadIngress::channel(4);
     let mut execution = if entered {
-        Some(runtime.execute(*assignment, tools, attachments).await?)
+        runtime
+            .execute(*assignment, tools, attachments, None)
+            .await
+            .map(Some)?
     } else {
         None
     };
@@ -132,6 +128,21 @@ async fn run_case(entered: bool, unconfirmed: bool) -> TestResult {
     manager.close().await;
     server.stop().await;
     Ok(())
+}
+
+async fn connect_ready(
+    client: &RoomAttendeeClient,
+    runtime: &mut AttendeeRuntime,
+) -> Result<AttendeeSocket, Box<dyn std::error::Error>> {
+    let mut socket = client.connect().await?;
+    socket
+        .send(&Request::Ready {
+            request_id: Uuid::new_v4(),
+            report: Box::new(runtime.start().await?),
+        })
+        .await?;
+    assert!(matches!(receive(&mut socket).await?, Frame::Ack { .. }));
+    Ok(socket)
 }
 
 async fn start_runtime(

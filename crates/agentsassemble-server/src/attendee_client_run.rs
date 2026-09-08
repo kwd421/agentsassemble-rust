@@ -15,6 +15,10 @@ use uuid::Uuid;
 mod tools;
 use tools::Tools;
 
+#[path = "attendee_client_run_requests.rs"]
+mod requests;
+use requests::Requests;
+
 const RETRY_DELAY: Duration = Duration::from_secs(1);
 const ACK_TIMEOUT: Duration = Duration::from_secs(30);
 
@@ -24,6 +28,7 @@ struct Session<'a> {
     execution: Option<AttendeeExecution>,
     interrupt: Option<AttendeeInterrupt>,
     tools: Tools,
+    requests: Requests,
     pending: Option<Request>,
     connection_ready: bool,
 }
@@ -53,6 +58,7 @@ pub async fn run_attendee_session(
         execution: None,
         interrupt: None,
         tools: Tools::new(),
+        requests: Requests::new(),
         connection_ready: false,
         pending: Some(Request::Ready {
             request_id: Uuid::new_v4(),
@@ -85,6 +91,7 @@ impl Session<'_> {
                 }
                 Err(failure) => return Err(failure),
             }
+            self.requests.clear();
             // Disconnection is the event that checks stop custody; this is not a room-state poll.
             match self.client.cleanup().await {
                 Ok(Some(stop)) => return Ok(Some(stop)),
@@ -122,7 +129,10 @@ impl Session<'_> {
                 sent = Some(request.request_id());
                 ack_deadline = tokio::time::Instant::now() + ACK_TIMEOUT;
             }
+            self.requests.send(socket).await?;
             tokio::select! {
+                () = requests::wait_timeout(self.requests.deadline()) => return Err(error("attendee_provider_ack_timeout")),
+                result = self.requests.step() => result?,
                 frame = socket.receive() => {
                     if let Some(stop) = self.frame(frame?).await? { return Ok(Some(stop)); }
                 }
@@ -142,6 +152,7 @@ impl Session<'_> {
                     if gone { return Ok(None); }
                     self.execution = None;
                     self.tools.clear();
+                    self.requests.clear();
                     self.pending = Some(self.ready_request().await?);
                 }
                 result = self.tools.step(self.client, connection) => result?,
@@ -154,8 +165,13 @@ impl Session<'_> {
         frame: Frame,
     ) -> Result<Option<AttendeeCleanupDelivery>, AttendeeClientError> {
         match frame {
-            Frame::ProviderResponse { .. } | Frame::ProviderRequestClosed { .. } => {
-                return Err(error("unexpected_provider_response"));
+            frame @ (Frame::ProviderResponse { .. } | Frame::ProviderRequestClosed { .. }) => {
+                self.requests.frame(frame)?;
+            }
+            frame @ (Frame::Ack { request_id, .. } | Frame::Nack { request_id, .. })
+                if self.requests.owns_reply(request_id) =>
+            {
+                self.requests.frame(frame)?;
             }
             Frame::Stop { stop } => return Ok(Some(stop)),
             Frame::Connected { .. } => return Err(error("unexpected_attendee_connection")),
@@ -181,42 +197,7 @@ impl Session<'_> {
                 resolution,
                 ..
             } => {
-                if resolution != CommandResolution::Committed {
-                    return Err(error("invalid_attendee_ack"));
-                }
-                let pending = self
-                    .pending
-                    .take()
-                    .ok_or_else(|| error("attendee_ack_mismatch"))?;
-                if pending.request_id() != request_id {
-                    return Err(error("attendee_ack_mismatch"));
-                }
-                match pending {
-                    Request::ProviderRequestOpen { .. }
-                    | Request::ProviderRequestDelivered { .. } => {
-                        return Err(error("unexpected_provider_request_ack"));
-                    }
-                    Request::Report { .. } => {
-                        let execution = self
-                            .execution
-                            .take()
-                            .ok_or_else(|| error("attendee_execution_missing"))?;
-                        execution.acknowledge(self.runtime, request_id).await?;
-                        if !self.connection_ready {
-                            self.pending = Some(self.ready_request().await?);
-                        }
-                    }
-                    Request::Started { .. } => {
-                        self.pending = self
-                            .execution
-                            .as_ref()
-                            .and_then(AttendeeExecution::report_request);
-                    }
-                    Request::Ready { .. } => {
-                        self.connection_ready = true;
-                        self.pending = self.next_report();
-                    }
-                }
+                self.acknowledge(request_id, resolution).await?;
             }
             Frame::Turn { assignment } => {
                 if let Some(execution) = &self.execution {
@@ -230,12 +211,14 @@ impl Session<'_> {
                                 *assignment,
                                 self.tools.ingress.clone(),
                                 self.tools.attachments.clone(),
+                                Some(self.requests.ingress.clone()),
                             )
                             .await?,
                     );
                 }
             }
             Frame::Interrupt { interrupt } => {
+                self.requests.clear();
                 if let Some(owned) = &self.interrupt {
                     if !owned.matches_delivery(&interrupt) {
                         return Err(error("attendee_interrupt_mismatch"));
@@ -249,6 +232,49 @@ impl Session<'_> {
             }
         }
         Ok(None)
+    }
+
+    async fn acknowledge(
+        &mut self,
+        request_id: Uuid,
+        resolution: CommandResolution,
+    ) -> Result<(), AttendeeClientError> {
+        if resolution != CommandResolution::Committed {
+            return Err(error("invalid_attendee_ack"));
+        }
+        let pending = self
+            .pending
+            .take()
+            .ok_or_else(|| error("attendee_ack_mismatch"))?;
+        if pending.request_id() != request_id {
+            return Err(error("attendee_ack_mismatch"));
+        }
+        match pending {
+            Request::ProviderRequestOpen { .. } | Request::ProviderRequestDelivered { .. } => {
+                return Err(error("unexpected_provider_request_ack"));
+            }
+            Request::Report { .. } => {
+                let execution = self
+                    .execution
+                    .take()
+                    .ok_or_else(|| error("attendee_execution_missing"))?;
+                execution.acknowledge(self.runtime, request_id).await?;
+                if !self.connection_ready {
+                    self.pending = Some(self.ready_request().await?);
+                }
+            }
+            Request::Started { .. } => {
+                self.pending = self
+                    .execution
+                    .as_ref()
+                    .and_then(AttendeeExecution::report_request);
+            }
+            Request::Ready { .. } => {
+                self.connection_ready = true;
+                self.pending = self.next_report();
+            }
+        }
+        Ok(())
     }
 
     fn next_report(&self) -> Option<Request> {

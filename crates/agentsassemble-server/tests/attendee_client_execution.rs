@@ -57,7 +57,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     let (tools, mut tools_rx) = ProviderRoomToolIngress::channel(4);
     let (attachments, mut attachments_rx) = ProviderAttachmentReadIngress::channel(4);
     let mut execution = runtime
-        .execute(*assignment, tools.clone(), attachments.clone())
+        .execute(*assignment, tools.clone(), attachments.clone(), None)
         .await?;
     room_portal_fixture::wait_for_turn(&seen, "1").await;
     let mut replacement = ready_socket(&client, &mut runtime).await?;
@@ -69,7 +69,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     assert!(assignment.resume && execution.matches_delivery(&assignment));
     assert!(
         runtime
-            .execute((*assignment).clone(), tools, attachments)
+            .execute((*assignment).clone(), tools, attachments, None)
             .await
             .is_err()
     );

@@ -424,6 +424,19 @@ cases and the existing local Codex canonical-turn fixture pass, along with serve
 Clippy and unchanged mandatory gates. Native request mapping and external CLI ingress
 consumption remain the next consumers; no real provider execution is claimed.
 
+
+The external CLI session now carries the native request ingress into its exact local
+execution. One connection-local relay owns the open envelope, live answer, native
+completion and server ACK. It retains at most one active exchange and four queued
+native opens; extra concurrent opens fail explicitly. Native completion cannot finish
+until the remote receipt arrives. Disconnect, interruption, closed requests and lost
+ACK custody clear the live exchange instead of replaying an answer after reconnect.
+A protocol rejection or the existing 30-second ACK bound remains a visible failure.
+The controlled callback test passes both committed completion and lost-connection
+failure. The actual CLI child-process fixture still passes admission, one result and
+confirmed remote stop (3.93 s). Server Clippy and unchanged mandatory gates pass;
+native provider request mapping and packaged response controls remain pending.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after
