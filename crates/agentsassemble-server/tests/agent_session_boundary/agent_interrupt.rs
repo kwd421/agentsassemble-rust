@@ -1,4 +1,7 @@
-use std::{fmt::Write, path::Path, time::Duration};
+use std::{path::Path, time::Duration};
+#[path = "../support/native_interrupt_fixture.rs"]
+mod native_interrupt_fixture;
+use native_interrupt_fixture::script as interrupt_fixture;
 
 use serde_json::{Value, json};
 
@@ -14,7 +17,7 @@ async fn busy_turn_interrupt_is_exact_and_runtime_retaining() {
         tempfile::tempdir().unwrap_or_else(|error| panic!("create interrupt root: {error}"));
     let transcript = directory.path().join("interrupt-requests.jsonl");
     let turn_seen = directory.path().join("interrupt-turn-seen");
-    let fixture = interrupt_fixture(&transcript, &turn_seen);
+    let fixture = interrupt_fixture(&transcript, &turn_seen, false);
     let store = agentsassemble_persistence::SqliteStore::open(&format!(
         "sqlite://{}",
         directory.path().join("runtime.sqlite3").display()
@@ -164,27 +167,4 @@ fn assert_one_start_and_interrupt(transcript: &Path) {
             "provider method {method} must occur exactly once",
         );
     }
-}
-
-fn interrupt_fixture(transcript: &Path, turn_seen: &Path) -> String {
-    format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r turn\nprintf '%s\\n' \"$turn\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{\"turn\":{{\"id\":\"provider-turn-1\"}}}}}}'\nprintf seen > {seen}\nIFS= read -r interrupt\nprintf '%s\\n' \"$interrupt\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{{}}}}'\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turn\":{{\"id\":\"provider-turn-1\",\"status\":\"interrupted\",\"items\":[]}}}}}}'\nIFS= read -r forever\n",
-        log = shell_quote(transcript),
-        seen = shell_quote(turn_seen),
-    )
-}
-
-fn shell_quote(path: &Path) -> String {
-    let mut quoted = String::from("'");
-    for character in path.to_string_lossy().chars() {
-        if character == '\'' {
-            quoted.push_str("'\\''");
-        } else {
-            quoted
-                .write_char(character)
-                .unwrap_or_else(|error| panic!("quote fixture path: {error}"));
-        }
-    }
-    quoted.push('\'');
-    quoted
 }

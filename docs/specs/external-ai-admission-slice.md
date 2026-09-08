@@ -135,6 +135,25 @@ random-event assertion used the wrong event type; it now checks the canonical
 unchanged mandatory gates pass. Interrupt/request handling and CLI/packaged entry
 remain pending; no real provider was executed.
 
+The native interrupt owner now retains one exact server delivery, interruption task
+and positive report across connection replacement. Entered turns use the provider's
+existing exact-turn control and quiescence deadline; a never-entered newer generation
+uses this exclusive live owner's runtime observation without creating provider input.
+Only a committed interrupt receipt releases local turn custody. Uncertain native
+interruption produces no report and requires the existing explicit cleanup path.
+
+The local socket/child-process test passes pre-entry interruption, native retained
+interruption and rejected native interruption, including replacement, receipt retry,
+one provider start/interrupt and positive final cleanup (10.15 s). The shared managed
+interrupt fixture passes its existing boundary test (3.28 s). Early provider-leader
+exit did not prove descendant cleanup: the existing guardian returns
+`provider_turn_interrupt_unconfirmed` and `provider_stop_unconfirmed`; that negative
+observation is not a runtime-gone success claim. Clippy and unchanged architecture,
+19 policy, format, diff and artifact gates pass. This adds one owned task per active
+interrupt and reuses the canonical bounded quiescence wait, with no room polling.
+CLI entry/event-loop integration, provider-request handling, entry packets and
+managed bridges remain pending; real providers have not run.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing

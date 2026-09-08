@@ -11,7 +11,7 @@ use agentsassemble_provider::{
 };
 use uuid::Uuid;
 
-const QUIESCENCE_TIMEOUT: Duration = Duration::from_secs(15);
+pub(crate) const QUIESCENCE_TIMEOUT: Duration = Duration::from_secs(15);
 
 pub(crate) async fn apply_exact_interrupt(
     store: &SqliteStore,

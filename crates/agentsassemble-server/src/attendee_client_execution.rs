@@ -33,11 +33,7 @@ impl AttendeeRuntime {
         let start = &delivery.authority;
         if self.stopped
             || self.ready.is_none()
-            || start.room_id != self.session.public.room_id
-            || start.session_id != self.session.public.session_id
-            || start.runtime_handle_id != self.session.runtime_handle_id
-            || start.runtime_owner_id != self.session.runtime_owner_id
-            || start.runtime_lease_token != self.session.runtime_lease_token
+            || !self.owns_runtime(start)
             || start.turn_generation <= self.session.turn_generation
             || start.start_dispatch_nonce.is_empty()
             || !delivery.provider_turn_id.is_empty()
@@ -112,6 +108,28 @@ impl AttendeeExecution {
                     .report
                     .as_ref()
                     .is_some_and(|report| report.provider_turn_id == delivery.provider_turn_id))
+    }
+
+    pub(super) fn matches_authority(
+        &self,
+        authority: &agentsassemble_persistence::ProviderTurnStartAuthority,
+    ) -> bool {
+        &self.delivery.authority == authority
+    }
+
+    pub(super) async fn drain_after_quiescence(&mut self) -> Result<(), AttendeeClientError> {
+        if let Some(task) = &mut self.task {
+            // Quiescence has already been positively observed; join the outer waiter as well.
+            let _outcome = tokio::time::timeout(
+                crate::provider_turn_interrupt_runtime::QUIESCENCE_TIMEOUT,
+                task,
+            )
+            .await
+            .map_err(|_| AttendeeClientError::local("attendee_turn_join_timeout"))?
+            .map_err(|_| AttendeeClientError::local("attendee_turn_owner_unresolved"))?;
+            self.task = None;
+        }
+        Ok(())
     }
 
     #[must_use]
@@ -213,11 +231,7 @@ impl AttendeeExecution {
         runtime: &mut AttendeeRuntime,
         request_id: Uuid,
     ) -> Result<(), AttendeeClientError> {
-        if self.authority.room_id != runtime.session.public.room_id
-            || self.authority.session_id != runtime.session.public.session_id
-            || self.authority.runtime_handle_id != runtime.session.runtime_handle_id
-            || self.authority.runtime_owner_id != runtime.session.runtime_owner_id
-            || self.authority.runtime_lease_token != runtime.session.runtime_lease_token
+        if !runtime.owns_runtime(&self.delivery.authority)
             || self.authority.turn_generation != runtime.session.turn_generation
         {
             return Err(AttendeeClientError::local("attendee_report_ack_mismatch"));

@@ -10,7 +10,10 @@ use crate::{AttendeeClientError, AttendeeJoined};
 
 #[path = "attendee_client_execution.rs"]
 mod execution;
+#[path = "attendee_client_interrupt.rs"]
+mod interrupt;
 pub use execution::AttendeeExecution;
+pub use interrupt::AttendeeInterrupt;
 
 pub struct AttendeeRuntime {
     pub(crate) session: DurableAgentSession,
@@ -146,6 +149,17 @@ impl AttendeeRuntime {
             )
             .await;
         Ok(())
+    }
+
+    fn owns_runtime(
+        &self,
+        authority: &agentsassemble_persistence::ProviderTurnStartAuthority,
+    ) -> bool {
+        authority.room_id == self.session.public.room_id
+            && authority.session_id == self.session.public.session_id
+            && authority.runtime_handle_id == self.session.runtime_handle_id
+            && authority.runtime_owner_id == self.session.runtime_owner_id
+            && authority.runtime_lease_token == self.session.runtime_lease_token
     }
 
     /// Verifies server-requested custody against the positively stopped local owner.
