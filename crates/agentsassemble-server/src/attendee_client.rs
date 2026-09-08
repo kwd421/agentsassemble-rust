@@ -26,6 +26,22 @@ pub struct AttendeeClientError {
 }
 
 impl AttendeeClientError {
+    /// Whether another attempt can resolve transport or explicitly unresolved command custody.
+    #[must_use]
+    pub fn is_retryable(&self) -> bool {
+        self.resolution == Some(CommandResolution::Unresolved)
+            || (self.resolution.is_none()
+                && matches!(
+                    self.code.as_str(),
+                    "attendee_transport_unresolved"
+                        | "invalid_attendee_response"
+                        | "attendee_connect_timeout"
+                        | "attendee_socket_unresolved"
+                        | "attendee_socket_closed"
+                        | "attendee_ack_unresolved"
+                ))
+    }
+
     pub(crate) fn local(code: &str) -> Self {
         Self {
             code: code.to_owned(),

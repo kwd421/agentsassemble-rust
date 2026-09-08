@@ -79,7 +79,7 @@ async fn run_connected(
     let mut ready = false;
     let mut delivered = None;
     let mut delivered_interrupt = None;
-    let idle = tokio::time::sleep(Duration::from_mins(5));
+    let idle = tokio::time::sleep(crate::attendee_wire::SOCKET_IDLE);
     tokio::pin!(idle);
     loop {
         if deliver_stop(state, connection, &mut sender).await != Some(false) {
@@ -104,7 +104,7 @@ async fn run_connected(
             () = &mut idle => break,
             message = receiver.next() => {
                 let Some(Ok(message)) = message else { break; };
-                idle.as_mut().reset(tokio::time::Instant::now() + Duration::from_mins(5));
+                idle.as_mut().reset(tokio::time::Instant::now() + crate::attendee_wire::SOCKET_IDLE);
                 let Some(became_ready) = receive(state, connection, &mut sender, message).await else { break; };
                 ready |= became_ready;
             }

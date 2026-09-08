@@ -1,6 +1,9 @@
 use agentsassemble_server::connector_mcp::transport::{serve_remote, serve_stdio};
 use clap::{Parser, Subcommand};
 
+#[path = "../attendee_cli.rs"]
+mod attendee;
+
 #[derive(Parser)]
 #[command(name = "assemble", about = "AgentsAssemble external room clients")]
 struct Cli {
@@ -16,6 +19,8 @@ enum Command {
 }
 #[derive(Subcommand)]
 enum RoomCommand {
+    /// Join a provider-bound invitation read privately from stdin.
+    Attend(attendee::Attend),
     /// Connect the current external AI conversation using MCP over stdin/stdout.
     ConnectorMcp,
     /// Serve loopback MCP for remote AI conversations through a user-owned tunnel.
@@ -29,6 +34,10 @@ enum RoomCommand {
 }
 
 fn main() -> anyhow::Result<()> {
+    #[cfg(unix)]
+    if let Some(code) = agentsassemble_provider::run_process_helper_if_requested() {
+        std::process::exit(code);
+    }
     let cli = Cli::parse();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -43,6 +52,9 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(command: Command) -> anyhow::Result<()> {
     match command {
+        Command::Room {
+            command: RoomCommand::Attend(args),
+        } => attendee::run(args).await,
         Command::Room {
             command: RoomCommand::ConnectorMcp,
         } => serve_stdio().await,

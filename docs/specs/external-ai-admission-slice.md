@@ -172,6 +172,28 @@ local provider before submitting positive cleanup; uncertain cleanup preserves o
 workspace artifacts and remains visible. Shutdown receipt recovery has a finite
 thirty-second budget and retains request identity throughout.
 
+`assemble room attend` now consumes its invitation through hidden terminal input
+(`rpassword`) or bounded piped stdin, selects the existing provider catalog contract,
+and owns the default temporary or explicitly selected workspace. Its event loop
+connects native execution, interruption and bounded room-tool/attachment reservations;
+pending reports and random IDs survive replacement. Recovered result receipts precede
+new readiness, so the next turn can be delivered. SIGINT/SIGTERM, expiry and remote
+stop flow through positive local shutdown and exact cleanup; failures preserve the
+temporary workspace. Discovery, admission and cleanup errors remain visible.
+
+The actual CLI child-process test passes discovery, provider-bound admission, native
+MCP publication, one public result and operator stop with confirmed cleanup (3.71 s).
+Only the selected local Codex protocol fixture runs, with isolated PATH/CODEX_HOME
+and temporary data. The first fixture returned plain assistant text instead of the
+required room-tool result; replacing that fixture behavior with `publish_message`
+proved the actual retained contract. No fixture provider process remained afterward.
+The two client receipt/socket tests, native execution/tool-relay test and three-case
+native interrupt test also pass. Affected Clippy, architecture/19 policy, formatting
+and diff gates pass. The artifact gate detected 20,398,231,552 allocated cache bytes;
+the existing maintenance owner is applied with Cargo/Tauri idle, without changing
+the 18 GiB gate. Integrated reconnect/interrupt CLI races, provider-request relay,
+entry-packet UI and managed bridges still precede Phase 7 acceptance.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing

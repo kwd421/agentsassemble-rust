@@ -7,6 +7,8 @@ use agentsassemble_protocol::CommandResolution;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+pub(crate) const SOCKET_IDLE: std::time::Duration = std::time::Duration::from_mins(5);
+
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "action", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AttendeeSocketRequest {

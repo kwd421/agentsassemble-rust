@@ -23,6 +23,7 @@ http-cache-semantics = "3.0.0"
 governor = { version = "0.10.4", default-features = false, features = ["std"] }
 jsonwebtoken = { version = "11.0.0", features = ["aws_lc_rs"] }
 reqwest.workspace = true
+rpassword = "7.5.4"
 rmcp = { workspace = true, features = ["transport-io"] }
 hmac.workspace = true
 parking_lot.workspace = true
