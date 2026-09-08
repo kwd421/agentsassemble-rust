@@ -104,7 +104,7 @@ fn storage_error(error: PersistenceError) -> Response {
                 b"friend_conflict" => StatusCode::CONFLICT,
                 _ => StatusCode::SERVICE_UNAVAILABLE,
             };
-            failure(status, code, &message)
+            failure(status, &code, &message)
         }
         _ => failure(
             StatusCode::SERVICE_UNAVAILABLE,

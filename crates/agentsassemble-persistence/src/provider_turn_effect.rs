@@ -855,21 +855,21 @@ pub(crate) fn canonical_now() -> String {
 
 pub(crate) fn invalid_effect() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stored_turn_effect_invalid",
+        code: "stored_turn_effect_invalid".into(),
         message: "Stored provider turn effect authority is invalid.".to_owned(),
     }
 }
 
 pub(crate) fn stale_effect() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stale_provider_turn_effect",
+        code: "stale_provider_turn_effect".into(),
         message: "Provider turn effect authority changed before this operation.".to_owned(),
     }
 }
 
 fn unresolved_effect() -> PersistenceError {
     PersistenceError::CommandUnresolved {
-        code: "provider_turn_effect_unresolved",
+        code: "provider_turn_effect_unresolved".into(),
         message: "The exact provider turn effect is owned by recovery or remains unresolved."
             .to_owned(),
     }

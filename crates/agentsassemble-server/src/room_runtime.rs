@@ -163,18 +163,18 @@ impl RoomRuntime {
             }))
             .map_err(|error| match error {
                 mpsc::error::TrySendError::Full(_) => PersistenceError::CommandRejected {
-                    code: "room_busy",
+                    code: "room_busy".into(),
                     message: "Room mutation queue is full.".to_owned(),
                 },
                 mpsc::error::TrySendError::Closed(_) => PersistenceError::CommandRejected {
-                    code: "room_unavailable",
+                    code: "room_unavailable".into(),
                     message: "Room mutation task stopped.".to_owned(),
                 },
             })?;
         response
             .await
             .map_err(|_| PersistenceError::CommandRejected {
-                code: "room_unavailable",
+                code: "room_unavailable".into(),
                 message: "Room admission response was lost.".to_owned(),
             })?
     }
@@ -271,14 +271,14 @@ impl RoomRuntime {
             .publication_wake
             .try_send(RoomPublicationWake::FinalizeDeletion(reply))
             .map_err(|_| PersistenceError::CommandUnresolved {
-                code: "room_busy",
+                code: "room_busy".into(),
                 message: "The room maintenance queue is unavailable; deletion remains pending."
                     .to_owned(),
             })?;
         response
             .await
             .map_err(|_| PersistenceError::CommandUnresolved {
-                code: "room_unavailable",
+                code: "room_unavailable".into(),
                 message: "The deletion completion response was lost.".to_owned(),
             })?
     }
@@ -293,7 +293,7 @@ impl RoomRuntime {
             .any(|assignment| assignment.session.public.room_id != room_id)
         {
             return Err(PersistenceError::CommandUnresolved {
-                code: "provider_turn_recovery_authority_invalid",
+                code: "provider_turn_recovery_authority_invalid".into(),
                 message: "Recovered provider assignments do not share one room authority."
                     .to_owned(),
             });
@@ -316,13 +316,13 @@ impl RoomRuntime {
             .send(RecoveredAssignments { assignments, reply })
             .await
             .map_err(|_| PersistenceError::CommandUnresolved {
-                code: "provider_turn_recovery_unavailable",
+                code: "provider_turn_recovery_unavailable".into(),
                 message: "The provider turn recovery owner stopped.".to_owned(),
             })?;
         response
             .await
             .map_err(|_| PersistenceError::CommandUnresolved {
-                code: "provider_turn_recovery_unavailable",
+                code: "provider_turn_recovery_unavailable".into(),
                 message: "The provider turn recovery owner lost its completion response."
                     .to_owned(),
             })?
@@ -739,7 +739,7 @@ async fn handle_room_command(
     );
     let execution = match lifecycle_guard {
         None => CommandExecution::unresolved_failure(PersistenceError::CommandUnresolved {
-            code: "runtime_recovery_in_progress",
+            code: "runtime_recovery_in_progress".into(),
             message: "The exact lifecycle request is currently owned by server recovery. Retry the same request.".to_owned(),
         }),
         Some(_lifecycle_guard) => {

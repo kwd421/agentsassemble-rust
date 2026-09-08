@@ -673,15 +673,19 @@ fn profile_authority(ticket: ConsumedProfileTicket) -> Result<ProfileAuthority, 
 #[derive(Debug)]
 struct ProfileHttpError {
     status: StatusCode,
-    code: &'static str,
+    code: std::borrow::Cow<'static, str>,
     message: String,
 }
 
 impl ProfileHttpError {
-    fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+    fn new(
+        status: StatusCode,
+        code: impl Into<std::borrow::Cow<'static, str>>,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             status,
-            code,
+            code: code.into(),
             message: message.into(),
         }
     }
@@ -690,7 +694,7 @@ impl ProfileHttpError {
         match error {
             BodyDecodeError::RequestTimeout => Self {
                 status: StatusCode::REQUEST_TIMEOUT,
-                code: "request_timeout",
+                code: "request_timeout".into(),
                 message: "Request body timed out.".to_owned(),
             },
             BodyDecodeError::PayloadTooLarge => Self::payload_too_large(),
@@ -703,7 +707,7 @@ impl ProfileHttpError {
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
-            code: "bad_request",
+            code: "bad_request".into(),
             message: message.into(),
         }
     }
@@ -711,7 +715,7 @@ impl ProfileHttpError {
     fn unauthorized() -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
-            code: "unauthorized",
+            code: "unauthorized".into(),
             message: "Valid request authority is required.".to_owned(),
         }
     }
@@ -719,7 +723,7 @@ impl ProfileHttpError {
     fn payload_too_large() -> Self {
         Self {
             status: StatusCode::PAYLOAD_TOO_LARGE,
-            code: "payload_too_large",
+            code: "payload_too_large".into(),
             message: "Request body exceeds the route limit.".to_owned(),
         }
     }
@@ -727,7 +731,7 @@ impl ProfileHttpError {
     fn internal() -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
-            code: "persistence_failed",
+            code: "persistence_failed".into(),
             message: "Persistence operation failed.".to_owned(),
         }
     }
@@ -737,32 +741,32 @@ impl From<PersistenceError> for ProfileHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
             PersistenceError::CommandRejected { code, message } => {
-                let status = match code {
-                    "session_revoked" => StatusCode::UNAUTHORIZED,
-                    "attachment_missing"
-                    | "attachment_not_found"
-                    | "appearance_asset_missing"
-                    | "message_attachment_missing"
-                    | "user_profile_missing" => StatusCode::NOT_FOUND,
-                    "invite_invalid"
-                    | "invite_revoked"
-                    | "token_expired"
-                    | "invite_use_limit_reached"
-                    | "session_read_only"
-                    | "room_authority_changed"
-                    | "permission_denied" => StatusCode::FORBIDDEN,
-                    "room_unavailable" | "room_inactive" => StatusCode::GONE,
-                    "attachment_owner_mismatch" | "profile_authority_mismatch" => {
+                let status = match code.as_bytes() {
+                    b"session_revoked" => StatusCode::UNAUTHORIZED,
+                    b"attachment_missing"
+                    | b"attachment_not_found"
+                    | b"appearance_asset_missing"
+                    | b"message_attachment_missing"
+                    | b"user_profile_missing" => StatusCode::NOT_FOUND,
+                    b"invite_invalid"
+                    | b"invite_revoked"
+                    | b"token_expired"
+                    | b"invite_use_limit_reached"
+                    | b"session_read_only"
+                    | b"room_authority_changed"
+                    | b"permission_denied" => StatusCode::FORBIDDEN,
+                    b"room_unavailable" | b"room_inactive" => StatusCode::GONE,
+                    b"attachment_owner_mismatch" | b"profile_authority_mismatch" => {
                         StatusCode::FORBIDDEN
                     }
-                    "attachment_quota_reached" => StatusCode::TOO_MANY_REQUESTS,
-                    "profile_revision_conflict" => StatusCode::CONFLICT,
-                    "attachment_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
-                    "attachment_type_unsupported"
-                    | "attachment_type_mismatch"
-                    | "attachment_invalid_image"
-                    | "attachment_image_limits" => StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                    "invalid_state" | "agent_avatar_custody_invalid" => {
+                    b"attachment_quota_reached" => StatusCode::TOO_MANY_REQUESTS,
+                    b"profile_revision_conflict" => StatusCode::CONFLICT,
+                    b"attachment_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
+                    b"attachment_type_unsupported"
+                    | b"attachment_type_mismatch"
+                    | b"attachment_invalid_image"
+                    | b"attachment_image_limits" => StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                    b"invalid_state" | b"agent_avatar_custody_invalid" => {
                         StatusCode::SERVICE_UNAVAILABLE
                     }
                     _ => StatusCode::BAD_REQUEST,

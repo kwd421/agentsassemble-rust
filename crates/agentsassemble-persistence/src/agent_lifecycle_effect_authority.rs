@@ -233,7 +233,7 @@ pub(crate) fn stop_effect(
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

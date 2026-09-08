@@ -124,7 +124,7 @@ pub(crate) struct ProviderAttachmentReadAuthority {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error("{message}")]
 pub struct ProviderAttachmentReadError {
-    pub code: &'static str,
+    pub code: std::borrow::Cow<'static, str>,
     pub message: String,
 }
 
@@ -224,14 +224,14 @@ impl Drop for ProviderAttachmentReadCommand {
 
 fn unavailable() -> ProviderAttachmentReadError {
     ProviderAttachmentReadError {
-        code: "room_unavailable",
+        code: "room_unavailable".into(),
         message: "The room attachment owner is unavailable.".to_owned(),
     }
 }
 
 fn invalid_response() -> ProviderAttachmentReadError {
     ProviderAttachmentReadError {
-        code: "attachment_invalid",
+        code: "attachment_invalid".into(),
         message: "The room attachment response is invalid.".to_owned(),
     }
 }

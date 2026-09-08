@@ -528,7 +528,7 @@ impl RoomRuntime {
 
 fn unavailable(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

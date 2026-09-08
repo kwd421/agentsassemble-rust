@@ -189,5 +189,5 @@ impl AttendeeRuntime {
 pub(crate) fn provider_error(
     error: &agentsassemble_provider::ProviderAdapterError,
 ) -> AttendeeClientError {
-    AttendeeClientError::local(error.code)
+    AttendeeClientError::local(&error.code)
 }

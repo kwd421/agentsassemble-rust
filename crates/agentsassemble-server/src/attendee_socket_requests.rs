@@ -126,7 +126,7 @@ impl SocketRequests {
         let result = pending.exchange.complete(delivered).await;
         self.pending = None;
         result.map_err(|_| PersistenceError::CommandUnresolved {
-            code: "provider_delivery_unconfirmed",
+            code: "provider_delivery_unconfirmed".into(),
             message: "The native delivery result could not be confirmed.".to_owned(),
         })?;
         self.completed = Some(receipt);
@@ -146,7 +146,7 @@ fn ack(request_id: Uuid, deduplicated: bool) -> Frame {
 
 fn rejected(code: &'static str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: "The provider request delivery is unavailable or inconsistent.".to_owned(),
     }
 }

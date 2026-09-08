@@ -624,7 +624,7 @@ fn bootstrap_grant(
 
 fn bootstrap_control_error(request_id: String, error: PersistenceError) -> LocalControlResponse {
     let (code, message) = match error {
-        PersistenceError::CommandRejected { code, message } => (code.to_owned(), message),
+        PersistenceError::CommandRejected { code, message } => (code.into_owned(), message),
         _ => (
             "bootstrap_persistence_failed".to_owned(),
             "Local bootstrap authority could not be read or changed.".to_owned(),
@@ -638,38 +638,45 @@ fn bootstrap_control_error(request_id: String, error: PersistenceError) -> Local
 }
 
 fn control_error(request_id: String, error: TicketIssueError) -> LocalControlResponse {
-    let (code, message) = match error {
+    let (code, message): (std::borrow::Cow<'static, str>, String) = match error {
         TicketIssueError::InvalidRoom(message) | TicketIssueError::InvalidAsset(message) => {
-            ("bad_request", message)
+            ("bad_request".into(), message)
         }
-        TicketIssueError::RoomMissing => ("room_not_found", "Room does not exist.".to_owned()),
+        TicketIssueError::RoomMissing => {
+            ("room_not_found".into(), "Room does not exist.".to_owned())
+        }
         TicketIssueError::ParticipantInactive => (
-            "session_revoked",
+            "session_revoked".into(),
             "The local operator is not an active room participant.".to_owned(),
         ),
         TicketIssueError::BootstrapIncomplete => (
-            "bootstrap_required",
+            "bootstrap_required".into(),
             "Local identity bootstrap is not complete.".to_owned(),
         ),
         TicketIssueError::AuthorityMismatch => (
-            "room_authority_changed",
+            "room_authority_changed".into(),
             "The selected room authority is no longer current.".to_owned(),
         ),
-        TicketIssueError::Persistence(PersistenceError::CommandRejected {
-            code: code @ ("muted" | "permission_denied" | "session_revoked"),
-            message,
-        }) => (code, message),
+        TicketIssueError::Persistence(PersistenceError::CommandRejected { code, message })
+            if matches!(
+                code.as_bytes(),
+                b"muted" | b"permission_denied" | b"session_revoked"
+            ) =>
+        {
+            (code, message)
+        }
         TicketIssueError::Persistence(_) => (
-            "persistence_failed",
+            "persistence_failed".into(),
             "Persistence operation failed.".to_owned(),
         ),
-        TicketIssueError::Unavailable => {
-            ("unavailable", "Ticket capacity is unavailable.".to_owned())
-        }
+        TicketIssueError::Unavailable => (
+            "unavailable".into(),
+            "Ticket capacity is unavailable.".to_owned(),
+        ),
     };
     LocalControlResponse::Error {
         request_id,
-        code: code.to_owned(),
+        code: code.into_owned(),
         message,
     }
 }

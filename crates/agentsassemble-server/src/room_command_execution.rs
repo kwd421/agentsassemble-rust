@@ -147,7 +147,7 @@ pub(crate) async fn progress_execution(
         Ok(None) => {}
         Err(error) => {
             let code = match &error {
-                PersistenceError::CommandRejected { code, .. } => *code,
+                PersistenceError::CommandRejected { code, .. } => code.as_ref(),
                 _ => "persistence_error",
             };
             tracing::error!(
@@ -168,10 +168,10 @@ pub(crate) async fn progress_execution(
     execution
 }
 
-pub(crate) fn persistence_error_code(error: &PersistenceError) -> &'static str {
+pub(crate) fn persistence_error_code(error: &PersistenceError) -> &str {
     match error {
         PersistenceError::CommandRejected { code, .. }
-        | PersistenceError::CommandUnresolved { code, .. } => code,
+        | PersistenceError::CommandUnresolved { code, .. } => code.as_ref(),
         PersistenceError::CommandConflict => "command_conflict",
         PersistenceError::StoredCommandRejected { .. } => "stored_command_rejected",
         PersistenceError::Database(_) => "database_error",

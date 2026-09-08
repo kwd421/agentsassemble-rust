@@ -491,7 +491,7 @@ async fn current_local_message_principal(
     };
     require_message_write_authority(&principal, &participant).map_err(|error| {
         PersistenceError::CommandRejected {
-            code: error.code,
+            code: error.code.into(),
             message: error.message,
         }
     })?;
@@ -598,7 +598,7 @@ async fn require_current_message_writer(
         load_active_participant(transaction, &principal.room_id, &principal.participant_id).await?;
     require_message_write_authority(principal, &participant).map_err(|error| {
         PersistenceError::CommandRejected {
-            code: error.code,
+            code: error.code.into(),
             message: error.message,
         }
     })
@@ -714,7 +714,7 @@ fn canonical_metadata(attachment: &MessageAttachmentMetadata) -> bool {
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

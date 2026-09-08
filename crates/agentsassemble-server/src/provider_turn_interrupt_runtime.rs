@@ -165,10 +165,13 @@ fn exact_authority(effect: &ProviderTurnInterruptEffect) -> ProviderExactTurnAut
     }
 }
 
-fn unresolved(code: &'static str, message: &'static str) -> PersistenceError {
+fn unresolved(
+    code: impl Into<std::borrow::Cow<'static, str>>,
+    message: impl Into<String>,
+) -> PersistenceError {
     PersistenceError::CommandUnresolved {
-        code,
-        message: message.to_owned(),
+        code: code.into(),
+        message: message.into(),
     }
 }
 

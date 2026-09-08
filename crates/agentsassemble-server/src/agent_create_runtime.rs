@@ -120,7 +120,7 @@ async fn execute_agent_create_start(
                 request_id,
                 payload,
                 &effect,
-                (error.code, error.message),
+                (&error.code, &error.message),
             )
             .await;
         }
@@ -258,7 +258,7 @@ async fn fail_created_agent_start_before_effect(
     request_id: &str,
     payload: &Value,
     effect: &AgentCreateStartEffect,
-    reason: (&'static str, &str),
+    reason: (&str, &str),
 ) -> Result<AgentCreateExecution, CommandFailure> {
     let commit = store
         .fail_agent_create_start_before_effect(
@@ -320,8 +320,8 @@ async fn fail_created_agent_start(
                 &effect.operation_id,
                 &error.runtime_handle_id,
                 &error.runtime_owner_id,
-                error.code,
-                error.message,
+                &error.code,
+                &error.message,
             )
             .await
             .map_err(CommandFailure::unresolved)?;
@@ -336,8 +336,8 @@ async fn fail_created_agent_start(
                 request_id,
                 payload,
                 effect,
-                error.code,
-                error.message,
+                &error.code,
+                &error.message,
             )
             .await
             .map_err(CommandFailure::unresolved)?;
@@ -376,9 +376,12 @@ fn selection_error(error: agentsassemble_provider::ProviderSelectionError) -> Pe
     rejected(error.code, error.message)
 }
 
-fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
+fn rejected(
+    code: impl Into<std::borrow::Cow<'static, str>>,
+    message: impl Into<String>,
+) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

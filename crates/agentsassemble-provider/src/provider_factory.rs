@@ -82,7 +82,7 @@ impl ProductionDriverFactory {
     pub(crate) fn guardian(&self) -> Result<&GuardianLaunch, DriverError> {
         self.guardian
             .as_ref()
-            .map_err(|error| *error)?
+            .map_err(Clone::clone)?
             .as_ref()
             .ok_or_else(custody_unavailable)
     }

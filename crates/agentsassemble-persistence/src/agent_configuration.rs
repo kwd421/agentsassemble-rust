@@ -227,7 +227,7 @@ fn require_stopped_profile(session: &DurableAgentSession) -> Result<(), Persiste
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

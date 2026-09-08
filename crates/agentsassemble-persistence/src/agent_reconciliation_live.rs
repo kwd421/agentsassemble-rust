@@ -74,7 +74,7 @@ fn same_principal_identity(
 
 fn previous_supervisor_effect() -> PersistenceError {
     PersistenceError::CommandUnresolved {
-        code: "runtime_effect_unconfirmed",
+        code: "runtime_effect_unconfirmed".into(),
         message: "The original provider effect belongs to a previous server runtime and awaits server-owned reconciliation.".to_owned(),
     }
 }

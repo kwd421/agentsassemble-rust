@@ -568,7 +568,7 @@ fn bootstrap_repair_required() -> PersistenceError {
 
 fn rejected(code: &'static str, message: &'static str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

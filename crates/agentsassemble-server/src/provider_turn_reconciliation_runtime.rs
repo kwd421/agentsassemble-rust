@@ -265,7 +265,7 @@ fn start_authority(
     let execution = &candidate.execution;
     if execution.start_dispatch_nonce.is_empty() {
         return Err(PersistenceError::CommandUnresolved {
-            code: "provider_turn_start_unresolved",
+            code: "provider_turn_start_unresolved".into(),
             message: "The retained provider result has no durable start authority.".to_owned(),
         });
     }
@@ -327,7 +327,7 @@ async fn publish_commit(
     let room_id = first_assignment.session.public.room_id.clone();
     if commit.events.iter().any(|event| event.room_id != room_id) {
         return Err(PersistenceError::CommandUnresolved {
-            code: "provider_turn_recovery_authority_invalid",
+            code: "provider_turn_recovery_authority_invalid".into(),
             message: "Recovered provider events do not share assignment room authority.".to_owned(),
         });
     }

@@ -106,7 +106,7 @@ fn credential(request: &Request, prefix: &str) -> Result<[u8; 32], ConnectorHttp
 
 pub(crate) struct ConnectorHttpError {
     status: StatusCode,
-    code: &'static str,
+    code: std::borrow::Cow<'static, str>,
     resolution: CommandResolution,
 }
 
@@ -114,14 +114,14 @@ impl ConnectorHttpError {
     pub(crate) fn invalid() -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
-            code: "invalid_connector_request",
+            code: "invalid_connector_request".into(),
             resolution: CommandResolution::Rejected,
         }
     }
     pub(crate) fn unauthorized() -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
-            code: "connector_credential_required",
+            code: "connector_credential_required".into(),
             resolution: CommandResolution::Rejected,
         }
     }
@@ -129,14 +129,16 @@ impl ConnectorHttpError {
         Self::from_failure(&CommandFailure::transactional(error))
     }
     fn from_failure(failure: &CommandFailure) -> Self {
-        let (status, code) = match failure.error {
+        let (status, code) = match &failure.error {
             PersistenceError::InvalidCursor { .. }
             | PersistenceError::SubscriptionCatchUpExceeded { .. }
             | PersistenceError::SubscriptionSequenceGap { .. } => {
                 (StatusCode::CONFLICT, "connector_resync_required")
             }
             PersistenceError::CommandConflict => (StatusCode::CONFLICT, "command_conflict"),
-            PersistenceError::CommandRejected { code, .. } => (StatusCode::FORBIDDEN, code),
+            PersistenceError::CommandRejected { code, .. } => {
+                (StatusCode::FORBIDDEN, code.as_ref())
+            }
             PersistenceError::RoomMissing | PersistenceError::ParticipantMissing => {
                 (StatusCode::GONE, "room_membership_unavailable")
             }
@@ -147,7 +149,7 @@ impl ConnectorHttpError {
         };
         Self {
             status,
-            code,
+            code: code.to_owned().into(),
             resolution: failure.resolution,
         }
     }

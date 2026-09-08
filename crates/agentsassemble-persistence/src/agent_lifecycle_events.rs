@@ -147,7 +147,7 @@ pub(crate) async fn store_result(
         .last()
         .cloned()
         .ok_or_else(|| PersistenceError::CommandRejected {
-            code: "invalid_state",
+            code: "invalid_state".into(),
             message: "Command outcome has no event.".to_owned(),
         })?;
     result["event_seq"] = json!(event.seq);

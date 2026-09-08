@@ -1097,3 +1097,13 @@ and 101 server unit cases pass with four test workers, as do workspace all-targe
 all-feature Clippy and unchanged mandatory gates. The artifact owner reclaimed the
 32 GiB rebuild cache after all Cargo work ended; the existing size limit is unchanged.
 Owned wire error values and actual managed transport remain pending.
+
+Driver and launch errors now support owned serialized code/message values; native
+constants remain borrowed. Persistence and response owners preserve those codes
+without a static-string restriction. Adapter messages use `Box<str>` to keep the
+error below the existing large-error lint threshold; allocation occurs on error,
+with no new normal-path task, queue or persistence. Existing status classifications
+and retry/uncertainty meanings are unchanged. The 321 persistence, 101 server unit,
+30 Codex, seven ACP and two launch-cleanup tests pass, along with workspace
+all-target/all-feature Clippy and unchanged mandatory gates. This establishes error
+transport ownership only; managed pipe and native cleanup acceptance remain pending.

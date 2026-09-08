@@ -561,7 +561,7 @@ pub(super) struct RoomToolAuthority {
 
 fn tool_error(code: &'static str, message: impl Into<String>) -> ProviderRoomToolError {
     ProviderRoomToolError {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

@@ -66,11 +66,17 @@ pub enum PersistenceError {
     #[error("subscription event sequence is not contiguous: expected {expected}, found {found}")]
     SubscriptionSequenceGap { expected: i64, found: i64 },
     #[error("command rejected: {code}: {message}")]
-    CommandRejected { code: &'static str, message: String },
+    CommandRejected {
+        code: std::borrow::Cow<'static, str>,
+        message: String,
+    },
     #[error("durable command rejected: {code}: {message}")]
     StoredCommandRejected { code: String, message: String },
     #[error("command outcome remains unresolved: {code}: {message}")]
-    CommandUnresolved { code: &'static str, message: String },
+    CommandUnresolved {
+        code: std::borrow::Cow<'static, str>,
+        message: String,
+    },
 }
 
 #[derive(Debug, Clone)]
@@ -369,7 +375,7 @@ async fn load_agent_sessions(
     .await?;
     if i64::try_from(rows.len()).unwrap_or(i64::MAX) > MAX_AGENT_SESSIONS_PER_ROOM {
         return Err(PersistenceError::CommandRejected {
-            code: "agent_session_capacity",
+            code: "agent_session_capacity".into(),
             message: "This room exceeds its Agent Session capacity.".to_owned(),
         });
     }

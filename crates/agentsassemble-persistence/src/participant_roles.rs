@@ -165,7 +165,7 @@ async fn role_updated_event(
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

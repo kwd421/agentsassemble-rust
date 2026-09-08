@@ -234,7 +234,7 @@ impl PrincipalMutationAdmission {
             .clone()
             .try_acquire_owned()
             .map_err(|_| PersistenceError::CommandUnresolved {
-                code: "write_inflight_limited",
+                code: "write_inflight_limited".into(),
                 message: "Authenticated write concurrency is temporarily full.".to_owned(),
             })
     }
@@ -242,14 +242,14 @@ impl PrincipalMutationAdmission {
 
 fn budget_exceeded() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "write_budget_exceeded",
+        code: "write_budget_exceeded".into(),
         message: "Authenticated principal write budget exceeded.".to_owned(),
     }
 }
 
 fn capacity_exceeded() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "write_budget_capacity_exceeded",
+        code: "write_budget_capacity_exceeded".into(),
         message: "Authenticated write admission capacity is unavailable.".to_owned(),
     }
 }

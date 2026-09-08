@@ -402,7 +402,7 @@ pub(crate) fn invalid_turn_queue() -> PersistenceError {
 
 pub(crate) fn unresolved_effect() -> PersistenceError {
     PersistenceError::CommandUnresolved {
-        code: "runtime_effect_unconfirmed",
+        code: "runtime_effect_unconfirmed".into(),
         message: "The original provider lifecycle effect remains unresolved. Wait for authoritative runtime observation before retrying it.".to_owned(),
     }
 }
@@ -500,7 +500,7 @@ pub(crate) fn apply_runtime_started(
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

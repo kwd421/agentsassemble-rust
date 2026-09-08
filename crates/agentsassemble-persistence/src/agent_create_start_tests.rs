@@ -584,10 +584,7 @@ async fn paired_create_start_rechecks_session_before_replay_and_provider_authori
     for error in errors {
         assert!(matches!(
             error,
-            Some(PersistenceError::CommandRejected {
-                code: "session_revoked",
-                ..
-            })
+            Some(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
         ));
     }
 }

@@ -631,7 +631,7 @@ pub(crate) fn persistence_error(error: &PersistenceError) -> (String, String) {
         PersistenceError::CommandConflict => ("command_conflict".to_owned(), error.to_string()),
         PersistenceError::CommandRejected { code, message }
         | PersistenceError::CommandUnresolved { code, message } => {
-            ((*code).to_owned(), message.clone())
+            (code.to_string(), message.clone())
         }
         PersistenceError::StoredCommandRejected { code, message } => {
             (code.clone(), message.clone())

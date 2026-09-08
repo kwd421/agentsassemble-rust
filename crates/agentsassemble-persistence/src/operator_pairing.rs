@@ -453,7 +453,7 @@ fn unavailable() -> PersistenceError {
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

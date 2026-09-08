@@ -143,7 +143,7 @@ pub(crate) async fn commit_readd_listing(
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

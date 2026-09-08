@@ -218,20 +218,24 @@ impl SessionExchangeError {
             StatusCode::SERVICE_UNAVAILABLE
         } else {
             match &failure.error {
-                PersistenceError::CommandRejected {
-                    code: "permission_denied",
-                    ..
-                } => StatusCode::FORBIDDEN,
-                PersistenceError::CommandRejected {
-                    code: "session_revoked",
-                    ..
+                PersistenceError::CommandRejected { code, .. }
+                    if matches!(code.as_bytes(), b"permission_denied") =>
+                {
+                    StatusCode::FORBIDDEN
                 }
-                | PersistenceError::ParticipantMissing
-                | PersistenceError::RoomMissing => StatusCode::UNAUTHORIZED,
-                PersistenceError::CommandRejected {
-                    code: "invalid_participant_leave",
-                    ..
-                } => StatusCode::BAD_REQUEST,
+                PersistenceError::ParticipantMissing | PersistenceError::RoomMissing => {
+                    StatusCode::UNAUTHORIZED
+                }
+                PersistenceError::CommandRejected { code, .. }
+                    if matches!(code.as_bytes(), b"session_revoked") =>
+                {
+                    StatusCode::UNAUTHORIZED
+                }
+                PersistenceError::CommandRejected { code, .. }
+                    if matches!(code.as_bytes(), b"invalid_participant_leave") =>
+                {
+                    StatusCode::BAD_REQUEST
+                }
                 PersistenceError::CommandRejected { .. }
                 | PersistenceError::CommandConflict
                 | PersistenceError::StoredCommandRejected { .. } => StatusCode::CONFLICT,
@@ -253,20 +257,23 @@ impl SessionExchangeError {
 impl From<PersistenceError> for SessionExchangeError {
     fn from(error: PersistenceError) -> Self {
         match error {
-            PersistenceError::CommandRejected {
-                code: code @ ("permission_denied" | "muted"),
-                message,
-            } => Self {
-                status: StatusCode::FORBIDDEN,
-                code: code.to_owned(),
-                message,
-            },
-            PersistenceError::CommandRejected {
-                code: "session_revoked",
-                ..
+            PersistenceError::CommandRejected { code, message }
+                if matches!(code.as_bytes(), b"permission_denied" | b"muted") =>
+            {
+                Self {
+                    status: StatusCode::FORBIDDEN,
+                    code: code.into_owned(),
+                    message,
+                }
             }
-            | PersistenceError::ParticipantMissing
-            | PersistenceError::RoomMissing => Self::unauthorized(),
+            PersistenceError::ParticipantMissing | PersistenceError::RoomMissing => {
+                Self::unauthorized()
+            }
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(code.as_bytes(), b"session_revoked") =>
+            {
+                Self::unauthorized()
+            }
             internal => {
                 tracing::error!(error = ?internal, "human session exchange failed");
                 Self {

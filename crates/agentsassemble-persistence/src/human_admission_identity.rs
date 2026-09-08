@@ -257,7 +257,7 @@ async fn transfer_admission_avatar(
     .await?;
     if inserted.rows_affected() != 1 {
         return Err(PersistenceError::CommandRejected {
-            code: "invalid_state",
+            code: "invalid_state".into(),
             message: "Admission avatar custody changed inside one transaction.".to_owned(),
         });
     }
@@ -272,7 +272,7 @@ async fn transfer_admission_avatar(
     .await?;
     if deleted.rows_affected() != 1 {
         return Err(PersistenceError::CommandRejected {
-            code: "invalid_state",
+            code: "invalid_state".into(),
             message: "Admission avatar transfer was not exclusive.".to_owned(),
         });
     }

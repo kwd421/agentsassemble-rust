@@ -1,6 +1,7 @@
 use crate::driver::DriverError;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 pub(crate) struct DriverLaunchError {
     pub(crate) error: DriverError,
     pub(crate) effect_uncertain: bool,

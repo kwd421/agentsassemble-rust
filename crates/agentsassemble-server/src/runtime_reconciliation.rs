@@ -367,7 +367,7 @@ pub(crate) async fn checkpoint_confirmed_shutdown(
 
 fn stale_shutdown_observation() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stale_reconciliation_candidate",
+        code: "stale_reconciliation_candidate".into(),
         message: "Confirmed shutdown no longer matches durable runtime authority.".to_owned(),
     }
 }

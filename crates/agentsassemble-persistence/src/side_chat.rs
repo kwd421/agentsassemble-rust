@@ -218,7 +218,7 @@ impl SqliteStore {
         tx.commit()
             .await
             .map_err(|_| PersistenceError::CommandUnresolved {
-                code: "side_chat_result_uncertain",
+                code: "side_chat_result_uncertain".into(),
                 message: "The side-chat result is uncertain; retry the same request.".to_owned(),
             })?;
         Ok(outcome)
@@ -301,7 +301,7 @@ async fn human_authority(
         || !principal.capabilities.room_history
     {
         return Err(PersistenceError::CommandRejected {
-            code: "human_side_chat_required",
+            code: "human_side_chat_required".into(),
             message: "Side chat is available only to current human room sessions.".to_owned(),
         });
     }
@@ -313,7 +313,7 @@ async fn human_authority(
 
 fn expired_retry() -> PersistenceError {
     PersistenceError::CommandUnresolved {
-        code: "side_chat_retry_expired",
+        code: "side_chat_retry_expired".into(),
         message:
             "This side-chat lifetime or retry window ended. Refresh before starting a new message."
                 .to_owned(),
@@ -322,14 +322,14 @@ fn expired_retry() -> PersistenceError {
 
 fn retired_room() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "session_revoked",
+        code: "session_revoked".into(),
         message: "The side-chat room lifetime ended.".to_owned(),
     }
 }
 
 fn rejection(error: agentsassemble_domain::CommandRejection) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: error.code,
+        code: error.code.into(),
         message: error.message,
     }
 }

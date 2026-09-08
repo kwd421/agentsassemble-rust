@@ -312,7 +312,7 @@ impl SqliteStore {
 
 fn invalid_request_owner() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_state",
+        code: "invalid_state".into(),
         message: "A room request lost its durable result owner.".to_owned(),
     }
 }
@@ -329,7 +329,7 @@ fn require_matching_runtime(
         Ok(())
     } else {
         Err(PersistenceError::CommandRejected {
-            code: "resident_runtime_changed",
+            code: "resident_runtime_changed".into(),
             message: "The resident provider runtime changed before the scheduling-state update."
                 .to_owned(),
         })
@@ -371,7 +371,7 @@ async fn require_resident_state(
         Ok(())
     } else {
         Err(PersistenceError::CommandRejected {
-            code: "invalid_state",
+            code: "invalid_state".into(),
             message:
                 "Only a complete idle or paused resident Agent Session can change scheduling state."
                     .to_owned(),

@@ -325,7 +325,7 @@ fn decode_person(
 
 fn invalid_state(message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_state",
+        code: "invalid_state".into(),
         message: message.into(),
     }
 }

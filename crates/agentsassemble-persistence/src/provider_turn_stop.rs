@@ -129,14 +129,14 @@ fn generation_i64(generation: u64) -> Result<i64, PersistenceError> {
 
 fn invalid_stop_turn() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stored_provider_stop_turn_invalid",
+        code: "stored_provider_stop_turn_invalid".into(),
         message: "Stored provider turn authority is invalid during confirmed stop.".to_owned(),
     }
 }
 
 fn stale_stop_turn() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stale_provider_stop_turn",
+        code: "stale_provider_stop_turn".into(),
         message: "Provider turn authority changed before confirmed stop committed.".to_owned(),
     }
 }

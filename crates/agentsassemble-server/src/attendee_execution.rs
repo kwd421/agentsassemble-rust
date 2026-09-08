@@ -104,12 +104,12 @@ impl RoomRuntime {
                     }
                 };
                 PersistenceError::CommandRejected {
-                    code,
+                    code: code.into(),
                     message: message.to_owned(),
                 }
             })?;
         response.await.map_err(|_| PersistenceError::CommandUnresolved {
-            code: "attendee_response_lost", message: "The attendee operation response was lost; recover its exact connection or report identity.".to_owned(),
+            code: "attendee_response_lost".into(), message: "The attendee operation response was lost; recover its exact connection or report identity.".to_owned(),
         })?
     }
 }

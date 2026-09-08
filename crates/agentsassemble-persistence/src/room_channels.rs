@@ -93,7 +93,7 @@ pub(crate) async fn transition_channels(
 
 fn rejected(code: &'static str, message: &'static str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

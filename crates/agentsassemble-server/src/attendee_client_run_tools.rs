@@ -62,7 +62,7 @@ impl Tools {
                     result => {
                         if let Some(tool) = self.tool.take() {
                             tool.complete(result.map_err(|failure| ProviderRoomToolError {
-                                code: "attendee_tool_rejected", message: failure.code,
+                                code: "attendee_tool_rejected".into(), message: failure.code,
                             }));
                         }
                     }
@@ -79,7 +79,7 @@ impl Tools {
                     result => {
                         if let Some(command) = self.attachment.take() {
                             command.complete(result.map_err(|failure| ProviderAttachmentReadError {
-                                code: "attendee_attachment_rejected", message: failure.code,
+                                code: "attendee_attachment_rejected".into(), message: failure.code,
                             }));
                         }
                     }

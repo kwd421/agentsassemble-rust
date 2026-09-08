@@ -34,7 +34,7 @@ async fn fixture(url: &str) -> (SqliteStore, LocalRoomManagerAuthority) {
     (store, manager)
 }
 
-fn code<T>(result: Result<T, PersistenceError>) -> &'static str {
+fn code<T>(result: Result<T, PersistenceError>) -> std::borrow::Cow<'static, str> {
     match result {
         Err(PersistenceError::CommandRejected { code, .. }) => code,
         Err(error) => panic!("unexpected failure: {error}"),

@@ -1,4 +1,4 @@
-use std::{future::Future, pin::Pin};
+use std::{borrow::Cow, future::Future, pin::Pin};
 
 use agentsassemble_domain::DurableAgentSession;
 use thiserror::Error;
@@ -75,16 +75,20 @@ pub(crate) struct ProviderSessionAttachment {
     pub(crate) observed_model_id: Option<String>,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error, serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
 #[error("{message}")]
 pub(crate) struct DriverError {
-    pub(crate) code: &'static str,
-    pub(crate) message: &'static str,
+    pub(crate) code: Cow<'static, str>,
+    pub(crate) message: Cow<'static, str>,
 }
 
 impl DriverError {
     pub(crate) const fn new(code: &'static str, message: &'static str) -> Self {
-        Self { code, message }
+        Self {
+            code: Cow::Borrowed(code),
+            message: Cow::Borrowed(message),
+        }
     }
 }
 

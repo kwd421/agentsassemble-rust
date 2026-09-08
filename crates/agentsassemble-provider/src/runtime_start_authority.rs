@@ -76,8 +76,9 @@ impl ProviderAdapter {
                     || !session.runtime_lease_token.is_empty()
                 {
                     return Err(ProviderAdapterError {
-                        code: "runtime_owner_mismatch",
-                        message: "The durable provider handle is not owned by this supervisor.",
+                        code: "runtime_owner_mismatch".into(),
+                        message: "The durable provider handle is not owned by this supervisor."
+                            .into(),
                         effect_uncertain: true,
                         runtime_handle_id: session.runtime_handle_id.clone(),
                         runtime_owner_id: session.runtime_owner_id.clone(),

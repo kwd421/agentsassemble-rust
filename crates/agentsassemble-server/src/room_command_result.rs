@@ -14,7 +14,7 @@ pub(crate) struct CommandFailure {
 impl CommandFailure {
     pub(crate) fn domain_rejected(error: CommandRejection) -> Self {
         Self::rejected(PersistenceError::CommandRejected {
-            code: error.code,
+            code: error.code.into(),
             message: error.message,
         })
     }
@@ -49,11 +49,8 @@ impl CommandFailure {
     pub(crate) fn after_admission(error: PersistenceError) -> Self {
         if matches!(error, PersistenceError::CommandConflict)
             || matches!(
-                error,
-                PersistenceError::CommandRejected {
-                    code: "write_budget_exceeded",
-                    ..
-                }
+                &error,
+                PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"write_budget_exceeded")
             )
         {
             Self::rejected(error)
@@ -66,7 +63,7 @@ impl CommandFailure {
 pub(crate) fn validate_command_envelope(request_id: &str) -> Result<(), PersistenceError> {
     if request_id.is_empty() || request_id.chars().count() > 128 {
         return Err(PersistenceError::CommandRejected {
-            code: "command_envelope_invalid",
+            code: "command_envelope_invalid".into(),
             message: "request_id is invalid.".to_owned(),
         });
     }
@@ -88,12 +85,13 @@ pub(crate) fn public_command_outcome(
 }
 
 /// Only definitive authorization refusal can cancel a prepared provider operation.
-pub(crate) fn ended_session_authority(error: &PersistenceError) -> Option<(&'static str, &str)> {
+pub(crate) fn ended_session_authority(error: &PersistenceError) -> Option<(&str, &str)> {
     match error {
-        PersistenceError::CommandRejected {
-            code: code @ ("session_revoked" | "permission_denied"),
-            message,
-        } => Some((*code, message)),
+        PersistenceError::CommandRejected { code, message }
+            if matches!(code.as_bytes(), b"session_revoked" | b"permission_denied") =>
+        {
+            Some((code.as_ref(), message))
+        }
         _ => None,
     }
 }

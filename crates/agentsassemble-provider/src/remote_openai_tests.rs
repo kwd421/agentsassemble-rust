@@ -231,7 +231,7 @@ async fn room_turn(
         tokio::time::timeout(Duration::from_secs(5), driver.send_turn(&session, &request)).await;
     let outcome = match &sent {
         Ok(Ok(_)) => driver.finish_room_observation(&request),
-        Ok(Err(error)) => Err(*error),
+        Ok(Err(error)) => Err(error.clone()),
         Err(_) => Err(DriverError::new(
             "test_timeout",
             "The fixture turn timed out.",

@@ -64,7 +64,7 @@ impl RoomRuntime {
         response
             .await
             .map_err(|_| PersistenceError::CommandUnresolved {
-                code: "admission_response_lost",
+                code: "admission_response_lost".into(),
                 message: "Room admission response was lost; retry the same admission identity."
                     .to_owned(),
             })?
@@ -100,7 +100,7 @@ pub(super) async fn admit(
 
 fn rejected(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

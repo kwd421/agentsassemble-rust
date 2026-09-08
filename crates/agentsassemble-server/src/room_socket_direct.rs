@@ -80,7 +80,7 @@ async fn provider_response_frame(
         .filter(|id| !id.is_nil())
         .ok_or_else(|| {
             CommandFailure::rejected(PersistenceError::CommandRejected {
-                code: "invalid_provider_response",
+                code: "invalid_provider_response".into(),
                 message: "Use the provider request UUID as the response request identity."
                     .to_owned(),
             })
@@ -88,7 +88,7 @@ async fn provider_response_frame(
     let resolution: agentsassemble_domain::ProviderRequestResolution =
         serde_json::from_value(payload.clone()).map_err(|_| {
             CommandFailure::rejected(PersistenceError::CommandRejected {
-                code: "invalid_provider_response",
+                code: "invalid_provider_response".into(),
                 message: "The provider response is invalid.".to_owned(),
             })
         })?;

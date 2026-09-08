@@ -42,12 +42,15 @@ pub(crate) fn into_provider_attachment(
 fn public_read_error(error: PersistenceError) -> ProviderAttachmentReadError {
     match error {
         PersistenceError::CommandRejected { code, message }
-            if matches!(code, "message_attachment_missing" | "stale_provider_turn") =>
+            if matches!(
+                code.as_bytes(),
+                b"message_attachment_missing" | b"stale_provider_turn"
+            ) =>
         {
             ProviderAttachmentReadError { code, message }
         }
         _ => ProviderAttachmentReadError {
-            code: "persistence_error",
+            code: "persistence_error".into(),
             message: "The room attachment could not be read.".to_owned(),
         },
     }

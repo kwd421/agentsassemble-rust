@@ -50,7 +50,7 @@ pub(crate) async fn read_vote_summary_frame(
     if encode_server_frame(&frame).is_err() {
         return Err(CommandFailure::rejected(
             PersistenceError::CommandRejected {
-                code: "response_too_large",
+                code: "response_too_large".into(),
                 message: "The canonical vote summary exceeds the WebSocket frame limit.".to_owned(),
             },
         ));

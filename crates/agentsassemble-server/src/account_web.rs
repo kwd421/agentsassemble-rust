@@ -197,15 +197,19 @@ async fn resolve_identity(
 
 struct AccountHttpError {
     status: StatusCode,
-    code: &'static str,
+    code: std::borrow::Cow<'static, str>,
     message: String,
 }
 
 impl AccountHttpError {
-    fn new(status: StatusCode, code: &'static str, message: impl Into<String>) -> Self {
+    fn new(
+        status: StatusCode,
+        code: impl Into<std::borrow::Cow<'static, str>>,
+        message: impl Into<String>,
+    ) -> Self {
         Self {
             status,
-            code,
+            code: code.into(),
             message: message.into(),
         }
     }

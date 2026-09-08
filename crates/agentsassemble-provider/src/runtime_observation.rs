@@ -58,7 +58,7 @@ impl ProviderAdapter {
             return ProviderRuntimeObservation::LeaseUncertain {
                 handle_id: runtime.handle_id.clone(),
                 owner_id: runtime.owner_id.clone(),
-                reason_code: error.code.to_owned(),
+                reason_code: error.code.into_owned(),
             };
         }
         ProviderRuntimeObservation::Adopted {

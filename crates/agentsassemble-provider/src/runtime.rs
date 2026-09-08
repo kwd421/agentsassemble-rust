@@ -82,8 +82,8 @@ pub enum ProviderRuntimeObservation {
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error("{message}")]
 pub struct ProviderAdapterError {
-    pub code: &'static str,
-    pub message: &'static str,
+    pub code: std::borrow::Cow<'static, str>,
+    pub message: Box<str>,
     pub effect_uncertain: bool,
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
@@ -95,7 +95,7 @@ impl ProviderAdapterError {
     fn safe(error: DriverError) -> Self {
         Self {
             code: error.code,
-            message: error.message,
+            message: error.message.into_owned().into_boxed_str(),
             effect_uncertain: false,
             runtime_handle_id: String::new(),
             runtime_owner_id: String::new(),
@@ -107,7 +107,7 @@ impl ProviderAdapterError {
     fn uncertain(error: DriverError, handle_id: &str, owner_id: &str) -> Self {
         Self {
             code: error.code,
-            message: error.message,
+            message: error.message.into_owned().into_boxed_str(),
             effect_uncertain: true,
             runtime_handle_id: handle_id.to_owned(),
             runtime_owner_id: owner_id.to_owned(),
@@ -135,7 +135,7 @@ impl ProviderAdapterError {
     ) -> Self {
         Self {
             code: error.code,
-            message: error.message,
+            message: error.message.into_owned().into_boxed_str(),
             effect_uncertain: false,
             runtime_handle_id: handle_id.to_owned(),
             runtime_owner_id: owner_id.to_owned(),

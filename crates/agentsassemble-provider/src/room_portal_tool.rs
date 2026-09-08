@@ -9,7 +9,7 @@ use super::{RoomToolAuthority, RoomToolReservation, tool_error};
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
 #[error("{message}")]
 pub struct ProviderRoomToolError {
-    pub code: &'static str,
+    pub code: std::borrow::Cow<'static, str>,
     pub message: String,
 }
 

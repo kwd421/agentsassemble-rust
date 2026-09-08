@@ -311,7 +311,7 @@ const fn room_status(status: RoomStatus) -> &'static str {
 #[derive(Debug)]
 struct DirectoryHttpError {
     status: StatusCode,
-    code: &'static str,
+    code: std::borrow::Cow<'static, str>,
     message: String,
 }
 
@@ -319,7 +319,7 @@ impl DirectoryHttpError {
     fn bad_request(message: impl Into<String>) -> Self {
         Self {
             status: StatusCode::BAD_REQUEST,
-            code: "bad_request",
+            code: "bad_request".into(),
             message: message.into(),
         }
     }
@@ -327,7 +327,7 @@ impl DirectoryHttpError {
     fn unauthorized() -> Self {
         Self {
             status: StatusCode::UNAUTHORIZED,
-            code: "unauthorized",
+            code: "unauthorized".into(),
             message: "Valid request authority is required.".to_owned(),
         }
     }
@@ -336,12 +336,12 @@ impl DirectoryHttpError {
         match error {
             BodyDecodeError::RequestTimeout => Self {
                 status: StatusCode::REQUEST_TIMEOUT,
-                code: "request_timeout",
+                code: "request_timeout".into(),
                 message: "Request body timed out.".to_owned(),
             },
             BodyDecodeError::PayloadTooLarge => Self {
                 status: StatusCode::PAYLOAD_TOO_LARGE,
-                code: "payload_too_large",
+                code: "payload_too_large".into(),
                 message: "Request body exceeds the route limit.".to_owned(),
             },
             BodyDecodeError::InvalidJson => Self::bad_request("Request JSON is invalid."),
@@ -354,7 +354,7 @@ impl DirectoryHttpError {
     fn internal() -> Self {
         Self {
             status: StatusCode::SERVICE_UNAVAILABLE,
-            code: "persistence_failed",
+            code: "persistence_failed".into(),
             message: "Persistence operation failed.".to_owned(),
         }
     }
@@ -362,7 +362,7 @@ impl DirectoryHttpError {
     fn authority_unavailable() -> Self {
         Self {
             status: StatusCode::CONFLICT,
-            code: "bootstrap_required",
+            code: "bootstrap_required".into(),
             message: "Local authority is not complete.".to_owned(),
         }
     }
@@ -373,7 +373,7 @@ impl From<PersistenceError> for DirectoryHttpError {
         match error {
             PersistenceError::CommandConflict => Self {
                 status: StatusCode::CONFLICT,
-                code: "command_conflict",
+                code: "command_conflict".into(),
                 message: "The request id was already used with a different command.".to_owned(),
             },
             PersistenceError::CommandUnresolved { code, message } => Self {
@@ -382,14 +382,14 @@ impl From<PersistenceError> for DirectoryHttpError {
                 message,
             },
             PersistenceError::CommandRejected { code, message } => {
-                let status = match code {
-                    "invalid_state"
-                    | "room_already_exists"
-                    | "room_create_request_conflict"
-                    | "room_incarnation_changed"
-                    | "room_closed"
-                    | "runtime_cleanup_pending" => StatusCode::CONFLICT,
-                    "permission_denied" | "session_revoked" => StatusCode::FORBIDDEN,
+                let status = match code.as_bytes() {
+                    b"invalid_state"
+                    | b"room_already_exists"
+                    | b"room_create_request_conflict"
+                    | b"room_incarnation_changed"
+                    | b"room_closed"
+                    | b"runtime_cleanup_pending" => StatusCode::CONFLICT,
+                    b"permission_denied" | b"session_revoked" => StatusCode::FORBIDDEN,
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {

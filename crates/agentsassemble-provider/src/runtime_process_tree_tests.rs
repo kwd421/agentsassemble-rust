@@ -227,7 +227,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
         };
         assert_eq!(error.code, "provider_stop_unconfirmed");
         assert_eq!(
-            error.message,
+            error.message.as_ref(),
             "The provider lineage history could not be confirmed."
         );
         assert!(process_exists(pid));

@@ -153,7 +153,7 @@ async fn execute_room_delete(store: &SqliteStore, command: &RoomCommand) -> Comm
                 CommandExecution::success(mutation.outcome)
             } else {
                 CommandExecution::unresolved_failure_with_events(PersistenceError::CommandUnresolved {
-                        code: "room_deletion_pending", message: "The room is closed. Deletion is waiting for owned runtime cleanup and publication; retry the same request.".to_owned(),
+                        code: "room_deletion_pending".into(), message: "The room is closed. Deletion is waiting for owned runtime cleanup and publication; retry the same request.".to_owned(),
                     }, if mutation.outcome.deduplicated { Vec::new() } else { mutation.outcome.events })
             };
             execution.revoked_human_sessions = mutation.revoked_session_fingerprints;
@@ -283,7 +283,7 @@ async fn execute_agent_interrupt(
     {
         return CommandExecution::transactional_failure(PersistenceError::CommandRejected {
             code: error.code,
-            message: error.message.to_owned(),
+            message: error.message.to_string(),
         });
     }
     let mutation = match store
@@ -348,7 +348,7 @@ async fn execute_message_mutation(store: &SqliteStore, command: &RoomCommand) ->
 
 fn misrouted_durable_command(action: RoomAction) -> CommandExecution {
     CommandExecution::transactional_failure(PersistenceError::CommandRejected {
-        code: "command_action_misrouted",
+        code: "command_action_misrouted".into(),
         message: format!(
             "{} cannot enter the durable room mutation owner.",
             action.as_str()
@@ -468,7 +468,7 @@ async fn execute_room_session_command(
             Err(error) => CommandExecution::transactional_failure(error),
         },
         _ => CommandExecution::transactional_failure(PersistenceError::CommandRejected {
-            code: "permission_denied",
+            code: "permission_denied".into(),
             message: "This human room session cannot perform that action.".to_owned(),
         }),
     }
@@ -540,7 +540,7 @@ async fn execute_agent_configure(
         )
         .await
         .map_err(|error| PersistenceError::CommandRejected {
-            code: error.code,
+            code: error.code.into(),
             message: error.message,
         })?;
     store

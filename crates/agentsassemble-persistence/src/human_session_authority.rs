@@ -232,14 +232,14 @@ fn decode_required_json<T: serde::de::DeserializeOwned>(
 
 fn session_revoked() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "session_revoked",
+        code: "session_revoked".into(),
         message: "This human room session has ended.".to_owned(),
     }
 }
 
 fn invalid_state(message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_state",
+        code: "invalid_state".into(),
         message: message.into(),
     }
 }

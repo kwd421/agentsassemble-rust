@@ -318,7 +318,7 @@ impl AcpClient {
             return self.poison(protocol_error());
         }
         loop {
-            let completed = *active.completion.borrow_and_update();
+            let completed = active.completion.borrow_and_update().clone();
             if let Some(result) = completed {
                 let Some(task) = active.task.take() else {
                     self.poisoned = true;

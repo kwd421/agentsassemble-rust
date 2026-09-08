@@ -142,7 +142,7 @@ impl SqliteStore {
                 && !crate::attendee_stop::owns_pending_reservation(transaction, reservation).await?
             {
                 return Err(PersistenceError::CommandUnresolved {
-                    code: "runtime_effect_unconfirmed",
+                    code: "runtime_effect_unconfirmed".into(),
                     message: "The original provider effect belongs to a previous server runtime and awaits server-owned reconciliation.".to_owned(),
                 });
             }
@@ -285,7 +285,7 @@ fn validate_stored_rejection(
         || canonical_message != failure_message
     {
         return Err(PersistenceError::CommandUnresolved {
-            code: "stored_command_rejection_invalid",
+            code: "stored_command_rejection_invalid".into(),
             message: "Stored terminal command rejection is invalid.".to_owned(),
         });
     }
@@ -294,7 +294,7 @@ fn validate_stored_rejection(
 
 fn invalid_reservation() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stale_lifecycle_reservation",
+        code: "stale_lifecycle_reservation".into(),
         message: "Provider lifecycle command reservation is missing or inconsistent.".to_owned(),
     }
 }

@@ -457,7 +457,7 @@ fn valid_result_id(value: &str) -> bool {
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

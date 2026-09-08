@@ -732,14 +732,14 @@ fn generation_i64(generation: u64) -> Result<i64, PersistenceError> {
 
 fn invalid_reconciliation() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stored_turn_reconciliation_invalid",
+        code: "stored_turn_reconciliation_invalid".into(),
         message: "Stored provider turn reconciliation authority is invalid.".to_owned(),
     }
 }
 
 fn stale_reconciliation() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stale_turn_reconciliation_candidate",
+        code: "stale_turn_reconciliation_candidate".into(),
         message: "Provider turn reconciliation authority changed before commit.".to_owned(),
     }
 }

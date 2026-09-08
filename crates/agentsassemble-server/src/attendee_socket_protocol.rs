@@ -15,7 +15,7 @@ impl Request {
         let request_id = self.request_id();
         if request_id.is_nil() {
             return Err(PersistenceError::CommandRejected {
-                code: "bad_request",
+                code: "bad_request".into(),
                 message: "A request UUID is required.".to_owned(),
             });
         }
@@ -104,9 +104,9 @@ impl Request {
 
 pub(super) fn failure(request_id: Uuid, error: PersistenceError) -> Frame {
     let failure = crate::room_command_result::CommandFailure::transactional(error);
-    let code = match failure.error {
+    let code = match &failure.error {
         PersistenceError::CommandRejected { code, .. }
-        | PersistenceError::CommandUnresolved { code, .. } => code,
+        | PersistenceError::CommandUnresolved { code, .. } => code.as_ref(),
         PersistenceError::CommandConflict => "command_conflict",
         _ => "attendee_operation_failed",
     };

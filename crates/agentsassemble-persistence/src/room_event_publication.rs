@@ -82,7 +82,7 @@ impl SqliteStore {
 
 fn invalid_publication_state() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "event_publication_state_invalid",
+        code: "event_publication_state_invalid".into(),
         message: "Durable room-event publication state is invalid.".to_owned(),
     }
 }

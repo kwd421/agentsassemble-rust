@@ -130,7 +130,7 @@ pub(crate) async fn require_room_tool_turn_authority(
 
 fn stale_provider_turn() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stale_provider_turn",
+        code: "stale_provider_turn".into(),
         message: "Room tool result no longer matches the active provider turn.".to_owned(),
     }
 }

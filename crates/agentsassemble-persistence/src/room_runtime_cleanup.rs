@@ -60,7 +60,7 @@ pub(crate) async fn load_launch_session(
 ) -> Result<DurableAgentSession, PersistenceError> {
     if cleanup_exists(transaction, room_id, session_id).await? {
         return Err(PersistenceError::CommandRejected {
-            code: "runtime_cleanup_pending",
+            code: "runtime_cleanup_pending".into(),
             message:
                 "Removed runtime custody must be resolved before this Agent Session can launch."
                     .to_owned(),
@@ -76,7 +76,7 @@ pub(crate) fn require_server_custody(
 ) -> Result<(), PersistenceError> {
     if session.public.external_owned || session.public.process_ownership != "server" {
         return Err(PersistenceError::CommandRejected {
-            code: "external_runtime_owned",
+            code: "external_runtime_owned".into(),
             message: "This provider runtime is owned by its external attendee.".to_owned(),
         });
     }

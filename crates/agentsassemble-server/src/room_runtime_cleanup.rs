@@ -180,9 +180,9 @@ pub(crate) fn log_pending(key: &RoomRuntimeCleanupKey, error: &PersistenceError)
     );
 }
 
-fn unresolved(code: &'static str) -> PersistenceError {
+fn unresolved(code: impl Into<std::borrow::Cow<'static, str>>) -> PersistenceError {
     PersistenceError::CommandUnresolved {
-        code,
+        code: code.into(),
         message: "Participant access is revoked; exact provider cleanup is still pending."
             .to_owned(),
     }

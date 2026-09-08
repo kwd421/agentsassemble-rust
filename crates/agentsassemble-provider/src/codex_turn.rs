@@ -53,7 +53,7 @@ pub(super) async fn send_turn(
     session: &DurableAgentSession,
     request: &ProviderTurnRequest,
 ) -> Result<ProviderTurnCompleted, DriverError> {
-    if let Some(error) = driver.turn_state.error {
+    if let Some(error) = driver.turn_state.error.clone() {
         return Err(error);
     }
     let thread_id = validate_attached_thread(driver, session)?.to_owned();
@@ -156,7 +156,7 @@ async fn start_turn(
         Ok(response) => response,
         Err(error) => {
             if driver.pending_request.is_none() {
-                driver.turn_state.error = Some(error);
+                driver.turn_state.error = Some(error.clone());
             }
             return Err(error);
         }
@@ -577,7 +577,7 @@ fn validate_attached_thread<'a>(
 }
 
 fn poison<T>(driver: &mut CodexDriver, error: DriverError) -> Result<T, DriverError> {
-    driver.turn_state.error = Some(error);
+    driver.turn_state.error = Some(error.clone());
     Err(error)
 }
 

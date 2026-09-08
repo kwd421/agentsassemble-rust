@@ -48,15 +48,15 @@ pub(crate) async fn revalidate_runtime_authority(
     match outcome {
         Ok(()) => Ok(()),
         Err(AuthorityFailure::Busy) => Err(PersistenceError::CommandRejected {
-            code: "runtime_authority_busy",
+            code: "runtime_authority_busy".into(),
             message: "Runtime authority validation is at capacity.".to_owned(),
         }),
         Err(AuthorityFailure::Timeout) => Err(PersistenceError::CommandRejected {
-            code: "runtime_authority_timeout",
+            code: "runtime_authority_timeout".into(),
             message: "Runtime authority validation timed out.".to_owned(),
         }),
         Err(AuthorityFailure::Changed) => Err(PersistenceError::CommandRejected {
-            code: "runtime_authority_changed",
+            code: "runtime_authority_changed".into(),
             message: "Workspace or provider executable authority changed before commit.".to_owned(),
         }),
         Err(AuthorityFailure::Task(message)) => {

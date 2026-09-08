@@ -25,19 +25,19 @@ impl SqliteStore {
         authorize_session(&mut transaction, principal).await?;
         if !principal.capabilities.room_history {
             return Err(PersistenceError::CommandRejected {
-                code: "permission_denied",
+                code: "permission_denied".into(),
                 message: "room.history permission is required.".to_owned(),
             });
         }
         if request.before_seq < 0 || !(1..=ROOM_HISTORY_MAX_EVENTS).contains(&request.limit) {
             return Err(PersistenceError::CommandRejected {
-                code: "bad_request",
+                code: "bad_request".into(),
                 message: "room.history cursor or limit is outside the supported range.".to_owned(),
             });
         }
         let limit =
             usize::try_from(request.limit).map_err(|_| PersistenceError::CommandRejected {
-                code: "bad_request",
+                code: "bad_request".into(),
                 message: "room.history limit is outside the supported range.".to_owned(),
             })?;
         let last_seq = sqlx::query_scalar::<_, i64>(

@@ -50,7 +50,7 @@ impl ProviderWriteBudget {
             || next_bytes > MAX_MUTATION_BYTES_PER_WINDOW
         {
             return Err(PersistenceError::CommandRejected {
-                code: "write_budget_exceeded",
+                code: "write_budget_exceeded".into(),
                 message: "Provider-session write budget exceeded.".to_owned(),
             });
         }

@@ -210,7 +210,7 @@ fn valid_persona_id(persona_id: &str) -> bool {
 
 fn persona_not_found() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "persona_not_found",
+        code: "persona_not_found".into(),
         message: "The selected bot card or module is unavailable.".to_owned(),
     }
 }

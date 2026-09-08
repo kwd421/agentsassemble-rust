@@ -74,7 +74,7 @@ pub(crate) async fn execute_agent_start(
                 store,
                 command,
                 &effect,
-                (error.code, error.message),
+                (&error.code, &error.message),
             )
             .await;
         }
@@ -157,7 +157,7 @@ async fn execute_paused_resume(
         }
         Ok(None) => Some(CommandExecution::transactional_failure(
             PersistenceError::CommandRejected {
-                code: "resident_runtime_changed",
+                code: "resident_runtime_changed".into(),
                 message: "The paused Agent Session changed before resume committed.".to_owned(),
             },
         )),
@@ -215,8 +215,8 @@ fn persisted_resident_runtime(runtime: ProviderResidentRuntime) -> AgentResident
 
 fn resident_runtime_failure(error: &ProviderAdapterError) -> CommandExecution {
     CommandExecution::transactional_failure(PersistenceError::CommandRejected {
-        code: error.code,
-        message: error.message.to_owned(),
+        code: error.code.clone(),
+        message: error.message.to_string(),
     })
 }
 
@@ -224,7 +224,7 @@ async fn record_agent_start_pre_effect_failure(
     store: &SqliteStore,
     command: &RoomCommand,
     effect: &AgentStartEffect,
-    reason: (&'static str, &str),
+    reason: (&str, &str),
 ) -> CommandExecution {
     let commit = store
         .fail_agent_start_before_effect(
@@ -288,8 +288,8 @@ async fn record_agent_start_failure(
                 &effect.operation_id,
                 &error.runtime_handle_id,
                 &error.runtime_owner_id,
-                error.code,
-                error.message,
+                &error.code,
+                &error.message,
             )
             .await
         {
@@ -309,8 +309,8 @@ async fn record_agent_start_failure(
             &command.request_id,
             &command.payload,
             &effect.operation_id,
-            error.code,
-            error.message,
+            &error.code,
+            &error.message,
             command.action.as_str(),
         )
         .await;
@@ -367,7 +367,7 @@ pub(crate) async fn execute_agent_stop(
         AgentStopPlan::Outcome(outcome) => CommandExecution::success(*outcome),
         AgentStopPlan::ExternalPending(events) => CommandExecution::unresolved_failure_with_events(
             PersistenceError::CommandUnresolved {
-                code: "external_stop_pending",
+                code: "external_stop_pending".into(),
                 message: "The external attendee must confirm its exact runtime has stopped."
                     .to_owned(),
             },
@@ -429,8 +429,8 @@ async fn execute_managed_stop(
                 &command.principal,
                 &effect.session_id,
                 &effect.operation_id,
-                error.code,
-                error.message,
+                &error.code,
+                &error.message,
             )
             .await
         {
@@ -442,7 +442,7 @@ async fn execute_managed_stop(
         return CommandExecution::unresolved_failure_with_events(
             PersistenceError::CommandRejected {
                 code: error.code,
-                message: error.message.to_owned(),
+                message: error.message.to_string(),
             },
             events,
         );
@@ -517,17 +517,17 @@ async fn prepare_agent_stop_with_recovery(
 fn unconfirmed_effect(error: &PersistenceError) -> bool {
     matches!(
         error,
-        PersistenceError::CommandUnresolved {
-            code: "runtime_effect_unconfirmed",
-            ..
-        }
+        PersistenceError::CommandUnresolved { code, .. } if matches!(code.as_bytes(), b"runtime_effect_unconfirmed")
     )
 }
 
-fn rejected(code: &'static str, message: &str) -> PersistenceError {
+fn rejected(
+    code: impl Into<std::borrow::Cow<'static, str>>,
+    message: impl Into<String>,
+) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
-        message: message.to_owned(),
+        code: code.into(),
+        message: message.into(),
     }
 }
 

@@ -151,7 +151,7 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
         operation_id: &str,
-        reason: (&'static str, &str),
+        reason: (&str, &str),
     ) -> Result<Vec<RoomEvent>, PersistenceError> {
         let agent_id = payload_agent_id(payload)?;
         let payload_hash = canonical_payload_hash(payload);
@@ -237,7 +237,7 @@ impl SqliteStore {
         principal: &AuthenticatedPrincipal,
         agent_id: &str,
         operation_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
     ) -> Result<Vec<RoomEvent>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
@@ -443,7 +443,7 @@ async fn detach_confirmed_session(
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

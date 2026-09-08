@@ -151,14 +151,14 @@ impl SqliteStore {
 
 fn rejection(error: agentsassemble_domain::CommandRejection) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: error.code,
+        code: error.code.into(),
         message: error.message,
     }
 }
 
 fn rejected(code: &'static str, message: &'static str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

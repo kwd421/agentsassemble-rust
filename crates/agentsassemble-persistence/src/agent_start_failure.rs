@@ -31,7 +31,7 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
         operation_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
         command_action: &'static str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
@@ -60,7 +60,7 @@ impl SqliteStore {
         payload_hash: &str,
         agent_id: &str,
         operation_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
         command_action: &'static str,
         reservation_phase: &str,
@@ -94,7 +94,7 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
         operation_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         self.fail_agent_launch(
@@ -121,7 +121,7 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
         operation_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         self.fail_agent_launch(
@@ -147,7 +147,7 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
         operation_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
         command_action: &'static str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
@@ -176,7 +176,7 @@ impl SqliteStore {
         payload_hash: &str,
         agent_id: &str,
         operation_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
         command_action: &'static str,
         reservation_phase: &str,
@@ -207,7 +207,7 @@ impl SqliteStore {
         payload_hash: &str,
         agent_id: &str,
         operation_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
         command_action: &'static str,
         reservation_phase: &str,
@@ -297,7 +297,7 @@ impl SqliteStore {
         operation_id: &str,
         runtime_handle_id: &str,
         runtime_owner_id: &str,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
     ) -> Result<Vec<RoomEvent>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
@@ -316,7 +316,7 @@ impl SqliteStore {
             || runtime_owner_id != session.runtime_owner_id
         {
             return Err(PersistenceError::CommandRejected {
-                code: "runtime_owner_mismatch",
+                code: "runtime_owner_mismatch".into(),
                 message: "Unconfirmed provider start does not match its durable runtime authority."
                     .to_owned(),
             });

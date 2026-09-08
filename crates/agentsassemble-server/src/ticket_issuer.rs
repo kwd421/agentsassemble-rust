@@ -569,25 +569,32 @@ fn require_appearance_asset_id(asset_id: &str) -> Result<(), TicketIssueError> {
 fn map_room_identity_error(error: PersistenceError) -> TicketIssueError {
     match error {
         PersistenceError::RoomMissing => TicketIssueError::RoomMissing,
-        PersistenceError::ParticipantMissing
-        | PersistenceError::CommandRejected {
-            code:
-                "session_revoked"
-                | "room_inactive"
-                | "user_profile_missing"
-                | "profile_authority_mismatch",
-            ..
-        } => TicketIssueError::ParticipantInactive,
+        PersistenceError::ParticipantMissing => TicketIssueError::ParticipantInactive,
+        PersistenceError::CommandRejected { code, .. }
+            if matches!(
+                code.as_bytes(),
+                b"session_revoked"
+                    | b"room_inactive"
+                    | b"user_profile_missing"
+                    | b"profile_authority_mismatch"
+            ) =>
+        {
+            TicketIssueError::ParticipantInactive
+        }
         error => map_bootstrap_error(error),
     }
 }
 
 fn map_bootstrap_error(error: PersistenceError) -> TicketIssueError {
     match error {
-        PersistenceError::CommandRejected {
-            code: "bootstrap_required" | "bootstrap_repair_required",
-            ..
-        } => TicketIssueError::BootstrapIncomplete,
+        PersistenceError::CommandRejected { code, .. }
+            if matches!(
+                code.as_bytes(),
+                b"bootstrap_required" | b"bootstrap_repair_required"
+            ) =>
+        {
+            TicketIssueError::BootstrapIncomplete
+        }
         error => TicketIssueError::Persistence(error),
     }
 }
@@ -602,7 +609,7 @@ mod tests {
     fn room_identity_mapper_preserves_bootstrap_rejections() {
         for code in ["bootstrap_required", "bootstrap_repair_required"] {
             let error = PersistenceError::CommandRejected {
-                code,
+                code: code.into(),
                 message: "bootstrap authority is unavailable".to_owned(),
             };
             assert!(matches!(

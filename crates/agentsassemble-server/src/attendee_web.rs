@@ -113,24 +113,26 @@ fn connection_id(headers: &HeaderMap) -> Result<Uuid, AttendeeHttpError> {
 
 struct AttendeeHttpError {
     status: StatusCode,
-    code: &'static str,
+    code: std::borrow::Cow<'static, str>,
     resolution: CommandResolution,
 }
 
 impl AttendeeHttpError {
-    fn rejected(status: StatusCode, code: &'static str) -> Self {
+    fn rejected(status: StatusCode, code: impl Into<std::borrow::Cow<'static, str>>) -> Self {
         Self {
             status,
-            code,
+            code: code.into(),
             resolution: CommandResolution::Rejected,
         }
     }
 
     fn from_persistence(error: PersistenceError) -> Self {
         let failure = CommandFailure::transactional(error);
-        let (status, code) = match failure.error {
+        let (status, code) = match &failure.error {
             PersistenceError::CommandConflict => (StatusCode::CONFLICT, "command_conflict"),
-            PersistenceError::CommandRejected { code, .. } => (StatusCode::FORBIDDEN, code),
+            PersistenceError::CommandRejected { code, .. } => {
+                (StatusCode::FORBIDDEN, code.as_ref())
+            }
             PersistenceError::RoomMissing | PersistenceError::ParticipantMissing => {
                 (StatusCode::GONE, "room_membership_unavailable")
             }
@@ -141,7 +143,7 @@ impl AttendeeHttpError {
         };
         Self {
             status,
-            code,
+            code: code.to_owned().into(),
             resolution: failure.resolution,
         }
     }

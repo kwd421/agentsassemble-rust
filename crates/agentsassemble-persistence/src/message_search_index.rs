@@ -158,7 +158,7 @@ pub(crate) fn canonical_created_at_nanos(event: &RoomEvent) -> Result<i64, Persi
 
 fn invalid_search_event() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_state",
+        code: "invalid_state".into(),
         message: "The canonical message cannot be indexed.".to_owned(),
     }
 }

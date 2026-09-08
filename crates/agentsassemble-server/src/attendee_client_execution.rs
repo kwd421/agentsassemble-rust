@@ -182,7 +182,7 @@ impl AttendeeExecution {
                 String::new(),
                 None,
                 AttendeeTurnOutcome::Failed {
-                    error_code: error.code.to_owned(),
+                    error_code: error.code.into_owned(),
                 },
             ),
         };

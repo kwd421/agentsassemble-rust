@@ -46,7 +46,7 @@ async fn create(
         Uuid::parse_str(&payload.request_id).map_err(|_| ConnectorHttpError::invalid())?;
     let ingress = state.public_ingress.ready_snapshot().ok_or_else(|| {
         ConnectorHttpError::from_persistence(PersistenceError::CommandRejected {
-            code: "public_ingress_not_ready",
+            code: "public_ingress_not_ready".into(),
             message: "Public ingress must be ready before creating an invite.".to_owned(),
         })
     })?;

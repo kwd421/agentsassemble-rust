@@ -362,7 +362,7 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
         effect: &AgentCreateStartEffect,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         let payload_hash = canonical_payload_hash(payload);
@@ -392,7 +392,7 @@ impl SqliteStore {
         request_id: &str,
         payload: &Value,
         effect: &AgentCreateStartEffect,
-        error_code: &'static str,
+        error_code: &str,
         message: &str,
     ) -> Result<AgentLaunchFailureCommit, PersistenceError> {
         let payload_hash = canonical_payload_hash(payload);
@@ -432,7 +432,7 @@ async fn resume_create_start(
     validate_create_reservation(&stored, payload_hash)?;
     if stored.status == "pending" && stored.supervisor_generation != runtime_generation {
         return Err(PersistenceError::CommandUnresolved {
-            code: "runtime_effect_unconfirmed",
+            code: "runtime_effect_unconfirmed".into(),
             message: "The original provider effect belongs to a previous server runtime and awaits server-owned reconciliation.".to_owned(),
         });
     }
@@ -451,7 +451,7 @@ async fn resume_create_start(
         AgentLifecycleIntentStatus::Prepared => {}
         AgentLifecycleIntentStatus::EffectInflight | AgentLifecycleIntentStatus::Unconfirmed => {
             return Err(PersistenceError::CommandUnresolved {
-                code: "runtime_effect_unconfirmed",
+                code: "runtime_effect_unconfirmed".into(),
                 message: "The original provider start effect remains unresolved. Wait for authoritative runtime observation before retrying it.".to_owned(),
             });
         }
@@ -552,7 +552,7 @@ fn prepared_events(result: &Value) -> Result<Vec<RoomEvent>, PersistenceError> {
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

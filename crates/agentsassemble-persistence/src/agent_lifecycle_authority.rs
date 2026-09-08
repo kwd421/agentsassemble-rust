@@ -178,7 +178,7 @@ fn rejected(message: impl Into<String>) -> PersistenceError {
 
 fn rejected_code(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

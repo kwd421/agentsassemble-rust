@@ -48,7 +48,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("create launch cleanup portal: {error}"));
         let failure = DriverLaunchError::safe(LAUNCH_FAILURE);
 
-        assert_eq!(portal(&mut room_portal, failure).await, failure);
+        assert_eq!(portal(&mut room_portal, failure.clone()).await, failure);
         assert!(!room_portal.is_running());
     }
 

@@ -70,7 +70,7 @@ pub(crate) fn public_tool_error(error: PersistenceError) -> ProviderRoomToolErro
             ProviderRoomToolError { code, message }
         }
         _ => ProviderRoomToolError {
-            code: "persistence_error",
+            code: "persistence_error".into(),
             message: "The room tool request could not be completed.".to_owned(),
         },
     }

@@ -784,21 +784,21 @@ pub(crate) async fn detach_participant(
 
 pub(crate) fn stale_candidate() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stale_reconciliation_candidate",
+        code: "stale_reconciliation_candidate".into(),
         message: "Provider runtime reconciliation candidate changed during observation.".to_owned(),
     }
 }
 
 pub(crate) fn invalid_observation() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_runtime_observation",
+        code: "invalid_runtime_observation".into(),
         message: "Provider runtime observation does not match durable authority.".to_owned(),
     }
 }
 
 pub(crate) fn invalid_stored_authority() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_stored_runtime_authority",
+        code: "invalid_stored_runtime_authority".into(),
         message: "Stored provider runtime authority is incomplete or inconsistent.".to_owned(),
     }
 }

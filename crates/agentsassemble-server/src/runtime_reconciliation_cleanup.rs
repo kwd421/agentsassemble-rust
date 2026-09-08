@@ -116,7 +116,7 @@ pub(super) async fn recover_dynamic_observed_runtime(
         .await
     {
         tracing::warn!(
-            code = error.code,
+            code = %error.code,
             %room_id,
             %session_id,
             "server-owned lifecycle recovery could not quiesce an observed runtime"

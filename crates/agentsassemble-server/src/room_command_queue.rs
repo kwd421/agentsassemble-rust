@@ -149,18 +149,18 @@ impl RoomRuntime {
             .map_err(|error| {
                 CommandFailure::unresolved(match error {
                     mpsc::error::TrySendError::Full(_) => PersistenceError::CommandRejected {
-                        code: "room_busy",
+                        code: "room_busy".into(),
                         message: "Room command queue is full.".to_owned(),
                     },
                     mpsc::error::TrySendError::Closed(_) => PersistenceError::CommandRejected {
-                        code: "room_unavailable",
+                        code: "room_unavailable".into(),
                         message: "Room mutation task stopped.".to_owned(),
                     },
                 })
             })?;
         response.await.map_err(|_| {
             CommandFailure::unresolved(PersistenceError::CommandRejected {
-                code: "room_unavailable",
+                code: "room_unavailable".into(),
                 message: "Room mutation response was lost.".to_owned(),
             })
         })?

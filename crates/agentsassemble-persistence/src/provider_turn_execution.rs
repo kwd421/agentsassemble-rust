@@ -586,14 +586,14 @@ fn canonical_now() -> String {
 
 fn invalid_execution() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stored_turn_execution_invalid",
+        code: "stored_turn_execution_invalid".into(),
         message: "Stored provider turn execution authority is invalid.".to_owned(),
     }
 }
 
 fn stale_execution() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "stale_provider_turn",
+        code: "stale_provider_turn".into(),
         message: "Provider turn execution authority changed before this operation.".to_owned(),
     }
 }

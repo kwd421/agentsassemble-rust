@@ -30,7 +30,7 @@ pub(crate) async fn execute_room_random(
     let request =
         RoomRandomRequest::parse(command.action.as_str(), &command.payload).map_err(|error| {
             PersistenceError::CommandRejected {
-                code: "invalid_room_random_request",
+                code: "invalid_room_random_request".into(),
                 message: error.message,
             }
         })?;
@@ -54,7 +54,7 @@ pub(crate) async fn execute_authorized_room_random(
     let request =
         RoomRandomRequest::parse(command.action.as_str(), &command.payload).map_err(|error| {
             PersistenceError::CommandRejected {
-                code: "invalid_room_random_request",
+                code: "invalid_room_random_request".into(),
                 message: error.message,
             }
         })?;

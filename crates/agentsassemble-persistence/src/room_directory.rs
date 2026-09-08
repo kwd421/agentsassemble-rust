@@ -289,14 +289,14 @@ fn room_created_event(room_id: &str, label: &str, now: chrono::DateTime<Utc>) ->
 
 fn rejected(code: &'static str, message: &'static str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }
 
 fn invalid_room_state() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_state",
+        code: "invalid_state".into(),
         message: "Stored room authority is invalid.".to_owned(),
     }
 }

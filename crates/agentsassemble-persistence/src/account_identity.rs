@@ -192,7 +192,7 @@ pub(crate) async fn load_account_user(
 
 pub(crate) fn rejected(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

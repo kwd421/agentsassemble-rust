@@ -123,7 +123,7 @@ pub(crate) async fn load_active_room(
     let room: Room = serde_json::from_str(&room_json)?;
     if room.room_id != room_id || room.status != RoomStatus::Active {
         return Err(PersistenceError::CommandRejected {
-            code: "room_inactive",
+            code: "room_inactive".into(),
             message: "Closed or archived rooms do not accept active sessions.".to_owned(),
         });
     }
@@ -132,7 +132,7 @@ pub(crate) async fn load_active_room(
 
 fn session_revoked() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "session_revoked",
+        code: "session_revoked".into(),
         message: "This room session has ended.".to_owned(),
     }
 }

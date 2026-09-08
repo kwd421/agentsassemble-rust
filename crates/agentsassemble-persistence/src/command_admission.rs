@@ -233,7 +233,7 @@ pub(crate) async fn existing_request_identity(
     .await?;
     if command.is_some() && reservation.is_some() {
         return Err(PersistenceError::CommandRejected {
-            code: "invalid_state",
+            code: "invalid_state".into(),
             message: "A room request has conflicting durable owners.".to_owned(),
         });
     }
@@ -249,7 +249,7 @@ pub(crate) async fn existing_request_identity(
         "pending" => Ok(Some(ExistingRequestIdentity::PendingLifecycle)),
         "rejected" => Ok(Some(ExistingRequestIdentity::RejectedLifecycle)),
         _ => Err(PersistenceError::CommandRejected {
-            code: "invalid_state",
+            code: "invalid_state".into(),
             message: "A lifecycle request has an invalid durable status.".to_owned(),
         }),
     }

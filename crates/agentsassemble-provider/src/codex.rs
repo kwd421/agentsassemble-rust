@@ -228,7 +228,7 @@ impl CodexDriver {
         if self.initialized {
             return Ok(());
         }
-        if let Some(error) = self.initialization_error {
+        if let Some(error) = self.initialization_error.clone() {
             return Err(error);
         }
         if !self.initialize_acked {
@@ -240,7 +240,7 @@ impl CodexDriver {
                 .await;
             if let Err(error) = initialized {
                 if self.pending_request.is_none() {
-                    self.initialization_error = Some(error);
+                    self.initialization_error = Some(error.clone());
                 }
                 return Err(error);
             }
@@ -265,7 +265,7 @@ impl CodexDriver {
         session: &DurableAgentSession,
     ) -> Result<ProviderSessionAttachment, DriverError> {
         self.initialize().await?;
-        if let Some(error) = self.attachment_error {
+        if let Some(error) = self.attachment_error.clone() {
             return Err(error);
         }
         let durable_id = checked_provider_session_id(&session.provider_session_id)?;
@@ -287,7 +287,7 @@ impl CodexDriver {
             Ok(response) => response,
             Err(error) => {
                 if self.pending_request.is_none() {
-                    self.attachment_error = Some(error);
+                    self.attachment_error = Some(error.clone());
                 }
                 return Err(error);
             }
@@ -321,7 +321,7 @@ impl CodexDriver {
     }
 
     fn poison_attachment<T>(&mut self, error: DriverError) -> Result<T, DriverError> {
-        self.attachment_error = Some(error);
+        self.attachment_error = Some(error.clone());
         Err(error)
     }
 

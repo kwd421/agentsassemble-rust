@@ -44,10 +44,12 @@ pub(super) async fn run(
         .await
     {
         let code = match error {
-            agentsassemble_persistence::PersistenceError::CommandRejected { code, .. } => code,
-            _ => "attendee_disconnect_failed",
+            agentsassemble_persistence::PersistenceError::CommandRejected { code, .. } => {
+                code.into_owned()
+            }
+            _ => "attendee_disconnect_failed".to_owned(),
         };
-        tracing::warn!(code, "external attendee network cleanup did not commit");
+        tracing::warn!(%code, "external attendee network cleanup did not commit");
     }
 }
 

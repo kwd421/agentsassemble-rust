@@ -600,7 +600,7 @@ const fn rejected(rejection: HumanAdmissionRejection) -> HumanAdmissionDecision 
 
 fn invalid_state(message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_state",
+        code: "invalid_state".into(),
         message: message.to_owned(),
     }
 }

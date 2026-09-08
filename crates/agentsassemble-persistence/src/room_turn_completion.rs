@@ -163,7 +163,7 @@ pub(super) async fn complete_vote(
                 turn_id,
                 provider_turn_id,
                 disposition: ProviderTurnDisposition::Rejected {
-                    error_code: code,
+                    error_code: &code,
                     message: &message,
                 },
             }

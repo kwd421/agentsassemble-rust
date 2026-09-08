@@ -178,7 +178,7 @@ async fn update_room_preferences_in_transaction(
         current
             .apply_patch(patch)
             .map_err(|error| PersistenceError::CommandRejected {
-                code: error.code,
+                code: error.code.into(),
                 message: error.message,
             })?;
     sqlx::query(
@@ -197,7 +197,7 @@ async fn update_room_preferences_in_transaction(
 
 fn invalid_stored_room() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "invalid_state",
+        code: "invalid_state".into(),
         message: "Stored room authority is invalid.".to_owned(),
     }
 }

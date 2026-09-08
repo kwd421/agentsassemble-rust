@@ -137,7 +137,7 @@ fn persistence_error(error: PersistenceError) -> Response {
                 b"permission_denied" | b"human_side_chat_required"
             ) =>
         {
-            error_response(StatusCode::FORBIDDEN, code, &message)
+            error_response(StatusCode::FORBIDDEN, &code, &message)
         }
         PersistenceError::RoomMissing | PersistenceError::ParticipantMissing => unauthorized(),
         PersistenceError::CommandRejected { code, .. }

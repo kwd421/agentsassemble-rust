@@ -156,7 +156,10 @@ async fn run_owned_turn_task(
     if let Err(error) = &outcome.result
         && outcome.requires_restart
     {
-        let driver_error = DriverError::new(error.code, error.message);
+        let driver_error = DriverError {
+            code: error.code.clone(),
+            message: error.message.to_string().into(),
+        };
         outcome.result = match adapter
             .stop(
                 &session.public.room_id,

@@ -210,7 +210,7 @@ pub(super) async fn authorize_in(
 
 pub(super) fn rejected(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.to_owned(),
     }
 }

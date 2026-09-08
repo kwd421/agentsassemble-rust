@@ -185,7 +185,7 @@ pub(crate) async fn apply_live_reconciliation(
     };
     if reservation.supervisor_generation != store.runtime_generation() {
         return Err(PersistenceError::CommandUnresolved {
-            code: "runtime_effect_unconfirmed",
+            code: "runtime_effect_unconfirmed".into(),
             message: "The original provider effect belongs to a previous server runtime and awaits server-owned reconciliation.".to_owned(),
         });
     }

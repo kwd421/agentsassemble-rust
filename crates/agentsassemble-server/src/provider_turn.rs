@@ -180,7 +180,7 @@ fn unresolved_turn_task(
         assignment,
         task_panicked: code == "provider_turn_task_failed",
         start_authority: Err(PersistenceError::CommandUnresolved {
-            code,
+            code: code.into(),
             message: "The exact provider turn owner ended without a typed result.".to_owned(),
         }),
         result: None,
@@ -195,7 +195,7 @@ async fn commit_provider_result(
     let start_authority = completed.start_authority?;
     let Some(result) = completed.result else {
         return Err(PersistenceError::CommandUnresolved {
-            code: "provider_turn_start_unresolved",
+            code: "provider_turn_start_unresolved".into(),
             message: "Provider turn start authorization remains unresolved.".to_owned(),
         });
     };
@@ -337,8 +337,8 @@ async fn commit_provider_error(
                 provider_turn_id: "",
                 provider_session_id: None,
             },
-            error.code,
-            error.message,
+            &error.code,
+            &error.message,
             confirmed_stop,
         )
         .await?;

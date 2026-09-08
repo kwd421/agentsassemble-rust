@@ -16,7 +16,7 @@ pub(super) enum ProviderTurnDisposition<'a> {
         reason_code: &'a str,
     },
     Rejected {
-        error_code: &'static str,
+        error_code: &'a str,
         message: &'a str,
     },
 }

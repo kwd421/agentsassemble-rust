@@ -301,7 +301,7 @@ fn fingerprint_hex_prefix(fingerprint: &[u8; 32]) -> String {
 
 fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
-        code,
+        code: code.into(),
         message: message.into(),
     }
 }

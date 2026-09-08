@@ -36,14 +36,14 @@ pub(crate) async fn read_history_frame(
     };
     let requested_events = usize::try_from(request.limit).map_err(|_| {
         CommandFailure::rejected(PersistenceError::CommandRejected {
-            code: "bad_request",
+            code: "bad_request".into(),
             message: "room.history limit is outside the supported range.".to_owned(),
         })
     })?;
     if !admission.admit_history(principal, requested_events) {
         return Err(CommandFailure::rejected(
             PersistenceError::CommandRejected {
-                code: "history_read_limited",
+                code: "history_read_limited".into(),
                 message: "Room history read budget exceeded.".to_owned(),
             },
         ));
@@ -164,7 +164,7 @@ fn history_ack(
 
 fn oversize_failure() -> CommandFailure {
     CommandFailure::rejected(PersistenceError::CommandRejected {
-        code: "response_too_large",
+        code: "response_too_large".into(),
         message: "A canonical room history event exceeds the WebSocket frame limit.".to_owned(),
     })
 }

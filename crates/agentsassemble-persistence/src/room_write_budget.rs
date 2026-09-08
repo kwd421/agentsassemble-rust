@@ -85,7 +85,7 @@ async fn reserve_room_write_budget_with_limits(
 
 fn budget_exceeded() -> PersistenceError {
     PersistenceError::CommandRejected {
-        code: "write_budget_exceeded",
+        code: "write_budget_exceeded".into(),
         message: "Room-wide authenticated write budget exceeded.".to_owned(),
     }
 }
