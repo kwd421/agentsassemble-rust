@@ -1402,3 +1402,10 @@ and guardian absence observation into one Unix owner. The shared parent still ow
 the same bounded handshake, wire actor and failure publication. Five existing managed
 cases pass, including all six native stop/loss/request/interrupt paths; affected
 Clippy and unchanged mandatory gates pass. This is not Windows runtime evidence.
+
+Native launch now has an explicit factory entry used by the worker, instead of
+mutating a managed flag and re-entering the supervisor factory. Profile validation
+has one registration owner. The outer supervisor factory retains the real lease
+parameter on every platform; only the native entry omits it on Windows. The five
+managed cases, affected Clippy and unchanged mandatory gates pass again after this
+call-path change. No provider execution or public wire behavior changed.

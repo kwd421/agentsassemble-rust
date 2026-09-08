@@ -217,11 +217,7 @@ impl ProviderAdapter {
                 let launch = self
                     .owner
                     .factory
-                    .launch(
-                        session,
-                        #[cfg(unix)]
-                        &runtime.runtime_lease,
-                    )
+                    .launch(session, &runtime.runtime_lease)
                     .await;
                 let driver = match launch {
                     Ok(driver) => driver,

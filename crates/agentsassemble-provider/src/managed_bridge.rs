@@ -3,11 +3,8 @@ use agentsassemble_domain::DurableAgentSession;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
-    credentials::ProviderCredentialStore,
-    driver::DriverError,
-    launch_error::DriverLaunchError,
-    provider_factory::{DriverFactory, ProductionDriverFactory},
-    runtime_lease::HeldRuntimeLease,
+    credentials::ProviderCredentialStore, driver::DriverError, launch_error::DriverLaunchError,
+    provider_factory::ProductionDriverFactory, runtime_lease::HeldRuntimeLease,
 };
 
 #[path = "managed_bridge_callbacks.rs"]
@@ -84,7 +81,6 @@ async fn run<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         factory.credentials = credentials;
         factory
     };
-    factory.managed = false;
     factory.state_root = launch.state_root;
     run_launch(
         &mut input,
@@ -101,11 +97,11 @@ async fn run_launch<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     output: &mut Writer<W>,
     session: &DurableAgentSession,
     lease: &HeldRuntimeLease,
-    factory: &dyn DriverFactory,
+    factory: &ProductionDriverFactory,
 ) -> Result<(), DriverError> {
     // A lost pipe does not abandon an in-flight native launch. Its owner first returns
     // the driver or its exact safe/uncertain launch failure, then performs cleanup.
-    let launch = factory.launch(session, lease);
+    let launch = factory.launch_native(session, lease);
     tokio::pin!(launch);
     let (result, parent_gone) = tokio::select! {
         result = &mut launch => (result, false),
@@ -161,8 +157,10 @@ pub(crate) async fn launch_managed(
     factory: &ProductionDriverFactory,
     session: &DurableAgentSession,
     lease: &HeldRuntimeLease,
-    credential_id: Option<crate::ProviderCredentialId>,
 ) -> Result<Box<dyn crate::driver::ProviderDriver>, DriverLaunchError> {
+    let credential_id = crate::registration::require_runtime_registration(session)?
+        .remote_spec
+        .and_then(crate::remote_openai_spec::RemoteOpenAiSpec::credential_id);
     let credential = if let Some(provider) = credential_id {
         Some(crate::credentials::private_handoff::SelectedCredential {
             provider,

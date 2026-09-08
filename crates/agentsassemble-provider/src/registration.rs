@@ -1,4 +1,3 @@
-#[cfg(unix)]
 use crate::runtime_lease::HeldRuntimeLease;
 use std::{future::Future, pin::Pin};
 
@@ -481,32 +480,36 @@ impl DriverFactory for ProductionDriverFactory {
     fn launch<'a>(
         &'a self,
         session: &'a DurableAgentSession,
-        #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
+        runtime_lease: &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
-        let Some(registration) = provider_registration_by_profile(
-            &session.public.provider_kind,
-            &session.public.runtime_kind,
-            &session.public.transport,
-        ) else {
-            return Box::pin(async {
-                Err(DriverError::new(
-                    "invalid_runtime_profile",
-                    "The stored provider runtime profile is unsupported.",
-                )
-                .into())
-            });
-        };
         #[cfg(unix)]
         if self.managed {
             return Box::pin(crate::managed_bridge::launch_managed(
                 self,
                 session,
                 runtime_lease,
-                registration
-                    .remote_spec
-                    .and_then(crate::remote_openai_spec::RemoteOpenAiSpec::credential_id),
             ));
         }
+        #[cfg(not(unix))]
+        let _ = runtime_lease;
+        self.launch_native(
+            session,
+            #[cfg(unix)]
+            runtime_lease,
+        )
+    }
+}
+
+impl ProductionDriverFactory {
+    pub(crate) fn launch_native<'a>(
+        &'a self,
+        session: &'a DurableAgentSession,
+        #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
+    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+        let registration = match require_runtime_registration(session) {
+            Ok(registration) => registration,
+            Err(error) => return Box::pin(async { Err(error.into()) }),
+        };
         (registration.launch)(
             self,
             session,
@@ -514,6 +517,22 @@ impl DriverFactory for ProductionDriverFactory {
             runtime_lease,
         )
     }
+}
+
+pub(crate) fn require_runtime_registration(
+    session: &DurableAgentSession,
+) -> Result<&'static ProviderRegistration, DriverError> {
+    provider_registration_by_profile(
+        &session.public.provider_kind,
+        &session.public.runtime_kind,
+        &session.public.transport,
+    )
+    .ok_or_else(|| {
+        DriverError::new(
+            "invalid_runtime_profile",
+            "The stored provider runtime profile is unsupported.",
+        )
+    })
 }
 
 fn launch_codex<'a>(
