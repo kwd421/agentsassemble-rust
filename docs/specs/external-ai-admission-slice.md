@@ -282,3 +282,32 @@ artifact owner's measured cleanup plan removed the obsolete 1.1 GiB desktop targ
 retaining the below-limit shared target needed by ongoing work. Unchanged
 architecture/format/diff/artifact gates pass. External attendee and managed bridge
 flows remain the next Phase 7 targets; whole-phase review has not been requested.
+
+## External attendee invitation custody
+
+A separate invitation table and credential purpose now own saved-AI-friend and
+human-companion entry packets. Saved-friend selection is resolved under exact room
+manager authority; its receipt retains the originally selected provider and name,
+even if the address book later changes or deletes the contact. Contact metadata
+alone never admits a participant or starts a provider. Creation retries revalidate
+the current authority and preserve identity and expiry, including after expiry.
+
+Companion creation requires a live posting, unmuted human session. It retains that
+exact parent fingerprint, identity and scope rather than acquiring manager authority.
+The original ten-minute default, one-hour maximum and eight pending/admitted
+companions per owner remain the relevant bounds; the default invitation also cannot
+outlive its parent session. Admission must retain parent provenance, require an
+explicit matching supported provider and establish separate attendee session custody.
+Provider availability and local runtime selection belong to the attendee, not the
+host catalog's installed executables. Host archival revokes the new invitation domain.
+
+The local invitation boundary passes two tests: immutable friend receipt recovery
+without membership/provider effects, and concurrent companion capacity plus revoked
+and read-only owner rejection. Creation introduces no periodic task or process;
+it adds one durable row per explicit invite, retained until room deletion to prevent
+expired request identities from minting fresh credentials. Admission, assigned-turn
+transport, provider execution and packaged packet controls remain pending.
+Affected all-target/all-feature persistence Clippy and unchanged architecture,
+format, diff and artifact gates pass for this invitation checkpoint. The session
+columns reserve the admission receipt under the same invitation custody; no session
+is issued until its admission transaction and exact provider boundary are connected.

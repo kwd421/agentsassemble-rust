@@ -1,3 +1,7 @@
+#[cfg(test)]
+mod attendee_invite_tests;
+mod attendee_invites;
+pub use attendee_invites::{AttendeeInvite, CompanionInviteRequest};
 mod connector_admission;
 mod connector_session;
 #[cfg(test)]
@@ -63,9 +67,10 @@ mod human_admission_identity;
 mod human_admission_store;
 mod session_bearer;
 pub use session_bearer::{
-    CONNECTOR_INVITE_PREFIX, CONNECTOR_SESSION_PREFIX, GUEST_RECOVERY_CODE_PREFIX,
-    HUMAN_SESSION_BEARER_BYTES, HUMAN_SESSION_BEARER_CHARS, HUMAN_SESSION_BEARER_PREFIX,
-    OPERATOR_SESSION_BEARER_CHARS, OPERATOR_SESSION_BEARER_PREFIX,
+    ATTENDEE_INVITE_PREFIX, ATTENDEE_SESSION_PREFIX, CONNECTOR_INVITE_PREFIX,
+    CONNECTOR_SESSION_PREFIX, GUEST_RECOVERY_CODE_PREFIX, HUMAN_SESSION_BEARER_BYTES,
+    HUMAN_SESSION_BEARER_CHARS, HUMAN_SESSION_BEARER_PREFIX, OPERATOR_SESSION_BEARER_CHARS,
+    OPERATOR_SESSION_BEARER_PREFIX,
 };
 mod human_invite_preflight;
 mod human_invites;

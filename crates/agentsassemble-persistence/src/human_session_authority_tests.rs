@@ -550,7 +550,7 @@ async fn assert_refreshed_display(
     assert_eq!(refreshed.principal().display_name, expected);
 }
 
-async fn admitted_fixture(invite_scope: InviteScope) -> (SqliteStore, DateTime<Utc>) {
+pub(super) async fn admitted_fixture(invite_scope: InviteScope) -> (SqliteStore, DateTime<Utc>) {
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open session authority fixture: {error}"));
@@ -608,7 +608,7 @@ async fn admitted_fixture(invite_scope: InviteScope) -> (SqliteStore, DateTime<U
     (store, now)
 }
 
-async fn session_fingerprint(store: &SqliteStore) -> [u8; 32] {
+pub(super) async fn session_fingerprint(store: &SqliteStore) -> [u8; 32] {
     sqlx::query_scalar::<_, Vec<u8>>("SELECT session_fingerprint FROM human_room_sessions")
         .fetch_one(&store.pool)
         .await
