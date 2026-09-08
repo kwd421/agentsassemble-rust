@@ -68,7 +68,7 @@ pub(crate) trait ProviderDriver: Send {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub(crate) struct ProviderSessionAttachment {
     pub(crate) provider_session_id: String,
     pub(crate) reused: bool,

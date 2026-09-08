@@ -37,6 +37,8 @@ mod llm_gateway;
 mod lm_studio;
 mod local_openai;
 mod loopback_http;
+#[cfg(unix)]
+mod managed_bridge;
 mod ollama;
 mod openai_stream;
 mod opencode;
@@ -90,6 +92,8 @@ pub use credentials::{
 };
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
+#[cfg(unix)]
+pub use managed_bridge::run_managed_bridge_if_requested;
 pub use profile::runtime_profile_key;
 pub use provider_request_exchange::{
     ProviderRequestCompletion, ProviderRequestExchange, ProviderRequestExchangeError,

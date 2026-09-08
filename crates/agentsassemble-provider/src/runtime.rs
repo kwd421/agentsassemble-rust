@@ -571,7 +571,7 @@ mod resident_tests;
 mod test_cleanup;
 #[cfg(all(test, unix))]
 #[path = "runtime_tests.rs"]
-mod tests;
+pub(crate) mod tests;
 
 #[path = "runtime_launch_state.rs"]
 mod launch_state;

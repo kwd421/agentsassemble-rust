@@ -1107,3 +1107,28 @@ and retry/uncertainty meanings are unchanged. The 321 persistence, 101 server un
 30 Codex, seven ACP and two launch-cleanup tests pass, along with workspace
 all-target/all-feature Clippy and unchanged mandatory gates. This establishes error
 transport ownership only; managed pipe and native cleanup acceptance remain pending.
+
+Tool execution keeps its native reservation owner across the pipe: the parent room
+actor requests the child's exact queued-to-executing transition and waits for its
+answer before performing the durable operation. It never substitutes an always-valid
+local reservation. Native completion remains pending until the parent's operation
+result returns. Pipe loss releases both response waiters and closes native admission;
+the existing durable turn checks still govern effects. This requires asynchronous
+reservation admission at that process boundary, rather than moving room policy into
+the child or duplicating the portal's reservation state in the parent.
+
+The internal managed-worker entry now accepts bounded length-delimited private
+startup frames, imports the exact already-authorized launch lease, and serves native
+session attachment, liveness and stop. The imported lifetime stays held until the
+worker ends, including API drivers without a native subprocess. Selected credentials
+are read-only in child memory with no secure-store fallback. Pipe loss during launch
+waits for the existing launch owner, then stops its returned driver; command or pipe
+failure after readiness also runs native cleanup. No turn replay is introduced.
+
+Local duplex transport with a real guarded CLI fixture passes attachment, explicit
+stop, EOF and changed-owner rejection, with the guardian's native-absence receipt in
+each termination case. Credential isolation also passes. Affected all-target/
+all-feature Clippy and unchanged mandatory gates pass. These tests execute the worker
+loop in-process; separate managed-process launch, turn/request/tool multiplexing and
+the production factory cutover remain pending. The pipe frame cap is 4 MiB; no new
+timer or background task is used by this lifecycle loop.

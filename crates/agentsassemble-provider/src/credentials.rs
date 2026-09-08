@@ -42,7 +42,7 @@ impl ProviderCredentialStatus {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error, serde::Serialize, serde::Deserialize)]
 pub enum ProviderCredentialError {
     #[error("secure_store_unavailable")]
     SecureStoreUnavailable,
@@ -226,6 +226,16 @@ impl ProviderCredential {
 }
 
 impl ProviderCredentialStore {
+    #[cfg(unix)]
+    pub(crate) fn from_private_handoff(
+        selected: Option<private_handoff::SelectedCredential>,
+    ) -> Self {
+        Self {
+            backend: Arc::new(private_handoff::PrivateCredentialBackend(selected)),
+            access: Arc::new(Semaphore::new(1)),
+        }
+    }
+
     #[cfg(test)]
     pub(crate) fn isolated_test_store() -> Self {
         tests::isolated_store()
@@ -347,6 +357,10 @@ fn validated_secret(value: &str) -> Result<String, ProviderCredentialError> {
     }
     Ok(secret)
 }
+
+#[cfg(unix)]
+#[path = "credentials_private_handoff.rs"]
+pub(crate) mod private_handoff;
 
 #[cfg(test)]
 mod tests {

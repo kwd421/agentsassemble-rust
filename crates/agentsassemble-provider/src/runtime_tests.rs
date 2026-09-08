@@ -16,7 +16,7 @@ use crate::runtime::test_cleanup::{ExactProcessCleanup, ExactProcessGroupCleanup
 use crate::runtime_lease::HeldRuntimeLease;
 use crate::test_support::durable_session;
 
-pub(super) static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
+pub(crate) static RUNTIME_TEST_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 #[path = "runtime_codex_home_tests.rs"]
 mod codex_home_tests;
@@ -595,7 +595,7 @@ async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
     );
 }
 
-pub(super) async fn fixture_session(directory: &Path, script: &str) -> DurableAgentSession {
+pub(crate) async fn fixture_session(directory: &Path, script: &str) -> DurableAgentSession {
     let executable = directory.join("codex-fixture");
     std::fs::write(&executable, script)
         .unwrap_or_else(|error| panic!("write process fixture: {error}"));

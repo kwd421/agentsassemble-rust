@@ -42,6 +42,45 @@ pub(crate) struct HeldRuntimeLease {
 }
 
 impl HeldRuntimeLease {
+    #[cfg(unix)]
+    pub(crate) fn from_private_handoff(
+        session: &agentsassemble_domain::DurableAgentSession,
+    ) -> io::Result<Self> {
+        use crate::runtime_handle::{RuntimeHandlePlatform, parse_handle_id};
+        let identity = parse_handle_id(&session.runtime_handle_id)?;
+        let boot_identity = crate::runtime_boot::current_identity()?.to_owned();
+        if identity.platform != RuntimeHandlePlatform::Unix
+            || identity.boot_identity.as_deref() != Some(boot_identity.as_str())
+            || identity.launch_token != session.runtime_lease_token
+            || session.runtime_owner_id.is_empty()
+        {
+            return Err(io::Error::other("managed launch identity is not current"));
+        }
+        let path = runtime_lease_path(&session.public.room_id, &session.public.session_id)?;
+        let lifetime_path = runtime_lifetime_path(&path);
+        let mut lifetime = OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open(&lifetime_path)?;
+        lifetime.try_lock_shared()?;
+        let mut marker = OpenOptions::new().read(true).write(true).open(&path)?;
+        marker.try_lock_exclusive()?;
+        let token = identity.launch_token;
+        if read_marker(&mut lifetime)? != format!("lifetime:{token}")
+            || read_marker(&mut marker)? != format!("launching:{token}")
+        {
+            return Err(io::Error::other("managed launch lease is not authorized"));
+        }
+        Ok(Self {
+            path,
+            lifetime_path,
+            launch_lifetime: Mutex::new(Some(lifetime)),
+            boot_identity,
+            token,
+            file: None,
+        })
+    }
+
     pub(crate) fn prepare(room_id: &str, session_id: &str) -> io::Result<Self> {
         #[cfg(unix)]
         let boot_identity = crate::runtime_boot::current_identity()?.to_owned();
