@@ -87,7 +87,7 @@ async fn run_request(interrupt: bool) -> Result<(), Box<dyn std::error::Error>> 
     Ok(())
 }
 
-fn request_fixture(transcript: &std::path::Path, interrupt: bool) -> String {
+pub(crate) fn request_fixture(transcript: &std::path::Path, interrupt: bool) -> String {
     let native_request = json!({"id": "native-request-1", "method": "item/tool/requestUserInput", "params": {
         "threadId": "thread-1", "turnId": "provider-turn-1", "questions": [{
             "id": "answer", "header": "Input", "question": "Enter the fixture answer", "isSecret": true, "isOther": true

@@ -1158,3 +1158,21 @@ uncertainty properties before readiness. No provider-kind policy is inferred in 
 parent. The two lifecycle/credential cases, two random and seven vote domain cases,
 affected all-target/all-feature Clippy and unchanged mandatory gates pass. The
 lifecycle cases still exercise an in-process worker with real guarded CLI children.
+
+The managed worker now prepares the actual observation, sends each turn once and
+handles exact interrupt, finish, abort and stop. Plain turns retain their existing
+absence of room-observation hooks. Each completed driver operation reports freshly
+observed native runtime properties; cancellation reports follow the dropped send
+future and do not claim native interruption or process absence on their own.
+
+Native requests retain their open, answer, actual upstream delivery and durable
+receipt exchange across the pipe. Tool callbacks retain the native reservation until
+the parent's result, and await native admission before execution. Attachment results
+retain native validation and use base64 to preserve the existing 10 MiB limit without
+JSON byte-array expansion. Frames allow that encoded maximum plus 4 MiB metadata;
+callback custody is bounded to 128 live futures and four queued ingress/events,
+without new tasks or timers. The guarded CLI fixture passes ordinary stop, EOF,
+wrong-owner rejection, one native input response, exact interruption and late
+interruption after a plain turn, with native absence receipts and no repeated turn/start. Affected Clippy and unchanged gates
+pass. This is child-side transport proof; parent callback integration, a separate
+managed-worker process and production cutover remain pending.

@@ -10,11 +10,13 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::{
     credentials::private_handoff::SelectedCredential,
-    driver::{DriverError, ProviderDriver, ProviderSessionAttachment},
+    driver::{DriverError, ProviderDriver, ProviderSessionAttachment, ProviderTurnCompleted},
     launch_error::DriverLaunchError,
 };
 
-const MAX_FRAME_BYTES: usize = 4 * 1024 * 1024;
+// Preserve the existing maximum attachment, including base64 expansion and frame metadata.
+const MAX_FRAME_BYTES: usize =
+    agentsassemble_domain::MAX_ATTACHMENT_BYTES.div_ceil(3) * 4 + 4 * 1024 * 1024;
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -30,6 +32,29 @@ pub(super) enum Command {
     Attach {
         id: u64,
         session: Box<DurableAgentSession>,
+    },
+    Prepare {
+        id: u64,
+        turn: super::turn::TurnInput,
+    },
+    Send {
+        id: u64,
+        session: Box<DurableAgentSession>,
+    },
+    Interrupt {
+        id: u64,
+        session: Box<DurableAgentSession>,
+    },
+    Finish {
+        id: u64,
+    },
+    Abort {
+        id: u64,
+    },
+    Callback {
+        id: u64,
+        callback_id: u64,
+        reply: super::callbacks::Reply,
     },
     IsAlive {
         id: u64,
@@ -52,6 +77,33 @@ pub(super) enum Event {
         id: u64,
         result: Result<ProviderSessionAttachment, DriverError>,
     },
+    Prepared {
+        id: u64,
+        result: Result<(), DriverError>,
+    },
+    Turn {
+        id: u64,
+        result: Result<ProviderTurnCompleted, DriverError>,
+    },
+    TurnCancelled {
+        id: u64,
+    },
+    Interrupted {
+        id: u64,
+        result: Result<(), DriverError>,
+    },
+    Finished {
+        id: u64,
+        result: Result<crate::room_portal::ProviderTurnOutcome, DriverError>,
+    },
+    Aborted {
+        id: u64,
+        result: Result<(), DriverError>,
+    },
+    Callback {
+        id: u64,
+        callback: super::callbacks::Callback,
+    },
     Alive {
         id: u64,
         result: Result<bool, DriverError>,
@@ -60,6 +112,22 @@ pub(super) enum Event {
         id: u64,
         result: Result<(), DriverError>,
     },
+}
+
+impl Command {
+    pub(super) fn id(&self) -> u64 {
+        match self {
+            Self::Attach { id, .. }
+            | Self::Prepare { id, .. }
+            | Self::Send { id, .. }
+            | Self::Interrupt { id, .. }
+            | Self::Finish { id }
+            | Self::Abort { id }
+            | Self::Callback { id, .. }
+            | Self::IsAlive { id }
+            | Self::Stop { id } => *id,
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize)]

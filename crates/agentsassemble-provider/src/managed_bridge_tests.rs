@@ -17,7 +17,7 @@ type TestResult = Result<(), Box<dyn std::error::Error>>;
 async fn managed_private_pipe_preserves_native_attach_and_cleans_stop_loss_and_wrong_owner()
 -> TestResult {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
-    for termination in ["stop", "eof", "wrong_owner"] {
+    for termination in ["stop", "eof", "wrong_owner", "answer", "interrupt", "plain"] {
         tokio::time::timeout(Duration::from_secs(20), native_lifecycle(termination)).await??;
     }
     Ok(())
@@ -32,7 +32,17 @@ async fn native_lifecycle(termination: &str) -> TestResult {
         "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\n",
         "IFS= read -r forever\n",
     );
-    let mut session = fixture_session(directory.path(), script).await;
+    let transcript = directory.path().join("native.jsonl");
+    let turn_case = matches!(termination, "answer" | "interrupt" | "plain");
+    let script = if turn_case {
+        crate::runtime::codex_request_tests::request_fixture(
+            &transcript,
+            termination == "interrupt",
+        )
+    } else {
+        script.to_owned()
+    };
+    let mut session = fixture_session(directory.path(), &script).await;
     let mut lease = HeldRuntimeLease::prepare(&session.public.room_id, &session.public.session_id)?;
     session.runtime_handle_id = lease.new_runtime_handle_id();
     session.runtime_lease_token = lease.token().to_owned();
@@ -73,15 +83,25 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     assert!(
         matches!(read_event(&mut input).await?, Some(Event::Attached { id: 1, result: Ok(attachment) }) if attachment.provider_session_id == "thread-1")
     );
+    let next_id = if turn_case {
+        session.provider_session_id = "thread-1".to_owned();
+        native_request_turn(
+            &mut input,
+            &mut output,
+            &session,
+            termination == "interrupt",
+            termination == "plain",
+        )
+        .await?
+    } else {
+        2
+    };
     match termination {
-        "stop" => {
-            write(&mut output, &Command::Stop { id: 2 }).await?;
+        "stop" | "answer" | "interrupt" | "plain" => {
+            write(&mut output, &Command::Stop { id: next_id }).await?;
             assert!(matches!(
                 read_event(&mut input).await?,
-                Some(Event::Stopped {
-                    id: 2,
-                    result: Ok(())
-                })
+                Some(Event::Stopped { result: Ok(()), .. })
             ));
         }
         "wrong_owner" => {
@@ -100,7 +120,38 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     drop(output);
     drop(input);
     let result = worker.await?;
-    assert_eq!(result.is_ok(), termination == "stop");
+    assert_native_proof(&mut lease, &session, &result, &transcript, termination)
+}
+
+fn assert_native_proof(
+    lease: &mut HeldRuntimeLease,
+    session: &agentsassemble_domain::DurableAgentSession,
+    result: &Result<(), crate::driver::DriverError>,
+    transcript: &std::path::Path,
+    termination: &str,
+) -> TestResult {
+    assert_eq!(
+        result.is_ok(),
+        matches!(termination, "stop" | "answer" | "interrupt" | "plain")
+    );
+    if matches!(termination, "answer" | "interrupt" | "plain") {
+        let recorded = std::fs::read_to_string(transcript)?;
+        let frames = recorded
+            .lines()
+            .map(serde_json::from_str::<serde_json::Value>)
+            .collect::<Result<Vec<_>, _>>()?;
+        assert_eq!(
+            frames.len(),
+            5,
+            "exactly one native send and one answer or interrupt"
+        );
+        assert_eq!(frames[3]["method"], "turn/start");
+        if termination == "interrupt" {
+            assert_eq!(frames[4]["method"], "turn/interrupt");
+        } else {
+            assert_eq!(frames[4]["id"], "native-request-1");
+        }
+    }
     assert!(
         lease.cleanup_receipt_is_present(),
         "native process absence must be proven"
@@ -153,4 +204,161 @@ async fn read_event<R: tokio::io::AsyncRead + Unpin>(
             event => return Ok(event),
         }
     }
+}
+
+async fn native_request_turn<R: tokio::io::AsyncRead + Unpin, W: tokio::io::AsyncWrite + Unpin>(
+    input: &mut wire::Reader<R>,
+    output: &mut wire::Writer<W>,
+    session: &agentsassemble_domain::DurableAgentSession,
+    interrupt: bool,
+    plain: bool,
+) -> Result<u64, Box<dyn std::error::Error>> {
+    use super::callbacks::{Callback, Reply};
+    write(output, &prepare_turn(session, plain)?).await?;
+    assert!(matches!(
+        read_event(input).await?,
+        Some(Event::Prepared {
+            id: 2,
+            result: Ok(())
+        })
+    ));
+    write(
+        output,
+        &Command::Send {
+            id: 3,
+            session: Box::new(session.clone()),
+        },
+    )
+    .await?;
+    let Some(Event::Callback {
+        id,
+        callback: Callback::Request { .. },
+    }) = read_event(input).await?
+    else {
+        return Err("expected native request".into());
+    };
+    write(
+        output,
+        &Command::Callback {
+            id: 4,
+            callback_id: id,
+            reply: Reply::RequestOpened { result: Ok(()) },
+        },
+    )
+    .await?;
+    if interrupt {
+        write(
+            output,
+            &Command::Interrupt {
+                id: 5,
+                session: Box::new(session.clone()),
+            },
+        )
+        .await?;
+        assert!(matches!(
+            read_event(input).await?,
+            Some(Event::TurnCancelled { id: 3 })
+        ));
+        assert!(matches!(
+            read_event(input).await?,
+            Some(Event::Interrupted {
+                id: 5,
+                result: Ok(())
+            })
+        ));
+    } else {
+        write(
+            output,
+            &Command::Callback {
+                id: 5,
+                callback_id: id,
+                reply: Reply::Resolution {
+                    result: Ok(agentsassemble_domain::ProviderRequestResolution::Answers {
+                        answers: [("answer".to_owned(), vec!["fixture-value".to_owned()])].into(),
+                    }),
+                },
+            },
+        )
+        .await?;
+    }
+    let Some(Event::Callback {
+        id: delivered_id,
+        callback: Callback::Delivered { delivered },
+    }) = read_event(input).await?
+    else {
+        return Err("expected native delivery acknowledgement".into());
+    };
+    assert_eq!(delivered_id, id);
+    assert_eq!(delivered, !interrupt);
+    write(
+        output,
+        &Command::Callback {
+            id: 6,
+            callback_id: id,
+            reply: Reply::Receipt { result: Ok(()) },
+        },
+    )
+    .await?;
+    if !interrupt {
+        assert!(matches!(
+            read_event(input).await?,
+            Some(Event::Turn {
+                id: 3,
+                result: Ok(_)
+            })
+        ));
+    }
+    close_turn(input, output, session, plain).await
+}
+
+async fn close_turn<R: tokio::io::AsyncRead + Unpin, W: tokio::io::AsyncWrite + Unpin>(
+    input: &mut wire::Reader<R>,
+    output: &mut wire::Writer<W>,
+    session: &agentsassemble_domain::DurableAgentSession,
+    plain: bool,
+) -> Result<u64, Box<dyn std::error::Error>> {
+    let abort_id = if plain {
+        write(
+            output,
+            &Command::Interrupt {
+                id: 7,
+                session: Box::new(session.clone()),
+            },
+        )
+        .await?;
+        assert!(matches!(
+            read_event(input).await?,
+            Some(Event::Interrupted {
+                id: 7,
+                result: Ok(())
+            })
+        ));
+        8
+    } else {
+        7
+    };
+    write(output, &Command::Abort { id: abort_id }).await?;
+    assert!(matches!(
+        read_event(input).await?,
+        Some(Event::Aborted { result: Ok(()), .. })
+    ));
+    Ok(abort_id + 1)
+}
+
+fn prepare_turn(
+    session: &agentsassemble_domain::DurableAgentSession,
+    plain: bool,
+) -> Result<Command, serde_json::Error> {
+    let mut turn: super::turn::TurnInput = serde_json::from_value(serde_json::json!({
+        "turn_id": "room-turn-1", "turn_generation": 1,
+        "execution_id": "11111111-1111-4111-8111-111111111111",
+        "input": "Ask a question", "requests": true,
+        "observation": { "session_id": session.public.session_id, "input_up_to_seq": 9,
+            "view": "Room: General\n#9 Human: ask", "attachment_ids": [],
+            "attachments": false, "allowed_agent_ids": [], "tabletop_tools": false, "tools": false }
+    }))?;
+    if plain {
+        turn.observation = None;
+    }
+    Ok(Command::Prepare { id: 2, turn })
 }

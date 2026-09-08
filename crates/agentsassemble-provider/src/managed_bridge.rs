@@ -4,14 +4,20 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::{
     credentials::ProviderCredentialStore,
-    driver::{DriverError, ProviderDriver},
+    driver::DriverError,
     launch_error::DriverLaunchError,
     provider_factory::{DriverFactory, ProductionDriverFactory},
     runtime_lease::HeldRuntimeLease,
 };
 
+#[path = "managed_bridge_callbacks.rs"]
+mod callbacks;
+#[path = "managed_bridge_turn.rs"]
+mod turn;
 #[path = "managed_bridge_wire.rs"]
 mod wire;
+#[path = "managed_bridge_worker.rs"]
+mod worker;
 use wire::{Command, Event, Launch, Reader, Writer, protocol_error, read, write};
 
 const WORKER_FLAG: &str = "--agentsassemble-managed-provider";
@@ -103,57 +109,10 @@ async fn run_launch<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     if let Err(error) = ready {
         return driver.stop().await.and(Err(error));
     }
-    let result = serve(input, output, session, driver.as_mut()).await;
+    let result = worker::serve(input, output, session, driver.as_mut()).await;
     match result {
         Ok(stopped) => stopped,
         Err(error) => driver.stop().await.and(Err(error)),
-    }
-}
-
-async fn serve<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
-    input: &mut Reader<R>,
-    output: &mut Writer<W>,
-    launched: &DurableAgentSession,
-    driver: &mut dyn ProviderDriver,
-) -> Result<Result<(), DriverError>, DriverError> {
-    let mut expected = 1_u64;
-    loop {
-        let command: Command = read(input).await?.ok_or_else(protocol_error)?;
-        let id = match &command {
-            Command::Attach { id, .. } | Command::IsAlive { id } | Command::Stop { id } => *id,
-        };
-        if id != expected {
-            return Err(protocol_error());
-        }
-        expected = expected.checked_add(1).ok_or_else(protocol_error)?;
-        let event = match command {
-            Command::Attach { session, .. } => {
-                if !same_runtime(launched, &session) {
-                    return Err(protocol_error());
-                }
-                Event::Attached {
-                    id,
-                    result: driver.attach_session(&session).await,
-                }
-            }
-            Command::IsAlive { .. } => Event::Alive {
-                id,
-                result: driver.is_alive().await,
-            },
-            Command::Stop { .. } => {
-                let result = driver.stop().await;
-                write(
-                    output,
-                    &Event::Stopped {
-                        id,
-                        result: result.clone(),
-                    },
-                )
-                .await?;
-                return Ok(result);
-            }
-        };
-        write(output, &event).await?;
     }
 }
 
