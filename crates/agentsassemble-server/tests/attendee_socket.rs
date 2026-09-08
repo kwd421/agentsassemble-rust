@@ -11,6 +11,8 @@ use uuid::Uuid;
 mod attendee;
 #[path = "support/human_invite.rs"]
 mod human_invite;
+#[path = "support/local_socket.rs"]
+mod local_socket;
 #[path = "support/room_socket_peer.rs"]
 mod room_socket_peer;
 
@@ -180,4 +182,127 @@ async fn verify_started_and_result(peer: &mut Peer, turn: &Value) {
     assert_eq!(replay["type"], "ack");
     assert_eq!(replay["deduplicated"], true);
     assert_eq!(replay["event_id"], ack["event_id"]);
+}
+
+#[tokio::test]
+async fn kicked_external_runtime_stays_pending_until_its_cleanup_report_is_published() -> TestResult
+{
+    let (store, invite) = attendee::fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let client = Client::new();
+    let joined: Value = client.post(format!("{}/api/room-attendee/join", server.base_url))
+        .bearer_auth(&invite.invite_bearer)
+        .json(&json!({"request_id":Uuid::new_v4(),"client_secret":URL_SAFE_NO_PAD.encode([10;32]),"provider":"codex","display_name":"Cleanup AI"}))
+        .send().await?.error_for_status()?.json().await?;
+    let bearer = joined["session_bearer"].as_str().ok_or("bearer missing")?;
+    let mut external = connect(&server.base_url, bearer).await?;
+    ready(&mut external).await;
+    let endpoint = format!("{}/api/room-attendee/cleanup", server.base_url);
+    let before: Value = client
+        .get(&endpoint)
+        .bearer_auth(bearer)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert!(before["stop"].is_null());
+    let mut manager = local_socket::connect(&server.base_url, server.state(), "general").await;
+    manager.subscribe(0).await;
+    manager.receive_json().await;
+    manager.send_json(&json!({"op":"command", "request_id":"external-runtime-kick", "action":"participant.kick", "payload":{"participant_id":joined["participant_id"]}})).await;
+    loop {
+        let frame = manager
+            .receive_json_with_timeout(Duration::from_secs(2))
+            .await;
+        if frame["op"] == "ack" {
+            assert_eq!(frame["result"]["cleanup_pending"], true);
+            break;
+        }
+        assert_ne!(frame["op"], "error");
+    }
+    assert!(tokio::time::timeout(Duration::from_secs(2), external.wait_closed()).await?);
+    let pending = store.snapshot("general", 0, 200).await?;
+    assert!(pending.agent_sessions[0].provider_session_active);
+    assert_ne!(
+        pending.agent_sessions[0].runtime_status,
+        agentsassemble_domain::AgentRuntimeStatus::Stopped
+    );
+    let response = client
+        .get(&endpoint)
+        .bearer_auth(bearer)
+        .send()
+        .await?
+        .error_for_status()?;
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    let stop: Value = response.json().await?;
+    let report = json!({"request_id":Uuid::new_v4(), "stopped":stop["stop"]});
+    assert_eq!(
+        client
+            .post(&endpoint)
+            .bearer_auth(&invite.invite_bearer)
+            .json(&report)
+            .send()
+            .await?
+            .status(),
+        401
+    );
+    let mut published = server.rooms().subscribe("general").await;
+    let event_id = report_cleanup_retry(&client, &endpoint, bearer, &report).await?;
+    let event = tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let event = published.recv().await?;
+            if event.id == event_id {
+                return Ok::<_, tokio::sync::broadcast::error::RecvError>(event);
+            }
+        }
+    })
+    .await??;
+    assert_eq!(event.id, event_id);
+    assert_eq!(event.extra["agent_session"]["runtime_status"], "stopped");
+    assert_eq!(
+        event.extra["agent_session"]["provider_session_active"],
+        false
+    );
+    let serialized = serde_json::to_string(&event)?;
+    assert!(!serialized.contains("external-lease"));
+    let completed: Value = client
+        .get(&endpoint)
+        .bearer_auth(bearer)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert!(completed["stop"].is_null());
+    manager.close().await;
+    server.stop().await;
+    Ok(())
+}
+
+async fn report_cleanup_retry(
+    client: &Client,
+    endpoint: &str,
+    bearer: &str,
+    report: &Value,
+) -> Result<Value, Box<dyn std::error::Error>> {
+    let mut event_id = Value::Null;
+    for deduplicated in [false, true] {
+        let ack: Value = client
+            .post(endpoint)
+            .bearer_auth(bearer)
+            .json(report)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        assert_eq!(ack["deduplicated"], deduplicated);
+        if deduplicated {
+            assert_eq!(ack["event_id"], event_id);
+        } else {
+            event_id = ack["event_id"].clone();
+        }
+    }
+    Ok(event_id)
 }

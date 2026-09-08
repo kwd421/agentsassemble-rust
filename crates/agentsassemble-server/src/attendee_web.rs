@@ -1,3 +1,5 @@
+#[path = "attendee_cleanup_web.rs"]
+mod cleanup;
 #[path = "attendee_socket.rs"]
 mod socket;
 #[path = "attendee_socket_protocol.rs"]
@@ -39,6 +41,7 @@ registered_routes! {
     fn attendee_routes<AppState>() {
         same_origin_public "/api/room-attendee/join" => post(join),
         same_origin_public "/api/room-attendee/ws" => get(upgrade_socket),
+        same_origin_public "/api/room-attendee/cleanup" => get(cleanup::read).post(cleanup::report),
     }
 }
 

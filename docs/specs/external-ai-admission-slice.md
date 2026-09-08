@@ -508,3 +508,21 @@ All-target/all-feature server and persistence Clippy passes. The measured 18,208
 cleanup future is boxed at its new call boundary without changing the lint gate.
 Cleanup publication/HTTP and external stop/interrupt controls remain to be connected;
 this checkpoint is persistence proof, not external process execution proof.
+
+### External cleanup transport checkpoint (2026-09-08)
+
+The private `/api/room-attendee/cleanup` GET reads only an exact pending stop request;
+POST accepts its bounded positive report through the existing attendee room queue.
+The session bearer remains purpose-specific, and these handlers use only the sealed
+cleanup authority. Revoked membership cannot reconnect its normal socket or publish
+turn output. A lost cleanup acknowledgement replays the committed event ID without
+republishing another result. This HTTP boundary is the external owner's explicit
+post-revocation cleanup path, not a substitute for ordinary room authorization.
+
+The real local socket test readies an external runtime, kicks it through the normal
+manager socket, observes closure while provider custody remains active, reports the
+exact stop over HTTP, and observes the canonical stopped event. It also checks
+wrong-purpose rejection, private/no-store responses, replay identity and no public
+runtime-lease disclosure. All four attendee HTTP/queue/socket tests and affected
+all-target/all-feature Clippy pass. External CLI and explicit stop/interrupt controls
+remain pending; no real provider process was started for this local proof.

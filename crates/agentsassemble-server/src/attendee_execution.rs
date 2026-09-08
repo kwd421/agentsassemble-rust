@@ -1,6 +1,7 @@
 use agentsassemble_persistence::{
-    AgentTurnCommit, AttendeeConnectionAuthorization, AttendeeRuntimeReady,
-    AttendeeSessionAuthorization, AttendeeTurnReport, PersistenceError,
+    AgentTurnCommit, AttendeeCleanupAuthorization, AttendeeCleanupReport,
+    AttendeeConnectionAuthorization, AttendeeRuntimeReady, AttendeeSessionAuthorization,
+    AttendeeTurnReport, PersistenceError,
 };
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
@@ -21,6 +22,10 @@ pub enum AttendeeOperation {
         connection: AttendeeConnectionAuthorization,
         report: Box<AttendeeTurnReport>,
     },
+    Cleanup {
+        authority: AttendeeCleanupAuthorization,
+        report: Box<AttendeeCleanupReport>,
+    },
     Disconnect {
         connection: AttendeeConnectionAuthorization,
     },
@@ -29,6 +34,7 @@ pub enum AttendeeOperation {
 impl AttendeeOperation {
     fn room_id(&self) -> &str {
         match self {
+            Self::Cleanup { authority, .. } => authority.room_id(),
             Self::Connect { session, .. } => &session.principal().room_id,
             Self::Ready { connection, .. }
             | Self::Report { connection, .. }
@@ -144,18 +150,11 @@ async fn apply(
             let mutation = store
                 .record_attendee_turn_report(&connection, &report, now)
                 .await?;
-            let reply = AttendeeOperationResult::Reported {
-                event_id: mutation.outcome.event.id,
-                sequence: mutation.outcome.event.seq,
-                deduplicated: mutation.outcome.deduplicated,
-            };
-            Ok((
-                reply,
-                AgentTurnCommit {
-                    events: mutation.outcome.events,
-                    next_assignments: mutation.assignments,
-                },
-            ))
+            Ok(reported(mutation))
+        }
+        AttendeeOperation::Cleanup { authority, report } => {
+            let mutation = store.record_attendee_cleanup(&authority, &report).await?;
+            Ok(reported(mutation))
         }
         AttendeeOperation::Disconnect { connection } => {
             empty.events = store
@@ -166,4 +165,20 @@ async fn apply(
             Ok((AttendeeOperationResult::Applied, empty))
         }
     }
+}
+
+fn reported(
+    mutation: agentsassemble_persistence::RoomCommandMutation,
+) -> (AttendeeOperationResult, AgentTurnCommit) {
+    (
+        AttendeeOperationResult::Reported {
+            event_id: mutation.outcome.event.id,
+            sequence: mutation.outcome.event.seq,
+            deduplicated: mutation.outcome.deduplicated,
+        },
+        AgentTurnCommit {
+            events: mutation.outcome.events,
+            next_assignments: mutation.assignments,
+        },
+    )
 }
