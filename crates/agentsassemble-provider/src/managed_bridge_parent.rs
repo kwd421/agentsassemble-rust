@@ -1,7 +1,8 @@
 //! Cancellation-safe provider interface: each pending operation has one wire send.
 use super::{
     parent_actor::{Call, Operation},
-    parent_process::{Exit, gone},
+    parent_process::Exit,
+    platform::RuntimeProof,
     wire::{Continuity, Event, Facts, protocol_error},
 };
 use crate::{
@@ -27,7 +28,7 @@ pub(super) struct ManagedDriver {
     failure: CancellationToken,
     actor: Option<AbortOnDropHandle<Exit>>,
     exit_verified: bool,
-    session: Arc<DurableAgentSession>,
+    proof: Arc<RuntimeProof>,
     pending: Option<Pending>,
     prepared: Option<Arc<ProviderTurnRequest>>,
     sent: Option<Arc<Operation>>,
@@ -39,14 +40,14 @@ impl ManagedDriver {
         facts: watch::Receiver<Facts>,
         failure: CancellationToken,
         actor: AbortOnDropHandle<Exit>,
-        session: Arc<DurableAgentSession>,
+        proof: Arc<RuntimeProof>,
     ) -> Self {
         Self {
             calls,
             facts,
             failure,
             actor: Some(actor),
-            session,
+            proof,
             exit_verified: false,
             pending: None,
             prepared: None,
@@ -131,7 +132,7 @@ impl ManagedDriver {
             self.actor.take();
             self.exit_verified = result.map_err(|_| protocol_error())?.verified;
         }
-        if self.exit_verified && gone(&self.session) {
+        if self.exit_verified && self.proof.is_gone() {
             Ok(())
         } else {
             Err(protocol_error())

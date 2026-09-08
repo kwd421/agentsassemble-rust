@@ -1381,3 +1381,24 @@ or durable transition changed. This lets a Windows worker use the native factory
 without asserting custody it does not own. Seven existing launch/cancellation tests,
 affected all-target/all-feature Clippy and unchanged mandatory gates pass on macOS;
 Windows compilation remains to be verified separately.
+
+Windows managed custody will use a real Job Object retained by the runtime lease,
+with suspended spawn and authoritative membership observation supplied by the
+maintained ProcessKit library. The bridge's child guard requests whole-job termination
+on cancellation; the retained lease can still observe actual membership after a
+cancelled launch. Empty membership, after the serialized launch owner ends, can
+produce the exact cleanup receipt; a cached leader exit cannot. An activated lease
+without that receipt remains unknown after owner loss, as with an unconfirmed Unix
+guardian. No new polling, detached cleanup task or unsafe-code exception is required.
+
+Interprocess supplies non-inheritable local Windows named pipes and kernel peer PID
+queries. Parent and bound worker verify each other's PID before transmitting launch
+credentials; the pipe name and expected PID carry no room/provider authority.
+The existing framed bridge protocol and callback owners remain shared. Unix retains
+its inherited socket, guardian lease handoff and independent cleanup receipt.
+
+The first transport boundary change moves Unix socket creation, worker FD ownership
+and guardian absence observation into one Unix owner. The shared parent still owns
+the same bounded handshake, wire actor and failure publication. Five existing managed
+cases pass, including all six native stop/loss/request/interrupt paths; affected
+Clippy and unchanged mandatory gates pass. This is not Windows runtime evidence.

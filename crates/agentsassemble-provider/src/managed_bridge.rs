@@ -24,6 +24,8 @@ mod parent_callbacks;
 mod parent_process;
 #[path = "managed_bridge_pipe.rs"]
 mod pipe;
+#[path = "managed_bridge_unix.rs"]
+mod platform;
 #[path = "managed_bridge_turn.rs"]
 mod turn;
 #[path = "managed_bridge_wire.rs"]
@@ -36,26 +38,20 @@ const CONTROL_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(1);
 
 const WORKER_FLAG: &str = "--agentsassemble-managed-provider";
 
+struct Spawn<C> {
+    child: platform::Child,
+    connection: C,
+    proof: std::sync::Arc<platform::RuntimeProof>,
+}
+
 /// Runs only the explicitly selected private managed-provider child mode.
 /// It has no listener, browser authority or public admission credential.
 pub async fn run_managed_bridge_if_requested() -> Option<i32> {
     if std::env::args_os().nth(1).as_deref() != Some(std::ffi::OsStr::new(WORKER_FLAG)) {
         return None;
     }
-    let result = run_socket().await;
+    let result = platform::run_worker().await;
     Some(i32::from(result.is_err()))
-}
-
-async fn run_socket() -> Result<(), DriverError> {
-    // Duplicate with CLOEXEC and close fd 0 before any native child can inherit it.
-    let socket =
-        rustix::io::fcntl_dupfd_cloexec(std::io::stdin(), 3).map_err(|_| protocol_error())?;
-    nix::unistd::close(0).map_err(|_| protocol_error())?;
-    let socket = std::os::unix::net::UnixStream::from(socket);
-    socket.set_nonblocking(true).map_err(|_| protocol_error())?;
-    let socket = tokio::net::UnixStream::from_std(socket).map_err(|_| protocol_error())?;
-    let (input, output) = socket.into_split();
-    run(input, output).await
 }
 
 async fn run<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
@@ -180,7 +176,7 @@ pub(crate) async fn launch_managed(
         None
     };
     parent_process::launch(
-        factory.guardian()?,
+        factory,
         Launch {
             session: Box::new(session.clone()),
             credential,

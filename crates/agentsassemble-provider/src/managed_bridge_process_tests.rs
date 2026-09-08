@@ -6,7 +6,7 @@ async fn worker_entry() {
     {
         return;
     }
-    let result = super::run_socket().await;
+    let result = super::platform::run_worker().await;
     std::process::exit(i32::from(result.is_err()));
 }
 
