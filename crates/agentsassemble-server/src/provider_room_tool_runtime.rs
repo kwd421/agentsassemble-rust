@@ -13,7 +13,7 @@ pub(crate) async fn handle_provider_room_tool(
     mut command: ProviderRoomToolCommand,
     write_budget: &mut ProviderWriteBudget,
 ) -> Option<crate::event_publication::PublicationAttempt> {
-    if let Err(error) = command.begin_execution() {
+    if let Err(error) = command.begin_execution().await {
         command.complete(Err(error));
         return None;
     }

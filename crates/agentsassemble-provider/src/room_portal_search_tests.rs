@@ -49,6 +49,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     );
     command
         .begin_execution()
+        .await
         .unwrap_or_else(|error| panic!("begin search execution: {error}"));
     let page = RoomMessageSearchPage {
         results: vec![RoomMessageSearchResult {
@@ -84,6 +85,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
         .unwrap_or_else(|| panic!("receive context command"));
     command
         .begin_execution()
+        .await
         .unwrap_or_else(|error| panic!("begin context execution: {error}"));
     let context = RoomMessageContext {
         channel_id: "lobby".to_owned(),

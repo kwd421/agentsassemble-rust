@@ -128,8 +128,10 @@ impl ProviderRoomToolCommand {
     /// # Errors
     ///
     /// Rejects stale, closing, missing, or already-consumed turn authority.
-    pub fn begin_execution(&mut self) -> Result<(), ProviderRoomToolError> {
-        self.reservation.begin_execution()
+    pub fn begin_execution(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<(), ProviderRoomToolError>> + Send {
+        std::future::ready(self.reservation.begin_execution())
     }
 
     pub fn complete(mut self, result: Result<ProviderRoomToolResult, ProviderRoomToolError>) {

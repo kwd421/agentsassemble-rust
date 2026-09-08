@@ -25,8 +25,8 @@ impl AttendeeToolCall {
     ///
     /// # Errors
     /// Rejects a native turn reservation that has already closed or lost exact authority.
-    pub fn new(mut command: ProviderRoomToolCommand) -> Result<Self, ProviderRoomToolError> {
-        if let Err(error) = command.begin_execution() {
+    pub async fn new(mut command: ProviderRoomToolCommand) -> Result<Self, ProviderRoomToolError> {
+        if let Err(error) = command.begin_execution().await {
             command.complete(Err(error.clone()));
             return Err(error);
         }

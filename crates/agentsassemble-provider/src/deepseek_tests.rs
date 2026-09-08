@@ -79,6 +79,7 @@ async fn committed_random_tool_keeps_the_turn_replay_unsafe() {
             .unwrap_or_else(|| panic!("receive room random command"));
         command
             .begin_execution()
+            .await
             .unwrap_or_else(|error| panic!("begin random commit: {error}"));
         command.complete(Ok(ProviderRoomToolResult::Random(
             RoomRandomResult::RollDice {

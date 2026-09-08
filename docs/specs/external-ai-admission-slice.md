@@ -1119,8 +1119,8 @@ the child or duplicating the portal's reservation state in the parent.
 
 The internal managed-worker entry now accepts bounded length-delimited private
 startup frames, imports the exact already-authorized launch lease, and serves native
-session attachment, liveness and stop. The imported lifetime stays held until the
-worker ends, including API drivers without a native subprocess. Selected credentials
+session attachment, liveness and stop. CLI launch transfers the imported lifetime to
+its existing guardian; API drivers retain it until the worker ends. Selected credentials
 are read-only in child memory with no secure-store fallback. Pipe loss during launch
 waits for the existing launch owner, then stops its returned driver; command or pipe
 failure after readiness also runs native cleanup. No turn replay is introduced.
@@ -1141,3 +1141,11 @@ cleanup. The only added local cost is a boxed future per invoked observation hoo
 without another task, queue or timer. Existing room/portal tests (22), exact-turn
 ownership tests (seven), API tool tests (three) and API contract tests (three) pass;
 affected all-target/all-feature Clippy and unchanged mandatory gates pass.
+
+Room-tool command admission now exposes an awaited result at the room actor and
+external native relay. The existing local reservation still performs its exact
+transition immediately and returns a ready future, with no added allocation or task.
+This prepares the same call site to await a managed child's reservation response.
+Nine portal cases, three API tool cases and the complete external execution/tool
+relay case pass. Affected all-target/all-feature Clippy and unchanged mandatory
+gates pass; the managed tool wire exchange remains pending.

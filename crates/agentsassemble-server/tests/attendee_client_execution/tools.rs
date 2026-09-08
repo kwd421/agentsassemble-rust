@@ -68,7 +68,7 @@ pub(super) async fn verify(
         let command = tokio::time::timeout(Duration::from_secs(10), receiver.recv())
             .await?
             .ok_or("native tool request missing")?;
-        let call = AttendeeToolCall::new(command)?;
+        let call = AttendeeToolCall::new(command).await?;
         let result = call.execute(client, connection).await?;
         if index == 2 {
             assert!(matches!(result, ProviderRoomToolResult::Random(_)));

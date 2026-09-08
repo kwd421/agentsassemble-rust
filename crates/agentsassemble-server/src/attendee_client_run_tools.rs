@@ -48,7 +48,7 @@ impl Tools {
         tokio::select! {
             Some(command) = self.tool_rx.recv(), if self.tool.is_none() => {
                 // Rejected stale reservations are already replied to by their existing owner.
-                self.tool = AttendeeToolCall::new(command).ok();
+                self.tool = AttendeeToolCall::new(command).await.ok();
             }
             Some(command) = self.attachment_rx.recv(), if self.attachment.is_none() => self.attachment = Some(command),
             result = async {

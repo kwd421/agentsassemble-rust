@@ -70,6 +70,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
     assert_eq!(blocked_terminal.is_error, Some(true));
     command
         .begin_execution()
+        .await
         .unwrap_or_else(|error| panic!("begin room actor commit: {error}"));
     command.complete(Ok(ProviderRoomToolResult::Random(
         RoomRandomResult::RollDice {
@@ -213,6 +214,7 @@ async fn closing_observation_retains_a_committing_tool_until_resolution() {
         .unwrap_or_else(|| panic!("receive committing room tool"));
     command
         .begin_execution()
+        .await
         .unwrap_or_else(|error| panic!("begin committing room tool: {error}"));
     portal
         .end_observation()
