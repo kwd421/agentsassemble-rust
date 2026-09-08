@@ -212,3 +212,188 @@ async fn fixture() -> Result<
         .await?;
     Ok((store, invite))
 }
+
+#[tokio::test]
+async fn attendee_room_queue_publishes_ready_and_results_without_host_execution() -> TestResult {
+    use agentsassemble_server::{
+        AttendeeOperation as Operation, AttendeeOperationResult as ResultKind,
+    };
+    use sha2::{Digest as _, Sha256};
+    let (store, invite) = fixture().await?;
+    let human_invite = human_invite::persist_invite(
+        &store,
+        InviteScope::ReadWrite,
+        1,
+        "turn-human",
+        "Turn Human",
+    )
+    .await;
+    let server = human_invite::start(store.clone()).await;
+    let mut events = server.rooms().subscribe("general").await;
+    let admitted = server
+        .rooms()
+        .admit_attendee(agentsassemble_persistence::AttendeeAdmissionRequest {
+            invite_fingerprint: &Sha256::digest(invite.invite_bearer.as_bytes()).into(),
+            client_fingerprint: &[8; 32],
+            request_id: Uuid::new_v4(),
+            provider_kind: "codex",
+            display_name: "External Codex",
+        })
+        .await?;
+    let ResultKind::Connected(connection) = server
+        .rooms()
+        .execute_attendee(Operation::Connect {
+            session: admitted.authorization,
+            connection_id: Uuid::new_v4(),
+        })
+        .await?
+    else {
+        return Err("connection response mismatch".into());
+    };
+    let ready = serde_json::from_value(json!({
+        "runtime_handle_id":"external-runtime", "runtime_owner_id":"external-owner", "runtime_lease_token":"external-lease",
+        "provider_session_id":"external-session", "model":"contract-model", "reasoning_effort":"", "service_tier":"", "variant":"",
+        "execution_harness":"builtin", "permission_mode":"meeting_read_only", "max_output_tokens":0,
+    }))?;
+    server
+        .rooms()
+        .execute_attendee(Operation::Ready {
+            connection: connection.clone(),
+            report: Box::new(ready),
+        })
+        .await?;
+    let client = Client::new();
+    let human = human_invite::join(
+        &client,
+        &server.base_url,
+        human_invite.invite_token(),
+        &format!("aad1_{}", URL_SAFE_NO_PAD.encode([0xB7; 32])),
+        &Uuid::new_v4().to_string(),
+        "Turn Human",
+        "",
+    )
+    .await;
+    let mut socket = human_invite::open_session_socket(
+        &client,
+        &server.base_url,
+        human_invite::canonical_session_token(&human),
+    )
+    .await;
+    send_human_input(&mut socket).await?;
+    let turn = store
+        .deliver_attendee_turn(&connection, chrono::Utc::now())
+        .await?
+        .ok_or("external assignment missing")?;
+    assert!(!turn.resume);
+    assert!(turn.input.room_view.contains("Please reply externally"));
+    let start = turn.authority;
+    store
+        .record_attendee_turn_started(
+            &connection,
+            &start,
+            "queue-provider-turn",
+            chrono::Utc::now(),
+        )
+        .await?;
+    publish_external_result(server.rooms(), &mut events, &connection, start).await?;
+    server
+        .rooms()
+        .execute_attendee(Operation::Disconnect { connection })
+        .await?;
+    let public = store
+        .snapshot("general", 0, 200)
+        .await?
+        .agent_sessions
+        .pop()
+        .ok_or("external session missing")?;
+    assert_eq!(
+        public.runtime_status,
+        agentsassemble_domain::AgentRuntimeStatus::Disconnected
+    );
+    assert!(public.provider_session_active);
+    socket.close().await;
+    server.stop().await;
+    Ok(())
+}
+
+async fn publish_external_result(
+    rooms: &agentsassemble_server::RoomRuntime,
+    events: &mut tokio::sync::broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+    connection: &agentsassemble_persistence::AttendeeConnectionAuthorization,
+    start: agentsassemble_persistence::ProviderTurnStartAuthority,
+) -> TestResult {
+    use agentsassemble_server::{
+        AttendeeOperation as Operation, AttendeeOperationResult as ResultKind,
+    };
+    let report = agentsassemble_persistence::AttendeeTurnReport {
+        request_id: Uuid::new_v4(),
+        turn_id: start.turn_id,
+        turn_generation: start.turn_generation,
+        execution_id: start.execution_id,
+        start_dispatch_nonce: start.start_dispatch_nonce,
+        runtime_handle_id: start.runtime_handle_id,
+        runtime_owner_id: start.runtime_owner_id,
+        runtime_lease_token: start.runtime_lease_token,
+        provider_turn_id: "queue-provider-turn".to_owned(),
+        provider_session_id: None,
+        outcome: agentsassemble_persistence::AttendeeTurnOutcome::Message {
+            content: "External queue result".to_owned(),
+            target_agent_id: String::new(),
+        },
+    };
+    let result = rooms
+        .execute_attendee(Operation::Report {
+            connection: connection.clone(),
+            report: Box::new(report.clone()),
+        })
+        .await?;
+    let ResultKind::Reported {
+        event_id,
+        deduplicated,
+        ..
+    } = result
+    else {
+        return Err("report response mismatch".into());
+    };
+    assert!(!deduplicated);
+    let published = tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let event = events.recv().await?;
+            if event.id == event_id {
+                return Ok::<_, tokio::sync::broadcast::error::RecvError>(event);
+            }
+        }
+    })
+    .await??;
+    assert_eq!(published.content.as_deref(), Some("External queue result"));
+    let ResultKind::Reported { deduplicated, .. } = rooms
+        .execute_attendee(Operation::Report {
+            connection: connection.clone(),
+            report: Box::new(report),
+        })
+        .await?
+    else {
+        return Err("retry response mismatch".into());
+    };
+    assert!(deduplicated);
+    Ok(())
+}
+
+async fn send_human_input(
+    socket: &mut room_socket_peer::RoomSocketPeer<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+) -> TestResult {
+    socket.send_json(&json!({"op":"command", "request_id":"attendee-turn-input", "action":"message.send", "payload":{"content":"Please reply externally"}})).await;
+    tokio::time::timeout(std::time::Duration::from_secs(2), async {
+        loop {
+            let frame = socket.receive_json().await;
+            if frame["op"] == "ack" {
+                break;
+            }
+            assert_ne!(frame["op"], "error");
+        }
+    })
+    .await?;
+    Ok(())
+}

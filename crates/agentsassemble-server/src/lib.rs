@@ -173,3 +173,5 @@ pub use ticket_issuer::{
     issue_side_chat_read_ticket,
 };
 pub use web::{ServeError, router, serve};
+
+pub use room_runtime::{AttendeeOperation, AttendeeOperationResult};

@@ -29,6 +29,11 @@ pub(crate) fn spawn_provider_turn(
     room_tool_ingress: ProviderRoomToolIngress,
     attachment_ingress: ProviderAttachmentReadIngress,
 ) {
+    // External assignments are delivered from the committed room event by their authenticated
+    // connection owner. They never enter the host adapter or create a local provider task.
+    if assignment.session.public.external_owned {
+        return;
+    }
     tasks.spawn(run_provider_turn_task(
         store,
         provider_adapter,
@@ -432,7 +437,7 @@ fn turn_authority<'a>(
     }
 }
 
-async fn publish_turn_commit(
+pub(crate) async fn publish_turn_commit(
     store: &SqliteStore,
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     tasks: &mut JoinSet<ProviderTurnTaskResult>,

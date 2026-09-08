@@ -38,6 +38,10 @@ use crate::room_command_execution::CommandExecution;
 mod command_queue;
 pub(crate) use command_queue::{RoomCommand, RoomCommandSession};
 
+#[path = "attendee_execution.rs"]
+mod attendee_execution;
+pub use attendee_execution::{AttendeeOperation, AttendeeOperationResult};
+
 #[path = "attendee_runtime.rs"]
 mod attendee;
 #[path = "connector_runtime.rs"]
@@ -629,6 +633,9 @@ async fn handle_room_mutation(
         RoomMutation::ConnectorAdmission(command) => {
             connector::admit(&owners, room_id, command).await
         }
+        RoomMutation::Attendee(command) => {
+            Box::pin(attendee_execution::execute(owners, command)).await
+        }
         RoomMutation::AttendeeAdmission(command) => {
             attendee::admit(&owners, room_id, command).await
         }
@@ -765,4 +772,5 @@ enum RoomMutation {
     HumanAdmission(HumanAdmissionCommand),
     ConnectorAdmission(connector::ConnectorAdmissionCommand),
     AttendeeAdmission(attendee::AttendeeAdmissionCommand),
+    Attendee(attendee_execution::AttendeeCommand),
 }

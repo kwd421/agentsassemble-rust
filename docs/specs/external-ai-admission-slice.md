@@ -440,3 +440,22 @@ replacement, changed start IDs and foreign-room rejection. Affected Clippy and
 unchanged architecture/format/diff/artifact gates pass. There is no new persisted
 queue, worker or timer. RoomRuntime/WebSocket integration and client runtime cleanup
 remain pending before the external attendee flow can meet acceptance.
+
+## Attendee room publication integration
+
+Connection claims, readiness, terminal reports and exact disconnect now pass through
+the existing bounded RoomRuntime mutation queue and durable publication owner.
+Responses distinguish committed reports from unresolved reply loss. The same turn
+publication helper advances managed assignments; external assignments remain with
+the authenticated connection's durable delivery owner and never spawn a host adapter
+task. No parallel queue or polling loop was added. The attendee branch is boxed at
+the room dispatch boundary after Clippy measured a 17,000-byte combined future;
+the existing future-size gate remains unchanged.
+
+The local integration test admits an external session with an empty host catalog,
+uses an actual human HTTP admission and WebSocket message, delivers its exact turn,
+then verifies queued result publication, receipt replay and disconnected-but-active
+external custody. It passes alongside the existing HTTP admission/isolation case.
+Affected all-target/all-feature Clippy and unchanged architecture/format/diff/artifact
+gates pass. The external attendee WebSocket, external provider CLI and lifecycle
+cleanup are still the next dependencies; no real provider was run for this proof.
