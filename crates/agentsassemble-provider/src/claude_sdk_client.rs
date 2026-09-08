@@ -5,7 +5,10 @@ use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::codec::{FramedRead, FramedWrite, LinesCodec};
 
-use crate::{driver::DriverError, launch_error::DriverLaunchError};
+use crate::{
+    driver::{DriverError, ProviderTurnRequest},
+    launch_error::DriverLaunchError,
+};
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
@@ -26,7 +29,7 @@ struct RoomPortalAuthority<'a> {
     url: String,
     bearer_token: &'a str,
 }
-#[derive(Debug, Deserialize)]
+#[derive(Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 #[serde(deny_unknown_fields)]
 enum HostMessage {
@@ -40,6 +43,17 @@ enum HostMessage {
         provider_turn_id: String,
         session_id: String,
         content: String,
+    },
+    ProviderRequest {
+        turn_id: String,
+        request: agentsassemble_domain::ProviderRequest,
+    },
+    RequestCancelled {
+        request_id: uuid::Uuid,
+    },
+    RequestDelivered {
+        request_id: uuid::Uuid,
+        delivered: bool,
     },
     Stopped,
     Fatal {
@@ -129,32 +143,16 @@ where
 
     pub(crate) async fn turn(
         &mut self,
-        turn_id: &str,
-        input: &str,
+        session_id: &str,
+        request: &ProviderTurnRequest,
     ) -> Result<ClaudeSdkTurn, DriverError> {
         self.send(&serde_json::json!({
-            "type": "turn",
-            "turn_id": turn_id,
-            "input": input,
+            "type": "turn", "turn_id": request.turn_id, "input": request.input,
         }))
         .await?;
-        match self.receive().await {
-            Ok(HostMessage::TurnResult {
-                turn_id: observed_turn_id,
-                provider_turn_id,
-                session_id,
-                content,
-            }) if observed_turn_id == turn_id
-                && session_id == self.session_id
-                && !provider_turn_id.is_empty() =>
-            {
-                Ok(ClaudeSdkTurn {
-                    provider_turn_id,
-                    session_id,
-                    content,
-                })
-            }
-            Ok(_) | Err(_) => self.poison(protocol_error()),
+        match requests::run(self, session_id, request).await {
+            Ok(result) => Ok(result),
+            Err(error) => self.poison(error),
         }
     }
 
@@ -232,3 +230,6 @@ const fn protocol_error() -> DriverError {
 #[cfg(test)]
 #[path = "claude_sdk_client_tests.rs"]
 mod tests;
+
+#[path = "claude_sdk_requests.rs"]
+mod requests;

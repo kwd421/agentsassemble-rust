@@ -174,10 +174,10 @@ impl ClaudeSdkRuntime {
 
     pub(crate) async fn turn(
         &mut self,
-        turn_id: &str,
-        input: &str,
+        session_id: &str,
+        request: &ProviderTurnRequest,
     ) -> Result<ClaudeSdkTurn, DriverError> {
-        self.client.turn(turn_id, input).await
+        self.client.turn(session_id, request).await
     }
 
     pub(crate) async fn is_alive(&mut self) -> Result<bool, DriverError> {

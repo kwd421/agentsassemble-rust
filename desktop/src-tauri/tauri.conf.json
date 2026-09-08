@@ -30,6 +30,7 @@
     "externalBin": ["binaries/agentsassemble-server"],
     "resources": {
       "../../frontend/dist/": "frontend/",
+      "../../provider-runtime/claude-owner-requests.mjs": "provider-runtime/claude-owner-requests.mjs",
       "../../provider-runtime/claude-native-delivery.mjs": "provider-runtime/claude-native-delivery.mjs",
       "../../provider-runtime/claude-agent-sdk-bridge.mjs": "provider-runtime/claude-agent-sdk-bridge.mjs",
       "../../provider-runtime/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs": "provider-runtime/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs"

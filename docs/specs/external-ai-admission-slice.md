@@ -1297,3 +1297,25 @@ at most 128 live hook correlations and response callbacks. Native child argument
 environment and SDK graceful-close signal are retained; stderr remains private and
 is discarded as in the Rust host. Owner request translation is the next connection,
 so this evidence alone does not establish Claude's integrated human-response flow.
+
+Claude request consumers now use `PreToolUse` for the original AskUserQuestion and
+ExitPlanMode behavior, and the SDK's `canUseTool` callback for ordinary approvals.
+This follows the installed callback contracts and the SDK's
+[user-input permission flow](https://code.claude.com/docs/en/agent-sdk/user-input):
+`dontAsk` can skip permission callbacks, so the specific question hook retains the
+read-only interactive entry without widening the permission mode. Native tool input
+and IDs remain in the private SDK host; the Rust client redacts owner-facing text,
+opens the actual session/generation/execution request and retains its live exchange.
+Concurrent callbacks use scoped futures, with native cancellation dropping the
+corresponding exchange. Native flush then durable server receipt precede turn output;
+request/transport failure poisons the native client. No new polling or task is added.
+
+Seven SDK/host cases and five Rust SDK cases pass. The installed SDK handles all
+three native question/plan/permission shapes over a local process peer, preserving
+private tool input in the returned native payload while omitting it from the owner
+request. The Rust client opens two concurrent requests with the exact room execution,
+waits for real delivery and durable receipts, and drops a natively cancelled request.
+Cancellation before or immediately after accepting a human answer produces denial;
+ending a native turn with an unanswered callback is a protocol failure. Affected
+Clippy and unchanged mandatory gates pass. These linked local boundaries do not yet
+prove a packaged managed Claude process or an authorized real provider run.

@@ -21,7 +21,8 @@ class FakeQuery {
       this.options.strictMcpConfig !== true ||
       this.options.allowedTools[0] !== "mcp__agentsassemble_room__*" ||
       this.options.mcpServers.agentsassemble_room.headers.Authorization !== "Bearer fixture-token" ||
-      this.options.systemPrompt.snapshot !== true
+      this.options.systemPrompt.snapshot !== true ||
+      (this.options.permissionMode === "dontAsk" && JSON.stringify(this.options.tools) !== '["AskUserQuestion"]')
     ) {
       throw new Error("unexpected SDK options");
     }
@@ -48,7 +49,7 @@ class FakeQuery {
         effort: this.options.effort,
         fast_mode_state: this.options.settings?.fastMode ? "on" : "off",
         permissionMode: this.options.permissionMode,
-        tools: [],
+        tools: Array.isArray(this.options.tools) ? this.options.tools : [],
         mcp_servers: [{ name: "agentsassemble_room", status: "connected" }],
       };
       yield {

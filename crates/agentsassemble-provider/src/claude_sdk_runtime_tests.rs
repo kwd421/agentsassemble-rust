@@ -19,13 +19,38 @@ async fn fatal_protocol_does_not_mask_confirmed_owned_cleanup() {
     let mut runtime = fatal_runtime(&workspace_path, &lease).await;
     let endpoint = runtime.room_portal.endpoint().to_owned();
     let error = runtime
-        .turn("failed-turn", "input")
+        .turn(
+            "room-session",
+            &crate::driver::ProviderTurnRequest {
+                request_ingress: None,
+                turn_id: "failed-turn".to_owned(),
+                turn_generation: 7,
+                execution_id: "fixture-execution".to_owned(),
+                input: "input".to_owned(),
+                room_observation: None,
+            },
+        )
         .await
         .err()
         .unwrap_or_else(|| panic!("fatal must reject the turn"));
     assert_eq!(error.code, "provider_protocol_invalid");
     assert!(runtime.requires_restart());
-    assert!(runtime.turn("retry", "input").await.is_err());
+    assert!(
+        runtime
+            .turn(
+                "room-session",
+                &crate::driver::ProviderTurnRequest {
+                    request_ingress: None,
+                    turn_id: "retry".to_owned(),
+                    turn_generation: 7,
+                    execution_id: "fixture-execution".to_owned(),
+                    input: "input".to_owned(),
+                    room_observation: None,
+                }
+            )
+            .await
+            .is_err()
+    );
     assert!(
         runtime
             .process_group

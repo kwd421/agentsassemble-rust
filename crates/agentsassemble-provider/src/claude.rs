@@ -257,11 +257,14 @@ impl ProviderDriver for ClaudeAgentSdkDriver {
 
     fn send_turn<'a>(
         &'a mut self,
-        _session: &'a DurableAgentSession,
+        session: &'a DurableAgentSession,
         request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>> {
         Box::pin(async move {
-            let turn = self.runtime.turn(&request.turn_id, &request.input).await?;
+            let turn = self
+                .runtime
+                .turn(&session.public.session_id, request)
+                .await?;
             if request.room_observation.is_none() && turn.content.trim().is_empty() {
                 return Err(protocol_error());
             }

@@ -29,7 +29,7 @@ export class NativeDelivery {
   }
 
   expect(id, delivered) {
-    if (this.#closed || this.#pending.has(id) || this.#pending.size >= 128) {
+    if (typeof id !== "string" || !id || this.#closed || this.#pending.has(id) || this.#pending.size >= 128) {
       throw new Error("invalid native response custody");
     }
     this.#pending.set(id, delivered);

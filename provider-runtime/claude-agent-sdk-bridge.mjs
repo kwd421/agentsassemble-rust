@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
 import { NativeDelivery } from "./claude-native-delivery.mjs";
+import { OwnerRequests } from "./claude-owner-requests.mjs";
 
 const MAX_INPUT_LINE_BYTES = 256 * 1024;
 const MAX_OUTPUT_LINE_BYTES = 256 * 1024;
@@ -170,7 +171,7 @@ function sessionOptions(command, claudePath, sessionId) {
     model,
     effort,
     permissionMode: permission === "workspace_write" ? "acceptEdits" : "dontAsk",
-    tools: permission === "workspace_write" ? { type: "preset", preset: "claude_code" } : [],
+    tools: permission === "workspace_write" ? { type: "preset", preset: "claude_code" } : ["AskUserQuestion"],
     allowedTools: ["mcp__agentsassemble_room__*"],
     mcpServers: {
       agentsassemble_room: {
@@ -204,7 +205,7 @@ function validInit(message, active, session) {
     message.permissionMode === (session.permission === "workspace_write" ? "acceptEdits" : "dontAsk") &&
     Array.isArray(message.tools) &&
     (session.permission !== "meeting_read_only" ||
-      message.tools.every((tool) => tool.startsWith("mcp__agentsassemble_room__"))) &&
+      message.tools.every((tool) => tool === "AskUserQuestion" || tool.startsWith("mcp__agentsassemble_room__"))) &&
     Array.isArray(message.mcp_servers) &&
     message.mcp_servers.length === 1 &&
     message.mcp_servers.every(
@@ -242,10 +243,18 @@ async function session(sdk, claudePath, command, commands) {
   const configured = sessionOptions(command, claudePath, id);
   const delivery = new NativeDelivery();
   configured.options.spawnClaudeCodeProcess = delivery.spawn;
+  const state = { id, ...configured, shuttingDown: false, active: null, failed: false };
+  const fail = () => {
+    state.failed = true;
+    emitFatal("claude_sdk_request_failed").catch(() => {});
+    process.stdin.destroy();
+  };
+  const requests = new OwnerRequests(state, delivery, emit, fail);
+  configured.options.hooks = requests.hooks;
+  configured.options.canUseTool = requests.canUseTool;
   const query = sdk.query({ prompt: queue, options: configured.options });
   const initialization = await query.initializationResult();
   validateInitialization(initialization.models, configured.model, configured.effort, configured.tier);
-  const state = { id, ...configured, shuttingDown: false, active: null, failed: false };
   await emit({ type: "ready", session_id: id, reused: Boolean(resume), model: configured.model });
 
   const reader = (async () => {
@@ -256,6 +265,9 @@ async function session(sdk, claudePath, command, commands) {
       } else if (message?.type === "result") {
         const active = state.active;
         if (!validResult(message, active, state)) throw new Error("invalid SDK result");
+        active.closing = true;
+        await requests.finishTurn();
+        if (state.failed || state.shuttingDown) throw new Error("request custody ended");
         await emit({
           type: "turn_result",
           turn_id: active.turnId,
@@ -289,8 +301,11 @@ async function session(sdk, claudePath, command, commands) {
           uuid: sdkTurnId,
           session_id: state.id,
         });
+      } else if (requests.accept(next)) {
+        continue;
       } else if (next.type === "shutdown") {
         state.shuttingDown = true;
+        requests.close();
         queue.close();
         query.close();
         await emit({ type: "stopped" });
@@ -301,6 +316,7 @@ async function session(sdk, claudePath, command, commands) {
     }
   } finally {
     state.shuttingDown = true;
+    requests.close();
     delivery.close();
     queue.close();
     query.close();
