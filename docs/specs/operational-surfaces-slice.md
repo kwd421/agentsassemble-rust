@@ -138,3 +138,31 @@ frontend production build and unchanged CSS/architecture/growth/19-policy/format
 gates pass. The only new resident task is the existing discovery worker retained on
 an event wait; no provider runtime is launched by the local fixture verification.
 Packaged operation proof and whole-phase cost measurement remain pending.
+
+## Browser OAuth login implementation
+
+Codex, Claude, Grok and Cursor registrations now own their original login arguments;
+the public optional `login_supported` flag is derived from those registrations.
+API/local providers, Freebuff and managed Antigravity do not gain login authority.
+OpenCode's separate interactive authentication entry remains the next login target.
+
+One login owner coalesces repeated requests for the same provider and retains the
+bounded native command across response loss. Explicit cancellation and runtime
+shutdown cancel and join it through the existing process-group/Job probe owner.
+Its original ten-minute OAuth deadline remains; there is no periodic work. The
+registry bounds retained login records, and no process starts at service construction.
+Codex retains its existing configured home. No raw command output is published.
+
+The local-operator login/cancel routes reuse the refresh transport boundary. Login
+reports authenticated only after successful command exit and catalog refresh. If
+authentication succeeds but refresh fails, the response explicitly reports that
+distinction. The creation dialog displays pending state and an explicit cancel action.
+
+A native local-command fixture verifies successful/failed exit, private diagnostic
+suppression, unsupported providers and shutdown rejection (0.02s). The existing
+three process cases verify sanitized environment, cancellation with positive
+descendant cleanup, and explicit unconfirmed cleanup (0.03s). The TCP operation
+boundary additionally rejects unauthenticated/unsupported login and distinguishes
+no-active-login cancellation (0.05s). No real provider/account runs. Affected
+Clippy, 34 existing frontend tests, generated types, frontend build, unchanged CSS
+and mandatory gates pass; direct packaged login proof remains part of phase acceptance.

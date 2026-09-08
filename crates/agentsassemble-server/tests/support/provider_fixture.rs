@@ -94,6 +94,7 @@ pub fn agent_catalog(root: &Path, fixture_override: Option<&[u8]>) -> ProviderCa
             credential_available: false,
             custom_endpoint: false,
             custom_model: false,
+            login_supported: false,
             controls: vec![
                 ProviderControl {
                     key: "model".to_owned(),

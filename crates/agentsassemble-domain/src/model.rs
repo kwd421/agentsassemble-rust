@@ -341,6 +341,8 @@ pub struct ProviderAvailability {
     pub discovery_error: String,
     pub credential_available: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub login_supported: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub custom_endpoint: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub custom_model: bool,

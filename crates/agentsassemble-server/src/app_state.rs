@@ -34,6 +34,7 @@ pub struct AppState {
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
     pub provider_catalog: ProviderCatalogService,
+    pub provider_login: agentsassemble_provider::ProviderLoginService,
     pub provider_adapter: ProviderAdapter,
     pub(crate) provider_credentials: ProviderCredentialStore,
     pub human_invite_credentials: HumanInviteCredentialAuthority,
@@ -132,6 +133,7 @@ impl AppState {
             HumanInviteCredentialAuthority::from_persistent(&persistent_host_identity);
         let central_host_identity =
             CentralHostIdentity::from_persistent(&persistent_host_identity)?;
+        let shutdown = CancellationToken::new();
         Ok(Self {
             rooms: RoomRuntime::with_provider_adapter(
                 store.clone(),
@@ -142,12 +144,15 @@ impl AppState {
             google_accounts: crate::GoogleAccountService::default(),
             tickets,
             provider_catalog,
+            provider_login: agentsassemble_provider::ProviderLoginService::new(
+                shutdown.child_token(),
+            ),
             provider_adapter,
             provider_credentials,
             human_invite_credentials,
             central_host_identity,
             central_login: crate::central_login::CentralLoginBroker::default(),
-            shutdown: CancellationToken::new(),
+            shutdown,
             connections: TaskTracker::new(),
             connection_admission: ConnectionAdmission::new(),
             socket_admission: SocketAdmission::new(),

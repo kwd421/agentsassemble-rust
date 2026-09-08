@@ -411,6 +411,7 @@ mod tests {
                 credential_available: false,
                 custom_endpoint: false,
                 custom_model: false,
+                login_supported: false,
                 controls: vec![
                     control(
                         "model",

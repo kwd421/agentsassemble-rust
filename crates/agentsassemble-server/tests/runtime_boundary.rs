@@ -576,6 +576,7 @@ fn large_provider_catalog() -> ProviderCatalog {
             credential_available: true,
             custom_endpoint: false,
             custom_model: false,
+            login_supported: false,
             controls: vec![ProviderControl {
                 key: "model".to_owned(),
                 label: "Model".to_owned(),

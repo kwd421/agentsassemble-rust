@@ -31,6 +31,10 @@ pub(crate) fn home() -> Result<String, DriverError> {
     resolve_home(env::var_os(HOME_ENV), default_home)
 }
 
+pub(crate) fn login_environment() -> Result<Vec<(String, String)>, DriverError> {
+    Ok(vec![(HOME_ENV.to_owned(), home()?)])
+}
+
 pub(super) async fn load() -> Result<CodexConfiguration, DriverError> {
     let home = home()?;
     let inherited_mcp_servers = inherited_mcp_servers(Path::new(&home)).await?;

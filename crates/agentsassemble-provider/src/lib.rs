@@ -2,6 +2,8 @@ mod acp_client;
 mod acp_runtime;
 mod catalog;
 mod catalog_service;
+mod provider_login;
+pub use provider_login::{ProviderLoginError, ProviderLoginService};
 mod cerebras;
 mod claude;
 mod claude_sdk_assets;

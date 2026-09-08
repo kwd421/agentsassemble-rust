@@ -135,6 +135,8 @@ pub enum ServeError {
     Io(#[from] std::io::Error),
     #[error("provider discovery task failed: {0}")]
     ProviderDiscovery(#[from] tokio::task::JoinError),
+    #[error("provider login shutdown failed: {0}")]
+    ProviderLogin(#[from] agentsassemble_provider::ProviderLoginError),
     #[error("runtime reconciliation task failed: {0}")]
     RuntimeReconciliationTask(tokio::task::JoinError),
     #[error("room runtime shutdown failed: {0}")]
@@ -372,6 +374,7 @@ async fn serve_runtime(
     reconcile_before_network_admission(&state, &cancellation).await?;
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();
+    let provider_login = state.provider_login.clone();
     let public_ingress = state.public_ingress();
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
@@ -412,6 +415,7 @@ async fn serve_runtime(
     };
     let ingress_shutdown = tokio::spawn(async move { public_ingress.shutdown().await });
     drain_connections(&connections, &connection_shutdown).await;
+    let login_shutdown = provider_login.shutdown().await;
     http_admission.report_rejections();
     let (reconciliation_shutdown, (room_shutdown, provider_shutdown)) =
         drain_reconciliation_then(reconciliation_owner, async {
@@ -425,6 +429,7 @@ async fn serve_runtime(
         .map_err(|_| ServeError::PublicIngressCleanup)
         .and_then(|result| result.map_err(|_| ServeError::PublicIngressCleanup));
     room_shutdown?;
+    login_shutdown?;
     provider_shutdown?;
     reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;
     ingress_shutdown?;

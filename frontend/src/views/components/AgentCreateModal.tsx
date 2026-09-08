@@ -25,6 +25,7 @@ import {
 } from "../../lib/providerCatalogGroups";
 import ProviderLogo from "./ProviderLogo";
 import ProviderCatalogRefresh from "./ProviderCatalogRefresh";
+import ProviderLogin from "./ProviderLogin";
 import ProviderControlSelect from "./ProviderControlSelect";
 import ProviderControlToggle from "./ProviderControlToggle";
 import AgentPersonaPicker from "./AgentPersonaPicker";
@@ -416,6 +417,7 @@ export default function AgentCreateModal({
             </section>
           )}
 
+          {selectedProvider?.login_supported && <ProviderLogin key={selectedProvider.id} providerId={selectedProvider.id} displayName={selectedProvider.display_name} />}
           {selectedProvider && (
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">기본 정보</p>
