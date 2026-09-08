@@ -156,9 +156,6 @@ pub(crate) fn turn_transport_error(error: impl Into<TurnTransportError>) -> Driv
         TurnTransportError::Http | TurnTransportError::Events(OpenCodeEventError::Provider) => {
             provider_request_error()
         }
-        TurnTransportError::Events(OpenCodeEventError::InteractiveRequest) => {
-            interactive_request_error()
-        }
         TurnTransportError::Events(
             OpenCodeEventError::Transport
             | OpenCodeEventError::TooLarge
@@ -274,13 +271,6 @@ pub(crate) const fn provider_request_error() -> DriverError {
     DriverError::new(
         "provider_request_failed",
         "The OpenCode provider request failed.",
-    )
-}
-
-const fn interactive_request_error() -> DriverError {
-    DriverError::new(
-        "provider_request_unsupported",
-        "OpenCode requested interactive input that this runtime cannot resolve.",
     )
 }
 

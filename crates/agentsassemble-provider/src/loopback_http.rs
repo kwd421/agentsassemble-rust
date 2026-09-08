@@ -11,7 +11,8 @@ use hyper::{
 use hyper_util::rt::TokioIo;
 use serde_json::Value;
 use thiserror::Error;
-use tokio::{net::TcpStream, task::JoinHandle};
+use tokio::net::TcpStream;
+use tokio_util::task::AbortOnDropHandle;
 use url::{Position, Url};
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(3);
@@ -53,7 +54,7 @@ pub(crate) struct VerifiedLoopbackConnection {
 
 pub(crate) struct LoopbackStream {
     body: Incoming,
-    connection_task: JoinHandle<()>,
+    _connection_task: AbortOnDropHandle<()>,
 }
 
 pub(crate) struct JsonResponse {
@@ -208,6 +209,18 @@ impl VerifiedLoopbackConnection {
             .await
     }
 
+    /// The `OpenCode` turn owner applies its active-time deadline while excluding human waits.
+    pub(crate) async fn post_turn_json(
+        self,
+        path: &str,
+        payload: &Value,
+    ) -> Result<JsonResponse, LoopbackHttpError> {
+        let request = self
+            .http
+            .request(Method::POST, path, Some(payload), false)?;
+        self.read_json(request).await
+    }
+
     pub(crate) async fn get_stream(
         self,
         path: &str,
@@ -218,12 +231,11 @@ impl VerifiedLoopbackConnection {
             .await
             .map_err(|_| LoopbackHttpError::Request)??;
         if !response.status().is_success() {
-            connection_task.abort();
             return Err(LoopbackHttpError::Request);
         }
         Ok(LoopbackStream {
             body: response.into_body(),
-            connection_task,
+            _connection_task: connection_task,
         })
     }
 
@@ -235,48 +247,50 @@ impl VerifiedLoopbackConnection {
         timeout: Duration,
     ) -> Result<JsonResponse, LoopbackHttpError> {
         let request = self.http.request(method, path, payload, false)?;
-        tokio::time::timeout(timeout, async move {
-            let (response, connection_task) = self.send(request).await?;
-            let status = response.status();
-            let mut body = response.into_body();
-            let mut encoded = Vec::new();
-            while let Some(frame) = body.frame().await {
-                let frame = frame.map_err(|_| LoopbackHttpError::Request)?;
-                if let Ok(chunk) = frame.into_data() {
-                    if encoded.len().saturating_add(chunk.len()) > MAX_JSON_BYTES {
-                        connection_task.abort();
-                        return Err(LoopbackHttpError::ResponseTooLarge);
-                    }
-                    encoded.extend_from_slice(&chunk);
+        tokio::time::timeout(timeout, self.read_json(request))
+            .await
+            .map_err(|_| LoopbackHttpError::Request)?
+    }
+
+    async fn read_json(
+        self,
+        request: Request<Full<Bytes>>,
+    ) -> Result<JsonResponse, LoopbackHttpError> {
+        let (response, _connection_task) = self.send(request).await?;
+        let status = response.status();
+        let mut body = response.into_body();
+        let mut encoded = Vec::new();
+        while let Some(frame) = body.frame().await {
+            let frame = frame.map_err(|_| LoopbackHttpError::Request)?;
+            if let Ok(chunk) = frame.into_data() {
+                if encoded.len().saturating_add(chunk.len()) > MAX_JSON_BYTES {
+                    return Err(LoopbackHttpError::ResponseTooLarge);
                 }
+                encoded.extend_from_slice(&chunk);
             }
-            connection_task.abort();
-            let value = if encoded.is_empty() {
-                Value::Null
-            } else {
-                serde_json::from_slice(&encoded).map_err(|_| LoopbackHttpError::InvalidJson)?
-            };
-            Ok(JsonResponse { status, value })
-        })
-        .await
-        .map_err(|_| LoopbackHttpError::Request)?
+        }
+        let value = if encoded.is_empty() {
+            Value::Null
+        } else {
+            serde_json::from_slice(&encoded).map_err(|_| LoopbackHttpError::InvalidJson)?
+        };
+        Ok(JsonResponse { status, value })
     }
 
     async fn send(
         self,
         request: Request<Full<Bytes>>,
-    ) -> Result<(hyper::Response<Incoming>, JoinHandle<()>), LoopbackHttpError> {
+    ) -> Result<(hyper::Response<Incoming>, AbortOnDropHandle<()>), LoopbackHttpError> {
         let (mut sender, connection) =
             hyper::client::conn::http1::handshake(TokioIo::new(self.stream))
                 .await
                 .map_err(|_| LoopbackHttpError::Request)?;
-        let connection_task = tokio::spawn(async move {
+        let connection_task = AbortOnDropHandle::new(tokio::spawn(async move {
             let _ = connection.await;
-        });
+        }));
         if let Ok(response) = sender.send_request(request).await {
             Ok((response, connection_task))
         } else {
-            connection_task.abort();
             Err(LoopbackHttpError::Request)
         }
     }
@@ -296,12 +310,6 @@ impl LoopbackStream {
     }
 }
 
-impl Drop for LoopbackStream {
-    fn drop(&mut self) {
-        self.connection_task.abort();
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::path::Path;
@@ -317,6 +325,44 @@ mod tests {
             "agentsassemble",
             &"x".repeat(64),
         )
+    }
+
+    #[tokio::test]
+    async fn cancelling_a_pending_turn_http_response_closes_its_connection()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let client = client(&format!(
+            "http://127.0.0.1:{}/",
+            listener.local_addr()?.port()
+        ))?;
+        let connection = client.verify_peer(client.connect().await?, true)?;
+        let (seen, received) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            let (mut stream, _) = listener.accept().await?;
+            let mut byte = [0];
+            let mut request = Vec::new();
+            while !request.ends_with(b"\r\n\r\n") {
+                stream.read_exact(&mut byte).await?;
+                request.push(byte[0]);
+            }
+            // The fixture payload is exactly {}. No request bytes or headers leave this task.
+            stream.read_exact(&mut [0; 2]).await?;
+            let _ = seen.send(());
+            stream.read(&mut byte).await
+        });
+        let payload = serde_json::json!({});
+        let mut pending = Box::pin(connection.post_turn_json("/session/exact/message", &payload));
+        tokio::select! {
+            result = &mut pending => panic!("server must wait for cancellation: {}", result.is_ok()),
+            result = received => result?,
+        }
+        // Drop the actual HTTP future, including its connection driver, before observing EOF.
+        drop(pending);
+        assert_eq!(
+            tokio::time::timeout(std::time::Duration::from_secs(2), server).await???,
+            0
+        );
+        Ok(())
     }
 
     #[test]

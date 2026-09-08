@@ -7,8 +7,10 @@ use process_wrap::tokio::ChildWrapper;
 use serde_json::{Value, json};
 use tokio::{sync::oneshot, task::JoinHandle};
 
+mod requests;
 #[path = "opencode/session_creation.rs"]
 mod session_creation;
+mod turn_transport;
 
 #[cfg(not(any(target_os = "linux", target_os = "android")))]
 use crate::filesystem::BoundExecutable;
@@ -21,13 +23,13 @@ use crate::{
     launch_error::DriverLaunchError,
     loopback_http::{JsonResponse, LoopbackHttp, VerifiedLoopbackConnection},
     opencode_protocol::{
-        TurnTransportError, assistant_message, clean_session_id, config_error, executable_error,
-        http_driver_error, model_id, model_mismatch, profile_error, protocol_error, provider_id,
+        assistant_message, clean_session_id, config_error, executable_error, http_driver_error,
+        model_id, model_mismatch, profile_error, protocol_error, provider_id,
         provider_request_error, runtime_exited, session_mismatch, session_missing, session_path,
         session_unconfirmed, startup_error, turn_empty, turn_in_progress, turn_mismatch,
-        turn_timeout, turn_transport_error, validate_profile,
+        turn_transport_error, validate_profile,
     },
-    opencode_sse::{OpenCodeTurnEvents, collect_turn_events},
+    opencode_sse::OpenCodeTurnEvents,
     opencode_startup::{drain_output, observe_startup, reserve_loopback_port, server_password},
     room_portal::{ProviderTurnOutcome, RoomPortal},
     runtime::{
@@ -402,23 +404,19 @@ impl OpenCodeDriver {
             payload["variant"] = json!(session.public.variant);
         }
         let prompt_connection = self.connect_owned_peer().await?;
-        let prompt = async move {
-            prompt_connection
-                .post_json(&path, &payload, TURN_TIMEOUT)
-                .await
-                .map_err(TurnTransportError::from)
-        };
-        let events = async {
-            collect_turn_events(event_response, &attached, TURN_TIMEOUT)
-                .await
-                .map_err(TurnTransportError::from)
-        };
-        let joined = tokio::time::timeout(TURN_TIMEOUT, async { tokio::try_join!(prompt, events) })
+        let (prompt, events) = match self
+            .run_turn_transport(
+                session,
+                request,
+                prompt_connection,
+                event_response,
+                &payload,
+                &path,
+            )
             .await
-            .map_err(|_| turn_timeout())?;
-        let (prompt, events) = match joined {
+        {
             Ok(joined) => joined,
-            Err(error) => return self.poison(turn_transport_error(error)),
+            Err(error) => return self.poison(error),
         };
         let completed =
             Self::completed_from_response(session, request, &attached, &prompt, &events);

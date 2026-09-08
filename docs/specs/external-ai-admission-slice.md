@@ -451,6 +451,19 @@ policy choice mappings and 23 affected Codex tests pass, as do provider all-targ
 all-feature Clippy and unchanged architecture, policy, format and artifact gates.
 Other native mappers, visible controls and managed bridge custody remain pending.
 
+OpenCode now carries same-session permission/question events through its native
+HTTP reply endpoint and the shared room receipt. Ordered/multiple/custom answers
+retain their upstream meaning; only explicitly offered project-wide permissions
+can be selected. The existing bounded SSE parser yields requests to the turn owner,
+which holds one active-time deadline across prompt HTTP and SSE while excluding
+bounded human waits. Ordinary HTTP requests retain their own deadline. HTTP
+connection tasks now use the library's abort-on-drop owner so cancellation during
+headers or body reception cannot detach the provider connection. The exact local
+process case, all 16 affected OpenCode cases and five HTTP cases pass, including
+receipt ordering and observable connection EOF on cancellation. Provider all-target/
+all-feature Clippy and unchanged architecture, policy, format and artifact gates
+pass. This does not close the other native mappings, visible controls or bridges.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

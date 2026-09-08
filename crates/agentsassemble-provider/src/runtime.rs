@@ -550,6 +550,9 @@ mod launch_tests;
 #[path = "runtime_observation.rs"]
 mod observation;
 #[cfg(all(test, unix))]
+#[path = "runtime_opencode_request_tests.rs"]
+mod opencode_request_tests;
+#[cfg(all(test, unix))]
 #[path = "runtime_provider_session_tests.rs"]
 mod provider_session_tests;
 #[cfg(all(test, unix))]

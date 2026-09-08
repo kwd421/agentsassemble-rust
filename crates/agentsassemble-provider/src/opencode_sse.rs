@@ -17,8 +17,6 @@ pub(crate) enum OpenCodeEventError {
     TooLarge,
     #[error("the OpenCode event stream protocol was invalid")]
     Protocol,
-    #[error("OpenCode requested unsupported interactive input")]
-    InteractiveRequest,
     #[error("OpenCode reported a provider error")]
     Provider,
 }
@@ -36,6 +34,7 @@ struct EventState {
     mode: WaitMode,
     turn: OpenCodeTurnEvents,
     provider_error: bool,
+    request: Option<Value>,
 }
 
 #[derive(Clone, Copy, Default, PartialEq, Eq)]
@@ -72,7 +71,8 @@ impl EventState {
         }
         match event_type {
             "permission.asked" | "question.asked" if self.mode == WaitMode::Turn => {
-                return Err(OpenCodeEventError::InteractiveRequest);
+                self.request = Some(event.clone());
+                return Ok(false);
             }
             "session.error" => self.provider_error = true,
             "message.updated" => {
@@ -120,12 +120,61 @@ impl EventState {
     }
 }
 
-pub(crate) async fn collect_turn_events(
+pub(crate) enum TurnEvent {
+    Request(Value),
+    Completed(OpenCodeTurnEvents),
+}
+
+pub(crate) struct TurnEventStream {
     response: LoopbackStream,
-    session_id: &str,
-    timeout: Duration,
-) -> Result<OpenCodeTurnEvents, OpenCodeEventError> {
-    collect_until_idle(response, session_id, timeout, WaitMode::Turn).await
+    state: EventState,
+    pending: Vec<u8>,
+    total: usize,
+    events: usize,
+}
+
+impl TurnEventStream {
+    pub(crate) fn new(response: LoopbackStream, session_id: &str) -> Self {
+        Self {
+            response,
+            state: EventState::new(session_id, WaitMode::Turn),
+            pending: Vec::new(),
+            total: 0,
+            events: 0,
+        }
+    }
+
+    // State survives cancellation by the prompt-response branch of the turn owner's select.
+    pub(crate) async fn next(&mut self) -> Result<TurnEvent, OpenCodeEventError> {
+        loop {
+            if accept_complete_lines(&mut self.pending, &mut self.state, &mut self.events)? {
+                return Ok(self.state.request.take().map_or_else(
+                    || TurnEvent::Completed(std::mem::take(&mut self.state.turn)),
+                    TurnEvent::Request,
+                ));
+            }
+            let Some(chunk) = self
+                .response
+                .chunk()
+                .await
+                .map_err(|_| OpenCodeEventError::Transport)?
+            else {
+                return Err(if self.state.provider_error {
+                    OpenCodeEventError::Provider
+                } else {
+                    OpenCodeEventError::Transport
+                });
+            };
+            self.total = self.total.saturating_add(chunk.len());
+            if self.total > MAX_EVENT_STREAM_BYTES {
+                return Err(OpenCodeEventError::TooLarge);
+            }
+            self.pending.extend_from_slice(&chunk);
+            if self.pending.len() > MAX_EVENT_LINE_BYTES && !self.pending.contains(&b'\n') {
+                return Err(OpenCodeEventError::TooLarge);
+            }
+        }
+    }
 }
 
 pub(crate) async fn wait_session_idle(
@@ -133,47 +182,15 @@ pub(crate) async fn wait_session_idle(
     session_id: &str,
     timeout: Duration,
 ) -> Result<(), OpenCodeEventError> {
-    collect_until_idle(response, session_id, timeout, WaitMode::Quiescence)
+    let mut events = TurnEventStream::new(response, session_id);
+    events.state.mode = WaitMode::Quiescence;
+    match tokio::time::timeout(timeout, events.next())
         .await
-        .map(|_| ())
-}
-
-async fn collect_until_idle(
-    mut response: LoopbackStream,
-    session_id: &str,
-    timeout: Duration,
-    mode: WaitMode,
-) -> Result<OpenCodeTurnEvents, OpenCodeEventError> {
-    tokio::time::timeout(timeout, async move {
-        let mut state = EventState::new(session_id, mode);
-        let mut pending = Vec::new();
-        let mut total = 0_usize;
-        let mut events = 0_usize;
-        while let Some(chunk) = response
-            .chunk()
-            .await
-            .map_err(|_| OpenCodeEventError::Transport)?
-        {
-            total = total.saturating_add(chunk.len());
-            if total > MAX_EVENT_STREAM_BYTES {
-                return Err(OpenCodeEventError::TooLarge);
-            }
-            pending.extend_from_slice(&chunk);
-            if pending.len() > MAX_EVENT_LINE_BYTES && !pending.contains(&b'\n') {
-                return Err(OpenCodeEventError::TooLarge);
-            }
-            if accept_complete_lines(&mut pending, &mut state, &mut events)? {
-                return Ok(state.turn);
-            }
-        }
-        Err(if state.provider_error {
-            OpenCodeEventError::Provider
-        } else {
-            OpenCodeEventError::Transport
-        })
-    })
-    .await
-    .map_err(|_| OpenCodeEventError::Transport)?
+        .map_err(|_| OpenCodeEventError::Transport)??
+    {
+        TurnEvent::Completed(_) => Ok(()),
+        TurnEvent::Request(_) => Err(OpenCodeEventError::Protocol),
+    }
 }
 
 fn accept_complete_lines(
@@ -198,7 +215,7 @@ fn accept_complete_lines(
         if *events > MAX_EVENTS {
             return Err(OpenCodeEventError::TooLarge);
         }
-        if state.accept(&event)? {
+        if state.accept(&event)? || state.request.is_some() {
             return Ok(true);
         }
     }
@@ -313,14 +330,22 @@ mod tests {
     }
 
     #[test]
-    fn interactive_provider_requests_fail_closed() {
+    fn interactive_provider_requests_are_retained_for_the_turn_owner() {
         let mut state = EventState::new("session-1", WaitMode::Turn);
         assert_eq!(
             state.accept(&json!({
                 "type": "permission.asked",
                 "properties": {"sessionID": "session-1", "id": "permission-1"}
             })),
-            Err(OpenCodeEventError::InteractiveRequest)
+            Ok(false)
+        );
+        assert_eq!(
+            state
+                .request
+                .as_ref()
+                .and_then(|request| request.pointer("/properties/id"))
+                .and_then(serde_json::Value::as_str),
+            Some("permission-1")
         );
     }
 
