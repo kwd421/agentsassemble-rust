@@ -35,7 +35,7 @@ async fn attendee_friend_receipt_preserves_selected_metadata_without_admitting_o
         .await?;
     let request = Uuid::new_v4();
     let first = store
-        .create_friend_attendee_invite(&manager, request, friend.friend_id, now)
+        .create_friend_attendee_invite(&manager, request, friend.friend_id, resolve_provider, now)
         .await?;
     store.delete_friend(friend.friend_id).await?;
     let retry = store
@@ -43,6 +43,7 @@ async fn attendee_friend_receipt_preserves_selected_metadata_without_admitting_o
             &manager,
             request,
             friend.friend_id,
+            resolve_provider,
             now + Duration::seconds(1),
         )
         .await?;
@@ -50,17 +51,23 @@ async fn attendee_friend_receipt_preserves_selected_metadata_without_admitting_o
     let same_bearer = first.invite_bearer == retry.invite_bearer;
     assert!(same_bearer);
     assert_eq!(first.expires_at, retry.expires_at);
-    assert_eq!(retry.provider_kind, "codex");
+    assert_eq!(retry.provider_kind, "codex_live_session");
     assert_eq!(retry.display_name, "Remote Codex");
     assert!(
         store
-            .create_friend_attendee_invite(&manager, Uuid::new_v4(), friend.friend_id, now)
+            .create_friend_attendee_invite(
+                &manager,
+                Uuid::new_v4(),
+                friend.friend_id,
+                resolve_provider,
+                now
+            )
             .await
             .is_err()
     );
     assert!(matches!(
         store
-            .create_friend_attendee_invite(&manager, request, Uuid::new_v4(), now)
+            .create_friend_attendee_invite(&manager, request, Uuid::new_v4(), resolve_provider, now)
             .await,
         Err(PersistenceError::CommandConflict)
     ));
@@ -70,6 +77,7 @@ async fn attendee_friend_receipt_preserves_selected_metadata_without_admitting_o
                 &manager,
                 request,
                 friend.friend_id,
+                resolve_provider,
                 now + Duration::hours(2)
             )
             .await
@@ -150,4 +158,8 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
         })
     ));
     Ok(())
+}
+
+fn resolve_provider(value: &str) -> Option<&'static str> {
+    (value == "codex").then_some("codex_live_session")
 }

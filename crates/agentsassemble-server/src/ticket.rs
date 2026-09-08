@@ -67,6 +67,7 @@ pub(super) enum LocalRoomManagerPurpose {
     SideChatRead,
     HumanInviteCreate,
     ConnectorInviteCreate,
+    AttendeeInviteCreate,
     HumanInviteRevoke,
     AppearanceUpload,
     AgentAvatarUpload { session_id: String },
@@ -287,6 +288,19 @@ impl TicketStore {
         authority: LocalRoomManagerAuthority,
     ) -> Result<IssuedTicket, TicketError> {
         self.issue_local_room_manager(authority, LocalRoomManagerPurpose::MessageSearchRead)
+            .await
+    }
+
+    /// Issues one exact attendee-invite creation credential for a resolved room manager.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` for empty identity fields or exhausted ticket capacity.
+    pub async fn issue_attendee_invite_create(
+        &self,
+        authority: LocalRoomManagerAuthority,
+    ) -> Result<IssuedTicket, TicketError> {
+        self.issue_local_room_manager(authority, LocalRoomManagerPurpose::AttendeeInviteCreate)
             .await
     }
 
@@ -601,6 +615,19 @@ impl TicketStore {
         self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::MessageSearchRead)
             .await
             .map(|grant| grant.authority)
+    }
+
+    /// Consumes only an exact attendee-invite creation credential.
+    ///
+    /// # Errors
+    ///
+    /// Returns `Invalid` after consuming a wrong-purpose, expired, unknown, or reused ticket.
+    pub(crate) async fn consume_attendee_invite_create(
+        &self,
+        ticket: &str,
+    ) -> Result<ConsumedLocalRoomManagerTicket, TicketError> {
+        self.consume_local_room_manager(ticket, &LocalRoomManagerPurpose::AttendeeInviteCreate)
+            .await
     }
 
     /// Consumes only an exact connector-invite creation credential.

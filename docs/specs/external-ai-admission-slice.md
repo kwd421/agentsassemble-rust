@@ -194,6 +194,40 @@ the existing maintenance owner is applied with Cargo/Tauri idle, without changin
 the 18 GiB gate. Integrated reconnect/interrupt CLI races, provider-request relay,
 entry-packet UI and managed bridges still precede Phase 7 acceptance.
 
+### Friend and companion entry-packet boundary
+
+The friend endpoint consumes a distinct exact-room native manager ticket, including
+room incarnation and bootstrap lineage. The companion endpoint accepts only its
+currently admitted human bearer; read-only, departed and other credential purposes
+fail. Both call their existing invitation transaction owner, require ready public
+ingress and return one private/no-store typed packet with the canonical CLI selector,
+hidden-input invitation and expiry. Neither creates an agent session or launches a
+provider. The native command registry, capability and generated permission agree.
+
+Saved contacts may contain a provider alias. The provider registration resolver is
+now invoked on that exact stored metadata inside the invitation transaction, before
+insertion, yielding the same canonical kind the attendee presents on join. This avoids
+a stale preflight read or a second provider registry in persistence. Unsupported
+contacts fail, while receipt recovery after contact deletion preserves the original
+invitation. The shared packet decoder checks request, room incarnation, public origin
+and the exact command shape before exposing copyable text.
+
+Actual HTTP checks pass friend creation/retry after deletion, wrong-purpose rejection,
+normalized attendee admission, unsupported-provider rejection, human read-only denial,
+companion creation/retry, parent departure rejection and attendee-owned final cleanup.
+Parent departure does not claim provider absence: an explicit WebSocket handshake
+rejection now terminates CLI reconnection and reaches its existing cleanup owner.
+Timeouts, rate limits and transport uncertainty retain bounded retry behavior.
+
+The two invitation persistence tests, five manager HTTP tests, ten private-control
+tests, 28 native desktop tests and 17 frontend API/bridge tests pass. Affected Clippy,
+production frontend/CSS, unchanged architecture/19 policy, format, diff and artifact
+checks pass. Adding the native command required updating its exact expected inventory
+to 28. Private-control decoding now owns its typed rejection instead of passing an
+untyped error tuple to the dispatch owner; its existing ten boundary tests pass.
+No provider turn ran in these packet tests. Packet creation/copy UI and its direct
+packaged verification remain next; full Phase 7 acceptance is still pending.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing

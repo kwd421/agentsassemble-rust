@@ -47,6 +47,7 @@ pub async fn fixture() -> Result<
             &manager,
             Uuid::new_v4(),
             friend.friend_id,
+            agentsassemble_provider::registered_provider_kind,
             chrono::Utc::now(),
         )
         .await?;

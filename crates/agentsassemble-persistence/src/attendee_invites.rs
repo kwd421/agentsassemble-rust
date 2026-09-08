@@ -46,6 +46,7 @@ impl SqliteStore {
         manager: &RoomManagerAuthority,
         request_id: Uuid,
         friend_id: Uuid,
+        resolve_provider: impl FnOnce(&str) -> Option<&'static str>,
         now: DateTime<Utc>,
     ) -> Result<AttendeeInvite, PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
@@ -81,13 +82,21 @@ impl SqliteStore {
                 "An AI contact is required for attendee admission.",
             ));
         }
+        // Registration policy belongs to the provider crate. Resolve the exact stored contact
+        // inside this transaction; no stale preflight read or second provider registry is needed.
+        let provider_kind = resolve_provider(&friend.details.provider_kind).ok_or_else(|| {
+            rejected(
+                "unsupported_provider",
+                "The saved contact does not select a supported attendee provider.",
+            )
+        })?;
         let invite = self
             .insert_attendee_invite(
                 &mut tx,
                 &owner,
                 &CompanionInviteRequest {
                     request_id,
-                    provider_kind: &friend.details.provider_kind,
+                    provider_kind,
                     display_name: &friend.details.display_name,
                 },
                 &hash,

@@ -1,3 +1,6 @@
+#[path = "attendee_entry_web.rs"]
+mod entry;
+pub(crate) use entry::HTTP_ROUTES as ENTRY_HTTP_ROUTES;
 #[path = "attendee_cleanup_web.rs"]
 mod cleanup;
 #[path = "attendee_interrupt_web.rs"]
@@ -54,10 +57,12 @@ registered_routes! {
 }
 
 pub(crate) fn routes() -> Router<AppState> {
-    attendee_routes().layer(SetResponseHeaderLayer::overriding(
-        CACHE_CONTROL,
-        PRIVATE_NO_STORE.clone(),
-    ))
+    attendee_routes()
+        .merge(entry::routes())
+        .layer(SetResponseHeaderLayer::overriding(
+            CACHE_CONTROL,
+            PRIVATE_NO_STORE.clone(),
+        ))
 }
 
 async fn join(

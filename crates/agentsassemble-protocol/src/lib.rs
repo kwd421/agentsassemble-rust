@@ -1,3 +1,4 @@
+mod attendee_entry;
 use agentsassemble_domain::{
     AgentSession, CapabilitySet, Participant, ProviderCatalog, PublicRoomSettings, Room, RoomEvent,
     SnapshotMode,
@@ -12,6 +13,9 @@ pub use agentsassemble_domain::{
     MESSAGE_ATTACHMENT_REFERENCE_PREFIX, MESSAGE_ATTACHMENT_VIEW_SUFFIX, MESSAGE_CONTEXT_RADIUS,
     MESSAGE_SEARCH_PAGE_SIZE, ROOM_APPEARANCE_ASSET_HEX_LENGTH, ROOM_APPEARANCE_ASSET_PREFIX,
     ROOM_APPEARANCE_REFERENCE_PREFIX, ROOM_APPEARANCE_REFERENCE_SUFFIX,
+};
+pub use attendee_entry::{
+    AttendeeEntryPacket, CreateCompanionAttendeeInvite, CreateFriendAttendeeInvite,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

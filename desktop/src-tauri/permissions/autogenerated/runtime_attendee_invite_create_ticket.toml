@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-attendee-invite-create-ticket"
+description = "Enables the runtime_attendee_invite_create_ticket command without any pre-configured scope."
+commands.allow = ["runtime_attendee_invite_create_ticket"]
+
+[[permission]]
+identifier = "deny-runtime-attendee-invite-create-ticket"
+description = "Denies the runtime_attendee_invite_create_ticket command without any pre-configured scope."
+commands.deny = ["runtime_attendee_invite_create_ticket"]

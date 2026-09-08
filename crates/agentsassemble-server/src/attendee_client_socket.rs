@@ -41,7 +41,7 @@ impl RoomAttendeeClient {
         tokio::time::timeout(Duration::from_secs(10), async {
             let (stream, _) = connect_async_with_config(request, Some(config), false)
                 .await
-                .map_err(|_| transport())?;
+                .map_err(handshake_error)?;
             let mut socket = AttendeeSocket {
                 stream,
                 connection_id: Uuid::nil(),
@@ -143,4 +143,17 @@ fn transport() -> AttendeeClientError {
 }
 fn closed() -> AttendeeClientError {
     AttendeeClientError::local("attendee_socket_closed")
+}
+
+fn handshake_error(failure: tokio_tungstenite::tungstenite::Error) -> AttendeeClientError {
+    if let tokio_tungstenite::tungstenite::Error::Http(response) = failure
+        && response.status().is_client_error()
+        && !matches!(response.status().as_u16(), 408 | 429)
+    {
+        return AttendeeClientError {
+            code: "attendee_connection_rejected".to_owned(),
+            resolution: Some(agentsassemble_protocol::CommandResolution::Rejected),
+        };
+    }
+    transport()
 }

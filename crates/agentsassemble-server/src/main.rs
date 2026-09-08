@@ -15,11 +15,11 @@ use agentsassemble_protocol::{
 use agentsassemble_provider::ProviderCatalogService;
 use agentsassemble_server::{
     AppState, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError, TicketStore,
-    issue_central_registration_ticket, issue_connector_invite_create_ticket,
-    issue_human_invite_create_ticket, issue_human_invite_revoke_ticket,
-    issue_local_operator_http_ticket, issue_local_ticket, issue_preferences_read_ticket,
-    issue_preferences_write_ticket, issue_settings_directory_read_ticket, local_bind_is_supported,
-    serve,
+    issue_attendee_invite_create_ticket, issue_central_registration_ticket,
+    issue_connector_invite_create_ticket, issue_human_invite_create_ticket,
+    issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
+    issue_preferences_read_ticket, issue_preferences_write_ticket,
+    issue_settings_directory_read_ticket, local_bind_is_supported, serve,
 };
 use anyhow::Context;
 use clap::Parser;
@@ -231,13 +231,7 @@ async fn run_control_pipe<R, W>(
 async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse {
     let (request_id, request) = match parse_control_request(line) {
         Ok(request) => request,
-        Err((request_id, code, message)) => {
-            return LocalControlResponse::Error {
-                request_id,
-                code: code.to_owned(),
-                message: message.to_owned(),
-            };
-        }
+        Err(error) => return *error,
     };
     match request {
         LocalControlRequest::CentralLogin {
@@ -302,7 +296,8 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         | LocalControlRequest::IssueMessageAttachmentReadTicket { .. }) => {
             message_attachments_control::response(state, request_id, request).await
         }
-        request @ (LocalControlRequest::IssueConnectorInviteCreateTicket { .. }
+        request @ (LocalControlRequest::IssueAttendeeInviteCreateTicket { .. }
+        | LocalControlRequest::IssueConnectorInviteCreateTicket { .. }
         | LocalControlRequest::IssueHumanInviteCreateTicket { .. }
         | LocalControlRequest::IssueHumanInviteRevokeTicket { .. }) => {
             invite_ticket_control_request(state, request_id, request).await
@@ -331,23 +326,23 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
 
 fn parse_control_request(
     line: &[u8],
-) -> Result<(String, LocalControlRequest), (String, &'static str, &'static str)> {
+) -> Result<(String, LocalControlRequest), Box<LocalControlResponse>> {
     let request = serde_json::from_slice::<LocalControlRequest>(line).map_err(|_| {
-        (
-            String::new(),
-            "control_request_invalid",
-            "Control request JSON is invalid.",
-        )
+        Box::new(LocalControlResponse::Error {
+            request_id: String::new(),
+            code: "control_request_invalid".to_owned(),
+            message: "Control request JSON is invalid.".to_owned(),
+        })
     })?;
     let request_id = control_request_id(&request).to_owned();
     if valid_control_request_id(&request_id) {
         Ok((request_id, request))
     } else {
-        Err((
+        Err(Box::new(LocalControlResponse::Error {
             request_id,
-            "request_id_invalid",
-            "Control request id is invalid.",
-        ))
+            code: "request_id_invalid".to_owned(),
+            message: "Control request id is invalid.".to_owned(),
+        }))
     }
 }
 
@@ -397,6 +392,7 @@ async fn bootstrap_control_response(
 
 enum InviteTicketRequest {
     ConnectorCreate(ManagerRoomAuthorityRequest),
+    AttendeeCreate(ManagerRoomAuthorityRequest),
     Create(ManagerRoomAuthorityRequest),
     Revoke(ManagerRoomAuthorityRequest),
 }
@@ -407,6 +403,18 @@ async fn invite_ticket_control_request(
     request: LocalControlRequest,
 ) -> LocalControlResponse {
     let request = match request {
+        LocalControlRequest::IssueAttendeeInviteCreateTicket {
+            server_id,
+            authority_lineage_id,
+            meeting_id,
+            room_uid,
+            ..
+        } => InviteTicketRequest::AttendeeCreate(ManagerRoomAuthorityRequest {
+            server_id,
+            authority_lineage_id,
+            room_id: meeting_id,
+            room_uid,
+        }),
         LocalControlRequest::IssueConnectorInviteCreateTicket {
             server_id,
             authority_lineage_id,
@@ -454,6 +462,15 @@ async fn invite_ticket_control_response(
     request: InviteTicketRequest,
 ) -> LocalControlResponse {
     let result = match request {
+        InviteTicketRequest::AttendeeCreate(authority) => {
+            issue_attendee_invite_create_ticket(state, &authority)
+                .await
+                .map(|ticket| LocalControlResponse::AttendeeInviteCreateOk {
+                    request_id: request_id.clone(),
+                    ticket: ticket.ticket,
+                    ttl_seconds: ticket.ttl_seconds,
+                })
+        }
         InviteTicketRequest::ConnectorCreate(authority) => {
             issue_connector_invite_create_ticket(state, &authority)
                 .await
@@ -545,6 +562,7 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::IssueSideChatReadTicket { request_id, .. }
         | LocalControlRequest::IssueMessageAttachmentUploadTicket { request_id, .. }
         | LocalControlRequest::IssueMessageAttachmentReadTicket { request_id, .. }
+        | LocalControlRequest::IssueAttendeeInviteCreateTicket { request_id, .. }
         | LocalControlRequest::IssueConnectorInviteCreateTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteCreateTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteRevokeTicket { request_id, .. }

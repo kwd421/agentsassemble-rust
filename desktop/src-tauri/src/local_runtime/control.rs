@@ -182,6 +182,13 @@ pub(super) fn request_message_attachment_read_ticket(
     )
 }
 
+pub(super) fn request_attendee_invite_create_ticket(
+    runtime: &mut RuntimeProcess,
+    authority: &ManagerRoomAuthority,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::AttendeeInviteCreate(authority))
+}
+
 pub(super) fn request_connector_invite_create_ticket(
     runtime: &mut RuntimeProcess,
     authority: &ManagerRoomAuthority,
@@ -262,6 +269,7 @@ enum HttpTicketKind<'a> {
     MessageAttachmentRead(&'a str, &'a str),
     HumanInviteCreate(&'a ManagerRoomAuthority),
     ConnectorInviteCreate(&'a ManagerRoomAuthority),
+    AttendeeInviteCreate(&'a ManagerRoomAuthority),
     HumanInviteRevoke(&'a ManagerRoomAuthority),
     AgentAvatarUpload(&'a ManagerRoomAuthority, &'a str),
     AppearanceUpload(&'a ManagerRoomAuthority),
@@ -330,7 +338,8 @@ fn http_ticket_request(kind: HttpTicketKind<'_>, request_id: &str) -> LocalContr
         | HttpTicketKind::AgentAvatarUpload(_, _) => {
             unreachable!("asset requests are decoded above")
         }
-        HttpTicketKind::ConnectorInviteCreate(_)
+        HttpTicketKind::AttendeeInviteCreate(_)
+        | HttpTicketKind::ConnectorInviteCreate(_)
         | HttpTicketKind::HumanInviteCreate(_)
         | HttpTicketKind::HumanInviteRevoke(_) => invites::request(kind, request_id),
         HttpTicketKind::AppearanceUpload(authority) => {
@@ -417,7 +426,8 @@ fn decode_http_ticket_response(
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
     match kind {
-        HttpTicketKind::ConnectorInviteCreate(_)
+        HttpTicketKind::AttendeeInviteCreate(_)
+        | HttpTicketKind::ConnectorInviteCreate(_)
         | HttpTicketKind::HumanInviteCreate(_)
         | HttpTicketKind::HumanInviteRevoke(_) => {
             return invites::response(kind, request_id, response);

@@ -320,6 +320,15 @@ pub fn registered_provider_kind(provider: &str) -> Option<&'static str> {
         .map(|registration| registration.provider_kind)
 }
 
+/// Returns the CLI selector for an explicit registered external provider.
+#[must_use]
+pub fn registered_provider_id(provider: &str) -> Option<&'static str> {
+    PROVIDER_REGISTRATIONS
+        .iter()
+        .find(|registration| registration.id == provider || registration.provider_kind == provider)
+        .map(|registration| registration.id)
+}
+
 pub(crate) fn provider_registration_by_id(id: &str) -> Option<&'static ProviderRegistration> {
     PROVIDER_REGISTRATIONS
         .iter()

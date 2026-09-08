@@ -298,3 +298,6 @@ async fn start(ready: bool) -> RunningServer {
 
 #[path = "human_invite_manager_boundary/connector.rs"]
 mod connector_invite_manager;
+
+#[path = "human_invite_manager_boundary/attendee.rs"]
+mod attendee_entry;

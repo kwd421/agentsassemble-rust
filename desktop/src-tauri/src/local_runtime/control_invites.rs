@@ -5,6 +5,15 @@ use super::{
 
 pub(super) fn request(kind: HttpTicketKind<'_>, request_id: &str) -> LocalControlRequest {
     match kind {
+        HttpTicketKind::AttendeeInviteCreate(authority) => {
+            LocalControlRequest::IssueAttendeeInviteCreateTicket {
+                request_id: request_id.to_owned(),
+                server_id: authority.server_id.clone(),
+                authority_lineage_id: authority.authority_lineage_id.clone(),
+                meeting_id: authority.room_id.clone(),
+                room_uid: authority.room_uid.clone(),
+            }
+        }
         HttpTicketKind::ConnectorInviteCreate(authority) => {
             LocalControlRequest::IssueConnectorInviteCreateTicket {
                 request_id: request_id.to_owned(),
@@ -43,6 +52,14 @@ pub(super) fn response(
 ) -> Result<(String, u64), TicketFailure> {
     match (kind, response) {
         (
+            HttpTicketKind::AttendeeInviteCreate(_),
+            LocalControlResponse::AttendeeInviteCreateOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        )
+        | (
             HttpTicketKind::ConnectorInviteCreate(_),
             LocalControlResponse::ConnectorInviteCreateOk {
                 request_id: response_id,
