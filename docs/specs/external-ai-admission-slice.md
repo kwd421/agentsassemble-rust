@@ -388,3 +388,15 @@ Clippy and unchanged architecture/format/diff/artifact gates pass. Startup proce
 at most 64 connection rows per transaction; there is no new periodic worker or
 provider process. These methods are not yet exposed as a ready/report WebSocket;
 authenticated turn delivery/reporting and exact external stop remain in progress.
+
+## Shared terminal turn transaction
+
+Message, vote, decline and failure completion now have a single transaction-local
+implementation under `room_turn_completion`. Existing managed APIs retain transaction
+ownership and call that implementation. This gives the attendee report owner a place
+to revalidate connection provenance and recover a durable report receipt in the
+same transaction as canonical turn completion, without prechecking authority and
+then borrowing a trusted host principal. No terminal policy or event contract is
+duplicated. The room-turn facade is reduced from 764 to 548 lines; the completion
+owner is 308 lines. Forty-four existing room-turn tests, affected Clippy and unchanged
+architecture/format/diff gates pass. Attendee report transport is the next consumer.
