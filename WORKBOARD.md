@@ -36,13 +36,15 @@
 - Phase 6 is closed through `25c7961`: Daybreak approved all 17 commits,
   cumulative phase, exact HEAD and complete local contract at C0/H0/M0/L0.
   [Correction and approval](docs/VERIFICATION.md#phase-6-whole-phase-review-correction-http-incarnation-2026-09-08).
-- Active: Phase 7 passes local acceptance through `f6da14b`: all three custody
-  paths, direct packaged desktop/mobile flows, and Windows compile/lint/runtime
-  verification. Daybreak reviewed all 94 commits through `0600093` at C0/H0/M1/L0;
-  the muted-owner request correction awaits re-approval before Phase 8.
+- Phase 7 is closed through `d70224b`: Daybreak approved the correction, cumulative
+  95-commit phase, exact HEAD and whole local contract at C0/H0/M0/L0. All three
+  custody paths, packaged desktop/mobile and Windows process/IPC verification pass.
   [Correction](docs/VERIFICATION.md#phase-7-whole-phase-review-correction-muted-owner-2026-09-09).
   [Contract and evidence](docs/specs/external-ai-admission-slice.md).
   New Pro review and authorized real-provider proof remain at full closeout.
+- Active: Phase 8 operational surfaces. Establish provider operations and runtime
+  diagnostics under their current owners, then complete direct packaged acceptance.
+  [Contract and acceptance](docs/specs/operational-surfaces-slice.md).
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:
