@@ -13,6 +13,7 @@ import {
 import { CHANNEL_SECTIONS, DeferredViewFallback, type ChannelConfig } from "./appModel";
 import type { AppController } from "./useAppController";
 import AppOverlays from "./AppOverlays";
+import SideChatDock from "../views/components/SideChatDock";
 import LobbyView from "../views/LobbyView";
 import { RoomSocketProvider } from "../RoomSocketContext";
 import ChannelContextMenu from "../views/components/ChannelContextMenu";
@@ -385,6 +386,10 @@ export default function AppView({ controller }: { controller: AppController }) {
             <DeferredViewFallback />
           )}
         </Suspense>
+        {hasRoom && !guestExpired && !activeRoomDisconnected && !adminOpen && !friendsOpen && <SideChatDock
+          chat={controller.sideChat} socket={roomSocket}
+          canPost={lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) && canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") && participant.participant_type === "human" && participant.status === "joined" && !participant.muted)}
+          mentionables={scopedMentionables} />}
       </main>
 
       {hasRoom && mobileRoomInfoOpen && (

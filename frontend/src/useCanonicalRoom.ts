@@ -55,6 +55,9 @@ type OpenRoomSocket = (
 
 const NO_STREAMS: RoomStream[] = [];
 type CanonicalRoomCallbacks = {
+  onSideChat?: (update: import("./types/generated/SideChatUpdate").SideChatUpdate) => void;
+  onSideChatReady?: (roomUid: string) => void;
+  onSideChatClose?: () => void;
   onRoomLifecycle?: (room: Room) => void;
   onError?: (error: Event | Error) => void;
   onUnauthorized?: () => void;
@@ -88,6 +91,9 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   } = options;
   const callbacksRef = useRef<CanonicalRoomCallbacks>({});
   callbacksRef.current = {
+    onSideChat: options.onSideChat,
+    onSideChatReady: options.onSideChatReady,
+    onSideChatClose: options.onSideChatClose,
     onRoomLifecycle: options.onRoomLifecycle,
     onError: options.onError,
     onUnauthorized: options.onUnauthorized,
@@ -411,12 +417,19 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
         ) return;
         setProviderCatalogByRoom((previous) => ({ ...previous, [roomId]: catalog }));
       },
+      onSideChat: (update) => {
+        if (connectionIsCurrent() && socketIsAccepted(currentSocket)) callbacksRef.current.onSideChat?.(update);
+      },
       onOpen: () => {
         if (!connectionIsCurrent()) return;
         setConnectionState("connected");
+        if (typeof acceptedRoomUid === "string") callbacksRef.current.onSideChatReady?.(acceptedRoomUid);
       },
       onClose: () => {
-        if (connectionIsCurrent()) setConnectionState("connecting");
+        if (connectionIsCurrent()) {
+          setConnectionState("connecting");
+          callbacksRef.current.onSideChatClose?.();
+        }
       },
       onError: (errorValue) => {
         if (!connectionIsCurrent()) return;

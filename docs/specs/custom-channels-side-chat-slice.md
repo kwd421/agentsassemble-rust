@@ -234,3 +234,33 @@ and six protocol cases also pass.
 Affected Rust all-target Clippy, 44 frontend transport/surface cases (3.48 s),
 the production frontend build and CSS check pass. Unchanged structure, 19 policy,
 formatting, diff and artifact gates pass. Packaged UI acceptance remains pending.
+
+## Side-chat frontend connection
+
+The human dock is mounted below the active channel and can be expanded without
+covering its conversation. It restores the original human-only notice, plain-text
+mention/emoji insertion and scoped drafts. Current canonical membership, mute and
+message capability control its composer; failure retains the draft and success
+clears it only after the server receipt. No author name is supplied by the client.
+Drafts remain private memory scoped to HTTP authority, room ID and room UID.
+
+The existing canonical room socket forwards its accepted UID, private updates and
+closure to the side-chat hook. That hook owns one abortable HTTP bootstrap per
+connection and at most 200 buffered live updates. It merges the HTTP cut with live
+sequence/generation/floor checks, immediately hides old history when room or login
+authority changes, and exposes failed bootstrap or gaps with an explicit reconnect
+action. There is no added poll, timer, socket or local persistence. ACKs can precede
+earlier queued live frames, so the subscribed live stream owns transcript order;
+ACKs confirm sends without inventing a gap or duplicating messages.
+
+Affected frontend acceptance covers stale native grants, private/no-store HTTP,
+overlapping bootstrap/live retention, ACK-before-live ordering, generation and
+sequence failure, authority/reconnect isolation, room-incarnation drafts, and the
+composer's rejection, success, focus and read-only state. Canonical room lifecycle,
+creation, controls and isolation regressions also pass. Packaged desktop/mobile
+acceptance, custom-channel presentation and channel search/pins remain open.
+
+All 37 affected frontend cases pass (3.64 s); the production build and unchanged
+CSS cascade pass. The dock adds about 3 KiB of compressed frontend code, one
+bounded private projection and one in-flight bootstrap. Structure, 19 policy,
+formatting, diff and artifact checks pass; visible packaged behavior is not yet proven.

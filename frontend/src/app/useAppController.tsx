@@ -13,6 +13,8 @@ import {
   type RoomAgentSession,
   type RoomSearchResult,
 } from "../api";
+import { useRoomSideChat } from "./useRoomSideChat";
+import { resolveRoomHttpAuthority } from "../api/roomHttpAuthority";
 import { useCanonicalRoom } from "../useCanonicalRoom";
 import type {
   ChannelHeaderActions,
@@ -248,12 +250,19 @@ export function useAppController(deviceToken: string, clientId: string) {
   const roomSurfaceReady = Boolean(
     serverProductSurface?.websocket_streams.includes("room_events")
   );
+  const sideChat = useRoomSideChat(
+    startupIdentityResolved && roomSurfaceReady ? activeOperationalMeetingId : "",
+    resolveRoomHttpAuthority(admittedSessionToken, !guestLocked && isDesktopWebview(), deviceToken),
+  );
   const canonicalRoom = useCanonicalRoom({
     roomId: startupIdentityResolved && roomSurfaceReady ? activeOperationalMeetingId : "",
     auth: roomSurfaceReady ? canonicalRoomAuth : undefined,
     streams: serverProductSurface?.websocket_streams || [],
     serverSurface: serverProductSurface,
     viewerParticipantId: guestSession?.agentId || "operator-local",
+    onSideChat: sideChat.receive,
+    onSideChatReady: sideChat.connect,
+    onSideChatClose: sideChat.disconnect,
     onUnauthorized: admittedSessionToken ? expireGuestSession : undefined,
     onRoomLifecycle: (room) => { roomLifecycle.onRoomLifecycle(); pairedRoomLifecycle.onRoomLifecycle(room); },
   });
@@ -573,7 +582,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     activeRoomDisconnected, activeRoomHistory, activeRoomMembers,
     addFreshRoom, adjustSidebarWidthWithKeyboard,
     adminOpen, admittedSessionToken, agentActivityVisibility, agentCreateOpen,
-    cancelMobileShellPointer, canonicalRoom,
+    cancelMobileShellPointer, canonicalRoom, sideChat,
     changeAgentActivityVisibility, channel, channelHeaderActions,
     channelMenu, channelSearchNeedle, channelSearchQuery, channelSidebarWidth,
     closeInviteModal, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
