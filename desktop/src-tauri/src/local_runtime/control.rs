@@ -154,6 +154,13 @@ pub(super) fn request_message_search_read_ticket(
     request_http_ticket(runtime, HttpTicketKind::MessageSearchRead(room_id))
 }
 
+pub(super) fn request_side_chat_read_ticket(
+    runtime: &mut RuntimeProcess,
+    room_id: &str,
+) -> Result<HttpTicketGrant, TicketFailure> {
+    request_http_ticket(runtime, HttpTicketKind::SideChatRead(room_id))
+}
+
 pub(super) fn request_message_attachment_upload_ticket(
     runtime: &mut RuntimeProcess,
     room_id: &str,
@@ -240,6 +247,7 @@ enum HttpTicketKind<'a> {
     MessagePinsRead(&'a str),
     MessagePinsWrite(&'a str),
     MessageSearchRead(&'a str),
+    SideChatRead(&'a str),
     MessageAttachmentUpload(&'a str),
     MessageAttachmentRead(&'a str, &'a str),
     HumanInviteCreate(&'a ManagerRoomAuthority),
@@ -302,6 +310,10 @@ fn http_ticket_request(kind: HttpTicketKind<'_>, request_id: &str) -> LocalContr
                 meeting_id: room_id.to_owned(),
             }
         }
+        HttpTicketKind::SideChatRead(room_id) => LocalControlRequest::IssueSideChatReadTicket {
+            request_id: request_id.to_owned(),
+            meeting_id: room_id.to_owned(),
+        },
         HttpTicketKind::MessageAttachmentUpload(_)
         | HttpTicketKind::MessageAttachmentRead(_, _)
         | HttpTicketKind::AgentAvatarUpload(_, _) => {
@@ -409,8 +421,8 @@ fn decode_http_ticket_response(
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
     match kind {
-        HttpTicketKind::MessageSearchRead(_) => {
-            return decode_message_search_ticket_response(request_id, response);
+        HttpTicketKind::MessageSearchRead(_) | HttpTicketKind::SideChatRead(_) => {
+            return decode_chat_read_ticket_response(kind, request_id, response);
         }
         HttpTicketKind::MessagePinsRead(_) | HttpTicketKind::MessagePinsWrite(_) => {
             return decode_message_pin_ticket_response(kind, request_id, response);
@@ -553,23 +565,38 @@ fn decode_asset_ticket_response(
     }
 }
 
-fn decode_message_search_ticket_response(
+fn decode_chat_read_ticket_response(
+    kind: HttpTicketKind<'_>,
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
-    match response {
-        LocalControlResponse::MessageSearchReadOk {
-            request_id: response_id,
-            ticket,
-            ttl_seconds,
-        } if response_id == request_id => Ok((ticket, ttl_seconds)),
-        LocalControlResponse::Error {
-            request_id: response_id,
-            code,
-            message,
-        } if response_id == request_id => Err(control_ticket_failure(&code, message)),
+    match (kind, response) {
+        (
+            HttpTicketKind::MessageSearchRead(_),
+            LocalControlResponse::MessageSearchReadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        )
+        | (
+            HttpTicketKind::SideChatRead(_),
+            LocalControlResponse::SideChatReadOk {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            },
+        ) if response_id == request_id => Ok((ticket, ttl_seconds)),
+        (
+            _,
+            LocalControlResponse::Error {
+                request_id: response_id,
+                code,
+                message,
+            },
+        ) if response_id == request_id => Err(control_ticket_failure(&code, message)),
         _ => Err(TicketFailure::Broken(
-            "local runtime message-search response did not match the request".to_owned(),
+            "local runtime chat read ticket response did not match the request".to_owned(),
         )),
     }
 }

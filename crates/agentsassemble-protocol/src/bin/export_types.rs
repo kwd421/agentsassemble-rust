@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     agentsassemble_domain::SaveFriend::export_all(&config)?;
     agentsassemble_domain::ChannelHistoryPage::export_all(&config)?;
     agentsassemble_domain::ChannelMessageSend::export_all(&config)?;
+    agentsassemble_domain::SideChatSnapshot::export_all(&config)?;
     Subscribed::export_all(&config)?;
     CommandAck::export_all(&config)?;
     TicketResponse::export_all(&config)?;

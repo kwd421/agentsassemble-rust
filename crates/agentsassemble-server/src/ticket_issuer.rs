@@ -202,6 +202,23 @@ pub async fn issue_message_search_read_ticket(
     Ok(operator_http_response(state, issued))
 }
 
+/// Issues an exact side-chat bootstrap credential for the current local room human.
+///
+/// # Errors
+/// Returns a bounded identity, persistence, or ticket-capacity error.
+pub async fn issue_side_chat_read_ticket(
+    state: &AppState,
+    requested_room_id: &str,
+) -> Result<OperatorHttpTicketResponse, TicketIssueError> {
+    let identity = resolve_local_room_user(state, requested_room_id).await?;
+    let issued = state
+        .tickets
+        .issue_side_chat_read(identity.room_id, identity.user_id, identity.participant_id)
+        .await
+        .map_err(|_| TicketIssueError::Unavailable)?;
+    Ok(operator_http_response(state, issued))
+}
+
 /// Issues an exact message-attachment upload credential for the current local room human.
 ///
 /// # Errors

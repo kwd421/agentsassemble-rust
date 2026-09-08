@@ -16,6 +16,7 @@ use uuid::Uuid;
 
 mod human_session;
 mod message_attachments;
+mod side_chat;
 
 use human_session::RoomSessionSocketGrant;
 pub(crate) use human_session::{
@@ -74,6 +75,7 @@ pub enum RoomHttpPurpose {
     MessagePinsRead,
     MessagePinsWrite,
     MessageSearchRead,
+    SideChatRead,
     MessageAttachmentUpload,
     BoundMessageAttachmentRead { attachment_id: String },
     BoundAppearanceRead { asset_id: String },

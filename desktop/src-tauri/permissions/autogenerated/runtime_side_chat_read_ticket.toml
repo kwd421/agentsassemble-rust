@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-side-chat-read-ticket"
+description = "Enables the runtime_side_chat_read_ticket command without any pre-configured scope."
+commands.allow = ["runtime_side_chat_read_ticket"]
+
+[[permission]]
+identifier = "deny-runtime-side-chat-read-ticket"
+description = "Denies the runtime_side_chat_read_ticket command without any pre-configured scope."
+commands.deny = ["runtime_side_chat_read_ticket"]

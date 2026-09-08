@@ -125,6 +125,7 @@ mod runtime_reconciliation;
 mod runtime_reconciliation_cleanup;
 mod security_headers;
 mod server_identity_web;
+mod side_chat_web;
 mod socket_admission;
 mod stable_entry;
 mod ticket;
@@ -161,6 +162,6 @@ pub use ticket_issuer::{
     issue_message_attachment_upload_ticket, issue_message_pins_read_ticket,
     issue_message_pins_write_ticket, issue_message_search_read_ticket,
     issue_preferences_read_ticket, issue_preferences_write_ticket,
-    issue_settings_directory_read_ticket,
+    issue_settings_directory_read_ticket, issue_side_chat_read_ticket,
 };
 pub use web::{ServeError, router, serve};

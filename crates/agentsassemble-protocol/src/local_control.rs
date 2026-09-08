@@ -43,6 +43,10 @@ pub enum LocalControlRequest {
         request_id: String,
         meeting_id: String,
     },
+    IssueSideChatReadTicket {
+        request_id: String,
+        meeting_id: String,
+    },
     IssueMessageAttachmentUploadTicket {
         request_id: String,
         meeting_id: String,
@@ -168,6 +172,11 @@ pub enum LocalControlResponse {
         ttl_seconds: u64,
     },
     MessageSearchReadOk {
+        request_id: String,
+        ticket: String,
+        ttl_seconds: u64,
+    },
+    SideChatReadOk {
         request_id: String,
         ticket: String,
         ttl_seconds: u64,

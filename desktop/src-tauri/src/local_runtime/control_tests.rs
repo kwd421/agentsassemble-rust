@@ -18,6 +18,39 @@ const PRESERVATION_CHILD_ENV: &str = "AGENTSASSEMBLE_RUNTIME_PRESERVATION_CHILD"
 const PRESERVATION_CHILD_READY: &str = "agentsassemble-runtime-preservation-ready";
 
 #[test]
+fn side_chat_ticket_cannot_be_used_as_search_or_cross_a_request() {
+    let response = LocalControlResponse::SideChatReadOk {
+        request_id: "side-chat".to_owned(),
+        ticket: "f".repeat(64),
+        ttl_seconds: 30,
+    };
+    assert!(
+        decode_http_ticket_response(
+            HttpTicketKind::SideChatRead("general"),
+            "side-chat",
+            response.clone()
+        )
+        .is_ok()
+    );
+    assert!(matches!(
+        decode_http_ticket_response(
+            HttpTicketKind::MessageSearchRead("general"),
+            "side-chat",
+            response.clone()
+        ),
+        Err(TicketFailure::Broken(_))
+    ));
+    assert!(matches!(
+        decode_http_ticket_response(
+            HttpTicketKind::SideChatRead("general"),
+            "other-request",
+            response
+        ),
+        Err(TicketFailure::Broken(_))
+    ));
+}
+
+#[test]
 fn http_ticket_response_variant_must_match_the_exact_request_purpose() {
     let response = LocalControlResponse::PreferencesWriteOk {
         request_id: "request-1".to_owned(),

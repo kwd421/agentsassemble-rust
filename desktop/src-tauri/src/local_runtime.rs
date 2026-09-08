@@ -27,6 +27,7 @@ mod human_invite;
 mod message_attachments;
 mod message_pins;
 mod message_search;
+mod side_chat;
 
 use control::{
     TicketFailure, request_bootstrap_initialize, request_bootstrap_status,

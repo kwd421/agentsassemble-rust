@@ -15,6 +15,7 @@ import {
   requestDesktopMessagePinsReadTicket,
   requestDesktopMessagePinsWriteTicket,
   requestDesktopMessageSearchReadTicket,
+  requestDesktopSideChatReadTicket,
   requestDesktopMessageAttachmentReadTicket,
   requestDesktopMessageAttachmentUploadTicket,
   saveDesktopMessageAttachment,
@@ -35,6 +36,7 @@ const hostCommands = [
   "runtime_message_pins_write_ticket",
   "runtime_message_search_read_ticket",
   "runtime_operator_ticket",
+  "runtime_side_chat_read_ticket",
   "save_message_attachment",
 ];
 
@@ -271,6 +273,7 @@ describe("desktop exact-purpose HTTP bridge", () => {
     await requestDesktopMessagePinsReadTicket("general");
     await requestDesktopMessagePinsWriteTicket("general");
     await requestDesktopMessageSearchReadTicket("general");
+    await requestDesktopSideChatReadTicket("general");
 
     expect(invoke).toHaveBeenNthCalledWith(2, "runtime_message_pins_read_ticket", {
       roomId: "general",
@@ -279,6 +282,9 @@ describe("desktop exact-purpose HTTP bridge", () => {
       roomId: "general",
     });
     expect(invoke).toHaveBeenNthCalledWith(4, "runtime_message_search_read_ticket", {
+      roomId: "general",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(5, "runtime_side_chat_read_ticket", {
       roomId: "general",
     });
   });

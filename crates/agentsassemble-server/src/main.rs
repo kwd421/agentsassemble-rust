@@ -29,9 +29,9 @@ use tokio::{
 
 mod agent_avatar_control;
 mod appearance_control;
+mod chat_read_control;
 mod message_attachments_control;
 mod message_pins_control;
-mod message_search_control;
 
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
@@ -293,8 +293,9 @@ async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse
         | LocalControlRequest::IssueMessagePinsWriteTicket { .. }) => {
             message_pins_control::response(state, request_id, request).await
         }
-        request @ LocalControlRequest::IssueMessageSearchReadTicket { .. } => {
-            message_search_control::response(state, request_id, request).await
+        request @ (LocalControlRequest::IssueSideChatReadTicket { .. }
+        | LocalControlRequest::IssueMessageSearchReadTicket { .. }) => {
+            chat_read_control::response(state, request_id, request).await
         }
         request @ (LocalControlRequest::IssueMessageAttachmentUploadTicket { .. }
         | LocalControlRequest::IssueMessageAttachmentReadTicket { .. }) => {
@@ -519,6 +520,7 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::IssueMessagePinsReadTicket { request_id, .. }
         | LocalControlRequest::IssueMessagePinsWriteTicket { request_id, .. }
         | LocalControlRequest::IssueMessageSearchReadTicket { request_id, .. }
+        | LocalControlRequest::IssueSideChatReadTicket { request_id, .. }
         | LocalControlRequest::IssueMessageAttachmentUploadTicket { request_id, .. }
         | LocalControlRequest::IssueMessageAttachmentReadTicket { request_id, .. }
         | LocalControlRequest::IssueHumanInviteCreateTicket { request_id, .. }

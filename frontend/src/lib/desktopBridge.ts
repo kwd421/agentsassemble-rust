@@ -73,6 +73,7 @@ type DesktopHttpTicketCommand =
   | "runtime_message_pins_read_ticket"
   | "runtime_message_pins_write_ticket"
   | "runtime_message_search_read_ticket"
+  | "runtime_side_chat_read_ticket"
   | "runtime_message_attachment_upload_ticket"
   | "runtime_message_attachment_read_ticket"
   | "runtime_human_invite_create_ticket"
@@ -457,6 +458,10 @@ export function requestDesktopMessageSearchReadTicket(
     { roomId },
     "로비 메시지 검색 read 티켓"
   );
+}
+
+export function requestDesktopSideChatReadTicket(roomId: string): Promise<DesktopOperatorHttpTicket> {
+  return requestDesktopHttpTicket("runtime_side_chat_read_ticket", { roomId }, "사이드챗 읽기 권한");
 }
 
 export function requestDesktopMessageAttachmentUploadTicket(

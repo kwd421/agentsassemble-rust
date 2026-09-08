@@ -172,3 +172,30 @@ Digest and bootstrap-authority rejection assertions are preserved. All affected
 Rust targets/features pass Clippy; unchanged structure, 19 policy, formatting,
 diff and artifact gates pass. The dispatch groups atomic updates without runtime
 follow-up under one match, preserving profile/role command behavior and line gates.
+
+## Side-chat bootstrap transport
+
+`GET /api/side-chat?room_id=...` reads the bounded memory snapshot with private,
+no-store responses. Public human/paired bearer authority uses the existing origin,
+device and current-session resolver. The bundled desktop uses a new exact-purpose,
+one-use read ticket, resolved to its current local identity inside the same
+transaction as the memory read. Wrong room, wrong purpose, consumed ticket and
+revoked session remain errors. The native control response must match both its
+purpose and request; search and side-chat response decoding share that mechanism
+without accepting one another's grants. Only the bundled main window receives the
+new native permission, and the advertised host surface is its actual registry/
+capability intersection.
+
+Actual HTTP acceptance passes (0.17 s), including all 200 maximum-size Unicode
+messages, a body larger than the unchanged WebSocket frame limit, no-store headers,
+local ticket reuse/wrong-purpose rejection, and read-only human read/wrong-room/
+leave rejection. Desktop Clippy and all 28 native tests pass; the surface check
+caught the initially missing bundled-window permission, which was then registered.
+Fifteen affected frontend native-bridge cases and the production build/CSS gate
+pass. Snapshot/message bindings are generated from Rust. Affected Rust Clippy and
+unchanged structure, 19 policy, formatting, diff and artifact gates pass.
+
+The full bootstrap travels over HTTP because 200 Unicode text messages can exceed
+256 KiB. Live delivery will send one bounded update per WebSocket frame after
+subscription-before-bootstrap; no enlarged frame gate or polling was introduced.
+The dock and live mutation/subscription remain subsequent Phase 6 work.

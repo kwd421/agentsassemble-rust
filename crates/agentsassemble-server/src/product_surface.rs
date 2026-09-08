@@ -53,6 +53,7 @@ fn registered_routes(
         crate::room_preferences_web::HTTP_ROUTES,
         crate::message_pins_web::HTTP_ROUTES,
         crate::message_search_web::HTTP_ROUTES,
+        crate::side_chat_web::HTTP_ROUTES,
         crate::persona_web::HTTP_ROUTES,
         crate::profile_web::HTTP_ROUTES,
         crate::account_web::HTTP_ROUTES,

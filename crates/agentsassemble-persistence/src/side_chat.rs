@@ -90,6 +90,32 @@ pub struct SideChatCommit {
 }
 
 impl SqliteStore {
+    /// Reads ephemeral side chat under the current exact local room identity.
+    ///
+    /// # Errors
+    /// Rejects inactive local identity or room membership and database failures.
+    pub async fn local_side_chat_snapshot(
+        &self,
+        room_id: &str,
+        user_id: &str,
+        participant_id: &str,
+        now: DateTime<Utc>,
+    ) -> Result<SideChatSnapshot, PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        let (authority, _) = crate::room_user_identity::resolve_local_room_manager(
+            &mut tx,
+            room_id,
+            user_id,
+            participant_id,
+        )
+        .await?;
+        let snapshot = self
+            .side_chat_snapshot_in_memory(authority.room_uid, room_id.to_owned(), now)
+            .await;
+        tx.commit().await?;
+        Ok(snapshot)
+    }
+
     /// Reads only the current human room's ephemeral chat, never durable room events.
     ///
     /// # Errors
@@ -101,14 +127,23 @@ impl SqliteStore {
     ) -> Result<SideChatSnapshot, PersistenceError> {
         let mut tx = self.pool.begin().await?;
         let (room_uid, principal, _) = human_authority(&mut tx, authority, false).await?;
-        let snapshot = {
-            let mut rooms = self.side_chat.rooms.lock().await;
-            let room = rooms.entry(room_uid).or_default();
-            room.prune(now);
-            room.snapshot(principal.room_id)
-        };
+        let snapshot = self
+            .side_chat_snapshot_in_memory(room_uid, principal.room_id, now)
+            .await;
         tx.commit().await?;
         Ok(snapshot)
+    }
+
+    async fn side_chat_snapshot_in_memory(
+        &self,
+        incarnation: Uuid,
+        room_id: String,
+        now: DateTime<Utc>,
+    ) -> SideChatSnapshot {
+        let mut rooms = self.side_chat.rooms.lock().await;
+        let room = rooms.entry(incarnation).or_default();
+        room.prune(now);
+        room.snapshot(room_id)
     }
 
     /// Registers live delivery before the caller obtains its HTTP/bootstrap snapshot.
