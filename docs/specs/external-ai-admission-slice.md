@@ -437,6 +437,20 @@ failure. The actual CLI child-process fixture still passes admission, one result
 confirmed remote stop (3.93 s). Server Clippy and unchanged mandatory gates pass;
 native provider request mapping and packaged response controls remain pending.
 
+Codex now translates its retained native command/file/permission approvals and user
+questions into the shared request ingress for both managed and attendee turns.
+Thread/turn matching occurs before admission; early requests preceding the native
+turn/start receipt remain in the existing bounded queue. Human response waits sit
+outside the native inactivity deadline, with exact-turn interruption dropping the
+live exchange. Policy amendment objects stay native-side; durable descriptions use
+the existing redaction owner and oversized prompts fail validation. A flushed
+JSON-RPC reply is the upstream delivery boundary, followed by the room receipt.
+The local process case verifies early secret question delivery, one exact native
+response, the durable receipt barrier and official interrupt cancellation. Native
+policy choice mappings and 23 affected Codex tests pass, as do provider all-target/
+all-feature Clippy and unchanged architecture, policy, format and artifact gates.
+Other native mappers, visible controls and managed bridge custody remain pending.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

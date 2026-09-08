@@ -76,7 +76,13 @@ pub(super) async fn send_turn(
     } else {
         start_turn(driver, session, request, &thread_id).await?;
     }
-    read_turn(driver, &thread_id, &session.public.model).await
+    read_turn(
+        driver,
+        &thread_id,
+        &session.public.model,
+        &session.public.session_id,
+    )
+    .await
 }
 
 pub(super) async fn interrupt_turn(
@@ -122,6 +128,10 @@ pub(super) async fn interrupt_turn(
     tokio::time::timeout(std::time::Duration::from_secs(10), async {
         loop {
             let message = next_matching_notification(driver, &thread_id, &provider_turn_id).await?;
+            if message.get("id").is_some() {
+                driver.handle_server_request(&message).await?;
+                continue;
+            }
             if message.get("method").and_then(Value::as_str) == Some("turn/completed") {
                 terminal_status(&message)?;
                 return Ok::<(), DriverError>(());
@@ -193,6 +203,7 @@ async fn read_turn(
     driver: &mut CodexDriver,
     thread_id: &str,
     configured_model: &str,
+    session_id: &str,
 ) -> Result<ProviderTurnCompleted, DriverError> {
     loop {
         let (turn_id, deadline) = {
@@ -216,6 +227,27 @@ async fn read_turn(
             Ok(Err(error)) => return poison(driver, error),
             Err(_) => return poison(driver, turn_timeout()),
         };
+        if message.get("id").is_some() {
+            let request = driver
+                .turn_state
+                .active
+                .as_ref()
+                .ok_or_else(turn_unconfirmed)?
+                .request
+                .clone();
+            if let Err(error) =
+                super::requests::handle(driver, session_id, &request, &message).await
+            {
+                return poison(driver, error);
+            }
+            driver
+                .turn_state
+                .active
+                .as_mut()
+                .ok_or_else(turn_unconfirmed)?
+                .last_progress = Instant::now();
+            continue;
+        }
         let Some(method) = message.get("method").and_then(Value::as_str) else {
             return poison(driver, protocol_error());
         };
@@ -307,6 +339,11 @@ async fn next_matching_notification(
             ));
         }
         if object.get("id").is_some() {
+            if super::requests::supported(&message)
+                && message_matches(&message, thread_id, turn_id)?
+            {
+                return Ok(message);
+            }
             driver.handle_server_request(&message).await?;
             continue;
         }

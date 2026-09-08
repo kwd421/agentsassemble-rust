@@ -175,14 +175,17 @@ mod tests {
         let (mut native, mut broker, mut observer) = ProviderRequestExchange::channel();
         broker
             .respond(ProviderRequestResolution::Acknowledge)
-            .unwrap();
+            .unwrap_or_else(|error| panic!("request exchange fixture: {error}"));
         assert!(
             broker
                 .respond(ProviderRequestResolution::Acknowledge)
                 .is_err()
         );
         assert!(matches!(
-            native.receive().await.unwrap(),
+            native
+                .receive()
+                .await
+                .unwrap_or_else(|error| panic!("receive fixture response: {error}")),
             ProviderRequestResolution::Acknowledge
         ));
         let completion = native.complete(true);
@@ -194,7 +197,9 @@ mod tests {
         }
         assert!(observer.completion().await);
         observer.finish(Ok(()));
-        completion.await.unwrap();
+        completion
+            .await
+            .unwrap_or_else(|error| panic!("request exchange fixture: {error}"));
 
         let (native, mut broker, mut observer) = ProviderRequestExchange::channel();
         drop(native);

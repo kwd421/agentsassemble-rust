@@ -372,7 +372,12 @@ impl CodexDriver {
             let message = serde_json::from_str::<Value>(&line).map_err(|_| protocol_error())?;
             let object = message.as_object().ok_or_else(protocol_error)?;
             if object.get("method").is_some() {
-                if object.get("id").is_some() {
+                let early_interactive = requests::supported(&message)
+                    && self
+                        .pending_request
+                        .as_ref()
+                        .is_some_and(|pending| pending.method == "turn/start");
+                if object.get("id").is_some() && !early_interactive {
                     self.handle_server_request(&message).await?;
                 } else {
                     self.queue_notification(message, line.len())?;
@@ -705,6 +710,9 @@ const fn notification_overflow() -> DriverError {
 
 #[path = "codex_turn.rs"]
 mod turn;
+
+#[path = "codex_requests.rs"]
+mod requests;
 
 #[path = "codex_config.rs"]
 pub(crate) mod config;

@@ -539,6 +539,9 @@ impl Default for ProviderAdapter {
 }
 
 #[cfg(all(test, unix))]
+#[path = "runtime_codex_request_tests.rs"]
+mod codex_request_tests;
+#[cfg(all(test, unix))]
 #[path = "runtime_fixture.rs"]
 mod fixture;
 #[cfg(all(test, unix))]
