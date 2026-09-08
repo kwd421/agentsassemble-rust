@@ -598,6 +598,16 @@ async fn transition_to_waiting_effect(
     claim_owner: Option<&str>,
 ) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
     let mut transaction = store.pool.begin().await?;
+    let effect = transition_to_waiting_in(&mut transaction, expected, claim_owner).await?;
+    transaction.commit().await?;
+    Ok(effect)
+}
+
+pub(crate) async fn transition_to_waiting_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    expected: &ProviderTurnInterruptEffect,
+    claim_owner: Option<&str>,
+) -> Result<ProviderTurnInterruptEffect, PersistenceError> {
     let effect_changed = if let Some(claim_owner) = claim_owner {
         sqlx::query(
             "UPDATE provider_turn_effects SET phase = 'issued_waiting_quiescence', \
@@ -609,7 +619,7 @@ async fn transition_to_waiting_effect(
         .bind(&expected.effect_id)
         .bind(claim_owner)
         .bind(Utc::now().timestamp_millis())
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await?
     } else {
         sqlx::query(
@@ -621,7 +631,7 @@ async fn transition_to_waiting_effect(
         .bind(&expected.room_id)
         .bind(&expected.effect_id)
         .bind(&expected.dispatch_nonce)
-        .execute(&mut *transaction)
+        .execute(&mut **transaction)
         .await?
     };
     let execution_changed = sqlx::query(
@@ -638,19 +648,18 @@ async fn transition_to_waiting_effect(
     .bind(&expected.runtime_handle_id)
     .bind(&expected.runtime_owner_id)
     .bind(&expected.runtime_lease_token)
-    .execute(&mut *transaction)
+    .execute(&mut **transaction)
     .await?;
     if effect_changed.rows_affected() != 1 || execution_changed.rows_affected() != 1 {
         return Err(stale_effect());
     }
-    transaction.commit().await?;
-    store
-        .provider_turn_interrupt_effect(
-            &expected.room_id,
-            &expected.session_id,
-            expected.turn_generation,
-        )
-        .await
+    load_effect_in(
+        transaction,
+        &expected.room_id,
+        &expected.session_id,
+        expected.turn_generation,
+    )
+    .await
 }
 
 async fn transition_to_recovery_required(

@@ -551,3 +551,14 @@ The new socket test initially waited for the wrong response operation; using the
 canonical `nack` shape resolved that test failure. Affected all-target/all-feature
 Clippy passes. Interrupt/mute effects, provider-request relay, CLI, entry packets
 and managed bridge acceptance remain pending; real providers have not run.
+
+### Shared interrupt transaction owner
+
+The canonical interrupt-wait transition and retained-runtime finalization now expose
+transaction-local implementations. Managed callers keep their original transaction
+ownership; external reports can next combine exact connection authorization and
+receipt storage with these same state transitions. The wait result is loaded before
+its transaction commits, preserving the exact committed effect against later writes.
+No interruption policy, effect table, queue or timer is duplicated. Ten existing
+mute/recovery tests and three explicit-interrupt tests pass, together with affected
+all-target/all-feature Clippy. External interrupt delivery/reporting remains next.

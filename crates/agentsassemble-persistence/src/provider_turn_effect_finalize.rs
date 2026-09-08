@@ -33,86 +33,93 @@ impl SqliteStore {
         expected: &ProviderTurnInterruptEffect,
     ) -> Result<AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let mut session =
-            load_session(&mut transaction, &expected.room_id, &expected.session_id).await?;
-        if !active_turn_authority(&session).map_err(|_| invalid_effect())?
-            || session.public.participant_id != expected.participant_id
-            || session.public.active_turn_id != expected.turn_id
-            || session.turn_generation != expected.turn_generation
-            || session.runtime_handle_id != expected.runtime_handle_id
-            || session.runtime_owner_id != expected.runtime_owner_id
-            || session.runtime_lease_token != expected.runtime_lease_token
-        {
-            return Err(stale_effect());
-        }
-        terminalize_retained_interrupt(&mut transaction, expected).await?;
+        let commit = finalize_retained_in(&mut transaction, expected).await?;
+        transaction.commit().await?;
+        Ok(commit)
+    }
+}
 
-        let turn_id = session.public.active_turn_id.clone();
-        let mut events = Vec::with_capacity(3);
-        if expected.cause == ProviderTurnInterruptCause::AgentInterrupt {
-            events.push(
-                crate::room_turns::support::error_event(
-                    &mut transaction,
-                    &session,
-                    &turn_id,
-                    INTERRUPTED_CODE,
-                    INTERRUPTED_MESSAGE,
-                )
-                .await?,
-            );
-        }
+pub(crate) async fn finalize_retained_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    expected: &ProviderTurnInterruptEffect,
+) -> Result<AgentTurnCommit, PersistenceError> {
+    let mut session = load_session(transaction, &expected.room_id, &expected.session_id).await?;
+    if !active_turn_authority(&session).map_err(|_| invalid_effect())?
+        || session.public.participant_id != expected.participant_id
+        || session.public.active_turn_id != expected.turn_id
+        || session.turn_generation != expected.turn_generation
+        || session.runtime_handle_id != expected.runtime_handle_id
+        || session.runtime_owner_id != expected.runtime_owner_id
+        || session.runtime_lease_token != expected.runtime_lease_token
+    {
+        return Err(stale_effect());
+    }
+    terminalize_retained_interrupt(transaction, expected).await?;
+
+    let turn_id = session.public.active_turn_id.clone();
+    let mut events = Vec::with_capacity(3);
+    if expected.cause == ProviderTurnInterruptCause::AgentInterrupt {
         events.push(
-            turn_finished_event(
-                &mut transaction,
+            crate::room_turns::support::error_event(
+                transaction,
                 &session,
                 &turn_id,
-                "interrupted",
-                None,
-                Some(expected.cause.as_str()),
+                INTERRUPTED_CODE,
+                INTERRUPTED_MESSAGE,
             )
             .await?,
         );
-        session.pending_inputs = merge_room_inputs(
-            session
-                .inflight_inputs
-                .iter()
-                .chain(&session.pending_inputs),
-        )
-        .map_err(|_| invalid_effect())?;
-        session.inflight_inputs.clear();
-        session.public.status = AgentSessionStatus::Attached;
-        session.public.runtime_status = AgentRuntimeStatus::Idle;
-        session.public.turn_phase = AgentTurnPhase::None;
-        session.public.active_turn_id.clear();
-        if expected.cause == ProviderTurnInterruptCause::AgentInterrupt {
-            INTERRUPTED_MESSAGE.clone_into(&mut session.public.last_error);
-            INTERRUPTED_CODE.clone_into(&mut session.public.last_error_code);
-        } else {
-            session.public.last_error.clear();
-            session.public.last_error_code.clear();
-        }
-        session.public.recovery_required = false;
-        clear_active_turn_fields(&mut session);
-        session.public.updated_at = Utc::now();
-        save_session(&mut transaction, &session).await?;
-        let state = session_state_event(&mut transaction, &session).await?;
-        let scheduled = if expected.cause == ProviderTurnInterruptCause::ParticipantMuted {
-            let (room, settings) = load_active_room(&mut transaction, &expected.room_id).await?;
-            assign_pending_in(&mut transaction, &room, &settings).await?
-        } else {
-            AgentTurnCommit {
-                events: Vec::new(),
-                next_assignments: Vec::new(),
-            }
-        };
-        transaction.commit().await?;
-        events.push(state);
-        events.extend(scheduled.events);
-        Ok(AgentTurnCommit {
-            events,
-            next_assignments: scheduled.next_assignments,
-        })
     }
+    events.push(
+        turn_finished_event(
+            transaction,
+            &session,
+            &turn_id,
+            "interrupted",
+            None,
+            Some(expected.cause.as_str()),
+        )
+        .await?,
+    );
+    session.pending_inputs = merge_room_inputs(
+        session
+            .inflight_inputs
+            .iter()
+            .chain(&session.pending_inputs),
+    )
+    .map_err(|_| invalid_effect())?;
+    session.inflight_inputs.clear();
+    session.public.status = AgentSessionStatus::Attached;
+    session.public.runtime_status = AgentRuntimeStatus::Idle;
+    session.public.turn_phase = AgentTurnPhase::None;
+    session.public.active_turn_id.clear();
+    if expected.cause == ProviderTurnInterruptCause::AgentInterrupt {
+        INTERRUPTED_MESSAGE.clone_into(&mut session.public.last_error);
+        INTERRUPTED_CODE.clone_into(&mut session.public.last_error_code);
+    } else {
+        session.public.last_error.clear();
+        session.public.last_error_code.clear();
+    }
+    session.public.recovery_required = false;
+    clear_active_turn_fields(&mut session);
+    session.public.updated_at = Utc::now();
+    save_session(transaction, &session).await?;
+    let state = session_state_event(transaction, &session).await?;
+    let scheduled = if expected.cause == ProviderTurnInterruptCause::ParticipantMuted {
+        let (room, settings) = load_active_room(transaction, &expected.room_id).await?;
+        assign_pending_in(transaction, &room, &settings).await?
+    } else {
+        AgentTurnCommit {
+            events: Vec::new(),
+            next_assignments: Vec::new(),
+        }
+    };
+    events.push(state);
+    events.extend(scheduled.events);
+    Ok(AgentTurnCommit {
+        events,
+        next_assignments: scheduled.next_assignments,
+    })
 }
 
 async fn terminalize_retained_interrupt(
