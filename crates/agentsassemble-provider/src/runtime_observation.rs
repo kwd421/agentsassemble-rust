@@ -108,10 +108,7 @@ fn observe_launching_runtime(
             {
                 ProviderRuntimeObservation::Gone
             }
-            LeaseObservation::GenerationGone { .. }
-            | LeaseObservation::PreviousBoot { .. }
-            | LeaseObservation::Missing
-            | LeaseObservation::Unknown => ProviderRuntimeObservation::LeaseUncertain {
+            _ => ProviderRuntimeObservation::LeaseUncertain {
                 handle_id: runtime.handle_id.clone(),
                 owner_id: runtime.owner_id.clone(),
                 reason_code: "provider_launch_cleanup_unconfirmed".to_owned(),

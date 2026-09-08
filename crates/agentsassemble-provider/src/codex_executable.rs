@@ -14,6 +14,7 @@ use std::os::unix::fs::PermissionsExt;
 
 use super::{BoundExecutable, FilesystemFailure};
 
+#[cfg(unix)]
 pub(crate) fn codex_code_mode_host_path(
     executable: &BoundExecutable,
 ) -> io::Result<Option<PathBuf>> {

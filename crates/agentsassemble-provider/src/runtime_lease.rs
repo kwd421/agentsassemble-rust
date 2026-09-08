@@ -27,6 +27,7 @@ pub(crate) enum LeaseObservation {
     GenerationGone {
         launch_token: String,
     },
+    #[cfg(unix)]
     PreviousBoot {
         boot_identity: String,
         launch_token: String,
@@ -263,7 +264,7 @@ pub(crate) fn provider_lifetime_is_active(path: &Path, token: &str) -> io::Resul
             FileExt::unlock(&file)?;
             Ok(false)
         }
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => Ok(true),
+        Err(error) if lock_contended(&error) => Ok(true),
         Err(error) => Err(error),
     }
 }
@@ -338,7 +339,7 @@ pub(crate) fn observe_runtime_lease(room_id: &str, session_id: &str) -> LeaseObs
     };
     match file.try_lock_exclusive() {
         Ok(()) => classify_unlocked_marker(&path, read_marker(&mut file)),
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => LeaseObservation::Active,
+        Err(error) if lock_contended(&error) => LeaseObservation::Active,
         Err(_) => LeaseObservation::Unknown,
     }
 }
@@ -462,7 +463,7 @@ pub(crate) fn mark_unix_runtime_gone(path: &Path, token: &str) -> io::Result<()>
     loop {
         match file.try_lock_exclusive() {
             Ok(()) => break,
-            Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+            Err(error) if lock_contended(&error) => {
                 if started.elapsed() >= CLEANUP_RECEIPT_LOCK_TIMEOUT {
                     return Err(io::Error::other(
                         "provider runtime cleanup receipt lock timed out",
@@ -528,6 +529,12 @@ fn marker_token(marker: &str) -> Option<&str> {
         ) if validate_token(token).is_ok() => Some(token),
         _ => None,
     }
+}
+
+// Windows lock violation is not ErrorKind::WouldBlock. Use the locking library's
+// exact platform error so contention stays distinct from failed observation.
+fn lock_contended(error: &io::Error) -> bool {
+    error.raw_os_error() == fs2::lock_contended_error().raw_os_error()
 }
 
 fn open_runtime_lease(path: &Path) -> io::Result<File> {

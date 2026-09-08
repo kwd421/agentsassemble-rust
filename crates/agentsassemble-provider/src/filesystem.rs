@@ -504,7 +504,7 @@ fn copy_and_verify_staged(
     verify_staged_identity(source_handle, expected_identity, staged)
 }
 
-#[cfg(any(unix, windows))]
+#[cfg(unix)]
 fn verify_staged_identity(
     source_handle: &Handle,
     expected_identity: &str,

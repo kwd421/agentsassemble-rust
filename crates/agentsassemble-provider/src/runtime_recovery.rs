@@ -43,14 +43,14 @@ fn classify_previous_runtime(
     {
         return ProviderRuntimeObservation::Gone;
     }
-    if empty_pre_effect_authority(session)
-        && matches!(
-            observation,
-            LeaseObservation::GenerationGone { .. }
-                | LeaseObservation::PreviousBoot { .. }
-                | LeaseObservation::Missing
-        )
-    {
+    let pre_effect_absence = matches!(
+        observation,
+        LeaseObservation::GenerationGone { .. } | LeaseObservation::Missing
+    );
+    #[cfg(unix)]
+    let pre_effect_absence =
+        pre_effect_absence || matches!(observation, LeaseObservation::PreviousBoot { .. });
+    if empty_pre_effect_authority(session) && pre_effect_absence {
         return ProviderRuntimeObservation::Gone;
     }
     match observation {
@@ -69,6 +69,7 @@ fn classify_previous_runtime(
         LeaseObservation::GenerationGone { .. } => ProviderRuntimeObservation::Ambiguous {
             reason_code: "runtime_lease_generation_mismatch".to_owned(),
         },
+        #[cfg(unix)]
         LeaseObservation::PreviousBoot { .. } => ProviderRuntimeObservation::Ambiguous {
             reason_code: "runtime_boot_generation_mismatch".to_owned(),
         },

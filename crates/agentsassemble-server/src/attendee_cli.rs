@@ -117,7 +117,7 @@ async fn run_owned(
             .await?;
         #[cfg(unix)]
         let adapter = ProviderAdapter::with_guardian_executable(&std::env::current_exe()?);
-        // Windows native drivers already own their process trees through Job Objects.
+        // The attendee owns its Windows worker and all native descendants through its lease Job.
         #[cfg(not(unix))]
         let adapter = ProviderAdapter::new();
         runtime = Some(AttendeeRuntime::new(&joined, selection.into(), adapter)?);

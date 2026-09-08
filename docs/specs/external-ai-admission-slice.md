@@ -1360,10 +1360,10 @@ controls must show recovery required without a new message or lifecycle command.
 
 ### Windows custody completion
 
-The external attendee owns its native provider directly. Its Unix constructor binds
-the guardian executable; Windows uses the existing native Job Object owner. Calling
-the Unix-only constructor unconditionally is a compilation defect, not an admission
-or runtime authority difference. The CLI now selects those existing platform owners.
+The external attendee owns its provider runtime. Its Unix constructor binds the
+guardian executable; Windows retains the managed worker and its native descendants
+in the attendee-owned lease Job Object. The CLI selects those platform owners; the
+room server does not acquire custody of an externally launched attendee.
 
 The managed worker remains a separate required boundary on Windows. Its parent must
 retain the real runtime lease and prove the entire owned Job Object empty before
@@ -1432,7 +1432,15 @@ Windows CI exposed a remaining Unix-only gate on the already-shared selected-
 credential backend. Removing that gate makes the same private, read-only credential
 handoff available to the Windows worker; it adds no keyring access or fallback.
 The Windows suite also compiles a native Rust protocol fixture with a persistent
-child, checks all three actual Job members after attach, and exercises normal stop
+child, checks worker and native descendant Job membership after attach, and exercises normal stop
 and lost private transport. Cold recovery distinguishes pre-effect reservation,
 activated owner loss, and a positively recorded cleanup receipt. Runtime results
 remain pending the updated Windows run.
+
+The first Windows runtime run at `55cbd7a` passed cancellation and all cold-recovery
+cases, but exposed a platform lock-contention classification defect and an overly
+exact native Job member count. Lease observation now uses fs2’s platform contention
+error; the native test requires its exact fixture PIDs while allowing additional OS
+members. Whole-Job emptiness remains required for cleanup. Windows-only compilation
+also identified unused Unix helpers; their availability now follows their actual
+consumers. The corrected Windows runtime and Clippy result remains pending.

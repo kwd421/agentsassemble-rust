@@ -63,7 +63,7 @@ impl ProviderAdapter {
     }
 
     /// Runs a provider turn without product persistence only in provider-unit tests.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) async fn send_turn(
         &self,
         session: &DurableAgentSession,

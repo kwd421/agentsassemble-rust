@@ -289,7 +289,7 @@ impl ProviderAdapter {
     /// # Errors
     ///
     /// Returns a redacted fail-closed runtime error.
-    #[cfg(test)]
+    #[cfg(all(test, unix))]
     pub(crate) async fn start(
         &self,
         session: &DurableAgentSession,

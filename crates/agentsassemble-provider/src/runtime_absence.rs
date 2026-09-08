@@ -28,6 +28,7 @@ pub(crate) fn observation_proves_gone(
     }
     match observation {
         LeaseObservation::GenerationGone { launch_token } => launch_token == durable_launch_token,
+        #[cfg(unix)]
         LeaseObservation::PreviousBoot {
             boot_identity,
             launch_token,
@@ -65,14 +66,6 @@ fn previous_boot_matches(
 ) -> bool {
     handle.boot_identity.as_deref() == Some(observed_boot)
         && crate::runtime_boot::current_identity().is_ok_and(|current| observed_boot != current)
-}
-
-#[cfg(not(unix))]
-const fn previous_boot_matches(
-    _handle: &crate::runtime_handle::RuntimeHandleIdentity,
-    _observed_boot: &str,
-) -> bool {
-    false
 }
 
 #[cfg(unix)]
