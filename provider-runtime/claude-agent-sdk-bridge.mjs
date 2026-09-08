@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { pathToFileURL } from "node:url";
+import { NativeDelivery } from "./claude-native-delivery.mjs";
 
 const MAX_INPUT_LINE_BYTES = 256 * 1024;
 const MAX_OUTPUT_LINE_BYTES = 256 * 1024;
@@ -239,6 +240,8 @@ async function session(sdk, claudePath, command, commands) {
   if (!SESSION_ID.test(id)) throw new Error("invalid session ID");
   const queue = new InputQueue();
   const configured = sessionOptions(command, claudePath, id);
+  const delivery = new NativeDelivery();
+  configured.options.spawnClaudeCodeProcess = delivery.spawn;
   const query = sdk.query({ prompt: queue, options: configured.options });
   const initialization = await query.initializationResult();
   validateInitialization(initialization.models, configured.model, configured.effort, configured.tier);
@@ -298,6 +301,7 @@ async function session(sdk, claudePath, command, commands) {
     }
   } finally {
     state.shuttingDown = true;
+    delivery.close();
     queue.close();
     query.close();
     await reader;

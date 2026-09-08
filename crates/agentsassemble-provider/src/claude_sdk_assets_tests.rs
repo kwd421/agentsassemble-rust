@@ -6,10 +6,16 @@ fn stages_exact_bounded_regular_resources() {
         .unwrap_or_else(|error| panic!("create SDK parent: {error}"));
     std::fs::write(root.path().join(super::BRIDGE_NAME), b"bridge")
         .unwrap_or_else(|error| panic!("write bridge: {error}"));
+    std::fs::write(root.path().join(super::DELIVERY_NAME), b"delivery")
+        .unwrap_or_else(|error| panic!("write delivery: {error}"));
     std::fs::write(&sdk, b"sdk").unwrap_or_else(|error| panic!("write SDK: {error}"));
 
     let staged = super::PrivateClaudeSdkBundle::stage_from(root.path())
         .unwrap_or_else(|error| panic!("stage SDK bundle: {error}"));
+    assert_eq!(
+        std::fs::read(staged.bridge.with_file_name(super::DELIVERY_NAME)).unwrap_or_default(),
+        b"delivery"
+    );
     assert_eq!(std::fs::read(staged.bridge).unwrap_or_default(), b"bridge");
     assert_eq!(std::fs::read(staged.sdk).unwrap_or_default(), b"sdk");
 }

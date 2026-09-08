@@ -1276,3 +1276,24 @@ No additional task or timer is spawned: scoped tokens track the existing library
 handlers, and response delivery holds at most 128 entries. Outgoing JSON is inspected
 only while a response awaits delivery. Claude's native hooks and packaged integrated
 managed controls remain pending; these local peers do not prove real ACP execution.
+
+Claude's reachable question and plan hooks must retain the native tool input and
+return the human resolution through the existing room request owner. The installed
+SDK exposes hook callbacks but no hook request ID or response write receipt. Its
+public `spawnClaudeCodeProcess` boundary therefore owns an ephemeral correlation of
+actual native hook envelopes and flushed stdin responses; callback return alone is
+not delivery. Native IDs and tool inputs stay private. The managed Rust client must
+await the server's durable completion before releasing a turn. Verify native stream
+correlation, write failure, question/permission translation and cancellation locally;
+no real Claude run is authorized. Read-only sessions expose only room MCP tools and
+AskUserQuestion, preserving the original interactive question entry point.
+
+The public SDK process transport now stages with the private bridge and packaged
+resources. Six JavaScript cases pass, including the installed SDK's actual hook
+callback over a local process peer, fragmented response writes and exit-before-reply.
+Four affected Rust SDK cases, provider Clippy and unchanged mandatory gates pass.
+The transport adds no process, task or timer; it observes native frames and retains
+at most 128 live hook correlations and response callbacks. Native child arguments,
+environment and SDK graceful-close signal are retained; stderr remains private and
+is discarded as in the Rust host. Owner request translation is the next connection,
+so this evidence alone does not establish Claude's integrated human-response flow.

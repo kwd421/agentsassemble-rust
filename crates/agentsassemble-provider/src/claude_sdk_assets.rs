@@ -7,6 +7,7 @@ use std::{
 };
 
 const BRIDGE_NAME: &str = "claude-agent-sdk-bridge.mjs";
+const DELIVERY_NAME: &str = "claude-native-delivery.mjs";
 const SDK_RELATIVE_PATH: &str = "node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs";
 const MAX_BRIDGE_BYTES: u64 = 512 * 1024;
 const MAX_SDK_BYTES: u64 = 4 * 1024 * 1024;
@@ -37,6 +38,11 @@ impl PrivateClaudeSdkBundle {
         let bridge = copy_regular_file(
             &root.join(BRIDGE_NAME),
             &directory.path().join(BRIDGE_NAME),
+            MAX_BRIDGE_BYTES,
+        )?;
+        copy_regular_file(
+            &root.join(DELIVERY_NAME),
+            &directory.path().join(DELIVERY_NAME),
             MAX_BRIDGE_BYTES,
         )?;
         let sdk = copy_regular_file(
@@ -100,7 +106,11 @@ pub(crate) fn fixture_bundle() -> PrivateClaudeSdkBundle {
     let sdk = root.path().join(SDK_RELATIVE_PATH);
     std::fs::create_dir_all(sdk.parent().unwrap_or_else(|| panic!("SDK parent")))
         .unwrap_or_else(|error| panic!("SDK directory: {error}"));
-    for path in [root.path().join(BRIDGE_NAME), sdk] {
+    for path in [
+        root.path().join(BRIDGE_NAME),
+        root.path().join(DELIVERY_NAME),
+        sdk,
+    ] {
         std::fs::write(path, "// unused fixture resource\n")
             .unwrap_or_else(|error| panic!("SDK resource: {error}"));
     }
