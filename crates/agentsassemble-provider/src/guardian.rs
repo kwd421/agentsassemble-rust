@@ -338,7 +338,6 @@ impl GuardianLaunch {
         Ok(command)
     }
 
-    #[cfg(test)]
     pub(crate) fn managed_command(
         &self,
         socket: std::os::fd::OwnedFd,

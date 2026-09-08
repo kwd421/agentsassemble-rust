@@ -14,6 +14,14 @@ use crate::{
 mod callbacks;
 #[path = "managed_bridge_exchange.rs"]
 mod exchange;
+#[path = "managed_bridge_parent.rs"]
+mod parent;
+#[path = "managed_bridge_parent_actor.rs"]
+mod parent_actor;
+#[path = "managed_bridge_parent_callbacks.rs"]
+mod parent_callbacks;
+#[path = "managed_bridge_parent_process.rs"]
+mod parent_process;
 #[path = "managed_bridge_pipe.rs"]
 mod pipe;
 #[path = "managed_bridge_turn.rs"]
@@ -23,6 +31,8 @@ mod wire;
 #[path = "managed_bridge_worker.rs"]
 mod worker;
 use wire::{Command, Event, Launch, Reader, Writer, protocol_error, read, write};
+
+const CONTROL_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(1);
 
 const WORKER_FLAG: &str = "--agentsassemble-managed-provider";
 
@@ -78,6 +88,7 @@ async fn run<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         factory.credentials = credentials;
         factory
     };
+    factory.managed = false;
     factory.state_root = launch.state_root;
     run_launch(
         &mut input,
@@ -149,3 +160,33 @@ mod tests;
 #[cfg(test)]
 #[path = "managed_bridge_process_tests.rs"]
 mod process_tests;
+
+pub(crate) async fn launch_managed(
+    factory: &ProductionDriverFactory,
+    session: &DurableAgentSession,
+    lease: &HeldRuntimeLease,
+    credential_id: Option<crate::ProviderCredentialId>,
+) -> Result<Box<dyn crate::driver::ProviderDriver>, DriverLaunchError> {
+    let credential = if let Some(provider) = credential_id {
+        Some(crate::credentials::private_handoff::SelectedCredential {
+            provider,
+            secret: factory
+                .credentials
+                .secret(provider)
+                .await
+                .map(|secret| secret.expose().to_owned()),
+        })
+    } else {
+        None
+    };
+    parent_process::launch(
+        factory.guardian()?,
+        Launch {
+            session: Box::new(session.clone()),
+            credential,
+            state_root: factory.state_root.clone(),
+        },
+        lease,
+    )
+    .await
+}

@@ -10,6 +10,8 @@ use crate::{
     launch_error::DriverLaunchError,
     runtime_lease::HeldRuntimeLease,
 };
+#[cfg(unix)]
+use std::sync::OnceLock;
 
 pub(crate) trait DriverFactory: Send + Sync {
     fn launch<'a>(
@@ -23,41 +25,20 @@ pub(crate) struct ProductionDriverFactory {
     pub(crate) credentials: ProviderCredentialStore,
     pub(crate) state_root: Option<PathBuf>,
     #[cfg(unix)]
-    pub(crate) guardian: Result<Option<GuardianLaunch>, DriverError>,
+    pub(crate) managed: bool,
+    #[cfg(unix)]
+    pub(crate) guardian: OnceLock<Result<GuardianLaunch, DriverError>>,
 }
 
 impl ProductionDriverFactory {
     pub(crate) fn local(credentials: ProviderCredentialStore) -> Self {
-        #[cfg(all(unix, test))]
-        let guardian = GuardianLaunch::test_harness()
-            .map(Some)
-            .map_err(|_| custody_binding_failed());
-        #[cfg(all(unix, not(test), any(target_os = "linux", target_os = "android")))]
-        let guardian = crate::guardian::reexecution_path()
-            .map_err(|_| custody_reexecution_failed())
-            .and_then(|executable| {
-                GuardianLaunch::production(&executable)
-                    .map(Some)
-                    .map_err(|_| custody_binding_failed())
-            });
-        #[cfg(all(unix, not(test), not(any(target_os = "linux", target_os = "android"))))]
-        let guardian =
-            if std::env::var_os("AGENTSASSEMBLE_INTERNAL_SERVER_STAGED") == Some("v1".into()) {
-                crate::guardian::reexecution_path()
-                    .map_err(|_| custody_reexecution_failed())
-                    .and_then(|executable| {
-                        GuardianLaunch::production(&executable)
-                            .map(Some)
-                            .map_err(|_| custody_binding_failed())
-                    })
-            } else {
-                Ok(None)
-            };
         Self {
             credentials,
             state_root: None,
             #[cfg(unix)]
-            guardian,
+            managed: true,
+            #[cfg(unix)]
+            guardian: OnceLock::new(),
         }
     }
 
@@ -72,28 +53,32 @@ impl ProductionDriverFactory {
         Self {
             credentials: ProviderCredentialStore::production(),
             state_root: None,
-            guardian: GuardianLaunch::production(executable)
-                .map(Some)
-                .map_err(|_| custody_binding_failed()),
+            managed: false,
+            guardian: OnceLock::from(
+                GuardianLaunch::production(executable).map_err(|_| custody_binding_failed()),
+            ),
         }
     }
 
     #[cfg(unix)]
     pub(crate) fn guardian(&self) -> Result<&GuardianLaunch, DriverError> {
         self.guardian
+            .get_or_init(bind_current_guardian)
             .as_ref()
-            .map_err(Clone::clone)?
-            .as_ref()
-            .ok_or_else(custody_unavailable)
+            .map_err(Clone::clone)
     }
 }
 
 #[cfg(unix)]
-const fn custody_unavailable() -> DriverError {
-    DriverError::new(
-        "provider_custody_unavailable",
-        "The provider process custody helper is unavailable.",
-    )
+fn bind_current_guardian() -> Result<GuardianLaunch, DriverError> {
+    #[cfg(test)]
+    return GuardianLaunch::test_harness().map_err(|_| custody_binding_failed());
+    #[cfg(not(test))]
+    crate::guardian::reexecution_path()
+        .map_err(|_| custody_reexecution_failed())
+        .and_then(|executable| {
+            GuardianLaunch::production(&executable).map_err(|_| custody_binding_failed())
+        })
 }
 
 #[cfg(all(unix, not(test)))]

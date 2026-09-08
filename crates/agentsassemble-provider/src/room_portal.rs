@@ -552,11 +552,11 @@ pub(super) fn require_current_receipt(active: &ActiveObservation) -> Result<(), 
 
 #[derive(Debug)]
 pub(super) struct RoomToolAuthority {
-    session_id: String,
-    turn_id: String,
-    input_up_to_seq: i64,
-    durable_turn_generation: u64,
-    execution_id: String,
+    pub(crate) session_id: String,
+    pub(crate) turn_id: String,
+    pub(crate) input_up_to_seq: i64,
+    pub(crate) durable_turn_generation: u64,
+    pub(crate) execution_id: String,
 }
 
 fn tool_error(code: &'static str, message: impl Into<String>) -> ProviderRoomToolError {

@@ -488,6 +488,17 @@ impl DriverFactory for ProductionDriverFactory {
                 .into())
             });
         };
+        #[cfg(unix)]
+        if self.managed {
+            return Box::pin(crate::managed_bridge::launch_managed(
+                self,
+                session,
+                runtime_lease,
+                registration
+                    .remote_spec
+                    .and_then(crate::remote_openai_spec::RemoteOpenAiSpec::credential_id),
+            ));
+        }
         (registration.launch)(self, session, runtime_lease)
     }
 }

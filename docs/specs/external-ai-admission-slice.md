@@ -1235,3 +1235,15 @@ Provider registration now derives credential selection and catalog availability 
 the native API specification. Turn handoff derives ingress presence from the actual
 request. Existing selection and managed request cases pass; these projections add
 no parallel credential policy or transport-owned permission.
+
+The Unix production factory now uses the managed worker and continuously owned
+parent transport; external attendees retain their explicit native factory. Completed
+turn reads reuse the exact received result. Stop requires reaped worker and native
+absence; startup failure retains its error and refines custody only with that proof.
+Helper binding is deferred until first launch, restoring all ten startup-control
+cases without changing their deadlines. All 440 provider/server cases pass,
+including sixteen actual managed-session flows, as do affected Clippy and unchanged
+gates. A sampled debug worker used 20 MiB RSS and 13 threads. Packaged integrated
+controls and remaining native request consumers still precede Phase 7 closure.
+Combined verification generated 27.3 GB of Cargo artifacts; the unchanged artifact
+owner cleaned that exact cache after all Cargo work ended, before the final gate.

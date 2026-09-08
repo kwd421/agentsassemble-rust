@@ -229,6 +229,16 @@ impl ProviderAdapter {
         Self::with_factory(Arc::new(ProductionDriverFactory::with_guardian(executable)))
     }
 
+    /// Binds the host binary that implements the private managed-worker entry.
+    #[doc(hidden)]
+    #[cfg(unix)]
+    #[must_use]
+    pub fn with_managed_executable(executable: &Path) -> Self {
+        let mut factory = ProductionDriverFactory::with_guardian(executable);
+        factory.managed = true;
+        Self::with_factory(Arc::new(factory))
+    }
+
     fn with_factory(factory: Arc<dyn DriverFactory>) -> Self {
         Self {
             owner: Arc::new(AdapterOwner {
