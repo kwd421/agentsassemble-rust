@@ -51,13 +51,13 @@ impl ProviderRoomToolIngress {
         &self,
         authority: RoomToolAuthority,
         request: ProviderRoomToolRequest,
-        reservation: RoomToolReservation,
+        reservation: impl Into<Admission>,
     ) -> Result<ProviderRoomToolResult, ProviderRoomToolError> {
         let (reply, response) = oneshot::channel();
         let command = ProviderRoomToolCommand {
             authority,
             request,
-            reservation,
+            reservation: reservation.into(),
             reply: Some(reply),
             resolved: false,
         };
@@ -87,7 +87,7 @@ impl ProviderRoomToolIngress {
 pub struct ProviderRoomToolCommand {
     authority: RoomToolAuthority,
     request: ProviderRoomToolRequest,
-    reservation: RoomToolReservation,
+    reservation: Admission,
     reply: Option<oneshot::Sender<Result<ProviderRoomToolResult, ProviderRoomToolError>>>,
     resolved: bool,
 }
@@ -131,7 +131,7 @@ impl ProviderRoomToolCommand {
     pub fn begin_execution(
         &mut self,
     ) -> impl std::future::Future<Output = Result<(), ProviderRoomToolError>> + Send {
-        std::future::ready(self.reservation.begin_execution())
+        self.reservation.begin_execution()
     }
 
     pub fn complete(mut self, result: Result<ProviderRoomToolResult, ProviderRoomToolError>) {
@@ -181,5 +181,62 @@ fn response_matches(request: &ProviderRoomToolRequest, result: &ProviderRoomTool
             ProviderRoomToolRequest::ReadMessageContext { .. },
             ProviderRoomToolResult::MessageContext(_)
         )
+    )
+}
+
+/// The child keeps the native reservation; a relayed command waits for its answer.
+#[derive(Debug)]
+pub(crate) enum Admission {
+    Local(RoomToolReservation),
+    Remote(Option<oneshot::Sender<oneshot::Sender<Result<(), ProviderRoomToolError>>>>),
+}
+
+impl From<RoomToolReservation> for Admission {
+    fn from(reservation: RoomToolReservation) -> Self {
+        Self::Local(reservation)
+    }
+}
+
+impl From<oneshot::Sender<oneshot::Sender<Result<(), ProviderRoomToolError>>>> for Admission {
+    fn from(sender: oneshot::Sender<oneshot::Sender<Result<(), ProviderRoomToolError>>>) -> Self {
+        Self::Remote(Some(sender))
+    }
+}
+
+impl Admission {
+    fn begin_execution(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<(), ProviderRoomToolError>> + Send {
+        use futures_util::future::Either;
+        let sender = match self {
+            Self::Local(reservation) => {
+                return Either::Left(std::future::ready(reservation.begin_execution()));
+            }
+            Self::Remote(sender) => sender,
+        };
+        let Some(sender) = sender.take() else {
+            return Either::Left(std::future::ready(Err(tool_error(
+                "room_tool_conflict",
+                "The room tool reservation was already consumed.",
+            ))));
+        };
+        let (reply, response) = oneshot::channel();
+        if sender.send(reply).is_err() {
+            return Either::Left(std::future::ready(Err(relay_lost())));
+        }
+        Either::Right(async move { response.await.map_err(|_| relay_lost())? })
+    }
+
+    fn resolve(&mut self, successful: bool) {
+        if let Self::Local(reservation) = self {
+            reservation.resolve(successful);
+        }
+    }
+}
+
+fn relay_lost() -> ProviderRoomToolError {
+    tool_error(
+        "room_unavailable",
+        "The native tool reservation owner is unavailable.",
     )
 }

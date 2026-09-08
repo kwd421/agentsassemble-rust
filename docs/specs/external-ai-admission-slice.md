@@ -1190,3 +1190,11 @@ pass without assuming an interruption/delivery event order. Affected Clippy and 
 mandatory gates pass. This adds a bounded frame queue and reuses the codec's write
 buffer; it adds no task or timer. Separate worker launch and parent integration remain
 pending.
+
+Room-tool commands now admit either their existing local reservation or the native
+child's one-use reply slot. A relayed begin waits for that slot's actual result;
+missing custody and repeated admission fail. Native resolution stays in the child.
+The existing MCP randomness/terminal-ordering case now exercises the relayed room
+command and proves that it cannot execute before native admission. All nine portal
+cases, affected Clippy and unchanged mandatory gates pass; local admission still
+adds no allocation or queue.

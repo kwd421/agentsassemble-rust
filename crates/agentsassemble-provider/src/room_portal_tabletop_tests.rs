@@ -55,7 +55,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
         )
         .await
     });
-    let mut command = commands
+    let command = commands
         .recv()
         .await
         .unwrap_or_else(|| panic!("room actor must receive the reserved tool command"));
@@ -68,18 +68,16 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
     )
     .await;
     assert_eq!(blocked_terminal.is_error, Some(true));
-    command
-        .begin_execution()
-        .await
-        .unwrap_or_else(|error| panic!("begin room actor commit: {error}"));
-    command.complete(Ok(ProviderRoomToolResult::Random(
-        RoomRandomResult::RollDice {
+    execute_relayed_tool(
+        command,
+        ProviderRoomToolResult::Random(RoomRandomResult::RollDice {
             notation: "2d6+1".to_owned(),
             rolls: vec![2, 5],
             modifier: 1,
             total: 8,
-        },
-    )));
+        }),
+    )
+    .await;
     let tool_result = pending_tool
         .await
         .unwrap_or_else(|error| panic!("join tabletop tool call: {error}"));
@@ -362,4 +360,54 @@ async fn connect(portal: &RoomPortal) -> RoomClient {
     ))
     .await
     .unwrap_or_else(|error| panic!("connect tabletop portal: {error}"))
+}
+
+async fn execute_relayed_tool(
+    mut native: super::ProviderRoomToolCommand,
+    result: ProviderRoomToolResult,
+) {
+    let authority = super::RoomToolAuthority {
+        session_id: native.session_id().to_owned(),
+        turn_id: native.turn_id().to_owned(),
+        input_up_to_seq: native.input_up_to_seq(),
+        durable_turn_generation: native.turn_generation(),
+        execution_id: native.execution_id().to_owned(),
+    };
+    let request = native.request().clone();
+    let (ingress, mut queued) = ProviderRoomToolIngress::channel(1);
+    let (begin, begin_rx) = tokio::sync::oneshot::channel::<
+        tokio::sync::oneshot::Sender<Result<(), super::ProviderRoomToolError>>,
+    >();
+    let relayed = tokio::spawn(async move { ingress.submit(authority, request, begin).await });
+    let mut owner = queued
+        .recv()
+        .await
+        .unwrap_or_else(|| panic!("missing relayed room command"));
+    {
+        let admitted = owner.begin_execution();
+        tokio::pin!(admitted);
+        tokio::select! {
+            biased;
+            result = &mut admitted => panic!("room operation passed before native admission: {result:?}"),
+            () = std::future::ready(()) => {}
+        }
+        let reply = begin_rx
+            .await
+            .unwrap_or_else(|error| panic!("native admission request: {error}"));
+        reply
+            .send(native.begin_execution().await)
+            .unwrap_or_else(|_| panic!("room owner abandoned admission"));
+        admitted
+            .await
+            .unwrap_or_else(|error| panic!("relayed admission: {error}"));
+    }
+    assert!(
+        matches!(owner.begin_execution().await, Err(error) if error.code == "room_tool_conflict")
+    );
+    owner.complete(Ok(result));
+    native.complete(
+        relayed
+            .await
+            .unwrap_or_else(|error| panic!("room relay completion: {error}")),
+    );
 }
