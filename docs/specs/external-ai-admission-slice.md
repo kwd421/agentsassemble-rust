@@ -1247,3 +1247,9 @@ gates. A sampled debug worker used 20 MiB RSS and 13 threads. Packaged integrate
 controls and remaining native request consumers still precede Phase 7 closure.
 Combined verification generated 27.3 GB of Cargo artifacts; the unchanged artifact
 owner cleaned that exact cache after all Cargo work ended, before the final gate.
+
+The actual parent/worker API path now verifies selected synthetic credential handoff,
+native registration, attachment, liveness and positive worker cleanup. Secure-store
+failure is preserved by native registration at startup, with verified safe absence.
+Both branches pass without an HTTP completion or real provider credential; affected
+Clippy and unchanged gates pass. This proves private launch custody, not API output.

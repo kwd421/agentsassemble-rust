@@ -11,6 +11,67 @@ use crate::{
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
+async fn managed_api_preserves_private_credential_failure_and_worker_custody() -> TestResult {
+    for secret in [
+        Err(ProviderCredentialError::SecureStoreUnavailable),
+        Ok("synthetic-private-secret".to_owned()),
+    ] {
+        managed_api_lifecycle(secret).await?;
+    }
+    Ok(())
+}
+
+async fn managed_api_lifecycle(secret: Result<String, ProviderCredentialError>) -> TestResult {
+    use crate::provider_factory::DriverFactory;
+    let available = secret.is_ok();
+    let mut session = crate::test_support::durable_session(
+        &uuid::Uuid::new_v4().to_string(),
+        "api-worker",
+        "DeepSeek",
+        "deepseek_api",
+        "deepseek-chat",
+        "https",
+    );
+    "api".clone_into(&mut session.public.runtime_kind);
+    let credentials = ProviderCredentialStore::from_private_handoff(Some(SelectedCredential {
+        provider: ProviderCredentialId::DeepSeek,
+        secret,
+    }));
+    let factory = crate::provider_factory::ProductionDriverFactory::local(credentials);
+    let mut lease = HeldRuntimeLease::prepare(&session.public.room_id, &session.public.session_id)?;
+    session.runtime_handle_id = lease.new_runtime_handle_id();
+    session.runtime_lease_token = lease.token().to_owned();
+    session.runtime_owner_id = "api-parent".to_owned();
+    lease.begin_launch_effect()?;
+    match factory.launch(&session, &lease).await {
+        Ok(mut driver) => {
+            assert!(available);
+            assert_eq!(
+                observe_runtime_lease(&session.public.room_id, &session.public.session_id),
+                LeaseObservation::Active
+            );
+            // Native registration consumes the selected secret at startup. No HTTP turn runs.
+            driver.attach_session(&session).await?;
+            assert!(driver.is_alive().await?);
+            driver.stop().await?;
+        }
+        Err(error) => {
+            assert!(!available);
+            assert_eq!(error.error.code, "secure_store_unavailable");
+            assert!(!error.effect_uncertain);
+        }
+    }
+    assert_eq!(
+        observe_runtime_lease(&session.public.room_id, &session.public.session_id),
+        LeaseObservation::GenerationGone {
+            launch_token: lease.token().to_owned()
+        }
+    );
+    lease.release_and_remove();
+    Ok(())
+}
+
+#[tokio::test]
 async fn managed_private_pipe_preserves_native_attach_and_cleans_stop_loss_and_wrong_owner()
 -> TestResult {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
