@@ -223,3 +223,7 @@ pub use room_write_budget::command_size as room_write_command_size;
 pub use sqlite::{
     AgentLaunchFailureCommit, CommandOutcome, PersistenceError, RoomSnapshotData, SqliteStore,
 };
+
+pub use room_turns::{AttendeeTurnOutcome, AttendeeTurnReport};
+#[cfg(test)]
+mod attendee_turn_report_tests;

@@ -546,3 +546,7 @@ use support::{
 #[cfg(test)]
 #[path = "room_turn_tests.rs"]
 mod tests;
+
+#[path = "attendee_turn_report.rs"]
+mod attendee_report;
+pub use attendee_report::{AttendeeTurnOutcome, AttendeeTurnReport};

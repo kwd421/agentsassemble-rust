@@ -400,3 +400,22 @@ then borrowing a trusted host principal. No terminal policy or event contract is
 duplicated. The room-turn facade is reduced from 764 to 548 lines; the completion
 owner is 308 lines. Forty-four existing room-turn tests, affected Clippy and unchanged
 architecture/format/diff gates pass. Attendee report transport is the next consumer.
+
+## Authenticated attendee result receipts
+
+External message, vote, decline and failure reports now use the shared terminal
+transaction under exact current attendee connection provenance. Room and participant
+identity come only from the admitted session. The canonical command receipt owner
+stores the report hash and public result atomically with completion. A same-report
+retry recovers the committed result before requiring an active turn, while revoked
+admission and replaced connections cannot recover or submit reports. Changed request
+content conflicts. Runtime leases and dispatch nonces never enter the public receipt;
+raw external diagnostics remain with the client. Failure does not claim process stop.
+
+Two controlled local tests pass: concurrent response-loss retry with one public
+message and connection/nonce/conflict/revocation rejection, and canonical vote,
+decline and failure finalization with receipt recovery. Affected Clippy and unchanged
+architecture/format/diff/artifact gates pass. Each report uses one existing durable
+receipt and room write budget, without a new queue, timer, or process. Network turn
+assignment, WebSocket reporting and external cleanup are still pending; this is a
+storage boundary checkpoint rather than external CLI acceptance.
