@@ -104,3 +104,60 @@ async fn cancelled_probe_tree_is_killed_reaped_and_joinable() {
     }
     panic!("probe descendant {descendant} survived cancellation");
 }
+
+#[tokio::test]
+async fn inspection_closes_its_exact_process_after_success_and_cancellation() {
+    use tokio::io::{AsyncBufReadExt, BufReader};
+    for cancel in [false, true] {
+        let cancellation = CancellationToken::new();
+        let (sender, receiver) = tokio::sync::oneshot::channel();
+        let operation = super::inspect(
+            "/bin/sh",
+            &["-c", "echo $$; exec sleep 30"],
+            &cancellation,
+            &[],
+            |_, stdout| async move {
+                let mut reader = BufReader::new(stdout);
+                let mut line = String::new();
+                reader
+                    .read_line(&mut line)
+                    .await
+                    .map_err(|_| ProbeFailure::Malformed)?;
+                let pid = line
+                    .trim()
+                    .parse::<u32>()
+                    .map_err(|_| ProbeFailure::Malformed)?;
+                sender.send(pid).map_err(|_| ProbeFailure::Failed)?;
+                if cancel {
+                    std::future::pending::<()>().await;
+                }
+                Ok(pid)
+            },
+        );
+        let control = async {
+            let pid = receiver
+                .await
+                .unwrap_or_else(|error| panic!("inspection PID: {error}"));
+            if cancel {
+                cancellation.cancel();
+            }
+            pid
+        };
+        let (result, pid) = tokio::join!(operation, control);
+        assert_eq!(
+            result,
+            if cancel {
+                Err(ProbeFailure::Cancelled)
+            } else {
+                Ok(pid)
+            }
+        );
+        let status = std::process::Command::new("/bin/kill")
+            .args(["-0", &pid.to_string()])
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .status()
+            .unwrap_or_else(|error| panic!("inspect process absence: {error}"));
+        assert!(!status.success(), "inspection left its exact process alive");
+    }
+}

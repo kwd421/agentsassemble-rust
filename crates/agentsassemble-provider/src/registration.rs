@@ -95,7 +95,7 @@ pub(crate) static CODEX_PROVIDER: ProviderRegistration = ProviderRegistration {
     executable_required: true,
     probe_executable: "codex",
     remote_spec: None,
-    usage: None,
+    usage: Some(crate::codex::usage::read),
     login: Some(crate::provider_login::ProviderLoginSpec {
         arguments: &["login"],
         environment: Some(crate::codex::config::login_environment),

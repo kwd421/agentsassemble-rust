@@ -56,6 +56,7 @@ pub(super) async fn handle(
         .map_err(|_| request_unavailable())?;
     let result = mapped.response(&resolution)?;
     let written = driver
+        .wire
         .write_message(&json!({"jsonrpc": "2.0", "id": id, "result": result}))
         .await;
     // JSON-RPC responses have no response ACK. Flushed native stdin is this delivery boundary;

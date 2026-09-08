@@ -4,11 +4,10 @@ use agentsassemble_domain::{
     DurableAgentSession, MAX_MESSAGE_CHARACTERS, clean_message, has_visible_text,
     is_provider_turn_id,
 };
-use futures_util::StreamExt;
 use serde_json::{Value, json};
 use tokio::time::Instant;
 
-use super::{CodexDriver, protocol_closed, protocol_error};
+use super::{CodexDriver, protocol_error};
 use crate::room_portal::ProviderTurnOutcome;
 use crate::runtime::{DriverError, ProviderTurnCompleted, ProviderTurnRequest};
 
@@ -324,13 +323,7 @@ async fn next_matching_notification(
                 .ok_or_else(protocol_error)?;
             return Ok(queued.message);
         }
-        let line = driver
-            .stdout
-            .next()
-            .await
-            .ok_or_else(protocol_closed)?
-            .map_err(|_| protocol_error())?;
-        let message = serde_json::from_str::<Value>(&line).map_err(|_| protocol_error())?;
+        let (message, encoded_bytes) = driver.wire.read_message().await?;
         let object = message.as_object().ok_or_else(protocol_error)?;
         if object.get("method").is_none() {
             return Err(DriverError::new(
@@ -350,7 +343,7 @@ async fn next_matching_notification(
         if message_matches(&message, thread_id, turn_id)? {
             return Ok(message);
         }
-        driver.queue_notification(message, line.len())?;
+        driver.queue_notification(message, encoded_bytes)?;
     }
 }
 

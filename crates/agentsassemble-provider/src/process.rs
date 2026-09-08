@@ -89,29 +89,7 @@ pub(crate) async fn probe_with_timeout(
     #[cfg(not(any(unix, windows)))]
     return Err(ProbeFailure::Failed);
 
-    let mut command = CommandWrap::with_new(program, |command| {
-        command
-            .args(args)
-            .stdin(Stdio::null())
-            .stdout(Stdio::piped())
-            .stderr(Stdio::piped());
-    });
-    sanitize_environment(command.command_mut());
-    command
-        .command_mut()
-        .envs(environment.iter().map(|(name, value)| (name, value)));
-    command.wrap(KillOnDrop);
-    #[cfg(unix)]
-    command.wrap(ProcessGroup::leader());
-    #[cfg(windows)]
-    command.wrap(JobObject);
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(error) if error.kind() == io::ErrorKind::NotFound => {
-            return Err(ProbeFailure::Missing);
-        }
-        Err(_) => return Err(ProbeFailure::Failed),
-    };
+    let mut child = spawn_probe(program, args, environment, Stdio::null())?;
     let (Some(stdout), Some(stderr)) = (child.stdout().take(), child.stderr().take()) else {
         terminate_probe_tree(child.as_mut()).await?;
         return Err(ProbeFailure::Failed);
@@ -149,6 +127,79 @@ pub(crate) async fn probe_with_timeout(
         );
     }
     String::from_utf8(stdout).map_err(|_| ProbeFailure::Malformed)
+}
+
+fn spawn_probe(
+    program: &str,
+    args: &[&str],
+    environment: &[(String, String)],
+    stdin: Stdio,
+) -> Result<Box<dyn process_wrap::tokio::ChildWrapper>, ProbeFailure> {
+    let mut command = CommandWrap::with_new(program, |command| {
+        command
+            .args(args)
+            .stdin(stdin)
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+    });
+    sanitize_environment(command.command_mut());
+    command
+        .command_mut()
+        .envs(environment.iter().map(|(name, value)| (name, value)));
+    command.wrap(KillOnDrop);
+    #[cfg(unix)]
+    command.wrap(ProcessGroup::leader());
+    #[cfg(windows)]
+    command.wrap(JobObject);
+    match command.spawn() {
+        Ok(child) => Ok(child),
+        Err(error) if error.kind() == io::ErrorKind::NotFound => Err(ProbeFailure::Missing),
+        Err(_) => Err(ProbeFailure::Failed),
+    }
+}
+
+/// Runs one bounded native inspection, then confirms its process tree is gone.
+/// The exchange owns only private pipes and cannot outlive this process owner.
+pub(crate) async fn inspect<T, F, Fut>(
+    program: &str,
+    args: &[&str],
+    cancellation: &CancellationToken,
+    environment: &[(String, String)],
+    exchange: F,
+) -> Result<T, ProbeFailure>
+where
+    F: FnOnce(tokio::process::ChildStdin, tokio::process::ChildStdout) -> Fut,
+    Fut: std::future::Future<Output = Result<T, ProbeFailure>>,
+{
+    if cancellation.is_cancelled() {
+        return Err(ProbeFailure::Cancelled);
+    }
+    #[cfg(not(any(unix, windows)))]
+    return Err(ProbeFailure::Failed);
+    let mut child = spawn_probe(program, args, environment, Stdio::piped())?;
+    let (Some(stdin), Some(stdout), Some(stderr)) = (
+        child.stdin().take(),
+        child.stdout().take(),
+        child.stderr().take(),
+    ) else {
+        terminate_probe_tree(child.as_mut()).await?;
+        return Err(ProbeFailure::Failed);
+    };
+    let drain_errors = async {
+        read_limited(stderr)
+            .await
+            .map_err(|_| ProbeFailure::Malformed)?;
+        std::future::pending::<Result<T, ProbeFailure>>().await
+    };
+    let outcome = tokio::select! {
+        biased;
+        () = cancellation.cancelled() => Err(ProbeFailure::Cancelled),
+        result = tokio::time::timeout(PROBE_TIMEOUT, exchange(stdin, stdout)) =>
+            result.map_err(|_| ProbeFailure::Timeout).and_then(std::convert::identity),
+        result = drain_errors => result,
+    };
+    terminate_probe_tree(child.as_mut()).await?;
+    outcome
 }
 
 pub(crate) fn sanitize_environment(command: &mut tokio::process::Command) {

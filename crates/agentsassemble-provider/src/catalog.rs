@@ -55,16 +55,22 @@ async fn await_filesystem<T>(
     }
 }
 
+pub(crate) async fn resolved_codex(
+    cancellation: &CancellationToken,
+) -> Result<(String, String), ProbeFailure> {
+    await_filesystem(cancellation, resolve_codex_executable())
+        .await?
+        .ok_or(ProbeFailure::Missing)
+}
+
 pub(crate) async fn discover_codex(
     mut provider: ProviderAvailability,
     cancellation: &CancellationToken,
 ) -> ProviderAvailability {
-    let (executable, executable_identity) =
-        match await_filesystem(cancellation, resolve_codex_executable()).await {
-            Ok(Some(authority)) => authority,
-            Ok(None) => return failed_provider(provider, ProbeFailure::Missing),
-            Err(failure) => return failed_provider(provider, failure),
-        };
+    let (executable, executable_identity) = match resolved_codex(cancellation).await {
+        Ok(authority) => authority,
+        Err(failure) => return failed_provider(provider, failure),
+    };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
     let Ok(home) = crate::codex::config::home() else {

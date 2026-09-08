@@ -218,3 +218,28 @@ provider/server all-target/all-feature Clippy and unchanged mandatory gates pass
 The SDK fixture proves the actual bridge selects quota fields and exits; it does not
 prove live Claude authentication or availability. Direct packaged phase acceptance
 and the remaining Codex reader are pending.
+
+## Codex account rate limits implementation
+
+Codex now reads `account/rateLimits/read` through a temporary app-server, preserving
+its configured home and process-local MCP isolation. The exchange only initializes
+and reads account limits; it never starts/resumes a thread or sends a model turn.
+The [native account contract](https://learn.chatgpt.com/docs/app-server#6-rate-limits-chatgpt)
+selects the multi-bucket projection when present and the documented single-bucket
+projection otherwise. Malformed multi-bucket data fails instead of recovering from
+the other field. Missing measurements/reset times remain unknown, and private
+account notifications and reset-credit metadata never enter the quota projection.
+
+Room sessions and account inspection now share Codex's existing bounded JSON-line
+wire owner. The existing process owner also supports a bounded private-pipe exchange;
+it drains bounded stderr, cancels on shutdown and confirms the process tree has
+ended before returning any outcome. There is no room portal, resident account
+process, provider retry or periodic usage work. The existing room-session request,
+turn, correlation and pending-notification authority remains with the session.
+
+Five usage cases pass, including the real duplex native exchange and multi-bucket
+projection; all 32 existing/affected Codex cases pass (77.83s), including turn
+cancellation, durable resume and descendant cleanup. Four process cases pass (0.02s),
+including exact inspection process absence after success and cancellation. Existing
+provider/server Clippy and mandatory gates pass. No real Codex/account is invoked;
+packaged phase and final real-provider evidence remain pending.

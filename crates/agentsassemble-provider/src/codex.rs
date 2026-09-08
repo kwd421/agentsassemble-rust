@@ -1,15 +1,14 @@
 use std::{collections::VecDeque, time::Duration};
 
 use agentsassemble_domain::DurableAgentSession;
-use futures_util::StreamExt;
 #[cfg(not(unix))]
 use process_wrap::tokio::ChildWrapper;
+use protocol::CodexWire;
 use serde_json::{Value, json};
 use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWriteExt},
+    io::{AsyncRead, AsyncReadExt},
     task::JoinHandle,
 };
-use tokio_util::codec::{FramedRead, LinesCodec};
 
 use crate::{
     codex_identity::{
@@ -46,8 +45,7 @@ pub(crate) struct CodexDriver {
     _executable_guard: BoundExecutable,
     #[cfg(unix)]
     process_group: UnixProcessCustody,
-    stdin: ProviderStdin,
-    stdout: FramedRead<ProviderStdout, LinesCodec>,
+    wire: CodexWire<ProviderStdin, ProviderStdout>,
     stderr_task: JoinHandle<()>,
     next_request_id: u64,
     pending_notifications: VecDeque<turn::QueuedNotification>,
@@ -142,11 +140,7 @@ impl CodexDriver {
             Ok(Self {
                 child,
                 _executable_guard: executable,
-                stdin,
-                stdout: FramedRead::new(
-                    stdout,
-                    LinesCodec::new_with_max_length(MAX_PROTOCOL_LINE_BYTES),
-                ),
+                wire: CodexWire::new(stdin, stdout),
                 stderr_task,
                 next_request_id: 1,
                 pending_notifications: VecDeque::new(),
@@ -202,11 +196,7 @@ impl CodexDriver {
         Ok(Self {
             process_group,
             _executable_guard: executable,
-            stdin: pipes.stdin,
-            stdout: FramedRead::new(
-                pipes.stdout,
-                LinesCodec::new_with_max_length(MAX_PROTOCOL_LINE_BYTES),
-            ),
+            wire: CodexWire::new(pipes.stdin, pipes.stdout),
             stderr_task,
             next_request_id: 1,
             pending_notifications: VecDeque::new(),
@@ -250,12 +240,13 @@ impl CodexDriver {
             return Err(initialization_uncertain());
         }
         self.initialized_notification_started = true;
-        self.write_message(&json!({
-            "jsonrpc": "2.0",
-            "method": "initialized",
-            "params": {},
-        }))
-        .await?;
+        self.wire
+            .write_message(&json!({
+                "jsonrpc": "2.0",
+                "method": "initialized",
+                "params": {},
+            }))
+            .await?;
         self.initialized = true;
         Ok(())
     }
@@ -342,13 +333,14 @@ impl CodexDriver {
                 method: method.to_owned(),
                 params: params.clone(),
             });
-            self.write_message(&json!({
-                "jsonrpc": "2.0",
-                "id": request_id,
-                "method": method,
-                "params": params,
-            }))
-            .await?;
+            self.wire
+                .write_message(&json!({
+                    "jsonrpc": "2.0",
+                    "id": request_id,
+                    "method": method,
+                    "params": params,
+                }))
+                .await?;
             request_id
         };
         tokio::time::timeout(PROTOCOL_TIMEOUT, self.read_response(request_id))
@@ -363,13 +355,7 @@ impl CodexDriver {
 
     async fn read_response(&mut self, request_id: u64) -> Result<Value, DriverError> {
         loop {
-            let line = self
-                .stdout
-                .next()
-                .await
-                .ok_or_else(protocol_closed)?
-                .map_err(|_| protocol_error())?;
-            let message = serde_json::from_str::<Value>(&line).map_err(|_| protocol_error())?;
+            let (message, encoded_bytes) = self.wire.read_message().await?;
             let object = message.as_object().ok_or_else(protocol_error)?;
             if object.get("method").is_some() {
                 let early_interactive = requests::supported(&message)
@@ -380,7 +366,7 @@ impl CodexDriver {
                 if object.get("id").is_some() && !early_interactive {
                     self.handle_server_request(&message).await?;
                 } else {
-                    self.queue_notification(message, line.len())?;
+                    self.queue_notification(message, encoded_bytes)?;
                 }
                 continue;
             }
@@ -408,6 +394,7 @@ impl CodexDriver {
         let id = message.get("id").cloned().ok_or_else(protocol_error)?;
         if is_room_portal_approval(message) {
             return self
+                .wire
                 .write_message(&json!({
                     "jsonrpc": "2.0",
                     "id": id,
@@ -415,31 +402,16 @@ impl CodexDriver {
                 }))
                 .await;
         }
-        self.write_message(&json!({
-            "jsonrpc": "2.0",
-            "id": id,
-            "error": {
-                "code": -32601,
-                "message": "Unsupported provider request.",
-            },
-        }))
-        .await
-    }
-
-    async fn write_message(&mut self, message: &Value) -> Result<(), DriverError> {
-        let mut encoded = serde_json::to_vec(message).map_err(|_| protocol_error())?;
-        if encoded.len() > MAX_PROTOCOL_LINE_BYTES {
-            return Err(DriverError::new(
-                "provider_protocol_overflow",
-                "The Codex app-server request exceeded its protocol bound.",
-            ));
-        }
-        encoded.push(b'\n');
-        self.stdin
-            .write_all(&encoded)
+        self.wire
+            .write_message(&json!({
+                "jsonrpc": "2.0",
+                "id": id,
+                "error": {
+                    "code": -32601,
+                    "message": "Unsupported provider request.",
+                },
+            }))
             .await
-            .map_err(|_| protocol_closed())?;
-        self.stdin.flush().await.map_err(|_| protocol_closed())
     }
 
     async fn stop_process(&mut self) -> Result<(), DriverError> {
@@ -729,3 +701,8 @@ pub(crate) mod config;
 #[cfg(test)]
 #[path = "codex_command_tests.rs"]
 mod tests;
+
+#[path = "codex_protocol.rs"]
+mod protocol;
+#[path = "codex_usage.rs"]
+pub(crate) mod usage;
