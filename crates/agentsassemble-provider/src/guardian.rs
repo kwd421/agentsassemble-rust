@@ -338,6 +338,33 @@ impl GuardianLaunch {
         Ok(command)
     }
 
+    #[cfg(test)]
+    pub(crate) fn managed_command(
+        &self,
+        socket: std::os::fd::OwnedFd,
+    ) -> io::Result<tokio::process::Command> {
+        let mut command = tokio::process::Command::new(self.executable.launch_path());
+        crate::process::sanitize_std_environment(command.as_std_mut());
+        if self.test_harness {
+            command.args([
+                "--exact",
+                "managed_bridge::process_tests::worker_entry",
+                "--nocapture",
+            ]);
+            command.env("AGENTSASSEMBLE_TEST_MANAGED_WORKER", "1");
+        } else {
+            command.arg("--agentsassemble-managed-provider");
+        }
+        command
+            .stdin(Stdio::from(socket))
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .kill_on_drop(true);
+        self.executable
+            .configure_std_command(command.as_std_mut())?;
+        Ok(command)
+    }
+
     fn anchor_command(&self, lease_path: &Path, lease_token: &str) -> io::Result<Command> {
         let mut command = Command::new(self.executable.launch_path());
         command.env_clear();

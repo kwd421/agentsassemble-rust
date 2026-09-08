@@ -67,6 +67,7 @@ pub(super) enum Command {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Event {
+    Acquired,
     Facts {
         facts: Facts,
     },

@@ -1198,3 +1198,25 @@ The existing MCP randomness/terminal-ordering case now exercises the relayed roo
 command and proves that it cannot execute before native admission. All nine portal
 cases, affected Clippy and unchanged mandatory gates pass; local admission still
 adds no allocation or queue.
+
+Parent integration uses a private inherited Unix socket, without a listener or a
+secret in arguments, environment or files. The child acknowledges imported lifetime
+custody before the parent releases its launch lifetime; native readiness follows.
+One owned transport task continues servicing callbacks while the driver caller waits
+or cancels. A cancelled call retains its original reply; only an entered send permits
+interleaved interrupt/abort/stop. Other native operations finish before later control.
+There is no automatic send replay or fallback to a direct native driver.
+
+Private startup and control acknowledgements have a sixty-second deadline, outside
+the existing native operation deadlines; ordinary turns retain their native/request
+budgets. Transport failure remains an error and cleans the exact managed child.
+Successful stop requires native stop, reaped worker exit and the existing exact
+lease-absence proof. A later explicit stop may confirm already-observed absence;
+a failed or uncertain turn is never promoted to a successful result.
+
+The worker entry now consumes that inherited socket, closes its original descriptor
+before native launch and acknowledges imported custody before native readiness.
+The existing six lifecycle scenarios now run a separate bound worker executable,
+including the actual native answer/interrupt transcript and exact cleanup receipt.
+All four managed tests, affected Clippy and unchanged mandatory gates pass. Parent
+callback/driver integration and production factory cutover are still pending.

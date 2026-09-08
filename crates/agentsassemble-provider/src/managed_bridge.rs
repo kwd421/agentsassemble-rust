@@ -32,8 +32,20 @@ pub async fn run_managed_bridge_if_requested() -> Option<i32> {
     if std::env::args_os().nth(1).as_deref() != Some(std::ffi::OsStr::new(WORKER_FLAG)) {
         return None;
     }
-    let result = run(tokio::io::stdin(), tokio::io::stdout()).await;
+    let result = run_socket().await;
     Some(i32::from(result.is_err()))
+}
+
+async fn run_socket() -> Result<(), DriverError> {
+    // Duplicate with CLOEXEC and close fd 0 before any native child can inherit it.
+    let socket =
+        rustix::io::fcntl_dupfd_cloexec(std::io::stdin(), 3).map_err(|_| protocol_error())?;
+    nix::unistd::close(0).map_err(|_| protocol_error())?;
+    let socket = std::os::unix::net::UnixStream::from(socket);
+    socket.set_nonblocking(true).map_err(|_| protocol_error())?;
+    let socket = tokio::net::UnixStream::from_std(socket).map_err(|_| protocol_error())?;
+    let (input, output) = socket.into_split();
+    run(input, output).await
 }
 
 async fn run<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
@@ -55,6 +67,7 @@ async fn run<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
         )
         .await;
     };
+    write(&mut output, &Event::Acquired).await?;
     let credentials = ProviderCredentialStore::from_private_handoff(launch.credential);
     #[cfg(test)]
     let mut factory = ProductionDriverFactory::local(credentials);
@@ -132,3 +145,7 @@ fn same_runtime(left: &DurableAgentSession, right: &DurableAgentSession) -> bool
 #[cfg(test)]
 #[path = "managed_bridge_tests.rs"]
 mod tests;
+
+#[cfg(test)]
+#[path = "managed_bridge_process_tests.rs"]
+mod process_tests;

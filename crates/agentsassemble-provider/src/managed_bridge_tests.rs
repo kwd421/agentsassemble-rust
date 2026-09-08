@@ -1,9 +1,6 @@
 use std::time::Duration;
 
-use super::{
-    run,
-    wire::{self, Command, Event, Launch, read, write},
-};
+use super::wire::{self, Command, Event, Launch, read, write};
 use crate::{
     ProviderCredentialError, ProviderCredentialId, ProviderCredentialStore,
     credentials::private_handoff::SelectedCredential,
@@ -25,13 +22,7 @@ async fn managed_private_pipe_preserves_native_attach_and_cleans_stop_loss_and_w
 
 async fn native_lifecycle(termination: &str) -> TestResult {
     let directory = tempfile::tempdir()?;
-    let script = concat!(
-        "#!/bin/sh\nIFS= read -r initialize\n",
-        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\n",
-        "IFS= read -r initialized\nIFS= read -r thread\n",
-        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\n",
-        "IFS= read -r forever\n",
-    );
+    let script = idle_script();
     let transcript = directory.path().join("native.jsonl");
     let turn_case = matches!(termination, "answer" | "interrupt" | "plain");
     let script = if turn_case {
@@ -48,10 +39,8 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     session.runtime_lease_token = lease.token().to_owned();
     session.runtime_owner_id = "fixture-parent".to_owned();
     lease.begin_launch_effect()?;
-    let (parent, child) = tokio::io::duplex(8192);
-    let (child_input, child_output) = tokio::io::split(child);
-    let worker = tokio::spawn(run(child_input, child_output));
-    let (parent_input, parent_output) = tokio::io::split(parent);
+    let (mut worker, parent) = super::process_tests::spawn_worker()?;
+    let (parent_input, parent_output) = parent.into_split();
     let mut input = wire::reader(parent_input);
     let mut output = wire::writer(parent_output);
     write(
@@ -65,9 +54,13 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     .await?;
     assert!(matches!(
         read_event(&mut input).await?,
-        Some(Event::Ready { result: Ok(()) })
+        Some(Event::Acquired)
     ));
     lease.release_launch_lifetime();
+    assert!(matches!(
+        read_event(&mut input).await?,
+        Some(Event::Ready { result: Ok(()) })
+    ));
     assert_eq!(
         observe_runtime_lease(&session.public.room_id, &session.public.session_id),
         LeaseObservation::Active
@@ -119,7 +112,11 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     }
     drop(output);
     drop(input);
-    let result = worker.await?;
+    let result = if worker.wait().await?.success() {
+        Ok(())
+    } else {
+        Err(super::protocol_error())
+    };
     assert_native_proof(&mut lease, &session, &result, &transcript, termination)
 }
 
@@ -380,4 +377,14 @@ async fn await_interruption<R: tokio::io::AsyncRead + Unpin>(
             _ => return Err("unexpected interrupt or delivery response".into()),
         }
     }
+}
+
+fn idle_script() -> &'static str {
+    concat!(
+        "#!/bin/sh\nIFS= read -r initialize\n",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\n",
+        "IFS= read -r initialized\nIFS= read -r thread\n",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\n",
+        "IFS= read -r forever\n",
+    )
 }
