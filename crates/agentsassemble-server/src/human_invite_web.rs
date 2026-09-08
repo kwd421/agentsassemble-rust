@@ -411,22 +411,29 @@ impl From<HumanAdmissionRejection> for HumanInviteHttpError {
 impl From<PersistenceError> for HumanInviteHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
-            PersistenceError::CommandRejected {
-                code: "room_busy", ..
-            } => Self::new(
-                StatusCode::SERVICE_UNAVAILABLE,
-                "room_busy",
-                "Room mutation queue is full.",
-            ),
-            PersistenceError::CommandRejected {
-                code: "room_unavailable",
-                ..
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(code.as_bytes(), b"room_busy") =>
+            {
+                Self::new(
+                    StatusCode::SERVICE_UNAVAILABLE,
+                    "room_busy",
+                    "Room mutation queue is full.",
+                )
             }
-            | PersistenceError::RoomMissing => Self::new(
+            PersistenceError::RoomMissing => Self::new(
                 StatusCode::GONE,
                 "room_unavailable",
                 "Room was deleted or is unavailable.",
             ),
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(code.as_bytes(), b"room_unavailable") =>
+            {
+                Self::new(
+                    StatusCode::GONE,
+                    "room_unavailable",
+                    "Room was deleted or is unavailable.",
+                )
+            }
             internal => {
                 tracing::error!(error = ?internal, "human invite HTTP persistence failed");
                 Self::internal()

@@ -440,27 +440,38 @@ impl From<PersistenceError> for RoomPreferencesHttpError {
                 code: "room_not_found",
                 message: "Room does not exist.".to_owned(),
             },
-            PersistenceError::ParticipantMissing
-            | PersistenceError::CommandRejected {
-                code:
-                    "session_revoked"
-                    | "room_inactive"
-                    | "user_profile_missing"
-                    | "profile_authority_mismatch",
-                ..
-            } => Self::unauthorized(),
-            PersistenceError::CommandRejected {
-                code: "room_preferences_invalid" | "bad_request",
-                message,
-            } => Self::bad_request(message),
-            PersistenceError::CommandRejected {
-                code: "bootstrap_required" | "bootstrap_repair_required",
-                message,
-            } => Self {
-                status: StatusCode::CONFLICT,
-                code: "bootstrap_required",
-                message,
-            },
+            PersistenceError::ParticipantMissing => Self::unauthorized(),
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(
+                    code.as_bytes(),
+                    b"session_revoked"
+                        | b"room_inactive"
+                        | b"user_profile_missing"
+                        | b"profile_authority_mismatch"
+                ) =>
+            {
+                Self::unauthorized()
+            }
+            PersistenceError::CommandRejected { code, message }
+                if matches!(
+                    code.as_bytes(),
+                    b"room_preferences_invalid" | b"bad_request"
+                ) =>
+            {
+                Self::bad_request(message)
+            }
+            PersistenceError::CommandRejected { code, message }
+                if matches!(
+                    code.as_bytes(),
+                    b"bootstrap_required" | b"bootstrap_repair_required"
+                ) =>
+            {
+                Self {
+                    status: StatusCode::CONFLICT,
+                    code: "bootstrap_required",
+                    message,
+                }
+            }
             error => {
                 tracing::error!(error = ?error, "room preferences HTTP persistence failed");
                 Self::internal()

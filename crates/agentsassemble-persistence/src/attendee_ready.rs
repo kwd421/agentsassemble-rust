@@ -202,14 +202,12 @@ pub(crate) async fn is_available(
     let fingerprint = fingerprint.try_into().map_err(|_| invalid_ready())?;
     match crate::attendee_session::authorize_in(tx, &fingerprint, Utc::now()).await {
         Ok(_) => Ok(true),
-        Err(
-            PersistenceError::CommandRejected {
-                code: "session_revoked" | "permission_denied",
-                ..
-            }
-            | PersistenceError::ParticipantMissing
-            | PersistenceError::RoomMissing,
-        ) => Ok(false),
+        Err(PersistenceError::ParticipantMissing | PersistenceError::RoomMissing) => Ok(false),
+        Err(PersistenceError::CommandRejected { code, .. })
+            if matches!(code.as_bytes(), b"session_revoked" | b"permission_denied") =>
+        {
+            Ok(false)
+        }
         Err(error) => Err(error),
     }
 }

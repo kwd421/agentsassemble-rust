@@ -309,10 +309,11 @@ async fn inspect_bootstrap(
         }
         "complete" => match inspect_complete(connection, &marker, &server_id).await {
             Ok(status) => Ok(status),
-            Err(PersistenceError::CommandRejected {
-                code: "bootstrap_repair_required",
-                ..
-            }) => Ok(repair_status(marker.authority_lineage_id, server_id)),
+            Err(PersistenceError::CommandRejected { code, .. })
+                if matches!(code.as_bytes(), b"bootstrap_repair_required") =>
+            {
+                Ok(repair_status(marker.authority_lineage_id, server_id))
+            }
             Err(error) => Err(error),
         },
         _ => Ok(LocalBootstrapStatus {

@@ -383,10 +383,7 @@ mod tests {
             .await;
         assert!(matches!(
             payload_conflict,
-            Err(crate::PersistenceError::CommandRejected {
-                code: "room_create_request_conflict",
-                ..
-            })
+            Err(crate::PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_create_request_conflict")
         ));
         let room_conflict = store
             .create_room_for_local_operator(
@@ -397,10 +394,7 @@ mod tests {
             .await;
         assert!(matches!(
             room_conflict,
-            Err(crate::PersistenceError::CommandRejected {
-                code: "room_already_exists",
-                ..
-            })
+            Err(crate::PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_already_exists")
         ));
         let preserved = store
             .participant("project-room", LOCAL_OPERATOR_PARTICIPANT_ID)
@@ -439,10 +433,7 @@ mod tests {
         let loser = if left.is_err() { left } else { right };
         assert!(matches!(
             loser,
-            Err(crate::PersistenceError::CommandRejected {
-                code: "room_already_exists",
-                ..
-            })
+            Err(crate::PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_already_exists")
         ));
         let snapshot = store
             .snapshot("contended", 0, 20)

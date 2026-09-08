@@ -513,10 +513,7 @@ mod tests {
         );
         assert!(matches!(
             store.acknowledge_room_publication("general", 2).await,
-            Err(PersistenceError::CommandRejected {
-                code: "event_publication_state_invalid",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"event_publication_state_invalid")
         ));
         store
             .acknowledge_room_publication("general", 3)

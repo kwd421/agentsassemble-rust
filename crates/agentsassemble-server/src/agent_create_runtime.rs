@@ -199,10 +199,7 @@ async fn resolve_create_start_plan(
     if inspected.as_ref().is_err_and(|error| {
         matches!(
             error,
-            PersistenceError::CommandUnresolved {
-                code: "runtime_effect_unconfirmed",
-                ..
-            }
+            PersistenceError::CommandUnresolved { code, .. } if matches!(code.as_bytes(), b"runtime_effect_unconfirmed")
         )
     }) {
         inspected = match recover_exact_lifecycle_command(

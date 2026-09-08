@@ -325,32 +325,44 @@ impl From<PersistenceError> for InviteManagerHttpError {
                 code: "room_not_found",
                 message: "Room does not exist.".to_owned(),
             },
-            PersistenceError::ParticipantMissing
-            | PersistenceError::CommandRejected {
-                code:
-                    "session_revoked"
-                    | "user_profile_missing"
-                    | "profile_authority_mismatch"
-                    | "permission_denied"
-                    | "room_authority_changed",
-                ..
-            } => Self {
+            PersistenceError::ParticipantMissing => Self {
                 status: StatusCode::FORBIDDEN,
                 code: "room_manager_required",
                 message: "Current room-manager authority is required.".to_owned(),
             },
-            PersistenceError::CommandRejected {
-                code: "room_inactive",
-                ..
-            } => Self {
-                status: StatusCode::GONE,
-                code: "room_closed",
-                message: "Room is closed.".to_owned(),
-            },
-            PersistenceError::CommandRejected {
-                code: "invalid_human_invite" | "invalid_human_invite_id",
-                message,
-            } => Self::bad_request(message),
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(
+                    code.as_bytes(),
+                    b"session_revoked"
+                        | b"user_profile_missing"
+                        | b"profile_authority_mismatch"
+                        | b"permission_denied"
+                        | b"room_authority_changed"
+                ) =>
+            {
+                Self {
+                    status: StatusCode::FORBIDDEN,
+                    code: "room_manager_required",
+                    message: "Current room-manager authority is required.".to_owned(),
+                }
+            }
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(code.as_bytes(), b"room_inactive") =>
+            {
+                Self {
+                    status: StatusCode::GONE,
+                    code: "room_closed",
+                    message: "Room is closed.".to_owned(),
+                }
+            }
+            PersistenceError::CommandRejected { code, message }
+                if matches!(
+                    code.as_bytes(),
+                    b"invalid_human_invite" | b"invalid_human_invite_id"
+                ) =>
+            {
+                Self::bad_request(message)
+            }
             _ => Self::internal(),
         }
     }

@@ -498,9 +498,9 @@ async fn validate_publication_target(
     }
     let target = match load_session(transaction, &session.public.room_id, target_agent_id).await {
         Ok(target) => target,
-        Err(PersistenceError::CommandRejected {
-            code: "not_found", ..
-        }) => {
+        Err(PersistenceError::CommandRejected { code, .. })
+            if matches!(code.as_bytes(), b"not_found") =>
+        {
             return Err(rejected(
                 "room_portal_publication_invalid",
                 "The RoomPortal handoff target does not exist.",

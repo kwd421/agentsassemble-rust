@@ -74,10 +74,11 @@ pub(crate) async fn resume_exact_interrupt(
         .await
     {
         Ok(claim) => claim,
-        Err(PersistenceError::CommandUnresolved {
-            code: "provider_turn_effect_unresolved",
-            ..
-        }) => return Ok(None),
+        Err(PersistenceError::CommandUnresolved { code, .. })
+            if matches!(code.as_bytes(), b"provider_turn_effect_unresolved") =>
+        {
+            return Ok(None);
+        }
         Err(error) => return Err(error),
     };
     let authority = exact_authority(&claim.effect);

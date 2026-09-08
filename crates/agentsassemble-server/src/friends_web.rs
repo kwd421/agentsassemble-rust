@@ -99,9 +99,9 @@ async fn delete(
 fn storage_error(error: PersistenceError) -> Response {
     match error {
         PersistenceError::CommandRejected { code, message } => {
-            let status = match code {
-                "friend_invalid" => StatusCode::BAD_REQUEST,
-                "friend_conflict" => StatusCode::CONFLICT,
+            let status = match code.as_bytes() {
+                b"friend_invalid" => StatusCode::BAD_REQUEST,
+                b"friend_conflict" => StatusCode::CONFLICT,
                 _ => StatusCode::SERVICE_UNAVAILABLE,
             };
             failure(status, code, &message)

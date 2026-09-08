@@ -206,10 +206,7 @@ pub(super) async fn commit_dynamic_gone(
 pub(super) fn stale_candidate(error: &PersistenceError) -> bool {
     matches!(
         error,
-        PersistenceError::CommandRejected {
-            code: "stale_reconciliation_candidate",
-            ..
-        }
+        PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"stale_reconciliation_candidate")
     )
 }
 

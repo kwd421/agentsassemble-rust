@@ -261,10 +261,7 @@ mod tests {
                     },
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "permission_denied",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
         ));
     }
 }

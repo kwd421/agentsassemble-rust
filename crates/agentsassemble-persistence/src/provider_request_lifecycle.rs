@@ -92,19 +92,21 @@ pub(crate) async fn reconcile_session_in(
         } else {
             match require_pending_authority_in(tx, &session, &row, now).await {
                 Ok(()) => None,
-                Err(
-                    PersistenceError::RoomMissing
-                    | PersistenceError::ParticipantMissing
-                    | PersistenceError::CommandRejected {
-                        code:
-                            "stale_provider_turn"
-                            | "bridge_connection_replaced"
-                            | "session_revoked"
-                            | "permission_denied"
-                            | "room_inactive",
-                        ..
-                    },
-                ) => Some("cancelled"),
+                Err(PersistenceError::RoomMissing | PersistenceError::ParticipantMissing) => {
+                    Some("cancelled")
+                }
+                Err(PersistenceError::CommandRejected { code, .. })
+                    if matches!(
+                        code.as_bytes(),
+                        b"stale_provider_turn"
+                            | b"bridge_connection_replaced"
+                            | b"session_revoked"
+                            | b"permission_denied"
+                            | b"room_inactive"
+                    ) =>
+                {
+                    Some("cancelled")
+                }
                 Err(error) => return Err(error),
             }
         };

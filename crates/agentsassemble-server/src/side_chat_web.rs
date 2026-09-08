@@ -131,21 +131,27 @@ fn unauthorized() -> Response {
 
 fn persistence_error(error: PersistenceError) -> Response {
     match error {
-        PersistenceError::CommandRejected {
-            code: code @ ("permission_denied" | "human_side_chat_required"),
-            message,
-        } => error_response(StatusCode::FORBIDDEN, code, &message),
-        PersistenceError::RoomMissing
-        | PersistenceError::ParticipantMissing
-        | PersistenceError::CommandRejected {
-            code:
-                "session_revoked"
-                | "room_authority_changed"
-                | "room_inactive"
-                | "user_profile_missing"
-                | "profile_authority_mismatch",
-            ..
-        } => unauthorized(),
+        PersistenceError::CommandRejected { code, message }
+            if matches!(
+                code.as_bytes(),
+                b"permission_denied" | b"human_side_chat_required"
+            ) =>
+        {
+            error_response(StatusCode::FORBIDDEN, code, &message)
+        }
+        PersistenceError::RoomMissing | PersistenceError::ParticipantMissing => unauthorized(),
+        PersistenceError::CommandRejected { code, .. }
+            if matches!(
+                code.as_bytes(),
+                b"session_revoked"
+                    | b"room_authority_changed"
+                    | b"room_inactive"
+                    | b"user_profile_missing"
+                    | b"profile_authority_mismatch"
+            ) =>
+        {
+            unauthorized()
+        }
         error => {
             tracing::error!(error = ?error, "side-chat bootstrap failed");
             error_response(

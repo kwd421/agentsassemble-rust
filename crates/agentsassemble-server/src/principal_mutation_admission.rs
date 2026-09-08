@@ -278,10 +278,7 @@ mod tests {
         };
         assert!(matches!(
             error,
-            PersistenceError::CommandRejected {
-                code: "write_budget_exceeded",
-                ..
-            }
+            PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"write_budget_exceeded")
         ));
     }
 
@@ -297,10 +294,7 @@ mod tests {
         };
         assert!(matches!(
             error,
-            PersistenceError::CommandRejected {
-                code: "write_budget_exceeded",
-                ..
-            }
+            PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"write_budget_exceeded")
         ));
     }
 }

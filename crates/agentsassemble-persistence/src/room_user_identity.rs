@@ -287,10 +287,7 @@ mod tests {
                     LOCAL_OPERATOR_PARTICIPANT_ID,
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "session_revoked",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
         ));
     }
 
@@ -323,10 +320,7 @@ mod tests {
                     LOCAL_OPERATOR_PARTICIPANT_ID,
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "session_revoked",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
         ));
 
         participant.participant_type = "human".to_owned();
@@ -353,10 +347,7 @@ mod tests {
                     LOCAL_OPERATOR_PARTICIPANT_ID,
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "profile_authority_mismatch",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"profile_authority_mismatch")
         ));
     }
 
@@ -384,10 +375,7 @@ mod tests {
                     LOCAL_OPERATOR_PARTICIPANT_ID,
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "bootstrap_repair_required",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bootstrap_repair_required")
         ));
     }
 

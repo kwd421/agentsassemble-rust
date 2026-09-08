@@ -235,11 +235,11 @@ impl From<PersistenceError> for RecoveryHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
             PersistenceError::CommandRejected { code, message } => {
-                let status = match code {
-                    "account_device_mismatch" => StatusCode::CONFLICT,
-                    "recovery_capacity_reached" => StatusCode::TOO_MANY_REQUESTS,
-                    "invalid_state" | "recovery_unavailable" => StatusCode::SERVICE_UNAVAILABLE,
-                    "recovery_request_invalid" => StatusCode::BAD_REQUEST,
+                let status = match code.as_bytes() {
+                    b"account_device_mismatch" => StatusCode::CONFLICT,
+                    b"recovery_capacity_reached" => StatusCode::TOO_MANY_REQUESTS,
+                    b"invalid_state" | b"recovery_unavailable" => StatusCode::SERVICE_UNAVAILABLE,
+                    b"recovery_request_invalid" => StatusCode::BAD_REQUEST,
                     _ => StatusCode::FORBIDDEN,
                 };
                 Self::new(status, code, message)

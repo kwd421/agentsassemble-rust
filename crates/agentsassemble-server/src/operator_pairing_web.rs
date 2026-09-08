@@ -283,14 +283,15 @@ impl PairingHttpError {
 impl From<PersistenceError> for PairingHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
-            PersistenceError::CommandRejected {
-                code: "pairing_capacity",
-                ..
-            } => Self::new(
-                StatusCode::TOO_MANY_REQUESTS,
-                "pairing_capacity",
-                "Operator pairing capacity is unavailable.",
-            ),
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(code.as_bytes(), b"pairing_capacity") =>
+            {
+                Self::new(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "pairing_capacity",
+                    "Operator pairing capacity is unavailable.",
+                )
+            }
             PersistenceError::CommandRejected { .. }
             | PersistenceError::ParticipantMissing
             | PersistenceError::RoomMissing => Self::unauthorized(),

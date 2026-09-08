@@ -249,10 +249,7 @@ mod tests {
                     }),
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "invalid_participant_role",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invalid_participant_role")
         ));
         assert!(matches!(
             store
@@ -262,10 +259,7 @@ mod tests {
                     &json!({"participant_id": "missing", "role": "agent"}),
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "invalid_participant_role",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invalid_participant_role")
         ));
 
         let mut guest = principal;
@@ -283,10 +277,7 @@ mod tests {
                     }),
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "permission_denied",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
         ));
     }
 

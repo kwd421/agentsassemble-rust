@@ -156,10 +156,7 @@ mod tests {
         };
         assert!(matches!(
             error,
-            crate::PersistenceError::CommandRejected {
-                code: "write_budget_exceeded",
-                ..
-            }
+            crate::PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"write_budget_exceeded")
         ));
     }
 }

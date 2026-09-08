@@ -356,10 +356,7 @@ mod tests {
                     invalid_patch,
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "room_preferences_invalid",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_preferences_invalid")
         ));
         let stored = sqlx::query_scalar::<_, i64>(
             "SELECT COUNT(*) FROM room_user_preferences WHERE user_id = ? AND room_id = 'general'",
@@ -440,10 +437,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("corrupt directory bootstrap fixture: {error}"));
         assert!(matches!(
             store.local_room_preferences_directory().await,
-            Err(PersistenceError::CommandRejected {
-                code: "bootstrap_repair_required",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bootstrap_repair_required")
         ));
     }
 

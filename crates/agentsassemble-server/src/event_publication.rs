@@ -138,10 +138,7 @@ mod tests {
             .unwrap_or_else(|| panic!("stale incarnation was accepted"));
         assert!(matches!(
             failure.error,
-            agentsassemble_persistence::PersistenceError::CommandRejected {
-                code: "room_incarnation_changed",
-                ..
-            }
+            agentsassemble_persistence::PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"room_incarnation_changed")
         ));
         assert_eq!(
             store

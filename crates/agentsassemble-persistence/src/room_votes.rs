@@ -199,15 +199,12 @@ pub(crate) async fn apply_vote_command(
 pub(crate) fn is_terminal_vote_rejection(error: &PersistenceError) -> bool {
     matches!(
         error,
-        PersistenceError::CommandRejected {
-            code: "vote_not_found"
-                | "vote_expired"
-                | "vote_closed"
-                | "vote_capacity_reached"
-                | "invalid_vote_choice"
-                | "permission_denied",
-            ..
-        }
+        PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"vote_not_found"
+                | b"vote_expired"
+                | b"vote_closed"
+                | b"vote_capacity_reached"
+                | b"invalid_vote_choice"
+                | b"permission_denied")
     )
 }
 

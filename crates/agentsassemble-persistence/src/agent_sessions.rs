@@ -203,10 +203,7 @@ mod tests {
         for error in errors {
             assert!(matches!(
                 error,
-                Some(PersistenceError::CommandRejected {
-                    code: "session_revoked",
-                    ..
-                })
+                Some(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
             ));
         }
     }
@@ -457,10 +454,7 @@ mod tests {
             .unwrap_or_else(|| panic!("missing persona must fail"));
         assert!(matches!(
             error,
-            PersistenceError::CommandRejected {
-                code: "persona_not_found",
-                ..
-            }
+            PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"persona_not_found")
         ));
         let retained = store
             .snapshot("general", 0, 200)
@@ -595,10 +589,7 @@ mod tests {
             .await;
         assert!(matches!(
             result,
-            Err(PersistenceError::CommandRejected {
-                code: "runtime_authority_changed",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_authority_changed")
         ));
         let snapshot = store
             .snapshot("general", 0, 200)
@@ -637,10 +628,7 @@ mod tests {
         assert!(
             matches!(
                 &outcome,
-                Err(PersistenceError::CommandRejected {
-                    code: "agent_session_capacity",
-                    ..
-                })
+                Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"agent_session_capacity")
             ),
             "unexpected capacity outcome: {outcome:?}"
         );
@@ -674,10 +662,7 @@ mod tests {
             .await;
         assert!(matches!(
             result,
-            Err(PersistenceError::CommandRejected {
-                code: "permission_denied",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
         ));
         let snapshot = store
             .snapshot("general", 0, 200)

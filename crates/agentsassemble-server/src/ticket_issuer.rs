@@ -59,11 +59,12 @@ pub async fn issue_local_ticket(
         .await
         .map_err(|error| match error {
             PersistenceError::RoomMissing => TicketIssueError::RoomMissing,
-            PersistenceError::ParticipantMissing
-            | PersistenceError::CommandRejected {
-                code: "session_revoked" | "room_inactive",
-                ..
-            } => TicketIssueError::ParticipantInactive,
+            PersistenceError::ParticipantMissing => TicketIssueError::ParticipantInactive,
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(code.as_bytes(), b"session_revoked" | b"room_inactive") =>
+            {
+                TicketIssueError::ParticipantInactive
+            }
             error => TicketIssueError::Persistence(error),
         })?;
     let client_kind = ClientKind::Browser;

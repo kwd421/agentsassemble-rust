@@ -388,10 +388,7 @@ mod tests {
             store
                 .create_human_invite_for_local_manager(&manager, sub_microsecond)
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "invalid_human_invite",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invalid_human_invite")
         ));
         let created = store
             .create_human_invite_for_local_manager(&manager, new_invite(0xAB, 0xCD))
@@ -461,10 +458,7 @@ mod tests {
             store
                 .create_human_invite_for_local_manager(&manager, new_invite(0x44, 0x55))
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "room_authority_changed",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_authority_changed")
         ));
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_invites")
@@ -477,10 +471,7 @@ mod tests {
             store
                 .revoke_human_invite_for_local_manager(&manager, &predecessor_invite.invite_id,)
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "room_authority_changed",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_authority_changed")
         ));
         assert!(
             !store

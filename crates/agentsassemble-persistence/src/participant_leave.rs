@@ -347,10 +347,7 @@ mod tests {
         );
         assert!(matches!(
             store.authorize_human_session(&fingerprint).await,
-            Err(PersistenceError::CommandRejected {
-                code: "session_revoked",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
         ));
         let rejoined = rejoin(&store).await;
         assert!(
@@ -402,10 +399,7 @@ mod tests {
                     &json!({"participant_id": "someone-else"}),
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "invalid_participant_leave",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invalid_participant_leave")
         ));
         store
             .authorize_human_session(authorization.session_fingerprint())
@@ -428,10 +422,7 @@ mod tests {
             store
                 .execute_participant_leave(&owner, "owner-leave", &json!({}))
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "owner_must_transfer_or_delete",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"owner_must_transfer_or_delete")
         ));
         assert_eq!(
             sqlx::query_scalar::<_, i64>(
@@ -458,10 +449,7 @@ mod tests {
                     &payload
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "permission_denied",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
         ));
         let mutation = store
             .execute_participant_removal(
@@ -476,10 +464,7 @@ mod tests {
         assert!(mutation.cleanup.is_none());
         assert!(matches!(
             store.authorize_human_session(&fingerprint).await,
-            Err(PersistenceError::CommandRejected {
-                code: "session_revoked",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
         ));
         let rejoined = rejoin(&store).await;
         let replay = store

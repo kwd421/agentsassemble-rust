@@ -367,11 +367,12 @@ async fn exact_interrupt_phase(
         .await
     {
         Ok(effect) if interrupt_effect_owns_result(start, &effect) => Ok(Some(effect.phase)),
-        Ok(_)
-        | Err(PersistenceError::CommandRejected {
-            code: "stale_provider_turn_effect",
-            ..
-        }) => Ok(None),
+        Ok(_) => Ok(None),
+        Err(PersistenceError::CommandRejected { code, .. })
+            if matches!(code.as_bytes(), b"stale_provider_turn_effect") =>
+        {
+            Ok(None)
+        }
         Err(error) => Err(error),
     }
 }
@@ -517,14 +518,15 @@ pub(crate) async fn handle_provider_result(
             )
             .await;
         }
-        Err(PersistenceError::CommandRejected {
-            code: "stale_provider_turn",
-            ..
-        }) => tracing::debug!(
-            room_id,
-            session_id,
-            "discarded provider result after durable turn authority changed"
-        ),
+        Err(PersistenceError::CommandRejected { code, .. })
+            if matches!(code.as_bytes(), b"stale_provider_turn") =>
+        {
+            tracing::debug!(
+                room_id,
+                session_id,
+                "discarded provider result after durable turn authority changed"
+            );
+        }
         Err(_) => tracing::error!(
             room_id,
             session_id,

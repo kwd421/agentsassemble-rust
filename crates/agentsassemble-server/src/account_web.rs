@@ -254,15 +254,15 @@ impl From<PersistenceError> for AccountHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
             PersistenceError::CommandRejected { code, message } => {
-                let status = match code {
-                    "account_switch_confirmation_required"
-                    | "account_link_conflict"
-                    | "account_identity_changed" => StatusCode::CONFLICT,
-                    "account_operator_boundary"
-                    | "account_switch_operator_forbidden"
-                    | "account_switch_unavailable"
-                    | "account_device_mismatch" => StatusCode::FORBIDDEN,
-                    "invalid_state" => StatusCode::SERVICE_UNAVAILABLE,
+                let status = match code.as_bytes() {
+                    b"account_switch_confirmation_required"
+                    | b"account_link_conflict"
+                    | b"account_identity_changed" => StatusCode::CONFLICT,
+                    b"account_operator_boundary"
+                    | b"account_switch_operator_forbidden"
+                    | b"account_switch_unavailable"
+                    | b"account_device_mismatch" => StatusCode::FORBIDDEN,
+                    b"invalid_state" => StatusCode::SERVICE_UNAVAILABLE,
                     _ => StatusCode::UNAUTHORIZED,
                 };
                 Self::new(status, code, message)
