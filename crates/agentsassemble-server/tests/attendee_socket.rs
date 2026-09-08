@@ -117,7 +117,7 @@ async fn ready(peer: &mut Peer) {
     peer.send_json(&json!({"action":"ready", "request_id":Uuid::new_v4(), "report":{
         "runtime_handle_id":"external-runtime", "runtime_owner_id":"external-owner", "runtime_lease_token":"external-lease",
         "provider_session_id":"external-session", "model":"contract-model", "reasoning_effort":"", "service_tier":"", "variant":"",
-        "execution_harness":"builtin", "permission_mode":"meeting_read_only", "max_output_tokens":0
+        "execution_harness":"builtin", "permission_mode":"meeting_read_only", "max_output_tokens":0, "retained_interrupt":true
     }})).await;
     assert_eq!(peer.receive_json().await["type"], "ack");
 }

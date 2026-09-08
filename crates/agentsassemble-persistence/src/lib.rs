@@ -1,3 +1,9 @@
+mod attendee_interrupt;
+#[cfg(test)]
+mod attendee_interrupt_tests;
+pub use attendee_interrupt::{
+    AttendeeInterruptDelivery, AttendeeInterruptReport, AttendeeInterruptedRuntime,
+};
 mod attendee_cleanup;
 #[cfg(test)]
 mod attendee_cleanup_tests;

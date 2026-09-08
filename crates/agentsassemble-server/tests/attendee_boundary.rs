@@ -206,7 +206,7 @@ async fn attendee_room_queue_publishes_ready_and_results_without_host_execution(
     let ready = serde_json::from_value(json!({
         "runtime_handle_id":"external-runtime", "runtime_owner_id":"external-owner", "runtime_lease_token":"external-lease",
         "provider_session_id":"external-session", "model":"contract-model", "reasoning_effort":"", "service_tier":"", "variant":"",
-        "execution_harness":"builtin", "permission_mode":"meeting_read_only", "max_output_tokens":0,
+        "execution_harness":"builtin", "permission_mode":"meeting_read_only", "max_output_tokens":0, "retained_interrupt":true,
     }))?;
     server
         .rooms()

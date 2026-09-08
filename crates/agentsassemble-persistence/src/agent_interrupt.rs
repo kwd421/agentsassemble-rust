@@ -161,6 +161,17 @@ async fn load_interruptible_session(
     let participant =
         load_participant(transaction, room_id, &session.public.participant_id).await?;
     require_busy_session(&session, &participant)?;
+    if session.public.external_owned && session.public.process_ownership == "external" {
+        let supported: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM room_attendee_invites invite JOIN attendee_connections connection USING(session_fingerprint) WHERE invite.room_id=? AND invite.participant_id=? AND connection.retained_interrupt=1)")
+            .bind(room_id).bind(agent_id).fetch_one(&mut **transaction).await?;
+        if !supported {
+            return Err(rejected(
+                "provider_turn_interrupt_unsupported",
+                "The external runtime has not reported retained-turn interrupt capability.",
+            ));
+        }
+    }
+
     let execution =
         load_execution_in(transaction, room_id, agent_id, session.turn_generation).await?;
     if load_optional_effect_in(transaction, room_id, agent_id, session.turn_generation)

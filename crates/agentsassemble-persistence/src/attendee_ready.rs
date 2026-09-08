@@ -11,6 +11,7 @@ use sqlx::{Sqlite, Transaction};
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttendeeRuntimeReady {
+    pub retained_interrupt: bool,
     pub runtime_handle_id: String,
     pub runtime_owner_id: String,
     pub runtime_lease_token: String,
@@ -58,8 +59,9 @@ impl AttendeeRuntimeReady {
         Ok(())
     }
 
-    fn from_session(session: &DurableAgentSession) -> Self {
+    fn from_session(session: &DurableAgentSession, retained_interrupt: bool) -> Self {
         Self {
+            retained_interrupt,
             runtime_handle_id: session.runtime_handle_id.clone(),
             runtime_owner_id: session.runtime_owner_id.clone(),
             runtime_lease_token: session.runtime_lease_token.clone(),
@@ -140,14 +142,20 @@ impl SqliteStore {
             ));
         }
         let first = session.runtime_handle_id.is_empty();
-        if !first && report != &AttendeeRuntimeReady::from_session(&session) {
+        let retained_interrupt: bool = sqlx::query_scalar(
+            "SELECT retained_interrupt FROM attendee_connections WHERE session_fingerprint=?",
+        )
+        .bind(connection.session.fingerprint.as_slice())
+        .fetch_one(&mut *tx)
+        .await?;
+        if !first && report != &AttendeeRuntimeReady::from_session(&session, retained_interrupt) {
             return Err(rejected(
                 "runtime_owner_mismatch",
                 "Reconnect must retain its exact external runtime and profile.",
             ));
         }
-        let changed = sqlx::query("UPDATE attendee_connections SET state='ready' WHERE session_fingerprint=? AND connection_id=? AND state='connected'")
-            .bind(connection.session.fingerprint.as_slice()).bind(connection.connection_id.to_string()).execute(&mut *tx).await?;
+        let changed = sqlx::query("UPDATE attendee_connections SET state='ready', retained_interrupt=? WHERE session_fingerprint=? AND connection_id=? AND state='connected'")
+            .bind(report.retained_interrupt).bind(connection.session.fingerprint.as_slice()).bind(connection.connection_id.to_string()).execute(&mut *tx).await?;
         if changed.rows_affected() == 0 {
             tx.commit().await?;
             return Ok(AgentTurnCommit {

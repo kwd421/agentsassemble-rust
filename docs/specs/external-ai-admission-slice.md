@@ -562,3 +562,28 @@ its transaction commits, preserving the exact committed effect against later wri
 No interruption policy, effect table, queue or timer is duplicated. Ten existing
 mute/recovery tests and three explicit-interrupt tests pass, together with affected
 all-target/all-feature Clippy. External interrupt delivery/reporting remains next.
+
+### External interrupt proof checkpoint (2026-09-08)
+
+Ready reports now bind the external runtime's retained-interrupt capability to its
+existing connection record; replacement preserves it and contradictory readiness
+fails. Schema 68 follows the existing exact-version rejection contract without data
+conversion. Explicit interrupt rejects unsupported external runtimes before effects.
+The canonical effect moves from prepared to dispatching when delivered to the exact
+connection, with one immutable nonce across reconnect. Delivery does not claim that
+provider I/O or quiescence succeeded, and introduces no host claim lease or timer.
+
+A positive retained/gone report compares the complete private delivery, then uses
+the shared turn owner and writes its public retry receipt in one transaction.
+New proofs require current session and connection authority. Exact receipt recovery
+uses the sealed cleanup authority so runtime-gone detachment cannot lose an already
+committed result; it does not grant ordinary room reads or result publication.
+Connection-ID authorization is reused from its current owner without repeating
+session validation inside the transaction.
+
+Seventeen attendee persistence tests pass, including replacement, exact concurrent
+retry, retained/gone outcomes, mute, unsupported capability and contradictory ready
+reports. After the connection-owner extraction, its three affected cases pass again.
+All five attendee HTTP/queue/socket cases pass with the explicit ready field, as does
+affected all-target/all-feature Clippy. Server command routing and interrupt transport
+are the next consumer; this storage checkpoint is not external CLI acceptance.

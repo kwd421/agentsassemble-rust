@@ -148,6 +148,7 @@ async fn attendee_idle_disconnect_requires_ready_before_assigning_queued_observa
 
 pub(super) fn report() -> AttendeeRuntimeReady {
     AttendeeRuntimeReady {
+        retained_interrupt: true,
         runtime_handle_id: "external-runtime".to_owned(),
         runtime_owner_id: "external-owner".to_owned(),
         runtime_lease_token: "external-generation".to_owned(),

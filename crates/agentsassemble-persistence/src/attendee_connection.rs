@@ -135,6 +135,27 @@ pub(crate) async fn revalidate_in(
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
     crate::attendee_session::revalidate_in(tx, &expected.session, now).await?;
+    require_current_id(tx, expected).await
+}
+
+pub(crate) async fn authorize_current_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    fingerprint: &[u8; 32],
+    connection_id: Uuid,
+    now: DateTime<Utc>,
+) -> Result<AttendeeConnectionAuthorization, PersistenceError> {
+    let connection = AttendeeConnectionAuthorization {
+        session: crate::attendee_session::authorize_in(tx, fingerprint, now).await?,
+        connection_id,
+    };
+    require_current_id(tx, &connection).await?;
+    Ok(connection)
+}
+
+async fn require_current_id(
+    tx: &mut Transaction<'_, Sqlite>,
+    expected: &AttendeeConnectionAuthorization,
+) -> Result<(), PersistenceError> {
     let live: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM attendee_connections WHERE session_fingerprint=? AND connection_id=? AND state!='disconnected')")
         .bind(expected.session.fingerprint.as_slice()).bind(expected.connection_id.to_string()).fetch_one(&mut **tx).await?;
     if !live {

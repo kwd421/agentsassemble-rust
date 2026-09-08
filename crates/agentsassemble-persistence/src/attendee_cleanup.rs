@@ -15,12 +15,12 @@ use crate::{
 };
 
 /// Revocation ends room access, but cannot prevent the external owner reporting exact cleanup.
-/// This sealed authority grants no room read, command, ready or turn-result operation.
+/// This sealed authority grants no room read, command, ready or ordinary turn-result operation.
 #[derive(Clone)]
 pub struct AttendeeCleanupAuthorization {
-    fingerprint: [u8; 32],
+    pub(crate) fingerprint: [u8; 32],
     room_uid: Uuid,
-    key: RoomRuntimeCleanupKey,
+    pub(crate) key: RoomRuntimeCleanupKey,
 }
 
 impl AttendeeCleanupAuthorization {
@@ -196,7 +196,7 @@ async fn authorize_in(
     })
 }
 
-async fn revalidate_in(
+pub(crate) async fn revalidate_in(
     tx: &mut Transaction<'_, Sqlite>,
     expected: &AttendeeCleanupAuthorization,
 ) -> Result<(), PersistenceError> {
