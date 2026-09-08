@@ -1149,3 +1149,12 @@ This prepares the same call site to await a managed child's reservation response
 Nine portal cases, three API tool cases and the complete external execution/tool
 relay case pass. Affected all-target/all-feature Clippy and unchanged mandatory
 gates pass; the managed tool wire exchange remains pending.
+
+Private transport values now serialize their existing native outcomes, attachment
+results and callback errors. Vote and random requests decode through their canonical
+domain parsers, including their existing bounds and derived dice fields. The worker
+reports its native driver's initial restart, interruption, attachment replay and
+uncertainty properties before readiness. No provider-kind policy is inferred in the
+parent. The two lifecycle/credential cases, two random and seven vote domain cases,
+affected all-target/all-feature Clippy and unchanged mandatory gates pass. The
+lifecycle cases still exercise an in-process worker with real guarded CLI children.

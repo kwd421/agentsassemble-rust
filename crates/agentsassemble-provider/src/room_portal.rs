@@ -33,7 +33,7 @@ pub(super) const ROOM_PORTAL_TOKEN_ENV_PREFIX: &str = "AGENTSASSEMBLE_INTERNAL_R
 
 const MAX_TURN_ID_BYTES: usize = 128;
 const MAX_ROOM_TOOL_RESULTS: usize = 32;
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderTurnOutcome {
     Message {
         content: String,

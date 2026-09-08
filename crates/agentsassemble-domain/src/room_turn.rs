@@ -64,6 +64,19 @@ pub struct RoomRandomError {
     pub message: String,
 }
 
+impl Serialize for RoomRandomRequest {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        (self.room_action(), self.canonical_payload()).serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for RoomRandomRequest {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let (action, payload) = <(String, Value)>::deserialize(deserializer)?;
+        Self::parse(&action, &payload).map_err(serde::de::Error::custom)
+    }
+}
+
 impl RoomRandomRequest {
     /// Parses the exact shared human/provider room-random contract.
     ///

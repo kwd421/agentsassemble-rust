@@ -132,7 +132,7 @@ pub struct ProviderRoomObservation {
     pub room_tool_ingress: Option<ProviderRoomToolIngress>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProviderTurnCompleted {
     pub turn_id: String,
     pub provider_turn_id: String,

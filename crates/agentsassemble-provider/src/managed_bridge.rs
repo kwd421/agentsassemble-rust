@@ -94,7 +94,13 @@ async fn run_launch<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     if parent_gone {
         return driver.stop().await.and(Err(protocol_error()));
     }
-    if let Err(error) = write(output, &Event::Ready { result: Ok(()) }).await {
+    let facts = wire::Facts::observe(driver.as_ref());
+    let ready = async {
+        write(output, &Event::Facts { facts }).await?;
+        write(output, &Event::Ready { result: Ok(()) }).await
+    }
+    .await;
+    if let Err(error) = ready {
         return driver.stop().await.and(Err(error));
     }
     let result = serve(input, output, session, driver.as_mut()).await;

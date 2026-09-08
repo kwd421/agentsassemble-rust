@@ -10,7 +10,7 @@ use tokio_util::codec::{FramedRead, FramedWrite, LengthDelimitedCodec};
 
 use crate::{
     credentials::private_handoff::SelectedCredential,
-    driver::{DriverError, ProviderSessionAttachment},
+    driver::{DriverError, ProviderDriver, ProviderSessionAttachment},
     launch_error::DriverLaunchError,
 };
 
@@ -42,6 +42,9 @@ pub(super) enum Command {
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "event", rename_all = "snake_case", deny_unknown_fields)]
 pub(super) enum Event {
+    Facts {
+        facts: Facts,
+    },
     Ready {
         result: Result<(), DriverLaunchError>,
     },
@@ -57,6 +60,37 @@ pub(super) enum Event {
         id: u64,
         result: Result<(), DriverError>,
     },
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Facts {
+    pub(super) retains_runtime_after_turn_interrupt: bool,
+    pub(super) continuity: Continuity,
+    pub(super) attachment_replay_is_safe: bool,
+    pub(super) turn_failure_effect_uncertain: bool,
+}
+
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub(super) enum Continuity {
+    Reusable,
+    RestartRequired,
+}
+
+impl Facts {
+    pub(super) fn observe(driver: &dyn ProviderDriver) -> Self {
+        Self {
+            retains_runtime_after_turn_interrupt: driver.retains_runtime_after_turn_interrupt(),
+            continuity: if driver.requires_restart() {
+                Continuity::RestartRequired
+            } else {
+                Continuity::Reusable
+            },
+            attachment_replay_is_safe: driver.attachment_replay_is_safe(),
+            turn_failure_effect_uncertain: driver.turn_failure_effect_uncertain(),
+        }
+    }
 }
 
 pub(super) type Reader<R> = FramedRead<R, LengthDelimitedCodec>;

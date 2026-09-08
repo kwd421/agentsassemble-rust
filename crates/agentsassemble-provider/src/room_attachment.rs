@@ -11,13 +11,14 @@ use serde::Serialize;
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub struct ProviderAttachment {
     pub id: String,
     pub filename: String,
     pub content_type: String,
     pub size: usize,
     pub is_image: bool,
+    #[serde(with = "private_bytes")]
     pub content: Vec<u8>,
 }
 
@@ -121,7 +122,7 @@ pub(crate) struct ProviderAttachmentReadAuthority {
     pub(crate) execution_id: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error, serde::Serialize, serde::Deserialize)]
 #[error("{message}")]
 pub struct ProviderAttachmentReadError {
     pub code: std::borrow::Cow<'static, str>,
@@ -233,5 +234,27 @@ fn invalid_response() -> ProviderAttachmentReadError {
     ProviderAttachmentReadError {
         code: "attachment_invalid".into(),
         message: "The room attachment response is invalid.".to_owned(),
+    }
+}
+
+// Private process frames use bounded base64 instead of expanding each byte into JSON digits.
+mod private_bytes {
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
+    use serde::{Deserialize, Serialize};
+
+    pub(super) fn serialize<S: serde::Serializer>(
+        bytes: &[u8],
+        serializer: S,
+    ) -> Result<S::Ok, S::Error> {
+        STANDARD.encode(bytes).serialize(serializer)
+    }
+
+    pub(super) fn deserialize<'de, D: serde::Deserializer<'de>>(
+        deserializer: D,
+    ) -> Result<Vec<u8>, D::Error> {
+        let encoded = String::deserialize(deserializer)?;
+        STANDARD
+            .decode(encoded)
+            .map_err(|_| serde::de::Error::custom("invalid attachment encoding"))
     }
 }

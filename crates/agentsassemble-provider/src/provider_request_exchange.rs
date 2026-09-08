@@ -4,7 +4,7 @@ use thiserror::Error;
 use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Error, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRequestExchangeError {
     #[error("the provider request queue is full")]
     Busy,

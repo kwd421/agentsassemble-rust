@@ -54,7 +54,7 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     )
     .await?;
     assert!(matches!(
-        read::<_, Event>(&mut input).await?,
+        read_event(&mut input).await?,
         Some(Event::Ready { result: Ok(()) })
     ));
     lease.release_launch_lifetime();
@@ -71,13 +71,13 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     )
     .await?;
     assert!(
-        matches!(read::<_, Event>(&mut input).await?, Some(Event::Attached { id: 1, result: Ok(attachment) }) if attachment.provider_session_id == "thread-1")
+        matches!(read_event(&mut input).await?, Some(Event::Attached { id: 1, result: Ok(attachment) }) if attachment.provider_session_id == "thread-1")
     );
     match termination {
         "stop" => {
             write(&mut output, &Command::Stop { id: 2 }).await?;
             assert!(matches!(
-                read::<_, Event>(&mut input).await?,
+                read_event(&mut input).await?,
                 Some(Event::Stopped {
                     id: 2,
                     result: Ok(())
@@ -142,4 +142,15 @@ async fn private_credential_handoff_has_no_keyring_access_or_unselected_account(
         Err(ProviderCredentialError::SecureStoreUnavailable)
     ));
     Ok(())
+}
+
+async fn read_event<R: tokio::io::AsyncRead + Unpin>(
+    input: &mut wire::Reader<R>,
+) -> Result<Option<Event>, crate::driver::DriverError> {
+    loop {
+        match read(input).await? {
+            Some(Event::Facts { .. }) => {}
+            event => return Ok(event),
+        }
+    }
 }

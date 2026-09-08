@@ -74,6 +74,19 @@ pub struct VoteSummary {
     pub close_reason: String,
 }
 
+impl Serialize for VoteCommand {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        self.to_payload().serialize(serializer)
+    }
+}
+
+impl<'de> Deserialize<'de> for VoteCommand {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let payload = Value::deserialize(deserializer)?;
+        Self::from_payload(&payload).map_err(|_| serde::de::Error::custom("invalid vote command"))
+    }
+}
+
 impl VoteCommand {
     /// Parses one exact non-ordinary `message.send` vote payload.
     ///

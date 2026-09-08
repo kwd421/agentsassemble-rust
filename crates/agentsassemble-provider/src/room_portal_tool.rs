@@ -6,7 +6,7 @@ use tokio::sync::{mpsc, oneshot};
 
 use super::{RoomToolAuthority, RoomToolReservation, tool_error};
 
-#[derive(Debug, Clone, PartialEq, Eq, Error)]
+#[derive(Debug, Clone, PartialEq, Eq, Error, serde::Serialize, serde::Deserialize)]
 #[error("{message}")]
 pub struct ProviderRoomToolError {
     pub code: std::borrow::Cow<'static, str>,
@@ -18,14 +18,14 @@ pub struct ProviderRoomToolIngress {
     sender: mpsc::Sender<ProviderRoomToolCommand>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolRequest {
     Random(RoomRandomRequest),
     SearchMessages { query: String, cursor: String },
     ReadMessageContext { event_id: String },
 }
 
-#[derive(Debug, Clone, PartialEq)]
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolResult {
     Random(RoomRandomResult),
     SearchMessages(RoomMessageSearchPage),
