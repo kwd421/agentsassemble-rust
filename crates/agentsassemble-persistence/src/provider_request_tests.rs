@@ -103,7 +103,7 @@ async fn request_open_replays_one_private_event_and_fences_changed_expired_or_re
     Ok(())
 }
 
-fn request_for(turn: &crate::AttendeeTurnReport) -> OpenProviderRequest {
+pub(super) fn request_for(turn: &crate::AttendeeTurnReport) -> OpenProviderRequest {
     OpenProviderRequest {
         turn_generation: turn.turn_generation,
         execution_id: turn.execution_id.clone(),

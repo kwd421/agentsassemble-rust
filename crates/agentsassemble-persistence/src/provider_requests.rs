@@ -55,7 +55,7 @@ impl SqliteStore {
             &request.execution_id,
         )
         .await?;
-        let result = open_in(&mut tx, &session, request, now).await?;
+        let result = open_in(&mut tx, &session, request, None, now).await?;
         tx.commit().await?;
         Ok(result)
     }
@@ -80,7 +80,7 @@ impl SqliteStore {
             &request.execution_id,
         )
         .await?;
-        let result = open_in(&mut tx, &session, request, now).await?;
+        let result = open_in(&mut tx, &session, request, Some(connection_id), now).await?;
         tx.commit().await?;
         Ok(result)
     }
@@ -91,6 +91,7 @@ async fn open_in(
     tx: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
     input: &OpenProviderRequest,
+    connection_id: Option<Uuid>,
     now: DateTime<Utc>,
 ) -> Result<ProviderRequestCommit, PersistenceError> {
     if !input.request.is_valid() {
@@ -117,7 +118,16 @@ async fn open_in(
         ));
     }
     let request_id = input.request.provider_request_id.to_string();
-    if let Some(existing) = replay_in(tx, session, input, &participant.owner_id, now).await? {
+    if let Some(existing) = replay_in(
+        tx,
+        session,
+        input,
+        &participant.owner_id,
+        connection_id,
+        now,
+    )
+    .await?
+    {
         return Ok(existing);
     }
     let pending: i64 = sqlx::query_scalar(
@@ -159,7 +169,7 @@ async fn open_in(
     )
     .await?;
     sqlx::query(
-        "INSERT INTO provider_requests(room_id, request_id, session_id, turn_generation, execution_id, owner_id, request_json, expires_at, state, open_event_id) VALUES (?,?,?,?,?,?,?,?,'open',?)",
+        "INSERT INTO provider_requests(room_id, request_id, session_id, turn_generation, execution_id, owner_id, request_json, expires_at, state, open_event_id, connection_id) VALUES (?,?,?,?,?,?,?,?,'open',?,?)",
     )
     .bind(room_id)
     .bind(&request_id)
@@ -170,6 +180,7 @@ async fn open_in(
     .bind(encoded)
     .bind(expires_at.timestamp_millis())
     .bind(&event.id)
+    .bind(connection_id.map(|id| id.to_string()))
     .execute(&mut **tx)
     .await?;
     Ok(ProviderRequestCommit {
@@ -191,13 +202,14 @@ async fn replay_in(
     session: &DurableAgentSession,
     input: &OpenProviderRequest,
     owner_id: &str,
+    connection_id: Option<Uuid>,
     now: DateTime<Utc>,
 ) -> Result<Option<ProviderRequestCommit>, PersistenceError> {
     let room_id = &session.public.room_id;
     let session_id = &session.public.session_id;
     let request_id = input.request.provider_request_id.to_string();
     let Some(row) = sqlx::query(
-        "SELECT session_id, turn_generation, execution_id, owner_id, request_json, expires_at, state, open_event_id FROM provider_requests WHERE room_id=? AND request_id=?",
+        "SELECT session_id, turn_generation, execution_id, owner_id, request_json, expires_at, state, open_event_id, connection_id FROM provider_requests WHERE room_id=? AND request_id=?",
     )
     .bind(room_id)
     .bind(&request_id)
@@ -211,6 +223,7 @@ async fn replay_in(
                 .map_err(|_| PersistenceError::CommandConflict)?
         || row.get::<&str, _>("execution_id") != input.execution_id
         || row.get::<&str, _>("owner_id") != owner_id
+        || row.get::<Option<String>, _>("connection_id") != connection_id.map(|id| id.to_string())
         || stored != input.request
     {
         return Err(PersistenceError::CommandConflict);

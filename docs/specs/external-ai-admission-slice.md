@@ -335,6 +335,18 @@ the first response and replay. The focused storage case covers these boundaries 
 ordinary-view hiding. Resolution, terminal lifecycle and live delivery still need
 integration before request acceptance; this checkpoint does not expose a new route.
 
+Schema 70 binds external requests to their opening connection and retains resolution
+and terminal event identities. Human resolution revalidates actual ownership,
+membership, posting authority, admission and exact execution in the same transaction.
+Concurrent matching responses yield one non-serializable delivery claim; a keyed,
+purpose-separated response fingerprint detects changed secret answers without storing
+their values or a guessable raw hash. Delivery completion, exact-execution cancellation
+and stored-deadline expiry own separate terminal transitions and private events.
+Three focused persistence cases pass, covering single delivery, secret-free storage,
+wrong-owner rejection, terminal replay, expiry, cancellation and replaced connections.
+Persistence all-target/all-feature Clippy passes. Live broker, startup reconciliation,
+transport/native consumers and packaged controls remain pending for this contract.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

@@ -16,6 +16,7 @@ const TABLES: &[TableDefinition] = &[
             "owner_id TEXT NOT NULL CHECK(length(owner_id)>0), request_json TEXT NOT NULL, ",
             "expires_at INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('open','resolving','resolved','denied','cancelled','expired','failed')), ",
             "open_event_id TEXT NOT NULL, resolution_json TEXT, resolution_fingerprint BLOB CHECK(resolution_fingerprint IS NULL OR length(resolution_fingerprint)=32), ",
+            "connection_id TEXT, resolution_event_id TEXT, closed_event_id TEXT, ",
             "PRIMARY KEY(room_id,request_id), ",
             "FOREIGN KEY(room_id,session_id) REFERENCES agent_sessions(room_id,session_id) ON DELETE CASCADE) STRICT"
         ),

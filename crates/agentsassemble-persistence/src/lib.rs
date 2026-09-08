@@ -131,13 +131,20 @@ mod room_directory;
 mod room_lifecycle;
 pub use room_deletion::{RoomDeletionMutation, RoomDeletionPage};
 pub use room_lifecycle::RoomLifecycleMutation;
+mod provider_request_authority;
+mod provider_request_completion;
+pub use provider_request_completion::ProviderRequestDeliveryOutcome;
+mod provider_request_resolution;
 mod provider_requests;
+pub use provider_request_resolution::{ProviderRequestDelivery, ProviderRequestResolutionCommit};
 mod room_event_publication;
 mod room_event_sequence;
 mod room_history;
 mod room_preferences;
 mod room_random;
 pub use provider_requests::{OpenProviderRequest, ProviderRequestCommit};
+#[cfg(test)]
+mod provider_request_resolution_tests;
 #[cfg(test)]
 mod provider_request_tests;
 mod room_runtime_cleanup;
