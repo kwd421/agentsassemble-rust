@@ -9,6 +9,7 @@ import type { SideChatUpdate } from "../types/generated/SideChatUpdate";
 import type { RoomSocketHandle } from "../roomSocketTypes";
 
 type Connection = {
+  scope: object;
   abort: AbortController;
   snapshot: SideChatSnapshot | null;
   buffered: SideChatUpdate[];
@@ -25,7 +26,7 @@ export function useRoomSideChat(roomId: string, authority: RoomHttpAuthority | u
   const connectionRef = useRef<Connection | null>(null);
   const [drafts, setDrafts] = useState<Record<string, string>>({});
   const [view, setView] = useState<View>({ scope, snapshot: null, error: "", busy: false });
-  const current = useCallback((connection: Connection) => currentScope.current === scope && connectionRef.current === connection && !connection.abort.signal.aborted, [scope]);
+  const current = useCallback((connection: Connection) => currentScope.current === scope && connection.scope === scope && connectionRef.current === connection && !connection.abort.signal.aborted, [scope]);
   const fail = useCallback((connection: Connection, error: unknown) => {
     if (!current(connection)) return;
     connection.failed = true;
@@ -47,7 +48,7 @@ export function useRoomSideChat(roomId: string, authority: RoomHttpAuthority | u
   const connect = useCallback((roomUid: string) => {
     if (currentScope.current !== scope || !scope.roomId || !scope.authority) return;
     connectionRef.current?.abort.abort();
-    const connection: Connection = { abort: new AbortController(), snapshot: null, buffered: [], failed: false, sending: false };
+    const connection: Connection = { scope, abort: new AbortController(), snapshot: null, buffered: [], failed: false, sending: false };
     connectionRef.current = connection;
     setView({ scope, snapshot: null, error: "", busy: false });
     void fetchSideChatSnapshot(scope.roomId, roomUid, scope.authority, connection.abort.signal).then((snapshot) => {

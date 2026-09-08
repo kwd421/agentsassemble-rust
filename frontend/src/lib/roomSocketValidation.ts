@@ -1,3 +1,6 @@
+import { channelMessageFieldsAreValid } from "./channelMessageContract";
+import { isCustomChannelId } from "./customChannelId";
+import { CHANNEL_MESSAGE_EVENT_TYPE } from "../types/generated/TEXT_CHAT_WIRE";
 import { isSequence } from "./roomSequence";
 import { parseSideChatUpdate } from "./sideChatContract";
 import { isRoomLifecycleEvent, parsePublicRoom, roomFromLifecycleEvent } from "./roomLifecycleContract";
@@ -161,6 +164,7 @@ function publicRoomSettingsMatch(left: unknown, right: unknown): boolean {
 
 export function eventProjectionIsValid(event: RoomEvent): boolean {
   try {
+    if (event.type === CHANNEL_MESSAGE_EVENT_TYPE && !channelMessageFieldsAreValid(event)) return false;
     if (isRoomLifecycleEvent(event)) roomFromLifecycleEvent(event);
     if (
       event.type === "room_settings_updated" &&
@@ -287,6 +291,24 @@ function roomHistoryResultIsValid(
   );
 }
 
+function channelHistoryResultIsValid(
+  payload: Record<string, unknown>, result: Record<string, unknown>, roomId: string,
+): boolean {
+  try {
+    assertExactKeys(result, ["room_id", "channel_id", "events", "oldest_seq", "last_seq", "has_more_before"], "channel history");
+    const { before_seq: before, limit, channel_id: channelId } = payload;
+    if (!isCustomChannelId(channelId) || !isSequence(before) || !isSequence(limit) || limit < 1 || limit > ROOM_HISTORY_MAX_EVENTS ||
+      result.room_id !== roomId || result.channel_id !== channelId || !Array.isArray(result.events) || result.events.length > limit ||
+      !isSequence(result.oldest_seq) || !isSequence(result.last_seq) || typeof result.has_more_before !== "boolean") return false;
+    const events = result.events;
+    if (!events.every((event) => publicRoomEventIsValid(event, roomId) && event.type === CHANNEL_MESSAGE_EVENT_TYPE &&
+      event.channel_id === channelId && event.seq <= Number(result.last_seq) && (before === 0 || event.seq < before))) return false;
+    return result.oldest_seq === (events[0]?.seq ?? 0) && (!result.has_more_before || events.length > 0) &&
+      new Set(events.map((event) => event.id)).size === events.length &&
+      events.every((event, index) => index === 0 || event.seq > events[index - 1].seq);
+  } catch { return false; }
+}
+
 export function commandAckResultIsValid(
   action: string,
   payload: Record<string, unknown>,
@@ -309,6 +331,14 @@ export function commandAckResultIsValid(
     } catch {
       return false;
     }
+  }
+  if (action === "channel.history") return channelHistoryResultIsValid(payload, result, expectedRoomId);
+  if (action === "channel.message.send") {
+    try {
+      assertExactKeys(result, ["channel_id", "event", "event_seq"], "channel message ACK");
+      return Boolean(hasDurableEvent && event?.type === CHANNEL_MESSAGE_EVENT_TYPE &&
+        event.channel_id === payload.channel_id && result.channel_id === payload.channel_id && event.participant_id === expectedParticipantId);
+    } catch { return false; }
   }
   if (action === "message.send" || action.startsWith("room.random.")) {
     return hasDurableEvent && event?.type === "message_final";

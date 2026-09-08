@@ -55,6 +55,7 @@ type OpenRoomSocket = (
 
 const NO_STREAMS: RoomStream[] = [];
 type CanonicalRoomCallbacks = {
+  onRoomEvents?: (events: RoomEvent[]) => void;
   onSideChat?: (update: import("./types/generated/SideChatUpdate").SideChatUpdate) => void;
   onSideChatReady?: (roomUid: string) => void;
   onSideChatClose?: () => void;
@@ -91,6 +92,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
   } = options;
   const callbacksRef = useRef<CanonicalRoomCallbacks>({});
   callbacksRef.current = {
+    onRoomEvents: options.onRoomEvents,
     onSideChat: options.onSideChat,
     onSideChatReady: options.onSideChatReady,
     onSideChatClose: options.onSideChatClose,
@@ -382,6 +384,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
             return;
           }
           applyEvents(roomId, events);
+          callbacksRef.current.onRoomEvents?.(events);
           if (terminalRoom) {
             callbacksRef.current.onRoomLifecycle?.(terminalRoom);
             currentSocket.close();
@@ -736,7 +739,7 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       Boolean(roomId && auth) &&
       lastError instanceof RoomSocketSayError &&
       [
-        "event_sequence_gap", "event_sequence_invalid",
+        "event_sequence_gap", "event_sequence_invalid", "room_scope_changed",
         "plugin_event_gap", "resync_required",
         "settings_ack_invalid", "settings_conflict", "settings_snapshot_invalid",
         "authorization_failed", "socket_connection_failed",

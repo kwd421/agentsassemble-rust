@@ -264,3 +264,33 @@ All 37 affected frontend cases pass (3.64 s); the production build and unchanged
 CSS cascade pass. The dock adds about 3 KiB of compressed frontend code, one
 bounded private projection and one in-flight bootstrap. Structure, 19 policy,
 formatting, diff and artifact checks pass; visible packaged behavior is not yet proven.
+
+## Channel client contract and retained window
+
+The channel client uses generated text bounds and the 80-event default page size.
+Its ACK validator binds channel history and send responses to the requested room,
+channel, cursor, current author and channel-message schema. Channel room sequences
+may be separated by other room events; they are strictly ordered but need not be
+consecutive. These records remain excluded from the lobby transcript projection.
+
+A selected-channel hook owns one bounded 200-message window and buffers live events
+while the initial page is pending. It adds only events after the page's room cut,
+keeps older navigation stable, indicates newly arrived messages and reloads latest
+history on request. Room, UID, channel and canonical connection changes invalidate
+late reads and send receipts. It adds no poll, timer, second socket or per-channel cache.
+The canonical hook exposes accepted room events to this owner before its own
+bounded React event window can discard older delivery.
+
+An actual client regression reproduced an existing retry defect: a pending channel
+send was replayed after a native reconnect resolved a recreated namesake room. The
+shared socket now binds its accepted room UID, rejects old pending outcomes as
+unknown and reconnects from cursor zero before accepting that new room's history.
+The correction prevents both old intent replay and old/new transcript mixing;
+ordinary reconnect retry semantics are unchanged. The failing and corrected cases
+are captured by `roomSocketClient.channel.test.ts`.
+
+Affected socket/canonical/hook cases pass (106 unchanged cases plus the corrected
+incarnation case); the production frontend build/CSS and protocol Clippy pass.
+The added window remains bounded at 200 events; the 300-message burst test confirms
+retention. Unchanged structure, 19 policy, formatting and artifact gates pass.
+Channel mounting, search/pins and packaged acceptance remain subsequent work.

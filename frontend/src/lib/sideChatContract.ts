@@ -1,7 +1,8 @@
 import type { SideChatMessage } from "../types/generated/SideChatMessage";
 import type { SideChatSnapshot } from "../types/generated/SideChatSnapshot";
 import type { SideChatUpdate } from "../types/generated/SideChatUpdate";
-import { MAX_TEXT_CHAT_CHARACTERS, SIDE_CHAT_MAX_MESSAGES } from "../types/generated/SIDE_CHAT_WIRE";
+import { MAX_TEXT_CHAT_CHARACTERS } from "../types/generated/TEXT_CHAT_WIRE";
+import { SIDE_CHAT_MAX_MESSAGES } from "../types/generated/SIDE_CHAT_WIRE";
 import { assertExactKeys, strictRecord } from "./strictJsonContract";
 import { isSequence } from "./roomSequence";
 import { isUnicodeScalarString } from "./unicodeScalarString";

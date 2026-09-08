@@ -3,7 +3,7 @@ import { AtSign, MessageSquare, Send, Smile } from "lucide-react";
 import type { useRoomSideChat } from "../../app/useRoomSideChat";
 import type { RoomSocketHandle } from "../../roomSocketTypes";
 import type { Mentionable } from "../../lib/mentionComposerModel";
-import { MAX_TEXT_CHAT_CHARACTERS } from "../../types/generated/SIDE_CHAT_WIRE";
+import { MAX_TEXT_CHAT_CHARACTERS } from "../../types/generated/TEXT_CHAT_WIRE";
 import DiscordText from "./DiscordText";
 import MentionInput from "./MentionInput";
 

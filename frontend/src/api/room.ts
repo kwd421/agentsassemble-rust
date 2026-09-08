@@ -1,3 +1,4 @@
+import { isCustomChannelId } from "../lib/customChannelId";
 import type { RoomAppearance } from "../lib/roomAppearance";
 import type { Participant } from "../types/generated/Participant";
 import {
@@ -148,7 +149,7 @@ function parseChannelSettings(
   return Object.fromEntries(
     Object.entries(settings).map(([channelId, raw]) => {
       if (!new Set(["lobby", "live", "board", "records"]).has(channelId) &&
-        !/^c[0-9a-f]{12}$/.test(channelId)) {
+        !isCustomChannelId(channelId)) {
         throw new Error(`${label}.${channelId} 식별자가 올바르지 않습니다.`);
       }
       const entry = strictRecord(raw, `${label}.${channelId}`);

@@ -1,3 +1,4 @@
+import { parsePublicRoom } from "./lib/roomLifecycleContract";
 import {
   getWsTicket,
   type RoomEvent,
@@ -112,6 +113,7 @@ export function openRoomSocket(
   let reconnectTimer = 0;
   let reconnectAttempt = 0;
   let lastSeq = 0;
+  let acceptedRoomUid: string | null = null;
   let transportReady = false;
   let sendPendingForConnection: (() => void) | null = null;
   let stopKeepaliveForConnection: (() => void) | null = null;
@@ -404,6 +406,16 @@ export function openRoomSocket(
           const msg = JSON.parse(raw) as unknown;
           verifyBoundSnapshot(msg, receipt);
           if (!canUseOpenSocket()) return;
+          const candidateRoomUid = isRecord(msg) && isRecord(msg.room) ? msg.room.room_uid : null;
+          if (acceptedRoomUid !== null && candidateRoomUid !== acceptedRoomUid) {
+            const room = parsePublicRoom(isRecord(msg) ? msg.room : undefined, dependencies.expectedRoomId);
+            // A fresh native ticket may resolve a reused name, but cannot move
+            // earlier pending intent or a resume cursor into that room lifetime.
+            rejectAll(new RoomSocketSayError("The room lifetime changed before pending commands were confirmed.", "room_scope_changed"));
+            acceptedRoomUid = room.room_uid;
+            lastSeq = 0;
+            throw new RoomSocketSayError("The room was recreated; reconnecting with fresh history.", "room_scope_changed");
+          }
           const validationError = snapshotValidationError(msg, {
             expectedRoomId: dependencies.expectedRoomId,
             currentLastSeq: lastSeq,
@@ -421,6 +433,7 @@ export function openRoomSocket(
               "snapshot_rejected"
             );
           }
+          acceptedRoomUid = snapshot.room.room_uid;
           lastSeq = snapshot.last_seq;
           snapshotAccepted = true;
           markReady();
