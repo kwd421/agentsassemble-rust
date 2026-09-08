@@ -1253,3 +1253,26 @@ native registration, attachment, liveness and positive worker cleanup. Secure-st
 failure is preserved by native registration at startup, with verified safe absence.
 Both branches pass without an HTTP completion or real provider credential; affected
 Clippy and unchanged gates pass. This proves private launch custody, not API output.
+
+ACP request integration retains the existing exact room-tool auto-allow policy;
+other native permission options use the current room request broker and exact active
+execution. Native session mismatch, cancellation and missing ingress never grant
+permission. The installed ACP responder queues responses synchronously, so its return
+cannot prove delivery: the existing outgoing transport must acknowledge the exact
+response only after flushing native stdin, then await the broker's durable receipt.
+Turn end/interrupt and protocol shutdown cancel pending exchanges. Verify a native
+permission/owner-answer/flushed-response/receipt flow and cancellation with local
+protocol peers before claiming this consumer complete.
+
+The ACP consumer is connected for Grok and Cursor using the actual turn ingress.
+Native option IDs remain private; the owner sees bounded option choices and a
+redacted title. Existing automatic room-tool permission checks remain authoritative.
+The outgoing sink confirms a selected response only after native stdin flush;
+turn completion waits for the broker receipt. Native cancellation and shutdown drop
+live exchanges, and failed request delivery prevents a successful turn receipt.
+Nine affected ACP cases pass, including the actual protocol answer/receipt and
+cancel flows plus broken native stdin, as do affected Clippy and unchanged gates.
+No additional task or timer is spawned: scoped tokens track the existing library
+handlers, and response delivery holds at most 128 entries. Outgoing JSON is inspected
+only while a response awaits delivery. Claude's native hooks and packaged integrated
+managed controls remain pending; these local peers do not prove real ACP execution.

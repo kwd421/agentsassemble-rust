@@ -34,7 +34,7 @@ async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
     assert!(!attached.reused);
 
     let turn = client
-        .prompt("turn-1", "Hello", false)
+        .prompt("room-session", &turn("turn-1", "Hello", false))
         .await
         .unwrap_or_else(|error| panic!("complete ACP prompt: {error}"));
     assert_eq!(turn.turn_id, "turn-1");
@@ -63,7 +63,10 @@ async fn tool_only_completion_is_reserved_for_room_publication_validation() {
             .await
             .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
         let result = client
-            .prompt("tool-turn", "Tool only", room_observation)
+            .prompt(
+                "room-session",
+                &turn("tool-turn", "Tool only", room_observation),
+            )
             .await;
         if room_observation {
             let turn = result.unwrap_or_else(|error| panic!("allow portal validation: {error}"));
@@ -92,7 +95,8 @@ async fn cancellation_waits_for_the_exact_acp_cancelled_receipt() {
         .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
         .await
         .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
-    let mut pending = Box::pin(client.prompt("turn-cancel", "Wait", false));
+    let request = turn("turn-cancel", "Wait", false);
+    let mut pending = Box::pin(client.prompt("room-session", &request));
     tokio::select! {
         biased;
         _result = &mut pending => panic!("fixture completed before cancellation"),
@@ -108,6 +112,66 @@ async fn cancellation_waits_for_the_exact_acp_cancelled_receipt() {
     fixture
         .await
         .unwrap_or_else(|error| panic!("join ACP fixture: {error}"));
+}
+
+#[tokio::test]
+async fn native_permission_uses_exact_owner_and_waits_for_delivery_receipt_or_cancellation() {
+    for cancel in [false, true] {
+        let (mut client, fixture, _) = fixture(cancel).await;
+        client
+            .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
+            .await
+            .unwrap_or_else(|error| panic!("attach: {error}"));
+        let (ingress, mut requests) = crate::ProviderRequestIngress::channel(1);
+        let mut request = turn("permission-turn", "Permission", false);
+        request.request_ingress = Some(ingress);
+        let mut prompt = Box::pin(client.prompt("room-session", &request));
+        let command = tokio::select! {
+            biased;
+            result = &mut prompt => panic!("prompt ended before permission: {result:?}"),
+            command = requests.recv() => command.unwrap_or_else(|| panic!("missing permission")),
+        };
+        assert_eq!(command.session_id, "room-session");
+        assert_eq!(command.turn_generation, request.turn_generation);
+        assert_eq!(command.execution_id, request.execution_id);
+        let (exchange, mut responder, mut completion) = crate::ProviderRequestExchange::channel();
+        command.complete(Ok(exchange));
+        if cancel {
+            drop(prompt);
+            let cancel = client.cancel(&request.turn_id);
+            tokio::pin!(cancel);
+            tokio::select! {
+                biased;
+                result = &mut cancel => {
+                    result.unwrap_or_else(|error| panic!("native cancellation: {error}"));
+                    assert!(!completion.completion().await);
+                }
+                delivered = completion.completion() => {
+                    assert!(!delivered);
+                    cancel.await.unwrap_or_else(|error| panic!("native cancellation: {error}"));
+                }
+            }
+        } else {
+            responder
+                .respond(agentsassemble_domain::ProviderRequestResolution::Option {
+                    option_id: "option-0".to_owned(),
+                })
+                .unwrap_or_else(|error| panic!("answer: {error}"));
+            tokio::select! {
+                biased;
+                result = &mut prompt => panic!("prompt ended before durable receipt: {result:?}"),
+                delivered = completion.completion() => assert!(delivered),
+            }
+            completion.finish(Ok(()));
+            prompt
+                .await
+                .unwrap_or_else(|error| panic!("permission turn: {error}"));
+        }
+        client.shutdown().await;
+        fixture
+            .await
+            .unwrap_or_else(|error| panic!("native permission peer: {error}"));
+    }
 }
 
 #[tokio::test]
@@ -237,6 +301,9 @@ async fn run_fixture(
             serde_json::from_str(&line).unwrap_or_else(|error| panic!("fixture JSON: {error}"));
         let method = message.get("method").and_then(Value::as_str).unwrap_or("");
         let id = message.get("id").cloned();
+        if permission_event(&mut output, &message, &mut pending_prompt, cancel_prompt).await {
+            continue;
+        }
         match method {
             "initialize" => {
                 respond(&mut output, id, initialize_response()).await;
@@ -425,4 +492,80 @@ async fn write(output: &mut DuplexStream, message: Value) {
         .flush()
         .await
         .unwrap_or_else(|error| panic!("flush fixture message: {error}"));
+}
+
+fn turn(id: &str, input: &str, observed: bool) -> crate::driver::ProviderTurnRequest {
+    crate::driver::ProviderTurnRequest {
+        turn_id: id.to_owned(),
+        turn_generation: 7,
+        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
+        input: input.to_owned(),
+        request_ingress: None,
+        room_observation: observed.then(|| crate::driver::ProviderRoomObservation {
+            session_id: "room-session".to_owned(),
+            input_up_to_seq: 1,
+            view: "#1 Human: test".to_owned(),
+            attachment_ids: vec![],
+            attachment_ingress: None,
+            allowed_agent_ids: vec![],
+            tabletop_tools: false,
+            room_tool_ingress: None,
+        }),
+    }
+}
+
+async fn permission_event(
+    output: &mut DuplexStream,
+    message: &Value,
+    pending_prompt: &mut Option<Value>,
+    cancel_prompt: bool,
+) -> bool {
+    let method = message.get("method").and_then(Value::as_str).unwrap_or("");
+    let id = message.get("id").cloned();
+    match method {
+        "session/prompt"
+            if message.pointer("/params/prompt/0/text") == Some(&json!("Permission")) =>
+        {
+            *pending_prompt = id;
+            let mut request = permission_request("native-tool", "workspace_write");
+            request.session_id = SessionId::new("cursor-session");
+            write(
+                output,
+                json!({"jsonrpc": "2.0", "id": "native-permission",
+                    "method": "session/request_permission", "params": request}),
+            )
+            .await;
+        }
+        "" if id == Some(json!("native-permission")) => {
+            if cancel_prompt {
+                assert_eq!(
+                    message.pointer("/result/outcome/outcome"),
+                    Some(&json!("cancelled"))
+                );
+            } else {
+                assert_eq!(
+                    message.pointer("/result/outcome/optionId"),
+                    Some(&json!("allow"))
+                );
+                notify(
+                    output,
+                    SessionNotification::new(
+                        "cursor-session",
+                        SessionUpdate::AgentMessageChunk(ContentChunk::new(ContentBlock::Text(
+                            TextContent::new("Permission complete"),
+                        ))),
+                    ),
+                )
+                .await;
+                respond(
+                    output,
+                    pending_prompt.take(),
+                    PromptResponse::new(StopReason::EndTurn),
+                )
+                .await;
+            }
+        }
+        _ => return false,
+    }
+    true
 }

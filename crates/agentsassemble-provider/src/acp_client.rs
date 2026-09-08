@@ -20,19 +20,19 @@ use agent_client_protocol::schema::{
     },
 };
 use agent_client_protocol::{Agent, Client, ConnectionTo, Lines};
-use futures_util::{Sink, SinkExt, StreamExt};
+use futures_util::StreamExt;
 use tokio::{
     sync::{oneshot, watch},
     task::JoinHandle,
 };
 use tokio_util::{
-    codec::{FramedRead, FramedWrite, LinesCodec},
+    codec::{FramedRead, LinesCodec},
     sync::CancellationToken,
 };
 
 use crate::room_portal_tool_contract::PROVIDER_ROOM_TOOL_NAMES;
 use crate::{
-    driver::{DriverError, ProviderTurnCompleted},
+    driver::{DriverError, ProviderTurnCompleted, ProviderTurnRequest},
     launch_error::DriverLaunchError,
     room_portal::ProviderTurnOutcome,
 };
@@ -42,12 +42,19 @@ const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
 const MAX_RESPONSE_BYTES: usize = 128 * 1024;
 type ProtocolReady = (ConnectionTo<Agent>, AgentCapabilities, Option<String>);
 
+#[path = "acp_delivery.rs"]
+mod delivery;
+#[path = "acp_permissions.rs"]
+mod permissions;
+
 #[derive(Default)]
 struct ProtocolState {
     permission_policy: AcpPermissionPolicy,
     room_observation_active: bool,
     session_id: Option<SessionId>,
     active_turn_id: Option<String>,
+    request_turn: Option<permissions::RequestTurn>,
+    request_failed: bool,
     active_tools: HashMap<String, String>,
     output: String,
     output_overflow: bool,
@@ -179,12 +186,14 @@ impl AcpClient {
 
     pub(super) async fn prompt(
         &mut self,
-        turn_id: &str,
-        input: &str,
-        room_observation: bool,
+        session_id: &str,
+        request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnCompleted, DriverError> {
-        self.start_turn(turn_id, input)?;
+        let turn_id = &request.turn_id;
+        let room_observation = request.room_observation.is_some();
+        self.start_turn(session_id, request)?;
         let stop_reason = self.await_turn(turn_id).await?;
+        self.finish_requests().await?;
         let output = self.take_output(turn_id)?;
         let Some(session_id) = self.attached_session_id.as_ref().map(ToString::to_string) else {
             return self.poison(protocol_error());
@@ -224,6 +233,12 @@ impl AcpClient {
         if self.active_turn.as_ref().map(|turn| turn.turn_id.as_str()) != Some(turn_id) {
             return self.poison(protocol_error());
         }
+        {
+            let state = self.state.lock().map_err(|_| protocol_error())?;
+            if let Some(turn) = &state.request_turn {
+                turn.cancel();
+            }
+        }
         if self
             .connection
             .send_notification(CancelNotification::new(session_id))
@@ -236,6 +251,7 @@ impl AcpClient {
             Ok(Err(error)) => return Err(error),
             Err(_) => return self.poison(protocol_error()),
         };
+        self.finish_requests().await?;
         self.take_output(turn_id)?;
         if reason == StopReason::Cancelled {
             Ok(())
@@ -251,6 +267,20 @@ impl AcpClient {
         self.closed.load(Ordering::Acquire)
     }
 
+    async fn finish_requests(&self) -> Result<(), DriverError> {
+        let handlers = self
+            .state
+            .lock()
+            .map_err(|_| protocol_error())?
+            .request_turn
+            .as_ref()
+            .map(permissions::RequestTurn::close);
+        if let Some(handlers) = handlers {
+            handlers.wait().await;
+        }
+        Ok(())
+    }
+
     pub(super) fn requires_restart(&self) -> bool {
         self.poisoned || self.is_closed()
     }
@@ -263,12 +293,22 @@ impl AcpClient {
     }
 
     pub(super) async fn shutdown(&mut self) {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .request_turn
+            .take();
         self.shutdown.cancel();
         self.task.abort();
         let _ = (&mut self.task).await;
     }
 
-    fn start_turn(&mut self, turn_id: &str, input: &str) -> Result<(), DriverError> {
+    fn start_turn(
+        &mut self,
+        room_session_id: &str,
+        request: &ProviderTurnRequest,
+    ) -> Result<(), DriverError> {
+        let turn_id = &request.turn_id;
         let Some(session_id) = self.attached_session_id.clone() else {
             return self.poison(protocol_error());
         };
@@ -283,6 +323,8 @@ impl AcpClient {
                 return self.poison(protocol_error());
             };
             state.active_turn_id = Some(turn_id.to_owned());
+            state.request_turn = Some(permissions::RequestTurn::new(room_session_id, request));
+            state.request_failed = false;
             state.active_tools.clear();
             state.output.clear();
             state.output_overflow = false;
@@ -290,7 +332,7 @@ impl AcpClient {
         let connection = self.connection.clone();
         let prompt = PromptRequest::new(
             session_id,
-            vec![ContentBlock::Text(TextContent::new(input.to_owned()))],
+            vec![ContentBlock::Text(TextContent::new(request.input.clone()))],
         );
         let (sender, completion) = watch::channel(None);
         let task = tokio::spawn(async move {
@@ -350,6 +392,14 @@ impl AcpClient {
         let Ok(mut state) = self.state.lock() else {
             return self.poison(protocol_error());
         };
+        state.request_turn.take();
+        if state.request_failed {
+            state.active_turn_id = None;
+            state.active_tools.clear();
+            state.output.clear();
+            self.poisoned = true;
+            return Err(permissions::request_error());
+        }
         if state.active_turn_id.as_deref() != Some(turn_id) || state.output_overflow {
             state.active_turn_id = None;
             state.active_tools.clear();
@@ -499,6 +549,11 @@ impl AcpClient {
 
 impl Drop for AcpClient {
     fn drop(&mut self) {
+        self.state
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .request_turn
+            .take();
         self.shutdown.cancel();
         self.task.abort();
     }
@@ -522,7 +577,8 @@ where
             LinesCodec::new_with_max_length(MAX_PROTOCOL_LINE_BYTES),
         )
         .map(|line| line.map_err(io::Error::other));
-        let outgoing = outgoing_lines(stdin);
+        let deliveries = delivery::Deliveries::default();
+        let outgoing = delivery::outgoing_lines(stdin, deliveries.clone());
         let _ = Client
             .builder()
             .on_receive_notification(
@@ -539,7 +595,7 @@ where
                 {
                     let state = Arc::clone(&state);
                     async move |request: RequestPermissionRequest, responder, _connection| {
-                        responder.respond(permission_response(&state, &request))
+                        permissions::handle(&state, &deliveries, request, responder).await
                     }
                 },
                 agent_client_protocol::on_receive_request!(),
@@ -717,15 +773,6 @@ fn selected_value(kind: &SessionConfigKind) -> Option<&str> {
 
 fn is_model_option(option: &SessionConfigOption) -> bool {
     option.category == Some(SessionConfigOptionCategory::Model) || option.id.to_string() == "model"
-}
-
-fn outgoing_lines<W>(writer: W) -> impl Sink<String, Error = io::Error> + Send + 'static
-where
-    W: tokio::io::AsyncWrite + Unpin + Send + 'static,
-{
-    FramedWrite::new(writer, LinesCodec::new())
-        .with(|line: String| async move { Ok::<String, tokio_util::codec::LinesCodecError>(line) })
-        .sink_map_err(io::Error::other)
 }
 
 const fn protocol_error() -> DriverError {
