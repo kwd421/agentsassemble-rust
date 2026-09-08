@@ -1230,3 +1230,8 @@ retains its executable until exit and uses unique runtime identities across test
 processes. All managed worker cases and the actual parent-to-worker initialization
 cancellation pass; affected Clippy and unchanged gates pass. Parent cutover is still
 being verified before publication.
+
+Provider registration now derives credential selection and catalog availability from
+the native API specification. Turn handoff derives ingress presence from the actual
+request. Existing selection and managed request cases pass; these projections add
+no parallel credential policy or transport-owned permission.

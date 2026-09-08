@@ -38,7 +38,7 @@ pub(crate) static PROVIDER: ProviderRegistration = ProviderRegistration {
     connection_kind: "native_cli_bridge",
     executable_required: true,
     probe_executable: "lms",
-    credential_available: false,
+    remote_spec: None,
     turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
     configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_registered,

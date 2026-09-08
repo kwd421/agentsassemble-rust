@@ -48,3 +48,28 @@ impl TurnInput {
         }
     }
 }
+
+impl From<&ProviderTurnRequest> for TurnInput {
+    fn from(request: &ProviderTurnRequest) -> Self {
+        Self {
+            turn_id: request.turn_id.clone(),
+            turn_generation: request.turn_generation,
+            execution_id: request.execution_id.clone(),
+            input: request.input.clone(),
+            requests: request.request_ingress.is_some(),
+            observation: request
+                .room_observation
+                .as_ref()
+                .map(|observation| Observation {
+                    session_id: observation.session_id.clone(),
+                    input_up_to_seq: observation.input_up_to_seq,
+                    view: observation.view.clone(),
+                    attachment_ids: observation.attachment_ids.clone(),
+                    attachments: observation.attachment_ingress.is_some(),
+                    allowed_agent_ids: observation.allowed_agent_ids.clone(),
+                    tabletop_tools: observation.tabletop_tools,
+                    tools: observation.room_tool_ingress.is_some(),
+                }),
+        }
+    }
+}
