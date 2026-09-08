@@ -1,4 +1,12 @@
 mod attendee_admission;
+mod attendee_connection;
+mod attendee_ready;
+#[cfg(test)]
+mod attendee_ready_tests;
+pub use attendee_ready::AttendeeRuntimeReady;
+#[cfg(test)]
+mod attendee_connection_tests;
+pub use attendee_connection::{AttendeeConnectionAuthorization, AttendeeConnectionClaim};
 #[cfg(test)]
 mod attendee_admission_tests;
 mod attendee_records;

@@ -357,3 +357,34 @@ Clippy and unchanged architecture/format/diff gates pass. This path owns one req
 and one existing queue slot, with no additional task, timer or provider process.
 Invitation packet controls, authenticated WebSocket execution and external cleanup
 remain pending; admission alone does not claim a working provider conversation.
+
+## Attendee connection and runtime boundary
+
+Each WebSocket receives a fresh connection identity under its admitted attendee
+credential. Replacement invalidates the previous connection's reports in the same
+transaction that changes custody; an old socket's closing callback cannot disconnect
+its replacement. A connection identity is distinct from the client-owned provider
+runtime identity and the canonical assigned execution. Disconnect preserves runtime
+and active-turn custody, including the ordered floor. New assignments require a
+current connected attendee and current admission authority. Startup invalidates old
+network connections before admitting requests, without declaring remote runtimes
+stopped. Ready/reconnect reports must preserve the existing exact runtime tuple;
+only confirmed external cleanup may release it for a different runtime.
+
+The connection/readiness persistence owner now enforces this boundary. Its single
+row per admitted attendee records `connected`, `ready` or `disconnected` and the
+current connection UUID. Ready binds the reported runtime tuple and public profile;
+repeat reports produce no duplicate event, and a replacement cannot report a new
+runtime before cleanup. Network loss preserves provider-active and Busy/Stopping
+custody while disabling assignment through the connection state. Automatic host
+turn reconciliation skips externally owned executions instead of observing them
+through the host provider adapter.
+
+Four local tests pass: connection replacement and revocation cleanup, startup
+network invalidation, exact running-turn preservation on reconnect, and queued
+directed input remaining unassigned until readiness. Forty-four existing room-turn
+cases and the managed blocking-turn restart case pass. Affected all-target/all-feature
+Clippy and unchanged architecture/format/diff/artifact gates pass. Startup processes
+at most 64 connection rows per transaction; there is no new periodic worker or
+provider process. These methods are not yet exposed as a ready/report WebSocket;
+authenticated turn delivery/reporting and exact external stop remain in progress.

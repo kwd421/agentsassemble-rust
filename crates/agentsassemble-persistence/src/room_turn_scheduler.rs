@@ -81,7 +81,9 @@ pub(super) async fn assign_available_pending(
     let mut empty_schedule_requests = Vec::new();
     for session in load_room_sessions(transaction, &room.room_id).await? {
         any_active |= turn_authority_is_active(&session)?;
-        if !session_is_assignable(&session) {
+        if !session_is_assignable(&session)
+            || !crate::attendee_ready::is_available(transaction, &session).await?
+        {
             continue;
         }
         let participant =

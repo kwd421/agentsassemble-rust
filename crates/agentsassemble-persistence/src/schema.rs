@@ -8,6 +8,17 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "attendee_connections",
+        ddl: concat!(
+            "CREATE TABLE IF NOT EXISTS attendee_connections (",
+            "session_fingerprint BLOB PRIMARY KEY CHECK(length(session_fingerprint)=32), ",
+            "connection_id TEXT NOT NULL CHECK(length(connection_id)=36), ",
+            "state TEXT NOT NULL CHECK(state IN ('connected','ready','disconnected')), ",
+            "FOREIGN KEY(session_fingerprint) REFERENCES room_attendee_invites(session_fingerprint) ON DELETE CASCADE) STRICT"
+        ),
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_attendee_invites",
         ddl: concat!(
             "CREATE TABLE IF NOT EXISTS room_attendee_invites (",

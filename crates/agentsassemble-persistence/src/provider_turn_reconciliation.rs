@@ -162,6 +162,10 @@ impl SqliteStore {
             let execution =
                 load_execution_in(&mut transaction, &room_id, &session_id, generation).await?;
             let session = load_session(&mut transaction, &room_id, &session_id).await?;
+            if session.public.external_owned && session.public.process_ownership == "external" {
+                continue;
+            }
+            crate::room_runtime_cleanup::require_server_custody(&session)?;
             validate_candidate(&session, &execution)?;
             let effect =
                 load_optional_effect_in(&mut transaction, &room_id, &session_id, generation)
