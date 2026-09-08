@@ -278,6 +278,27 @@ impl RoomPortalMcp {
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for RoomPortalMcp {
+    // RMCP's generated tools/list uses async without suspension. Keep its router,
+    // result builders and negotiated cache hints, with an immediately ready result.
+    fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> impl std::future::Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
+    + Send
+    + '_ {
+        let mut result = rmcp::model::ListToolsResult::with_all_items(self.tool_router.list_all());
+        if context
+            .protocol_version()
+            .is_some_and(|version| version >= rmcp::model::ProtocolVersion::V_2026_07_28)
+        {
+            result = result
+                .with_ttl_ms(0)
+                .with_cache_scope(rmcp::model::CacheScope::Public);
+        }
+        std::future::ready(Ok(result))
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Read the bounded shared-room view, then publish, vote, or decline exactly once.",

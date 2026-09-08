@@ -2,7 +2,7 @@ use std::{
     env,
     fs::{File, OpenOptions},
     io::{self, Read, Seek},
-    path::{Path, PathBuf},
+    path::Path,
 };
 
 use agentsassemble_domain::{
@@ -10,7 +10,7 @@ use agentsassemble_domain::{
 };
 use same_file::Handle;
 #[cfg(unix)]
-use std::os::unix::fs::PermissionsExt;
+use std::{os::unix::fs::PermissionsExt, path::PathBuf};
 
 use super::{BoundExecutable, FilesystemFailure};
 

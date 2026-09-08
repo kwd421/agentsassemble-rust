@@ -386,7 +386,7 @@ pub(crate) fn bind_helper_executable_sync(path: &Path) -> io::Result<BoundExecut
     {
         let canonical = path.canonicalize()?;
         let identity = executable_identity_sync(&canonical)?;
-        return bind_executable_sync(&canonical, &identity);
+        bind_executable_sync(&canonical, &identity)
     }
     #[cfg(unix)]
     {

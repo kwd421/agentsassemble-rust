@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::room_attachment::valid_observation_attachments;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 use super::ProviderExactTurnAuthority;
 use super::{
     DriverError, ProviderAdapter, ProviderAdapterError, ProviderDriver, ProviderPreparedTurn,

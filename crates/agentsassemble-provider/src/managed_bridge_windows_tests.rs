@@ -27,7 +27,7 @@ fn session()
     "api".clone_into(&mut session.public.runtime_kind);
     let lease = HeldRuntimeLease::prepare(&session.public.room_id, &session.public.session_id)?;
     session.runtime_handle_id = lease.new_runtime_handle_id();
-    session.runtime_lease_token = lease.token().to_owned();
+    lease.token().clone_into(&mut session.runtime_lease_token);
     "windows-parent".clone_into(&mut session.runtime_owner_id);
     lease.begin_launch_effect()?;
     Ok((session, lease))

@@ -45,12 +45,9 @@ pub(crate) async fn start(
     command.wrap(KillOnDrop);
     #[cfg(windows)]
     command.wrap(JobObject);
-    let mut child = match command.spawn() {
-        Ok(child) => child,
-        Err(_) => {
-            let failure = DriverLaunchError::safe(spawn_error());
-            return Err(launch_cleanup::portal(room_portal, failure).await);
-        }
+    let Ok(mut child) = command.spawn() else {
+        let failure = DriverLaunchError::safe(spawn_error());
+        return Err(launch_cleanup::portal(room_portal, failure).await);
     };
     drop(command);
     let Some(stdout) = child.stdout().take() else {

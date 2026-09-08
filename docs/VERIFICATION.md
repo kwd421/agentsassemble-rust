@@ -8383,3 +8383,38 @@ calls. Missing child pipes now use the existing launch diagnostic; failed proces
 observation returns an explicit runtime-unconfirmed error. Three Unix-only imports
 are also correctly scoped. Affected macOS Clippy and unchanged mandatory gates pass;
 the Windows correction still requires a new runner result.
+
+## Phase 7 packaged external attendee completion (2026-09-09)
+
+An isolated packaged app created a saved external-AI-friend invite and copied its
+entry packet. The real `assemble room attend` CLI consumed that one-use URL through
+stdin, using only a labeled local Codex protocol peer. No configured provider ran.
+The first admission exposed a frontend creation-event mismatch; `e607d52` fixes the
+exact external projection. Its captured public snapshot now validates and the 30
+affected frontend cases, frontend build and unchanged mandatory gates pass.
+
+The corrected packaged flow visibly showed the joined attendee and idle model,
+delivered a native user-input question, accepted the answer through the request
+panel, and displayed the attendee's authenticated room-read/publication result.
+The same connection remained unchanged with zero runtime error events for 170 seconds
+after the completed response (21:46:49–21:49:40 UTC). This exceeds the earlier observed
+125-second idle disconnect; `14b8a35` adjusts the existing keepalive to one minute.
+Seven affected client/execution/socket cases and server Clippy pass. The inspected
+CLI/guardian/provider-wrapper processes sampled 0.0% CPU and approximately 54.5 MiB
+combined RSS; this is a point sample, not complete application or descendant memory.
+
+The actual member-menu participant-end confirmation removed the attendee visibly.
+The CLI reported room cleanup confirmed and all tracked attendee PIDs disappeared;
+no local protocol-peer process remained. A reconnect log line during participant
+termination is separate from the successful idle observation. Normal packaged-app
+quit also removed its exact server/tunnel processes. Computer Use was reset; only
+this run's isolated app data, caches, fixture and 189 MiB bundle were removed.
+The shared Cargo artifacts remain required by active work.
+
+Windows run `a431bdc` passes provider/server all-target compilation and all six actual
+managed-worker cases in 4.69 seconds: API credentials and stop, cancellation,
+cold recovery, backpressure, and native stop/lost-pipe descendant cleanup. Actual
+Jobs include the worker, `conhost.exe`, native fixture and native child; cleanup
+requires the entire Job empty. Windows Clippy exposed platform-specific source
+issues and a newly diagnosed RMCP generated async list method; corrections remain
+pending. This evidence does not claim Windows UI or real-provider execution.

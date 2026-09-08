@@ -166,17 +166,29 @@ impl AcpRuntime {
         )
     }
 
-    pub(crate) async fn is_alive(&mut self) -> Result<bool, DriverError> {
-        if self.client.is_closed() {
-            return Ok(false);
-        }
+    pub(crate) fn is_alive(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<bool, DriverError>> + '_ {
         #[cfg(unix)]
-        return self.process_group.leader_is_running().await;
+        {
+            async move {
+                if self.client.is_closed() {
+                    return Ok(false);
+                }
+                self.process_group.leader_is_running().await
+            }
+        }
         #[cfg(not(unix))]
-        self.child
-            .try_wait()
-            .map(|status| status.is_none())
-            .map_err(|_| protocol_error())
+        {
+            std::future::ready(if self.client.is_closed() {
+                Ok(false)
+            } else {
+                self.child
+                    .try_wait()
+                    .map(|status| status.is_none())
+                    .map_err(|_| protocol_error())
+            })
+        }
     }
 
     pub(crate) async fn stop(&mut self) -> Result<(), DriverError> {

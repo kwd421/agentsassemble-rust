@@ -218,7 +218,7 @@ fn model_option(entry: &ModelEntry) -> ProviderControlOption {
 }
 
 fn ollama_model_label(value: &str) -> String {
-    let (base, tag) = value.split_once(':').map_or((value, ""), |parts| parts);
+    let (base, tag) = value.split_once(':').unwrap_or((value, ""));
     let mut normalized = String::with_capacity(base.len() + 2);
     let mut previous = None;
     for character in base.chars() {

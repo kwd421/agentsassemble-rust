@@ -121,12 +121,9 @@ impl ClaudeSdkRuntime {
         sanitize_environment(command.command_mut());
         command.wrap(KillOnDrop);
         command.wrap(JobObject);
-        let mut child = match command.spawn() {
-            Ok(child) => child,
-            Err(_) => {
-                let failure = DriverLaunchError::safe(spawn_error());
-                return Err(launch_cleanup::portal(&mut room_portal, failure).await);
-            }
+        let Ok(mut child) = command.spawn() else {
+            let failure = DriverLaunchError::safe(spawn_error());
+            return Err(launch_cleanup::portal(&mut room_portal, failure).await);
         };
         drop(command);
         let Some(stdin) = child.stdin().take() else {
@@ -180,22 +177,34 @@ impl ClaudeSdkRuntime {
         self.client.turn(session_id, request).await
     }
 
-    pub(crate) async fn is_alive(&mut self) -> Result<bool, DriverError> {
-        if self.client.requires_restart() {
-            return Ok(false);
-        }
+    pub(crate) fn is_alive(
+        &mut self,
+    ) -> impl std::future::Future<Output = Result<bool, DriverError>> + '_ {
         #[cfg(unix)]
-        return self.process_group.leader_is_running().await;
+        {
+            async move {
+                if self.client.requires_restart() {
+                    return Ok(false);
+                }
+                self.process_group.leader_is_running().await
+            }
+        }
         #[cfg(windows)]
-        self.child
-            .try_wait()
-            .map(|status| status.is_none())
-            .map_err(|_| {
-                DriverError::new(
-                    "provider_runtime_unconfirmed",
-                    "The Claude Agent SDK process state could not be observed.",
-                )
+        {
+            std::future::ready(if self.client.requires_restart() {
+                Ok(false)
+            } else {
+                self.child
+                    .try_wait()
+                    .map(|status| status.is_none())
+                    .map_err(|_| {
+                        DriverError::new(
+                            "provider_runtime_unconfirmed",
+                            "The Claude Agent SDK process state could not be observed.",
+                        )
+                    })
             })
+        }
     }
 
     pub(crate) async fn stop(&mut self) -> Result<(), DriverError> {

@@ -1472,3 +1472,14 @@ carries no readiness, room query or application effect. Server idle expiry, reta
 execution and reconnect semantics are unchanged. The seven affected attendee client,
 execution and socket cases pass. Packaged idle stability and visible response/stop
 proof remain pending the corrected build.
+
+Windows runtime verification now passes all six managed cases at `a431bdc`.
+Clippy then diagnosed unused platform imports, synchronous Windows liveness bodies,
+Windows-only spawn matches, and the RMCP macro's generated non-suspending tools/list
+method. Windows liveness now returns an immediately ready result while Unix retains
+its awaited guardian observation. Both MCP handlers explicitly return their unchanged
+router catalog with RMCP result builders and the same negotiated cache hints. Tool
+routing, protocol schemas and error/cleanup behavior remain library-owned; no lint
+exception, toolchain downgrade or dependency fork is introduced. Nine ACP, seven
+Claude, six portal and two connector cases pass, including actual tools/list and
+read/publication flows; final Windows lint verification remains pending.

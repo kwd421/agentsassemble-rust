@@ -248,6 +248,27 @@ impl ConnectorMcp {
 
 #[tool_handler(router = self.tool_router)]
 impl ServerHandler for ConnectorMcp {
+    // RMCP's generated tools/list uses async without suspension. Keep its router,
+    // result builders and negotiated cache hints, with an immediately ready result.
+    fn list_tools(
+        &self,
+        _request: Option<rmcp::model::PaginatedRequestParams>,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
+    ) -> impl std::future::Future<Output = Result<rmcp::model::ListToolsResult, rmcp::ErrorData>>
+    + Send
+    + '_ {
+        let mut result = rmcp::model::ListToolsResult::with_all_items(self.tool_router.list_all());
+        if context
+            .protocol_version()
+            .is_some_and(|version| version >= rmcp::model::ProtocolVersion::V_2026_07_28)
+        {
+            result = result
+                .with_ttl_ms(0)
+                .with_cache_scope(rmcp::model::CacheScope::Public);
+        }
+        std::future::ready(Ok(result))
+    }
+
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
             "Use room_join with the user's complete invite URL, then room_read. This connects the current conversation; do not launch another model or delegate. Pass connection_id unchanged to later tools and keep it private. Contribute with room_say, then room_wait_next."
