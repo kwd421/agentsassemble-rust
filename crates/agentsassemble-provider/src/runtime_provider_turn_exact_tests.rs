@@ -88,19 +88,21 @@ impl ProviderDriver for DefinitiveFailureDriver {
         Box::pin(async { Ok(()) })
     }
 
-    fn begin_room_observation(
-        &mut self,
-        _request: &ProviderTurnRequest,
-    ) -> Result<(), DriverError> {
-        Ok(())
+    fn begin_room_observation<'a>(
+        &'a mut self,
+        _request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(async move { Ok(()) })
     }
 
-    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
-        self.abort_failure_stops.as_ref().map_or(Ok(()), |_| {
-            Err(DriverError::new(
-                "room_portal_unavailable",
-                "The server-owned provider room portal is unavailable.",
-            ))
+    fn abort_room_observation(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
+        Box::pin(async move {
+            self.abort_failure_stops.as_ref().map_or(Ok(()), |_| {
+                Err(DriverError::new(
+                    "room_portal_unavailable",
+                    "The server-owned provider room portal is unavailable.",
+                ))
+            })
         })
     }
 

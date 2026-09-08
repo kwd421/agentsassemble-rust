@@ -275,7 +275,7 @@ async fn run_driver_turn(
     let result = match require_live_driver(driver, cancellation, handle_id, owner_id).await {
         Ok(()) => {
             if request.room_observation.is_some()
-                && let Err(error) = driver.begin_room_observation(request)
+                && let Err(error) = driver.begin_room_observation(request).await
             {
                 Err(with_aborted_room_observation(
                     driver,
@@ -284,7 +284,8 @@ async fn run_driver_turn(
                     handle_id,
                     owner_id,
                     &mut abort_requires_restart,
-                ))
+                )
+                .await)
             } else {
                 let sent = tokio::select! {
                     biased;
@@ -298,15 +299,18 @@ async fn run_driver_turn(
                     sent = driver.send_turn(session, request) => sent,
                 };
                 match sent {
-                    Ok(completed) => finish_completed_turn(
-                        driver,
-                        session,
-                        request,
-                        completed,
-                        handle_id,
-                        owner_id,
-                        &mut abort_requires_restart,
-                    ),
+                    Ok(completed) => {
+                        finish_completed_turn(
+                            driver,
+                            session,
+                            request,
+                            completed,
+                            handle_id,
+                            owner_id,
+                            &mut abort_requires_restart,
+                        )
+                        .await
+                    }
                     Err(error) if error.code == "provider_turn_interrupted" => {
                         Err(with_aborted_room_observation(
                             driver,
@@ -315,7 +319,8 @@ async fn run_driver_turn(
                             handle_id,
                             owner_id,
                             &mut abort_requires_restart,
-                        ))
+                        )
+                        .await)
                     }
                     Err(error) => {
                         let effect_uncertain = driver.turn_failure_effect_uncertain();
@@ -331,7 +336,8 @@ async fn run_driver_turn(
                             handle_id,
                             owner_id,
                             &mut abort_requires_restart,
-                        ))
+                        )
+                        .await)
                     }
                 }
             }
@@ -344,7 +350,7 @@ async fn run_driver_turn(
     }
 }
 
-fn with_aborted_room_observation(
+async fn with_aborted_room_observation(
     driver: &mut dyn ProviderDriver,
     request: &ProviderTurnRequest,
     original: ProviderAdapterError,
@@ -355,7 +361,7 @@ fn with_aborted_room_observation(
     if request.room_observation.is_none() {
         return original;
     }
-    match driver.abort_room_observation() {
+    match driver.abort_room_observation().await {
         Ok(()) => original,
         Err(error) => {
             *abort_requires_restart = true;
@@ -398,7 +404,7 @@ async fn require_live_driver(
     }
 }
 
-fn finish_completed_turn(
+async fn finish_completed_turn(
     driver: &mut dyn ProviderDriver,
     session: &DurableAgentSession,
     request: &ProviderTurnRequest,
@@ -426,10 +432,11 @@ fn finish_completed_turn(
             handle_id,
             owner_id,
             abort_requires_restart,
-        ));
+        )
+        .await);
     }
     if request.room_observation.is_some() {
-        completed.outcome = match driver.finish_room_observation(request) {
+        completed.outcome = match driver.finish_room_observation(request).await {
             Ok(outcome) => outcome,
             Err(error) => {
                 let error = ProviderAdapterError::uncertain(error, handle_id, owner_id);
@@ -440,7 +447,8 @@ fn finish_completed_turn(
                     handle_id,
                     owner_id,
                     abort_requires_restart,
-                ));
+                )
+                .await);
             }
         };
     }

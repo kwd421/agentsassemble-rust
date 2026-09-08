@@ -137,8 +137,9 @@ async fn portal_completion_preserves_read_and_publication_failure_codes() {
     let request = room_request("session");
     driver
         .begin_room_observation(&request)
+        .await
         .unwrap_or_else(|error| panic!("begin room observation: {error}"));
-    let Err(error) = driver.finish_room_observation(&request) else {
+    let Err(error) = driver.finish_room_observation(&request).await else {
         panic!("accepted incomplete room observation");
     };
     assert_eq!(error.code, "room_observation_unconfirmed");
@@ -157,12 +158,13 @@ async fn portal_completion_preserves_read_and_publication_failure_codes() {
         )
         .await
         .unwrap_or_else(|error| panic!("read through authenticated MCP: {error}"));
-    let Err(error) = driver.finish_room_observation(&request) else {
+    let Err(error) = driver.finish_room_observation(&request).await else {
         panic!("accepted incomplete room observation");
     };
     assert_eq!(error.code, "room_portal_publication_missing");
     driver
         .abort_room_observation()
+        .await
         .unwrap_or_else(|error| panic!("release failed observation: {error}"));
     driver
         .stop()
@@ -226,11 +228,12 @@ async fn room_turn(
     let request = room_request(&session.public.session_id);
     driver
         .begin_room_observation(&request)
+        .await
         .unwrap_or_else(|error| panic!("begin observation: {error}"));
     let sent =
         tokio::time::timeout(Duration::from_secs(5), driver.send_turn(&session, &request)).await;
     let outcome = match &sent {
-        Ok(Ok(_)) => driver.finish_room_observation(&request),
+        Ok(Ok(_)) => driver.finish_room_observation(&request).await,
         Ok(Err(error)) => Err(error.clone()),
         Err(_) => Err(DriverError::new(
             "test_timeout",
@@ -240,6 +243,7 @@ async fn room_turn(
     if outcome.is_err() {
         driver
             .abort_room_observation()
+            .await
             .unwrap_or_else(|error| panic!("abort observation: {error}"));
     }
     let after = driver
@@ -250,13 +254,9 @@ async fn room_turn(
         .stop()
         .await
         .unwrap_or_else(|error| panic!("stop real portal: {error}"));
-    if !server.is_finished() {
-        server.abort();
-    }
-    match server.await {
-        Ok(()) => {}
-        Err(error) if error.is_cancelled() => {}
-        Err(error) => panic!("fixture server failed: {error}"),
+    server.abort();
+    if let Err(error) = server.await {
+        assert!(error.is_cancelled(), "fixture server failed: {error}");
     }
     if let Ok(Ok(completed)) = sent {
         assert_eq!(completed.turn_id, request.turn_id);

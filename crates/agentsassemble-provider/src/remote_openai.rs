@@ -482,30 +482,39 @@ impl ProviderDriver for RemoteOpenAiDriver {
         })
     }
 
-    fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
-        self.portal
-            .as_ref()
-            .ok_or(ROOM_PORTAL_UNAVAILABLE)?
-            .begin_turn(request)
-            .map_err(DriverError::from)
+    fn begin_room_observation<'a>(
+        &'a mut self,
+        request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(async move {
+            self.portal
+                .as_ref()
+                .ok_or(ROOM_PORTAL_UNAVAILABLE)?
+                .begin_turn(request)
+                .map_err(DriverError::from)
+        })
     }
 
-    fn finish_room_observation(
-        &mut self,
-        request: &ProviderTurnRequest,
-    ) -> Result<ProviderTurnOutcome, DriverError> {
-        self.portal
-            .as_ref()
-            .ok_or(ROOM_PORTAL_UNAVAILABLE)?
-            .finish_turn(request)
-            .map_err(DriverError::from)
+    fn finish_room_observation<'a>(
+        &'a mut self,
+        request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<ProviderTurnOutcome, DriverError>> {
+        Box::pin(async move {
+            self.portal
+                .as_ref()
+                .ok_or(ROOM_PORTAL_UNAVAILABLE)?
+                .finish_turn(request)
+                .map_err(DriverError::from)
+        })
     }
 
-    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
-        if let Some(portal) = self.portal.as_ref() {
-            portal.end_observation().map_err(DriverError::from)?;
-        }
-        Ok(())
+    fn abort_room_observation(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
+        Box::pin(async move {
+            if let Some(portal) = self.portal.as_ref() {
+                portal.end_observation().map_err(DriverError::from)?;
+            }
+            Ok(())
+        })
     }
 
     fn requires_restart(&self) -> bool {

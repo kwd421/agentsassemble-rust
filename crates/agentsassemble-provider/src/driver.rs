@@ -42,20 +42,20 @@ pub(crate) trait ProviderDriver: Send {
     }
     fn is_alive(&mut self) -> DriverFuture<'_, Result<bool, DriverError>>;
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>>;
-    fn begin_room_observation(
-        &mut self,
-        _request: &ProviderTurnRequest,
-    ) -> Result<(), DriverError> {
-        Err(ROOM_PORTAL_UNAVAILABLE)
+    fn begin_room_observation<'a>(
+        &'a mut self,
+        _request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(async move { Err(ROOM_PORTAL_UNAVAILABLE) })
     }
-    fn finish_room_observation(
-        &mut self,
-        _request: &ProviderTurnRequest,
-    ) -> Result<ProviderTurnOutcome, DriverError> {
-        Err(ROOM_PORTAL_UNAVAILABLE)
+    fn finish_room_observation<'a>(
+        &'a mut self,
+        _request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<ProviderTurnOutcome, DriverError>> {
+        Box::pin(async move { Err(ROOM_PORTAL_UNAVAILABLE) })
     }
-    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
-        Ok(())
+    fn abort_room_observation(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
+        Box::pin(async move { Ok(()) })
     }
     fn requires_restart(&self) -> bool {
         false

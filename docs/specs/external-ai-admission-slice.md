@@ -1132,3 +1132,12 @@ all-feature Clippy and unchanged mandatory gates pass. These tests execute the w
 loop in-process; separate managed-process launch, turn/request/tool multiplexing and
 the production factory cutover remain pending. The pipe frame cap is 4 MiB; no new
 timer or background task is used by this lifecycle loop.
+
+The driver observation start, finish and abort hooks now return awaited futures, so
+the parent runtime can require an actual child acknowledgement at each transition.
+Native drivers still perform their existing portal transitions inline. Runtime
+publication waits for finish; an abort failure still forces restart and uncertain
+cleanup. The only added local cost is a boxed future per invoked observation hook,
+without another task, queue or timer. Existing room/portal tests (22), exact-turn
+ownership tests (seven), API tool tests (three) and API contract tests (three) pass;
+affected all-target/all-feature Clippy and unchanged mandatory gates pass.

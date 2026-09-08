@@ -517,25 +517,34 @@ impl ProviderDriver for CodexDriver {
         Box::pin(self.stop_process())
     }
 
-    fn begin_room_observation(&mut self, request: &ProviderTurnRequest) -> Result<(), DriverError> {
-        self.room_portal
-            .begin_turn(request)
-            .map_err(DriverError::from)
+    fn begin_room_observation<'a>(
+        &'a mut self,
+        request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<(), DriverError>> {
+        Box::pin(async move {
+            self.room_portal
+                .begin_turn(request)
+                .map_err(DriverError::from)
+        })
     }
 
-    fn finish_room_observation(
-        &mut self,
-        request: &ProviderTurnRequest,
-    ) -> Result<ProviderTurnOutcome, DriverError> {
-        self.room_portal
-            .finish_turn(request)
-            .map_err(DriverError::from)
+    fn finish_room_observation<'a>(
+        &'a mut self,
+        request: &'a ProviderTurnRequest,
+    ) -> DriverFuture<'a, Result<ProviderTurnOutcome, DriverError>> {
+        Box::pin(async move {
+            self.room_portal
+                .finish_turn(request)
+                .map_err(DriverError::from)
+        })
     }
 
-    fn abort_room_observation(&mut self) -> Result<(), DriverError> {
-        self.room_portal
-            .end_observation()
-            .map_err(DriverError::from)
+    fn abort_room_observation(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
+        Box::pin(async move {
+            self.room_portal
+                .end_observation()
+                .map_err(DriverError::from)
+        })
     }
 
     fn requires_restart(&self) -> bool {
