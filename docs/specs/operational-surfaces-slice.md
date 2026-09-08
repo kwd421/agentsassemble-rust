@@ -194,3 +194,27 @@ projection cases (2 tests, 0.01s), the extended real-TCP operator boundary (0.03
 27 frontend cases, existing catalog projection regression, generated bindings,
 frontend build/CSS, provider/server all-target/all-feature Clippy and mandatory
 gates. Native account/API execution and direct packaged observation remain pending.
+
+## Claude structured quota implementation
+
+Claude uses the already-pinned Agent SDK `0.3.258` public experimental usage method
+(`sdk.d.ts`, `SDKControlGetUsageResponse`). The existing catalog inspection owner
+now also runs the usage mode: an empty prompt queue, no tools/settings/MCP, bounded
+ten-second process probe, private SDK staging and confirmed process cleanup. This
+uses the supported typed method directly; an SDK failure is not replaced by terminal
+scraping. No dependency version or actual Claude account/provider execution changes.
+
+The bridge projects quota fields only, excluding session costs and transcript/behavior
+metadata. Rust maps five-hour, weekly, model-specific and OAuth-app quota windows
+into one generated rate-window projection. Null measurements and reset times remain
+unknown; an account for which subscription limits are unavailable has a separate
+state. This phase retains plan quota usage, not session-cost/behavior analysis or
+purchase/extra-usage account management. The same operator member control renders
+quota windows and exact DeepSeek balances without periodic refresh.
+
+Eight existing/expanded SDK bridge fixtures, three Rust usage-owner/projection tests,
+five frontend response/rendering cases, generated bindings, frontend build/CSS,
+provider/server all-target/all-feature Clippy and unchanged mandatory gates pass.
+The SDK fixture proves the actual bridge selects quota fields and exits; it does not
+prove live Claude authentication or availability. Direct packaged phase acceptance
+and the remaining Codex reader are pending.

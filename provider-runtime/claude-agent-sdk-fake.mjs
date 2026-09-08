@@ -33,6 +33,19 @@ class FakeQuery {
     return MODELS;
   }
 
+  async usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET() {
+    if (this.options.tools.length !== 0 || this.options.permissionMode !== "dontAsk" ||
+        this.options.strictMcpConfig !== true || this.options.settingSources.length !== 0) {
+      throw new Error("unexpected inspection options");
+    }
+    return {
+      session: { private_session_detail: "must not be projected" },
+      behaviors: { private_transcript_detail: "must not be projected" },
+      rate_limits_available: true,
+      rate_limits: { five_hour: { utilization: 12.5, resets_at: null }, seven_day: null },
+    };
+  }
+
   close() {
     this.closed = true;
   }

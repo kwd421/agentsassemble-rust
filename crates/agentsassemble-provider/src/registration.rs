@@ -118,7 +118,7 @@ pub(crate) static CLAUDE_PROVIDER: ProviderRegistration = ProviderRegistration {
     executable_required: true,
     probe_executable: "claude",
     remote_spec: None,
-    usage: None,
+    usage: Some(crate::claude_usage::read),
     login: Some(crate::provider_login::ProviderLoginSpec {
         arguments: &["auth", "login"],
         environment: None,

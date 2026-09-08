@@ -41,20 +41,7 @@ pub(crate) async fn discover(
     };
     provider.executable.clone_from(&claude);
     provider.executable_identity = claude_identity;
-    let (node, _) = match provider_executable("node", cancellation).await {
-        Ok(authority) => authority,
-        Err(failure) => return failed_provider(provider, failure),
-    };
-    let Ok(bundle) = PrivateClaudeSdkBundle::stage().await else {
-        return failed_provider(provider, ProbeFailure::Failed);
-    };
-    let Some(bridge) = bundle.bridge.to_str() else {
-        return failed_provider(provider, ProbeFailure::Malformed);
-    };
-    let Some(sdk) = bundle.sdk.to_str() else {
-        return failed_provider(provider, ProbeFailure::Malformed);
-    };
-    let output = match probe(&node, &[bridge, sdk, &claude, "catalog"], cancellation, &[]).await {
+    let output = match inspect(&claude, Inspection::Catalog, cancellation).await {
         Ok(output) => output,
         Err(failure) => return failed_provider(provider, failure),
     };
@@ -62,6 +49,29 @@ pub(crate) async fn discover(
         return failed_provider(provider, ProbeFailure::Malformed);
     };
     ready_provider(provider, catalog.default_model.clone(), catalog.controls())
+}
+
+pub(crate) enum Inspection {
+    Catalog,
+    Usage,
+}
+
+pub(crate) async fn inspect(
+    claude: &str,
+    inspection: Inspection,
+    cancellation: &CancellationToken,
+) -> Result<String, ProbeFailure> {
+    let (node, _) = provider_executable("node", cancellation).await?;
+    let bundle = PrivateClaudeSdkBundle::stage()
+        .await
+        .map_err(|_| ProbeFailure::Failed)?;
+    let bridge = bundle.bridge.to_str().ok_or(ProbeFailure::Malformed)?;
+    let sdk = bundle.sdk.to_str().ok_or(ProbeFailure::Malformed)?;
+    let mode = match inspection {
+        Inspection::Catalog => "catalog",
+        Inspection::Usage => "usage",
+    };
+    probe(&node, &[bridge, sdk, claude, mode], cancellation, &[]).await
 }
 
 #[derive(Deserialize)]

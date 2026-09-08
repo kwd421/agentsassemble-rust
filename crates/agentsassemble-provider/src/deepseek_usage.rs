@@ -111,7 +111,10 @@ mod tests {
         let ProviderQuota::Balance {
             is_available,
             balances,
-        } = project(payload.clone()).unwrap_or_else(|error| panic!("{error}"));
+        } = project(payload.clone()).unwrap_or_else(|error| panic!("{error}"))
+        else {
+            panic!("expected balance")
+        };
         assert!(!is_available);
         assert_eq!(balances[0].total_balance, "-0.000000000000000001");
         assert_eq!(

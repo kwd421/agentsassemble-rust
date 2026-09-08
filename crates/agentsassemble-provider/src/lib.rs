@@ -13,6 +13,7 @@ mod claude_sdk_assets;
 mod claude_sdk_client;
 #[cfg(any(unix, windows))]
 mod claude_sdk_runtime;
+mod claude_usage;
 mod codex;
 #[cfg(unix)]
 mod codex_code_mode_host;

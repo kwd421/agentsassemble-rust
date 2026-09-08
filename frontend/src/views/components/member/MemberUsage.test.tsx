@@ -38,6 +38,24 @@ describe("MemberUsage", () => {
     expect(screen.queryByText(/USD 잔액/)).toBeNull();
   });
 
+  it("keeps a missing native window unknown and distinguishes an unavailable subscription", async () => {
+    vi.mocked(readProviderUsage).mockResolvedValueOnce({
+      provider_id: "claude", observed_at: "2026-09-09T00:00:00Z",
+      quota: { kind: "rate_limits", available: true, windows: [{
+        id: "seven_day", label: "7일", used_percent: null, resets_at: null, window_minutes: 10080,
+      }] },
+    }).mockResolvedValueOnce({
+      provider_id: "claude", observed_at: "2026-09-09T00:00:00Z",
+      quota: { kind: "rate_limits", available: false, windows: [] },
+    });
+    render(<MemberUsage displayName="Claude" provider={{ ...provider, id: "claude" }} />);
+    fireEvent.click(screen.getByRole("button", { name: "계정 사용량 조회" }));
+    expect(await screen.findByText(/7일: 사용량 확인 불가/)).toBeTruthy();
+    expect(screen.queryByText(/잔여 100%/)).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "계정 사용량 조회" }));
+    expect(await screen.findByText(/이 계정의 구독 사용량을 확인할 수 없어요/)).toBeTruthy();
+  });
+
   it("does not expose host account usage in the admitted browser", () => {
     vi.mocked(isDesktopWebview).mockReturnValue(false);
     render(<MemberUsage displayName="Agent One" provider={provider} />);

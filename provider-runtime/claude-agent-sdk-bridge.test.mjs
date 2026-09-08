@@ -43,6 +43,16 @@ test("catalog emits only exact installed model authority", async () => {
   assert.equal(await closed(runtime.child), 0);
 });
 
+test("usage projects structured SDK limits without session or transcript metadata", async () => {
+  const runtime = start("usage");
+  const exit = closed(runtime.child);
+  assert.deepEqual(await runtime.next(), {
+    type: "usage", rate_limits_available: true,
+    rate_limits: { five_hour: { utilization: 12.5, resets_at: null }, seven_day: null },
+  });
+  assert.equal(await exit, 0);
+});
+
 test("session correlates one SDK result and closes explicitly", async () => {
   const runtime = start("session");
   runtime.child.stdin.write(

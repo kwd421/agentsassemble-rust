@@ -38,6 +38,21 @@ pub enum ProviderUsageError {
     CleanupUnconfirmed,
 }
 
+impl From<crate::process::ProbeFailure> for ProviderUsageError {
+    fn from(error: crate::process::ProbeFailure) -> Self {
+        use crate::process::ProbeFailure as E;
+        match error {
+            E::Missing => Self::Missing,
+            E::Timeout => Self::Timeout,
+            E::Authentication => Self::Authentication,
+            E::Malformed | E::CatalogTooLarge => Self::InvalidResponse,
+            E::Failed => Self::Unavailable,
+            E::Cancelled => Self::Cancelled,
+            E::CleanupUnconfirmed => Self::CleanupUnconfirmed,
+        }
+    }
+}
+
 type UsageResult = Shared<BoxFuture<'static, Result<ProviderUsage, ProviderUsageError>>>;
 
 struct UsageOwner {

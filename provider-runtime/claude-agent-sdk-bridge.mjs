@@ -132,11 +132,16 @@ function baseOptions(claudePath) {
   };
 }
 
-async function catalog(sdk, claudePath) {
+async function inspect(sdk, claudePath, mode) {
   const input = new InputQueue();
   const query = sdk.query({ prompt: input, options: baseOptions(claudePath) });
   try {
-    await emit({ type: "catalog", models: exactModels(await query.supportedModels()) });
+    if (mode === "catalog") {
+      await emit({ type: "catalog", models: exactModels(await query.supportedModels()) });
+    } else {
+      const usage = await query.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET();
+      await emit({ type: "usage", rate_limits_available: usage.rate_limits_available, rate_limits: usage.rate_limits });
+    }
   } finally {
     input.close();
     query.close();
@@ -328,8 +333,8 @@ async function session(sdk, claudePath, command, commands) {
 async function main() {
   const [sdkPath, claudePath, mode] = process.argv.slice(2);
   const sdk = await loadSdk(sdkPath);
-  if (mode === "catalog") {
-    await catalog(sdk, claudePath);
+  if (mode === "catalog" || mode === "usage") {
+    await inspect(sdk, claudePath, mode);
     return;
   }
   if (mode !== "session") throw new Error("invalid bridge mode");

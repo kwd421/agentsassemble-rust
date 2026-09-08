@@ -36,10 +36,19 @@ export default function MemberUsage({ displayName, provider }: {
         {error && <p role="alert" className="dc-member-detail-note preserve-words">{error}</p>}
         {usage && <div role="status">
           <p className="dc-member-detail-note">조회 시각: {new Date(usage.observed_at).toLocaleString()}</p>
-          {usage.quota.balances.map((balance) => <p key={balance.currency} className="dc-member-detail-note preserve-words">
-            {balance.currency} 잔액 {balance.total_balance} · 지급 {balance.granted_balance} · 충전 {balance.topped_up_balance}
-          </p>)}
-          {!usage.quota.is_available && <p className="dc-member-detail-note">현재 계정 잔액으로 API를 사용할 수 없어요.</p>}
+          {usage.quota.kind === "balance" ? <>
+            {usage.quota.balances.map((balance) => <p key={balance.currency} className="dc-member-detail-note preserve-words">
+              {balance.currency} 잔액 {balance.total_balance} · 지급 {balance.granted_balance} · 충전 {balance.topped_up_balance}
+            </p>)}
+            {!usage.quota.is_available && <p className="dc-member-detail-note">현재 계정 잔액으로 API를 사용할 수 없어요.</p>}
+          </> : <>
+            {!usage.quota.available ? <p className="dc-member-detail-note">이 계정의 구독 사용량을 확인할 수 없어요.</p> :
+              usage.quota.windows.length === 0 ? <p className="dc-member-detail-note">사용량 수치가 아직 제공되지 않았어요.</p> :
+              usage.quota.windows.map((window) => <p key={window.id} className="dc-member-detail-note preserve-words">
+                {window.label}: {window.used_percent === null ? "사용량 확인 불가" : `사용 ${window.used_percent}% · 잔여 ${Math.max(0, 100 - window.used_percent)}%`}
+                {window.resets_at ? ` · 초기화 ${new Date(window.resets_at).toLocaleString()}` : " · 초기화 시각 확인 불가"}
+              </p>)}
+          </>}
         </div>}
       </>}
     </section>
