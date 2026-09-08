@@ -8294,3 +8294,35 @@ button and copying again; the controls retained visible margins. The ten affecte
 tests, production build/CSS and unchanged mandatory gates pass. These are local
 packet/UI checks, not an actual external provider run. The browser viewport was
 reset and its verification tab and the isolated package were normally closed.
+
+## Phase 7 packaged mobile requests and worker-crash presentation — 2026-09-09
+
+At `98dec1c`, the isolated 390×420 macOS package resumed the existing local protocol
+peer through its profile, accepted an ordinary human message, opened its native
+question, scrolled to the final controls, and delivered the selected `Mobile verified`
+answer. The peer's authenticated Room Portal publication appeared in the room; the
+session returned to idle and the mobile stop control removed its owned processes.
+The same narrow window selected the saved AI friend, generated its external attendee
+packet and copied the instructions, with visible margins and accessible final controls.
+
+A new question displayed the prior closed request's success text without identifying
+its scope. That text now explicitly says it is the previous request while another
+request is pending; the rebuilt package verifies the distinction. Killing only the
+verified app-owned worker during that pending question cancelled the request and
+removed the exact worker plus four descendants. The profile exposed the existing
+recovery diagnostic and allowed normal stop, but its busy badge and typing indicator
+misrepresented that server-owned recovery state. Presentation now derives the recovery
+badge and error presence from `recovery_required`; the shared typing predicate rejects
+both generic and detailed progress for that state. Control authority and durable
+runtime status are unchanged.
+
+Thirty-six affected frontend tests, production build/CSS and unchanged mandatory
+gates pass. A second packaged crash at the corrected tree visibly showed `복구 필요`,
+the existing diagnostic and stop control, removed the typing indicator and cancelled
+the unanswered request. The exact five-process tree disappeared, and normal app quit
+left no verification app/server/tunnel processes. The browser override and tabs were
+already cleared; Computer Use was reset. The observed debug worker used about 20 MiB
+RSS before the crash; this is a sample, not a performance improvement claim. These
+checks used only the labelled local protocol peer, without a real AI provider/account.
+Isolated data remains for the continuing Phase 7 verification; platform custody and
+whole-phase review are not closed by this record.

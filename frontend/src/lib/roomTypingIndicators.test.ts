@@ -78,11 +78,14 @@ describe("roomTypingNames", () => {
     ]);
   });
 
-  it("does not revive a stopped session from stale turn progress", () => {
+  it.each([
+    { ...session, runtime_status: "stopped" as const, active_turn_id: "" },
+    { ...session, recovery_required: true },
+  ])("does not revive an inactive or quarantined session from stale turn progress", (inactive) => {
     expect(
       roomTypingNames({
         members: [member],
-        sessions: [{ ...session, runtime_status: "stopped", active_turn_id: "" }],
+        sessions: [inactive],
         progress,
       })
     ).toEqual([]);

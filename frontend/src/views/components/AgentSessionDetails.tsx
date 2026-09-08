@@ -14,7 +14,8 @@ import ProviderRuntimeSettingField from "./ProviderRuntimeSettingField";
 
 export type AgentSessionControlAction = "start" | "pause" | "stop" | "resume" | "interrupt";
 
-export function agentSessionStatusLabel(status?: string) {
+export function agentSessionStatusLabel(status?: string, recoveryRequired = false) {
+  if (recoveryRequired) return "복구 필요";
   if (status === "busy") return "응답 중";
   if (status === "starting") return "시작 중";
   if (status === "idle") return "대기";
@@ -31,7 +32,8 @@ export function agentSessionIsPresent(status?: string) {
   return ["starting", "idle", "busy", "paused", "stopping"].includes(status || "");
 }
 
-export function agentSessionPresenceStatus(status?: string) {
+export function agentSessionPresenceStatus(status?: string, recoveryRequired = false) {
+  if (recoveryRequired) return "error";
   if (status === "busy" || status === "starting" || status === "stopping") return "working";
   if (status === "idle") return "online";
   if (status === "paused" || status === "available") return "idle";
@@ -214,8 +216,8 @@ export default function AgentSessionDetails({
     <section className="dc-member-detail-section" aria-label={`${session.display_name} 실행 및 설정`}>
       <div className="dc-member-detail-section-heading">
         <h3>실행 및 설정</h3>
-        <span className="dc-agent-session-state" data-state={agentSessionPresenceStatus(status)}>
-          {agentSessionStatusLabel(status)}
+        <span className="dc-agent-session-state" data-state={agentSessionPresenceStatus(status, session.recovery_required)}>
+          {agentSessionStatusLabel(status, session.recovery_required)}
         </span>
       </div>
       {(status === "error" || session.recovery_required) && visibleSessionError && (

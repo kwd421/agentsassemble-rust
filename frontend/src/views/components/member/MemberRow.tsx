@@ -91,7 +91,8 @@ export default function MemberRow({
             statusDotClass(
               entry.agentSession
                 ? agentSessionPresenceStatus(
-                    entry.agentSession.runtime_status || entry.agentSession.status
+                    entry.agentSession.runtime_status || entry.agentSession.status,
+                    entry.agentSession.recovery_required
                   )
                 : entry.agent?.status || entry.member?.status || "online"
             )

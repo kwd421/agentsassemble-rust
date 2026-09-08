@@ -72,7 +72,7 @@ export function roomTypingIndicators({
   };
 
   sessions.forEach((session) => {
-    if (session.runtime_status === "busy") {
+    if (sessionCanShowTyping(session)) {
       add(
         session.participant_id,
         session.display_name || session.participant_id,
@@ -110,7 +110,7 @@ export function roomTypingNames(options: RoomTypingIndicatorsOptions): string[] 
 }
 
 function sessionCanShowTyping(session: RoomAgentSession | undefined, turnId = "") {
-  if (!session?.runtime_status) return false;
+  if (!session?.runtime_status || session.recovery_required) return false;
   if (session.runtime_status !== "busy") return false;
   return !turnId || !session.active_turn_id || session.active_turn_id === turnId;
 }

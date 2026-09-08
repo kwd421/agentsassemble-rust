@@ -47,7 +47,7 @@ export default function ProviderRequestsPanel({ requests, socket, connected, can
       </header>
       <div style={{ padding: "0 24px 24px", display: "grid", gap: 24, overflowWrap: "anywhere" }}>
         {!connected && <p role="status">연결을 복구하고 있어요. 연결되면 응답할 수 있어요.</p>}
-        {lastClosed && <p role="status">{terminalLabels[String(lastClosed.state)]}</p>}
+        {lastClosed && <p role="status">{requests.length > 0 && "이전 요청: "}{terminalLabels[String(lastClosed.state)]}</p>}
         {requests.map((entry) => <RequestForm key={entry.request.provider_request_id} entry={entry}
           socket={socket} enabled={connected && canPost} />)}
         {!requests.length && <p>대기 중인 요청이 없어요.</p>}

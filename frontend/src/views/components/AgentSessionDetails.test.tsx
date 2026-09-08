@@ -86,6 +86,8 @@ describe("AgentSessionDetails diagnostics", () => {
       await waitFor(() => expect(interrupt!.disabled).toBe(false));
       rerender(<AgentSessionDetails session={{ ...session, recovery_required: true }} provider={provider} onControl={onControl} />);
       expect(screen.queryByRole("button", { name: "응답 중단" })).toBeNull();
+      expect(screen.getByText("복구 필요")).toBeTruthy();
+      expect(screen.queryByText("응답 중")).toBeNull();
     } else {
       expect(interrupt).toBeNull();
       expect(onControl).not.toHaveBeenCalled();

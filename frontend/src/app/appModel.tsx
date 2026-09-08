@@ -97,7 +97,7 @@ export function agentSessionMemberToLiveAgent(
   member: RoomMember,
   session: RoomAgentSession
 ): LiveAgent {
-  const status = session.runtime_status === "busy" ||
+  const status = session.recovery_required ? "error" : session.runtime_status === "busy" ||
     session.runtime_status === "starting" ||
     session.runtime_status === "stopping"
     ? "working"

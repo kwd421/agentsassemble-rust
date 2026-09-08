@@ -125,7 +125,7 @@ export function useMemberEntries({
         ),
         fullDetail: [detail, agentSession?.runtime_kind].filter(Boolean).join(" · "),
         statusLabel: agentSession
-          ? agentSessionStatusLabel(runtimeStatus)
+          ? agentSessionStatusLabel(runtimeStatus, agentSession.recovery_required)
           : member
             ? memberStatusLabel(member)
             : undefined,
@@ -181,7 +181,7 @@ export function useMemberEntries({
           ),
           fullDetail: [fullDetail, agentSession?.runtime_kind].filter(Boolean).join(" · "),
           statusLabel: agentSession
-            ? agentSessionStatusLabel(agentSession.runtime_status || agentSession.status)
+            ? agentSessionStatusLabel(agentSession.runtime_status || agentSession.status, agentSession.recovery_required)
             : memberStatusLabel(member),
           role,
           owner: false,
