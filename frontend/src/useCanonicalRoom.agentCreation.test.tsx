@@ -171,6 +171,7 @@ function harness(historyBefore: RoomSocketHandle["historyBefore"] = vi.fn()) {
       ready: () => true,
       command: vi.fn(),
       say: vi.fn(),
+      resolveProviderRequest: vi.fn(),
       historyBefore,
     } satisfies RoomSocketHandle;
   });

@@ -56,7 +56,7 @@ describe("VotePollCard", () => {
       ready: () => true,
       command,
       say,
-      historyBefore: vi.fn(),
+      resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
     };
     const { rerender } = render(
       <RoomSocketProvider socket={socket}>
@@ -117,7 +117,7 @@ describe("VotePollCard", () => {
       ready: () => true,
       command,
       say,
-      historyBefore: vi.fn(),
+      resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
     };
     render(
       <RoomSocketProvider socket={socket}>
@@ -159,7 +159,7 @@ describe("VotePollCard", () => {
       ready: () => true,
       command,
       say: vi.fn().mockResolvedValue({ events: [] }),
-      historyBefore: vi.fn(),
+      resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
     };
     render(
       <RoomSocketProvider socket={socket}>
@@ -199,7 +199,7 @@ describe("VotePollCard", () => {
       ready: () => true,
       command,
       say,
-      historyBefore: vi.fn(),
+      resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
     };
     render(
       <RoomSocketProvider socket={socket}>
@@ -252,7 +252,7 @@ describe("VotePollCard", () => {
       ready: () => true,
       command,
       say: vi.fn(),
-      historyBefore: vi.fn(),
+      resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
     };
 
     render(
@@ -294,7 +294,7 @@ describe("VotePollCard", () => {
       ready: () => true,
       command,
       say,
-      historyBefore: vi.fn(),
+      resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
     };
     render(
       <RoomSocketProvider socket={socket}>

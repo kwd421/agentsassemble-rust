@@ -14,7 +14,7 @@ describe("room lifecycle notification", () => {
     const resync = vi.fn();
     const openSocket = vi.fn((_auth, _streams, next: RoomSocketHandlers) => {
       handlers = next;
-      return { close, resync, ready: () => true, command: vi.fn(), say: vi.fn(), historyBefore: vi.fn() } satisfies RoomSocketHandle;
+      return { close, resync, ready: () => true, command: vi.fn(), say: vi.fn(), resolveProviderRequest: vi.fn(), historyBefore: vi.fn() } satisfies RoomSocketHandle;
     });
     renderHook(() => useCanonicalRoom({ roomId: "general", auth: { kind: "host", meetingId: "general" }, serverSurface: TEST_SERVER_PRODUCT_SURFACE, openSocket, onRoomLifecycle }));
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());

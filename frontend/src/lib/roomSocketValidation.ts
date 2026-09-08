@@ -316,9 +316,17 @@ export function commandAckResultIsValid(
   payload: Record<string, unknown>,
   result: unknown,
   expectedRoomId: string,
-  expectedParticipantId: string
+  expectedParticipantId: string,
+  expectedRequestId?: string
 ): boolean {
   if (!isRecord(result)) return false;
+  if (action === "provider.request.resolve") {
+    try {
+      assertExactKeys(result, ["provider_request_id", "event_id"], "provider response ACK");
+      return typeof expectedRequestId === "string" && result.provider_request_id === expectedRequestId &&
+        typeof result.event_id === "string" && result.event_id.length > 0;
+    } catch { return false; }
+  }
   const event = isRecord(result.event) ? result.event : null;
   const hasDurableEvent = Boolean(
     event &&

@@ -60,6 +60,7 @@ export interface RoomSocketHandle {
   ready: () => boolean;
   say: (request: RoomSayRequest) => Promise<LobbyPostResponse>;
   command: (action: string, payload?: Record<string, unknown>) => Promise<RoomCommandAck>;
+  resolveProviderRequest: (requestId: string, resolution: import("./types/generated/ProviderRequestResolution").ProviderRequestResolution) => Promise<RoomCommandAck>;
   plugin?: (payload: Record<string, unknown>) => void;
   historyBefore: (beforeSeq: number, limit?: number) => Promise<RoomHistoryPage>;
 }

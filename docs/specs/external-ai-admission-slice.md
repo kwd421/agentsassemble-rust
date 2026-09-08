@@ -476,6 +476,15 @@ socket/canonical frontend tests, frontend build/CSS validation, affected server
 Clippy and unchanged mandatory gates pass.
 Visible request state and response controls remain the next integration step.
 
+The browser socket now exposes a typed response method that preserves the original
+provider request identity, rejects concurrent replacement, and reuses its existing
+bounded reconnect/retry owner. Its ACK validator requires the same request identity
+and metadata-only durable receipt; receipt acceptance is not native-delivery success.
+A reconnect test confirms the unchanged synthetic secret answer and request ID,
+and 102 affected frontend tests plus frontend build/CSS and unchanged architecture,
+19 policy, format and artifact gates pass. Visible request controls remain pending.
+
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

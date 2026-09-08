@@ -109,7 +109,7 @@ describe("useCanonicalRoom", () => {
         ready: () => true,
         command: vi.fn(),
         say: vi.fn(),
-        historyBefore: vi.fn(),
+        resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
       } satisfies RoomSocketHandle;
     });
     const { result } = renderHook(() =>
@@ -178,7 +178,7 @@ describe("useCanonicalRoom", () => {
         ready: () => true,
         command,
         say: vi.fn(),
-        historyBefore: vi.fn(),
+        resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
       } satisfies RoomSocketHandle;
     });
     const { result } = renderHook(() =>
@@ -225,7 +225,7 @@ describe("useCanonicalRoom", () => {
         ready: () => true,
         command: vi.fn(),
         say: vi.fn(),
-        historyBefore: vi.fn(),
+        resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
       } satisfies RoomSocketHandle;
     });
     const { result } = renderHook(() =>
@@ -279,7 +279,7 @@ describe("useCanonicalRoom", () => {
         ready: () => true,
         command: vi.fn(),
         say: vi.fn(),
-        historyBefore: vi.fn(),
+        resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
       } satisfies RoomSocketHandle;
     });
     const { result } = renderHook(() =>
@@ -332,6 +332,7 @@ describe("useCanonicalRoom", () => {
       ready: () => true,
       command,
       say: vi.fn(),
+      resolveProviderRequest: vi.fn(),
       historyBefore,
     };
     const openSocket = vi.fn((_auth, _streams, nextHandlers: RoomSocketHandlers) => {
@@ -409,7 +410,7 @@ describe("useCanonicalRoom", () => {
         ready: () => true,
         command: vi.fn(),
         say: vi.fn(),
-        historyBefore: vi.fn(),
+        resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
       } satisfies RoomSocketHandle;
     });
     const { result } = renderHook(() =>
@@ -500,7 +501,7 @@ describe("useCanonicalRoom", () => {
           ready: () => true,
           command: vi.fn(),
           say: vi.fn(),
-          historyBefore: vi.fn(),
+          resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
         } satisfies RoomSocketHandle;
       });
       const { result } = renderHook(() =>
@@ -571,7 +572,7 @@ describe("useCanonicalRoom", () => {
         ready: () => true,
         command: vi.fn(),
         say: vi.fn(),
-        historyBefore: vi.fn(),
+        resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
       } satisfies RoomSocketHandle;
     });
     const { result } = renderHook(() =>
@@ -648,7 +649,8 @@ describe("useCanonicalRoom", () => {
         ready: () => true,
         command,
         say: vi.fn(),
-        historyBefore,
+        resolveProviderRequest: vi.fn(),
+      historyBefore,
       } satisfies RoomSocketHandle;
     });
     const { result } = renderHook(() =>

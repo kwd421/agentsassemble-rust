@@ -535,7 +535,8 @@ export function openRoomSocket(
               command.payload,
               msg.result,
               dependencies.expectedRoomId,
-              dependencies.expectedParticipantId
+              dependencies.expectedParticipantId,
+              msg.request_id
             )
           ) {
             throw new RoomSocketSayError(
@@ -632,6 +633,15 @@ export function openRoomSocket(
   }
 
   function command(action: string, payload: Record<string, unknown> = {}) {
+    if (action === "provider.request.resolve") {
+      return Promise.reject(new RoomSocketSayError(
+        "Provider responses require their original request identity.", "request_id_required"
+      ));
+    }
+    return enqueueCommand(action, payload);
+  }
+
+  function enqueueCommand(action: string, payload: Record<string, unknown>, providerRequestId?: string) {
     return new Promise<RoomCommandAck>((resolve, reject) => {
       if (closed) {
         reject(new RoomSocketSayError("Room socket is closed.", "socket_closed"));
@@ -646,12 +656,16 @@ export function openRoomSocket(
       }
       let requestId: string;
       try {
-        requestId = createSecureRequestId();
+        requestId = providerRequestId ?? createSecureRequestId();
       } catch {
         reject(new RoomSocketSayError(
           "Secure request identity is unavailable.",
           "request_id_unavailable"
         ));
+        return;
+      }
+      if (!requestId || pending.has(requestId)) {
+        reject(new RoomSocketSayError("A response for this request is already pending or has no identity.", "request_id_conflict"));
         return;
       }
       const encoded = JSON.stringify({
@@ -702,6 +716,7 @@ export function openRoomSocket(
     resync: () => socket?.close(),
     ready: () => transportReady,
     command,
+    resolveProviderRequest: (requestId, resolution) => enqueueCommand("provider.request.resolve", resolution, requestId),
     historyBefore: async (beforeSeq, limit = ROOM_HISTORY_MAX_EVENTS) => {
       const ack = await command("room.history", { before_seq: beforeSeq, limit });
       return ack.result as unknown as RoomHistoryPage;

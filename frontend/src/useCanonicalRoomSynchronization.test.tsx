@@ -88,7 +88,7 @@ function socketHarness(
       ready: () => true,
       command,
       say: vi.fn(),
-      historyBefore: vi.fn(),
+      resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
     } satisfies RoomSocketHandle;
   });
   return {

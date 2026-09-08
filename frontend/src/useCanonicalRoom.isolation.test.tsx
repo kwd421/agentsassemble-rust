@@ -118,7 +118,7 @@ describe("useCanonicalRoom projection isolation", () => {
     const openSocket = vi.fn((_auth: RoomSocketAuth, _streams: string[], handlers: RoomSocketHandlers) => {
       const close = vi.fn();
       connections.push({ handlers, close });
-      return { close, resync: vi.fn(), ready: () => true, say: vi.fn(), historyBefore: vi.fn(), command: vi.fn() };
+      return { close, resync: vi.fn(), ready: () => true, say: vi.fn(), resolveProviderRequest: vi.fn(), historyBefore: vi.fn(), command: vi.fn() };
     });
     const hook = renderHook(({ deviceToken }) => useCanonicalRoom({
       serverSurface: TEST_SERVER_PRODUCT_SURFACE,
@@ -161,7 +161,7 @@ describe("useCanonicalRoom projection isolation", () => {
           resync: vi.fn(),
           ready: () => true,
           say: vi.fn(),
-          historyBefore: vi.fn(),
+          resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
           command: vi.fn((action: string) =>
             auth.kind === "host"
               ? hostCommand.promise
@@ -297,7 +297,7 @@ describe("useCanonicalRoom projection isolation", () => {
           ready: () => true,
           say: vi.fn(),
           command: vi.fn(),
-          historyBefore: vi.fn(),
+          resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
         } satisfies RoomSocketHandle;
       }
     );
@@ -345,7 +345,7 @@ describe("useCanonicalRoom projection isolation", () => {
       ready: () => true,
       command: vi.fn(),
       say: vi.fn(),
-      historyBefore: vi.fn(),
+      resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
     });
     const openSocket = vi.fn((auth, _streams, handlers: RoomSocketHandlers) => {
       const targetRoom = auth.kind === "host" ? auth.meetingId : "guest";
@@ -383,7 +383,7 @@ describe("useCanonicalRoom projection isolation", () => {
         ready: () => false,
         command: vi.fn(),
         say: vi.fn(),
-        historyBefore: vi.fn(),
+        resolveProviderRequest: vi.fn(), historyBefore: vi.fn(),
       } satisfies RoomSocketHandle;
     });
     const onUnauthorized = vi.fn();
