@@ -4,8 +4,8 @@ import {
   type LiveAgent,
   type LobbyEvent,
   type MessageAttachmentAuthority,
-  fetchLobbyMessagePins,
-  setLobbyMessagePinned,
+  fetchMessagePins,
+  setMessagePinned,
   type MessagePin,
   type MessagePinsAuthority,
   type RoomSearchResult,
@@ -240,7 +240,8 @@ export default function LobbyView({
     setPinsLoading(true);
     setPinsError("");
     try {
-      const pins = await fetchLobbyMessagePins({
+      const pins = await fetchMessagePins({
+        channelId: "lobby",
         roomId: activeRoom.meetingId,
         authority: messagePinsAuthority,
         beforeDispatch: () => requireCurrentPinOperation(operation, activePinOperation.current),
@@ -425,7 +426,8 @@ export default function LobbyView({
     setPinBusyIds(new Set([eventId]));
     setPinsError("");
     try {
-      const pins = await setLobbyMessagePinned({
+      const pins = await setMessagePinned({
+        channelId: "lobby",
         roomId: activeRoom.meetingId,
         eventId,
         pinned,

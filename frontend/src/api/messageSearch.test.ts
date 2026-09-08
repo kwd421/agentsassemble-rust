@@ -143,6 +143,37 @@ describe("lobby message-search HTTP authority", () => {
     vi.unstubAllGlobals();
   });
 
+  it("accepts channel and union searches but binds context to one current channel", async () => {
+    const channelId = "c0123456789ab";
+    const authority = { kind: "remote", sessionToken: "aas1.session" } as const;
+    const customResult = { ...result("event-custom", 8), channel_id: channelId };
+    const customEvent = { ...contextEvent("event-custom", 8), type: "channel_message_final", channel_id: channelId };
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ results: [customResult, result()], next_cursor: "" }));
+    const union = await searchRoomMessages({ roomId: "general", channelId: "all", query: "canonical", authority });
+    expect(union.results.map((item) => item.channel_id)).toEqual([channelId, "lobby"]);
+    fetchMock.mockResolvedValueOnce(jsonResponse({ results: [customResult], next_cursor: "" }));
+    await expect(searchRoomMessages({ roomId: "general", channelId, query: "canonical", authority })).resolves.toMatchObject({ results: [customResult] });
+    fetchMock.mockResolvedValueOnce(jsonResponse({ results: [result()], next_cursor: "" }));
+    await expect(searchRoomMessages({ roomId: "general", channelId, query: "canonical", authority })).rejects.toThrow();
+    const context = { channel_id: channelId, event_id: customEvent.id, events: [customEvent] };
+    fetchMock.mockResolvedValueOnce(jsonResponse(context));
+    await expect(fetchRoomMessageContext({ roomId: "general", channelId, eventId: customEvent.id, authority })).resolves.toEqual(context);
+    for (const event of [
+      { ...customEvent, channel_id: "c0123456789ac" },
+      { ...customEvent, room_id: "other" },
+      { ...customEvent, message_deleted: true, content: "" },
+      { ...customEvent, provider_private: "must reject" },
+      contextEvent(customEvent.id, 8),
+    ]) {
+      fetchMock.mockResolvedValueOnce(jsonResponse({ ...context, events: [event] }));
+      await expect(fetchRoomMessageContext({ roomId: "general", channelId, eventId: customEvent.id, authority })).rejects.toThrow();
+    }
+    await expect(fetchRoomMessageContext({ roomId: "general", channelId: "all", eventId: customEvent.id, authority: { kind: "local" } })).rejects.toThrow("채널 식별자");
+    expect(bridge.read).not.toHaveBeenCalled();
+  });
+
   it("uses a fresh local one-use grant for search and context", async () => {
     bridge.read
       .mockResolvedValueOnce(grant("a".repeat(64)))

@@ -1,3 +1,6 @@
+import { isCustomChannelId, requireMessageChannelId } from "../lib/customChannelId";
+import { publicRoomEventIsValid } from "../lib/roomSocketValidation";
+import { CHANNEL_MESSAGE_EVENT_TYPE } from "../types/generated/TEXT_CHAT_WIRE";
 import { requestDesktopMessageSearchReadTicket } from "../lib/desktopBridge";
 import { canonicalRoomId } from "../lib/canonicalRoomId";
 import { assertExactKeys, strictRecord } from "../lib/strictJsonContract";
@@ -36,7 +39,7 @@ export type MessageSearchAuthority = RoomHttpAuthority;
 export type RoomSearchResult = Readonly<{
   event_id: string;
   participant_id: string;
-  channel_id: "lobby";
+  channel_id: string;
   seq: number;
   created_at: string;
   author: string;
@@ -50,7 +53,7 @@ export type RoomSearchPage = Readonly<{
 }>;
 
 export type RoomMessageContext = Readonly<{
-  channel_id: "lobby";
+  channel_id: string;
   event_id: string;
   events: RoomEvent[];
 }>;
@@ -111,7 +114,7 @@ const RFC3339_UTC_OFFSET =
 const CURSOR = /^[A-Za-z0-9_-]+$/;
 
 function invalidResponse(): never {
-  throw new Error("로비 메시지 검색 응답 계약이 올바르지 않습니다.");
+  throw new Error("메시지 검색 응답 계약이 올바르지 않습니다.");
 }
 
 function boundedString(value: unknown, limit: number, allowEmpty = false): string {
@@ -165,16 +168,17 @@ function hasVisibleText(value: string): boolean {
   );
 }
 
-function parseSearchResult(value: unknown): RoomSearchResult {
-  const result = strictRecord(value, "로비 메시지 검색 결과");
-  assertExactKeys(result, SEARCH_RESULT_KEYS, "로비 메시지 검색 결과");
+function parseSearchResult(value: unknown, channelId: string): RoomSearchResult {
+  const result = strictRecord(value, "메시지 검색 결과");
+  assertExactKeys(result, SEARCH_RESULT_KEYS, "메시지 검색 결과");
   const content = boundedString(
     result.content,
     MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS,
     true
   );
   if (
-    result.channel_id !== "lobby" ||
+    (result.channel_id !== "lobby" && !isCustomChannelId(result.channel_id)) ||
+    (channelId !== "all" && result.channel_id !== channelId) ||
     !Array.isArray(result.attachment_filenames) ||
     result.attachment_filenames.length > MAX_MESSAGE_ATTACHMENTS_PER_EVENT
   ) {
@@ -185,7 +189,7 @@ function parseSearchResult(value: unknown): RoomSearchResult {
   return Object.freeze({
     event_id: eventId(result.event_id),
     participant_id: boundedString(result.participant_id, 256),
-    channel_id: "lobby",
+    channel_id: result.channel_id as string,
     seq: positiveSequence(result.seq),
     created_at: timestamp(result.created_at),
     author: boundedString(result.author, MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS),
@@ -194,13 +198,13 @@ function parseSearchResult(value: unknown): RoomSearchResult {
   });
 }
 
-function parseSearchPage(value: unknown): RoomSearchPage {
-  const page = strictRecord(value, "로비 메시지 검색 페이지");
-  assertExactKeys(page, ["results", "next_cursor"], "로비 메시지 검색 페이지");
+function parseSearchPage(value: unknown, channelId: string): RoomSearchPage {
+  const page = strictRecord(value, "메시지 검색 페이지");
+  assertExactKeys(page, ["results", "next_cursor"], "메시지 검색 페이지");
   if (!Array.isArray(page.results) || page.results.length > MESSAGE_SEARCH_PAGE_SIZE) {
     invalidResponse();
   }
-  const results = page.results.map(parseSearchResult);
+  const results = page.results.map((result) => parseSearchResult(result, channelId));
   const cursor = boundedString(page.next_cursor, MAX_MESSAGE_SEARCH_CURSOR_BYTES, true);
   if (
     (cursor && (!CURSOR.test(cursor) || results.length !== MESSAGE_SEARCH_PAGE_SIZE)) ||
@@ -225,8 +229,8 @@ function parseSearchPage(value: unknown): RoomSearchPage {
 }
 
 function parseActor(value: unknown): Readonly<{ participant_id: string; participant_type: string }> {
-  const actor = strictRecord(value, "로비 메시지 검색 actor");
-  assertExactKeys(actor, ["participant_id", "participant_type"], "로비 메시지 검색 actor");
+  const actor = strictRecord(value, "메시지 검색 actor");
+  assertExactKeys(actor, ["participant_id", "participant_type"], "메시지 검색 actor");
   return Object.freeze({
     participant_id: boundedString(actor.participant_id, 256),
     participant_type: boundedString(actor.participant_type, 64),
@@ -315,8 +319,13 @@ function parseVoteFields(event: Record<string, unknown>, createdAt: string) {
   });
 }
 
-function parseContextEvent(value: unknown, roomId: string): RoomEvent {
-  const event = strictRecord(value, "로비 메시지 검색 컨텍스트 이벤트");
+function parseContextEvent(value: unknown, roomId: string, channelId: string): RoomEvent {
+  if (channelId !== "lobby") {
+    if (!publicRoomEventIsValid(value, roomId) || value.type !== CHANNEL_MESSAGE_EVENT_TYPE ||
+        value.channel_id !== channelId || value.message_deleted === true) invalidResponse();
+    return Object.freeze({ ...value, actor: Object.freeze({ ...value.actor }) });
+  }
+  const event = strictRecord(value, "메시지 검색 컨텍스트 이벤트");
   const source = event.message_source;
   if (source === undefined) {
     assertExactKeys(
@@ -324,13 +333,13 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
       event.message_kind === "vote"
         ? [...CONTEXT_EVENT_KEYS, ...VOTE_EVENT_KEYS]
         : CONTEXT_EVENT_KEYS,
-      "로비 메시지 검색 컨텍스트 이벤트",
+      "메시지 검색 컨텍스트 이벤트",
       ["attachments"]
     );
   } else if (source === "room_portal") {
-    assertExactKeys(event, [...CONTEXT_EVENT_KEYS, ...ROOM_PORTAL_KEYS], "로비 메시지 검색 컨텍스트 이벤트");
+    assertExactKeys(event, [...CONTEXT_EVENT_KEYS, ...ROOM_PORTAL_KEYS], "메시지 검색 컨텍스트 이벤트");
   } else if (source === "room_tool_result") {
-    assertExactKeys(event, [...CONTEXT_EVENT_KEYS, ...ROOM_TOOL_KEYS], "로비 메시지 검색 컨텍스트 이벤트");
+    assertExactKeys(event, [...CONTEXT_EVENT_KEYS, ...ROOM_TOOL_KEYS], "메시지 검색 컨텍스트 이벤트");
   } else {
     invalidResponse();
   }
@@ -414,11 +423,11 @@ function parseContextEvent(value: unknown, roomId: string): RoomEvent {
   }) as unknown as RoomEvent;
 }
 
-function parseContext(value: unknown, roomId: string, expectedEventId: string): RoomMessageContext {
-  const context = strictRecord(value, "로비 메시지 검색 컨텍스트");
-  assertExactKeys(context, ["channel_id", "event_id", "events"], "로비 메시지 검색 컨텍스트");
+function parseContext(value: unknown, roomId: string, channelId: string, expectedEventId: string): RoomMessageContext {
+  const context = strictRecord(value, "메시지 검색 컨텍스트");
+  assertExactKeys(context, ["channel_id", "event_id", "events"], "메시지 검색 컨텍스트");
   if (
-    context.channel_id !== "lobby" ||
+    context.channel_id !== channelId ||
     context.event_id !== expectedEventId ||
     !Array.isArray(context.events) ||
     context.events.length === 0 ||
@@ -426,7 +435,7 @@ function parseContext(value: unknown, roomId: string, expectedEventId: string): 
   ) {
     invalidResponse();
   }
-  const events = context.events.map((event) => parseContextEvent(event, roomId));
+  const events = context.events.map((event) => parseContextEvent(event, roomId, channelId));
   const targetIndex = events.findIndex((event) => event.id === expectedEventId);
   if (
     events.filter((event) => event.id === expectedEventId).length !== 1 ||
@@ -438,7 +447,7 @@ function parseContext(value: unknown, roomId: string, expectedEventId: string): 
     invalidResponse();
   }
   return Object.freeze({
-    channel_id: "lobby",
+    channel_id: channelId,
     event_id: expectedEventId,
     events,
   });
@@ -489,6 +498,7 @@ export async function searchRoomMessages({
   beforeDispatch?: () => void;
 }): Promise<RoomSearchPage> {
   const room = canonicalRoomId(roomId);
+  if (channelId !== "all") requireMessageChannelId(channelId);
   const resolvedAuthority = await searchAuthority(room, authority);
   const path = `/api/room-search${queryString({
     room_id: room,
@@ -496,7 +506,7 @@ export async function searchRoomMessages({
     q: query,
     cursor: cursor || undefined,
   })}`;
-  return parseSearchPage(await fetchSearchJson(path, resolvedAuthority, beforeDispatch));
+  return parseSearchPage(await fetchSearchJson(path, resolvedAuthority, beforeDispatch), channelId);
 }
 
 export async function fetchRoomMessageContext({
@@ -514,6 +524,7 @@ export async function fetchRoomMessageContext({
 }): Promise<RoomMessageContext> {
   const room = canonicalRoomId(roomId);
   const target = eventId(rawEventId);
+  requireMessageChannelId(channelId);
   const resolvedAuthority = await searchAuthority(room, authority);
   const path = `/api/room-search/context${queryString({
     room_id: room,
@@ -523,6 +534,7 @@ export async function fetchRoomMessageContext({
   return parseContext(
     await fetchSearchJson(path, resolvedAuthority, beforeDispatch),
     room,
+    channelId,
     target
   );
 }

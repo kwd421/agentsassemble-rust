@@ -12,8 +12,8 @@ const api = vi.hoisted(() => ({
 
 vi.mock("../api", async () => ({
   ...(await vi.importActual<typeof import("../api")>("../api")),
-  fetchLobbyMessagePins: api.fetchLobbyPins,
-  setLobbyMessagePinned: api.setLobbyPin,
+  fetchMessagePins: api.fetchLobbyPins,
+  setMessagePinned: api.setLobbyPin,
   fetchChannelLobby: api.fetchChannelLobby,
   fetchRoomMessageContext: api.fetchRoomContext,
 }));
@@ -94,6 +94,7 @@ describe("message-pin view ownership", () => {
     fireEvent.click(screen.getByRole("button", { name: "메시지 고정" }));
     await waitFor(() =>
       expect(api.setLobbyPin).toHaveBeenCalledWith({
+        channelId: "lobby",
         roomId: "general",
         eventId: "event-1",
         pinned: true,
@@ -105,6 +106,7 @@ describe("message-pin view ownership", () => {
     fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
     await waitFor(() =>
       expect(api.fetchLobbyPins).toHaveBeenCalledWith({
+        channelId: "lobby",
         roomId: "general",
         authority: { kind: "local" },
         beforeDispatch: expect.any(Function),

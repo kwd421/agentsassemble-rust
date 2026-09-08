@@ -1,3 +1,4 @@
+import { requireMessageChannelId } from "../lib/customChannelId";
 import {
   requestDesktopMessagePinsReadTicket,
   requestDesktopMessagePinsWriteTicket,
@@ -18,7 +19,7 @@ import type { RoomHttpAuthority } from "./roomHttpAuthority";
 
 export type MessagePin = {
   event_id: string;
-  channel_id: "lobby";
+  channel_id: string;
   pinned_at: string;
   seq: number;
   author: string;
@@ -43,7 +44,7 @@ const PIN_KEYS = [
 ] as const;
 
 function invalidResponse(): never {
-  throw new Error("로비 메시지 핀 응답 계약이 올바르지 않습니다.");
+  throw new Error("메시지 고정 응답 계약이 올바르지 않습니다.");
 }
 
 function canonicalEventId(value: unknown): string {
@@ -77,17 +78,17 @@ function hasVisibleText(value: string): boolean {
   );
 }
 
-function parsePin(value: unknown): MessagePin {
-  const pin = strictRecord(value, "로비 메시지 핀");
-  assertExactKeys(pin, PIN_KEYS, "로비 메시지 핀");
+function parsePin(value: unknown, channelId: string): MessagePin {
+  const pin = strictRecord(value, "메시지 고정");
+  assertExactKeys(pin, PIN_KEYS, "메시지 고정");
   const eventId = canonicalEventId(pin.event_id);
-  const author = requiredString(pin, "author", "로비 메시지 핀");
-  const content = requiredString(pin, "content", "로비 메시지 핀");
+  const author = requiredString(pin, "author", "메시지 고정");
+  const content = requiredString(pin, "content", "메시지 고정");
   if (
     !isUnicodeScalarString(author) ||
     !isUnicodeScalarString(content) ||
     !hasVisibleText(content) ||
-    pin.channel_id !== "lobby" ||
+    pin.channel_id !== channelId ||
     !Number.isSafeInteger(pin.seq) ||
     Number(pin.seq) < 1 ||
     !Array.isArray(pin.attachment_filenames) ||
@@ -97,7 +98,7 @@ function parsePin(value: unknown): MessagePin {
   }
   return Object.freeze({
     event_id: eventId,
-    channel_id: "lobby",
+    channel_id: channelId,
     pinned_at: timestamp(pin.pinned_at),
     seq: pin.seq as number,
     author,
@@ -107,11 +108,11 @@ function parsePin(value: unknown): MessagePin {
   });
 }
 
-function parsePins(value: unknown): MessagePin[] {
+function parsePins(value: unknown, channelId: string): MessagePin[] {
   if (!Array.isArray(value) || value.length > MAX_CHANNEL_MESSAGE_PINS) {
     invalidResponse();
   }
-  const pins = value.map(parsePin);
+  const pins = value.map((pin) => parsePin(pin, channelId));
   if (
     new Set(pins.map((pin) => pin.event_id)).size !== pins.length ||
     new Set(pins.map((pin) => pin.seq)).size !== pins.length
@@ -121,21 +122,22 @@ function parsePins(value: unknown): MessagePin[] {
   return pins;
 }
 
-function parseListResponse(value: unknown): MessagePin[] {
-  const response = strictRecord(value, "로비 메시지 핀 목록");
-  assertExactKeys(response, ["pins"], "로비 메시지 핀 목록");
-  return parsePins(response.pins);
+function parseListResponse(value: unknown, channelId: string): MessagePin[] {
+  const response = strictRecord(value, "메시지 고정 목록");
+  assertExactKeys(response, ["pins"], "메시지 고정 목록");
+  return parsePins(response.pins, channelId);
 }
 
 function parseMutationResponse(
   value: unknown,
+  channelId: string,
   expectedEventId: string,
   expectedPinned: boolean
 ): MessagePin[] {
-  const response = strictRecord(value, "로비 메시지 핀 변경");
-  assertExactKeys(response, ["pinned", "pins"], "로비 메시지 핀 변경");
+  const response = strictRecord(value, "메시지 고정 변경");
+  assertExactKeys(response, ["pinned", "pins"], "메시지 고정 변경");
   if (response.pinned !== expectedPinned) invalidResponse();
-  const pins = parsePins(response.pins);
+  const pins = parsePins(response.pins, channelId);
   if (pins.some((pin) => pin.event_id === expectedEventId) !== expectedPinned) {
     invalidResponse();
   }
@@ -170,20 +172,23 @@ function bearer(credential: string, json = false, deviceToken?: string): Headers
   return headers;
 }
 
-export async function fetchLobbyMessagePins({
+export async function fetchMessagePins({
   roomId,
+  channelId,
   authority,
   beforeDispatch,
 }: {
   roomId: string;
+  channelId: string;
   authority: MessagePinsAuthority;
   beforeDispatch?: () => void;
 }): Promise<MessagePin[]> {
   const canonicalRoom = canonicalRoomId(roomId);
+  requireMessageChannelId(channelId);
   const resolved = await operationAuthority(canonicalRoom, authority, "read");
   const path = `/api/room-pins${queryString({
     room_id: canonicalRoom,
-    channel_id: "lobby",
+    channel_id: channelId,
   })}`;
   beforeDispatch?.();
   const response = await fetch(`${resolved.baseUrl}${path}`, {
@@ -191,23 +196,26 @@ export async function fetchLobbyMessagePins({
     headers: bearer(resolved.credential, false, resolved.deviceToken),
   });
   if (!response.ok) throw await responseError(response);
-  return parseListResponse(await response.json());
+  return parseListResponse(await response.json(), channelId);
 }
 
-export async function setLobbyMessagePinned({
+export async function setMessagePinned({
   roomId,
+  channelId,
   eventId,
   pinned,
   authority,
   beforeDispatch,
 }: {
   roomId: string;
+  channelId: string;
   eventId: string;
   pinned: boolean;
   authority: MessagePinsAuthority;
   beforeDispatch?: () => void;
 }): Promise<MessagePin[]> {
   const canonicalRoom = canonicalRoomId(roomId);
+  requireMessageChannelId(channelId);
   const canonicalEvent = canonicalEventId(eventId);
   const resolved = await operationAuthority(canonicalRoom, authority, "write");
   beforeDispatch?.();
@@ -217,11 +225,11 @@ export async function setLobbyMessagePinned({
     headers: bearer(resolved.credential, true, resolved.deviceToken),
     body: JSON.stringify({
       room_id: canonicalRoom,
-      channel_id: "lobby",
+      channel_id: channelId,
       event_id: canonicalEvent,
       pinned,
     }),
   });
   if (!response.ok) throw await responseError(response);
-  return parseMutationResponse(await response.json(), canonicalEvent, pinned);
+  return parseMutationResponse(await response.json(), channelId, canonicalEvent, pinned);
 }

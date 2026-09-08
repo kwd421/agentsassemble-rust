@@ -14,8 +14,8 @@ vi.mock("../lib/desktopBridge", async () => ({
 }));
 
 import {
-  fetchLobbyMessagePins,
-  setLobbyMessagePinned,
+  fetchMessagePins,
+  setMessagePinned,
 } from "./messagePins";
 
 function grant(ticket: string) {
@@ -52,6 +52,26 @@ describe("lobby message-pin HTTP authority", () => {
     vi.unstubAllGlobals();
   });
 
+  it("binds custom pin lists and mutation receipts to the requested channel", async () => {
+    const channelId = "c0123456789ab";
+    const authority = { kind: "remote", sessionToken: "aas1.session" } as const;
+    const custom = { ...pin(), channel_id: channelId };
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse({ pins: [custom] }))
+      .mockResolvedValueOnce(jsonResponse({ pinned: true, pins: [custom] }))
+      .mockResolvedValueOnce(jsonResponse({ pins: [pin()] }))
+      .mockResolvedValueOnce(jsonResponse({ pinned: true, pins: [{ ...custom, channel_id: "c0123456789ac" }] }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(fetchMessagePins({ roomId: "general", channelId, authority })).resolves.toEqual([custom]);
+    await expect(setMessagePinned({ roomId: "general", channelId, authority, eventId: custom.event_id, pinned: true })).resolves.toEqual([custom]);
+    expect(fetchMock.mock.calls[0][0]).toContain(`channel_id=${channelId}`);
+    expect(JSON.parse(fetchMock.mock.calls[1][1].body).channel_id).toBe(channelId);
+    await expect(fetchMessagePins({ roomId: "general", channelId, authority })).rejects.toThrow();
+    await expect(setMessagePinned({ roomId: "general", channelId, authority, eventId: custom.event_id, pinned: true })).rejects.toThrow();
+    await expect(fetchMessagePins({ roomId: "general", channelId: "all", authority: { kind: "local" } })).rejects.toThrow("채널 식별자");
+    expect(bridge.read).not.toHaveBeenCalled();
+  });
+
   it("uses distinct local read and write grants on the issued loopback base", async () => {
     bridge.read.mockResolvedValue(grant("a".repeat(64)));
     bridge.write.mockResolvedValue(grant("b".repeat(64)));
@@ -61,11 +81,13 @@ describe("lobby message-pin HTTP authority", () => {
       .mockResolvedValueOnce(jsonResponse({ pinned: false, pins: [] }));
     vi.stubGlobal("fetch", fetchMock);
 
-    const listed = await fetchLobbyMessagePins({
+    const listed = await fetchMessagePins({
+        channelId: "lobby",
       roomId: "general",
       authority: { kind: "local" },
     });
-    const changed = await setLobbyMessagePinned({
+    const changed = await setMessagePinned({
+        channelId: "lobby",
       roomId: "general",
       eventId: "event-1",
       pinned: false,
@@ -106,8 +128,9 @@ describe("lobby message-pin HTTP authority", () => {
     vi.stubGlobal("fetch", fetchMock);
     const authority = { kind: "remote", sessionToken, deviceToken } as const;
 
-    await fetchLobbyMessagePins({ roomId: "general", authority });
-    await setLobbyMessagePinned({
+    await fetchMessagePins({ channelId: "lobby", roomId: "general", authority });
+    await setMessagePinned({
+        channelId: "lobby",
       roomId: "general",
       eventId: "event-1",
       pinned: true,
@@ -147,7 +170,8 @@ describe("lobby message-pin HTTP authority", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await expect(
-      setLobbyMessagePinned({
+      setMessagePinned({
+        channelId: "lobby",
         roomId: "general",
         eventId: "event-1",
         pinned: true,
@@ -168,7 +192,8 @@ describe("lobby message-pin HTTP authority", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     let current = true;
-    const request = fetchLobbyMessagePins({
+    const request = fetchMessagePins({
+        channelId: "lobby",
       roomId: "general",
       authority: { kind: "local" },
       beforeDispatch: () => {
@@ -187,7 +212,8 @@ describe("lobby message-pin HTTP authority", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     await expect(
-      setLobbyMessagePinned({
+      setMessagePinned({
+        channelId: "lobby",
         roomId: "general",
         eventId: "event-1",
         pinned: true,
@@ -221,7 +247,8 @@ describe("lobby message-pin HTTP authority", () => {
     for (const payload of malformed) {
       vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(payload)));
       await expect(
-        fetchLobbyMessagePins({
+        fetchMessagePins({
+        channelId: "lobby",
           roomId: "general",
           authority: { kind: "local" },
         })
@@ -242,7 +269,8 @@ describe("lobby message-pin HTTP authority", () => {
     );
 
     await expect(
-      fetchLobbyMessagePins({
+      fetchMessagePins({
+        channelId: "lobby",
         roomId: "general",
         authority: { kind: "local" },
       })
@@ -251,13 +279,15 @@ describe("lobby message-pin HTTP authority", () => {
 
   it("rejects invalid identities before consuming a native grant", async () => {
     await expect(
-      fetchLobbyMessagePins({
+      fetchMessagePins({
+        channelId: "lobby",
         roomId: " general",
         authority: { kind: "local" },
       })
     ).rejects.toThrow("방 식별자");
     await expect(
-      setLobbyMessagePinned({
+      setMessagePinned({
+        channelId: "lobby",
         roomId: "general",
         eventId: `event-${"a".repeat(129)}`,
         pinned: true,
@@ -265,7 +295,8 @@ describe("lobby message-pin HTTP authority", () => {
       })
     ).rejects.toThrow("메시지 식별자");
     await expect(
-      setLobbyMessagePinned({
+      setMessagePinned({
+        channelId: "lobby",
         roomId: "general",
         eventId: "é".repeat(65),
         pinned: true,
@@ -273,7 +304,8 @@ describe("lobby message-pin HTTP authority", () => {
       })
     ).rejects.toThrow("메시지 식별자");
     await expect(
-      setLobbyMessagePinned({
+      setMessagePinned({
+        channelId: "lobby",
         roomId: "general",
         eventId: "event-\ud800",
         pinned: true,
@@ -292,7 +324,8 @@ describe("lobby message-pin HTTP authority", () => {
     );
 
     await expect(
-      setLobbyMessagePinned({
+      setMessagePinned({
+        channelId: "lobby",
         roomId: "general",
         eventId: "event-1",
         pinned: true,

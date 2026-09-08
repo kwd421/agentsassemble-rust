@@ -350,3 +350,21 @@ all-feature Clippy and unchanged structure/19 policy/format/diff/artifact gates 
 Pin reads remain at most 64 projections; the room-owned pointer scan can cover the
 bounded set of 50 custom channels plus lobby. The public client parser and custom
 channel mounting remain the next slice; packaged acceptance is still pending.
+
+## Channel search and pin clients
+
+The existing search and pin clients now accept an explicit lobby/custom channel.
+A shared selector validates the outbound identity before native grant consumption.
+Search pages bind every result to the requested channel, or permit the canonical
+union when `all` was requested. Context binds the enclosing response and every
+custom event to the same room/channel and reuses the canonical public event parser;
+retired tombstones and private/extra fields fail. Pin lists and mutation receipts
+bind every pointer to the requested concrete channel. The lobby callers now pass
+`lobby` explicitly; there are no compatibility wrappers or alternate routes.
+
+All 28 affected client/view/window cases pass (1.11 s), including mixed union results,
+wrong-channel/context rejection, retired/private records and pin receipt scope.
+Production frontend build and unchanged CSS, structure/19 policy and diff gates pass.
+React review found no added state, effects or subscription; this extends existing
+bounded projections and adds approximately 0.14 KiB compressed code. The custom
+channel screen and packaged verification remain the next work.
