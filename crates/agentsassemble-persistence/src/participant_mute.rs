@@ -40,14 +40,14 @@ struct PreparedParticipantMute {
     participant: Participant,
     event: RoomEvent,
     scheduling: crate::AgentTurnCommit,
-    interrupt_effect: Option<ProviderTurnInterruptEffect>,
+    host_interrupt_effect: Option<ProviderTurnInterruptEffect>,
 }
 
 #[derive(Debug, Clone)]
 pub struct ParticipantMuteMutation {
     pub outcome: CommandOutcome,
     pub assignments: Vec<AgentTurnAssignment>,
-    pub interrupt_effect: Option<ProviderTurnInterruptEffect>,
+    pub host_interrupt_effect: Option<ProviderTurnInterruptEffect>,
 }
 
 impl SqliteStore {
@@ -87,7 +87,7 @@ impl SqliteStore {
             return Ok(ParticipantMuteMutation {
                 outcome,
                 assignments: Vec::new(),
-                interrupt_effect: None,
+                host_interrupt_effect: None,
             });
         }
         let update = parse_update(payload)?;
@@ -117,7 +117,7 @@ impl SqliteStore {
                 deduplicated: false,
             },
             assignments: prepared.scheduling.next_assignments,
-            interrupt_effect: prepared.interrupt_effect,
+            host_interrupt_effect: prepared.host_interrupt_effect,
         })
     }
 }
@@ -175,12 +175,17 @@ async fn prepare_participant_mute(
     )
     .await?;
     insert_event(transaction, &event).await?;
-    let mut interrupt_effect = None;
+    let mut host_interrupt_effect = None;
     let mut scheduling = crate::AgentTurnCommit {
         events: Vec::new(),
         next_assignments: Vec::new(),
     };
     if let Some(session) = &mut agent_session {
+        let external =
+            session.public.external_owned && session.public.process_ownership == "external";
+        if !external {
+            crate::room_runtime_cleanup::require_server_custody(session)?;
+        }
         if update.muted && active_turn_authority(session).map_err(|_| stored_turn_invalid())? {
             let execution = load_execution_in(
                 transaction,
@@ -189,14 +194,15 @@ async fn prepare_participant_mute(
                 session.turn_generation,
             )
             .await?;
-            interrupt_effect = Some(
-                prepare_interrupt_effect(
-                    transaction,
-                    &execution,
-                    ProviderTurnInterruptCause::ParticipantMuted,
-                )
-                .await?,
-            );
+            let effect = prepare_interrupt_effect(
+                transaction,
+                &execution,
+                ProviderTurnInterruptCause::ParticipantMuted,
+            )
+            .await?;
+            if !external {
+                host_interrupt_effect = Some(effect);
+            }
         } else if !update.muted {
             session.schedule_requested = true;
             session.public.updated_at = Utc::now();
@@ -209,7 +215,7 @@ async fn prepare_participant_mute(
         participant,
         event,
         scheduling,
-        interrupt_effect,
+        host_interrupt_effect,
     })
 }
 

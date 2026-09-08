@@ -28,11 +28,12 @@ pub(crate) const INTERRUPTED_MESSAGE: &str =
 #[derive(Debug, Clone)]
 pub struct AgentInterruptMutation {
     pub outcome: CommandOutcome,
-    pub interrupt_effect: Option<ProviderTurnInterruptEffect>,
+    pub host_interrupt_effect: Option<ProviderTurnInterruptEffect>,
 }
 
 #[derive(Debug, Clone)]
 pub enum AgentInterruptPlan {
+    External,
     Outcome(Box<CommandOutcome>),
     Interruptible {
         session: Box<DurableAgentSession>,
@@ -75,6 +76,9 @@ impl SqliteStore {
         let (session, execution) =
             load_interruptible_session(&mut transaction, &principal.room_id, &agent_id).await?;
         transaction.commit().await?;
+        if session.public.external_owned {
+            return Ok(AgentInterruptPlan::External);
+        }
         Ok(AgentInterruptPlan::Interruptible {
             session: Box::new(session),
             durable_turn_is_assigned: execution.phase == ProviderTurnExecutionPhase::Assigned,
@@ -113,7 +117,7 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(AgentInterruptMutation {
                 outcome,
-                interrupt_effect: None,
+                host_interrupt_effect: None,
             });
         }
         let (mut session, execution) =
@@ -147,7 +151,7 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(AgentInterruptMutation {
             outcome,
-            interrupt_effect: Some(effect),
+            host_interrupt_effect: (!session.public.external_owned).then_some(effect),
         })
     }
 }
@@ -170,6 +174,8 @@ async fn load_interruptible_session(
                 "The external runtime has not reported retained-turn interrupt capability.",
             ));
         }
+    } else {
+        crate::room_runtime_cleanup::require_server_custody(&session)?;
     }
 
     let execution =

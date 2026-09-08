@@ -232,7 +232,7 @@ async fn execute_participant_mute(
         Ok(mutation) => mutation,
         Err(error) => return CommandExecution::transactional_failure(error),
     };
-    let effect = mutation.interrupt_effect.clone();
+    let effect = mutation.host_interrupt_effect.clone();
     let mut execution = CommandExecution::participant_mute(mutation);
     if let Some(effect) = effect {
         match Box::pin(
@@ -267,16 +267,18 @@ async fn execute_agent_interrupt(
         Ok(plan) => plan,
         Err(error) => return CommandExecution::transactional_failure(error),
     };
-    let (session, durable_turn_is_assigned) = match plan {
+    let managed = match plan {
+        AgentInterruptPlan::External => None,
         AgentInterruptPlan::Outcome(outcome) => return CommandExecution::success(*outcome),
         AgentInterruptPlan::Interruptible {
             session,
             durable_turn_is_assigned,
-        } => (session, durable_turn_is_assigned),
+        } => Some((session, durable_turn_is_assigned)),
     };
-    if let Err(error) = provider_adapter
-        .require_retained_turn_interrupt(&session, durable_turn_is_assigned)
-        .await
+    if let Some((session, durable_turn_is_assigned)) = managed
+        && let Err(error) = provider_adapter
+            .require_retained_turn_interrupt(&session, durable_turn_is_assigned)
+            .await
     {
         return CommandExecution::transactional_failure(PersistenceError::CommandRejected {
             code: error.code,
@@ -294,7 +296,7 @@ async fn execute_agent_interrupt(
         Ok(mutation) => mutation,
         Err(error) => return CommandExecution::transactional_failure(error),
     };
-    let effect = mutation.interrupt_effect;
+    let effect = mutation.host_interrupt_effect;
     let mut execution = CommandExecution::success(mutation.outcome);
     if let Some(effect) = effect {
         match Box::pin(

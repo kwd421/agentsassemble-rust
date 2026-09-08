@@ -1,5 +1,7 @@
 #[path = "attendee_cleanup_web.rs"]
 mod cleanup;
+#[path = "attendee_interrupt_web.rs"]
+mod interrupt;
 #[path = "attendee_socket.rs"]
 mod socket;
 #[path = "attendee_socket_protocol.rs"]
@@ -42,6 +44,7 @@ registered_routes! {
         same_origin_public "/api/room-attendee/join" => post(join),
         same_origin_public "/api/room-attendee/ws" => get(upgrade_socket),
         same_origin_public "/api/room-attendee/cleanup" => get(cleanup::read).post(cleanup::report),
+        same_origin_public "/api/room-attendee/interrupt" => post(interrupt::report),
     }
 }
 

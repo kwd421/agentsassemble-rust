@@ -10,6 +10,11 @@ use super::{RoomCommandOwners, RoomMutation, RoomRuntime};
 use crate::event_publication::PublicationAttempt;
 
 pub enum AttendeeOperation {
+    Interrupt {
+        authority: AttendeeCleanupAuthorization,
+        connection_id: Uuid,
+        report: Box<agentsassemble_persistence::AttendeeInterruptReport>,
+    },
     Connect {
         session: AttendeeSessionAuthorization,
         connection_id: Uuid,
@@ -34,7 +39,9 @@ pub enum AttendeeOperation {
 impl AttendeeOperation {
     fn room_id(&self) -> &str {
         match self {
-            Self::Cleanup { authority, .. } => authority.room_id(),
+            Self::Cleanup { authority, .. } | Self::Interrupt { authority, .. } => {
+                authority.room_id()
+            }
             Self::Connect { session, .. } => &session.principal().room_id,
             Self::Ready { connection, .. }
             | Self::Report { connection, .. }
@@ -127,6 +134,16 @@ async fn apply(
         next_assignments: Vec::new(),
     };
     match operation {
+        AttendeeOperation::Interrupt {
+            authority,
+            connection_id,
+            report,
+        } => {
+            let mutation = store
+                .record_attendee_interrupt(&authority, connection_id, &report, now)
+                .await?;
+            Ok(reported(mutation))
+        }
         AttendeeOperation::Connect {
             session,
             connection_id,

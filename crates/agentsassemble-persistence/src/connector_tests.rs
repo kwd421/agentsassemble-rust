@@ -199,7 +199,7 @@ async fn connector_moderation_controls_membership_without_claiming_a_provider_pr
             &serde_json::json!({"participant_id":target,"muted":true}),
         )
         .await?;
-    assert!(muted.interrupt_effect.is_none());
+    assert!(muted.host_interrupt_effect.is_none());
     assert!(muted.assignments.is_empty());
     assert!(
         store

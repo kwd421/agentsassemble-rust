@@ -41,6 +41,12 @@ pub(super) async fn report(
         })
         .await
         .map_err(AttendeeHttpError::from_persistence)?;
+    acknowledge(result)
+}
+
+pub(super) fn acknowledge(
+    result: AttendeeOperationResult,
+) -> Result<Json<Value>, AttendeeHttpError> {
     let AttendeeOperationResult::Reported {
         event_id,
         sequence,
@@ -57,7 +63,7 @@ pub(super) async fn report(
     ))
 }
 
-async fn authorize(
+pub(super) async fn authorize(
     state: &AppState,
     headers: &HeaderMap,
 ) -> Result<AttendeeCleanupAuthorization, AttendeeHttpError> {

@@ -57,7 +57,7 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
     let muted_event_seq = muted.outcome.event.seq;
     assert_eq!(muted.outcome.result["event_seq"], json!(muted_event_seq));
     let effect = muted
-        .interrupt_effect
+        .host_interrupt_effect
         .unwrap_or_else(|| panic!("active Agent interrupt effect"));
     assert_eq!(effect.execution_id, assignment.execution_id);
     assert_eq!(effect.turn_generation, assignment.turn_generation);
@@ -89,7 +89,7 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
         .await
         .unwrap_or_else(|error| panic!("replay Agent mute: {error}"));
     assert!(replay.outcome.deduplicated);
-    assert!(replay.interrupt_effect.is_none());
+    assert!(replay.host_interrupt_effect.is_none());
     assert_eq!(replay.outcome.result["event_seq"], json!(muted_event_seq));
     let claim = store
         .claim_provider_turn_interrupt(&effect, "10000000-0000-4000-8000-000000000099")
@@ -136,7 +136,7 @@ async fn human_mute_changes_only_room_participant_authority() {
         )
         .await
         .unwrap_or_else(|error| panic!("mute human participant: {error}"));
-    assert!(muted.interrupt_effect.is_none());
+    assert!(muted.host_interrupt_effect.is_none());
     assert!(muted.assignments.is_empty());
     assert!(
         store
@@ -379,7 +379,7 @@ async fn authorized_turn_mute_fences_interrupt_before_finalization() {
         )
         .await
         .unwrap_or_else(|error| panic!("mute started Agent turn: {error}"))
-        .interrupt_effect
+        .host_interrupt_effect
         .unwrap_or_else(|| panic!("started Agent interrupt effect"));
     assert_eq!(effect.start_dispatch_nonce, start.start_dispatch_nonce);
     let claim = store
@@ -445,7 +445,7 @@ async fn exact_live_control_can_resume_a_quarantined_interrupt_without_reissuing
         )
         .await
         .unwrap_or_else(|error| panic!("mute recovery Agent: {error}"))
-        .interrupt_effect
+        .host_interrupt_effect
         .unwrap_or_else(|| panic!("recovery interrupt effect"));
     let claim = store
         .claim_provider_turn_interrupt(&effect, "10000000-0000-4000-8000-000000000101")
@@ -530,7 +530,7 @@ async fn task_death_after_interrupt_dispatch_preserves_one_ambiguous_effect() {
         )
         .await
         .unwrap_or_else(|error| panic!("mute dispatch-death Agent: {error}"))
-        .interrupt_effect
+        .host_interrupt_effect
         .unwrap_or_else(|| panic!("dispatch-death interrupt effect"));
     let claim = store
         .claim_provider_turn_interrupt(&effect, "10000000-0000-4000-8000-000000000102")
@@ -671,7 +671,7 @@ async fn runtime_gone_releases_ordered_floor_and_consumes_an_unmute_wake() {
         )
         .await
         .unwrap_or_else(|error| panic!("mute Flash floor: {error}"))
-        .interrupt_effect
+        .host_interrupt_effect
         .unwrap_or_else(|| panic!("Flash floor had no interrupt effect"));
     assert_eq!(flash_effect.execution_id, flash_assignment.execution_id);
     let flash_claim = store

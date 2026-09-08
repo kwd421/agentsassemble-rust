@@ -28,7 +28,7 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
     assert_eq!(accepted.outcome.event.event_type, "agent_session_state");
     assert_eq!(accepted.outcome.result["interrupt_requested"], json!(true));
     let effect = accepted
-        .interrupt_effect
+        .host_interrupt_effect
         .unwrap_or_else(|| panic!("fresh command owns an interrupt effect"));
     assert_eq!(effect.cause, ProviderTurnInterruptCause::AgentInterrupt);
     assert_eq!(effect.execution_id, assignment.execution_id);
@@ -39,7 +39,7 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
         .await
         .unwrap_or_else(|error| panic!("replay accepted interrupt: {error}"));
     assert!(replay.outcome.deduplicated);
-    assert!(replay.interrupt_effect.is_none());
+    assert!(replay.host_interrupt_effect.is_none());
     assert_eq!(replay.outcome.result, accepted.outcome.result);
     assert!(matches!(
         store
@@ -207,7 +207,7 @@ async fn runtime_gone_explicit_interrupt_restores_input_without_floor_progressio
         .await
         .unwrap_or_else(|error| panic!("accept runtime-gone interrupt: {error}"));
     let effect = accepted
-        .interrupt_effect
+        .host_interrupt_effect
         .unwrap_or_else(|| panic!("runtime-gone effect"));
     let candidate = store
         .load_provider_turn_reconciliation_candidate(

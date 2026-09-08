@@ -76,13 +76,20 @@ async fn run_connected(
     }
     let mut ready = false;
     let mut delivered = None;
+    let mut delivered_interrupt = None;
     let idle = tokio::time::sleep(Duration::from_mins(5));
     tokio::pin!(idle);
     loop {
         if deliver_stop(state, connection, &mut sender).await != Some(false) {
             break;
         }
+        let Some(interrupt_pending) =
+            deliver_interrupt(state, connection, &mut sender, &mut delivered_interrupt).await
+        else {
+            break;
+        };
         if ready
+            && !interrupt_pending
             && deliver(state, connection, &mut sender, &mut delivered)
                 .await
                 .is_none()
@@ -147,6 +154,41 @@ async fn receive(
     };
     send(state, connection, sender, response).await?;
     Some(ready)
+}
+
+async fn deliver_interrupt(
+    state: &AppState,
+    connection: &AttendeeConnectionAuthorization,
+    sender: &mut SplitSink<WebSocket, Message>,
+    delivered: &mut Option<String>,
+) -> Option<bool> {
+    let interrupt = match state
+        .store
+        .deliver_attendee_interrupt(connection, chrono::Utc::now())
+        .await
+    {
+        Ok(Some(interrupt)) => interrupt,
+        Ok(None) => {
+            *delivered = None;
+            return Some(false);
+        }
+        Err(error) => {
+            send(state, connection, sender, failure(Uuid::nil(), error)).await?;
+            return None;
+        }
+    };
+    if delivered.as_ref() != Some(&interrupt.effect_id) {
+        let effect_id = interrupt.effect_id.clone();
+        send(
+            state,
+            connection,
+            sender,
+            json!({"type":"interrupt", "interrupt":interrupt}),
+        )
+        .await?;
+        *delivered = Some(effect_id);
+    }
+    Some(true)
 }
 
 async fn deliver_stop(

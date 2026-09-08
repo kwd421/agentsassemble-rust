@@ -159,7 +159,7 @@ async fn stage_pre_slot_interrupt() -> PreSlotFixture {
         store,
         session_id,
         effect: accepted
-            .interrupt_effect
+            .host_interrupt_effect
             .unwrap_or_else(|| panic!("fresh pre-slot interrupt has no effect")),
         lease_owner,
         reservation,

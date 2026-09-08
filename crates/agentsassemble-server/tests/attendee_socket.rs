@@ -39,7 +39,7 @@ async fn private_attendee_socket_resumes_exact_turn_and_replays_one_public_resul
         .send().await?.error_for_status()?.json().await?;
     let bearer = joined["session_bearer"].as_str().ok_or("bearer missing")?;
     reject_wrong_purpose(&server.base_url, &invite.invite_bearer).await?;
-    let mut old = connect(&server.base_url, bearer).await?;
+    let (mut old, _) = connect(&server.base_url, bearer).await?;
     ready(&mut old).await;
     let mut human = human_input(&server.base_url, human_invite.invite_token()).await?;
     let first = old.receive_json_with_timeout(Duration::from_secs(2)).await;
@@ -51,7 +51,7 @@ async fn private_attendee_socket_resumes_exact_turn_and_replays_one_public_resul
             .ok_or("view missing")?
             .contains("External socket reply please")
     );
-    let mut current = connect(&server.base_url, bearer).await?;
+    let (mut current, _) = connect(&server.base_url, bearer).await?;
     ready(&mut current).await;
     let resumed = current
         .receive_json_with_timeout(Duration::from_secs(2))
@@ -83,7 +83,7 @@ async fn private_attendee_socket_resumes_exact_turn_and_replays_one_public_resul
     Ok(())
 }
 
-async fn connect(base: &str, bearer: &str) -> Result<Peer, Box<dyn std::error::Error>> {
+async fn connect(base: &str, bearer: &str) -> Result<(Peer, Uuid), Box<dyn std::error::Error>> {
     let url = format!("{}/api/room-attendee/ws", base.replace("http://", "ws://"));
     let mut request = url.into_client_request()?;
     request
@@ -92,8 +92,14 @@ async fn connect(base: &str, bearer: &str) -> Result<Peer, Box<dyn std::error::E
     let (socket, response) = connect_async(request).await?;
     assert_eq!(response.headers()["cache-control"], "private, no-store");
     let mut peer = Peer::new(socket);
-    assert_eq!(peer.receive_json().await["type"], "connected");
-    Ok(peer)
+    let connected = peer.receive_json().await;
+    assert_eq!(connected["type"], "connected");
+    let connection_id = Uuid::parse_str(
+        connected["connection_id"]
+            .as_str()
+            .ok_or("connection id missing")?,
+    )?;
+    Ok((peer, connection_id))
 }
 
 async fn reject_wrong_purpose(base: &str, invite: &str) -> TestResult {
@@ -195,7 +201,7 @@ async fn kicked_external_runtime_stays_pending_until_its_cleanup_report_is_publi
         .json(&json!({"request_id":Uuid::new_v4(),"client_secret":URL_SAFE_NO_PAD.encode([10;32]),"provider":"codex","display_name":"Cleanup AI"}))
         .send().await?.error_for_status()?.json().await?;
     let bearer = joined["session_bearer"].as_str().ok_or("bearer missing")?;
-    let mut external = connect(&server.base_url, bearer).await?;
+    let (mut external, _) = connect(&server.base_url, bearer).await?;
     ready(&mut external).await;
     let endpoint = format!("{}/api/room-attendee/cleanup", server.base_url);
     let before: Value = client
@@ -318,7 +324,7 @@ async fn operator_stop_reaches_external_socket_and_original_command_replays_afte
         .json(&json!({"request_id":Uuid::new_v4(),"client_secret":URL_SAFE_NO_PAD.encode([11;32]),"provider":"codex","display_name":"Stop AI"}))
         .send().await?.error_for_status()?.json().await?;
     let bearer = joined["session_bearer"].as_str().ok_or("bearer missing")?;
-    let mut external = connect(&server.base_url, bearer).await?;
+    let (mut external, _) = connect(&server.base_url, bearer).await?;
     ready(&mut external).await;
     let mut manager = local_socket::connect(&server.base_url, server.state(), "general").await;
     manager.subscribe(0).await;
@@ -371,3 +377,6 @@ async fn operator_stop_reaches_external_socket_and_original_command_replays_afte
     server.stop().await;
     Ok(())
 }
+
+#[path = "attendee_socket/interrupt.rs"]
+mod interrupt;

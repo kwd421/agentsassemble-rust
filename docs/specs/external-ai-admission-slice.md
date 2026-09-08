@@ -587,3 +587,27 @@ reports. After the connection-owner extraction, its three affected cases pass ag
 All five attendee HTTP/queue/socket cases pass with the explicit ready field, as does
 affected all-target/all-feature Clippy. Server command routing and interrupt transport
 are the next consumer; this storage checkpoint is not external CLI acceptance.
+
+### External interrupt command and transport checkpoint
+
+Operator interrupt and mute now return only host-owned effects to the host adapter;
+external effects remain in the same canonical table for their attendee socket.
+Explicit interrupt checks the external readiness capability at its transaction
+owner, while managed preflight retains the actual host driver's exact-turn proof.
+The socket delivers one interrupt identity before normal turn delivery and recovers
+that same identity on replacement. It does not restart the turn or claim quiescence.
+
+The private interrupt-report HTTP endpoint requires the attendee bearer and current
+connection ID for new proofs, routes them through the bounded room queue and returns
+the shared cleanup acknowledgement. A gone-runtime report can detach membership and
+still recover its exact committed receipt. Public publication retains canonical
+event ordering, without private runtime credentials. No provider process, queue or
+timer was added; the connection retains only its last delivered interrupt ID.
+
+Actual local socket/HTTP verification passes explicit interrupt and mute with
+retained runtimes, runtime-gone detachment, changed connection rejection, report
+retry and one public turn completion. The other three attendee socket cases pass.
+Ten managed mute/recovery cases, three managed explicit-interrupt cases and the
+host pre-slot interruption test pass. Affected all-target/all-feature Clippy and
+unchanged architecture/format/diff checks pass. External CLI runtime/tool relay,
+entry-packet controls and managed bridge remain pending before phase acceptance.
