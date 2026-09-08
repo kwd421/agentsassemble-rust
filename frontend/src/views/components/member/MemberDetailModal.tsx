@@ -49,6 +49,7 @@ export default function MemberDetailModal({
   }, [visible]);
   if (!visible) return null;
   const DetailIcon = entry.icon;
+  const usageProvider = availableProviders.find((provider) => provider.provider_kind === (entry.agentSession?.provider_kind || entry.providerKind));
 
   return (
     <div className="dc-modal-backdrop" role="presentation">
@@ -74,7 +75,7 @@ export default function MemberDetailModal({
             activityVisible={activityVisible}
             onActivityVisibilityChange={onActivityVisibilityChange}
           />
-          {entry.agent && <MemberUsage displayName={entry.displayName} />}
+          <MemberUsage key={usageProvider?.id || entry.id} displayName={entry.displayName} provider={usageProvider} />
         </AgentProfileCard> : <>
           <header className="dc-member-detail-modal-head">
             <span className="dc-member-detail-modal-avatar" data-role={entry.role}>
@@ -87,7 +88,7 @@ export default function MemberDetailModal({
             </div>
             <button type="button" className="dc-modal-close" onClick={onClose} aria-label="멤버 정보 닫기"><X size={18} /></button>
           </header>
-          <MemberUsage displayName={entry.displayName} />
+          <MemberUsage key={usageProvider?.id || entry.id} displayName={entry.displayName} provider={usageProvider} />
         </>}
       </dialog>
     </div>

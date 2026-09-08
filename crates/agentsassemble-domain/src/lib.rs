@@ -30,6 +30,8 @@ pub use provider_request::{
     ProviderRequestQuestion, ProviderRequestResolution,
 };
 mod provider_turn;
+mod provider_usage;
+pub use provider_usage::{ProviderBalance, ProviderQuota, ProviderUsage};
 mod room_history;
 mod room_preferences;
 mod room_settings;

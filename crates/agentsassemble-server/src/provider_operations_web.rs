@@ -30,6 +30,7 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn operation_routes<AppState>() {
         private "/api/provider-catalog/refresh" => post(refresh_catalog),
+        private "/api/providers/usage" => post(usage),
         private "/api/providers/login" => post(login),
         private "/api/providers/login/cancel" => post(cancel_login),
     }
@@ -64,8 +65,24 @@ async fn refresh_catalog(
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct LoginRequest {
+struct ProviderOperationRequest {
     provider_id: String,
+}
+
+async fn usage(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<agentsassemble_domain::ProviderUsage>, ProviderOperationHttpError> {
+    authorize(&state, request.headers()).await?;
+    let input: ProviderOperationRequest = decode_json_body(request, 4096)
+        .await
+        .map_err(ProviderOperationHttpError::from_body)?;
+    state
+        .provider_usage
+        .read(&input.provider_id)
+        .await
+        .map(Json)
+        .map_err(ProviderOperationHttpError::from_usage)
 }
 
 async fn login(
@@ -73,7 +90,7 @@ async fn login(
     request: Request,
 ) -> Result<Json<Value>, ProviderOperationHttpError> {
     authorize(&state, request.headers()).await?;
-    let input: LoginRequest = decode_json_body(request, 4096)
+    let input: ProviderOperationRequest = decode_json_body(request, 4096)
         .await
         .map_err(ProviderOperationHttpError::from_body)?;
     state
@@ -99,7 +116,7 @@ async fn cancel_login(
     request: Request,
 ) -> Result<Json<Value>, ProviderOperationHttpError> {
     authorize(&state, request.headers()).await?;
-    let input: LoginRequest = decode_json_body(request, 4096)
+    let input: ProviderOperationRequest = decode_json_body(request, 4096)
         .await
         .map_err(ProviderOperationHttpError::from_body)?;
     let cancelled = state
@@ -133,6 +150,61 @@ struct ProviderOperationHttpError {
 }
 
 impl ProviderOperationHttpError {
+    fn from_usage(error: agentsassemble_provider::ProviderUsageError) -> Self {
+        use agentsassemble_provider::ProviderUsageError as E;
+        let (status, code, message) = match error {
+            E::Unsupported => (
+                StatusCode::BAD_REQUEST,
+                "provider_usage_unsupported",
+                "This provider does not support account usage.",
+            ),
+            E::Missing => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_usage_missing",
+                "Configure the provider account before reading usage.",
+            ),
+            E::CredentialUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_usage_credential_unavailable",
+                "The credential store is unavailable.",
+            ),
+            E::Authentication => (
+                StatusCode::BAD_GATEWAY,
+                "provider_usage_authentication",
+                "The provider rejected account usage authorization.",
+            ),
+            E::Timeout => (
+                StatusCode::GATEWAY_TIMEOUT,
+                "provider_usage_timeout",
+                "Provider usage timed out.",
+            ),
+            E::Cancelled => (
+                StatusCode::CONFLICT,
+                "provider_usage_cancelled",
+                "Provider usage was cancelled.",
+            ),
+            E::Unavailable => (
+                StatusCode::BAD_GATEWAY,
+                "provider_usage_unavailable",
+                "Provider usage is unavailable.",
+            ),
+            E::InvalidResponse => (
+                StatusCode::BAD_GATEWAY,
+                "provider_usage_invalid_response",
+                "The provider returned invalid usage data.",
+            ),
+            E::CleanupUnconfirmed => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_usage_cleanup_unconfirmed",
+                "Provider usage process cleanup could not be confirmed.",
+            ),
+        };
+        Self {
+            status,
+            code,
+            message,
+        }
+    }
     const fn from_login(error: ProviderLoginError) -> Self {
         let (status, code, message) = match error {
             ProviderLoginError::Unsupported => (

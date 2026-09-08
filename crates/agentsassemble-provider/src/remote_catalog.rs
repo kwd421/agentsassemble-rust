@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::ProviderControlOption;
-use futures_util::StreamExt;
-use reqwest::{StatusCode, Url, header};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
@@ -11,76 +9,19 @@ use crate::remote_https::fixed_catalog_client;
 const MAX_CATALOG_RESPONSE_BYTES: usize = 1024 * 1024;
 const MAX_CATALOG_MODELS: usize = 256;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub(crate) enum RemoteCatalogError {
-    Cancelled,
-    Timeout,
-    Authentication,
-    Malformed,
-    Failed,
-    TooLarge,
-}
+pub(crate) use crate::remote_https::RemoteReadError as RemoteCatalogError;
 
 pub(crate) async fn fetch_public_catalog(
     endpoint: &'static str,
     cancellation: &CancellationToken,
 ) -> Result<Value, RemoteCatalogError> {
-    if cancellation.is_cancelled() {
-        return Err(RemoteCatalogError::Cancelled);
-    }
     let client = fixed_catalog_client().map_err(|_| RemoteCatalogError::Failed)?;
-    let endpoint = Url::parse(endpoint).map_err(|_| RemoteCatalogError::Failed)?;
-    let response = tokio::select! {
-        biased;
-        () = cancellation.cancelled() => return Err(RemoteCatalogError::Cancelled),
-        result = client.get(endpoint).header(header::ACCEPT, "application/json").send() => {
-            result.map_err(|error| {
-                if error.is_timeout() {
-                    RemoteCatalogError::Timeout
-                } else {
-                    RemoteCatalogError::Failed
-                }
-            })?
-        }
-    };
-    match response.status() {
-        status if status.is_success() => {}
-        StatusCode::UNAUTHORIZED | StatusCode::FORBIDDEN => {
-            return Err(RemoteCatalogError::Authentication);
-        }
-        StatusCode::REQUEST_TIMEOUT | StatusCode::GATEWAY_TIMEOUT => {
-            return Err(RemoteCatalogError::Timeout);
-        }
-        _ => return Err(RemoteCatalogError::Failed),
-    }
-    if response
-        .content_length()
-        .is_some_and(|length| length > MAX_CATALOG_RESPONSE_BYTES as u64)
-    {
-        return Err(RemoteCatalogError::TooLarge);
-    }
-    let mut body = Vec::new();
-    let mut stream = response.bytes_stream();
-    loop {
-        let next = tokio::select! {
-            biased;
-            () = cancellation.cancelled() => return Err(RemoteCatalogError::Cancelled),
-            next = stream.next() => next,
-        };
-        let Some(chunk) = next else { break };
-        let chunk = chunk.map_err(|error| {
-            if error.is_timeout() {
-                RemoteCatalogError::Timeout
-            } else {
-                RemoteCatalogError::Failed
-            }
-        })?;
-        if body.len().saturating_add(chunk.len()) > MAX_CATALOG_RESPONSE_BYTES {
-            return Err(RemoteCatalogError::TooLarge);
-        }
-        body.extend_from_slice(&chunk);
-    }
-    serde_json::from_slice(&body).map_err(|_| RemoteCatalogError::Malformed)
+    crate::remote_https::fetch_bounded_json(
+        client.get(endpoint),
+        MAX_CATALOG_RESPONSE_BYTES,
+        cancellation,
+    )
+    .await
 }
 
 pub(crate) fn gateway_model_options(

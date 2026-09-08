@@ -34,6 +34,7 @@ pub struct AppState {
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
     pub provider_catalog: ProviderCatalogService,
+    pub provider_usage: agentsassemble_provider::ProviderUsageService,
     pub provider_login: agentsassemble_provider::ProviderLoginService,
     pub provider_adapter: ProviderAdapter,
     pub(crate) provider_credentials: ProviderCredentialStore,
@@ -148,6 +149,10 @@ impl AppState {
                 shutdown.child_token(),
             ),
             provider_adapter,
+            provider_usage: agentsassemble_provider::ProviderUsageService::new(
+                provider_credentials.clone(),
+                shutdown.child_token(),
+            ),
             provider_credentials,
             human_invite_credentials,
             central_host_identity,

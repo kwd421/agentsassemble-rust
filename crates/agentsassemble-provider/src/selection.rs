@@ -412,6 +412,7 @@ mod tests {
                 custom_endpoint: false,
                 custom_model: false,
                 login_supported: false,
+                usage_supported: false,
                 controls: vec![
                     control(
                         "model",

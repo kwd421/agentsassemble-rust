@@ -166,3 +166,31 @@ boundary additionally rejects unauthenticated/unsupported login and distinguishe
 no-active-login cancellation (0.05s). No real provider/account runs. Affected
 Clippy, 34 existing frontend tests, generated types, frontend build, unchanged CSS
 and mandatory gates pass; direct packaged login proof remains part of phase acceptance.
+
+## On-demand usage and DeepSeek balance implementation
+
+Provider registration now owns usage readers and the generated `usage_supported`
+capability. The shared usage owner starts no resident task or periodic request:
+explicit reads coalesce while running, preserve their observation timestamp, and
+runtime shutdown cancels and joins them. Completed results are not a freshness cache.
+A failed refresh clears the visible observation instead of relabeling old data.
+
+The first reader uses DeepSeek's fixed `/user/balance` endpoint and the existing
+credential store. The existing bounded HTTPS JSON read mechanism is shared with
+catalog discovery; it retains HTTPS-only/no-redirect policy, eight-second deadline,
+cancellation and bounded body handling. Balance responses have a 16 KiB cap and
+retain exact decimal strings, currency and the provider's `is_available` result.
+No model turn or credential/public diagnostic output is involved. Codex and Claude
+structured usage readers remain subsequent targets; other providers stay explicit.
+
+The private POST usage route consumes the same one-use local operator authority
+before body decoding. The member detail resolves its provider from the current
+catalog and offers an explicit desktop account-usage action; admitted browsers
+receive an explanatory state and no host account operation. Responses and UI use
+the generated domain projection, separate from room history and participant state.
+
+Local verification passes: controlled concurrent read/shutdown and exact-decimal
+projection cases (2 tests, 0.01s), the extended real-TCP operator boundary (0.03s),
+27 frontend cases, existing catalog projection regression, generated bindings,
+frontend build/CSS, provider/server all-target/all-feature Clippy and mandatory
+gates. Native account/API execution and direct packaged observation remain pending.

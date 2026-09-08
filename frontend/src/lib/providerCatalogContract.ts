@@ -28,6 +28,7 @@ const PROVIDER_OPTIONAL_KEYS = [
   "custom_endpoint",
   "custom_model",
   "login_supported",
+  "usage_supported",
 ] as const;
 const GENERATED_PROVIDER_KEYS = [
   "id",
@@ -50,6 +51,7 @@ const GENERATED_PROVIDER_KEYS = [
   "custom_endpoint",
   "custom_model",
   "login_supported",
+  "usage_supported",
   "controls",
 ] as const satisfies readonly (keyof ProviderAvailability)[];
 const PROVIDER_KEYS: ExactGeneratedKeys<
@@ -156,7 +158,7 @@ function providerIsValid(value: unknown): boolean {
     Boolean(provider.connection_kind) &&
     booleanKeys.every((key) => typeof provider[key] === "boolean") &&
     (provider.turn_interrupt === "unsupported" || provider.turn_interrupt === "retained_runtime") &&
-    ["custom_endpoint", "custom_model", "login_supported"].every(
+    ["custom_endpoint", "custom_model", "login_supported", "usage_supported"].every(
       (key) => provider[key] === undefined || typeof provider[key] === "boolean",
     ) &&
     ["harness", "api", "local"].includes(String(provider.catalog_group)) &&

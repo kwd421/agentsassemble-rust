@@ -41,6 +41,7 @@ pub(crate) static PROVIDER: ProviderRegistration = ProviderRegistration {
     probe_executable: "ollama",
     remote_spec: None,
     login: None,
+    usage: None,
     turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
     configuration_authority: ProviderConfigurationAuthority::Catalog,
     discover: discover_registered,

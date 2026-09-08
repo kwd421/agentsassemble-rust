@@ -1,4 +1,7 @@
+use futures_util::StreamExt;
+use serde_json::Value;
 use std::{error::Error, io, net::IpAddr, time::Duration};
+use tokio_util::sync::CancellationToken;
 
 use ip_network::IpNetwork;
 use reqwest::{
@@ -101,6 +104,77 @@ pub(crate) fn public_unicast(address: IpAddr) -> bool {
 
 fn resolution_error(kind: io::ErrorKind, message: &'static str) -> Box<dyn Error + Send + Sync> {
     Box::new(io::Error::new(kind, message))
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum RemoteReadError {
+    Cancelled,
+    Timeout,
+    Authentication,
+    Malformed,
+    Failed,
+    TooLarge,
+}
+
+pub(crate) async fn fetch_bounded_json(
+    request: reqwest::RequestBuilder,
+    max_bytes: usize,
+    cancellation: &CancellationToken,
+) -> Result<Value, RemoteReadError> {
+    if cancellation.is_cancelled() {
+        return Err(RemoteReadError::Cancelled);
+    }
+    let response = tokio::select! {
+        biased;
+        () = cancellation.cancelled() => return Err(RemoteReadError::Cancelled),
+        result = request.header(reqwest::header::ACCEPT, "application/json").send() => {
+            result.map_err(|error| {
+                if error.is_timeout() {
+                    RemoteReadError::Timeout
+                } else {
+                    RemoteReadError::Failed
+                }
+            })?
+        }
+    };
+    match response.status() {
+        status if status.is_success() => {}
+        reqwest::StatusCode::UNAUTHORIZED | reqwest::StatusCode::FORBIDDEN => {
+            return Err(RemoteReadError::Authentication);
+        }
+        reqwest::StatusCode::REQUEST_TIMEOUT | reqwest::StatusCode::GATEWAY_TIMEOUT => {
+            return Err(RemoteReadError::Timeout);
+        }
+        _ => return Err(RemoteReadError::Failed),
+    }
+    if response
+        .content_length()
+        .is_some_and(|length| length > max_bytes as u64)
+    {
+        return Err(RemoteReadError::TooLarge);
+    }
+    let mut body = Vec::new();
+    let mut stream = response.bytes_stream();
+    loop {
+        let next = tokio::select! {
+            biased;
+            () = cancellation.cancelled() => return Err(RemoteReadError::Cancelled),
+            next = stream.next() => next,
+        };
+        let Some(chunk) = next else { break };
+        let chunk = chunk.map_err(|error| {
+            if error.is_timeout() {
+                RemoteReadError::Timeout
+            } else {
+                RemoteReadError::Failed
+            }
+        })?;
+        if body.len().saturating_add(chunk.len()) > max_bytes {
+            return Err(RemoteReadError::TooLarge);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    serde_json::from_slice(&body).map_err(|_| RemoteReadError::Malformed)
 }
 
 #[cfg(test)]

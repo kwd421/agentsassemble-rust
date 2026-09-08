@@ -343,6 +343,8 @@ pub struct ProviderAvailability {
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub login_supported: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub usage_supported: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub custom_endpoint: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub custom_model: bool,

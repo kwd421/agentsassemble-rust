@@ -86,6 +86,7 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
         StatusCode::UNAUTHORIZED
     );
     assert_login_authority(&client, &route, &tickets).await?;
+    assert_usage_authority(&client, &route, &tickets).await?;
     cancellation.cancel();
     tokio::time::timeout(Duration::from_secs(8), server).await???;
     Ok(())
@@ -136,6 +137,36 @@ async fn assert_login_authority(
     assert_eq!(
         cancelled.json::<serde_json::Value>().await?["status"],
         "not_running"
+    );
+    Ok(())
+}
+
+async fn assert_usage_authority(
+    client: &Client,
+    route: &str,
+    tickets: &TicketStore,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let route = route.replace("provider-catalog/refresh", "providers/usage");
+    assert_eq!(
+        client.post(&route).body("invalid").send().await?.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let response = client
+        .post(&route)
+        .bearer_auth(
+            tickets
+                .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+                .await?
+                .ticket,
+        )
+        .json(&serde_json::json!({"provider_id":"custom_api"}))
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    assert_eq!(
+        response.json::<serde_json::Value>().await?["code"],
+        "provider_usage_unsupported"
     );
     Ok(())
 }
