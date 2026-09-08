@@ -10,11 +10,15 @@ async fn worker_entry() {
     std::process::exit(i32::from(result.is_err()));
 }
 
-pub(super) fn spawn_worker() -> std::io::Result<(tokio::process::Child, tokio::net::UnixStream)> {
+pub(super) fn spawn_worker() -> std::io::Result<(
+    crate::guardian::GuardianLaunch,
+    tokio::process::Child,
+    tokio::net::UnixStream,
+)> {
     let launch = crate::guardian::GuardianLaunch::test_harness()?;
     let (parent, child) = std::os::unix::net::UnixStream::pair()?;
     parent.set_nonblocking(true)?;
     let parent = tokio::net::UnixStream::from_std(parent)?;
     let worker = launch.managed_command(child.into())?.spawn()?;
-    Ok((worker, parent))
+    Ok((launch, worker, parent))
 }

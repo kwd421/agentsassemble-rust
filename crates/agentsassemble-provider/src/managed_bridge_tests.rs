@@ -15,7 +15,10 @@ async fn managed_private_pipe_preserves_native_attach_and_cleans_stop_loss_and_w
 -> TestResult {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     for termination in ["stop", "eof", "wrong_owner", "answer", "interrupt", "plain"] {
-        tokio::time::timeout(Duration::from_secs(20), native_lifecycle(termination)).await??;
+        tokio::time::timeout(Duration::from_secs(20), native_lifecycle(termination))
+            .await
+            .map_err(|_| format!("{termination}: worker deadline"))?
+            .map_err(|error| format!("{termination}: {error}"))?;
     }
     Ok(())
 }
@@ -39,7 +42,7 @@ async fn native_lifecycle(termination: &str) -> TestResult {
     session.runtime_lease_token = lease.token().to_owned();
     session.runtime_owner_id = "fixture-parent".to_owned();
     lease.begin_launch_effect()?;
-    let (mut worker, parent) = super::process_tests::spawn_worker()?;
+    let (_binding, mut worker, parent) = super::process_tests::spawn_worker()?;
     let (parent_input, parent_output) = parent.into_split();
     let mut input = wire::reader(parent_input);
     let mut output = wire::writer(parent_output);

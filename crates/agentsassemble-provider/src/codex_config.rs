@@ -1,3 +1,5 @@
+pub(crate) const HOME_ENV: &str = "CODEX_HOME";
+
 use std::{
     env,
     ffi::OsString,
@@ -26,7 +28,7 @@ pub(crate) fn home() -> Result<String, DriverError> {
     let default_home = env::var_os("USERPROFILE");
     #[cfg(not(windows))]
     let default_home = env::var_os("HOME");
-    resolve_home(env::var_os("CODEX_HOME"), default_home)
+    resolve_home(env::var_os(HOME_ENV), default_home)
 }
 
 pub(super) async fn load() -> Result<CodexConfiguration, DriverError> {

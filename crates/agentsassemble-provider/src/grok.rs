@@ -1,3 +1,5 @@
+pub(crate) const HOME_ENV: &str = "GROK_HOME";
+
 use std::{collections::BTreeSet, env, io, path::PathBuf, time::Duration};
 
 use agentsassemble_domain::{ProviderAvailability, ProviderControlOption};
@@ -152,7 +154,7 @@ fn parse_custom_model_ids(bytes: &[u8]) -> Result<BTreeSet<String>, ProbeFailure
 }
 
 fn config_path() -> Option<PathBuf> {
-    env::var_os("GROK_HOME")
+    env::var_os(HOME_ENV)
         .map(PathBuf::from)
         .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".grok")))
         .map(|home| home.join("config.toml"))

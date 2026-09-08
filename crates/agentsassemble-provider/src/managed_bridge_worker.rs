@@ -124,9 +124,9 @@ async fn execute<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             if active.is_some() || !same_runtime(launched, &session) {
                 return Err(protocol_error());
             }
-            Event::Attached {
-                id,
-                result: drive(pipe, callbacks, expected, driver.attach_session(&session)).await?,
+            match drive(pipe, callbacks, expected, driver.attach_session(&session)).await? {
+                Drive::Returned(result) => Event::Attached { id, result },
+                Drive::Stop(id) => return stop(pipe, driver, active, callbacks, id).await,
             }
         }
         Command::Prepare { turn, .. } => {
@@ -156,17 +156,19 @@ async fn execute<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             }
             let turn = active.as_mut().ok_or_else(protocol_error)?;
             turn.session = session;
-            Event::Interrupted {
-                id,
-                result: drive(
-                    pipe,
-                    callbacks,
-                    expected,
-                    driver.interrupt_turn(&turn.session, &turn.request),
-                )
-                .await?,
+            match drive(
+                pipe,
+                callbacks,
+                expected,
+                driver.interrupt_turn(&turn.session, &turn.request),
+            )
+            .await?
+            {
+                Drive::Returned(result) => Event::Interrupted { id, result },
+                Drive::Stop(id) => return stop(pipe, driver, active, callbacks, id).await,
             }
         }
+
         Command::Finish { .. } => {
             let turn = active
                 .as_ref()
@@ -189,21 +191,7 @@ async fn execute<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
             id,
             result: driver.is_alive().await,
         },
-        Command::Stop { .. } => {
-            *active = None;
-            *callbacks = Callbacks::new();
-            let result = driver.stop().await;
-            respond(
-                pipe,
-                driver,
-                &Event::Stopped {
-                    id,
-                    result: result.clone(),
-                },
-            )?;
-            pipe.flush().await?;
-            return Ok(Some(result));
-        }
+        Command::Stop { .. } => return stop(pipe, driver, active, callbacks, id).await,
         Command::Callback {
             callback_id, reply, ..
         } => {
@@ -271,12 +259,39 @@ async fn send<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
     }
 }
 
+async fn stop<R: AsyncRead + Unpin, W: AsyncWrite + Unpin>(
+    pipe: &mut Pipe<'_, R, W>,
+    driver: &mut dyn ProviderDriver,
+    active: &mut Option<ActiveTurn>,
+    callbacks: &mut Callbacks,
+    id: u64,
+) -> Result<Option<Result<(), DriverError>>, DriverError> {
+    *active = None;
+    *callbacks = Callbacks::new();
+    let result = driver.stop().await;
+    respond(
+        pipe,
+        driver,
+        &Event::Stopped {
+            id,
+            result: result.clone(),
+        },
+    )?;
+    pipe.flush().await?;
+    Ok(Some(result))
+}
+
+enum Drive<T> {
+    Returned(Result<T, DriverError>),
+    Stop(u64),
+}
+
 async fn drive<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, T>(
     pipe: &mut Pipe<'_, R, W>,
     callbacks: &mut Callbacks,
     expected: &mut u64,
     mut operation: crate::driver::DriverFuture<'_, Result<T, DriverError>>,
-) -> Result<Result<T, DriverError>, DriverError> {
+) -> Result<Drive<T>, DriverError> {
     loop {
         tokio::select! {
             biased;
@@ -287,10 +302,13 @@ async fn drive<R: AsyncRead + Unpin, W: AsyncWrite + Unpin, T>(
             command = pipe.read::<Command>() => {
                 let command = command?.ok_or_else(protocol_error)?;
                 check_sequence(&command, expected)?;
-                let Command::Callback { callback_id, reply, .. } = command else { return Err(protocol_error()); };
-                callbacks.reply(callback_id, reply)?;
+                match command {
+                    Command::Callback { callback_id, reply, .. } => callbacks.reply(callback_id, reply)?,
+                    Command::Stop { id } => return Ok(Drive::Stop(id)),
+                    _ => return Err(protocol_error()),
+                }
             }
-            result = &mut operation => return Ok(result),
+            result = &mut operation => return Ok(Drive::Returned(result)),
         }
     }
 }

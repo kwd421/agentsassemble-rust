@@ -694,8 +694,9 @@ fn session(
     workspace: &str,
     workspace_identity: &str,
 ) -> DurableAgentSession {
+    // The home-selection fixture also runs in a separate process outside this process's test lock.
     let mut session = durable_session(
-        "general",
+        &uuid::Uuid::new_v4().to_string(),
         "codex-agent",
         "Codex",
         "codex_live_session",

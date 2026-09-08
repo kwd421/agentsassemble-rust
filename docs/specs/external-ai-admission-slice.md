@@ -1203,8 +1203,9 @@ Parent integration uses a private inherited Unix socket, without a listener or a
 secret in arguments, environment or files. The child acknowledges imported lifetime
 custody before the parent releases its launch lifetime; native readiness follows.
 One owned transport task continues servicing callbacks while the driver caller waits
-or cancels. A cancelled call retains its original reply; only an entered send permits
-interleaved interrupt/abort/stop. Other native operations finish before later control.
+or cancels. A cancelled call retains its original reply; explicit stop may cancel
+pending native attachment or interruption. Interrupt/abort interleave an entered
+send; other calls wait for the pending native operation acknowledgement.
 There is no automatic send replay or fallback to a direct native driver.
 
 Private startup and control acknowledgements have a sixty-second deadline, outside
@@ -1220,3 +1221,12 @@ The existing six lifecycle scenarios now run a separate bound worker executable,
 including the actual native answer/interrupt transcript and exact cleanup receipt.
 All four managed tests, affected Clippy and unchanged mandatory gates pass. Parent
 callback/driver integration and production factory cutover are still pending.
+
+
+Worker stop now drops a pending native attachment or interruption before native
+cleanup. Configuration path environment values come from their existing owners,
+including custom Codex/Grok homes and packaged SDK assets. The bound worker fixture
+retains its executable until exit and uses unique runtime identities across test
+processes. All managed worker cases and the actual parent-to-worker initialization
+cancellation pass; affected Clippy and unchanged gates pass. Parent cutover is still
+being verified before publication.

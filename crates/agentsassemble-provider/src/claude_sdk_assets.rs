@@ -1,3 +1,5 @@
+pub(crate) const RUNTIME_ENV: &str = "AGENTSASSEMBLE_PROVIDER_RUNTIME";
+
 use std::{
     fs::{File, OpenOptions},
     io::{self, Read, Write},
@@ -51,7 +53,7 @@ impl PrivateClaudeSdkBundle {
 }
 
 fn source_root() -> PathBuf {
-    std::env::var_os("AGENTSASSEMBLE_PROVIDER_RUNTIME").map_or_else(
+    std::env::var_os(RUNTIME_ENV).map_or_else(
         || Path::new(env!("CARGO_MANIFEST_DIR")).join("../../provider-runtime"),
         PathBuf::from,
     )

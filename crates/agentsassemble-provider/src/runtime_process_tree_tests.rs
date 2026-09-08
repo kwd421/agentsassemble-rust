@@ -284,7 +284,8 @@ async fn cancelled_initialization_remains_owned_for_shutdown() {
     let mut pending = tokio::spawn(async move { pending_adapter.start(&pending_session).await });
     let pid = tokio::select! {
         pid = pid_barrier.receive() => pid,
-        _ = &mut pending => panic!("provider initialization ended before descendant readiness"),
+        result = &mut pending => panic!("provider initialization ended before descendant readiness: {}",
+            result.ok().and_then(Result::err).map_or_else(|| "unexpected completion".to_owned(), |error| error.code.into_owned())),
     };
     let mut cleanup = ExactProcessCleanup::new(pid);
     pending.abort();

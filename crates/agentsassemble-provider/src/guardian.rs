@@ -345,6 +345,16 @@ impl GuardianLaunch {
     ) -> io::Result<tokio::process::Command> {
         let mut command = tokio::process::Command::new(self.executable.launch_path());
         crate::process::sanitize_std_environment(command.as_std_mut());
+        for name in [
+            crate::codex::config::HOME_ENV,
+            crate::grok::HOME_ENV,
+            crate::grok_acp::AUTH_PATH_ENV,
+            crate::claude_sdk_assets::RUNTIME_ENV,
+        ] {
+            if let Some(value) = env::var_os(name) {
+                command.env(name, value);
+            }
+        }
         if self.test_harness {
             command.args([
                 "--exact",
