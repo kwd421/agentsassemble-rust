@@ -358,6 +358,14 @@ pending-session lookup per state transition, with no periodic scan or new task.
 The local fixture exercises disconnect, completion, interrupt, mute and lost-delivery
 startup; all 320 persistence tests pass. Actual live response delivery remains pending.
 
+
+The live exchange separates the answer slot from native delivery acknowledgement
+and the durable completion receipt. It never serializes answers. Dropping either
+execution owner wakes cancellation; a cancelled wait can resume without submitting
+a second delivery report. The focused exchange test verifies that an answer alone
+cannot complete delivery, the answer slot is single-use, and a lost native owner
+wakes the broker. Provider-request protocol consumers remain pending.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after
