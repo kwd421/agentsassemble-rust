@@ -1327,3 +1327,13 @@ It passes in 5.40 seconds, including the existing owned shutdown, without real p
 execution. Affected server Clippy and unchanged mandatory gates pass. This closes the
 previous unverified parent tool/attachment connection using the existing scenario;
 packaged integrated controls and platform custody still precede phase closure.
+
+Cross-consumer policy inspection found that request ingress could bypass Cursor's
+existing hard `Reject` permission policy. That policy now prevents opening a human
+approval request at the ACP dispatch boundary; Grok's `RoomTools` policy retains its
+original human-request behavior plus exact room-tool auto-approval. The existing
+native exchange test now uses the actual permitting policy for answer/cancel cases
+and also verifies a real reject response with an available but unused room ingress.
+All nine affected ACP cases, provider Clippy and unchanged mandatory gates pass.
+This corrects the earlier statement that Cursor's requests were generally brokered;
+its current read-only contract still rejects native permission requests.

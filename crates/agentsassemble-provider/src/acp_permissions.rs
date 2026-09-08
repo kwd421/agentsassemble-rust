@@ -68,7 +68,11 @@ pub(super) async fn handle(
         let state = state
             .lock()
             .map_err(|_| agent_client_protocol::Error::internal_error())?;
-        if state.session_id.as_ref() == Some(&request.session_id) && state.active_turn_id.is_some()
+        if matches!(
+            state.permission_policy,
+            super::AcpPermissionPolicy::RoomTools
+        ) && state.session_id.as_ref() == Some(&request.session_id)
+            && state.active_turn_id.is_some()
         {
             state
                 .request_turn
