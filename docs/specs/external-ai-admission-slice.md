@@ -1464,3 +1464,11 @@ lease observation and complete native normal stop. The extra owned member is
 `conhost.exe`, verified from actual Job metadata. The remaining lost-pipe fixture
 forgot the shared worker's Facts frame before Attached; its expected sequence now
 matches the production actor. Final runtime and Windows Clippy await the next run.
+
+The same packaged run exposed a separate idle-transport cost: the Cloudflare path
+replaced the attendee connection after approximately 125 seconds, before its 150-
+second keepalive. The existing connection-owned ping now runs each minute; it still
+carries no readiness, room query or application effect. Server idle expiry, retained
+execution and reconnect semantics are unchanged. The seven affected attendee client,
+execution and socket cases pass. Packaged idle stability and visible response/stop
+proof remain pending the corrected build.

@@ -117,7 +117,10 @@ impl Session<'_> {
         }
         let mut sent = None;
         let mut ack_deadline = tokio::time::Instant::now() + ACK_TIMEOUT;
-        let period = crate::attendee_wire::SOCKET_IDLE / 2;
+        // The packaged Cloudflare path closed idle attendee sockets after ~125s,
+        // before the old 150s ping. Keep this connection alive without reporting
+        // provider readiness or querying room state; the server's 5min limit is unchanged.
+        let period = Duration::from_mins(1);
         let mut keepalive = tokio::time::interval_at(tokio::time::Instant::now() + period, period);
         let connection = socket.connection_id();
         keepalive.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
