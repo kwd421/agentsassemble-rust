@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use crate::runtime_lease::HeldRuntimeLease;
 use std::path::{Path, PathBuf};
 
 use agentsassemble_domain::DurableAgentSession;
@@ -8,7 +10,6 @@ use crate::{
     credentials::ProviderCredentialStore,
     driver::{DriverError, DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
-    runtime_lease::HeldRuntimeLease,
 };
 #[cfg(unix)]
 use std::sync::OnceLock;
@@ -17,7 +18,7 @@ pub(crate) trait DriverFactory: Send + Sync {
     fn launch<'a>(
         &'a self,
         session: &'a DurableAgentSession,
-        runtime_lease: &'a HeldRuntimeLease,
+        #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>>;
 }
 

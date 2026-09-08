@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use crate::runtime_lease::HeldRuntimeLease;
 use std::{collections::HashSet, time::Duration};
 
 use agentsassemble_domain::{DurableAgentSession, ProviderAvailability, ProviderControlOption};
@@ -20,7 +22,6 @@ use crate::{
         RemoteOpenAiAuthentication, RemoteOpenAiEndpoint, RemoteOpenAiErrors, RemoteOpenAiSpec,
         ResponseModelIdentity,
     },
-    runtime_lease::HeldRuntimeLease,
 };
 
 const PREFERRED_MODEL: &str = "nemotron-3-super:cloud";
@@ -143,7 +144,7 @@ async fn discover(
 fn launch_registered<'a>(
     factory: &'a ProductionDriverFactory,
     _session: &'a DurableAgentSession,
-    _runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         let driver = RemoteOpenAiDriver::launch(&SPEC, factory.credentials.clone()).await?;

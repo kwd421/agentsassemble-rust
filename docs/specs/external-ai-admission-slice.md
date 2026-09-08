@@ -1373,3 +1373,11 @@ authorization retain their existing owners. Private IPC must prevent native chil
 from inheriting bridge credentials. Positive cleanup must survive cancellation; a
 cached leader exit alone cannot prove descendant absence. Windows compile and local
 process tests require an actual Windows runner; macOS passing tests are insufficient.
+
+The native factory signature now passes the launch lease only on Unix, where the
+guardian handoff consumes it. Windows still retains its exclusive lease in the same
+runtime slot through confirmed cleanup. No lease construction, release, observation
+or durable transition changed. This lets a Windows worker use the native factory
+without asserting custody it does not own. Seven existing launch/cancellation tests,
+affected all-target/all-feature Clippy and unchanged mandatory gates pass on macOS;
+Windows compilation remains to be verified separately.

@@ -1,3 +1,5 @@
+#[cfg(unix)]
+use crate::runtime_lease::HeldRuntimeLease;
 use std::{future::Future, pin::Pin};
 
 use agentsassemble_domain::{DurableAgentSession, ProviderAvailability};
@@ -25,7 +27,6 @@ use crate::{
     opencode::OpenCodeDriver,
     openrouter,
     provider_factory::{DriverFactory, ProductionDriverFactory},
-    runtime_lease::HeldRuntimeLease,
     tokenrouter, vercel,
 };
 
@@ -33,11 +34,18 @@ pub(crate) type ProviderDiscoveryFuture<'a> =
     Pin<Box<dyn Future<Output = ProviderAvailability> + Send + 'a>>;
 pub(crate) type ProviderDiscovery =
     for<'a> fn(ProviderAvailability, &'a CancellationToken) -> ProviderDiscoveryFuture<'a>;
+#[cfg(unix)]
 pub(crate) type ProviderLaunch =
     for<'a> fn(
         &'a ProductionDriverFactory,
         &'a DurableAgentSession,
         &'a HeldRuntimeLease,
+    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>>;
+#[cfg(not(unix))]
+pub(crate) type ProviderLaunch =
+    for<'a> fn(
+        &'a ProductionDriverFactory,
+        &'a DurableAgentSession,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>>;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -473,7 +481,7 @@ impl DriverFactory for ProductionDriverFactory {
     fn launch<'a>(
         &'a self,
         session: &'a DurableAgentSession,
-        runtime_lease: &'a HeldRuntimeLease,
+        #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
     ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
         let Some(registration) = provider_registration_by_profile(
             &session.public.provider_kind,
@@ -499,17 +507,22 @@ impl DriverFactory for ProductionDriverFactory {
                     .and_then(crate::remote_openai_spec::RemoteOpenAiSpec::credential_id),
             ));
         }
-        (registration.launch)(self, session, runtime_lease)
+        (registration.launch)(
+            self,
+            session,
+            #[cfg(unix)]
+            runtime_lease,
+        )
     }
 }
 
 fn launch_codex<'a>(
     factory: &'a ProductionDriverFactory,
     session: &'a DurableAgentSession,
-    runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     #[cfg(not(unix))]
-    let _ = (factory, runtime_lease);
+    let _ = factory;
     Box::pin(async move {
         #[cfg(unix)]
         let driver = CodexDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
@@ -522,12 +535,12 @@ fn launch_codex<'a>(
 fn launch_claude<'a>(
     factory: &'a ProductionDriverFactory,
     session: &'a DurableAgentSession,
-    runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     #[cfg(windows)]
-    let _ = (factory, runtime_lease);
+    let _ = factory;
     #[cfg(not(any(unix, windows)))]
-    let _ = (factory, session, runtime_lease);
+    let _ = (factory, session);
     Box::pin(async move {
         #[cfg(unix)]
         let driver =
@@ -548,10 +561,10 @@ fn launch_claude<'a>(
 fn launch_opencode<'a>(
     factory: &'a ProductionDriverFactory,
     session: &'a DurableAgentSession,
-    runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     #[cfg(not(unix))]
-    let _ = (factory, runtime_lease);
+    let _ = factory;
     Box::pin(async move {
         #[cfg(unix)]
         let driver = OpenCodeDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
@@ -564,10 +577,10 @@ fn launch_opencode<'a>(
 fn launch_cursor<'a>(
     factory: &'a ProductionDriverFactory,
     session: &'a DurableAgentSession,
-    runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     #[cfg(not(unix))]
-    let _ = (factory, runtime_lease);
+    let _ = factory;
     Box::pin(async move {
         #[cfg(unix)]
         let driver = CursorAcpDriver::spawn(session, runtime_lease, factory.guardian()?).await?;
@@ -580,7 +593,7 @@ fn launch_cursor<'a>(
 fn launch_grok<'a>(
     factory: &'a ProductionDriverFactory,
     session: &'a DurableAgentSession,
-    runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         let state_root = factory.state_root.as_deref().ok_or_else(|| {
@@ -601,7 +614,7 @@ fn launch_grok<'a>(
 fn launch_deepseek<'a>(
     factory: &'a ProductionDriverFactory,
     _session: &'a DurableAgentSession,
-    _runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         factory
@@ -617,7 +630,7 @@ fn launch_deepseek<'a>(
 fn launch_cerebras<'a>(
     factory: &'a ProductionDriverFactory,
     _session: &'a DurableAgentSession,
-    _runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         factory
@@ -633,7 +646,7 @@ fn launch_cerebras<'a>(
 fn launch_openrouter<'a>(
     factory: &'a ProductionDriverFactory,
     _session: &'a DurableAgentSession,
-    _runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         factory
@@ -649,7 +662,7 @@ fn launch_openrouter<'a>(
 fn launch_vercel<'a>(
     factory: &'a ProductionDriverFactory,
     _session: &'a DurableAgentSession,
-    _runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         factory
@@ -665,7 +678,7 @@ fn launch_vercel<'a>(
 fn launch_llm_gateway<'a>(
     factory: &'a ProductionDriverFactory,
     _session: &'a DurableAgentSession,
-    _runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         factory
@@ -681,7 +694,7 @@ fn launch_llm_gateway<'a>(
 fn launch_tokenrouter<'a>(
     factory: &'a ProductionDriverFactory,
     _session: &'a DurableAgentSession,
-    _runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         factory
@@ -697,7 +710,7 @@ fn launch_tokenrouter<'a>(
 fn launch_custom_api<'a>(
     factory: &'a ProductionDriverFactory,
     session: &'a DurableAgentSession,
-    _runtime_lease: &'a HeldRuntimeLease,
+    #[cfg(unix)] _runtime_lease: &'a HeldRuntimeLease,
 ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
     Box::pin(async move {
         factory

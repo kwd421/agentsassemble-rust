@@ -217,14 +217,15 @@ impl ProviderAdapter {
                 let launch = self
                     .owner
                     .factory
-                    .launch(session, &runtime.runtime_lease)
+                    .launch(
+                        session,
+                        #[cfg(unix)]
+                        &runtime.runtime_lease,
+                    )
                     .await;
                 let driver = match launch {
                     Ok(driver) => driver,
                     Err(failure) if failure.effect_uncertain => {
-                        let RuntimeState::Launching(runtime) = &slot.state else {
-                            unreachable!("uncertain provider launch must remain owned");
-                        };
                         return Err(ProviderAdapterError::uncertain(
                             failure.error,
                             &runtime.handle_id,
