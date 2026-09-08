@@ -8376,3 +8376,10 @@ checkout credentials, invokes no provider/account, and changes no required gate 
 branch rule. Its YAML and unchanged local policy gates pass. This provides the
 missing platform compilation path; a dispatched result is recorded separately and
 does not by itself establish managed-process cleanup or packaged Windows behavior.
+
+The first [Windows run at `7ea2ca0`](https://github.com/kwd421/agentsassemble-rust/actions/runs/34273319229)
+reached provider compilation and reported four undefined Claude SDK error-helper
+calls. Missing child pipes now use the existing launch diagnostic; failed process
+observation returns an explicit runtime-unconfirmed error. Three Unix-only imports
+are also correctly scoped. Affected macOS Clippy and unchanged mandatory gates pass;
+the Windows correction still requires a new runner result.

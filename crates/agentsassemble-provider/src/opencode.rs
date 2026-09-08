@@ -19,7 +19,6 @@ use crate::opencode_protocol::health_error;
 use crate::{
     driver::ROOM_PORTAL_UNAVAILABLE,
     filesystem::bind_executable_with_children,
-    launch_cleanup,
     launch_error::DriverLaunchError,
     loopback_http::{JsonResponse, LoopbackHttp, VerifiedLoopbackConnection},
     opencode_protocol::{
@@ -30,7 +29,7 @@ use crate::{
         turn_transport_error, validate_profile,
     },
     opencode_sse::OpenCodeTurnEvents,
-    opencode_startup::{drain_output, observe_startup, reserve_loopback_port, server_password},
+    opencode_startup::{reserve_loopback_port, server_password},
     room_portal::{ProviderTurnOutcome, RoomPortal},
     runtime::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
@@ -39,7 +38,11 @@ use crate::{
 };
 #[cfg(unix)]
 use crate::{
-    guardian::GuardianLaunch, runtime_lease::HeldRuntimeLease, unix_custody::UnixProcessCustody,
+    guardian::GuardianLaunch,
+    launch_cleanup,
+    opencode_startup::{drain_output, observe_startup},
+    runtime_lease::HeldRuntimeLease,
+    unix_custody::UnixProcessCustody,
 };
 use session_creation::{SessionCreationAuthority, guarded_session_creation};
 

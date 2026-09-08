@@ -1,5 +1,5 @@
 #[cfg(unix)]
-use crate::runtime_lease::HeldRuntimeLease;
+use crate::{driver::DriverError, runtime_lease::HeldRuntimeLease};
 use std::path::{Path, PathBuf};
 
 use agentsassemble_domain::DurableAgentSession;
@@ -8,7 +8,7 @@ use agentsassemble_domain::DurableAgentSession;
 use crate::guardian::GuardianLaunch;
 use crate::{
     credentials::ProviderCredentialStore,
-    driver::{DriverError, DriverFuture, ProviderDriver},
+    driver::{DriverFuture, ProviderDriver},
     launch_error::DriverLaunchError,
 };
 #[cfg(unix)]

@@ -131,17 +131,17 @@ impl ClaudeSdkRuntime {
         drop(command);
         let Some(stdin) = child.stdin().take() else {
             let process = stop_failed_child(child.as_mut()).await;
-            let failure = DriverLaunchError::safe(protocol_error());
+            let failure = DriverLaunchError::safe(spawn_error());
             return Err(launch_cleanup::owned_and_portal(&mut room_portal, process, failure).await);
         };
         let Some(stdout) = child.stdout().take() else {
             let process = stop_failed_child(child.as_mut()).await;
-            let failure = DriverLaunchError::safe(protocol_error());
+            let failure = DriverLaunchError::safe(spawn_error());
             return Err(launch_cleanup::owned_and_portal(&mut room_portal, process, failure).await);
         };
         let Some(stderr) = child.stderr().take() else {
             let process = stop_failed_child(child.as_mut()).await;
-            let failure = DriverLaunchError::safe(protocol_error());
+            let failure = DriverLaunchError::safe(spawn_error());
             return Err(launch_cleanup::owned_and_portal(&mut room_portal, process, failure).await);
         };
         let stderr_task = tokio::spawn(drain_stderr(stderr));
@@ -190,7 +190,12 @@ impl ClaudeSdkRuntime {
         self.child
             .try_wait()
             .map(|status| status.is_none())
-            .map_err(|_| protocol_error())
+            .map_err(|_| {
+                DriverError::new(
+                    "provider_runtime_unconfirmed",
+                    "The Claude Agent SDK process state could not be observed.",
+                )
+            })
     }
 
     pub(crate) async fn stop(&mut self) -> Result<(), DriverError> {

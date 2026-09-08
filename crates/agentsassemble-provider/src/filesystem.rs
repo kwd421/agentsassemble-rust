@@ -17,9 +17,10 @@ mod codex_executable;
 #[path = "filesystem_executable_staging.rs"]
 mod executable_staging;
 
+#[cfg(unix)]
+pub(crate) use codex_executable::codex_code_mode_host_path;
 pub(crate) use codex_executable::{
-    bind_codex_executable, codex_code_mode_host_path, codex_executable_identity,
-    resolve_codex_executable,
+    bind_codex_executable, codex_executable_identity, resolve_codex_executable,
 };
 #[cfg(unix)]
 use executable_staging::ExecutableStaging;
