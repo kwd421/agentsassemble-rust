@@ -10,6 +10,11 @@ use super::{RoomCommandOwners, RoomMutation, RoomRuntime};
 use crate::event_publication::PublicationAttempt;
 
 pub enum AttendeeOperation {
+    Random {
+        session: AttendeeSessionAuthorization,
+        connection_id: Uuid,
+        request: Box<agentsassemble_persistence::AttendeeRandomRequest>,
+    },
     Leave {
         authority: AttendeeCleanupAuthorization,
         request_id: Uuid,
@@ -46,7 +51,9 @@ impl AttendeeOperation {
             Self::Cleanup { authority, .. }
             | Self::Interrupt { authority, .. }
             | Self::Leave { authority, .. } => authority.room_id(),
-            Self::Connect { session, .. } => &session.principal().room_id,
+            Self::Connect { session, .. } | Self::Random { session, .. } => {
+                &session.principal().room_id
+            }
             Self::Ready { connection, .. }
             | Self::Report { connection, .. }
             | Self::Disconnect { connection } => &connection.session().principal().room_id,
@@ -55,6 +62,10 @@ impl AttendeeOperation {
 }
 
 pub enum AttendeeOperationResult {
+    Random {
+        result: agentsassemble_domain::RoomRandomResult,
+        deduplicated: bool,
+    },
     Connected(AttendeeConnectionAuthorization),
     Applied,
     Reported {
@@ -138,6 +149,24 @@ async fn apply(
         next_assignments: Vec::new(),
     };
     match operation {
+        AttendeeOperation::Random {
+            session,
+            connection_id,
+            request,
+        } => {
+            let generated = crate::room_random_runtime::generate_room_random(&request.parse()?);
+            let mutation = store
+                .commit_attendee_random(&session, connection_id, &request, &generated, now)
+                .await?;
+            empty.events = mutation.outcome.events;
+            Ok((
+                AttendeeOperationResult::Random {
+                    result: mutation.result,
+                    deduplicated: mutation.outcome.deduplicated,
+                },
+                empty,
+            ))
+        }
         AttendeeOperation::Leave {
             authority,
             request_id,

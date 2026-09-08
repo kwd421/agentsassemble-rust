@@ -42,3 +42,42 @@ pub(super) async fn read(
         }
     }))
 }
+
+pub(super) async fn random(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<Value>, AttendeeHttpError> {
+    let fingerprint = purpose_bearer_fingerprint(request.headers(), ATTENDEE_SESSION_PREFIX)
+        .ok_or_else(|| {
+            AttendeeHttpError::rejected(StatusCode::UNAUTHORIZED, "attendee_credential_required")
+        })?;
+    let connection_id = connection_id(request.headers())?;
+    let session = state
+        .store
+        .authorize_attendee_session(&fingerprint, chrono::Utc::now())
+        .await
+        .map_err(AttendeeHttpError::from_persistence)?;
+    let body = decode_json_body(request, 16384).await?;
+    let result = state
+        .rooms
+        .execute_attendee(crate::AttendeeOperation::Random {
+            session,
+            connection_id,
+            request: Box::new(body),
+        })
+        .await
+        .map_err(AttendeeHttpError::from_persistence)?;
+    let crate::AttendeeOperationResult::Random {
+        result,
+        deduplicated,
+    } = result
+    else {
+        return Err(AttendeeHttpError::rejected(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "attendee_result_mismatch",
+        ));
+    };
+    Ok(Json(
+        json!({"resolution":"committed", "kind":"random", "result":result, "deduplicated":deduplicated}),
+    ))
+}

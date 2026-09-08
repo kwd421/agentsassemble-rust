@@ -106,93 +106,103 @@ impl SqliteStore {
         &self,
         commit: ProviderRoomRandomCommit<'_>,
     ) -> Result<RoomRandomCommit, PersistenceError> {
-        let ProviderRoomRandomCommit {
-            room_id,
-            session_id,
-            turn_id,
-            input_up_to_seq,
-            turn_generation,
-            execution_id,
-            result_id,
-            request,
-            result,
-        } = commit;
-        if !valid_result_id(result_id) {
-            return Err(rejected(
-                "invalid_room_result",
-                "Room tool result id is invalid.",
-            ));
-        }
-        validate_result(request, result)?;
         let mut transaction = self.pool.begin().await?;
-        let (_, settings) = load_active_room(&mut transaction, room_id).await?;
-        if settings.tool_mode != "tabletop" {
-            return Err(rejected(
-                "room_random_unavailable",
-                "Room randomness is available only in tabletop mode.",
-            ));
-        }
-        let session = load_session(&mut transaction, room_id, session_id).await?;
+        let session = load_session(&mut transaction, commit.room_id, commit.session_id).await?;
         require_provider_room_tool_authority(
             &mut transaction,
             &session,
-            turn_id,
-            input_up_to_seq,
-            turn_generation,
-            execution_id,
+            commit.turn_id,
+            commit.input_up_to_seq,
+            commit.turn_generation,
+            commit.execution_id,
         )
         .await?;
-        let participant =
-            load_participant(&mut transaction, room_id, &session.public.participant_id).await?;
-        require_participant(participant.status, participant.muted)?;
-        let committed = sqlx::query_scalar::<_, i64>(
-            "SELECT COUNT(*) FROM room_turn_tool_results WHERE room_id = ? AND session_id = ? AND turn_id = ?",
-        )
-        .bind(room_id)
-        .bind(session_id)
-        .bind(turn_id)
-        .fetch_one(&mut *transaction)
-        .await?;
-        if committed >= MAX_RANDOM_RESULTS_PER_TURN {
-            return Err(rejected(
-                "room_random_budget_exhausted",
-                "This Agent Session turn reached its room-random result limit.",
-            ));
-        }
-        let payload = request.canonical_payload();
-        reserve_room_write_budget(
-            &mut transaction,
-            room_id,
-            command_size(result_id, request.room_action(), &payload)?,
-        )
-        .await?;
-        let event = random_event(
-            &mut transaction,
-            room_id,
-            &session.public.participant_id,
-            &session.public.display_name,
-            turn_id,
-            result_id,
-            result,
-        )
-        .await?;
-        insert_event(&mut transaction, &event).await?;
-        sqlx::query(
-            "INSERT INTO room_turn_tool_results(room_id, session_id, turn_id, result_id, event_seq) VALUES (?, ?, ?, ?, ?)",
-        )
-        .bind(room_id)
-        .bind(session_id)
-        .bind(turn_id)
-        .bind(result_id)
-        .bind(event.seq)
-        .execute(&mut *transaction)
-        .await?;
+        let result = commit_provider_random_in(&mut transaction, commit, &session).await?;
         transaction.commit().await?;
-        Ok(RoomRandomCommit {
-            event,
-            result: result.clone(),
-        })
+        Ok(result)
     }
+}
+
+// Both custody callers validate the exact active turn in this transaction first.
+pub(crate) async fn commit_provider_random_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    commit: ProviderRoomRandomCommit<'_>,
+    session: &agentsassemble_domain::DurableAgentSession,
+) -> Result<RoomRandomCommit, PersistenceError> {
+    let ProviderRoomRandomCommit {
+        room_id,
+        session_id,
+        turn_id,
+        input_up_to_seq: _,
+        turn_generation: _,
+        execution_id: _,
+        result_id,
+        request,
+        result,
+    } = commit;
+    if !valid_result_id(result_id) {
+        return Err(rejected(
+            "invalid_room_result",
+            "Room tool result id is invalid.",
+        ));
+    }
+    validate_result(request, result)?;
+    let (_, settings) = load_active_room(transaction, room_id).await?;
+    if settings.tool_mode != "tabletop" {
+        return Err(rejected(
+            "room_random_unavailable",
+            "Room randomness is available only in tabletop mode.",
+        ));
+    }
+    let participant =
+        load_participant(transaction, room_id, &session.public.participant_id).await?;
+    require_participant(participant.status, participant.muted)?;
+    let committed = sqlx::query_scalar::<_, i64>(
+        "SELECT COUNT(*) FROM room_turn_tool_results WHERE room_id = ? AND session_id = ? AND turn_id = ?",
+    )
+    .bind(room_id)
+    .bind(session_id)
+    .bind(turn_id)
+    .fetch_one(&mut **transaction)
+    .await?;
+    if committed >= MAX_RANDOM_RESULTS_PER_TURN {
+        return Err(rejected(
+            "room_random_budget_exhausted",
+            "This Agent Session turn reached its room-random result limit.",
+        ));
+    }
+    let payload = request.canonical_payload();
+    reserve_room_write_budget(
+        transaction,
+        room_id,
+        command_size(result_id, request.room_action(), &payload)?,
+    )
+    .await?;
+    let event = random_event(
+        transaction,
+        room_id,
+        &session.public.participant_id,
+        &session.public.display_name,
+        turn_id,
+        result_id,
+        result,
+    )
+    .await?;
+    insert_event(transaction, &event).await?;
+    sqlx::query(
+        "INSERT INTO room_turn_tool_results(room_id, session_id, turn_id, result_id, event_seq) VALUES (?, ?, ?, ?, ?)",
+    )
+    .bind(room_id)
+    .bind(session_id)
+    .bind(turn_id)
+    .bind(result_id)
+    .bind(event.seq)
+    .execute(&mut **transaction)
+    .await?;
+    Ok(RoomRandomCommit {
+        event,
+        result: result.clone(),
+    })
 }
 
 async fn execute_room_random_command_in(

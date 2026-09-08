@@ -13,6 +13,8 @@ mod attendee;
 mod human_invite;
 #[path = "support/local_socket.rs"]
 mod local_socket;
+#[path = "attendee_socket/random.rs"]
+mod random;
 #[path = "support/room_socket_peer.rs"]
 mod room_socket_peer;
 #[path = "attendee_socket/tools.rs"]
@@ -43,6 +45,7 @@ async fn private_attendee_socket_resumes_exact_turn_and_replays_one_public_resul
     reject_wrong_purpose(&server.base_url, &invite.invite_bearer).await?;
     let (mut old, old_connection) = connect(&server.base_url, bearer).await?;
     ready(&mut old).await;
+    random::enable_tabletop(&server).await?;
     let mut human = human_input(&server.base_url, human_invite.invite_token()).await?;
     let first = old.receive_json_with_timeout(Duration::from_secs(2)).await;
     assert_eq!(first["type"], "turn");
@@ -73,6 +76,7 @@ async fn private_attendee_socket_resumes_exact_turn_and_replays_one_public_resul
         &resumed,
     )
     .await?;
+    random::verify_random(&server, bearer, current_connection, &resumed).await?;
     verify_started_and_result(&mut current, &resumed).await;
     tools::reject_finished_read(&server.base_url, bearer, current_connection, &tool_request)
         .await?;

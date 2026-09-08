@@ -2,7 +2,12 @@ mod attendee_interrupt;
 #[cfg(test)]
 mod attendee_interrupt_tests;
 mod attendee_leave;
+mod attendee_random;
+#[cfg(test)]
+mod attendee_random_tests;
+mod attendee_tool_authority;
 mod attendee_tool_read;
+pub use attendee_random::{AttendeeRandomMutation, AttendeeRandomRequest};
 #[cfg(test)]
 mod attendee_tool_read_tests;
 pub use attendee_interrupt::{

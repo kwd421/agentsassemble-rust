@@ -49,6 +49,7 @@ registered_routes! {
         same_origin_public "/api/room-attendee/interrupt" => post(interrupt::report),
         same_origin_public "/api/room-attendee/leave" => post(cleanup::leave),
         same_origin_public "/api/room-attendee/tool/read" => post(tool::read),
+        same_origin_public "/api/room-attendee/tool/random" => post(tool::random),
     }
 }
 
