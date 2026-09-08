@@ -1,480 +1,156 @@
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Hash, Mic, MicOff, PhoneOff, Send, Volume2 } from "lucide-react";
-import {
-  fetchChannelLobby,
-  fetchVoicePresence,
-  joinVoiceChannel,
-  leaveVoiceChannel,
-  postChannelSay,
-  type LobbyEvent,
-  type RoomSearchResult,
-  type RoomChannel,
-  type VoiceParticipant,
-} from "../api";
-import { usePoll } from "../hooks";
-import ChannelHeader from "./components/ChannelHeader";
-import type {
-  ChannelHeaderActions,
-  ChannelSearchScope,
-} from "./components/ChannelHeader";
-import "../styles/custom-channel.css";
-import {
-  useRoomMessageSearch,
-  type RoomMessageSearchController,
-} from "./useRoomMessageSearch";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { Hash, Pin, Send } from "lucide-react";
+import type { MessagePinsAuthority, RoomChannel, RoomSearchResult } from "../api";
+import type { useChannelTranscript } from "../app/useChannelTranscript";
 import type { CanonicalParticipantProfile } from "../lib/canonicalRoomProjection";
+import type { Mentionable } from "../lib/mentionComposerModel";
+import { MAX_TEXT_CHAT_CHARACTERS } from "../types/generated/TEXT_CHAT_WIRE";
+import ChannelHeader, { type ChannelHeaderActions, type ChannelSearchScope } from "./components/ChannelHeader";
+import DiscordText from "./components/DiscordText";
+import { useMessagePins } from "./useMessagePins";
+import type { RoomMessageSearchController } from "./useRoomMessageSearch";
+import "../styles/custom-channel.css";
 
-/**
- * A custom (user-created) channel: a text channel renders its own message
- * stream + composer (poll-based, like the lobby's HTTP fallback); a voice
- * channel renders live presence with join/leave (audio streaming deferred).
- * Dual-mode auth: a guest passes its session token; the local operator console
- * passes the room id + display name and rides the loopback path.
- */
+type Transcript = ReturnType<typeof useChannelTranscript>;
+const buttonStyle = { minWidth: 44, minHeight: 44 };
+
 export default function CustomChannelView({
-  channel,
-  meetingId,
-  sessionToken,
-  localDisplayName,
-  participantProfiles = {},
-  searchLabel,
-  canPost,
-  membersOpen,
-  onToggleMembers,
-  onOpenMobileSidebar,
-  onOpenMobileInfo,
-  headerActions,
-  sharedMessageSearch,
-  messageSearchScope = "channel",
-  onMessageSearchScopeChange,
-  messageSearchChannelLabels = {},
-  onOpenCrossChannelSearchResult,
+  channel, channelId, roomId, roomUid, transcript, authority, messageSearch,
+  canPost, canPin, participantProfiles = {}, mentionables = [], searchLabel,
+  membersOpen, onToggleMembers, onOpenMobileSidebar, onOpenMobileInfo, headerActions,
+  messageSearchScope = "channel", onMessageSearchScopeChange, messageSearchChannelLabels = {},
+  pendingSearchTargetEventId = "", onSearchTargetHandled, onOpenCrossChannelSearchResult,
 }: {
-  channel: RoomChannel;
-  meetingId: string;
-  sessionToken: string;
-  localDisplayName: string;
-  participantProfiles?: Record<string, CanonicalParticipantProfile>;
-  searchLabel?: string;
-  canPost: boolean;
-  membersOpen?: boolean;
-  onToggleMembers?: () => void;
-  onOpenMobileSidebar?: () => void;
-  onOpenMobileInfo?: () => void;
-  headerActions?: ChannelHeaderActions;
-  sharedMessageSearch?: RoomMessageSearchController;
-  messageSearchScope?: ChannelSearchScope;
+  channel: RoomChannel | null; channelId: string; roomId: string; roomUid: string;
+  transcript: Transcript; authority?: MessagePinsAuthority; messageSearch: RoomMessageSearchController;
+  canPost: boolean; canPin: boolean; participantProfiles?: Record<string, CanonicalParticipantProfile>;
+  mentionables?: Mentionable[]; searchLabel?: string; membersOpen?: boolean;
+  onToggleMembers?: () => void; onOpenMobileSidebar?: () => void; onOpenMobileInfo?: () => void;
+  headerActions?: ChannelHeaderActions; messageSearchScope?: ChannelSearchScope;
   onMessageSearchScopeChange?: (scope: ChannelSearchScope) => void;
-  messageSearchChannelLabels?: Record<string, string>;
-  onOpenCrossChannelSearchResult?: (result: RoomSearchResult) => void;
+  messageSearchChannelLabels?: Record<string, string>; pendingSearchTargetEventId?: string;
+  onSearchTargetHandled?: () => void; onOpenCrossChannelSearchResult: (result: RoomSearchResult) => void;
 }) {
-  if (channel.type === "voice") {
-    return (
-      <VoiceChannelBody
-        channel={channel}
-        meetingId={meetingId}
-        sessionToken={sessionToken}
-        localDisplayName={localDisplayName}
-        searchLabel={searchLabel}
-        canJoin={canPost}
-        membersOpen={membersOpen}
-        onToggleMembers={onToggleMembers}
-        onOpenMobileSidebar={onOpenMobileSidebar}
-        onOpenMobileInfo={onOpenMobileInfo}
-        headerActions={headerActions}
-      />
-    );
-  }
-  return (
-    <TextChannelBody
-      channel={channel}
-      meetingId={meetingId}
-      sessionToken={sessionToken}
-      localDisplayName={localDisplayName}
-      participantProfiles={participantProfiles}
-      searchLabel={searchLabel}
-      canPost={canPost}
-      membersOpen={membersOpen}
-      onToggleMembers={onToggleMembers}
-      onOpenMobileSidebar={onOpenMobileSidebar}
-      onOpenMobileInfo={onOpenMobileInfo}
-      headerActions={headerActions}
-      sharedMessageSearch={sharedMessageSearch}
-      messageSearchScope={messageSearchScope}
-      onMessageSearchScopeChange={onMessageSearchScopeChange}
-      messageSearchChannelLabels={messageSearchChannelLabels}
-      onOpenCrossChannelSearchResult={onOpenCrossChannelSearchResult}
-    />
-  );
-}
+  const identity = JSON.stringify([roomId, roomUid, channelId, authority]);
+  const identityRef = useRef(identity); identityRef.current = identity;
+  const scopeRef = useRef(transcript.scope); scopeRef.current = transcript.scope;
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const [draft, setDraft] = useState({ identity, value: "" });
+  const [sendError, setSendError] = useState({ identity, message: "" });
+  const [selected, setSelected] = useState<{ scope: object; id: string } | null>(null);
+  const pendingFocus = useRef<typeof selected>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLTextAreaElement>(null);
+  const restoreScroll = useRef<{ height: number; top: number } | null>(null);
+  const [atBottom, setAtBottom] = useState(true);
+  const focusAfterSend = useRef(false);
+  const pins = useMessagePins({ roomId, roomUid, channelId, authority });
+  const pinnedIds = useMemo(() => new Set(pins.pinnedItems.map((pin) => pin.event_id)), [pins.pinnedItems]);
+  const mentionLabels = useMemo(() => Object.fromEntries(mentionables.map(({ token, label }) => [token, label])), [mentionables]);
+  const value = draft.identity === identity ? draft.value : "";
+  const error = sendError.identity === identity ? sendError.message : "";
+  const tooLong = [...value].length > MAX_TEXT_CHAT_CHARACTERS;
+  const disabled = !channel || !canPost || !transcript.ready || transcript.sending;
 
-function TextChannelBody({
-  channel,
-  meetingId,
-  sessionToken,
-  localDisplayName,
-  participantProfiles,
-  searchLabel,
-  canPost,
-  membersOpen,
-  onToggleMembers,
-  onOpenMobileSidebar,
-  onOpenMobileInfo,
-  headerActions,
-  sharedMessageSearch,
-  messageSearchScope,
-  onMessageSearchScopeChange,
-  messageSearchChannelLabels,
-  onOpenCrossChannelSearchResult,
-}: {
-  channel: RoomChannel;
-  meetingId: string;
-  sessionToken: string;
-  localDisplayName: string;
-  participantProfiles: Record<string, CanonicalParticipantProfile>;
-  searchLabel?: string;
-  canPost: boolean;
-  membersOpen?: boolean;
-  onToggleMembers?: () => void;
-  onOpenMobileSidebar?: () => void;
-  onOpenMobileInfo?: () => void;
-  headerActions?: ChannelHeaderActions;
-  sharedMessageSearch?: RoomMessageSearchController;
-  messageSearchScope: ChannelSearchScope;
-  onMessageSearchScopeChange?: (scope: ChannelSearchScope) => void;
-  messageSearchChannelLabels: Record<string, string>;
-  onOpenCrossChannelSearchResult?: (result: RoomSearchResult) => void;
-}) {
-  const [draft, setDraft] = useState("");
-  const [sendError, setSendError] = useState("");
-  const [sending, setSending] = useState(false);
-  const scrollRef = useRef<HTMLDivElement | null>(null);
-  const localMessageSearch = useRoomMessageSearch({
-    roomId: meetingId,
-    channelId: channel.id,
-  });
-  const messageSearch = sharedMessageSearch || localMessageSearch;
-
-  const fetcher = useCallback(
-    () => fetchChannelLobby(channel.id, { sessionToken: sessionToken || undefined, meetingId }),
-    [channel.id, sessionToken, meetingId]
-  );
-  const [events, , error, refresh] = usePoll<LobbyEvent[]>(fetcher, 2500);
-  const messages = events || [];
-  const channelSearchItems = messageSearch.results.map((result) => {
-    const date = new Date(result.created_at);
-    const timeLabel = date.toLocaleString("ko-KR", {
-      month: "numeric",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-    return {
-      id: result.event_id,
-      author: result.author || "익명",
-      avatarImage: participantProfiles[result.participant_id]?.avatarImageUrl,
-      body: result.content || result.attachment_filenames.join(", "),
-      meta: messageSearchScope === "all"
-        ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ${timeLabel}`
-        : timeLabel,
-      exactTime: date.toLocaleString("ko-KR", {
-        year: "numeric",
-        month: "long",
-        day: "numeric",
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      }),
-      onSelect: () => {
-        if (result.channel_id !== channel.id && onOpenCrossChannelSearchResult) {
-          onOpenCrossChannelSearchResult(result);
-          return;
-        }
-        messageSearch.setError("검색 결과의 채널을 열 수 없습니다.");
-      },
-    };
-  });
-
-  useEffect(() => {
+  useLayoutEffect(() => {
     const node = scrollRef.current;
-    if (node) node.scrollTop = node.scrollHeight;
-  }, [events]);
+    if (!node) return;
+    if (restoreScroll.current && !transcript.loading) {
+      const previous = restoreScroll.current; restoreScroll.current = null;
+      node.scrollTop = previous.top + node.scrollHeight - previous.height;
+    } else if (transcript.following && atBottom) node.scrollTop = node.scrollHeight;
+    const target = pendingFocus.current;
+    if (target?.scope !== transcript.scope) return;
+    const element = Array.from(node.querySelectorAll<HTMLElement>("[data-channel-event-id]")).find((item) => item.dataset.channelEventId === target.id);
+    if (element) { pendingFocus.current = null; element.scrollIntoView({ block: "center" }); element.focus({ preventScroll: true }); }
+  }, [transcript.events, transcript.loading, transcript.following, transcript.scope, atBottom, selected]);
+  useEffect(() => {
+    if (!transcript.sending && focusAfterSend.current) { focusAfterSend.current = false; inputRef.current?.focus(); }
+  }, [transcript.sending, value]);
+
+  async function navigate(eventId: string) {
+    if (!channel || !transcript.scope.connected) { setSendError({ identity, message: "채널 연결이 완료된 뒤 메시지를 열어 주세요." }); return; }
+    const scope = transcript.scope;
+    try {
+      const context = await messageSearch.readContext(eventId, channelId);
+      if (!context || !mounted.current || scopeRef.current !== scope) return;
+      const target = { scope, id: eventId }; pendingFocus.current = target; setSelected(target);
+      setAtBottom(false); restoreScroll.current = null;
+      transcript.showContext(context.events);
+    } catch (cause) {
+      if (mounted.current && scopeRef.current === scope) setSendError({ identity, message: cause instanceof Error ? cause.message : "메시지를 열지 못했어요." });
+    }
+  }
+  useEffect(() => {
+    if (!pendingSearchTargetEventId || !channel || !transcript.scope.connected) return;
+    let active = true;
+    void navigate(pendingSearchTargetEventId).finally(() => { if (active) onSearchTargetHandled?.(); });
+    return () => { active = false; };
+  }, [pendingSearchTargetEventId, transcript.scope, channel?.id]);
 
   async function send() {
-    const message = draft.trim();
-    if (!message || sending) return;
-    setSending(true);
-    setSendError("");
+    if (disabled || !value.trim() || tooLong) return;
+    setSendError({ identity, message: "" });
     try {
-      await postChannelSay({
-        channelId: channel.id,
-        message,
-        sessionToken: sessionToken || undefined,
-        meetingId,
-        name: localDisplayName || undefined,
-      });
-      setDraft("");
-      refresh();
-    } catch (err) {
-      setSendError(err instanceof Error ? err.message : "메시지를 보내지 못했습니다");
-    } finally {
-      setSending(false);
+      await transcript.send(value);
+      if (!mounted.current || identityRef.current !== identity) return;
+      setDraft({ identity, value: "" }); focusAfterSend.current = true;
+    } catch (cause) {
+      if (mounted.current && identityRef.current === identity) setSendError({ identity, message: cause instanceof Error ? cause.message : "메시지를 보내지 못했어요." });
     }
   }
-
-  const effectiveHeaderActions = {
-    ...(headerActions || {}),
-    pinnedSummary: "커스텀 채널 메시지 핀은 아직 사용할 수 없습니다.",
-    pinnedItems: undefined,
-    pinsLoading: false,
-    pinsError: "",
-    onOpenPins: undefined,
-    onSelectPin: undefined,
-    onUnpin: undefined,
-  };
-
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <ChannelHeader
-        icon={<Hash size={18} />}
-        title={channel.name}
-        subtitle="커스텀 텍스트 채널"
-        searchLabel={searchLabel}
-        membersOpen={membersOpen}
-        onToggleMembers={onToggleMembers}
-        onOpenMobileSidebar={onOpenMobileSidebar}
-        onOpenMobileInfo={onOpenMobileInfo}
-        headerActions={effectiveHeaderActions}
-        searchItems={channelSearchItems}
-        externalSearch
-        searchQuery={messageSearch.query}
-        searchScope={messageSearchScope}
-        onSearchScopeChange={onMessageSearchScopeChange}
-        searchLoading={messageSearch.loading}
-        searchError={messageSearch.error}
-        onSearchQueryChange={messageSearch.updateQuery}
-        searchHasMore={messageSearch.hasMore}
-        searchLoadingMore={messageSearch.loadingMore}
-        onLoadMoreSearch={() => void messageSearch.loadMore()}
-      />
-      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-4 py-3 chat-scroll">
-        {error && !messages.length ? (
-          <p className="text-[13px] text-text-muted">채널을 불러오지 못했습니다.</p>
-        ) : !messages.length ? (
-          <p className="text-[13px] text-text-muted">
-            #{channel.name} 채널의 첫 메시지를 남겨보세요.
-          </p>
-        ) : (
-          <ul className="dc-channel-message-list">
-            {messages.map((event) => (
-              <li
-                key={event.id}
-                className="dc-channel-message"
-                data-channel-event-id={event.id}
-                tabIndex={0}
-              >
-                <span className="dc-channel-message-author-line">
-                  <span className="dc-channel-message-author preserve-words">
-                    {event.name || "익명"}
-                  </span>
-                </span>
-                <span className="dc-channel-message-body preserve-words">{event.message}</span>
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-      <div className="dc-channel-composer">
-        <textarea
-          className="ops-input dc-channel-composer-input"
-          value={draft}
-          rows={1}
-          placeholder={canPost ? `#${channel.name}에 메시지 보내기` : "이 채널에 글을 쓸 수 없습니다"}
-          disabled={!canPost || sending}
-          onChange={(event) => setDraft(event.target.value.slice(0, 2000))}
-          onKeyDown={(event) => {
-            if (event.key === "Enter" && !event.shiftKey) {
-              event.preventDefault();
-              void send();
-            }
-          }}
-        />
-        <button
-          type="button"
-          className="ops-cta dc-channel-composer-send"
-          disabled={!canPost || sending || !draft.trim()}
-          onClick={() => void send()}
-          aria-label="보내기"
-        >
-          <Send size={16} />
-        </button>
-      </div>
-      {sendError && <p className="dc-channel-composer-error preserve-words">{sendError}</p>}
-    </div>
-  );
-}
-
-function VoiceChannelBody({
-  channel,
-  meetingId,
-  sessionToken,
-  localDisplayName,
-  searchLabel,
-  canJoin,
-  membersOpen,
-  onToggleMembers,
-  onOpenMobileSidebar,
-  onOpenMobileInfo,
-  headerActions,
-}: {
-  channel: RoomChannel;
-  meetingId: string;
-  sessionToken: string;
-  localDisplayName: string;
-  searchLabel?: string;
-  canJoin: boolean;
-  membersOpen?: boolean;
-  onToggleMembers?: () => void;
-  onOpenMobileSidebar?: () => void;
-  onOpenMobileInfo?: () => void;
-  headerActions?: ChannelHeaderActions;
-}) {
-  const [connected, setConnected] = useState(false);
-  const [selfMuted, setSelfMuted] = useState(false);
-  const [actionError, setActionError] = useState("");
-  const activeConnectionRef = useRef<Parameters<typeof leaveVoiceChannel>[0] | null>(null);
-
-  const tokenOpt = sessionToken || undefined;
-  const presenceFetcher = useCallback(
-    () => fetchVoicePresence(channel.id, { sessionToken: tokenOpt, meetingId }),
-    [channel.id, tokenOpt, meetingId]
-  );
-  const [participants, , , refresh] = usePoll<VoiceParticipant[]>(presenceFetcher, 5000);
-
-  // Heartbeat: while connected, re-post join so presence does not time out.
-  useEffect(() => {
-    if (!connected) return;
-    const beat = () => {
-      void joinVoiceChannel({
-        channelId: channel.id,
-        sessionToken: tokenOpt,
-        meetingId,
-        name: localDisplayName || undefined,
-        muted: selfMuted,
-      })
-        .then(() => refresh())
-        .catch((err) => {
-          setActionError(err instanceof Error ? err.message : "음성 채널 연결을 유지하지 못했습니다");
-        });
-    };
-    const id = window.setInterval(beat, 20000);
-    return () => window.clearInterval(id);
-  }, [connected, channel.id, tokenOpt, meetingId, localDisplayName, selfMuted, refresh]);
-
-  // The ref owns the exact successful join identity. Render state is not a
-  // reliable cleanup source because an effect cleanup closes over an earlier
-  // render, and the room/channel identity can change before it runs.
-  useEffect(() => {
-    setConnected(false);
-    setSelfMuted(false);
-    setActionError("");
-    return () => {
-      const connection = activeConnectionRef.current;
-      activeConnectionRef.current = null;
-      if (connection) void leaveVoiceChannel(connection);
-    };
-  }, [channel.id, meetingId, tokenOpt]);
-
-  async function toggleConnected() {
-    setActionError("");
-    try {
-      if (connected) {
-        const connection = activeConnectionRef.current || {
-          channelId: channel.id,
-          sessionToken: tokenOpt,
-          meetingId,
-        };
-        await leaveVoiceChannel(connection);
-        activeConnectionRef.current = null;
-        setConnected(false);
-      } else {
-        await joinVoiceChannel({
-          channelId: channel.id,
-          sessionToken: tokenOpt,
-          meetingId,
-          name: localDisplayName || undefined,
-          muted: selfMuted,
-        });
-        activeConnectionRef.current = {
-          channelId: channel.id,
-          sessionToken: tokenOpt,
-          meetingId,
-        };
-        setConnected(true);
-      }
-      refresh();
-    } catch (err) {
-      setActionError(err instanceof Error ? err.message : "음성 채널 작업에 실패했습니다");
-    }
-  }
-
-  const members = participants || [];
-
-  return (
-    <div className="flex min-h-0 min-w-0 flex-1 flex-col">
-      <ChannelHeader
-        icon={<Volume2 size={18} />}
-        title={channel.name}
-        subtitle="음성 채널 (오디오는 준비 중 · 현재는 접속/프레즌스)"
-        searchLabel={searchLabel}
-        membersOpen={membersOpen}
-        onToggleMembers={onToggleMembers}
-        onOpenMobileSidebar={onOpenMobileSidebar}
-        onOpenMobileInfo={onOpenMobileInfo}
-        headerActions={headerActions}
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 chat-scroll">
-        <div className="dc-voice-stage">
-          {members.length ? (
-            <ul className="dc-voice-roster">
-              {members.map((member) => (
-                <li key={member.participantId} className="dc-voice-tile" data-muted={member.muted}>
-                  <span className="dc-voice-avatar">{(member.name || "?").slice(0, 1).toUpperCase()}</span>
-                  <span className="dc-voice-name preserve-words">{member.name}</span>
-                  {member.muted && <MicOff size={13} className="opacity-70" />}
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-[13px] text-text-muted">아직 아무도 음성 채널에 없습니다.</p>
-          )}
+  const searchItems = messageSearch.results.map((result) => ({
+    id: result.event_id, author: participantProfiles[result.participant_id]?.displayName || result.author,
+    avatarImage: participantProfiles[result.participant_id]?.avatarImageUrl,
+    body: result.content || result.attachment_filenames.join(", "),
+    meta: `${messageSearchScope === "all" ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ` : ""}${new Date(result.created_at).toLocaleString("ko-KR")}`,
+    onSelect: () => result.channel_id === channelId ? void navigate(result.event_id) : onOpenCrossChannelSearchResult(result),
+  }));
+  const latestSeq = transcript.events.at(-1)?.seq;
+  return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+    <ChannelHeader icon={<Hash size={20} />} title={channel?.name ?? "채널 연결 중"} searchLabel={searchLabel}
+      membersOpen={membersOpen} onToggleMembers={onToggleMembers} onOpenMobileSidebar={onOpenMobileSidebar} onOpenMobileInfo={onOpenMobileInfo}
+      headerActions={{ ...headerActions, pinnedItems: pins.pinnedItems, pinsLoading: pins.pinsLoading, pinsError: pins.pinsError, latestReadCursor: latestSeq ? `seq:${latestSeq}` : "",
+        onOpenPins: authority ? () => void pins.reloadPins() : undefined,
+        onSelectPin: (pin) => void navigate(pin.event_id),
+        onUnpin: canPin && authority && !pins.pinBusyIds.size ? (pin) => void pins.setPinned(pin.event_id, false) : undefined }}
+      searchItems={searchItems} externalSearch searchQuery={messageSearch.query} searchScope={messageSearchScope}
+      onSearchScopeChange={onMessageSearchScopeChange} searchLoading={messageSearch.loading} searchError={messageSearch.error}
+      onSearchQueryChange={messageSearch.updateQuery} searchHasMore={messageSearch.hasMore} searchLoadingMore={messageSearch.loadingMore}
+      onLoadMoreSearch={() => void messageSearch.loadMore()} />
+    <div ref={scrollRef} className="chat-scroll" style={{ minHeight: 0, flex: 1, overflowY: "auto", padding: "16px 24px" }} aria-label="채널 메시지"
+      onScroll={(event) => { const node = event.currentTarget; setAtBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 24); }}>
+      {transcript.hasMore && <button type="button" className="ops-button" style={buttonStyle} disabled={transcript.loading} onClick={() => {
+        const node = scrollRef.current; if (node) restoreScroll.current = { height: node.scrollHeight, top: node.scrollTop };
+        setAtBottom(false); void transcript.earlier();
+      }}>이전 메시지</button>}
+      {!transcript.ready && !transcript.error && <p role="status">채널 연결과 기록을 기다리고 있어요.</p>}
+      {transcript.ready && transcript.events.length === 0 && <p className="text-text-muted">첫 메시지를 남겨보세요.</p>}
+      {transcript.events.map((event) => <article key={event.id} data-channel-event-id={event.id} data-search-target={selected?.scope === transcript.scope && selected.id === event.id} tabIndex={-1}
+        className="dc-channel-message" style={{ padding: "8px 0", overflowWrap: "anywhere" }}>
+        <div className="dc-channel-message-author-line">
+          <strong className="min-w-0 flex-1 preserve-words">{participantProfiles[event.actor.participant_id]?.displayName || event.display_name}</strong>
+          <time dateTime={event.created_at} style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{new Date(event.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</time>
+          {canPin && authority && <button type="button" className="dc-channel-message-pin" style={{ ...buttonStyle, opacity: 1 }} aria-label={pinnedIds.has(event.id) ? "고정 해제" : "메시지 고정"}
+            data-pinned={pinnedIds.has(event.id)} disabled={pins.pinsLoading || pins.pinBusyIds.size > 0} onClick={() => void pins.setPinned(event.id, !pinnedIds.has(event.id))}><Pin size={16} /></button>}
         </div>
-      </div>
-      <div className="dc-voice-controls">
-        <button
-          type="button"
-          className="ops-cta"
-          data-tone={connected ? "danger" : undefined}
-          disabled={!canJoin}
-          onClick={() => void toggleConnected()}
-        >
-          {connected ? <PhoneOff size={16} /> : <Volume2 size={16} />}
-          {connected ? "나가기" : "음성 참여"}
-        </button>
-        {connected && (
-          <button
-            type="button"
-            className="ops-cta"
-            data-active={selfMuted}
-            onClick={() => setSelfMuted((muted) => !muted)}
-            aria-pressed={selfMuted}
-          >
-            {selfMuted ? <MicOff size={16} /> : <Mic size={16} />}
-            {selfMuted ? "음소거됨" : "마이크 켜짐"}
-          </button>
-        )}
-        {actionError && <span className="dc-channel-composer-error preserve-words">{actionError}</span>}
-      </div>
+        <DiscordText text={event.content || ""} mentionLabels={mentionLabels} />
+      </article>)}
     </div>
-  );
+    {(!transcript.following || !atBottom) && <button type="button" className="ops-button" style={{ ...buttonStyle, margin: "0 24px 12px" }} disabled={transcript.sending} onClick={() => {
+      pendingFocus.current = null; setSelected(null); setAtBottom(true);
+      if (!transcript.following) transcript.latest();
+      else if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+    }}>{transcript.newMessages ? "새 메시지 · 최신으로" : "최신 메시지"}</button>}
+    {transcript.error && <div role="alert" style={{ padding: "0 24px 12px" }}>{transcript.error} <button type="button" className="ops-button" style={buttonStyle} disabled={transcript.sending} onClick={transcript.latest}>다시 불러오기</button></div>}
+    <div style={{ padding: "12px 24px 16px", display: "flex", gap: 12, alignItems: "flex-end" }}>
+      <textarea ref={inputRef} className="ops-input" style={{ minHeight: 44, maxHeight: 120, minWidth: 0, flex: 1, resize: "vertical" }} rows={2}
+        aria-label="채널 메시지 입력" placeholder={!channel || !transcript.ready ? "채널 연결을 기다리고 있어요" : canPost ? "메시지 보내기" : "이 채널에서는 보기만 할 수 있어요"}
+        value={value} disabled={disabled} maxLength={MAX_TEXT_CHAT_CHARACTERS * 2} onChange={(event) => setDraft({ identity, value: event.target.value })}
+        onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
+      <button type="button" className="ops-cta" style={buttonStyle} aria-label="채널 메시지 보내기" disabled={disabled || !value.trim() || tooLong} onClick={() => void send()}><Send size={18} /></button>
+    </div>
+    {(error || pins.pinsError || tooLong) && <p role="alert" style={{ padding: "0 24px 16px" }}>{error || pins.pinsError || `메시지는 ${MAX_TEXT_CHAT_CHARACTERS}자까지 보낼 수 있어요.`}</p>}
+  </div>;
 }

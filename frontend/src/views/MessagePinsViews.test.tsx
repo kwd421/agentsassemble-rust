@@ -6,7 +6,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const api = vi.hoisted(() => ({
   fetchLobbyPins: vi.fn(),
   setLobbyPin: vi.fn(),
-  fetchChannelLobby: vi.fn(),
   fetchRoomContext: vi.fn(),
 }));
 
@@ -14,14 +13,12 @@ vi.mock("../api", async () => ({
   ...(await vi.importActual<typeof import("../api")>("../api")),
   fetchMessagePins: api.fetchLobbyPins,
   setMessagePinned: api.setLobbyPin,
-  fetchChannelLobby: api.fetchChannelLobby,
   fetchRoomMessageContext: api.fetchRoomContext,
 }));
 
-import type { LobbyEvent, RoomChannel } from "../api";
+import type { LobbyEvent } from "../api";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import { createMessageAttachmentReadOwner } from "../lib/messageAttachmentReadScheduler";
-import CustomChannelView from "./CustomChannelView";
 import ProductionLobbyView from "./LobbyView";
 
 function LobbyView(
@@ -72,7 +69,6 @@ describe("message-pin view ownership", () => {
     vi.resetAllMocks();
     api.fetchLobbyPins.mockResolvedValue([pin]);
     api.setLobbyPin.mockResolvedValue([pin]);
-    api.fetchChannelLobby.mockResolvedValue([]);
   });
 
   afterEach(cleanup);
@@ -201,30 +197,4 @@ describe("message-pin view ownership", () => {
     expect(screen.getByText("아직 고정된 메시지가 없습니다.")).toBeTruthy();
   });
 
-  it("keeps custom-channel pins visibly unavailable", async () => {
-    const channel: RoomChannel = {
-      id: "planning",
-      name: "planning",
-      type: "text",
-      position: 0,
-      createdAt: "2026-08-29T00:00:00Z",
-    };
-    render(
-      <CustomChannelView
-        channel={channel}
-        meetingId="general"
-        sessionToken="aas1.session"
-        localDisplayName="Guest"
-        canPost
-      />
-    );
-
-    await waitFor(() => expect(api.fetchChannelLobby).toHaveBeenCalled());
-    fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
-    expect(
-      screen.getByText("커스텀 채널 메시지 핀은 아직 사용할 수 없습니다.")
-    ).toBeTruthy();
-    expect(api.fetchLobbyPins).not.toHaveBeenCalled();
-    expect(api.setLobbyPin).not.toHaveBeenCalled();
-  });
 });

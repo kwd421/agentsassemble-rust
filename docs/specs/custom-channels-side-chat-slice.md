@@ -390,3 +390,23 @@ room-recreation/login/channel pin custody and independent new-scope reads. Produ
 build/CSS and unchanged structure/19 policy/diff gates pass. React review confirms
 that operation state belongs to the scoped hook, with cleanup and no added periodic
 work. Mounting and direct packaged acceptance remain open.
+
+## Canonical custom-channel view
+
+The copied custom-channel view now consumes the selected-channel socket window and
+shared pin/search owners. Its text composer sends only channel/content, retains
+failed drafts, clears after the receipt and returns focus. Read-only or unready
+channels cannot send. History supports explicit older/latest navigation; exact
+search and older-pin context reuse the bounded window and preserve scroll/focus.
+Late context cannot replace a different connection's view. A temporary unavailable
+channel projection shows a connecting state while preserving the same identity's
+draft; different room/channel/login identity never displays that draft.
+
+The obsolete custom HTTP polling and voice presence/join/heartbeat body are removed
+from this directly replaced component. Voice remains deferred and is not mounted.
+The view reuses the original CSS with 24px interior spacing and 44px controls, and
+adds no poll, timer, socket or cache. Twelve affected view/pin/window cases pass
+(1.09 s); the final four composer/navigation cases also pass after correcting the
+mocked pin receipt to match its target. Production frontend build/CSS and unchanged
+structure/19 policy/diff gates pass. The view is not mounted in the app shell yet;
+that wiring, create-channel dialog and direct packaged acceptance remain open.
