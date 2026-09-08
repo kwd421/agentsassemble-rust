@@ -115,3 +115,26 @@ Final real runs remain configured DeepSeek, Codex, OpenCode, external Antigravit
 Grok and Cursor `auto` only. Claude and other providers receive static/native
 contract and local fixture verification without actual account/provider execution.
 Local Phase 8 acceptance does not claim the final authorized real-client matrix.
+
+## Explicit catalog refresh implementation
+
+Catalog discovery now retains one cancellable worker. A watch request/completion
+generation coalesces simultaneous refreshes and publishes the actual new catalog
+before acknowledging callers. Waiting has no timer or periodic work. Selected
+attendee discovery still visits only its chosen registration; fixed fixture catalogs
+explicitly reject refresh. Cancelled/failed workers return unavailable.
+
+The local operator's one-use HTTP ticket protects the private refresh route, whose
+response uses the existing catalog contract and no-store/Tauri-origin policy. The
+agent creation dialog exposes a desktop refresh button; room catalog subscriptions
+remain authoritative for updated choices. UI success follows a ready server result.
+
+The existing catalog test verifies concurrent requests share one generation, selected
+scope stays unchanged, and shutdown/fixed-catalog rejection. A real local TCP case
+verifies authorization before body handling, crossed/consumed tickets, bounded body,
+private CORS/cache behavior and published catalog equality. Both pass (0.01/0.04s).
+Provider/server all-target/all-feature Clippy, 24 existing agent-editor tests,
+frontend production build and unchanged CSS/architecture/growth/19-policy/format/diff
+gates pass. The only new resident task is the existing discovery worker retained on
+an event wait; no provider runtime is launched by the local fixture verification.
+Packaged operation proof and whole-phase cost measurement remain pending.

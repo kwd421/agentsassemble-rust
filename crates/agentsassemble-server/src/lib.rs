@@ -109,6 +109,7 @@ mod product_surface;
 mod profile_web;
 mod provider_attachment_runtime;
 mod provider_credentials_web;
+mod provider_operations_web;
 mod provider_recovery_tracker;
 mod provider_room_tool_runtime;
 mod provider_turn;

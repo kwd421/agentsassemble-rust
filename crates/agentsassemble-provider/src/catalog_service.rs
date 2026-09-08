@@ -37,6 +37,20 @@ pub struct ProviderCatalogService {
 struct CatalogOwner {
     cancellation: CancellationToken,
     task: Mutex<Option<JoinHandle<()>>>,
+    refresh: Option<CatalogRefresh>,
+}
+
+struct CatalogRefresh {
+    requested: watch::Sender<u64>,
+    completed: watch::Receiver<u64>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub enum CatalogRefreshError {
+    #[error("This catalog does not own provider discovery.")]
+    Unsupported,
+    #[error("Provider catalog discovery is unavailable.")]
+    Unavailable,
 }
 
 impl Drop for CatalogOwner {
@@ -68,10 +82,21 @@ impl ProviderCatalogService {
         let refresh_sender = sender.clone();
         let cancellation = CancellationToken::new();
         let discovery_cancellation = cancellation.clone();
+        let (requested, mut requests) = watch::channel(0_u64);
+        let (completed, completion) = watch::channel(0_u64);
         let task = tokio::spawn(async move {
-            let catalog = discover_catalog(&registrations, &discovery_cancellation).await;
-            if !discovery_cancellation.is_cancelled() {
-                let _ = refresh_sender.send(catalog);
+            loop {
+                let generation = *requests.borrow_and_update();
+                let catalog = discover_catalog(&registrations, &discovery_cancellation).await;
+                if discovery_cancellation.is_cancelled() {
+                    break;
+                }
+                refresh_sender.send_replace(catalog);
+                completed.send_replace(generation);
+                tokio::select! {
+                    () = discovery_cancellation.cancelled() => break,
+                    changed = requests.changed() => if changed.is_err() { break; },
+                }
             }
         });
         Self {
@@ -80,6 +105,10 @@ impl ProviderCatalogService {
             owner: Arc::new(CatalogOwner {
                 cancellation,
                 task: Mutex::new(Some(task)),
+                refresh: Some(CatalogRefresh {
+                    requested,
+                    completed: completion,
+                }),
             }),
         }
     }
@@ -93,6 +122,7 @@ impl ProviderCatalogService {
             owner: Arc::new(CatalogOwner {
                 cancellation: CancellationToken::new(),
                 task: Mutex::new(None),
+                refresh: None,
             }),
         }
     }
@@ -105,6 +135,45 @@ impl ProviderCatalogService {
     #[must_use]
     pub fn subscribe(&self) -> watch::Receiver<ProviderCatalog> {
         self.receiver.clone()
+    }
+
+    /// Joins one explicit discovery generation and returns its published result.
+    /// A failed catalog remains a failed result, never a refreshed old snapshot.
+    ///
+    /// # Errors
+    /// Rejects fixed catalogs and stopped or failed discovery owners.
+    pub async fn refresh(&self) -> Result<ProviderCatalog, CatalogRefreshError> {
+        let refresh = self
+            .owner
+            .refresh
+            .as_ref()
+            .ok_or(CatalogRefreshError::Unsupported)?;
+        if self.owner.cancellation.is_cancelled() {
+            return Err(CatalogRefreshError::Unavailable);
+        }
+        let mut completion = refresh.completed.clone();
+        let completed = *completion.borrow_and_update();
+        let next = completed
+            .checked_add(1)
+            .ok_or(CatalogRefreshError::Unavailable)?;
+        refresh.requested.send_if_modified(|requested| {
+            if *requested == completed {
+                *requested = next;
+                true
+            } else {
+                false
+            }
+        });
+        let requested = *refresh.requested.borrow();
+        loop {
+            if *completion.borrow_and_update() >= requested {
+                return Ok(self.snapshot());
+            }
+            tokio::select! {
+                () = self.owner.cancellation.cancelled() => return Err(CatalogRefreshError::Unavailable),
+                changed = completion.changed() => changed.map_err(|_| CatalogRefreshError::Unavailable)?,
+            }
+        }
     }
 
     /// Cancels provider discovery and waits for its task to exit.
@@ -220,9 +289,30 @@ mod tests {
         assert_eq!(catalog.status, "ready");
         assert_eq!(catalog.providers.len(), 1);
         assert_eq!(catalog.providers[0].id, "custom_api");
+        let (first, second) = tokio::join!(service.refresh(), service.refresh());
+        let first = first.unwrap_or_else(|error| panic!("refresh: {error}"));
+        let second = second.unwrap_or_else(|error| panic!("join refresh: {error}"));
+        assert_eq!(first, second);
+        assert_eq!(first.providers.len(), 1);
+        assert_eq!(first.providers[0].id, "custom_api");
+        assert_eq!(first.catalog_revision, catalog.catalog_revision);
+        let refresh = service
+            .owner
+            .refresh
+            .as_ref()
+            .unwrap_or_else(|| panic!("discovery owner"));
+        assert_eq!(*refresh.completed.borrow(), 1);
         service
             .shutdown()
             .await
             .unwrap_or_else(|error| panic!("catalog shutdown: {error}"));
+        assert!(matches!(
+            service.refresh().await,
+            Err(super::CatalogRefreshError::Unavailable)
+        ));
+        assert!(matches!(
+            ProviderCatalogService::fixed(first).refresh().await,
+            Err(super::CatalogRefreshError::Unsupported)
+        ));
     }
 }

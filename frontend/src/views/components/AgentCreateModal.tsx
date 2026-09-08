@@ -24,6 +24,7 @@ import {
   type ProviderCatalogGroup,
 } from "../../lib/providerCatalogGroups";
 import ProviderLogo from "./ProviderLogo";
+import ProviderCatalogRefresh from "./ProviderCatalogRefresh";
 import ProviderControlSelect from "./ProviderControlSelect";
 import ProviderControlToggle from "./ProviderControlToggle";
 import AgentPersonaPicker from "./AgentPersonaPicker";
@@ -375,6 +376,7 @@ export default function AgentCreateModal({
         </header>
 
         <div className="dc-agent-create-body">
+          <ProviderCatalogRefresh />
           <section className="dc-agent-section">
             <p className="dc-agent-section-title">종류</p>
             <div className="dc-agent-provider-grid" role="list" aria-label="에이전트 종류">
