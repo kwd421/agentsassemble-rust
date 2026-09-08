@@ -33,7 +33,7 @@ pub use local_control::{
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 12;
+pub const PRODUCT_SURFACE_REVISION: u32 = 13;
 pub const MAX_ROOM_SOCKET_MESSAGE_BYTES: usize = 256 * 1024;
 pub const BROWSER_CREDENTIAL_PREFIX: &str = "aad1_";
 pub const BROWSER_CREDENTIAL_BYTES: usize = 32;
@@ -387,6 +387,7 @@ pub struct RoomSnapshot {
     pub room_settings: PublicRoomSettings,
     pub participants: Vec<Participant>,
     pub agent_sessions: Vec<AgentSession>,
+    pub provider_requests: Vec<agentsassemble_domain::PendingProviderRequest>,
     pub active_turns: Vec<Value>,
     pub events: Vec<RoomEvent>,
     pub oldest_seq: i64,

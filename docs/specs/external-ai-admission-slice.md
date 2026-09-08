@@ -464,6 +464,18 @@ receipt ordering and observable connection EOF on cancellation. Provider all-tar
 all-feature Clippy and unchanged architecture, policy, format and artifact gates
 pass. This does not close the other native mappings, visible controls or bridges.
 
+The owner-only pending-request projection now belongs to the same read transaction
+as room snapshots. It includes the typed prompt, session, deadline and open/resolving
+state, never answer values. Revalidated browser ownership filters the indexed
+pending set; internal and AI snapshots carry no requests. Resolving requests remain
+visible after their opening event leaves the bounded event window, and terminal
+requests disappear. Browser wire validation and generated types include this field;
+product surface revision 13 rejects clients predating the new snapshot contract.
+The focused persistence case, five live broker/socket cases, 100 affected
+socket/canonical frontend tests, frontend build/CSS validation, affected server
+Clippy and unchanged mandatory gates pass.
+Visible request state and response controls remain the next integration step.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

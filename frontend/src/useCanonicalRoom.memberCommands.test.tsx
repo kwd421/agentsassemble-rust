@@ -94,6 +94,7 @@ describe("useCanonicalRoom member commands", () => {
       participants: [{ ...updatedParticipant, role: "agent" }],
       agent_sessions: [],
       active_turns: [],
+      provider_requests: [],
       events: [],
       oldest_seq: 0,
       last_seq: 0,

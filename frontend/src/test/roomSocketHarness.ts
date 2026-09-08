@@ -106,6 +106,7 @@ function snapshot(cursor: number) {
     participants: [],
     agent_sessions: [],
     active_turns: [],
+    provider_requests: [],
     events,
     oldest_seq: events[0]?.seq || 0,
     last_seq: cursor,

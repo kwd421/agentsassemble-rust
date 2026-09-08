@@ -59,6 +59,34 @@ pub struct ProviderRequest {
     pub prompt: ProviderRequestPrompt,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum PendingProviderRequestState {
+    Open,
+    Resolving,
+}
+
+/// Owner-only current state, independent of the bounded room event window.
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct PendingProviderRequest {
+    pub session_id: String,
+    pub request: ProviderRequest,
+    pub expires_at: chrono::DateTime<chrono::Utc>,
+    pub state: PendingProviderRequestState,
+}
+
+impl std::fmt::Debug for PendingProviderRequest {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PendingProviderRequest")
+            .field("session_id", &self.session_id)
+            .field("provider_request_id", &self.request.provider_request_id)
+            .field("state", &self.state)
+            .finish_non_exhaustive()
+    }
+}
+
 /// Deliberately has no Debug: answers can contain credentials and are live delivery only.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(tag = "response_kind", rename_all = "snake_case", deny_unknown_fields)]

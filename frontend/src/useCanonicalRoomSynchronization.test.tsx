@@ -59,6 +59,7 @@ function snapshot(events: RoomEvent[]): RoomSocketSnapshot {
     participants: [],
     agent_sessions: [],
     active_turns: [],
+    provider_requests: [],
     events,
     oldest_seq: events[0]?.seq || 0,
     last_seq: events.at(-1)?.seq || 0,

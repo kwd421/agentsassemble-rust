@@ -25,8 +25,9 @@ mod profile;
 mod projection;
 mod provider_request;
 pub use provider_request::{
-    DurableProviderResolution, ProviderRequest, ProviderRequestKind, ProviderRequestOption,
-    ProviderRequestPrompt, ProviderRequestQuestion, ProviderRequestResolution,
+    DurableProviderResolution, PendingProviderRequest, PendingProviderRequestState,
+    ProviderRequest, ProviderRequestKind, ProviderRequestOption, ProviderRequestPrompt,
+    ProviderRequestQuestion, ProviderRequestResolution,
 };
 mod provider_turn;
 mod room_history;

@@ -1,4 +1,5 @@
 import { channelMessageFieldsAreValid } from "./channelMessageContract";
+import { pendingProviderRequestsAreValid } from "./providerRequestContract";
 import { isCustomChannelId } from "./customChannelId";
 import { CHANNEL_MESSAGE_EVENT_TYPE } from "../types/generated/TEXT_CHAT_WIRE";
 import { isSequence } from "./roomSequence";
@@ -78,6 +79,7 @@ const GENERATED_SNAPSHOT_KEYS = [
   "room_settings",
   "participants",
   "agent_sessions",
+  "provider_requests",
   "active_turns",
   "events",
   "oldest_seq",
@@ -500,6 +502,7 @@ export function snapshotValidationError(
     !publicRoomSettingsIsValid(value.room_settings) ||
     !Array.isArray(value.participants) ||
     !Array.isArray(value.agent_sessions) ||
+    !pendingProviderRequestsAreValid(value.provider_requests) ||
     !Array.isArray(value.active_turns) ||
     !Array.isArray(value.events) ||
     !providerCatalogIsValid(value.provider_catalog) ||

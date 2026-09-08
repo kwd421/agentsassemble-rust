@@ -15,6 +15,78 @@ use crate::{
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
+async fn owner_snapshot_retains_pending_requests_outside_the_event_window() -> TestResult {
+    let (store, connection, turn, now) = assigned_report().await?;
+    let human = store
+        .authorize_human_session(&session_fingerprint(&store).await)
+        .await?;
+    let authority = RoomMutationAuthority::HumanSession(&human);
+    let request = request_for(&turn);
+    let opened = store
+        .open_attendee_provider_request(
+            connection.session().session_fingerprint(),
+            connection.connection_id(),
+            &request,
+            now,
+        )
+        .await?;
+    let id = request.request.provider_request_id;
+    let snapshot = store.snapshot_for(authority, 0, 1).await?;
+    assert_eq!(snapshot.provider_requests.len(), 1);
+    assert_eq!(
+        snapshot.provider_requests[0].request.provider_request_id,
+        id
+    );
+    let resolved = store
+        .resolve_provider_request(authority, id, &ProviderRequestResolution::Acknowledge, now)
+        .await?;
+    let snapshot = store.snapshot_for(authority, 0, 1).await?;
+    assert!(
+        !snapshot
+            .events
+            .iter()
+            .any(|event| event.id == opened.event.id)
+    );
+    assert_eq!(
+        snapshot.provider_requests[0].state,
+        agentsassemble_domain::PendingProviderRequestState::Resolving
+    );
+    assert!(
+        store
+            .snapshot("general", 0, 1)
+            .await?
+            .provider_requests
+            .is_empty()
+    );
+    assert!(
+        store
+            .snapshot_for(
+                RoomMutationAuthority::TrustedPrincipal(connection.session().principal()),
+                0,
+                1
+            )
+            .await?
+            .provider_requests
+            .is_empty()
+    );
+    store
+        .complete_provider_request_delivery(
+            &resolved.delivery.ok_or("delivery missing")?,
+            ProviderRequestDeliveryOutcome::Delivered,
+            now,
+        )
+        .await?;
+    assert!(
+        store
+            .snapshot_for(authority, 0, 1)
+            .await?
+            .provider_requests
+            .is_empty()
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn concurrent_secret_answers_claim_once_without_persisting_values() -> TestResult {
     let (store, connection, turn, now) = assigned_report().await?;
     let human = store

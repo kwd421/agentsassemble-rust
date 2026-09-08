@@ -79,6 +79,7 @@ pub struct RoomSnapshotData {
     pub settings: RoomSettings,
     pub participants: Vec<Participant>,
     pub agent_sessions: Vec<AgentSession>,
+    pub provider_requests: Vec<agentsassemble_domain::PendingProviderRequest>,
     pub events: Vec<RoomEvent>,
     pub oldest_seq: i64,
     pub last_seq: i64,
@@ -263,16 +264,20 @@ impl SqliteStore {
         }
         let limit = limit.max(1);
         let mut transaction = self.pool.begin().await?;
-        if let Some(authority) = authority {
+        let principal = if let Some(authority) = authority {
             match authority {
                 crate::RoomMutationAuthority::TrustedPrincipal(principal) => {
                     authorize_session(&mut transaction, principal).await?;
+                    Some(std::borrow::Cow::Borrowed(principal))
                 }
-                _ => {
-                    authority.resolve(&mut transaction).await?;
-                }
+                _ => Some(authority.resolve(&mut transaction).await?),
             }
-        }
+        } else {
+            None
+        };
+        let provider_requests =
+            crate::provider_requests::snapshot_pending_in(&mut transaction, principal.as_deref())
+                .await?;
         let row = sqlx::query("SELECT room_json, settings_json FROM rooms WHERE room_id = ?")
             .bind(room_id)
             .fetch_optional(&mut *transaction)
@@ -340,6 +345,7 @@ impl SqliteStore {
             settings,
             participants,
             agent_sessions,
+            provider_requests,
             events,
             oldest_seq,
             last_seq,

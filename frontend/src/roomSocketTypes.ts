@@ -83,6 +83,7 @@ export interface RoomSocketSnapshot {
   room_settings: PublicRoomSettings;
   participants: RoomMember[];
   agent_sessions: RoomAgentSession[];
+  provider_requests: import("./types/generated/PendingProviderRequest").PendingProviderRequest[];
   active_turns: Array<Record<string, unknown>>;
   events: RoomEvent[];
   oldest_seq: number;

@@ -33,6 +33,52 @@ pub struct ProviderRequestCommit {
     pub deduplicated: bool,
 }
 
+pub(crate) async fn snapshot_pending_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    principal: Option<&agentsassemble_domain::AuthenticatedPrincipal>,
+) -> Result<Vec<agentsassemble_domain::PendingProviderRequest>, PersistenceError> {
+    let Some(principal) = principal
+        .filter(|principal| principal.client_kind == agentsassemble_domain::ClientKind::Browser)
+    else {
+        return Ok(Vec::new());
+    };
+    let rows = sqlx::query("SELECT session_id, request_json, expires_at, state FROM provider_requests WHERE room_id=? AND owner_id=? AND state IN ('open','resolving') ORDER BY open_event_id")
+        .bind(&principal.room_id).bind(&principal.participant_id).fetch_all(&mut **tx).await?;
+    rows.into_iter()
+        .map(|row| {
+            let request: ProviderRequest = serde_json::from_str(row.get("request_json"))?;
+            if !request.is_valid() {
+                return Err(rejected(
+                    "invalid_state",
+                    "Stored provider request is invalid.",
+                ));
+            }
+            Ok(agentsassemble_domain::PendingProviderRequest {
+                session_id: row.get("session_id"),
+                request,
+                expires_at: DateTime::from_timestamp_millis(row.get("expires_at")).ok_or_else(
+                    || {
+                        rejected(
+                            "invalid_state",
+                            "Stored provider request deadline is invalid.",
+                        )
+                    },
+                )?,
+                state: match row.get::<&str, _>("state") {
+                    "open" => agentsassemble_domain::PendingProviderRequestState::Open,
+                    "resolving" => agentsassemble_domain::PendingProviderRequestState::Resolving,
+                    _ => {
+                        return Err(rejected(
+                            "invalid_state",
+                            "Stored pending request state is invalid.",
+                        ));
+                    }
+                },
+            })
+        })
+        .collect()
+}
+
 impl SqliteStore {
     /// Opens a request under the managed runtime's exact active turn authority.
     ///
