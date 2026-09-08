@@ -531,7 +531,7 @@ fn assert_session_server_surface(admission: &Value) {
     }
     assert_eq!(
         admission["server_product_surface"]["websocket_streams"],
-        json!(["room_events"])
+        json!(["room_events", "side_chat"])
     );
 }
 

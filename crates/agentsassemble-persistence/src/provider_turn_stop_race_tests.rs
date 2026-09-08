@@ -201,10 +201,7 @@ async fn runtime_gone_rejects_a_stop_intent_without_its_exact_reservation() {
     let result = store.finalize_provider_turn_runtime_gone(&candidate).await;
     assert!(matches!(
         result,
-        Err(crate::PersistenceError::CommandRejected {
-            code: "invalid_stored_runtime_authority",
-            ..
-        })
+        Err(crate::PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invalid_stored_runtime_authority")
     ));
     let execution = store
         .provider_turn_execution("general", AGENT_ID, assignment.turn_generation)

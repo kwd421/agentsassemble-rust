@@ -55,10 +55,7 @@ async fn explicit_interrupt_is_exact_replayable_and_does_not_rerun_restored_inpu
         store
             .execute_agent_interrupt(TrustedPrincipal(&principal), "second-interrupt", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "provider_turn_interrupt_in_progress",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"provider_turn_interrupt_in_progress")
     ));
 
     let claim = store

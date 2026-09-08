@@ -726,10 +726,7 @@ fn assert_rejected(decision: &HumanAdmissionDecision, expected: HumanAdmissionRe
 fn assert_invalid_state(result: &Result<HumanAdmissionDecision, PersistenceError>) {
     assert!(matches!(
         result,
-        Err(PersistenceError::CommandRejected {
-            code: "invalid_state",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invalid_state")
     ));
 }
 

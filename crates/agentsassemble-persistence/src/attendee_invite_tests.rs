@@ -124,10 +124,7 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
     };
     assert!(matches!(
         error,
-        PersistenceError::CommandRejected {
-            code: "companion_limit_reached",
-            ..
-        }
+        PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"companion_limit_reached")
     ));
     let retry = store
         .create_companion_attendee_invite(&human, make(first_id), now + Duration::seconds(1))
@@ -152,10 +149,7 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
         store
             .create_companion_attendee_invite(&human, make(Uuid::new_v4()), now)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "permission_denied",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
     ));
     Ok(())
 }

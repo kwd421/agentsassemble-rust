@@ -93,10 +93,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
         .await;
     assert!(matches!(
         mismatch,
-        Err(PersistenceError::CommandRejected {
-            code: "provider_session_mismatch",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"provider_session_mismatch")
     ));
     store
         .complete_agent_start(
@@ -146,10 +143,7 @@ async fn unconfirmed_start_rejects_a_substituted_runtime_identity() {
                 "Provider initialization was not confirmed.",
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_owner_mismatch",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_owner_mismatch")
     ));
     let current = store
         .load_runtime_reconciliation_candidates()

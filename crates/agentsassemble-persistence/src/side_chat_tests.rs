@@ -100,7 +100,7 @@ async fn bootstrap_overlap_replay_and_mutable_human_authority() -> TestResult {
         store
             .execute_side_chat(TrustedPrincipal(&principal), "one", &payload, now)
             .await,
-        Err(PersistenceError::CommandRejected { code: "muted", .. })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"muted")
     ));
     sqlx::query("UPDATE participants SET participant_json = json_set(participant_json, '$.participant_type', 'agent') WHERE room_id = 'general'").execute(&store.pool).await?;
     assert!(
@@ -141,10 +141,7 @@ async fn count_and_clock_retention_bound_exact_retry_custody() -> TestResult {
         store
             .execute_side_chat(TrustedPrincipal(&principal), "0", &old, now)
             .await,
-        Err(PersistenceError::CommandUnresolved {
-            code: "side_chat_retry_expired",
-            ..
-        })
+        Err(PersistenceError::CommandUnresolved { code, .. }) if matches!(code.as_bytes(), b"side_chat_retry_expired")
     ));
     let expired_at = now + chrono::Duration::seconds(SIDE_CHAT_TTL_SECONDS);
     let expired = store
@@ -215,10 +212,7 @@ async fn restart_discards_content_receipts_and_generation() -> TestResult {
                 now
             )
             .await,
-        Err(PersistenceError::CommandUnresolved {
-            code: "side_chat_retry_expired",
-            ..
-        })
+        Err(PersistenceError::CommandUnresolved { code, .. }) if matches!(code.as_bytes(), b"side_chat_retry_expired")
     ));
     Ok(())
 }

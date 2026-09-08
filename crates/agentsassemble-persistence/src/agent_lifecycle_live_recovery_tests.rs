@@ -60,10 +60,7 @@ async fn exact_live_replay_reenters_start_only_after_gone_proof() {
         store
             .prepare_agent_start(TrustedPrincipal(&principal), "replacement-start", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "operation_in_progress",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"operation_in_progress")
     ));
 }
 
@@ -277,10 +274,7 @@ async fn previous_supervisor_request_cannot_use_live_effect_reentry_after_reopen
                 &payload,
             )
             .await,
-        Err(PersistenceError::CommandUnresolved {
-            code: "runtime_effect_unconfirmed",
-            ..
-        })
+        Err(PersistenceError::CommandUnresolved { code, .. }) if matches!(code.as_bytes(), b"runtime_effect_unconfirmed")
     ));
     let candidate = reopened
         .load_runtime_reconciliation_candidates()

@@ -274,19 +274,13 @@ async fn channel_retirement_closes_history_replay_and_old_identity_reuse_atomica
     .await;
     assert!(matches!(
         reused,
-        Err(PersistenceError::CommandRejected {
-            code: "channel_retired",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"channel_retired")
     ));
     let mut changed = channel("c0123456789ac", "Second", 0);
     changed["created_at"] = json!("2026-09-09T00:00:00Z");
     assert!(matches!(
         set_channels(&store, &principal, json!([changed])).await,
-        Err(PersistenceError::CommandRejected {
-            code: "channel_identity_conflict",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"channel_identity_conflict")
     ));
 }
 
@@ -299,10 +293,7 @@ async fn denied_writes_and_failed_receipt_insert_leave_no_partial_channel_event(
         store
             .execute_channel_message(TrustedPrincipal(&principal), "denied", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "permission_denied",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
     ));
     assert!(
         checked(page(&store, &principal, "c0123456789ab", 0, 80).await)
@@ -316,7 +307,7 @@ async fn denied_writes_and_failed_receipt_insert_leave_no_partial_channel_event(
         store
             .execute_channel_message(TrustedPrincipal(&principal), "muted", &payload)
             .await,
-        Err(PersistenceError::CommandRejected { code: "muted", .. })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"muted")
     ));
     checked(sqlx::query("UPDATE participants SET participant_json = json_set(participant_json, '$.muted', json('false')) WHERE room_id = 'general'").execute(&store.pool).await);
     checked(sqlx::query("CREATE TRIGGER reject_channel_receipt BEFORE INSERT ON command_results WHEN NEW.action = 'channel.message.send' BEGIN SELECT RAISE(ABORT, 'fixture rollback'); END").execute(&store.pool).await);

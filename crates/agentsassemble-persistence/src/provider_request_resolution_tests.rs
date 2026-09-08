@@ -127,10 +127,7 @@ async fn concurrent_secret_answers_claim_once_without_persisting_values() -> Tes
                 now
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "permission_denied",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
     ));
     let (first, retry) = tokio::join!(
         store.resolve_provider_request(authority, id, &resolution, now),
@@ -274,10 +271,7 @@ async fn deadline_cancellation_and_replaced_connection_fence_delivery() -> TestR
                 now + TimeDelta::seconds(1)
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "bridge_connection_replaced",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bridge_connection_replaced")
     ));
     Ok(())
 }

@@ -50,10 +50,7 @@ async fn removal_fences_launch_and_reopen_retains_cleanup_until_absence_is_prove
         store
             .prepare_agent_start(TrustedPrincipal(&principal), "restart", &launch)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_cleanup_pending",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_cleanup_pending")
     ));
     let replay = store
         .execute_participant_removal(authority, "remove", "participant.kick", &payload)
@@ -145,10 +142,7 @@ async fn removal_rejects_owner_bridge_and_payload_retargeting_without_side_effec
                 &json!({"participant_id": AGENT_ID})
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "permission_denied",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
     ));
     assert!(
         store
@@ -194,10 +188,7 @@ async fn exported_session_cannot_resume_after_successful_cleanup() {
                     &payload
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "participant_exported",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"participant_exported")
         ));
     }
     assert_eq!(
@@ -237,10 +228,7 @@ async fn exported_session_cannot_resume_after_successful_cleanup() {
                 &json!({"agent_id": AGENT_ID})
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "participant_exported",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"participant_exported")
     ));
 }
 

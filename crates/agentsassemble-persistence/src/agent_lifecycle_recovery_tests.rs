@@ -72,10 +72,7 @@ async fn oversized_turn_queue_fails_before_lifecycle_or_reconciliation_effects()
     ] {
         assert!(matches!(
             result,
-            Err(PersistenceError::CommandRejected {
-                code: "stored_turn_authority_invalid" | "invalid_stored_runtime_authority",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stored_turn_authority_invalid" | b"invalid_stored_runtime_authority")
         ));
     }
 }
@@ -203,19 +200,13 @@ async fn ambiguous_start_retains_its_exact_runtime_lease_and_blocks_replacement(
         store
             .prepare_agent_start(TrustedPrincipal(&principal), "replacement-start", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "operation_in_progress",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"operation_in_progress")
     ));
     assert!(matches!(
         store
             .prepare_agent_start(TrustedPrincipal(&principal), "ambiguous-start", &payload)
             .await,
-        Err(PersistenceError::CommandUnresolved {
-            code: "runtime_effect_unconfirmed",
-            ..
-        })
+        Err(PersistenceError::CommandUnresolved { code, .. }) if matches!(code.as_bytes(), b"runtime_effect_unconfirmed")
     ));
     let unchanged = store
         .load_runtime_reconciliation_candidates()
@@ -258,10 +249,7 @@ async fn reconciliation_rejects_competing_pending_lifecycle_authority() {
 
     assert!(matches!(
         store.load_runtime_reconciliation_candidates().await,
-        Err(PersistenceError::CommandRejected {
-            code: "invalid_stored_runtime_authority",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invalid_stored_runtime_authority")
     ));
 }
 
@@ -325,10 +313,7 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
                 &RuntimeReconciliationObservation::Gone,
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "stale_reconciliation_candidate",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stale_reconciliation_candidate")
     ));
     let current = store
         .load_runtime_reconciliation_candidates()
@@ -525,10 +510,7 @@ async fn start_completion_derives_its_request_operation_binding() {
                 &started("owned-runtime", "owned-provider-thread"),
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "stale_start_confirmation",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stale_start_confirmation")
     ));
     authorize_start(
         &store,
@@ -574,10 +556,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
     ] {
         assert!(matches!(
             result,
-            Err(PersistenceError::CommandRejected {
-                code: "operation_in_progress",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"operation_in_progress")
         ));
     }
     authorize_start(
@@ -619,10 +598,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
     ] {
         assert!(matches!(
             result,
-            Err(PersistenceError::CommandRejected {
-                code: "operation_in_progress",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"operation_in_progress")
         ));
     }
     store
@@ -642,10 +618,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
         store
             .finalize_agent_stop(&principal, "different-stop", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "stale_stop_confirmation",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stale_stop_confirmation")
     ));
     assert!(matches!(
         store

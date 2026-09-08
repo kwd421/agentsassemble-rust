@@ -62,10 +62,7 @@ async fn connector_one_use_retry_and_leave_have_one_agent_owner() -> TestResult 
         store
             .admit_connector(&fingerprint, &client, join_id, "Changed name", now)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "invite_already_used",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invite_already_used")
     ));
     assert_eq!(
         store

@@ -83,10 +83,7 @@ async fn attendee_ready_reconnect_retains_exact_running_turn_and_external_custod
     wrong.runtime_lease_token = "different-generation".to_owned();
     assert!(matches!(
         store.record_attendee_ready(&replacement, &wrong, now).await,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_owner_mismatch",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_owner_mismatch")
     ));
     store
         .record_attendee_ready(&replacement, &ready, now)

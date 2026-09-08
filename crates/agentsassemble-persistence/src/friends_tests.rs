@@ -59,10 +59,7 @@ async fn friend_retries_conflicts_restart_and_deletion_preserve_directory_contra
     };
     assert!(matches!(
         loser,
-        PersistenceError::CommandRejected {
-            code: "friend_conflict",
-            ..
-        }
+        PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"friend_conflict")
     ));
     assert_eq!(checked(store.save_friend(&retry).await), winner);
     drop(store);

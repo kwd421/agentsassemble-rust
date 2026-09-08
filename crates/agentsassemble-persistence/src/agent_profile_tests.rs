@@ -91,10 +91,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
             store
                 .execute_agent_profile_update(TrustedPrincipal(&denied), "denied", &valid)
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "permission_denied",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
         ));
     }
     let mut bridge = principal.clone();
@@ -103,10 +100,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
         store
             .execute_agent_profile_update(TrustedPrincipal(&bridge), "bridge", &valid)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "permission_denied",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
     ));
     for value in [
         json!(null),
@@ -124,10 +118,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
                     &json!({"agent_id": AGENT_ID, "display_name": value})
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "bad_request",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bad_request")
         ));
     }
     for payload in [
@@ -139,10 +130,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
             store
                 .execute_agent_profile_update(TrustedPrincipal(&principal), "invalid", &payload)
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "bad_request",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bad_request")
         ));
     }
     let mut other_room = principal.clone();
@@ -168,10 +156,7 @@ async fn identity_update_rejects_wrong_authority_and_malformed_targets()
         store
             .execute_agent_profile_update(TrustedPrincipal(&principal), "human", &valid)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "stored_agent_identity_invalid",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stored_agent_identity_invalid")
     ));
     Ok(())
 }

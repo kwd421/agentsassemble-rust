@@ -38,10 +38,7 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
         .await;
     assert!(matches!(
         stale,
-        Err(PersistenceError::CommandRejected {
-            code: "stale_start_confirmation",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stale_start_confirmation")
     ));
     store
         .authorize_agent_start_effect(
@@ -83,10 +80,7 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
                 &payload
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_handle_unavailable",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_handle_unavailable")
     ));
     assert!(matches!(
         store

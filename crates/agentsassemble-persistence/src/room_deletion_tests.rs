@@ -161,10 +161,7 @@ async fn deletion_rejects_wrong_name_authority_incarnation_and_second_intent()
                 &json!({"room_uid": room.room_uid, "confirmation_name": "Wrong"})
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "confirmation_mismatch",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"confirmation_mismatch")
     ));
     assert!(matches!(
         store
@@ -174,10 +171,7 @@ async fn deletion_rejects_wrong_name_authority_incarnation_and_second_intent()
                 &json!({"room_uid": uuid::Uuid::new_v4(), "confirmation_name": room.label})
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "room_incarnation_changed",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_incarnation_changed")
     ));
     assert_eq!(
         store.snapshot("general", 0, 20).await?.room.status,
@@ -197,10 +191,7 @@ async fn deletion_rejects_wrong_name_authority_incarnation_and_second_intent()
         store
             .execute_room_delete(TrustedPrincipal(&principal), "other", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "room_deletion_pending",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_deletion_pending")
     ));
     assert!(
         store

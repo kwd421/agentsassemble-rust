@@ -39,10 +39,7 @@ async fn attendee_admission_has_one_provider_bound_external_owner_and_exact_retr
         store
             .admit_attendee(make(&[1; 32], "opencode_server", "Attendee"), now)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "provider_mismatch",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"provider_mismatch")
     ));
     assert!(
         store
@@ -163,19 +160,13 @@ async fn verify_external_custody(
         store
             .prepare_agent_start(authority, "host-start", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "external_runtime_owned",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"external_runtime_owned")
     ));
     assert!(matches!(
         store
             .agent_configuration_candidate(authority, &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "external_runtime_owned",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"external_runtime_owned")
     ));
     Ok(())
 }

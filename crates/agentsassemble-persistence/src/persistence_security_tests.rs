@@ -228,10 +228,7 @@ async fn inactive_room_rejects_commands_inside_the_write_transaction() {
                 &json!({"content": "must fail"}),
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "room_inactive",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_inactive")
     ));
 }
 
@@ -259,9 +256,6 @@ async fn revoked_participant_cannot_receive_an_authorized_snapshot() {
                 200
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "session_revoked",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
     ));
 }

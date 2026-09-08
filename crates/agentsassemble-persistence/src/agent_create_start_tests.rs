@@ -419,10 +419,7 @@ async fn restart_uncertain_create_start_keeps_one_unresolved_request() {
                     &payload
                 )
                 .await,
-            Err(crate::PersistenceError::CommandUnresolved {
-                code: "runtime_effect_unconfirmed",
-                ..
-            })
+            Err(crate::PersistenceError::CommandUnresolved { code, .. }) if matches!(code.as_bytes(), b"runtime_effect_unconfirmed")
         ));
     }
     assert_eq!(

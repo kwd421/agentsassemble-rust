@@ -272,10 +272,7 @@ async fn expired_sessions_can_recover_active_membership_but_cannot_revive_remove
         store
             .redeem_guest_recovery_code(&request(&next, &[5; 32]), future)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "recovery_membership_inactive",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"recovery_membership_inactive")
     ));
     assert!(
         store

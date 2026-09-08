@@ -334,10 +334,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
         .await;
     assert!(matches!(
         unowned,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_start_unconfirmed",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_start_unconfirmed")
     ));
     store
         .authorize_agent_start_effect(
@@ -371,10 +368,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
         .await;
     assert!(matches!(
         invalid,
-        Err(PersistenceError::CommandRejected {
-            code: "provider_session_unconfirmed",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"provider_session_unconfirmed")
     ));
     let outcome = store
         .complete_agent_start(
@@ -431,10 +425,7 @@ async fn unversioned_runtime_profile_fails_before_a_start_effect() {
         .await;
     assert!(matches!(
         outcome,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_profile_unsupported",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_profile_unsupported")
     ));
     let snapshot = store
         .snapshot("general", 0, 10)
@@ -531,10 +522,7 @@ async fn ambiguous_stop_becomes_a_redacted_recoverable_disconnect() {
         store
             .prepare_agent_start(TrustedPrincipal(&principal), "replacement-start", &payload)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "operation_in_progress",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"operation_in_progress")
     ));
 }
 
@@ -547,10 +535,7 @@ async fn restart_retains_ambiguous_stop_authority_until_gone_is_proven() {
         store
             .prepare_agent_stop(TrustedPrincipal(&principal), "ambiguous-stop", &payload)
             .await,
-        Err(PersistenceError::CommandUnresolved {
-            code: "runtime_effect_unconfirmed",
-            ..
-        })
+        Err(PersistenceError::CommandUnresolved { code, .. }) if matches!(code.as_bytes(), b"runtime_effect_unconfirmed")
     ));
     assert_eq!(
         store
@@ -563,10 +548,7 @@ async fn restart_retains_ambiguous_stop_authority_until_gone_is_proven() {
         store
             .prepare_agent_stop(TrustedPrincipal(&principal), "ambiguous-stop", &payload)
             .await,
-        Err(PersistenceError::CommandUnresolved {
-            code: "runtime_effect_unconfirmed",
-            ..
-        })
+        Err(PersistenceError::CommandUnresolved { code, .. }) if matches!(code.as_bytes(), b"runtime_effect_unconfirmed")
     ));
     assert_ambiguous_owner_was_retained(&store).await;
     assert!(matches!(
@@ -577,10 +559,7 @@ async fn restart_retains_ambiguous_stop_authority_until_gone_is_proven() {
                 &payload
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "operation_in_progress",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"operation_in_progress")
     ));
 }
 

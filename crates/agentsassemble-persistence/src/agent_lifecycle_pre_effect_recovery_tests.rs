@@ -212,10 +212,7 @@ async fn refused_prepared_stop_releases_only_its_intent_and_preserves_live_runti
                 reason
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "stale_stop_confirmation",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stale_stop_confirmation")
     ));
     store
         .record_agent_stop_effect(&principal.room_id, &next.session_id, &next.operation_id)

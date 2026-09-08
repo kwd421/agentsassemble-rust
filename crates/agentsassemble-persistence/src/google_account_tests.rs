@@ -50,10 +50,7 @@ async fn google_link_supports_multiple_devices_restart_and_link_only_disconnect(
         store
             .connect_google_account(&identity, &[12; 32], false)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "account_link_conflict",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"account_link_conflict")
     ));
     checked(store.disconnect_google_account(&identity).await);
     assert!(checked(store.google_account(&device(&store, 2).await).await).is_none());
@@ -96,10 +93,7 @@ async fn confirmed_guest_switch_is_atomic_and_preserves_public_history() {
     );
     assert!(matches!(
         store.connect_google_account(&guest, &[12; 32], false).await,
-        Err(PersistenceError::CommandRejected {
-            code: "account_switch_confirmation_required",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"account_switch_confirmation_required")
     ));
     checked(sqlx::query("CREATE TRIGGER reject_guest_retirement BEFORE DELETE ON user_profiles BEGIN SELECT RAISE(ABORT, 'fixture rollback'); END").execute(&store.pool).await);
     assert!(
@@ -186,10 +180,7 @@ async fn account_proof_cannot_retire_operator_or_cross_a_session_device_boundary
         store
             .connect_google_account(&operator, &[12; 32], true)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "account_switch_operator_forbidden",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"account_switch_operator_forbidden")
     ));
     checked(store.local_operator_profile().await);
     checked(
@@ -201,10 +192,7 @@ async fn account_proof_cannot_retire_operator_or_cross_a_session_device_boundary
         store
             .connect_google_account(&device(&store, 3).await, &[13; 32], true)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "account_operator_boundary",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"account_operator_boundary")
     ));
     assert!(device(&store, 3).await.user().is_none());
     assert!(checked(store.google_account(&operator).await).is_some());

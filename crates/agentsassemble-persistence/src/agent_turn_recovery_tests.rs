@@ -325,10 +325,7 @@ async fn prepared_stop_suppresses_a_late_ordinary_provider_final() {
         .await;
     assert!(matches!(
         late_final,
-        Err(PersistenceError::CommandRejected {
-            code: "stale_provider_turn",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stale_provider_turn")
     ));
 
     store

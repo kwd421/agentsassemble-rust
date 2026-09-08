@@ -1057,3 +1057,35 @@ Ten managed mute/recovery cases, three managed explicit-interrupt cases and the
 host pre-slot interruption test pass. Affected all-target/all-feature Clippy and
 unchanged architecture/format/diff checks pass. External CLI runtime/tool relay,
 entry-packet controls and managed bridge remain pending before phase acceptance.
+
+## Managed bridge process boundary
+
+The managed child uses a private parent-owned pipe for startup and turn transport;
+it receives no browser, attendee or Connector credential. The existing provider
+factory and driver semantics execute inside that exact child, while the parent room
+actor retains durable Agent Session, execution, permission and publication authority.
+The existing native process lease/guardian remains responsible for provider absence;
+a child report cannot replace its verified cleanup. Pipe loss ends that child launch
+and becomes an explicit runtime failure; it does not replay a provider turn. Existing
+Agent Session restart creates a fresh launch after confirmed cleanup.
+
+Startup handoff carries only the selected session/runtime configuration and selected
+provider credential through the private pipe. Bounded typed messages preserve native
+error codes, request/receipt barriers, active execution identity and tool authority.
+No launch secret enters command-line arguments or files. Provider errors therefore
+need owned wire strings instead of requiring every received value to have static
+lifetime. Static native errors remain borrowed; serialization must preserve their
+exact code/message without leaking or inventing a replacement provider result.
+
+Acceptance remains pending: exact startup/readiness, native turn and request relay,
+private tool routing, interrupt/stop, pipe/crash failure, native process absence and
+packaged managed controls must run through this boundary before Phase 7 closure.
+
+Existing failure assertions now compare code contents without requiring a literal
+static-string field pattern, preparing the owned bridge-error boundary. No cases
+or rejection branches are removed. The 321 persistence tests and 232 server unit/
+integration tests pass, with the server suite bounded to four test workers after
+one default-concurrency runtime-authority-capacity collision. The invite surface
+expectation now includes the already shipped human side-chat stream. Workspace
+all-target/all-feature Clippy and unchanged mandatory gates pass. Managed process
+transport is still pending.

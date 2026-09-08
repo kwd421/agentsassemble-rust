@@ -272,10 +272,7 @@ async fn paired_image_uploads_revalidate_revocation_before_storage()
     ] {
         assert!(matches!(
             result,
-            Err(crate::PersistenceError::CommandRejected {
-                code: "session_revoked",
-                ..
-            })
+            Err(crate::PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
         ));
     }
     Ok(())

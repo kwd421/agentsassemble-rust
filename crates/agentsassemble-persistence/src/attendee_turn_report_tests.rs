@@ -22,10 +22,7 @@ async fn attendee_report_replacement_and_response_loss_preserve_one_canonical_co
         store
             .record_attendee_turn_report(&first, &report, now)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "bridge_connection_replaced",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bridge_connection_replaced")
     ));
     store
         .record_attendee_ready(&replacement, &ready_report(), now)

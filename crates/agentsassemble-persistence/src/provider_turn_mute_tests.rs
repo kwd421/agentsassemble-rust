@@ -473,10 +473,7 @@ async fn exact_live_control_can_resume_a_quarantined_interrupt_without_reissuing
                 "10000000-0000-4000-8000-000000000202",
             )
             .await,
-        Err(crate::PersistenceError::CommandUnresolved {
-            code: "provider_turn_effect_unresolved",
-            ..
-        })
+        Err(crate::PersistenceError::CommandUnresolved { code, .. }) if matches!(code.as_bytes(), b"provider_turn_effect_unresolved")
     ));
     let waiting = store
         .authorize_provider_interrupt_recovery_wait(&recovery_claim)

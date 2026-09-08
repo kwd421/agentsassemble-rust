@@ -129,10 +129,7 @@ async fn archive_retains_management_replay_and_requires_cleanup_before_restore()
                 &restore
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_cleanup_pending",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_cleanup_pending")
     ));
     for key in &archived.cleanup {
         assert!(store.finish_room_runtime_cleanup(key).await?.is_some());
@@ -241,10 +238,7 @@ async fn closure_requires_exact_local_owner_and_incarnation_and_cannot_be_restor
                 &json!({"room_uid": uuid::Uuid::new_v4()})
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "room_incarnation_changed",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_incarnation_changed")
     ));
     let closed = store
         .execute_room_lifecycle(TrustedPrincipal(&principal), "close", "room.close", &close)
@@ -277,10 +271,7 @@ async fn closure_requires_exact_local_owner_and_incarnation_and_cannot_be_restor
                 &json!({"room_uid": uid, "archived": false})
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "room_closed",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"room_closed")
     ));
     Ok(())
 }

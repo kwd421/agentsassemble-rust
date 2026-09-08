@@ -22,10 +22,7 @@ async fn attendee_delivery_recovers_exact_running_input_and_start_acknowledgemen
     assert!(store.deliver_attendee_turn(&first, now).await.is_err());
     assert!(matches!(
         store.deliver_attendee_turn(&replacement, now).await,
-        Err(PersistenceError::CommandRejected {
-            code: "bridge_not_ready",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bridge_not_ready")
     ));
     assert!(
         store
@@ -75,10 +72,7 @@ async fn attendee_delivery_recovers_exact_running_input_and_start_acknowledgemen
         store
             .record_attendee_turn_started(&replacement, &wrong, &resumed.provider_turn_id, now)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "permission_denied",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
     ));
     let fields = serde_json::to_value(&resumed)?;
     let object = fields.as_object().ok_or("wire object missing")?;

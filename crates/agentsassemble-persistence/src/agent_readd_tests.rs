@@ -200,10 +200,7 @@ async fn readd_rejects_untrusted_flags_and_missing_control_authority()
                     "agent.readd"
                 )
                 .await,
-            Err(PersistenceError::CommandRejected {
-                code: "bad_request",
-                ..
-            })
+            Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bad_request")
         ));
     }
     principal.is_operator = false;
@@ -263,10 +260,7 @@ async fn readd_rejects_cross_bound_stored_identity_before_mutation()
                         "agent.readd"
                     )
                     .await,
-                Err(PersistenceError::CommandRejected {
-                    code: "stored_agent_identity_invalid",
-                    ..
-                })
+                Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stored_agent_identity_invalid")
             ));
             let after: String = sqlx::query_scalar(read)
                 .bind(AGENT_ID)

@@ -23,10 +23,7 @@ async fn attendee_connection_replacement_fences_old_reports_and_old_disconnect()
         .authorization;
     assert!(matches!(
         store.revalidate_attendee_connection(&first, now).await,
-        Err(PersistenceError::CommandRejected {
-            code: "bridge_connection_replaced",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bridge_connection_replaced")
     ));
     assert!(
         store

@@ -50,19 +50,13 @@ async fn request_open_replays_one_private_event_and_fences_changed_expired_or_re
         store
             .open_attendee_provider_request(fingerprint, id, &changed, now)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "provider_request_pending",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"provider_request_pending")
     ));
     assert!(matches!(
         store
             .open_attendee_provider_request(fingerprint, id, &request, now + TimeDelta::seconds(60))
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "provider_request_closed",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"provider_request_closed")
     ));
     changed = request.clone();
     changed.execution_id = Uuid::new_v4().to_string();
@@ -91,10 +85,7 @@ async fn request_open_replays_one_private_event_and_fences_changed_expired_or_re
         store
             .open_attendee_provider_request(fingerprint, id, &request, now)
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "bridge_connection_replaced",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bridge_connection_replaced")
     ));
     let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM provider_requests")
         .fetch_one(&store.pool)

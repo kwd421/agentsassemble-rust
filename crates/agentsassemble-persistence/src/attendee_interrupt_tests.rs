@@ -121,10 +121,7 @@ async fn readiness_cannot_change_exact_runtime_interrupt_capability_on_reconnect
     ready.retained_interrupt = false;
     assert!(matches!(
         store.record_attendee_ready(&replacement, &ready, now).await,
-        Err(PersistenceError::CommandRejected {
-            code: "runtime_owner_mismatch",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_owner_mismatch")
     ));
     Ok(())
 }
@@ -190,10 +187,7 @@ async fn external_runtime_without_retained_interrupt_rejects_before_preparing_ef
         .await;
     assert!(matches!(
         result,
-        Err(PersistenceError::CommandRejected {
-            code: "provider_turn_interrupt_unsupported",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"provider_turn_interrupt_unsupported")
     ));
     assert!(
         store

@@ -160,10 +160,7 @@ async fn pause_rejects_a_stale_live_runtime_proof_without_mutation() {
                 &stale
             )
             .await,
-        Err(PersistenceError::CommandRejected {
-            code: "resident_runtime_changed",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"resident_runtime_changed")
     ));
     assert_eq!(stored_session(&store).await, original);
 }
@@ -189,9 +186,6 @@ fn resident_runtime(session: &agentsassemble_domain::DurableAgentSession) -> Age
 fn assert_invalid_state(result: &Result<crate::CommandOutcome, PersistenceError>) {
     assert!(matches!(
         result,
-        Err(PersistenceError::CommandRejected {
-            code: "invalid_state",
-            ..
-        })
+        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"invalid_state")
     ));
 }
