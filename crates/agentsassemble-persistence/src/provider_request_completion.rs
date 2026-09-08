@@ -66,8 +66,10 @@ impl SqliteStore {
                 &delivery.session_id,
             )
             .await?;
-            crate::provider_request_authority::require_execution_in(&mut tx, &session, &row, now)
-                .await?;
+            crate::provider_request_authority::require_pending_authority_in(
+                &mut tx, &session, &row, now,
+            )
+            .await?;
         }
         let event = close_in(&mut tx, &row, state).await?;
         tx.commit().await?;
@@ -142,7 +144,7 @@ fn pending(row: &SqliteRow) -> bool {
     matches!(row.get::<&str, _>("state"), "open" | "resolving")
 }
 
-async fn close_in(
+pub(crate) async fn close_in(
     tx: &mut Transaction<'_, Sqlite>,
     row: &SqliteRow,
     state: &str,

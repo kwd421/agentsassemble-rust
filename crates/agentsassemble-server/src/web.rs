@@ -315,6 +315,10 @@ async fn reconcile_before_network_admission(
     state: &AppState,
     cancellation: &CancellationToken,
 ) -> Result<(), agentsassemble_persistence::PersistenceError> {
+    state
+        .store
+        .fail_provider_requests_before_admission()
+        .await?;
     state.store.disconnect_attendees_before_admission().await?;
     crate::room_runtime_cleanup::reconcile_before_admission(
         &state.store,

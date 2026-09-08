@@ -53,6 +53,12 @@ pub(crate) async fn append_state_event(
     principal: &AuthenticatedPrincipal,
     session: &AgentSession,
 ) -> Result<RoomEvent, PersistenceError> {
+    Box::pin(crate::provider_request_lifecycle::reconcile_session_in(
+        transaction,
+        session,
+        Utc::now(),
+    ))
+    .await?;
     append_session_event(
         transaction,
         principal,

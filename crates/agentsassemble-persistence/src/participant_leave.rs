@@ -148,6 +148,12 @@ async fn execute_leave_in(
     .await?;
     let event = participant_left_event(transaction, &participant).await?;
     insert_event(transaction, &event).await?;
+    Box::pin(crate::provider_request_lifecycle::cancel_participant_in(
+        transaction,
+        &principal.room_id,
+        &principal.participant_id,
+    ))
+    .await?;
     let result = json!({
         "participant": participant,
         "event": event,

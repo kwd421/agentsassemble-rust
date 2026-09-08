@@ -289,6 +289,12 @@ pub(crate) async fn session_state_event(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<RoomEvent, PersistenceError> {
+    Box::pin(crate::provider_request_lifecycle::reconcile_session_in(
+        transaction,
+        &session.public,
+        Utc::now(),
+    ))
+    .await?;
     internal_event(
         transaction,
         session,

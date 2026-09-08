@@ -175,6 +175,14 @@ async fn prepare_participant_mute(
     )
     .await?;
     insert_event(transaction, &event).await?;
+    if update.muted {
+        Box::pin(crate::provider_request_lifecycle::cancel_participant_in(
+            transaction,
+            &principal.room_id,
+            &participant.participant_id,
+        ))
+        .await?;
+    }
     let mut host_interrupt_effect = None;
     let mut scheduling = crate::AgentTurnCommit {
         events: Vec::new(),

@@ -206,6 +206,12 @@ pub(crate) async fn revoke_participant_access(
         .bind(room_id).bind(participant_id).fetch_all(&mut **transaction).await?.into_iter().flatten());
     sqlx::query("UPDATE room_invites SET revoked = 1 WHERE room_id = ? AND base_participant_id = ? AND revoked = 0")
         .bind(room_id).bind(participant_id).execute(&mut **transaction).await?;
+    Box::pin(crate::provider_request_lifecycle::cancel_participant_in(
+        transaction,
+        room_id,
+        participant_id,
+    ))
+    .await?;
     fingerprints
         .into_iter()
         .map(fixed_session_fingerprint)

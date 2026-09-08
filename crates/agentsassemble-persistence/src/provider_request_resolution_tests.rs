@@ -215,3 +215,78 @@ fn answer(value: &str) -> ProviderRequestResolution {
         answers: BTreeMap::from([("credential".to_owned(), vec![value.to_owned()])]),
     }
 }
+
+#[tokio::test]
+async fn existing_connection_turn_and_startup_transitions_close_pending_requests() -> TestResult {
+    for transition in [
+        "disconnect",
+        "turn_complete",
+        "interrupt",
+        "mute",
+        "startup",
+    ] {
+        let (store, connection, turn, now) = assigned_report().await?;
+        let request = request_for(&turn);
+        store
+            .open_attendee_provider_request(
+                connection.session().session_fingerprint(),
+                connection.connection_id(),
+                &request,
+                now,
+            )
+            .await?;
+        match transition {
+            "interrupt" => {
+                let operator = crate::human_session_authority_tests::local_operator_principal();
+                store.execute_agent_interrupt(RoomMutationAuthority::TrustedPrincipal(&operator), "request-interrupt", &serde_json::json!({"agent_id":connection.session().principal().participant_id})).await?;
+            }
+            "mute" => {
+                let operator = crate::human_session_authority_tests::local_operator_principal();
+                store.execute_participant_mute(RoomMutationAuthority::TrustedPrincipal(&operator), "request-mute", &serde_json::json!({"participant_id":connection.session().principal().participant_id,"muted":true})).await?;
+            }
+            "disconnect" => {
+                store
+                    .disconnect_attendee_connection(&connection, now)
+                    .await?;
+            }
+            "turn_complete" => {
+                store
+                    .record_attendee_turn_report(&connection, &turn, now)
+                    .await?;
+            }
+            _ => {
+                let human = store
+                    .authorize_human_session(&session_fingerprint(&store).await)
+                    .await?;
+                let claim = store
+                    .resolve_provider_request(
+                        RoomMutationAuthority::HumanSession(&human),
+                        request.request.provider_request_id,
+                        &ProviderRequestResolution::Acknowledge,
+                        now,
+                    )
+                    .await?;
+                assert!(claim.delivery.is_some());
+                drop(claim);
+                store.fail_provider_requests_before_admission().await?;
+                store.fail_provider_requests_before_admission().await?;
+            }
+        }
+        let snapshot = store.snapshot("general", 0, 200).await?;
+        let closed: Vec<_> = snapshot
+            .events
+            .iter()
+            .filter(|event| event.event_type == "provider_request_closed")
+            .collect();
+        assert_eq!(closed.len(), 1, "{transition}");
+        assert_eq!(
+            closed[0].extra["state"],
+            if transition == "startup" {
+                "failed"
+            } else {
+                "cancelled"
+            }
+        );
+    }
+    Ok(())
+}

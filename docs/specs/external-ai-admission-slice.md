@@ -347,6 +347,17 @@ wrong-owner rejection, terminal replay, expiry, cancellation and replaced connec
 Persistence all-target/all-feature Clippy passes. Live broker, startup reconciliation,
 transport/native consumers and packaged controls remain pending for this contract.
 
+Existing session-state transitions now reconcile their one pending request using
+the same current owner/execution authority as resolution. Disconnect, replacement,
+turn completion, stop and interrupt cannot retain a usable pending request. Mute,
+leave and shared participant access revocation explicitly cancel requests owned by
+or originating from that participant. Before network admission, startup fails all
+remaining live requests in bounded transactions; it never recreates secret answers.
+These transitions feed existing canonical event catch-up. They add an indexed
+pending-session lookup per state transition, with no periodic scan or new task.
+The local fixture exercises disconnect, completion, interrupt, mute and lost-delivery
+startup; all 320 persistence tests pass. Actual live response delivery remains pending.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

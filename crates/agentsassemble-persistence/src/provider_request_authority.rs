@@ -21,24 +21,32 @@ pub(crate) async fn authorize_resolution_in(
             "Only the current human owner may answer.",
         ));
     }
-    let (_, owner) =
-        load_active_membership(tx, &principal.room_id, &principal.participant_id).await?;
     let session =
         crate::agent_lifecycle::load_session(tx, &principal.room_id, row.get("session_id")).await?;
+    require_pending_authority_in(tx, &session, row, now).await?;
+    Ok(session)
+}
+
+pub(crate) async fn require_pending_authority_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    session: &DurableAgentSession,
+    row: &SqliteRow,
+    now: DateTime<Utc>,
+) -> Result<(), PersistenceError> {
     let (_, agent) =
-        load_active_membership(tx, &principal.room_id, &session.public.participant_id).await?;
+        load_active_membership(tx, &session.public.room_id, &session.public.participant_id).await?;
+    let (_, owner) = load_active_membership(tx, &session.public.room_id, &agent.owner_id).await?;
     if owner.participant_type != "human"
         || owner.muted
         || agent.muted
-        || agent.owner_id != principal.participant_id
+        || agent.owner_id != row.get::<&str, _>("owner_id")
     {
         return Err(rejected(
             "permission_denied",
             "Provider request owner authority has ended.",
         ));
     }
-    require_execution_in(tx, &session, row, now).await?;
-    Ok(session)
+    require_execution_in(tx, session, row, now).await
 }
 
 pub(crate) async fn require_execution_in(

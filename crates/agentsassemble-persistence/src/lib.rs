@@ -133,6 +133,7 @@ pub use room_deletion::{RoomDeletionMutation, RoomDeletionPage};
 pub use room_lifecycle::RoomLifecycleMutation;
 mod provider_request_authority;
 mod provider_request_completion;
+mod provider_request_lifecycle;
 pub use provider_request_completion::ProviderRequestDeliveryOutcome;
 mod provider_request_resolution;
 mod provider_requests;
