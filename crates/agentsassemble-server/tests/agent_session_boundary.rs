@@ -1,16 +1,15 @@
-use std::{collections::BTreeMap, path::Path, time::Duration};
+use std::{path::Path, time::Duration};
 
+use agentsassemble_domain::ProviderCatalog;
 #[cfg(unix)]
 use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID,
     LOCAL_OPERATOR_USER_ID,
 };
-use agentsassemble_domain::{
-    ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
-};
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{AppState, TicketStore, issue_local_ticket, serve};
+use provider_fixture::{agent_catalog, agent_catalog_with_fixture};
 use reqwest::Client;
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -661,70 +660,6 @@ fn local_principal() -> AuthenticatedPrincipal {
         invite_scope: InviteScope::ReadWrite,
         is_operator: true,
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
-    }
-}
-
-fn agent_catalog(root: &Path) -> ProviderCatalog {
-    #[cfg(unix)]
-    let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n";
-    #[cfg(not(unix))]
-    let fixture: &[u8] = b"provider fixture";
-    agent_catalog_with_fixture(root, fixture)
-}
-
-fn agent_catalog_with_fixture(root: &Path, fixture: &[u8]) -> ProviderCatalog {
-    let (executable, executable_identity) = provider_fixture::write_codex_bundle(root, fixture);
-    ProviderCatalog {
-        status: "ready".to_owned(),
-        catalog_revision: "catalog-boundary-1".to_owned(),
-        discovered_at: "2026-08-22T00:00:00Z".to_owned(),
-        providers: vec![ProviderAvailability {
-            id: "codex".to_owned(),
-            display_name: "Codex".to_owned(),
-            provider_kind: "codex_live_session".to_owned(),
-            runtime_kind: "live_cli".to_owned(),
-            catalog_group: "harness".to_owned(),
-            workspace_required: true,
-            connection_kind: "native_cli_bridge".to_owned(),
-            executable,
-            executable_identity,
-            default_model: "gpt-5.6-terra".to_owned(),
-            interactive: true,
-            turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
-            startable: true,
-            available: true,
-            discovery_status: "ready".to_owned(),
-            catalog_source: "discovered".to_owned(),
-            discovery_error_code: String::new(),
-            discovery_error: String::new(),
-            credential_available: false,
-            custom_endpoint: false,
-            custom_model: false,
-            controls: vec![
-                ProviderControl {
-                    key: "model".to_owned(),
-                    label: "Model".to_owned(),
-                    kind: "combobox".to_owned(),
-                    options: vec![ProviderControlOption {
-                        value: "gpt-5.6-terra".to_owned(),
-                        label: "Terra".to_owned(),
-                        metadata: BTreeMap::default(),
-                    }],
-                    default_value: "gpt-5.6-terra".to_owned(),
-                },
-                ProviderControl {
-                    key: "permission_mode".to_owned(),
-                    label: "Permission".to_owned(),
-                    kind: "select".to_owned(),
-                    options: vec![ProviderControlOption {
-                        value: "meeting_read_only".to_owned(),
-                        label: "Read only".to_owned(),
-                        metadata: BTreeMap::default(),
-                    }],
-                    default_value: "meeting_read_only".to_owned(),
-                },
-            ],
-        }],
     }
 }
 

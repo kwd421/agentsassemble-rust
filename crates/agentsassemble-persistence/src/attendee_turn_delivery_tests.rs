@@ -14,6 +14,7 @@ async fn attendee_delivery_recovers_exact_running_input_and_start_acknowledgemen
         .await?
         .ok_or("delivery missing")?;
     assert!(original.resume);
+    assert!(original.input_up_to_seq > 0);
     let replacement = store
         .claim_attendee_connection(first.session(), Uuid::new_v4(), now)
         .await?
@@ -47,6 +48,7 @@ async fn attendee_delivery_recovers_exact_running_input_and_start_acknowledgemen
     assert!(resumed.resume);
     assert_eq!(resumed.authority, original.authority);
     assert_eq!(resumed.input, original.input);
+    assert_eq!(resumed.input_up_to_seq, original.input_up_to_seq);
     assert_eq!(resumed.provider_turn_id, "external-provider-turn");
     store
         .record_attendee_turn_started(
@@ -80,7 +82,7 @@ async fn attendee_delivery_recovers_exact_running_input_and_start_acknowledgemen
     ));
     let fields = serde_json::to_value(&resumed)?;
     let object = fields.as_object().ok_or("wire object missing")?;
-    assert_eq!(object.len(), 4);
+    assert_eq!(object.len(), 5);
     assert!(object.contains_key("authority") && object.contains_key("input"));
     let published = store
         .record_attendee_turn_report(&replacement, &report, now)

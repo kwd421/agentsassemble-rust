@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 pub struct AttendeeTurnDelivery {
     pub authority: ProviderTurnStartAuthority,
     pub input: ProviderTurnAssignmentEnvelope,
+    pub input_up_to_seq: i64,
     pub provider_turn_id: String,
     /// A previous delivery may already have caused I/O. The external runtime resolves that custody.
     pub resume: bool,
@@ -85,6 +86,7 @@ impl SqliteStore {
         Ok(Some(AttendeeTurnDelivery {
             authority,
             input,
+            input_up_to_seq: candidate.session.input_up_to_seq,
             provider_turn_id: execution.provider_turn_id.clone(),
             resume,
         }))

@@ -79,6 +79,24 @@ creation still resolves persona and message cursors inside its original transact
 Five managed create/start tests and twenty attendee persistence cases pass, as do
 affected Clippy and unchanged mandatory gates. CLI runtime wiring remains next.
 
+The external local runtime owner now consumes that profile and an exclusively owned
+provider adapter. It reserves an actual local runtime lease before launch, projects
+readiness from the adapter's confirmed session and native interrupt capability, and
+retains ownership across HTTP/socket loss. Stop requires an exact positive adapter
+cleanup observation; mismatched cleanup tuples or pre-stop reports fail. A server
+that never committed readiness may request an empty tuple, but local cleanup must
+still finish first. Local lease artifacts are released only after committed cleanup
+acknowledgment. Runtime initialization errors remain visible and still require stop.
+The private turn delivery now includes its canonical input history sequence, stable
+across reconnect, for the client's existing room-tool authority contract.
+
+A local child-process fixture passes start/reuse, readiness, leave, pre-stop rejection,
+positive exact cleanup, wrong-lease rejection and artifact-release acknowledgment.
+The sixteen existing managed-session boundary tests pass after their existing
+catalog fixture moves to its shared test owner. The affected turn-delivery case,
+Clippy and unchanged mandatory gates pass. No real provider was run. Native turn
+execution/tool/request relay and CLI/packet entry still remain before acceptance.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing

@@ -30,6 +30,11 @@ fn started(
         runtime_reused,
         provider_session_reused: attachment.reused,
         provider_session_active: true,
+        turn_interrupt: if runtime.retained_interrupt {
+            agentsassemble_domain::ProviderTurnInterrupt::RetainedRuntime
+        } else {
+            agentsassemble_domain::ProviderTurnInterrupt::Unsupported
+        },
     })
 }
 

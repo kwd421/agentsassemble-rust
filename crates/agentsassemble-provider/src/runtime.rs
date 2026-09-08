@@ -27,6 +27,7 @@ pub struct ProviderRuntimeStarted {
     pub runtime_reused: bool,
     pub provider_session_reused: bool,
     pub provider_session_active: bool,
+    pub turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

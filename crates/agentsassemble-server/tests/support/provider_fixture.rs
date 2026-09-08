@@ -1,4 +1,7 @@
-use std::{fs::File, path::Path};
+use agentsassemble_domain::{
+    ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
+};
+use std::{collections::BTreeMap, fs::File, path::Path};
 
 use agentsassemble_domain::{
     codex_bundle_identity, codex_code_mode_host_name, stable_content_identity,
@@ -53,4 +56,68 @@ fn executable_identity(path: &Path) -> String {
     .unwrap_or_else(|error| panic!("identify test executable: {error}"));
     stable_content_identity(&handle, &mut file)
         .unwrap_or_else(|error| panic!("hash test executable: {error}"))
+}
+
+pub fn agent_catalog(root: &Path) -> ProviderCatalog {
+    #[cfg(unix)]
+    let fixture: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n";
+    #[cfg(not(unix))]
+    let fixture: &[u8] = b"provider fixture";
+    agent_catalog_with_fixture(root, fixture)
+}
+
+pub fn agent_catalog_with_fixture(root: &Path, fixture: &[u8]) -> ProviderCatalog {
+    let (executable, executable_identity) = write_codex_bundle(root, fixture);
+    ProviderCatalog {
+        status: "ready".to_owned(),
+        catalog_revision: "catalog-boundary-1".to_owned(),
+        discovered_at: "2026-08-22T00:00:00Z".to_owned(),
+        providers: vec![ProviderAvailability {
+            id: "codex".to_owned(),
+            display_name: "Codex".to_owned(),
+            provider_kind: "codex_live_session".to_owned(),
+            runtime_kind: "live_cli".to_owned(),
+            catalog_group: "harness".to_owned(),
+            workspace_required: true,
+            connection_kind: "native_cli_bridge".to_owned(),
+            executable,
+            executable_identity,
+            default_model: "gpt-5.6-terra".to_owned(),
+            interactive: true,
+            turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
+            startable: true,
+            available: true,
+            discovery_status: "ready".to_owned(),
+            catalog_source: "discovered".to_owned(),
+            discovery_error_code: String::new(),
+            discovery_error: String::new(),
+            credential_available: false,
+            custom_endpoint: false,
+            custom_model: false,
+            controls: vec![
+                ProviderControl {
+                    key: "model".to_owned(),
+                    label: "Model".to_owned(),
+                    kind: "combobox".to_owned(),
+                    options: vec![ProviderControlOption {
+                        value: "gpt-5.6-terra".to_owned(),
+                        label: "Terra".to_owned(),
+                        metadata: BTreeMap::default(),
+                    }],
+                    default_value: "gpt-5.6-terra".to_owned(),
+                },
+                ProviderControl {
+                    key: "permission_mode".to_owned(),
+                    label: "Permission".to_owned(),
+                    kind: "select".to_owned(),
+                    options: vec![ProviderControlOption {
+                        value: "meeting_read_only".to_owned(),
+                        label: "Read only".to_owned(),
+                        metadata: BTreeMap::default(),
+                    }],
+                    default_value: "meeting_read_only".to_owned(),
+                },
+            ],
+        }],
+    }
 }
