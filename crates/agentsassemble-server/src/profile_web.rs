@@ -518,7 +518,7 @@ enum ProfileAuthority {
 
 enum AttachmentUploadAuthority {
     Profile(ProfileAuthority),
-    Appearance(agentsassemble_persistence::RoomManagerAssetAuthority),
+    Appearance(agentsassemble_persistence::RoomManagerAuthority),
 }
 
 enum AppearanceReadAuthority {
@@ -609,7 +609,7 @@ async fn resolve_attachment_upload_authority(
                 }
                 agentsassemble_persistence::RoomSessionAuthorization::Operator(session) => {
                     AttachmentUploadAuthority::Appearance(
-                        agentsassemble_persistence::RoomManagerAssetAuthority::Operator(Box::new(
+                        agentsassemble_persistence::RoomManagerAuthority::Operator(Box::new(
                             session,
                         )),
                     )
@@ -631,7 +631,7 @@ async fn resolve_attachment_upload_authority(
         }
         ConsumedAttachmentUploadTicket::Appearance(authority) => {
             Ok(AttachmentUploadAuthority::Appearance(
-                agentsassemble_persistence::RoomManagerAssetAuthority::Local(authority),
+                agentsassemble_persistence::RoomManagerAuthority::Local(authority),
             ))
         }
     }

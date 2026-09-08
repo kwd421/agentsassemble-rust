@@ -8,7 +8,7 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    PersistenceError, RoomManagerAssetAuthority, SqliteStore,
+    PersistenceError, RoomManagerAuthority, SqliteStore,
     agent_lifecycle::load_session,
     agent_profile::load_profile_target,
     asset_storage::enforce_storage_replacement,
@@ -40,7 +40,7 @@ impl SqliteStore {
     /// Rejects stale authority, absent sessions, invalid raster, exhausted storage or corrupt state.
     pub async fn store_agent_avatar(
         &self,
-        authority: &RoomManagerAssetAuthority,
+        authority: &RoomManagerAuthority,
         session_id: &str,
         filename: &str,
         content_type: &str,

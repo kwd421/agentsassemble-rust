@@ -109,3 +109,24 @@ Measure CPU, memory, latency, disk and process/task costs at owning boundaries.
 Run affected verification and unchanged architecture/security/structure gates,
 then obtain Daybreak approval of every phase commit, cumulative range, exact HEAD
 and whole local Phase 7 before Phase 8.
+
+## Connector admission owner
+
+The first implementation establishes a separate connector invitation/session table,
+AI participant kind and one-hour invite/session expiry. Existing purpose-separated
+HMAC derivation stores fingerprints, never raw invite or session bearers. Creation
+receipts remain until room deletion: pruning a deterministic creation request
+would let an expired credential acquire a new expiry. The original remote MCP owner's 128-connection bound belongs to its live client
+handles; it is not applied as a new limit on manager-created invitations. Explicit
+host-created receipt history adds disk rows but no background work.
+
+The existing local/paired manager provenance is now named `RoomManagerAuthority`
+because connector invitation creation is its first non-image consumer. This is
+an owner rename, without new variants or permission policy. Admission commits one
+agent participant and public event with its exact client/request retry result.
+Session authorization checks current membership, scope, expiry and room UID;
+leave writes an agent-typed event and revokes only that session. Room archival
+revokes both pending connector invitations and admitted sessions permanently.
+Two controlled concurrent/expiry/leave/archive tests pass, as does affected
+all-target/all-feature Clippy. The HTTP/MCP and packaged entry points are next;
+this storage checkpoint alone is not Phase 7 acceptance.

@@ -1,7 +1,7 @@
 use crate::room_session_http_authority::{
     RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
 };
-use agentsassemble_persistence::{RoomManagerAssetAuthority, RoomSessionAuthorization};
+use agentsassemble_persistence::{RoomManagerAuthority, RoomSessionAuthorization};
 
 use super::{
     AppState, EncodedAttachmentUpload, Json, MAX_BASE64_UPLOAD_BODY_BYTES, Path, ProfileHttpError,
@@ -25,11 +25,11 @@ pub(super) async fn upload(
     {
         Ok(RoomSessionBearerResolution::Authorized(session)) => match *session {
             RoomSessionAuthorization::Operator(session) => {
-                RoomManagerAssetAuthority::Operator(Box::new(session))
+                RoomManagerAuthority::Operator(Box::new(session))
             }
             RoomSessionAuthorization::Human(_) => return Err(ProfileHttpError::unauthorized()),
         },
-        Ok(RoomSessionBearerResolution::Other) => RoomManagerAssetAuthority::Local(
+        Ok(RoomSessionBearerResolution::Other) => RoomManagerAuthority::Local(
             state
                 .tickets
                 .consume_agent_avatar_upload(token, &session_id)

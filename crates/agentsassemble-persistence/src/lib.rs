@@ -1,3 +1,9 @@
+mod connector_admission;
+mod connector_session;
+#[cfg(test)]
+mod connector_tests;
+pub use connector_admission::{ConnectorAdmission, ConnectorInvite};
+pub use connector_session::ConnectorSessionAuthorization;
 mod account_guest_retirement;
 #[cfg(test)]
 mod google_account_tests;
@@ -57,8 +63,9 @@ mod human_admission_identity;
 mod human_admission_store;
 mod session_bearer;
 pub use session_bearer::{
-    GUEST_RECOVERY_CODE_PREFIX, HUMAN_SESSION_BEARER_BYTES, HUMAN_SESSION_BEARER_CHARS,
-    HUMAN_SESSION_BEARER_PREFIX, OPERATOR_SESSION_BEARER_CHARS, OPERATOR_SESSION_BEARER_PREFIX,
+    CONNECTOR_INVITE_PREFIX, CONNECTOR_SESSION_PREFIX, GUEST_RECOVERY_CODE_PREFIX,
+    HUMAN_SESSION_BEARER_BYTES, HUMAN_SESSION_BEARER_CHARS, HUMAN_SESSION_BEARER_PREFIX,
+    OPERATOR_SESSION_BEARER_CHARS, OPERATOR_SESSION_BEARER_PREFIX,
 };
 mod human_invite_preflight;
 mod human_invites;
@@ -191,9 +198,7 @@ pub use room_subscription::RoomCatchUp;
 pub use room_turns::{
     AgentTurnAssignment, AgentTurnCommit, ProviderTurnAuthority, RoomCommandMutation,
 };
-pub use room_user_identity::{
-    LocalRoomManagerAuthority, RoomManagerAssetAuthority, RoomUserIdentity,
-};
+pub use room_user_identity::{LocalRoomManagerAuthority, RoomManagerAuthority, RoomUserIdentity};
 pub use room_write_budget::command_size as room_write_command_size;
 pub use sqlite::{
     AgentLaunchFailureCommit, CommandOutcome, PersistenceError, RoomSnapshotData, SqliteStore,

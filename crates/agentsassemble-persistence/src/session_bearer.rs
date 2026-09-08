@@ -2,6 +2,9 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use hmac::{Hmac, Mac};
 use sha2::{Digest, Sha256};
 
+pub const CONNECTOR_INVITE_PREFIX: &str = "aaci1.";
+pub const CONNECTOR_SESSION_PREFIX: &str = "aacs1.";
+
 pub const GUEST_RECOVERY_CODE_PREFIX: &str = "aagr1.";
 pub const HUMAN_SESSION_BEARER_PREFIX: &str = "aas1.";
 pub const HUMAN_SESSION_BEARER_BYTES: usize = 32;
@@ -13,6 +16,8 @@ pub const OPERATOR_SESSION_BEARER_CHARS: usize =
 
 #[derive(Clone, Copy)]
 pub(crate) enum SessionBearerPurpose {
+    ConnectorInvite,
+    ConnectorSession,
     HumanAdmission,
     OperatorPairing,
     GuestIdentityRecovery,
@@ -29,6 +34,14 @@ pub(crate) fn derive_session_bearer(
     purpose: SessionBearerPurpose,
 ) -> IssuedBearer {
     let (context, prefix): (&[u8], &str) = match purpose {
+        SessionBearerPurpose::ConnectorInvite => (
+            b"agentsassemble-connector-invite-v1\0",
+            CONNECTOR_INVITE_PREFIX,
+        ),
+        SessionBearerPurpose::ConnectorSession => (
+            b"agentsassemble-connector-session-v1\0",
+            CONNECTOR_SESSION_PREFIX,
+        ),
         SessionBearerPurpose::HumanAdmission => (
             b"agentsassemble-human-session-bearer-v1\0",
             HUMAN_SESSION_BEARER_PREFIX,

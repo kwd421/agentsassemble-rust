@@ -12,8 +12,8 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    LocalRoomManagerAuthority, PersistenceError, RoomManagerAssetAuthority,
-    RoomSessionAuthorization, SqliteStore,
+    LocalRoomManagerAuthority, PersistenceError, RoomManagerAuthority, RoomSessionAuthorization,
+    SqliteStore,
     asset_storage::enforce_storage_replacement,
     raster_assets::{prepare_raster, sanitize_filename, validate_stored_raster},
     room_user_identity::{
@@ -49,7 +49,7 @@ impl SqliteStore {
     /// capacity, or invalid durable state.
     pub async fn store_pending_room_appearance_asset(
         &self,
-        authority: &RoomManagerAssetAuthority,
+        authority: &RoomManagerAuthority,
         filename: &str,
         content_type: &str,
         content: Vec<u8>,

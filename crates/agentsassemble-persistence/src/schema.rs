@@ -8,6 +8,24 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "room_connector_invites",
+        ddl: concat!(
+            "CREATE TABLE IF NOT EXISTS room_connector_invites (",
+            "invite_id TEXT PRIMARY KEY, room_id TEXT NOT NULL, room_uid TEXT NOT NULL, ",
+            "creator_id TEXT NOT NULL, request_id TEXT NOT NULL, scope TEXT NOT NULL CHECK(scope IN ('read_write','read_only')), ",
+            "token_fingerprint BLOB NOT NULL UNIQUE CHECK(length(token_fingerprint) = 32), ",
+            "expires_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1)), ",
+            "client_fingerprint BLOB CHECK(client_fingerprint IS NULL OR length(client_fingerprint) = 32), ",
+            "join_request_id TEXT, join_payload_hash TEXT, participant_id TEXT UNIQUE, event_id TEXT, ",
+            "session_fingerprint BLOB UNIQUE CHECK(session_fingerprint IS NULL OR length(session_fingerprint) = 32), ",
+            "session_expires_at INTEGER, UNIQUE(room_id, request_id), ",
+            "CHECK((client_fingerprint IS NULL AND join_request_id IS NULL AND join_payload_hash IS NULL AND participant_id IS NULL AND event_id IS NULL AND session_fingerprint IS NULL AND session_expires_at IS NULL) OR ",
+            "(client_fingerprint IS NOT NULL AND join_request_id IS NOT NULL AND join_payload_hash IS NOT NULL AND participant_id IS NOT NULL AND event_id IS NOT NULL AND session_fingerprint IS NOT NULL AND session_expires_at IS NOT NULL)), ",
+            "FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE) STRICT"
+        ),
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "runtime_metadata",
         ddl: "CREATE TABLE IF NOT EXISTS runtime_metadata (key TEXT PRIMARY KEY, value TEXT NOT NULL)",
         infrastructure: true,

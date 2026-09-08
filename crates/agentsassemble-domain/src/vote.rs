@@ -231,7 +231,7 @@ fn require_vote_write_authority(
     participant: &Participant,
 ) -> Result<(), CommandRejection> {
     let allowed = match principal.client_kind {
-        ClientKind::Browser => principal.capabilities.message_send,
+        ClientKind::Browser | ClientKind::RoomConnector => principal.capabilities.message_send,
         ClientKind::AgentBridge => principal.capabilities.bridge_publish,
     };
     if !allowed {

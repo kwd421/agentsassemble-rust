@@ -28,7 +28,7 @@ async fn agent_avatar_custody_replaces_exact_references_and_survives_restart()
             LOCAL_OPERATOR_PARTICIPANT_ID,
         )
         .await?;
-    let upload = crate::RoomManagerAssetAuthority::Local(authority.clone());
+    let upload = crate::RoomManagerAuthority::Local(authority.clone());
     let human = bound_human_avatar(&store).await?;
     let appearance = store
         .store_pending_room_appearance_asset(&upload, "room.png", "image/png", png()?)
@@ -128,10 +128,10 @@ async fn agent_avatar_rejects_stale_authority_expired_and_other_session_referenc
             LOCAL_OPERATOR_PARTICIPANT_ID,
         )
         .await?;
-    let upload = crate::RoomManagerAssetAuthority::Local(authority.clone());
+    let upload = crate::RoomManagerAuthority::Local(authority.clone());
     let mut stale = authority.clone();
     stale.room_uid = uuid::Uuid::new_v4();
-    let stale = crate::RoomManagerAssetAuthority::Local(stale);
+    let stale = crate::RoomManagerAuthority::Local(stale);
     assert!(
         store
             .store_agent_avatar(&stale, AGENT_ID, "image.png", "image/png", png()?)
@@ -250,7 +250,7 @@ async fn paired_image_uploads_revalidate_revocation_before_storage()
     let paired = store
         .redeem_operator_pairing(&[71; 32], &[72; 32], origin, now)
         .await?;
-    let authority = crate::RoomManagerAssetAuthority::Operator(Box::new(paired.authorization));
+    let authority = crate::RoomManagerAuthority::Operator(Box::new(paired.authorization));
     store
         .store_agent_avatar(&authority, AGENT_ID, "agent.png", "image/png", png()?)
         .await?;

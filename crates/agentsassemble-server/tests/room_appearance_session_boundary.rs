@@ -26,7 +26,7 @@ async fn human_session_reads_exact_bound_appearance_directly() {
         .unwrap_or_else(|error| panic!("authorize appearance manager: {error}"));
     let stored = store
         .store_pending_room_appearance_asset(
-            &agentsassemble_persistence::RoomManagerAssetAuthority::Local(manager.clone()),
+            &agentsassemble_persistence::RoomManagerAuthority::Local(manager.clone()),
             "remote-room-icon.png",
             "image/png",
             base64::engine::general_purpose::STANDARD

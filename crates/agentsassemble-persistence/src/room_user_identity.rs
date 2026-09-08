@@ -26,14 +26,14 @@ pub struct LocalRoomManagerAuthority {
     pub manager: RoomUserIdentity,
 }
 
-/// Provenance for room-owned image mutation, without granting native host authority.
+/// Exact local or paired room-manager provenance, without granting native host authority.
 #[derive(Clone)]
-pub enum RoomManagerAssetAuthority {
+pub enum RoomManagerAuthority {
     Local(LocalRoomManagerAuthority),
     Operator(Box<crate::OperatorSessionAuthorization>),
 }
 
-impl RoomManagerAssetAuthority {
+impl RoomManagerAuthority {
     pub(crate) async fn resolve(
         &self,
         transaction: &mut Transaction<'_, Sqlite>,

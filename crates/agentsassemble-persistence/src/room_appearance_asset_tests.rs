@@ -15,7 +15,7 @@ async fn pending_room_asset_is_canonical_private_custody_until_expiry() {
     let (store, authority, _principal) = fixture().await;
     let stored = store
         .store_pending_room_appearance_asset(
-            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            &crate::RoomManagerAuthority::Local(authority.clone()),
             "banner.webp",
             "image/png",
             valid_png(),
@@ -84,7 +84,7 @@ async fn pending_room_asset_revalidates_exact_manager_and_shared_raster_safety()
     assert_rejected_code(
         store
             .store_pending_room_appearance_asset(
-                &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+                &crate::RoomManagerAuthority::Local(authority.clone()),
                 "active.html",
                 "image/png",
                 b"<html>active</html>".to_vec(),
@@ -95,7 +95,7 @@ async fn pending_room_asset_revalidates_exact_manager_and_shared_raster_safety()
 
     let stored = store
         .store_pending_room_appearance_asset(
-            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            &crate::RoomManagerAuthority::Local(authority.clone()),
             "icon.png",
             "image/png",
             valid_png(),
@@ -129,7 +129,7 @@ async fn settings_bind_replace_clear_and_rollback_room_owned_assets_atomically()
     let (store, authority, principal) = fixture().await;
     let shared = store
         .store_pending_room_appearance_asset(
-            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            &crate::RoomManagerAuthority::Local(authority.clone()),
             "shared.png",
             "image/png",
             valid_png(),
@@ -155,7 +155,7 @@ async fn settings_bind_replace_clear_and_rollback_room_owned_assets_atomically()
 
     let replacement = store
         .store_pending_room_appearance_asset(
-            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            &crate::RoomManagerAuthority::Local(authority.clone()),
             "replacement.png",
             "image/png",
             valid_png(),
@@ -190,7 +190,7 @@ async fn settings_bind_replace_clear_and_rollback_room_owned_assets_atomically()
 
     let rollback = store
         .store_pending_room_appearance_asset(
-            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            &crate::RoomManagerAuthority::Local(authority.clone()),
             "rollback.png",
             "image/png",
             valid_png(),
@@ -228,7 +228,7 @@ async fn settings_reject_expired_pending_without_partial_reference_or_promotion(
     let (store, authority, principal) = fixture().await;
     let expired = store
         .store_pending_room_appearance_asset(
-            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            &crate::RoomManagerAuthority::Local(authority.clone()),
             "expired.png",
             "image/png",
             valid_png(),
@@ -265,7 +265,7 @@ async fn bound_read_requires_current_membership_reference_and_integral_bytes() {
     let (store, authority, principal) = fixture().await;
     let stored = store
         .store_pending_room_appearance_asset(
-            &crate::RoomManagerAssetAuthority::Local(authority.clone()),
+            &crate::RoomManagerAuthority::Local(authority.clone()),
             "bound.png",
             "image/png",
             valid_png(),

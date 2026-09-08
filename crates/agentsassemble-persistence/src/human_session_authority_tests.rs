@@ -408,7 +408,7 @@ async fn bound_appearance_read_revalidates_human_session_in_the_asset_snapshot()
         .unwrap_or_else(|error| panic!("authorize appearance manager: {error}"));
     let stored = store
         .store_pending_room_appearance_asset(
-            &crate::RoomManagerAssetAuthority::Local(manager.clone()),
+            &crate::RoomManagerAuthority::Local(manager.clone()),
             "room-icon.png",
             "image/png",
             STANDARD
