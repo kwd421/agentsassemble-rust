@@ -323,7 +323,17 @@ secret answer values and retains only answered question IDs. Two focused contrac
 cases pass, including secret exclusion and invalid/duplicate choices. Domain
 all-target/all-feature Clippy and unchanged architecture/19 policy, format and
 artifact gates pass. Both Cargo lockfiles include the existing URL parser dependency;
-no gate was changed. Persistent state and live transport are the next consumers.
+no gate was changed.
+
+Schema 69 adds session-owned request state with one pending request per session.
+Both managed and admitted external open operations reuse the current execution
+authority inside an immediate transaction, derive the human owner from membership,
+and commit one owner-only event. Exact concurrent retries recover that event without
+renewing its deadline; changed payloads, replaced connections, expired requests and
+wrong custody are rejected. Deadlines use the stored millisecond precision in both
+the first response and replay. The focused storage case covers these boundaries and
+ordinary-view hiding. Resolution, terminal lifecycle and live delivery still need
+integration before request acceptance; this checkpoint does not expose a new route.
 
 ## Failure, concurrency and lifecycle
 

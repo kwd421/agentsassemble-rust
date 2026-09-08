@@ -8,6 +8,20 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "provider_requests",
+        ddl: concat!(
+            "CREATE TABLE IF NOT EXISTS provider_requests (",
+            "room_id TEXT NOT NULL, request_id TEXT NOT NULL, session_id TEXT NOT NULL, ",
+            "turn_generation INTEGER NOT NULL CHECK(turn_generation > 0), execution_id TEXT NOT NULL, ",
+            "owner_id TEXT NOT NULL CHECK(length(owner_id)>0), request_json TEXT NOT NULL, ",
+            "expires_at INTEGER NOT NULL, state TEXT NOT NULL CHECK(state IN ('open','resolving','resolved','denied','cancelled','expired','failed')), ",
+            "open_event_id TEXT NOT NULL, resolution_json TEXT, resolution_fingerprint BLOB CHECK(resolution_fingerprint IS NULL OR length(resolution_fingerprint)=32), ",
+            "PRIMARY KEY(room_id,request_id), ",
+            "FOREIGN KEY(room_id,session_id) REFERENCES agent_sessions(room_id,session_id) ON DELETE CASCADE) STRICT"
+        ),
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "attendee_cleanup_controls",
         ddl: "CREATE TABLE IF NOT EXISTS attendee_cleanup_controls (room_id TEXT NOT NULL, session_id TEXT NOT NULL, cleanup_id TEXT NOT NULL CHECK(length(cleanup_id)=36), PRIMARY KEY(room_id,session_id), FOREIGN KEY(room_id,session_id) REFERENCES agent_sessions(room_id,session_id) ON DELETE CASCADE) STRICT",
         infrastructure: false,
@@ -427,6 +441,7 @@ const TABLES: &[TableDefinition] = &[
 ];
 
 const INDEXES: &[&str] = &[
+    "CREATE UNIQUE INDEX IF NOT EXISTS provider_requests_pending_session_idx ON provider_requests(room_id,session_id) WHERE state IN ('open','resolving')",
     "CREATE INDEX IF NOT EXISTS room_channel_messages_idx ON room_events(room_id, json_extract(event_json, '$.channel_id'), seq) WHERE json_extract(event_json, '$.type') = 'channel_message_final'",
     "CREATE UNIQUE INDEX IF NOT EXISTS room_delete_pending_idx ON room_delete_results(room_id) WHERE state = 'pending'",
     "CREATE INDEX IF NOT EXISTS agent_avatar_assets_expiry_idx ON agent_avatar_assets(expires_at) WHERE state = 'pending'",

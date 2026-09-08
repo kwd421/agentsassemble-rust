@@ -202,7 +202,7 @@ pub(crate) async fn insert_event(
     Ok(())
 }
 
-async fn internal_event(
+pub(crate) async fn internal_event(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
     event_type: &str,
