@@ -52,6 +52,10 @@ mod agent_avatar;
 #[path = "agent_session_boundary/participant_removal.rs"]
 mod participant_removal;
 
+#[cfg(unix)]
+#[path = "agent_session_boundary/managed_tools.rs"]
+mod managed_tools;
+
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 struct RunningServer {
@@ -297,7 +301,12 @@ async fn verify_room_turn_publication(first_status: &str) {
     let server = start(store, catalog).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
-    let _snapshot = receive_json(&mut socket).await;
+    let snapshot = receive_json(&mut socket).await;
+    let attachment_ids = if first_status == "completed" {
+        managed_tools::prepare(&server, &mut socket, &snapshot).await
+    } else {
+        Vec::new()
+    };
     send_create(
         &mut socket,
         "create-room-turn-agent",
@@ -329,7 +338,7 @@ async fn verify_room_turn_publication(first_status: &str) {
         &mut socket,
         "room-message-1",
         "message.send",
-        &json!({"content": "@Terra answer the first room message"}),
+        &json!({"content": "@Terra answer the first room message", "attachment_ids":attachment_ids}),
     )
     .await;
     let _first_ack = receive_command_ack(&mut socket).await;
@@ -362,6 +371,24 @@ async fn verify_room_turn_publication(first_status: &str) {
         server.stop().await;
         return;
     }
+    managed_tools::verify(&endpoint, &token, &attachment_ids[0]).await;
+    let snapshot = server
+        .state
+        .store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("managed tool snapshot: {error}"));
+    assert_eq!(
+        snapshot
+            .events
+            .iter()
+            .filter(
+                |event| event.extra.get("message_source").and_then(Value::as_str)
+                    == Some("room_tool_result")
+            )
+            .count(),
+        1
+    );
     send_command(
         &mut socket,
         "room-message-2",

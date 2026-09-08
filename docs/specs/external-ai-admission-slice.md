@@ -1319,3 +1319,11 @@ Cancellation before or immediately after accepting a human answer produces denia
 ending a native turn with an unanswered callback is a protocol failure. Affected
 Clippy and unchanged mandatory gates pass. These linked local boundaries do not yet
 prove a packaged managed Claude process or an authorized real provider run.
+
+The existing managed room-turn boundary now exercises actual native MCP search,
+message context, one server-owned dice result and exact bound attachment bytes through
+the parent/worker callback transport before ordinary publication and queued follow-up.
+It passes in 5.40 seconds, including the existing owned shutdown, without real provider
+execution. Affected server Clippy and unchanged mandatory gates pass. This closes the
+previous unverified parent tool/attachment connection using the existing scenario;
+packaged integrated controls and platform custody still precede phase closure.

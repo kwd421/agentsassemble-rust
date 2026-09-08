@@ -150,7 +150,7 @@ pub(super) async fn publish(endpoint: &str, token: &str, content: &str) -> Strin
     view
 }
 
-async fn call_tool(
+pub(super) async fn call_tool(
     client: &RunningService<rmcp::RoleClient, ()>,
     name: &'static str,
     arguments: serde_json::Value,
