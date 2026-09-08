@@ -123,6 +123,8 @@ async fn lost_pipe(
         },
     )
     .await?;
+    // Every command result is preceded by the worker's refreshed runtime facts.
+    assert!(matches!(read(&mut input).await?, Some(Event::Facts { .. })));
     assert!(matches!(
         read(&mut input).await?,
         Some(Event::Attached { result: Ok(_), .. })
