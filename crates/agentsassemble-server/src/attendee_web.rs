@@ -1,3 +1,8 @@
+#[path = "attendee_socket.rs"]
+mod socket;
+#[path = "attendee_socket_protocol.rs"]
+mod socket_protocol;
+
 use crate::{
     AppState,
     http_api::{
@@ -7,13 +12,13 @@ use crate::{
     room_command_result::CommandFailure,
 };
 use agentsassemble_persistence::{
-    ATTENDEE_INVITE_PREFIX, AttendeeAdmissionRequest, PersistenceError,
+    ATTENDEE_INVITE_PREFIX, ATTENDEE_SESSION_PREFIX, AttendeeAdmissionRequest, PersistenceError,
 };
 use agentsassemble_protocol::CommandResolution;
 use axum::{
     Json, Router,
-    extract::{Request, State},
-    http::{StatusCode, header::CACHE_CONTROL},
+    extract::{Request, State, WebSocketUpgrade},
+    http::{HeaderMap, StatusCode, header::CACHE_CONTROL},
     response::{IntoResponse, Response},
 };
 use serde::Deserialize;
@@ -33,6 +38,7 @@ struct JoinRequest {
 registered_routes! {
     fn attendee_routes<AppState>() {
         same_origin_public "/api/room-attendee/join" => post(join),
+        same_origin_public "/api/room-attendee/ws" => get(upgrade_socket),
     }
 }
 
@@ -133,4 +139,36 @@ impl IntoResponse for AttendeeHttpError {
         )
             .into_response()
     }
+}
+
+async fn upgrade_socket(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    upgrade: WebSocketUpgrade,
+) -> Result<Response, AttendeeHttpError> {
+    let fingerprint =
+        purpose_bearer_fingerprint(&headers, ATTENDEE_SESSION_PREFIX).ok_or_else(|| {
+            AttendeeHttpError::rejected(StatusCode::UNAUTHORIZED, "attendee_credential_required")
+        })?;
+    let session = state
+        .store
+        .authorize_attendee_session(&fingerprint, chrono::Utc::now())
+        .await
+        .map_err(AttendeeHttpError::from_persistence)?;
+    let lease = state
+        .connection_admission
+        .acquire(session.principal())
+        .map_err(|_| {
+            AttendeeHttpError::rejected(StatusCode::SERVICE_UNAVAILABLE, "connection_limit")
+        })?;
+    let connections = state.connections.clone();
+    Ok(upgrade
+        .max_message_size(agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES)
+        .max_frame_size(agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES)
+        .write_buffer_size(64 * 1024)
+        .max_write_buffer_size(512 * 1024)
+        .on_upgrade(move |socket| {
+            connections.track_future(socket::run(socket, state, session, lease))
+        })
+        .into_response())
 }

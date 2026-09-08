@@ -459,3 +459,29 @@ external custody. It passes alongside the existing HTTP admission/isolation case
 Affected all-target/all-feature Clippy and unchanged architecture/format/diff/artifact
 gates pass. The external attendee WebSocket, external provider CLI and lifecycle
 cleanup are still the next dependencies; no real provider was run for this proof.
+
+### External attendee WebSocket checkpoint (2026-09-08)
+
+`/api/room-attendee/ws` accepts only the attendee session bearer in its private
+Authorization header. Its connection task subscribes before claiming the exact
+network generation, then routes ready/result/disconnect mutations through the room
+owner. Started reports use the canonical same-transaction start owner. A committed
+room event wakes the socket to load its single canonical assignment; lag reloads
+that same authority and adds no assignment queue or polling. A replacement socket
+must report ready again and receives the original execution, nonce and input with
+`resume=true`. The client must reconcile any uncertain local start before I/O.
+
+The transport uses existing process/principal/room connection and raw-frame budgets,
+256 KiB frames, bounded writes, tracked shutdown, exact expiry and five-minute
+inbound inactivity. Public room events and parent revocation signals trigger current
+connection authorization; all private sends revalidate current custody. Its only
+retained delivery state is the last sent execution ID, suppressing repeated delivery
+within one socket. Disconnect commits network unavailability without claiming a
+provider stop; failure to commit that cleanup is surfaced without private diagnostics.
+
+Real local HTTP/WebSocket verification covers wrong-purpose admission, ready,
+human-input delivery, replacement/reconnect with identical execution and input,
+retired-socket closure, start retry, result retry and a single public result without
+private runtime credentials. The two existing attendee admission/queue integration
+checks also pass. This checkpoint does not complete external provider lifecycle,
+provider-request relay, CLI, entry packets or managed bridge acceptance.
