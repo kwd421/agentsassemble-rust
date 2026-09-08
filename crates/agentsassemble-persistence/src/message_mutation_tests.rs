@@ -267,10 +267,11 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
 
 async fn search_count(store: &SqliteStore, query: &str) -> usize {
     store
-        .search_local_lobby_messages(
+        .search_local_messages(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             query,
             "",
         )

@@ -62,11 +62,11 @@ pub use message_mutations::{
 };
 pub use message_pins::{MAX_LOBBY_MESSAGE_PINS, MAX_MESSAGE_EVENT_ID_BYTES, is_message_event_id};
 pub use message_search::{
-    LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
     MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS, MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS,
     MAX_MESSAGE_SEARCH_CURSOR_BYTES, MAX_MESSAGE_SEARCH_QUERY_CHARACTERS, MESSAGE_CONTEXT_RADIUS,
-    MESSAGE_SEARCH_PAGE_SIZE, casefold_message_search_text, clean_message_search_query,
-    clean_message_search_value, compact_casefolded_message_search_text,
+    MESSAGE_SEARCH_PAGE_SIZE, RoomMessageContext, RoomMessageSearchPage, RoomMessageSearchResult,
+    casefold_message_search_text, clean_message_search_query, clean_message_search_value,
+    compact_casefolded_message_search_text,
 };
 pub use model::{
     AGENT_PROFILE_NAME_CHARACTER_LIMIT, Actor, AgentSession, AgentSessionDraft,

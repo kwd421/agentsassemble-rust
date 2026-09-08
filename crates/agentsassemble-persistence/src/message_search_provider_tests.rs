@@ -38,6 +38,13 @@ async fn provider_search_revalidates_the_exact_active_turn_without_writing() {
         execution_id: &assignment.execution_id,
     };
     let (poll_id, transition_id) = create_poll_with_private_ballot(&store, &principal).await;
+    let channel_message = create_channel_message(&store, &principal).await;
+    assert_rejection_code(
+        store
+            .provider_lobby_message_context(authority, &channel_message.id)
+            .await,
+        "message_missing",
+    );
     let events_before =
         sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events WHERE room_id = 'general'")
             .fetch_one(&store.pool)
@@ -139,4 +146,30 @@ fn assert_rejection_code<T>(result: Result<T, PersistenceError>, expected: &str)
         Err(error) => panic!("expected {expected}, got {error}"),
         Ok(_) => panic!("expected {expected} rejection"),
     }
+}
+
+async fn create_channel_message(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+) -> agentsassemble_domain::RoomEvent {
+    use crate::RoomMutationAuthority::TrustedPrincipal;
+    let snapshot = store
+        .snapshot_for(principal, 0, 1)
+        .await
+        .unwrap_or_else(|error| panic!("channel settings: {error}"));
+    let revision = agentsassemble_domain::public_settings(&snapshot.settings)
+        .unwrap_or_else(|error| panic!("public channel settings: {error}"))
+        .settings_revision;
+    store.execute_room_settings_update(TrustedPrincipal(principal), "provider-search-channel-settings", &json!({
+        "expected_revision":revision,"channels":[{"id":"c0123456789ab","name":"Notes","type":"text","position":0,"created_at":"2026-09-08T00:00:00Z"}]
+    })).await.unwrap_or_else(|error| panic!("create provider-search channel: {error}"));
+    store
+        .execute_channel_message(
+            TrustedPrincipal(principal),
+            "provider-search-channel-message",
+            &json!({"channel_id":"c0123456789ab","content":"search exact marker ALPHA-0830"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("create excluded channel message: {error}"))
+        .event
 }

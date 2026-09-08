@@ -170,6 +170,21 @@ async fn channels_have_independent_history_replay_and_restart_without_lobby_turn
     let history = checked(page(&reopened, &principal, "c0123456789ab", 0, 80).await);
     assert_eq!(history.events.len(), 2);
     assert_eq!(history.events[0].id, repeated.event.id);
+    let search = checked(
+        reopened
+            .search_local_messages(
+                &principal.room_id,
+                &principal.principal_id,
+                &principal.participant_id,
+                "c0123456789ab",
+                "first",
+                "",
+            )
+            .await,
+    );
+    assert_eq!(search.results.len(), 1);
+    assert_eq!(search.results[0].event_id, repeated.event.id);
+    assert_eq!(search.results[0].channel_id, "c0123456789ab");
     assert!(
         page(&reopened, &principal, "c000000000000", 0, 80)
             .await

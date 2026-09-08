@@ -1,7 +1,8 @@
 use agentsassemble_domain::{
-    MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS, MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS,
-    MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS, RoomEvent, casefold_message_search_text,
-    clean_message_search_value, compact_casefolded_message_search_text, room_event_is_owner_only,
+    CHANNEL_MESSAGE_EVENT_TYPE, MAX_MESSAGE_ATTACHMENT_FILENAME_CHARACTERS,
+    MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS, MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS, RoomEvent,
+    casefold_message_search_text, clean_message_search_value,
+    compact_casefolded_message_search_text, room_event_is_owner_only,
 };
 use serde_json::Value;
 use sqlx::{Sqlite, Transaction};
@@ -11,7 +12,8 @@ use crate::{
     message_attachments::{message_attachments_from_event, message_visible_text},
 };
 
-pub(crate) struct SearchableLobbyMessage {
+pub(crate) struct SearchableRoomMessage {
+    pub(crate) channel_id: String,
     pub(crate) author: String,
     pub(crate) content: String,
     pub(crate) attachment_filenames: Vec<String>,
@@ -19,11 +21,11 @@ pub(crate) struct SearchableLobbyMessage {
     compact_text: String,
 }
 
-pub(crate) async fn index_lobby_message(
+pub(crate) async fn index_room_message(
     transaction: &mut Transaction<'_, Sqlite>,
     event: &RoomEvent,
 ) -> Result<(), PersistenceError> {
-    let Some(message) = searchable_lobby_message(event)? else {
+    let Some(message) = searchable_room_message(event)? else {
         return Ok(());
     };
     let created_at_nanos = canonical_created_at_nanos(event)?;
@@ -43,15 +45,15 @@ pub(crate) async fn index_lobby_message(
     Ok(())
 }
 
-pub(crate) async fn replace_lobby_message_index(
+pub(crate) async fn replace_room_message_index(
     transaction: &mut Transaction<'_, Sqlite>,
     event: &RoomEvent,
 ) -> Result<(), PersistenceError> {
-    remove_lobby_message_index(transaction, event).await?;
-    index_lobby_message(transaction, event).await
+    remove_room_message_index(transaction, event).await?;
+    index_room_message(transaction, event).await
 }
 
-pub(crate) async fn remove_lobby_message_index(
+pub(crate) async fn remove_room_message_index(
     transaction: &mut Transaction<'_, Sqlite>,
     event: &RoomEvent,
 ) -> Result<(), PersistenceError> {
@@ -69,12 +71,26 @@ pub(crate) async fn remove_lobby_message_index(
     Ok(())
 }
 
-pub(crate) fn searchable_lobby_message(
+pub(crate) fn searchable_room_message(
     event: &RoomEvent,
-) -> Result<Option<SearchableLobbyMessage>, PersistenceError> {
-    if !event.is_current_lobby_message() || room_event_is_owner_only(event) {
+) -> Result<Option<SearchableRoomMessage>, PersistenceError> {
+    if room_event_is_owner_only(event) {
         return Ok(None);
     }
+    let channel_id = if event.is_current_lobby_message() {
+        "lobby"
+    } else if event.event_type == CHANNEL_MESSAGE_EVENT_TYPE
+        && event.extra.get("message_deleted") != Some(&Value::Bool(true))
+    {
+        event
+            .extra
+            .get("channel_id")
+            .and_then(Value::as_str)
+            .filter(|value| agentsassemble_domain::is_custom_channel_id(value))
+            .ok_or_else(invalid_search_event)?
+    } else {
+        return Ok(None);
+    };
     let author = event
         .display_name
         .as_deref()
@@ -122,7 +138,8 @@ pub(crate) fn searchable_lobby_message(
     values.extend(attachment_filenames.iter().cloned());
     let search_text = casefold_message_search_text(&values.join("\n"));
     let compact_text = compact_casefolded_message_search_text(&search_text);
-    Ok(Some(SearchableLobbyMessage {
+    Ok(Some(SearchableRoomMessage {
+        channel_id: channel_id.to_owned(),
         author,
         content,
         attachment_filenames,
@@ -142,6 +159,6 @@ pub(crate) fn canonical_created_at_nanos(event: &RoomEvent) -> Result<i64, Persi
 fn invalid_search_event() -> PersistenceError {
     PersistenceError::CommandRejected {
         code: "invalid_state",
-        message: "The canonical message timestamp cannot be indexed.".to_owned(),
+        message: "The canonical message cannot be indexed.".to_owned(),
     }
 }

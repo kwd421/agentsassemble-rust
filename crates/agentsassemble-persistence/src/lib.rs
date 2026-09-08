@@ -141,7 +141,7 @@ pub use agent_reconciliation::{
 pub use agent_reconciliation_scan::{RuntimeReconciliationCursor, RuntimeReconciliationPage};
 pub use agentsassemble_domain::MAX_ATTACHMENT_BYTES;
 pub use agentsassemble_domain::{
-    LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
+    RoomMessageContext, RoomMessageSearchPage, RoomMessageSearchResult,
 };
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use guest_identity_recovery::{GuestRecoveryCommit, GuestRecoveryRequest, GuestRecoveryResult};

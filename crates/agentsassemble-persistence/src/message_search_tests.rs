@@ -97,10 +97,11 @@ async fn complete_search_paginates_and_preserves_unicode_short_and_attachment_ma
 
     assert_rejection_code(
         store
-            .search_local_lobby_messages(
+            .search_local_messages(
                 "general",
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
+                "lobby",
                 "page marker",
                 "not-a-cursor",
             )
@@ -142,10 +143,11 @@ async fn context_is_bounded_chronological_and_uses_public_event_projection() {
         .unwrap_or_else(|error| panic!("store private context event: {error}"));
 
     let context = store
-        .local_lobby_message_context(
+        .local_message_context(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &target.id,
         )
         .await
@@ -175,10 +177,11 @@ async fn context_is_bounded_chronological_and_uses_public_event_projection() {
 
     assert_rejection_code(
         store
-            .local_lobby_message_context(
+            .local_message_context(
                 "general",
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
+                "lobby",
                 "missing-message",
             )
             .await,
@@ -235,10 +238,11 @@ async fn polls_search_by_visible_question_without_indexing_private_transitions()
     assert!(!indexed.contains(&transition.id));
 
     let context = store
-        .local_lobby_message_context(
+        .local_message_context(
             &principal.room_id,
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             &poll.id,
         )
         .await
@@ -303,12 +307,13 @@ async fn send(
         .event
 }
 
-async fn search(store: &SqliteStore, query: &str, cursor: &str) -> crate::LobbyMessageSearchPage {
+async fn search(store: &SqliteStore, query: &str, cursor: &str) -> crate::RoomMessageSearchPage {
     store
-        .search_local_lobby_messages(
+        .search_local_messages(
             "general",
             LOCAL_OPERATOR_USER_ID,
             LOCAL_OPERATOR_PARTICIPANT_ID,
+            "lobby",
             query,
             cursor,
         )

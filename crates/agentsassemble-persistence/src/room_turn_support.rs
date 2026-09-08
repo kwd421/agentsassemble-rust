@@ -10,8 +10,8 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    PersistenceError, message_search_index::index_lobby_message,
-    room_event_sequence::next_sequence, turn_authority::active_turn_authority,
+    PersistenceError, message_search_index::index_room_message, room_event_sequence::next_sequence,
+    turn_authority::active_turn_authority,
 };
 
 pub(crate) fn provider_room_principal(
@@ -198,7 +198,7 @@ pub(crate) async fn insert_event(
         .bind(serde_json::to_string(event)?)
         .execute(&mut **transaction)
         .await?;
-    index_lobby_message(transaction, event).await?;
+    index_room_message(transaction, event).await?;
     Ok(())
 }
 

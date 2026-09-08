@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use agentsassemble_domain::{
-    LobbyMessageContext, LobbyMessageSearchPage, LobbyMessageSearchResult,
-};
+use agentsassemble_domain::{RoomMessageContext, RoomMessageSearchPage, RoomMessageSearchResult};
 use rmcp::{
     ServiceExt,
     model::CallToolRequestParams,
@@ -52,8 +50,9 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     command
         .begin_execution()
         .unwrap_or_else(|error| panic!("begin search execution: {error}"));
-    let page = LobbyMessageSearchPage {
-        results: vec![LobbyMessageSearchResult {
+    let page = RoomMessageSearchPage {
+        results: vec![RoomMessageSearchResult {
+            channel_id: "lobby".to_owned(),
             event_id: "message-1".to_owned(),
             participant_id: "human-1".to_owned(),
             seq: 1,
@@ -68,7 +67,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let result = pending_search
         .await
         .unwrap_or_else(|error| panic!("join search call: {error}"));
-    assert_eq!(tool_json::<LobbyMessageSearchPage>(&result), page);
+    assert_eq!(tool_json::<RoomMessageSearchPage>(&result), page);
 
     let context_client = client.clone();
     let pending_context = tokio::spawn(async move {
@@ -86,7 +85,8 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     command
         .begin_execution()
         .unwrap_or_else(|error| panic!("begin context execution: {error}"));
-    let context = LobbyMessageContext {
+    let context = RoomMessageContext {
+        channel_id: "lobby".to_owned(),
         event_id: "message-1".to_owned(),
         events: Vec::new(),
     };
@@ -94,7 +94,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let result = pending_context
         .await
         .unwrap_or_else(|error| panic!("join context call: {error}"));
-    assert_eq!(tool_json::<LobbyMessageContext>(&result), context);
+    assert_eq!(tool_json::<RoomMessageContext>(&result), context);
 
     let published = call_tool(
         client.as_ref(),

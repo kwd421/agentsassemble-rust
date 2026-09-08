@@ -299,3 +299,31 @@ Retired channel tombstones remain valid room-history sequence records after the
 server erases their text, but are rejected as current channel history or send ACKs
 and never enter the selected-channel feed. Six affected client cases, the
 production build/CSS and unchanged mandatory gates pass for this correction.
+
+## Shared channel search and context
+
+The canonical message index now includes current custom text messages alongside
+lobby messages. Existing normalization, Unicode/short-query/attachment matching,
+30-result cursor pagination and 20-neighbor context remain one owner. Human/native
+reads select an exact registered text channel or the readable `all` union; context
+requires one concrete channel. Results carry their canonical channel ID. Channel
+retirement removes index entries atomically with its event tombstones, so an explicit
+read fails and union search cannot expose retired content. Provider room tools remain
+bound to lobby history and cannot resolve custom-channel context.
+
+The clean database version is 67 to identify the expanded index contract; earlier
+versions fail through the existing version owner without an implicit reindex or
+migration. No new table, poll, task or parallel search cache is added. Custom messages
+add the same bounded record/FTS entry already used for lobby messages, and reads
+retain the existing page/context limits. Shared HTTP responses now serialize domain
+projections directly instead of rebuilding them with a hardcoded lobby ID.
+
+Five actual HTTP cases pass (0.11 s), including native one-use tickets, read-only
+human channel/union searches, 30+1 pagination, exact context and retirement. Seven
+persistence search/mutation/provider cases pass (0.12 s), four channel cases pass
+(0.05 s) with search after reopening the file database, and the actual MCP search/
+context receipt case passes (0.02 s). Affected Rust all-target/all-feature Clippy,
+unchanged structure/19 policy cases, format, diff and artifact checks pass. The
+search owner exceeds 500 lines because it cohesively owns the bounded query and
+context paths; the transport projection was reduced by 81 lines. Frontend channel
+search parsing, pins, mounting and packaged acceptance remain open.

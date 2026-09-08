@@ -15,7 +15,8 @@ pub const MAX_MESSAGE_SEARCH_CONTENT_CHARACTERS: usize = MAX_MESSAGE_CHARACTERS;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LobbyMessageSearchResult {
+pub struct RoomMessageSearchResult {
+    pub channel_id: String,
     pub event_id: String,
     pub participant_id: String,
     pub seq: i64,
@@ -27,14 +28,15 @@ pub struct LobbyMessageSearchResult {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LobbyMessageSearchPage {
-    pub results: Vec<LobbyMessageSearchResult>,
+pub struct RoomMessageSearchPage {
+    pub results: Vec<RoomMessageSearchResult>,
     pub next_cursor: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct LobbyMessageContext {
+pub struct RoomMessageContext {
+    pub channel_id: String,
     pub event_id: String,
     pub events: Vec<RoomEvent>,
 }

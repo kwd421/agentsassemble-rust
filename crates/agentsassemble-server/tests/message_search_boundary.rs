@@ -315,6 +315,251 @@ async fn read_only_session_search_is_direct_reusable_and_current() {
     server.stop().await;
 }
 
+#[tokio::test]
+async fn custom_channel_search_context_and_retirement_are_exact_over_http()
+-> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
+    const FIRST: &str = "c0123456789ab";
+    const SECOND: &str = "c0123456789ac";
+    let (store, credentials) = fixture(InviteScope::ReadOnly).await;
+    let principal = local_principal();
+    let channels = json!([
+        {"id":FIRST,"name":"First","type":"text","position":0,"created_at":"2026-09-08T00:00:00Z"},
+        {"id":SECOND,"name":"Second","type":"text","position":1,"created_at":"2026-09-08T00:00:00Z"}
+    ]);
+    let revision = agentsassemble_domain::public_settings(
+        &store.snapshot_for(&principal, 0, 1).await?.settings,
+    )?
+    .settings_revision;
+    let settings = store
+        .execute_room_settings_update(
+            TrustedPrincipal(&principal),
+            "search-channels",
+            &json!({"expected_revision":revision,"channels":channels}),
+        )
+        .await?;
+    let mut messages = Vec::new();
+    for index in 0..31 {
+        messages.push(
+            store
+                .execute_channel_message(
+                    TrustedPrincipal(&principal),
+                    &format!("search-channel-{index}"),
+                    &json!({"channel_id":FIRST,"content":format!("needle ab {index}")}),
+                )
+                .await?
+                .event,
+        );
+    }
+    store
+        .execute_channel_message(
+            TrustedPrincipal(&principal),
+            "search-second-channel",
+            &json!({"channel_id":SECOND,"content":"needle ab second"}),
+        )
+        .await?;
+    send_message(&store, "search-lobby-neighbor", "needle ab lobby").await;
+    let server = start_invite(store.clone()).await;
+    let client = Client::new();
+    let path = format!("{}/api/room-search", server.base_url);
+    verify_native_channel_pagination(&server, &client, &path, &messages[0].id).await?;
+
+    let device = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x52; 32]));
+    let admission = join(
+        &client,
+        &server.base_url,
+        credentials.join_code(),
+        &device,
+        "c23e4567-e89b-12d3-a456-426614174000",
+        "Channel Reader",
+        "",
+    )
+    .await;
+    let token = canonical_session_token(&admission);
+    verify_human_channel_scope(&client, &path, token, &messages[15].id).await?;
+    let mut retained_channel = channels[1].clone();
+    retained_channel["position"] = json!(0);
+    store.execute_room_settings_update(TrustedPrincipal(&principal), "retire-searched-channel", &json!({"expected_revision":settings.result["room_settings"]["settings_revision"],"channels":[retained_channel]})).await?;
+    let retired = client
+        .get(search_url(
+            &path,
+            &[
+                ("room_id", "general"),
+                ("channel_id", FIRST),
+                ("q", "needle"),
+            ],
+        ))
+        .bearer_auth(token)
+        .send()
+        .await?;
+    assert_eq!(retired.status(), StatusCode::NOT_FOUND);
+    let retained: Value = client
+        .get(search_url(
+            &path,
+            &[
+                ("room_id", "general"),
+                ("channel_id", "all"),
+                ("q", "needle"),
+            ],
+        ))
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let results = retained["results"]
+        .as_array()
+        .ok_or("missing retained results")?;
+    assert_eq!(results.len(), 2);
+    assert!(results.iter().all(|result| result["channel_id"] != FIRST));
+    server.stop().await;
+    Ok(())
+}
+
+async fn verify_native_channel_pagination(
+    server: &support::human_invite::RunningServer,
+    client: &Client,
+    path: &str,
+    oldest_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    const FIRST: &str = "c0123456789ab";
+    let first = client
+        .get(search_url(
+            path,
+            &[
+                ("room_id", "general"),
+                ("channel_id", FIRST),
+                ("q", "needle"),
+            ],
+        ))
+        .bearer_auth(
+            agentsassemble_server::issue_message_search_read_ticket(server.state(), "general")
+                .await?
+                .ticket,
+        )
+        .send()
+        .await?;
+    assert_eq!(first.status(), StatusCode::OK);
+    assert_eq!(first.headers()["cache-control"], "private, no-store");
+    let first: Value = first.json().await?;
+    assert_eq!(first["results"].as_array().map(Vec::len), Some(30));
+    let cursor = first["next_cursor"].as_str().ok_or("missing cursor")?;
+    let next: Value = client
+        .get(search_url(
+            path,
+            &[
+                ("room_id", "general"),
+                ("channel_id", FIRST),
+                ("q", "needle"),
+                ("cursor", cursor),
+            ],
+        ))
+        .bearer_auth(
+            agentsassemble_server::issue_message_search_read_ticket(server.state(), "general")
+                .await?
+                .ticket,
+        )
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(next["results"].as_array().map(Vec::len), Some(1));
+    assert_eq!(next["results"][0]["event_id"], oldest_id);
+    assert_eq!(next["next_cursor"], "");
+
+    Ok(())
+}
+
+async fn verify_human_channel_scope(
+    client: &Client,
+    path: &str,
+    token: &str,
+    target_id: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    const FIRST: &str = "c0123456789ab";
+    const SECOND: &str = "c0123456789ac";
+    for (channel, expected) in [(FIRST, 30), (SECOND, 1), ("lobby", 1)] {
+        let page: Value = client
+            .get(search_url(
+                path,
+                &[("room_id", "general"), ("channel_id", channel), ("q", "ab")],
+            ))
+            .bearer_auth(token)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        let results = page["results"].as_array().ok_or("missing results")?;
+        assert_eq!(results.len(), expected);
+        assert!(results.iter().all(|result| result["channel_id"] == channel));
+    }
+    let all: Value = client
+        .get(search_url(
+            path,
+            &[
+                ("room_id", "general"),
+                ("channel_id", "all"),
+                ("q", "needle"),
+            ],
+        ))
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let all_results = all["results"].as_array().ok_or("missing all results")?;
+    for channel in [FIRST, SECOND, "lobby"] {
+        assert!(
+            all_results
+                .iter()
+                .any(|result| result["channel_id"] == channel)
+        );
+    }
+    let context_path = format!("{path}/context");
+    let context: Value = client
+        .get(search_url(
+            &context_path,
+            &[
+                ("room_id", "general"),
+                ("channel_id", FIRST),
+                ("event_id", target_id),
+            ],
+        ))
+        .bearer_auth(token)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let events = context["events"].as_array().ok_or("missing context")?;
+    assert_eq!(events.len(), 31);
+    assert!(
+        events
+            .iter()
+            .all(|event| event["type"] == "channel_message_final" && event["channel_id"] == FIRST)
+    );
+    for channel in [SECOND, "lobby"] {
+        let rejected = client
+            .get(search_url(
+                &context_path,
+                &[
+                    ("room_id", "general"),
+                    ("channel_id", channel),
+                    ("event_id", target_id),
+                ],
+            ))
+            .bearer_auth(token)
+            .send()
+            .await?;
+        assert_eq!(rejected.status(), StatusCode::NOT_FOUND);
+    }
+    Ok(())
+}
+
 async fn start() -> RunningServer {
     let store = SqliteStore::open("sqlite::memory:")
         .await
@@ -408,4 +653,10 @@ async fn json_body(response: reqwest::Response) -> Value {
         .json()
         .await
         .unwrap_or_else(|error| panic!("decode search JSON: {error}"))
+}
+
+fn search_url(path: &str, query: &[(&str, &str)]) -> reqwest::Url {
+    let mut url = reqwest::Url::parse(path).unwrap_or_else(|error| panic!("search URL: {error}"));
+    url.query_pairs_mut().extend_pairs(query.iter().copied());
+    url
 }

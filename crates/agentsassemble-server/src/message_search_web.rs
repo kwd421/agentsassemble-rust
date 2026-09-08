@@ -1,12 +1,12 @@
 use agentsassemble_domain::validate_room_id;
-use agentsassemble_persistence::{LobbyMessageContext, LobbyMessageSearchPage, PersistenceError};
+use agentsassemble_persistence::{PersistenceError, RoomMessageContext, RoomMessageSearchPage};
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
     http::{Method, StatusCode, header::CACHE_CONTROL},
     response::{IntoResponse, Response},
 };
-use serde::{Deserialize, Serialize};
+use serde::Deserialize;
 use serde_json::json;
 use tower_http::set_header::SetResponseHeaderLayer;
 
@@ -21,8 +21,6 @@ use crate::{
     ticket::RoomSessionHttpAuthority,
 };
 
-const LOBBY_CHANNEL_ID: &str = "lobby";
-const ALL_CHANNEL_ID: &str = "all";
 const MAX_SEARCH_BODY_BYTES: usize = 4 * 1024;
 
 #[derive(Debug, Deserialize)]
@@ -48,31 +46,6 @@ struct ContextQuery {
     event: String,
 }
 
-#[derive(Serialize)]
-struct SearchResponse {
-    results: Vec<SearchResult>,
-    next_cursor: String,
-}
-
-#[derive(Serialize)]
-struct SearchResult {
-    event_id: String,
-    participant_id: String,
-    channel_id: &'static str,
-    seq: i64,
-    created_at: String,
-    author: String,
-    content: String,
-    attachment_filenames: Vec<String>,
-}
-
-#[derive(Serialize)]
-struct ContextResponse {
-    channel_id: &'static str,
-    event_id: String,
-    events: Vec<agentsassemble_domain::RoomEvent>,
-}
-
 pub(crate) fn routes() -> Router<AppState> {
     search_routes()
         .layer(SetResponseHeaderLayer::overriding(
@@ -92,11 +65,11 @@ registered_routes! {
 async fn search_messages(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<SearchResponse>, MessageSearchHttpError> {
+) -> Result<Json<RoomMessageSearchPage>, MessageSearchHttpError> {
     let grant =
         resolve_read_authority(&state, request.headers(), request.extensions().get()).await?;
     let query = parse_query::<SearchQuery>(&request)?;
-    require_search_scope(&grant, &query.room_id, &query.channel_id)?;
+    require_room(&grant, &query.room_id)?;
     ensure_empty_body(request, MAX_SEARCH_BODY_BYTES)
         .await
         .map_err(|error| MessageSearchHttpError::from_body(error, "search"))?;
@@ -104,10 +77,11 @@ async fn search_messages(
         RoomSessionHttpAuthority::LocalTicket(local) => {
             state
                 .store
-                .search_local_lobby_messages(
+                .search_local_messages(
                     &local.room_id,
                     &local.principal_id,
                     &local.participant_id,
+                    &query.channel_id,
                     &query.q,
                     &query.cursor,
                 )
@@ -116,21 +90,26 @@ async fn search_messages(
         RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .search_room_session_lobby_messages(authorization, &query.q, &query.cursor)
+                .search_room_session_messages(
+                    authorization,
+                    &query.channel_id,
+                    &query.q,
+                    &query.cursor,
+                )
                 .await?
         }
     };
-    Ok(Json(project_page(page)))
+    Ok(Json(page))
 }
 
 async fn message_context(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<ContextResponse>, MessageSearchHttpError> {
+) -> Result<Json<RoomMessageContext>, MessageSearchHttpError> {
     let grant =
         resolve_read_authority(&state, request.headers(), request.extensions().get()).await?;
     let query = parse_query::<ContextQuery>(&request)?;
-    require_context_scope(&grant, &query.room, &query.channel)?;
+    require_room(&grant, &query.room)?;
     ensure_empty_body(request, MAX_SEARCH_BODY_BYTES)
         .await
         .map_err(|error| MessageSearchHttpError::from_body(error, "context"))?;
@@ -138,10 +117,11 @@ async fn message_context(
         RoomSessionHttpAuthority::LocalTicket(local) => {
             state
                 .store
-                .local_lobby_message_context(
+                .local_message_context(
                     &local.room_id,
                     &local.principal_id,
                     &local.participant_id,
+                    &query.channel,
                     &query.event,
                 )
                 .await?
@@ -149,11 +129,11 @@ async fn message_context(
         RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .room_session_lobby_message_context(authorization, &query.event)
+                .room_session_message_context(authorization, &query.channel, &query.event)
                 .await?
         }
     };
-    Ok(Json(project_context(context)))
+    Ok(Json(context))
 }
 
 async fn resolve_read_authority(
@@ -185,39 +165,6 @@ fn parse_query<T: for<'de> Deserialize<'de>>(
         .map_err(|_| MessageSearchHttpError::bad_request("Search query parameters are invalid."))
 }
 
-fn require_search_scope(
-    grant: &RoomSessionHttpAuthority,
-    requested_room_id: &str,
-    channel_id: &str,
-) -> Result<(), MessageSearchHttpError> {
-    require_room(grant, requested_room_id)?;
-    if !matches!(channel_id, "" | LOBBY_CHANNEL_ID | ALL_CHANNEL_ID) {
-        return Err(MessageSearchHttpError::not_found(
-            "Text channel search is not available.",
-        ));
-    }
-    Ok(())
-}
-
-fn require_context_scope(
-    grant: &RoomSessionHttpAuthority,
-    requested_room_id: &str,
-    channel_id: &str,
-) -> Result<(), MessageSearchHttpError> {
-    require_room(grant, requested_room_id)?;
-    if channel_id == ALL_CHANNEL_ID {
-        return Err(MessageSearchHttpError::bad_request(
-            "A concrete channel_id is required.",
-        ));
-    }
-    if !matches!(channel_id, "" | LOBBY_CHANNEL_ID) {
-        return Err(MessageSearchHttpError::not_found(
-            "Text channel search is not available.",
-        ));
-    }
-    Ok(())
-}
-
 fn require_room(
     grant: &RoomSessionHttpAuthority,
     requested_room_id: &str,
@@ -234,34 +181,6 @@ fn grant_room_id(grant: &RoomSessionHttpAuthority) -> &str {
     match grant {
         RoomSessionHttpAuthority::LocalTicket(local) => &local.room_id,
         RoomSessionHttpAuthority::Session(authorization) => &authorization.principal().room_id,
-    }
-}
-
-fn project_page(page: LobbyMessageSearchPage) -> SearchResponse {
-    SearchResponse {
-        results: page
-            .results
-            .into_iter()
-            .map(|result| SearchResult {
-                event_id: result.event_id,
-                participant_id: result.participant_id,
-                channel_id: LOBBY_CHANNEL_ID,
-                seq: result.seq,
-                created_at: result.created_at,
-                author: result.author,
-                content: result.content,
-                attachment_filenames: result.attachment_filenames,
-            })
-            .collect(),
-        next_cursor: page.next_cursor,
-    }
-}
-
-fn project_context(context: LobbyMessageContext) -> ContextResponse {
-    ContextResponse {
-        channel_id: LOBBY_CHANNEL_ID,
-        event_id: context.event_id,
-        events: context.events,
     }
 }
 
@@ -350,7 +269,7 @@ impl From<PersistenceError> for MessageSearchHttpError {
                 message,
             } => Self::forbidden(message),
             PersistenceError::CommandRejected {
-                code: "message_missing",
+                code: "message_missing" | "channel_not_found" | "channel_unavailable",
                 message,
             } => Self::not_found(message),
             PersistenceError::CommandRejected {

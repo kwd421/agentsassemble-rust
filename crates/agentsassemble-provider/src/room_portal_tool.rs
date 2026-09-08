@@ -1,5 +1,5 @@
 use agentsassemble_domain::{
-    LobbyMessageContext, LobbyMessageSearchPage, RoomRandomRequest, RoomRandomResult,
+    RoomMessageContext, RoomMessageSearchPage, RoomRandomRequest, RoomRandomResult,
 };
 use thiserror::Error;
 use tokio::sync::{mpsc, oneshot};
@@ -28,8 +28,8 @@ pub enum ProviderRoomToolRequest {
 #[derive(Debug, Clone, PartialEq)]
 pub enum ProviderRoomToolResult {
     Random(RoomRandomResult),
-    SearchMessages(LobbyMessageSearchPage),
-    MessageContext(LobbyMessageContext),
+    SearchMessages(RoomMessageSearchPage),
+    MessageContext(RoomMessageContext),
 }
 
 impl PartialEq for ProviderRoomToolIngress {
