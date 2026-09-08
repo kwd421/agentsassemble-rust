@@ -8424,3 +8424,29 @@ provider/server all-target compilation, all-target/all-feature Clippy and six ac
 managed-worker tests (2.41 seconds). This supersedes the pending Windows Clippy
 status above. Scope remains local protocol fixtures and real Windows process/IPC
 custody; Windows UI and configured provider execution are not claimed.
+
+## Phase 7 whole-phase review correction: muted owner (2026-09-09)
+
+Daybreak Blue at `xhigh` manually reviewed all 94 exclusive commits in
+`25c7961..0600093`, their cumulative diff, exact final HEAD and the complete local
+Phase 7 contract. Verdict: REVISE, C0/H0/M1/L0. Commit 39 (`70d2fe2`) introduced the
+one supported omission; the other 93 individual commits were approved.
+
+A managed agent's exact turn stays active when its human owner is muted. Request
+creation omitted that owner's mute condition, while resolution rejected it, so a
+new request could wait unanswerably until its deadline. Shared transactional
+request creation now requires an unmuted human owner before any replay or write.
+This is the smallest correction at the existing authority owner; no timer, retry,
+fallback or new state was added. Companion attendees already reject a muted parent
+in their admission owner, so the regression targets the reproduced managed path.
+
+The existing human-mute test now uses the canonical human owner, starts an exact
+managed turn, mutes the owner, and checks `permission_denied` with unchanged events
+and zero request rows. Unmuting admits the same request under the same execution.
+Without the new condition it fails with `muted owner request was admitted`; with
+the correction all 321 persistence tests pass (4.25 seconds). Affected all-target,
+all-feature Clippy and unchanged architecture/growth, nineteen policy tests,
+formatting and diff checks pass. The preceding packaged desktop/mobile and Windows
+custody evidence remains applicable; this correction changes only transactional
+request admission. Re-approval remains pending before Phase 8. Final Pro review
+and the authorized six-provider real flows remain separate closeout requirements.

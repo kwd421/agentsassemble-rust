@@ -158,10 +158,10 @@ async fn open_in(
         ));
     }
     let (_, owner) = load_active_membership(tx, room_id, &participant.owner_id).await?;
-    if owner.participant_type != "human" {
+    if owner.participant_type != "human" || owner.muted {
         return Err(rejected(
             "permission_denied",
-            "Provider request requires a human owner.",
+            "Provider request requires an active human owner.",
         ));
     }
     let request_id = input.request.provider_request_id.to_string();

@@ -38,7 +38,9 @@
   [Correction and approval](docs/VERIFICATION.md#phase-6-whole-phase-review-correction-http-incarnation-2026-09-08).
 - Active: Phase 7 passes local acceptance through `f6da14b`: all three custody
   paths, direct packaged desktop/mobile flows, and Windows compile/lint/runtime
-  verification. Whole-phase Daybreak review is pending before Phase 8.
+  verification. Daybreak reviewed all 94 commits through `0600093` at C0/H0/M1/L0;
+  the muted-owner request correction awaits re-approval before Phase 8.
+  [Correction](docs/VERIFICATION.md#phase-7-whole-phase-review-correction-muted-owner-2026-09-09).
   [Contract and evidence](docs/specs/external-ai-admission-slice.md).
   New Pro review and authorized real-provider proof remain at full closeout.
 - Scope, acceptance, dependency order, and finding placement:

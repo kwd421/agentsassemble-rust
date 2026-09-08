@@ -126,8 +126,34 @@ async fn mute_preempts_unstarted_exact_turn_and_unmute_reschedules_once() {
 }
 
 #[tokio::test]
-async fn human_mute_changes_only_room_participant_authority() {
+async fn human_mute_preserves_agent_turn_but_rejects_new_owner_requests()
+-> Result<(), Box<dyn std::error::Error>> {
     let (store, principal, _directory) = fixture().await;
+    let mut agent = store.participant("general", AGENT_ID).await?;
+    LOCAL_OPERATOR_PARTICIPANT_ID.clone_into(&mut agent.owner_id);
+    let mut tx = store.pool.begin().await?;
+    crate::participant_rows::save_participant_exact(&mut tx, "general", AGENT_ID, &agent).await?;
+    tx.commit().await?;
+    let assigned = store
+        .execute_message_with_turn(
+            &principal,
+            "human-mute-source",
+            "message.send",
+            &json!({"content": "@Terra start before owner mute"}),
+        )
+        .await?;
+    let assignment = assigned.assignments.first().ok_or("assignment missing")?;
+    let start = store
+        .authorize_provider_turn_start(
+            "general",
+            AGENT_ID,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await?;
+    store
+        .mark_provider_turn_running(&start, "owner-mute-turn")
+        .await?;
     let muted = store
         .execute_participant_mute(
             TrustedPrincipal(&principal),
@@ -145,6 +171,50 @@ async fn human_mute_changes_only_room_participant_authority() {
             .unwrap_or_else(|error| panic!("read muted human: {error}"))
             .muted
     );
+    let request = crate::OpenProviderRequest {
+        turn_generation: assignment.turn_generation,
+        execution_id: assignment.execution_id.clone(),
+        request: agentsassemble_domain::ProviderRequest {
+            provider_request_id: uuid::Uuid::new_v4(),
+            request_kind: agentsassemble_domain::ProviderRequestKind::ExternalAction,
+            title: "Continue provider action".to_owned(),
+            description: String::new(),
+            timeout_seconds: 60,
+            prompt: agentsassemble_domain::ProviderRequestPrompt::Acknowledge { action_url: None },
+        },
+    };
+    let before = store.snapshot("general", 0, 200).await?;
+    let rejected = store
+        .open_managed_provider_request("general", AGENT_ID, &request, Utc::now())
+        .await;
+    match rejected {
+        Err(crate::PersistenceError::CommandRejected { code, message }) => {
+            assert_eq!(code, "permission_denied", "{message}");
+        }
+        Err(error) => panic!("unexpected request error: {error}"),
+        Ok(_) => panic!("muted owner request was admitted"),
+    }
+    assert_eq!(
+        before.events,
+        store.snapshot("general", 0, 200).await?.events
+    );
+    let count: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM provider_requests")
+        .fetch_one(&store.pool)
+        .await?;
+    assert_eq!(count, 0);
+    store
+        .execute_participant_mute(
+            TrustedPrincipal(&principal),
+            "unmute-human",
+            &json!({"participant_id": LOCAL_OPERATOR_PARTICIPANT_ID, "muted": false}),
+        )
+        .await?;
+    // The same exact execution is still live after owner authority is restored.
+    let opened = store
+        .open_managed_provider_request("general", AGENT_ID, &request, Utc::now())
+        .await?;
+    assert_eq!(opened.event.event_type, "provider_request_opened");
+    Ok(())
 }
 
 #[tokio::test]
