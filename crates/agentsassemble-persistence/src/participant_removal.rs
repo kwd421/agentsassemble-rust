@@ -202,6 +202,8 @@ pub(crate) async fn revoke_participant_access(
     ).bind(room_id).bind(participant_id).fetch_all(&mut **transaction).await?;
     fingerprints.extend(sqlx::query_scalar::<_, Vec<u8>>("UPDATE room_connector_invites SET revoked=1 WHERE room_id=? AND participant_id=? AND revoked=0 RETURNING session_fingerprint")
         .bind(room_id).bind(participant_id).fetch_all(&mut **transaction).await?);
+    fingerprints.extend(sqlx::query_scalar::<_, Option<Vec<u8>>>("UPDATE room_attendee_invites SET revoked=1 WHERE room_id=? AND participant_id=? AND revoked=0 RETURNING session_fingerprint")
+        .bind(room_id).bind(participant_id).fetch_all(&mut **transaction).await?.into_iter().flatten());
     sqlx::query("UPDATE room_invites SET revoked = 1 WHERE room_id = ? AND base_participant_id = ? AND revoked = 0")
         .bind(room_id).bind(participant_id).execute(&mut **transaction).await?;
     fingerprints

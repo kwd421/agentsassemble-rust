@@ -60,7 +60,21 @@ pub(crate) async fn load_launch_session(
                     .to_owned(),
         });
     }
-    load_session(transaction, room_id, session_id).await
+    let session = load_session(transaction, room_id, session_id).await?;
+    require_server_custody(&session)?;
+    Ok(session)
+}
+
+pub(crate) fn require_server_custody(
+    session: &DurableAgentSession,
+) -> Result<(), PersistenceError> {
+    if session.public.external_owned || session.public.process_ownership != "server" {
+        return Err(PersistenceError::CommandRejected {
+            code: "external_runtime_owned",
+            message: "This provider runtime is owned by its external attendee.".to_owned(),
+        });
+    }
+    Ok(())
 }
 
 pub(crate) async fn cleanup_exists(

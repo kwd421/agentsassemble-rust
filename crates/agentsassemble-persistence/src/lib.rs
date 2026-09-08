@@ -1,3 +1,10 @@
+mod attendee_admission;
+#[cfg(test)]
+mod attendee_admission_tests;
+mod attendee_records;
+mod attendee_session;
+pub use attendee_admission::{AttendeeAdmission, AttendeeAdmissionRequest};
+pub use attendee_session::AttendeeSessionAuthorization;
 #[cfg(test)]
 mod attendee_invite_tests;
 mod attendee_invites;

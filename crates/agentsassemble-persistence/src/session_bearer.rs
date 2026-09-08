@@ -20,6 +20,7 @@ pub const OPERATOR_SESSION_BEARER_CHARS: usize =
 #[derive(Clone, Copy)]
 pub(crate) enum SessionBearerPurpose {
     AttendeeInvite,
+    AttendeeSession,
     ConnectorInvite,
     ConnectorSession,
     HumanAdmission,
@@ -38,6 +39,10 @@ pub(crate) fn derive_session_bearer(
     purpose: SessionBearerPurpose,
 ) -> IssuedBearer {
     let (context, prefix): (&[u8], &str) = match purpose {
+        SessionBearerPurpose::AttendeeSession => (
+            b"agentsassemble-attendee-session-v1\0",
+            ATTENDEE_SESSION_PREFIX,
+        ),
         SessionBearerPurpose::AttendeeInvite => (
             b"agentsassemble-attendee-invite-v1\0",
             ATTENDEE_INVITE_PREFIX,

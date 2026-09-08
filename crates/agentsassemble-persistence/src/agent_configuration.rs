@@ -201,6 +201,7 @@ fn required_agent_id(payload: &Value) -> Result<String, PersistenceError> {
 }
 
 fn require_stopped_profile(session: &DurableAgentSession) -> Result<(), PersistenceError> {
+    crate::room_runtime_cleanup::require_server_custody(session)?;
     let stopped = !session.public.enabled
         && matches!(
             session.public.runtime_status,

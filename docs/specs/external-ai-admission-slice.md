@@ -311,3 +311,30 @@ Affected all-target/all-feature persistence Clippy and unchanged architecture,
 format, diff and artifact gates pass for this invitation checkpoint. The session
 columns reserve the admission receipt under the same invitation custody; no session
 is issued until its admission transaction and exact provider boundary are connected.
+
+## External attendee admission transaction
+
+Admission now compares the explicitly selected provider before effects, admits one
+client/request pair, and commits its agent participant, external-owned Agent Session
+and public event together. Response-loss retries recover that event, credential and
+original expiry; a changed client, request or display name cannot consume the invite
+again. Companion admission and later authorization revalidate the exact posting
+human session, with child expiry bounded by the parent's expiry. Human, Connector
+and attendee credential fingerprints cannot authorize each other's session domains.
+
+An admitted attendee is disconnected and not provider-ready until its authenticated
+runtime report arrives. Its record contains no host executable, workspace, provider
+endpoint, provider credential or claimed running process. Common empty durable state
+initialization is shared with managed session creation; each custody owner supplies
+its own runtime authority. Host launch/configuration reject external custody, and
+host process reconciliation excludes external-owned sessions. Participant removal
+revokes the attendee credential; no ordinary human transport is widened.
+
+The admission/creation tests pass (three cases), including concurrent one-use
+admission, matching-provider failure before effects, exact retry, private authority
+separation and parent revocation. Eight existing managed-creation cases and three
+room-lifecycle cases pass. Affected persistence Clippy and unchanged architecture,
+format/diff/artifact gates pass. This transaction adds no process, timer or background
+worker. Authenticated readiness, turn/report/request transport, external cleanup and
+packaged admission controls remain the next dependency; this is not a completed
+external CLI flow or whole-phase acceptance.

@@ -4,8 +4,7 @@ use std::collections::BTreeMap;
 use agentsassemble_domain::{
     Actor, AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
     AgentSessionDraft, AgentSessionStatus, AgentTurnPhase, AuthenticatedPrincipal,
-    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantRole,
-    ParticipantStatus, RoomEvent,
+    DurableAgentSession, Participant, ParticipantRole, ParticipantStatus, RoomEvent,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -166,30 +165,22 @@ async fn create_agent_records(
 }
 
 fn new_durable_session(public: AgentSession, draft: &AgentSessionDraft) -> DurableAgentSession {
-    DurableAgentSession {
-        public,
-        executable: draft.executable.clone(),
-        executable_identity: draft.executable_identity.clone(),
-        workspace: draft.workspace.clone(),
-        workspace_identity: draft.workspace_identity.clone(),
-        provider_endpoint: draft.provider_endpoint.clone(),
-        runtime_profile_key: draft.runtime_profile_key.clone(),
-        runtime_profile_version: CURRENT_RUNTIME_PROFILE_VERSION,
-        provider_session_id: String::new(),
-        runtime_handle_id: String::new(),
-        runtime_owner_id: String::new(),
-        runtime_lease_token: String::new(),
-        turn_generation: 0,
-        schedule_requested: false,
-        pending_inputs: Vec::new(),
-        inflight_inputs: Vec::new(),
-        active_source_event_id: String::new(),
-        input_up_to_event_id: String::new(),
-        input_up_to_seq: 0,
-        lifecycle_intent_action: AgentLifecycleAction::None,
-        lifecycle_intent_id: String::new(),
-        lifecycle_intent_status: AgentLifecycleIntentStatus::None,
-    }
+    let mut session = crate::agent_session_rows::without_runtime(public);
+    session.executable.clone_from(&draft.executable);
+    session
+        .executable_identity
+        .clone_from(&draft.executable_identity);
+    session.workspace.clone_from(&draft.workspace);
+    session
+        .workspace_identity
+        .clone_from(&draft.workspace_identity);
+    session
+        .provider_endpoint
+        .clone_from(&draft.provider_endpoint);
+    session
+        .runtime_profile_key
+        .clone_from(&draft.runtime_profile_key);
+    session
 }
 
 async fn insert_agent_authority(
@@ -294,7 +285,7 @@ async fn save_session(
     Ok(())
 }
 
-async fn latest_message_cursor(
+pub(crate) async fn latest_message_cursor(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<(String, i64), PersistenceError> {
