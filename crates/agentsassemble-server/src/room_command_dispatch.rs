@@ -106,7 +106,8 @@ pub(crate) async fn execute_command(
         RoomAction::RoomHistory
         | RoomAction::ChannelHistory
         | RoomAction::RoomVoteSummary
-        | RoomAction::SideChatSend => misrouted_durable_command(command.action),
+        | RoomAction::SideChatSend
+        | RoomAction::ProviderRequestResolve => misrouted_durable_command(command.action),
     }
 }
 

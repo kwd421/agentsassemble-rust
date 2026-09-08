@@ -5,7 +5,7 @@ use std::{
     pin::Pin,
 };
 
-use agentsassemble_domain::{ProviderRequestResolution, RoomEvent};
+use agentsassemble_domain::{AuthenticatedPrincipal, ProviderRequestResolution, RoomEvent};
 use agentsassemble_persistence::{
     AttendeeConnectionAuthorization, OpenProviderRequest, PersistenceError, ProviderRequestCommit,
     ProviderRequestDelivery, ProviderRequestDeliveryOutcome, RoomSessionAuthorization, SqliteStore,
@@ -35,6 +35,19 @@ pub(super) enum OpeningAuthority {
     Attendee(AttendeeConnectionAuthorization),
 }
 
+pub(super) enum ResolutionAuthority {
+    Session(RoomSessionAuthorization),
+    Local {
+        principal: AuthenticatedPrincipal,
+        room_uid: Uuid,
+    },
+}
+
+pub struct ResolvedProviderRequest {
+    pub event: RoomEvent,
+    pub deduplicated: bool,
+}
+
 pub(super) enum RequestCommand {
     Open {
         authority: OpeningAuthority,
@@ -42,10 +55,10 @@ pub(super) enum RequestCommand {
         reply: oneshot::Sender<Result<LiveProviderRequest, PersistenceError>>,
     },
     Resolve {
-        authority: Box<RoomSessionAuthorization>,
+        authority: Box<ResolutionAuthority>,
         request_id: Uuid,
         resolution: ProviderRequestResolution,
-        reply: oneshot::Sender<Result<RoomEvent, PersistenceError>>,
+        reply: oneshot::Sender<Result<ResolvedProviderRequest, PersistenceError>>,
     },
 }
 
@@ -197,18 +210,32 @@ impl RequestBroker {
     async fn resolve(
         &mut self,
         store: &SqliteStore,
-        authority: &RoomSessionAuthorization,
+        authority: &ResolutionAuthority,
         request_id: Uuid,
         resolution: &ProviderRequestResolution,
-    ) -> Result<RoomEvent, PersistenceError> {
+    ) -> Result<ResolvedProviderRequest, PersistenceError> {
+        let principal = match authority {
+            ResolutionAuthority::Local {
+                principal,
+                room_uid,
+            } => {
+                store
+                    .require_room_incarnation(&principal.room_id, *room_uid)
+                    .await?;
+                store.resolve_principal(principal).await?
+            }
+            ResolutionAuthority::Session(session) => session.principal().clone(),
+        };
+        let authority = match authority {
+            ResolutionAuthority::Local { .. } => {
+                agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal)
+            }
+            ResolutionAuthority::Session(session) => session.mutation_authority(),
+        };
         let commit = store
-            .resolve_provider_request(
-                authority.mutation_authority(),
-                request_id,
-                resolution,
-                Utc::now(),
-            )
+            .resolve_provider_request(authority, request_id, resolution, Utc::now())
             .await?;
+        let deduplicated = commit.delivery.is_none();
         if let Some(delivery) = commit.delivery {
             let Some(pending) = self.pending.get_mut(&request_id) else {
                 store
@@ -243,7 +270,10 @@ impl RequestBroker {
             }
             pending.delivery = Some(delivery);
         }
-        Ok(commit.event)
+        Ok(ResolvedProviderRequest {
+            event: commit.event,
+            deduplicated,
+        })
     }
 
     pub async fn complete(
@@ -388,8 +418,43 @@ impl RoomRuntime {
         authority: RoomSessionAuthorization,
         request_id: Uuid,
         resolution: ProviderRequestResolution,
-    ) -> Result<RoomEvent, PersistenceError> {
-        let room_id = authority.principal().room_id.clone();
+    ) -> Result<ResolvedProviderRequest, PersistenceError> {
+        self.resolve_provider_response(
+            ResolutionAuthority::Session(authority),
+            request_id,
+            resolution,
+        )
+        .await
+    }
+
+    pub(crate) async fn resolve_local_provider_request(
+        &self,
+        principal: AuthenticatedPrincipal,
+        room_uid: Uuid,
+        request_id: Uuid,
+        resolution: ProviderRequestResolution,
+    ) -> Result<ResolvedProviderRequest, PersistenceError> {
+        self.resolve_provider_response(
+            ResolutionAuthority::Local {
+                principal,
+                room_uid,
+            },
+            request_id,
+            resolution,
+        )
+        .await
+    }
+
+    async fn resolve_provider_response(
+        &self,
+        authority: ResolutionAuthority,
+        request_id: Uuid,
+        resolution: ProviderRequestResolution,
+    ) -> Result<ResolvedProviderRequest, PersistenceError> {
+        let room_id = match &authority {
+            ResolutionAuthority::Session(session) => session.principal().room_id.clone(),
+            ResolutionAuthority::Local { principal, .. } => principal.room_id.clone(),
+        };
         let (reply, response) = oneshot::channel();
         self.enqueue_request(
             &room_id,

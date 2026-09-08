@@ -101,7 +101,7 @@ pub(crate) async fn run(
                             if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), CommandResolution::Rejected, ProtocolError::new("unsupported_transport", "This action uses the authenticated HTTP management endpoint."))).await.is_none() { return; }
                             continue;
                         }
-                        if let Some(result) = crate::room_socket_direct::command_frame(&state, &principal, room_session.as_ref(), &request_id, action, &payload).await {
+                        if let Some(result) = crate::room_socket_direct::command_frame(&state, &principal, room_uid, room_session.as_ref(), &request_id, action, &payload).await {
                             match result {
                                 Ok(frame) => {
                                     if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }

@@ -52,7 +52,7 @@ mod side_chat;
 
 #[path = "provider_request_broker.rs"]
 mod provider_requests;
-pub use provider_requests::LiveProviderRequest;
+pub use provider_requests::{LiveProviderRequest, ResolvedProviderRequest};
 use provider_requests::{RequestBroker, RequestCommand};
 
 const ROOM_QUEUE_CAPACITY: usize = 128;

@@ -387,6 +387,19 @@ Secret answers are absent from stored events. Server all-target/all-feature Clip
 unchanged architecture/19 policy, format and artifact gates pass. WebSocket, managed
 native ingress and provider/UI consumers remain pending; this is not packaged proof.
 
+
+The human response action is now `provider.request.resolve` on the existing room
+socket. Its request identity is the provider request UUID and its payload is the
+typed resolution. The direct socket owner bypasses generic receipt persistence,
+revalidates local room incarnation or durable browser provenance, and delegates the
+ownership/execution decision to the same request transaction. Its ACK contains only
+the request and resolving-event identities plus exact-retry status. Room management
+cannot answer another human's request. The real WebSocket case passes owner response,
+local-manager refusal, exact retry, secret-free ACK and native delivery completion;
+the three broker cases still pass. Generated action bindings, frontend production
+build/CSS check, server Clippy and unchanged architecture/19 policy and artifact
+gates pass. Visible request controls and attendee/native relay remain pending.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

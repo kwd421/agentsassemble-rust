@@ -105,6 +105,8 @@ impl RoomStream {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize, TS)]
 pub enum RoomAction {
+    #[serde(rename = "provider.request.resolve")]
+    ProviderRequestResolve,
     #[serde(rename = "side_chat.send")]
     SideChatSend,
     #[serde(rename = "channel.message.send")]
@@ -169,7 +171,7 @@ impl RoomAction {
         !matches!(self, Self::RoomClose | Self::RoomArchive | Self::RoomDelete)
     }
 
-    pub const ALL: [Self; 28] = [
+    pub const ALL: [Self; 29] = [
         Self::AgentConfigure,
         Self::AgentCreate,
         Self::AgentInterrupt,
@@ -189,6 +191,7 @@ impl RoomAction {
         Self::ParticipantLeave,
         Self::ParticipantMute,
         Self::ParticipantRoleUpdate,
+        Self::ProviderRequestResolve,
         Self::RoomArchive,
         Self::RoomClose,
         Self::RoomDelete,
@@ -203,6 +206,7 @@ impl RoomAction {
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
+            Self::ProviderRequestResolve => "provider.request.resolve",
             Self::SideChatSend => "side_chat.send",
             Self::ChannelMessageSend => "channel.message.send",
             Self::ChannelHistory => "channel.history",

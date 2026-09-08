@@ -16,6 +16,8 @@ use uuid::Uuid;
 
 #[path = "support/human_invite.rs"]
 mod human_invite;
+#[path = "support/local_socket.rs"]
+mod local_socket;
 #[path = "support/room_socket_peer.rs"]
 mod room_socket_peer;
 
@@ -41,7 +43,7 @@ async fn live_secret_response_has_one_recipient_and_requires_native_ack() -> Tes
         rooms.resolve_live_provider_request(human.clone(), id, answer.clone()),
         rooms.resolve_live_provider_request(human.clone(), id, answer.clone())
     );
-    assert_eq!(first?.id, retry?.id);
+    assert_eq!(first?.event.id, retry?.event.id);
     assert!(native.receive().await? == answer);
     assert_eq!(
         store.pending_provider_request_ids("general").await?,
@@ -152,6 +154,60 @@ async fn stored_deadline_expires_the_live_recipient() -> TestResult {
     Ok(())
 }
 
+#[tokio::test]
+async fn authenticated_socket_routes_owner_answers_outside_generic_receipts() -> TestResult {
+    let (store, human, bearer) = admitted_human().await?;
+    let server = human_invite::start(store.clone()).await;
+    let (connection, request) = assigned_request(&store, &human).await?;
+    let id = request.request.provider_request_id;
+    let opened = server
+        .rooms()
+        .open_attendee_request(connection, request)
+        .await?;
+    let mut native = opened.exchange.ok_or("exchange missing")?;
+    let mut manager = local_socket::connect(&server.base_url, server.state(), "general").await;
+    manager.subscribe(0).await;
+    let command = serde_json::json!({"op":"command", "request_id":id, "action":"provider.request.resolve", "payload":{"response_kind":"answers", "answers":{"secret":["wire-secret-value"]}}});
+    manager.send_json(&command).await;
+    let rejected = receive_result(&mut manager, "nack").await;
+    assert_eq!(rejected["error"]["code"], "permission_denied");
+    let client = reqwest::Client::new();
+    let mut owner = human_invite::open_session_socket(&client, &server.base_url, &bearer).await;
+    owner.send_json(&command).await;
+    let first = receive_result(&mut owner, "ack").await;
+    assert!(first.get("deduplicated").is_none());
+    assert_eq!(first["request_id"], id.to_string());
+    owner.send_json(&command).await;
+    let retry = receive_result(&mut owner, "ack").await;
+    assert_eq!(retry["deduplicated"], true);
+    assert_eq!(first["result"], retry["result"]);
+    assert!(!first.to_string().contains("wire-secret-value"));
+    let answer = native.receive().await?;
+    assert!(
+        matches!(answer, ProviderRequestResolution::Answers { answers } if answers["secret"] == ["wire-secret-value"])
+    );
+    native.complete(true).await?;
+    owner.close().await;
+    manager.close().await;
+    server.stop().await;
+    Ok(())
+}
+
+async fn receive_result(
+    peer: &mut room_socket_peer::RoomSocketPeer<
+        tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>,
+    >,
+    expected: &str,
+) -> serde_json::Value {
+    loop {
+        let frame = peer.receive_json_with_timeout(Duration::from_secs(2)).await;
+        if frame["op"] == "ack" || frame["op"] == "nack" {
+            assert_eq!(frame["op"], expected);
+            return frame;
+        }
+    }
+}
+
 async fn fixture() -> Result<
     (
         SqliteStore,
@@ -162,11 +218,29 @@ async fn fixture() -> Result<
     ),
     Box<dyn std::error::Error>,
 > {
-    let (store, human) = admitted_human().await?;
+    let (store, human, _) = admitted_human().await?;
+    let (connection, request) = assigned_request(&store, &human).await?;
+    let rooms = RoomRuntime::new(
+        store.clone(),
+        ProviderCatalogService::fixed(ProviderCatalog::default()),
+    );
+    Ok((
+        store,
+        rooms,
+        RoomSessionAuthorization::Human(human),
+        connection,
+        request,
+    ))
+}
+
+async fn assigned_request(
+    store: &SqliteStore,
+    human: &agentsassemble_persistence::HumanSessionAuthorization,
+) -> Result<(AttendeeConnectionAuthorization, OpenProviderRequest), Box<dyn std::error::Error>> {
     let now = chrono::Utc::now();
     let invite = store
         .create_companion_attendee_invite(
-            &human,
+            human,
             CompanionInviteRequest {
                 request_id: Uuid::new_v4(),
                 provider_kind: "codex_live_session",
@@ -213,7 +287,7 @@ async fn fixture() -> Result<
         .await?;
     store
         .execute_authorized_message_with_turn(
-            agentsassemble_persistence::RoomMutationAuthority::HumanSession(&human),
+            agentsassemble_persistence::RoomMutationAuthority::HumanSession(human),
             &Uuid::new_v4().to_string(),
             "message.send",
             &serde_json::json!({"content":"Request input"}),
@@ -248,23 +322,14 @@ async fn fixture() -> Result<
             },
         },
     };
-    let rooms = RoomRuntime::new(
-        store.clone(),
-        ProviderCatalogService::fixed(ProviderCatalog::default()),
-    );
-    Ok((
-        store,
-        rooms,
-        RoomSessionAuthorization::Human(human),
-        connection,
-        request,
-    ))
+    Ok((connection, request))
 }
 
 async fn admitted_human() -> Result<
     (
         SqliteStore,
         agentsassemble_persistence::HumanSessionAuthorization,
+        String,
     ),
     Box<dyn std::error::Error>,
 > {
@@ -292,5 +357,5 @@ async fn admitted_human() -> Result<
     let human = store
         .authorize_human_session(&Sha256::digest(admitted.session_bearer().as_bytes()).into())
         .await?;
-    Ok((store, human))
+    Ok((store, human, admitted.session_bearer().to_owned()))
 }
