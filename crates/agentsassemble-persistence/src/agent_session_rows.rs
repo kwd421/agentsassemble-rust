@@ -35,31 +35,3 @@ pub(crate) async fn update_agent_session_row(
     .await?
     .rows_affected())
 }
-
-/// Shared initial durable state; runtime custody is supplied only by its actual owner.
-pub(crate) fn without_runtime(public: agentsassemble_domain::AgentSession) -> DurableAgentSession {
-    DurableAgentSession {
-        public,
-        executable: String::new(),
-        executable_identity: String::new(),
-        workspace: String::new(),
-        workspace_identity: String::new(),
-        provider_endpoint: String::new(),
-        runtime_profile_key: String::new(),
-        runtime_profile_version: agentsassemble_domain::CURRENT_RUNTIME_PROFILE_VERSION,
-        provider_session_id: String::new(),
-        runtime_handle_id: String::new(),
-        runtime_owner_id: String::new(),
-        runtime_lease_token: String::new(),
-        turn_generation: 0,
-        schedule_requested: false,
-        pending_inputs: Vec::new(),
-        inflight_inputs: Vec::new(),
-        active_source_event_id: String::new(),
-        input_up_to_event_id: String::new(),
-        input_up_to_seq: 0,
-        lifecycle_intent_action: agentsassemble_domain::AgentLifecycleAction::None,
-        lifecycle_intent_id: String::new(),
-        lifecycle_intent_status: agentsassemble_domain::AgentLifecycleIntentStatus::None,
-    }
-}

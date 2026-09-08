@@ -129,5 +129,7 @@ async fn initial_session(
         created_at: participant.created_at,
         updated_at: participant.updated_at,
     };
-    Ok(crate::agent_session_rows::without_runtime(public))
+    Ok(agentsassemble_domain::DurableAgentSession::without_runtime(
+        public,
+    ))
 }

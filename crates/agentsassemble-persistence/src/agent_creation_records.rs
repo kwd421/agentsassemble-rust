@@ -2,9 +2,10 @@ use crate::participant_rows::load_participant_by_key as load_optional_participan
 use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
-    Actor, AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSession,
-    AgentSessionDraft, AgentSessionStatus, AgentTurnPhase, AuthenticatedPrincipal,
-    DurableAgentSession, Participant, ParticipantRole, ParticipantStatus, RoomEvent,
+    Actor, AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeCustody,
+    AgentRuntimeStatus, AgentSession, AgentSessionDraft, AgentSessionStatus,
+    AuthenticatedPrincipal, DurableAgentSession, Participant, ParticipantRole, ParticipantStatus,
+    RoomEvent,
 };
 use chrono::Utc;
 use serde_json::{Value, json};
@@ -107,48 +108,17 @@ async fn create_agent_records(
     let (last_message_id, last_message_seq) =
         latest_message_cursor(transaction, &principal.room_id).await?;
     let persona_card = resolve_persona_selection(transaction, &draft.persona_card_id).await?;
-    let public_session = AgentSession {
-        avatar_image_url: String::new(),
-        room_id: principal.room_id.clone(),
-        session_id: draft.agent_id.clone(),
-        participant_id: draft.agent_id.clone(),
-        display_name: draft.display_name.clone(),
-        status: AgentSessionStatus::Available,
-        runtime_status: AgentRuntimeStatus::Stopped,
-        enabled: false,
-        provider_kind: draft.provider_kind.clone(),
-        runtime_kind: draft.runtime_kind.clone(),
-        connection_kind: draft.connection_kind.clone(),
-        external_owned: false,
-        process_ownership: "server".to_owned(),
-        model: draft.model.clone(),
-        reasoning_effort: draft.reasoning_effort.clone(),
-        service_tier: draft.service_tier.clone(),
-        variant: draft.variant.clone(),
-        execution_harness: draft.execution_harness.clone(),
-        permission_mode: draft.permission_mode.clone(),
-        max_output_tokens: draft.max_output_tokens,
-        catalog_revision: draft.catalog_revision.clone(),
-        persona_card_id: draft.persona_card_id.clone().into_boxed_str(),
-        persona_card,
-        transport: draft.transport.clone(),
-        last_seen_event_id: last_message_id.clone(),
-        last_seen_seq: last_message_seq,
-        last_provider_sync_event_id: last_message_id,
-        last_provider_sync_seq: last_message_seq,
-        bootstrap_cutoff_seq: last_message_seq,
-        turn_count: 0,
-        active_turn_id: String::new(),
-        turn_phase: AgentTurnPhase::None,
-        last_error: String::new(),
-        last_error_code: String::new(),
-        recovery_required: false,
-        provider_session_active: false,
-        provider_session_reused: false,
-        created_at: now,
-        updated_at: now,
-    };
-    let mut session = new_durable_session(public_session.clone(), draft);
+    let mut session = draft.initial_session(&principal.room_id, AgentRuntimeCustody::Server, now);
+    session.public.persona_card = persona_card;
+    session
+        .public
+        .last_seen_event_id
+        .clone_from(&last_message_id);
+    session.public.last_seen_seq = last_message_seq;
+    session.public.last_provider_sync_event_id = last_message_id;
+    session.public.last_provider_sync_seq = last_message_seq;
+    session.public.bootstrap_cutoff_seq = last_message_seq;
+    let public_session = session.public.clone();
     if let Some(operation_id) = start_operation_id {
         prepare_start(&mut session, operation_id);
     }
@@ -162,25 +132,6 @@ async fn create_agent_records(
         result,
         committed_events,
     })
-}
-
-fn new_durable_session(public: AgentSession, draft: &AgentSessionDraft) -> DurableAgentSession {
-    let mut session = crate::agent_session_rows::without_runtime(public);
-    session.executable.clone_from(&draft.executable);
-    session
-        .executable_identity
-        .clone_from(&draft.executable_identity);
-    session.workspace.clone_from(&draft.workspace);
-    session
-        .workspace_identity
-        .clone_from(&draft.workspace_identity);
-    session
-        .provider_endpoint
-        .clone_from(&draft.provider_endpoint);
-    session
-        .runtime_profile_key
-        .clone_from(&draft.runtime_profile_key);
-    session
 }
 
 async fn insert_agent_authority(

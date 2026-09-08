@@ -71,6 +71,14 @@ one integration-test future to 20,408 bytes; it is boxed at that test's case bou
 without changing a gate. Affected Clippy and mandatory gates pass. Provider runtime
 execution, request relay and packaged entry flows still remain before acceptance.
 
+Initial session/profile construction now lives in the domain owner so the external
+CLI can use its validated local provider selection without opening a room database
+or constructing a host principal. Custody is explicit (`Server` or `External`);
+construction creates no lease, process, membership or turn authority. Managed
+creation still resolves persona and message cursors inside its original transaction.
+Five managed create/start tests and twenty attendee persistence cases pass, as do
+affected Clippy and unchanged mandatory gates. CLI runtime wiring remains next.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing
