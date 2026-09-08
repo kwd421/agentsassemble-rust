@@ -130,3 +130,20 @@ revokes both pending connector invitations and admitted sessions permanently.
 Two controlled concurrent/expiry/leave/archive tests pass, as does affected
 all-target/all-feature Clippy. The HTTP/MCP and packaged entry points are next;
 this storage checkpoint alone is not Phase 7 acceptance.
+
+## Connector mutation transport
+
+Dedicated `/api/room-connector/join` and `/command` routes retain connector
+credential purposes and return explicit committed/rejected/unresolved outcomes.
+Admission and writes use the existing bounded room queue and durable publication.
+The queue's owned session enum prevents browser/connector provenance combinations;
+message, vote and randomness transactions reuse the existing authority resolver.
+Connector commands cannot dispatch side chat, browser or manager controls.
+The queue implementation is separated from the room task/lifecycle loop rather
+than expanding that already-large owner. No timer, polling task, provider process,
+second mutation queue or credential cache is added. Each explicit request performs
+its authorization and existing room-budget work; resource measurements remain at
+whole-phase acceptance. The local HTTP join/send/replay/read-only/leave boundary
+passes, alongside both existing queue tests and exact-session transaction checks.
+Affected all-target/all-feature Clippy and unchanged architecture gates pass.
+Manager UI, bounded reads/wait, MCP and other two custody targets remain pending.

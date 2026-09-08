@@ -10,7 +10,7 @@ use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, PersistenceError, RoomSessionAuthorization, SqliteStore,
+    CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore,
     agent_lifecycle::load_session,
     authority::active_room_for_principal,
     command_admission::{admit_non_lifecycle_command, store_command_result},
@@ -74,19 +74,16 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Returns session provenance, replay, permission, room-mode, validation, or storage failures.
-    pub async fn execute_room_session_random_command(
+    pub async fn execute_authorized_random_command(
         &self,
-        authorization: &RoomSessionAuthorization,
+        authorization: RoomMutationAuthority<'_>,
         request_id: &str,
         action: &str,
         payload: &Value,
         result: &RoomRandomResult,
     ) -> Result<CommandOutcome, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let current = authorization
-            .mutation_authority()
-            .resolve(&mut transaction)
-            .await?;
+        let current = authorization.resolve(&mut transaction).await?;
         let outcome = execute_room_random_command_in(
             &mut transaction,
             &current,

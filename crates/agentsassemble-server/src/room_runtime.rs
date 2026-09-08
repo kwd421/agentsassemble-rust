@@ -4,19 +4,17 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_domain::{AuthenticatedPrincipal, RoomEvent};
+use agentsassemble_domain::RoomEvent;
 use agentsassemble_persistence::{
-    AgentTurnAssignment, CommandOutcome, HumanAdmissionDecision, HumanAdmissionRejection,
-    PersistenceError, PreparedHumanAdmission, RoomSessionAuthorization, SqliteStore,
+    AgentTurnAssignment, HumanAdmissionDecision, HumanAdmissionRejection, PersistenceError,
+    PreparedHumanAdmission, SqliteStore,
 };
-use agentsassemble_protocol::RoomAction;
 use agentsassemble_provider::{
     ProviderAdapter, ProviderAttachmentReadCommand, ProviderAttachmentReadIngress,
     ProviderCatalogService, ProviderRoomToolCommand, ProviderRoomToolIngress,
 };
-use serde_json::Value;
 use tokio::{
-    sync::{Mutex, OwnedSemaphorePermit, broadcast, mpsc, oneshot},
+    sync::{Mutex, broadcast, mpsc, oneshot},
     task::{JoinHandle, JoinSet},
 };
 use tokio_util::sync::CancellationToken;
@@ -25,19 +23,23 @@ use crate::{
     event_publication::{PublicationAttempt, PublicationRetry, publish_durable_room_events},
     human_admission_runtime::{HumanAdmissionCommand, handle_human_admission},
     lifecycle_command_tracker::LifecycleCommandTracker,
-    principal_mutation_admission::{MutationDebit, PrincipalMutationAdmission},
+    principal_mutation_admission::PrincipalMutationAdmission,
     provider_recovery_tracker::ProviderRecoveryTracker,
     provider_turn::{ProviderTurnTaskResult, handle_provider_result, spawn_provider_turn},
     provider_write_budget::ProviderWriteBudget,
-    room_command_admission::{
-        AdmittedHumanCommand, admit_human_command, admit_room_session_command,
-    },
     room_command_result::{CommandFailure, public_command_outcome},
     room_recovery_runtime::{RecoveredAssignment, RecoveredAssignments, RecoveryRuntime},
     room_shutdown::{RoomShutdownError, join_room_tasks},
 };
 
 use crate::room_command_execution::CommandExecution;
+
+#[path = "room_command_queue.rs"]
+mod command_queue;
+pub(crate) use command_queue::{RoomCommand, RoomCommandSession};
+
+#[path = "connector_runtime.rs"]
+pub(crate) mod connector;
 
 #[path = "side_chat_runtime.rs"]
 mod side_chat;
@@ -47,31 +49,6 @@ const ROOM_TOOL_QUEUE_CAPACITY: usize = 64;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
 const PUBLICATION_WAKE_CAPACITY: usize = 128;
 const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
-
-pub(crate) struct RoomCommand {
-    pub(crate) principal: AuthenticatedPrincipal,
-    pub(crate) room_uid: Option<uuid::Uuid>,
-    pub(crate) room_session: Option<Box<RoomSessionAuthorization>>,
-    pub(crate) request_id: String,
-    pub(crate) action: RoomAction,
-    pub(crate) payload: Value,
-    mutation_debit: Option<MutationDebit>,
-    _inflight_permit: OwnedSemaphorePermit,
-    reply: oneshot::Sender<Result<CommandOutcome, CommandFailure>>,
-}
-
-impl RoomCommand {
-    pub(crate) fn mutation_authority(
-        &self,
-    ) -> agentsassemble_persistence::RoomMutationAuthority<'_> {
-        match self.room_session.as_deref() {
-            Some(session) => session.mutation_authority(),
-            None => {
-                agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&self.principal)
-            }
-        }
-    }
-}
 
 #[derive(Clone)]
 struct RoomHandle {
@@ -148,124 +125,6 @@ impl RoomRuntime {
             provider_recoveries: ProviderRecoveryTracker::default(),
             principal_mutations: PrincipalMutationAdmission::new(),
         }
-    }
-
-    /// Enqueues one durable command on its room owner and classifies its outcome.
-    pub(crate) async fn execute(
-        &self,
-        principal: AuthenticatedPrincipal,
-        room_uid: Option<uuid::Uuid>,
-        request_id: String,
-        action: RoomAction,
-        payload: Value,
-    ) -> Result<CommandOutcome, CommandFailure> {
-        let admitted = admit_human_command(
-            &self.store,
-            &self.principal_mutations,
-            &principal,
-            &request_id,
-            action,
-            &payload,
-        )
-        .await?;
-        self.enqueue_command(admitted, None, room_uid, request_id, action, payload)
-            .await
-    }
-
-    pub(crate) async fn execute_room_session(
-        &self,
-        authorization: &RoomSessionAuthorization,
-        request_id: String,
-        action: RoomAction,
-        payload: Value,
-    ) -> Result<CommandOutcome, CommandFailure> {
-        let (admitted, current) = admit_room_session_command(
-            &self.store,
-            &self.principal_mutations,
-            authorization,
-            &request_id,
-            action,
-            &payload,
-        )
-        .await?;
-        self.enqueue_command(
-            admitted,
-            Some(Box::new(current)),
-            None,
-            request_id,
-            action,
-            payload,
-        )
-        .await
-    }
-
-    async fn enqueue_command(
-        &self,
-        admitted: AdmittedHumanCommand,
-        room_session: Option<Box<RoomSessionAuthorization>>,
-        room_uid: Option<uuid::Uuid>,
-        request_id: String,
-        action: RoomAction,
-        payload: Value,
-    ) -> Result<CommandOutcome, CommandFailure> {
-        let AdmittedHumanCommand {
-            principal,
-            mutation_debit,
-            inflight_permit,
-        } = admitted;
-        let handle = if action == RoomAction::RoomDelete {
-            // Serialize replay routing with deletion retirement. An immutable
-            // retry must not recreate an actor for a physically absent room.
-            let mut rooms = self.rooms.lock().await;
-            if room_session.is_none()
-                && let Some(outcome) = self
-                    .store
-                    .completed_room_deletion(&principal, &request_id, &payload)
-                    .await
-                    .map_err(CommandFailure::unresolved)?
-            {
-                if let Some(debit) = &mutation_debit {
-                    debit.resolve();
-                }
-                return public_command_outcome(&principal, outcome)
-                    .map_err(CommandFailure::unresolved);
-            }
-            self.handle_locked(&principal.room_id, &mut rooms).await
-        } else {
-            self.handle(&principal.room_id).await
-        };
-        let (reply, response) = oneshot::channel();
-        handle
-            .mutations
-            .try_send(RoomMutation::Command(RoomCommand {
-                principal,
-                room_uid,
-                room_session,
-                request_id,
-                action,
-                payload,
-                mutation_debit,
-                _inflight_permit: inflight_permit,
-                reply,
-            }))
-            .map_err(|error| {
-                CommandFailure::unresolved(match error {
-                    mpsc::error::TrySendError::Full(_) => PersistenceError::CommandRejected {
-                        code: "room_busy",
-                        message: "Room command queue is full.".to_owned(),
-                    },
-                    mpsc::error::TrySendError::Closed(_) => PersistenceError::CommandRejected {
-                        code: "room_unavailable",
-                        message: "Room mutation task stopped.".to_owned(),
-                    },
-                })
-            })?;
-        response.await.map_err(|_| {
-            CommandFailure::unresolved(PersistenceError::CommandRejected {
-                code: "room_unavailable",
-                message: "Room mutation response was lost.".to_owned(),
-            })
-        })?
     }
 
     /// Enqueues one prepared human admission on the room's bounded mutation owner.
@@ -765,6 +624,9 @@ async fn handle_room_mutation(
         RoomMutation::Command(command) => {
             Box::pin(handle_room_command(owners, session_revocations, command)).await
         }
+        RoomMutation::ConnectorAdmission(command) => {
+            connector::admit(&owners, room_id, command).await
+        }
         RoomMutation::HumanAdmission(command) => {
             let publication = handle_human_admission(
                 owners.store,
@@ -896,4 +758,5 @@ enum RoomInput {
 enum RoomMutation {
     Command(RoomCommand),
     HumanAdmission(HumanAdmissionCommand),
+    ConnectorAdmission(connector::ConnectorAdmissionCommand),
 }

@@ -66,6 +66,7 @@ pub use google_accounts::{GoogleAccountError, GoogleAccountService};
 mod account_web;
 mod central_registration_web;
 mod connection_admission;
+mod connector_web;
 mod event_publication;
 mod friends_web;
 mod guest_identity_recovery_web;

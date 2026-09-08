@@ -10,7 +10,7 @@ use std::collections::BTreeMap;
 use uuid::Uuid;
 
 use crate::{
-    CommandOutcome, PersistenceError, RoomSessionAuthorization, SqliteStore,
+    CommandOutcome, PersistenceError, RoomMutationAuthority, SqliteStore,
     agent_lifecycle::{load_session, save_session},
     command_admission::{admit_non_lifecycle_command, store_command_result},
     message_attachments::{bind_message_attachments, prepare_message_attachment_bindings},
@@ -173,18 +173,15 @@ impl SqliteStore {
     /// # Errors
     ///
     /// Returns session provenance, idempotency, room-state, or storage failures.
-    pub async fn execute_room_session_message_with_turn(
+    pub async fn execute_authorized_message_with_turn(
         &self,
-        authorization: &RoomSessionAuthorization,
+        authorization: RoomMutationAuthority<'_>,
         request_id: &str,
         action: &str,
         payload: &Value,
     ) -> Result<RoomCommandMutation, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        let current = authorization
-            .mutation_authority()
-            .resolve(&mut transaction)
-            .await?;
+        let current = authorization.resolve(&mut transaction).await?;
         let mutation =
             execute_message_in(&mut transaction, &current, request_id, action, payload).await?;
         transaction.commit().await?;

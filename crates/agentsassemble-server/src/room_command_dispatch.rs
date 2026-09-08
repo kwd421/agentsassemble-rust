@@ -11,7 +11,7 @@ use crate::{
     room_command_execution::{
         CommandExecution, persistence_error_code, progress_execution, progressed_execution,
     },
-    room_runtime::RoomCommand,
+    room_runtime::{RoomCommand, RoomCommandSession},
 };
 
 pub(crate) async fn execute_command(
@@ -21,10 +21,13 @@ pub(crate) async fn execute_command(
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> CommandExecution {
-    if let Some(authorization) = command.room_session.as_deref()
+    if let Some(RoomCommandSession::Browser(authorization)) = &command.session
         && requires_session_dispatch(authorization, command.action)
     {
         return execute_room_session_command(store, command, authorization).await;
+    }
+    if let Some(RoomCommandSession::Connector(authorization)) = &command.session {
+        return crate::room_runtime::connector::execute(store, command, authorization).await;
     }
     let authority = command.mutation_authority();
     match command.action {
@@ -415,8 +418,8 @@ async fn execute_room_session_command(
 ) -> CommandExecution {
     match command.action {
         RoomAction::MessageSend => match store
-            .execute_room_session_message_with_turn(
-                authorization,
+            .execute_authorized_message_with_turn(
+                authorization.mutation_authority(),
                 &command.request_id,
                 command.action.as_str(),
                 &command.payload,
@@ -439,10 +442,10 @@ async fn execute_room_session_command(
             Err(error) => CommandExecution::transactional_failure(error),
         },
         RoomAction::RoomRandomRoll | RoomAction::RoomRandomChoose => {
-            match crate::room_random_runtime::execute_session_room_random(
+            match crate::room_random_runtime::execute_authorized_room_random(
                 store,
                 command,
-                authorization,
+                authorization.mutation_authority(),
             )
             .await
             {

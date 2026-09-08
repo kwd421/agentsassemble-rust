@@ -64,7 +64,7 @@ pub(crate) async fn admit_room_session_command(
     Ok((admitted, current))
 }
 
-async fn admit_current_command(
+pub(crate) async fn admit_current_command(
     store: &SqliteStore,
     admission: &PrincipalMutationAdmission,
     principal: AuthenticatedPrincipal,

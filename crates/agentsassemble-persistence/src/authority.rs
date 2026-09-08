@@ -12,6 +12,8 @@ pub enum RoomMutationAuthority<'a> {
     TrustedPrincipal(&'a AuthenticatedPrincipal),
     /// Durable browser session, revalidated inside the mutation transaction.
     HumanSession(&'a HumanSessionAuthorization),
+    /// Exact current-conversation AI session, revalidated in the transaction.
+    ConnectorSession(&'a crate::ConnectorSessionAuthorization),
     /// Exact device-bound remote operator session, revalidated in the transaction.
     OperatorSession(&'a crate::OperatorSessionAuthorization),
 }
@@ -23,6 +25,15 @@ impl<'a> RoomMutationAuthority<'a> {
     ) -> Result<std::borrow::Cow<'a, AuthenticatedPrincipal>, PersistenceError> {
         match self {
             Self::TrustedPrincipal(principal) => Ok(std::borrow::Cow::Borrowed(principal)),
+            Self::ConnectorSession(expected) => {
+                let current = crate::connector_session::revalidate_in(
+                    transaction,
+                    expected,
+                    chrono::Utc::now(),
+                )
+                .await?;
+                Ok(std::borrow::Cow::Owned(current.principal().clone()))
+            }
             Self::OperatorSession(expected) => {
                 let current = crate::operator_pairing::revalidate_operator_session(
                     transaction,

@@ -63,6 +63,7 @@ fn registered_routes(
         crate::human_invite_manager_web::HTTP_ROUTES,
         crate::operator_pairing_web::HTTP_ROUTES,
         crate::human_invite_web::HTTP_ROUTES,
+        crate::connector_web::HTTP_ROUTES,
         crate::human_session_exchange_web::HTTP_ROUTES,
         crate::server_identity_web::HTTP_ROUTES,
     ]
