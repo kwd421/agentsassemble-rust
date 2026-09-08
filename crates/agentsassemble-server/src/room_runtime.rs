@@ -38,6 +38,8 @@ use crate::room_command_execution::CommandExecution;
 mod command_queue;
 pub(crate) use command_queue::{RoomCommand, RoomCommandSession};
 
+#[path = "attendee_runtime.rs"]
+mod attendee;
 #[path = "connector_runtime.rs"]
 pub(crate) mod connector;
 
@@ -627,6 +629,9 @@ async fn handle_room_mutation(
         RoomMutation::ConnectorAdmission(command) => {
             connector::admit(&owners, room_id, command).await
         }
+        RoomMutation::AttendeeAdmission(command) => {
+            attendee::admit(&owners, room_id, command).await
+        }
         RoomMutation::HumanAdmission(command) => {
             let publication = handle_human_admission(
                 owners.store,
@@ -759,4 +764,5 @@ enum RoomMutation {
     Command(RoomCommand),
     HumanAdmission(HumanAdmissionCommand),
     ConnectorAdmission(connector::ConnectorAdmissionCommand),
+    AttendeeAdmission(attendee::AttendeeAdmissionCommand),
 }

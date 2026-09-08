@@ -89,6 +89,7 @@ pub use credentials::{
 #[cfg(unix)]
 pub use guardian::run_process_helper_if_requested;
 pub use profile::runtime_profile_key;
+pub use registration::registered_provider_kind;
 pub use room_attachment::{
     ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,
     ProviderAttachmentReadIngress,

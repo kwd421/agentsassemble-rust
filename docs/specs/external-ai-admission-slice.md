@@ -338,3 +338,22 @@ format/diff/artifact gates pass. This transaction adds no process, timer or back
 worker. Authenticated readiness, turn/report/request transport, external cleanup and
 packaged admission controls remain the next dependency; this is not a completed
 external CLI flow or whole-phase acceptance.
+
+## External attendee admission transport
+
+The dedicated `/api/room-attendee/join` endpoint commits admission through the same
+bounded room mutation queue and durable event publication owner. Provider IDs and
+canonical kinds resolve from the existing registration owner without probing host
+executables, model catalogs or credentials. Unsupported and mismatched providers
+fail before membership effects. The shared HTTP credential codec preserves separate
+Connector and attendee purposes; neither session gains human transport authority.
+
+A real local HTTP test passes with an intentionally empty host provider catalog:
+wrong/excluded providers are rejected, successful admission publishes an inactive
+external session, exact retries recover the credential and expiry, and competing
+clients and wrong-purpose transports fail. The existing Connector HTTP test passes
+after extracting its shared fingerprint mechanism. Affected all-target/all-feature
+Clippy and unchanged architecture/format/diff gates pass. This path owns one request
+and one existing queue slot, with no additional task, timer or provider process.
+Invitation packet controls, authenticated WebSocket execution and external cleanup
+remain pending; admission alone does not claim a working provider conversation.

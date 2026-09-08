@@ -1,6 +1,9 @@
 use crate::{
     AppState,
-    http_api::{BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body},
+    http_api::{
+        BodyDecodeError, PRIVATE_NO_STORE, admission_client_fingerprint, decode_json_body,
+        purpose_bearer_fingerprint,
+    },
     room_command_result::CommandFailure,
 };
 use agentsassemble_persistence::{
@@ -13,10 +16,8 @@ use axum::{
     http::{StatusCode, header::CACHE_CONTROL},
     response::{IntoResponse, Response},
 };
-use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde::Deserialize;
 use serde_json::{Value, json};
-use sha2::{Digest, Sha256};
 use tower_http::set_header::SetResponseHeaderLayer;
 use uuid::Uuid;
 
@@ -64,20 +65,11 @@ async fn join(
 ) -> Result<Json<Value>, ConnectorHttpError> {
     let invite = credential(&request, CONNECTOR_INVITE_PREFIX)?;
     let body: JoinRequest = decode_json_body(request, 8192).await?;
-    let decoded = URL_SAFE_NO_PAD
-        .decode(&body.client_secret)
-        .map_err(|_| ConnectorHttpError::invalid())?;
-    if decoded.len() != 32 {
-        return Err(ConnectorHttpError::invalid());
-    }
+    let client = admission_client_fingerprint(&body.client_secret)
+        .ok_or_else(ConnectorHttpError::invalid)?;
     let admitted = state
         .rooms
-        .admit_connector(
-            invite,
-            Sha256::digest(body.client_secret.as_bytes()).into(),
-            body.request_id,
-            body.display_name,
-        )
+        .admit_connector(invite, client, body.request_id, body.display_name)
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
     let authority = &admitted.authorization;
@@ -108,13 +100,8 @@ async fn command(
 }
 
 fn credential(request: &Request, prefix: &str) -> Result<[u8; 32], ConnectorHttpError> {
-    let value =
-        bearer_credential(request.headers()).ok_or_else(ConnectorHttpError::unauthorized)?;
-    if value.len() != prefix.len() + 43 || !value.starts_with(prefix) {
-        return Err(ConnectorHttpError::unauthorized());
-    }
-    // The credential owner matches the exact stored fingerprint; decoding it adds no authority.
-    Ok(Sha256::digest(value.as_bytes()).into())
+    purpose_bearer_fingerprint(request.headers(), prefix)
+        .ok_or_else(ConnectorHttpError::unauthorized)
 }
 
 pub(crate) struct ConnectorHttpError {

@@ -45,6 +45,21 @@ pub(crate) fn bearer_credential(headers: &HeaderMap) -> Option<&str> {
         .filter(|value| !value.is_empty() && !value.bytes().any(|byte| byte.is_ascii_whitespace()))
 }
 
+pub(crate) fn purpose_bearer_fingerprint(headers: &HeaderMap, prefix: &str) -> Option<[u8; 32]> {
+    use sha2::{Digest as _, Sha256};
+    let value = bearer_credential(headers)?;
+    // Exact stored fingerprints own authorization; decoding the bearer adds no authority.
+    (value.len() == prefix.len() + 43 && value.starts_with(prefix))
+        .then(|| Sha256::digest(value.as_bytes()).into())
+}
+
+pub(crate) fn admission_client_fingerprint(secret: &str) -> Option<[u8; 32]> {
+    use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+    use sha2::{Digest as _, Sha256};
+    (URL_SAFE_NO_PAD.decode(secret).ok()?.len() == 32)
+        .then(|| Sha256::digest(secret.as_bytes()).into())
+}
+
 pub(crate) async fn consume_local_operator(
     state: &AppState,
     headers: &HeaderMap,

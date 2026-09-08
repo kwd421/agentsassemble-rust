@@ -311,6 +311,15 @@ pub(crate) fn provider_registrations() -> &'static [&'static ProviderRegistratio
     PROVIDER_REGISTRATIONS
 }
 
+/// Resolves an explicit external provider without probing this host or borrowing its credentials.
+#[must_use]
+pub fn registered_provider_kind(provider: &str) -> Option<&'static str> {
+    PROVIDER_REGISTRATIONS
+        .iter()
+        .find(|registration| registration.id == provider || registration.provider_kind == provider)
+        .map(|registration| registration.provider_kind)
+}
+
 pub(crate) fn provider_registration_by_id(id: &str) -> Option<&'static ProviderRegistration> {
     PROVIDER_REGISTRATIONS
         .iter()

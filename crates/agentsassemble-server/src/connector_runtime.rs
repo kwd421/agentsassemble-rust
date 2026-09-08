@@ -67,7 +67,11 @@ impl RoomRuntime {
             })?;
         response
             .await
-            .map_err(|_| rejected("room_unavailable", "Room admission response was lost."))?
+            .map_err(|_| PersistenceError::CommandUnresolved {
+                code: "admission_response_lost",
+                message: "Room admission response was lost; retry the same admission identity."
+                    .to_owned(),
+            })?
     }
 
     pub(crate) async fn execute_connector(
