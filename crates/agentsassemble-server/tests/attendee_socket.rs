@@ -15,6 +15,8 @@ mod human_invite;
 mod local_socket;
 #[path = "support/room_socket_peer.rs"]
 mod room_socket_peer;
+#[path = "attendee_socket/tools.rs"]
+mod tools;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 type Peer =
@@ -39,7 +41,7 @@ async fn private_attendee_socket_resumes_exact_turn_and_replays_one_public_resul
         .send().await?.error_for_status()?.json().await?;
     let bearer = joined["session_bearer"].as_str().ok_or("bearer missing")?;
     reject_wrong_purpose(&server.base_url, &invite.invite_bearer).await?;
-    let (mut old, _) = connect(&server.base_url, bearer).await?;
+    let (mut old, old_connection) = connect(&server.base_url, bearer).await?;
     ready(&mut old).await;
     let mut human = human_input(&server.base_url, human_invite.invite_token()).await?;
     let first = old.receive_json_with_timeout(Duration::from_secs(2)).await;
@@ -51,7 +53,7 @@ async fn private_attendee_socket_resumes_exact_turn_and_replays_one_public_resul
             .ok_or("view missing")?
             .contains("External socket reply please")
     );
-    let (mut current, _) = connect(&server.base_url, bearer).await?;
+    let (mut current, current_connection) = connect(&server.base_url, bearer).await?;
     ready(&mut current).await;
     let resumed = current
         .receive_json_with_timeout(Duration::from_secs(2))
@@ -63,7 +65,17 @@ async fn private_attendee_socket_resumes_exact_turn_and_replays_one_public_resul
     );
     assert_eq!(resumed["assignment"]["input"], first["assignment"]["input"]);
     assert!(tokio::time::timeout(Duration::from_secs(2), old.wait_closed()).await?);
+    let tool_request = tools::verify_read_tools(
+        &server.base_url,
+        bearer,
+        old_connection,
+        current_connection,
+        &resumed,
+    )
+    .await?;
     verify_started_and_result(&mut current, &resumed).await;
+    tools::reject_finished_read(&server.base_url, bearer, current_connection, &tool_request)
+        .await?;
     let snapshot = store.snapshot("general", 0, 200).await?;
     let encoded = serde_json::to_string(
         &json!({"events":snapshot.events, "agent_sessions":snapshot.agent_sessions}),

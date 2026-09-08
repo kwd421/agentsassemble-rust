@@ -58,6 +58,29 @@ pub(crate) async fn require_provider_room_tool_authority(
     turn_generation: u64,
     execution_id: &str,
 ) -> Result<(), PersistenceError> {
+    if session.public.external_owned || session.public.process_ownership != "server" {
+        return Err(stale_provider_turn());
+    }
+    require_room_tool_turn_authority(
+        transaction,
+        session,
+        turn_id,
+        input_up_to_seq,
+        turn_generation,
+        execution_id,
+    )
+    .await
+}
+
+// The caller establishes managed or admitted external custody before this shared turn check.
+pub(crate) async fn require_room_tool_turn_authority(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &DurableAgentSession,
+    turn_id: &str,
+    input_up_to_seq: i64,
+    turn_generation: u64,
+    execution_id: &str,
+) -> Result<(), PersistenceError> {
     if active_turn_authority(session) != Ok(true)
         || session.public.active_turn_id != turn_id
         || session.input_up_to_seq != input_up_to_seq
@@ -68,7 +91,6 @@ pub(crate) async fn require_provider_room_tool_authority(
         || session.public.runtime_status != AgentRuntimeStatus::Busy
         || !session.public.enabled
         || !session.public.provider_session_active
-        || session.public.process_ownership != "server"
         || session.runtime_handle_id.is_empty()
         || session.runtime_owner_id.is_empty()
         || session.runtime_lease_token.is_empty()

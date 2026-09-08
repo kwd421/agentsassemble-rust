@@ -399,58 +399,66 @@ impl SqliteStore {
         authority: ProviderAttachmentReadAuthority<'_>,
         attachment_id: &str,
     ) -> Result<MessageAttachment, PersistenceError> {
-        if !is_message_attachment_id(attachment_id) {
-            return Err(message_attachment_missing());
-        }
         let mut transaction = self.pool.begin().await?;
-        let session =
-            load_session(&mut transaction, authority.room_id, authority.session_id).await?;
-        let participant = load_participant(
-            &mut transaction,
-            authority.room_id,
-            &session.public.participant_id,
-        )
-        .await?;
-        let execution = load_execution_in(
-            &mut transaction,
-            authority.room_id,
-            authority.session_id,
-            authority.turn_generation,
-        )
-        .await?;
-        if participant.status != agentsassemble_domain::ParticipantStatus::Joined
-            || participant.muted
-            || session.public.active_turn_id != authority.turn_id
-            || session.input_up_to_seq != authority.input_up_to_seq
-            || session.turn_generation != authority.turn_generation
-            || !active_turn_authority(&session).map_err(|_| stale_provider_turn())?
-            || execution.execution_id != authority.execution_id
-            || execution.turn_id != authority.turn_id
-            || execution.participant_id != session.public.participant_id
-            || execution.phase != crate::ProviderTurnExecutionPhase::StartDispatching
-        {
-            return Err(stale_provider_turn());
-        }
-        let mut inflight_events = Vec::with_capacity(session.inflight_inputs.len());
-        for input in &session.inflight_inputs {
-            inflight_events.push(
-                load_event(&mut transaction, authority.room_id, &input.event_id)
-                    .await?
-                    .ok_or_else(message_attachment_missing)?,
-            );
-        }
-        if !message_attachment_ids_from_events(inflight_events.iter())?
-            .iter()
-            .any(|candidate| candidate == attachment_id)
-        {
-            return Err(message_attachment_missing());
-        }
         let attachment =
-            read_bound_message_attachment(&mut transaction, authority.room_id, attachment_id)
-                .await?;
+            bound_provider_attachment_in(&mut transaction, authority, attachment_id).await?;
         transaction.commit().await?;
         Ok(attachment)
     }
+}
+
+pub(crate) async fn bound_provider_attachment_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    authority: ProviderAttachmentReadAuthority<'_>,
+    attachment_id: &str,
+) -> Result<MessageAttachment, PersistenceError> {
+    if !is_message_attachment_id(attachment_id) {
+        return Err(message_attachment_missing());
+    }
+    let session = load_session(transaction, authority.room_id, authority.session_id).await?;
+    let participant = load_participant(
+        transaction,
+        authority.room_id,
+        &session.public.participant_id,
+    )
+    .await?;
+    let execution = load_execution_in(
+        transaction,
+        authority.room_id,
+        authority.session_id,
+        authority.turn_generation,
+    )
+    .await?;
+    if participant.status != agentsassemble_domain::ParticipantStatus::Joined
+        || participant.muted
+        || session.public.active_turn_id != authority.turn_id
+        || session.input_up_to_seq != authority.input_up_to_seq
+        || session.turn_generation != authority.turn_generation
+        || !active_turn_authority(&session).map_err(|_| stale_provider_turn())?
+        || execution.execution_id != authority.execution_id
+        || execution.turn_id != authority.turn_id
+        || execution.participant_id != session.public.participant_id
+        || execution.phase != crate::ProviderTurnExecutionPhase::StartDispatching
+    {
+        return Err(stale_provider_turn());
+    }
+    let mut inflight_events = Vec::with_capacity(session.inflight_inputs.len());
+    for input in &session.inflight_inputs {
+        inflight_events.push(
+            load_event(transaction, authority.room_id, &input.event_id)
+                .await?
+                .ok_or_else(message_attachment_missing)?,
+        );
+    }
+    if !message_attachment_ids_from_events(inflight_events.iter())?
+        .iter()
+        .any(|candidate| candidate == attachment_id)
+    {
+        return Err(message_attachment_missing());
+    }
+    let attachment =
+        read_bound_message_attachment(transaction, authority.room_id, attachment_id).await?;
+    Ok(attachment)
 }
 
 async fn current_local_message_principal(

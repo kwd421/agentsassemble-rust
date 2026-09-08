@@ -6,6 +6,8 @@ mod interrupt;
 mod socket;
 #[path = "attendee_socket_protocol.rs"]
 mod socket_protocol;
+#[path = "attendee_tool_web.rs"]
+mod tool;
 
 use crate::{
     AppState,
@@ -46,6 +48,7 @@ registered_routes! {
         same_origin_public "/api/room-attendee/cleanup" => get(cleanup::read).post(cleanup::report),
         same_origin_public "/api/room-attendee/interrupt" => post(interrupt::report),
         same_origin_public "/api/room-attendee/leave" => post(cleanup::leave),
+        same_origin_public "/api/room-attendee/tool/read" => post(tool::read),
     }
 }
 
@@ -89,6 +92,17 @@ async fn join(
         "expires_at": authority.expires_at(),
         "deduplicated": admitted.deduplicated,
     })))
+}
+
+fn connection_id(headers: &HeaderMap) -> Result<Uuid, AttendeeHttpError> {
+    headers
+        .get("x-attendee-connection-id")
+        .and_then(|value| value.to_str().ok())
+        .and_then(|value| Uuid::parse_str(value).ok())
+        .filter(|value| !value.is_nil())
+        .ok_or_else(|| {
+            AttendeeHttpError::rejected(StatusCode::BAD_REQUEST, "attendee_connection_required")
+        })
 }
 
 struct AttendeeHttpError {

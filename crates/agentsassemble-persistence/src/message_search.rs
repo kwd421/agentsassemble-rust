@@ -152,7 +152,7 @@ async fn search_in(
     search_authorized_in(transaction, &principal.room_id, channel_id, query, cursor).await
 }
 
-async fn search_authorized_in(
+pub(crate) async fn search_authorized_in(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     channel_id: &str,
@@ -298,7 +298,7 @@ async fn context_in(
     context_authorized_in(transaction, principal, channel_id, event_id).await
 }
 
-async fn context_authorized_in(
+pub(crate) async fn context_authorized_in(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,
     channel_id: &str,

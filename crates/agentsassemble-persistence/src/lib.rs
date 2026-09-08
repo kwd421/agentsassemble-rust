@@ -2,9 +2,13 @@ mod attendee_interrupt;
 #[cfg(test)]
 mod attendee_interrupt_tests;
 mod attendee_leave;
+mod attendee_tool_read;
+#[cfg(test)]
+mod attendee_tool_read_tests;
 pub use attendee_interrupt::{
     AttendeeInterruptDelivery, AttendeeInterruptReport, AttendeeInterruptedRuntime,
 };
+pub use attendee_tool_read::{AttendeeToolRead, AttendeeToolReadRequest, AttendeeToolReadResult};
 mod attendee_cleanup;
 #[cfg(test)]
 mod attendee_cleanup_tests;

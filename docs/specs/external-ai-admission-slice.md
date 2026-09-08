@@ -58,6 +58,20 @@ model/runtime contract remains with the provider owner, not generic admission.
 Room membership and visible participant transitions commit with their durable
 room event and retry result. The normal room owner publishes committed changes.
 
+External turn-tool reads authenticate the bearer and current connection together
+with the exact execution generation in the read transaction. Room, participant,
+turn and input boundary come from stored custody. Lobby search/context and bound
+input attachments reuse their current owners; attachment preparation retains its
+pre-start phase restriction. Managed turn tools retain their server-custody check.
+These reads add no queue, timer, cache, receipt or provider process. Reconnect,
+interrupt, expiry and terminal completion must reject stale tool reads; the HTTP
+surface is private/no-store and cannot select a side channel or host path.
+Local TCP search/context checks pass for the current connection, with rejection
+of its replaced connection, changed execution and completed turn. Bound attachment
+pre-start reads pass and pending/unbound or post-start reads fail. Existing managed
+search, exact attachment binding and both randomness tests pass; affected
+all-target/all-feature Clippy and unchanged architecture/format/artifact gates pass.
+
 Revalidate exact session and current membership in the transaction for every room
 operation. Deletion/recreation, archive, revocation, kick, mute and read-only state
 must not be bypassed by an old credential or cached MCP view. Side chat and private
