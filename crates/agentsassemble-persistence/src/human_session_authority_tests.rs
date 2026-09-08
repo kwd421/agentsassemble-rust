@@ -517,7 +517,7 @@ async fn session_originated_command_units_revalidate_exact_provenance() {
     );
 }
 
-fn local_operator_principal() -> AuthenticatedPrincipal {
+pub(super) fn local_operator_principal() -> AuthenticatedPrincipal {
     AuthenticatedPrincipal {
         principal_id: LOCAL_OPERATOR_USER_ID.to_owned(),
         participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),

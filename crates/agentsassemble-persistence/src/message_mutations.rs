@@ -124,7 +124,7 @@ async fn execute_message_mutation_in(
     insert_event(transaction, &mutation).await?;
     store_command_result(
         transaction,
-        principal,
+        (&principal.room_id, &principal.principal_id),
         request_id,
         action,
         &payload_hash,

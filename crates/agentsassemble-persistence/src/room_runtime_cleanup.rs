@@ -34,11 +34,17 @@ pub(crate) async fn request_runtime_cleanup(
     session: &mut DurableAgentSession,
 ) -> Result<(), PersistenceError> {
     require_valid_turn_authority(session)?;
-    sqlx::query("INSERT INTO room_runtime_cleanup(room_id, session_id) VALUES (?, ?) ON CONFLICT(room_id, session_id) DO NOTHING")
+    let inserted = sqlx::query("INSERT INTO room_runtime_cleanup(room_id, session_id) VALUES (?, ?) ON CONFLICT(room_id, session_id) DO NOTHING")
         .bind(&session.public.room_id)
         .bind(&session.public.session_id)
         .execute(&mut **transaction)
         .await?;
+    if inserted.rows_affected() == 1
+        && session.public.external_owned
+        && session.public.process_ownership == "external"
+    {
+        crate::attendee_cleanup::request_in(transaction, session).await?;
+    }
     session.public.enabled = false;
     session.public.status = AgentSessionStatus::Detached;
     session.schedule_requested = false;
@@ -111,6 +117,16 @@ impl SqliteStore {
             &key.session_id,
         )
         .await?;
+        // The external owner must positively report absence; a host observation cannot prove it.
+        if let Some(candidate) = &candidate {
+            if candidate.session.public.external_owned
+                && candidate.session.public.process_ownership == "external"
+            {
+                transaction.commit().await?;
+                return Ok(None);
+            }
+            require_server_custody(&candidate.session)?;
+        }
         transaction.commit().await?;
         Ok(candidate)
     }
@@ -186,73 +202,76 @@ impl SqliteStore {
         key: &RoomRuntimeCleanupKey,
     ) -> Result<Option<AgentTurnCommit>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        if !cleanup_exists(&mut transaction, &key.room_id, &key.session_id).await? {
-            transaction.commit().await?;
-            return Ok(Some(AgentTurnCommit {
-                events: Vec::new(),
-                next_assignments: Vec::new(),
-            }));
-        }
-        let mut session = load_session(&mut transaction, &key.room_id, &key.session_id).await?;
-        require_valid_turn_authority(&session)?;
-        if !lifecycle_intent_is_empty(&session)
-            || !matches!(
-                session.public.runtime_status,
-                AgentRuntimeStatus::Stopped | AgentRuntimeStatus::Error
-            )
-            || session.public.recovery_required
-            || session.public.provider_session_active
-            || session.public.provider_session_reused
-            || !session.runtime_handle_id.is_empty()
-            || !session.runtime_owner_id.is_empty()
-            || !session.runtime_lease_token.is_empty()
-            || !session.public.active_turn_id.is_empty()
-            || blocking_execution_exists(&mut transaction, &key.room_id, &key.session_id).await?
-        {
-            transaction.commit().await?;
-            return Ok(None);
-        }
-        let participant = crate::agent_lifecycle::load_participant(
-            &mut transaction,
-            &key.room_id,
-            &key.session_id,
-        )
-        .await?;
-        session.public.status =
-            if participant.status == agentsassemble_domain::ParticipantStatus::Joined {
-                AgentSessionStatus::Available
-            } else {
-                AgentSessionStatus::Detached
-            };
-        session.public.runtime_status = AgentRuntimeStatus::Stopped;
-        session.public.enabled = false;
-        session.public.provider_session_active = false;
-        session.public.provider_session_reused = false;
-        session.public.recovery_required = false;
-        session.public.last_error.clear();
-        session.public.last_error_code.clear();
-        session.pending_inputs.clear();
-        session.inflight_inputs.clear();
-        session.schedule_requested = false;
-        session.public.updated_at = Utc::now();
-        save_session(&mut transaction, &session).await?;
-        sqlx::query("DELETE FROM room_runtime_cleanup WHERE room_id = ? AND session_id = ?")
-            .bind(&key.room_id)
-            .bind(&key.session_id)
-            .execute(&mut *transaction)
-            .await?;
-        let event = session_state_event(&mut transaction, &session).await?;
-        let (room, settings) = load_room_with_settings(&mut transaction, &key.room_id).await?;
-        let mut commit = if room.status == RoomStatus::Active {
-            assign_pending_in(&mut transaction, &room, &settings).await?
-        } else {
-            AgentTurnCommit {
-                events: Vec::new(),
-                next_assignments: Vec::new(),
-            }
-        };
-        commit.events.insert(0, event);
+        let commit = finish_cleanup_in(&mut transaction, key).await?;
         transaction.commit().await?;
-        Ok(Some(commit))
+        Ok(commit)
     }
+}
+
+pub(crate) async fn finish_cleanup_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    key: &RoomRuntimeCleanupKey,
+) -> Result<Option<AgentTurnCommit>, PersistenceError> {
+    if !cleanup_exists(transaction, &key.room_id, &key.session_id).await? {
+        return Ok(Some(AgentTurnCommit {
+            events: Vec::new(),
+            next_assignments: Vec::new(),
+        }));
+    }
+    let mut session = load_session(transaction, &key.room_id, &key.session_id).await?;
+    require_valid_turn_authority(&session)?;
+    if !lifecycle_intent_is_empty(&session)
+        || !matches!(
+            session.public.runtime_status,
+            AgentRuntimeStatus::Stopped | AgentRuntimeStatus::Error
+        )
+        || session.public.recovery_required
+        || session.public.provider_session_active
+        || session.public.provider_session_reused
+        || !session.runtime_handle_id.is_empty()
+        || !session.runtime_owner_id.is_empty()
+        || !session.runtime_lease_token.is_empty()
+        || !session.public.active_turn_id.is_empty()
+        || blocking_execution_exists(transaction, &key.room_id, &key.session_id).await?
+    {
+        return Ok(None);
+    }
+    let participant =
+        crate::agent_lifecycle::load_participant(transaction, &key.room_id, &key.session_id)
+            .await?;
+    session.public.status =
+        if participant.status == agentsassemble_domain::ParticipantStatus::Joined {
+            AgentSessionStatus::Available
+        } else {
+            AgentSessionStatus::Detached
+        };
+    session.public.runtime_status = AgentRuntimeStatus::Stopped;
+    session.public.enabled = false;
+    session.public.provider_session_active = false;
+    session.public.provider_session_reused = false;
+    session.public.recovery_required = false;
+    session.public.last_error.clear();
+    session.public.last_error_code.clear();
+    session.pending_inputs.clear();
+    session.inflight_inputs.clear();
+    session.schedule_requested = false;
+    session.public.updated_at = Utc::now();
+    save_session(transaction, &session).await?;
+    sqlx::query("DELETE FROM room_runtime_cleanup WHERE room_id = ? AND session_id = ?")
+        .bind(&key.room_id)
+        .bind(&key.session_id)
+        .execute(&mut **transaction)
+        .await?;
+    let event = session_state_event(transaction, &session).await?;
+    let (room, settings) = load_room_with_settings(transaction, &key.room_id).await?;
+    let mut commit = if room.status == RoomStatus::Active {
+        assign_pending_in(transaction, &room, &settings).await?
+    } else {
+        AgentTurnCommit {
+            events: Vec::new(),
+            next_assignments: Vec::new(),
+        }
+    };
+    commit.events.insert(0, event);
+    Ok(Some(commit))
 }

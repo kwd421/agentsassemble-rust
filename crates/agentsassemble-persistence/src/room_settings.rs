@@ -112,7 +112,7 @@ impl SqliteStore {
             .await?;
         store_command_result(
             &mut transaction,
-            principal,
+            (&principal.room_id, &principal.principal_id),
             request_id,
             "room.settings.update",
             &payload_hash,

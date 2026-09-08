@@ -95,7 +95,15 @@ impl SqliteStore {
             )
         })?;
         let result = json!({"event": event, "events": commit.events});
-        store_command_result(&mut tx, principal, &request_id, action, &hash, &result).await?;
+        store_command_result(
+            &mut tx,
+            (&principal.room_id, &principal.principal_id),
+            &request_id,
+            action,
+            &hash,
+            &result,
+        )
+        .await?;
         tx.commit().await?;
         Ok(RoomCommandMutation {
             outcome: CommandOutcome {

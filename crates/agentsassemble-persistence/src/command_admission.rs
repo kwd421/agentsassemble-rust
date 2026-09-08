@@ -108,7 +108,7 @@ pub(crate) async fn admit_non_lifecycle_command(
 
 pub(crate) async fn store_command_result(
     transaction: &mut Transaction<'_, Sqlite>,
-    principal: &AuthenticatedPrincipal,
+    owner: (&str, &str),
     request_id: &str,
     action: &str,
     payload_hash: &str,
@@ -117,8 +117,8 @@ pub(crate) async fn store_command_result(
     sqlx::query(
         "INSERT INTO command_results(room_id, principal_id, request_id, action, payload_hash, result_json) VALUES (?, ?, ?, ?, ?, ?)",
     )
-    .bind(&principal.room_id)
-    .bind(&principal.principal_id)
+    .bind(owner.0)
+    .bind(owner.1)
     .bind(request_id)
     .bind(action)
     .bind(payload_hash)

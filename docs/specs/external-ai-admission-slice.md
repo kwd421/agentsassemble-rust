@@ -485,3 +485,26 @@ retired-socket closure, start retry, result retry and a single public result wit
 private runtime credentials. The two existing attendee admission/queue integration
 checks also pass. This checkpoint does not complete external provider lifecycle,
 provider-request relay, CLI, entry packets or managed bridge acceptance.
+
+### External cleanup custody checkpoint (2026-09-08)
+
+Removal/archive cleanup now creates an exact external cleanup ID on the existing
+pending runtime-cleanup transition. Host recovery does not observe or stop an
+external blocking turn. A separate sealed cleanup authorization proves the original
+attendee bearer, current room incarnation and external provider custody, including
+after expiry or membership revocation. It grants no ordinary room access. The only
+private delivery is the cleanup ID and exact runtime identity; the corresponding
+positive stop report atomically uses the existing turn-absence and room-cleanup
+owners and writes an immutable report receipt. Replays return that public receipt,
+while changed request payloads, cleanup IDs or runtime leases fail before effects.
+Readiness cannot cross a pending cleanup fence. An admission that never accepted a
+runtime identity needs no fabricated process observation to clear its empty custody.
+
+Both new cleanup cases pass: running/removal with concurrent exact replay and stale
+proof rejection, plus idle/export and never-ready removal. All 307 other persistence
+cases passed during the affected receipt/transaction-owner regression run; the new
+case's incorrect test event name was corrected and both new cases then passed.
+All-target/all-feature server and persistence Clippy passes. The measured 18,208-byte
+cleanup future is boxed at its new call boundary without changing the lint gate.
+Cleanup publication/HTTP and external stop/interrupt controls remain to be connected;
+this checkpoint is persistence proof, not external process execution proof.

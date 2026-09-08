@@ -147,7 +147,7 @@ pub(crate) async fn store_result(
     result["event_seq"] = json!(event.seq);
     store_command_result(
         transaction,
-        principal,
+        (&principal.room_id, &principal.principal_id),
         request_id,
         action,
         &payload_hash,

@@ -358,7 +358,7 @@ async fn execute_message_in(
     let result = json!({"event": event, "event_seq": sequence});
     store_command_result(
         transaction,
-        principal,
+        (&principal.room_id, &principal.principal_id),
         request_id,
         action,
         &payload_hash,

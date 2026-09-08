@@ -62,7 +62,15 @@ impl SqliteStore {
         insert_event(&mut tx, &event).await?;
         let result =
             json!({"channel_id": command.channel_id, "event": event, "event_seq": event.seq});
-        store_command_result(&mut tx, &principal, request_id, ACTION, &hash, &result).await?;
+        store_command_result(
+            &mut tx,
+            (&principal.room_id, &principal.principal_id),
+            request_id,
+            ACTION,
+            &hash,
+            &result,
+        )
+        .await?;
         tx.commit().await?;
         Ok(CommandOutcome {
             result,

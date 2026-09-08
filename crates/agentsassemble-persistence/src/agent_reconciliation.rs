@@ -685,7 +685,9 @@ fn retain_uncertain_runtime(session: &mut DurableAgentSession) -> Result<(), Per
     Ok(())
 }
 
-fn stop_after_confirmed_absence(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
+pub(crate) fn stop_after_confirmed_absence(
+    session: &mut DurableAgentSession,
+) -> Result<(), PersistenceError> {
     // Gone is positive proof. Persist it before clearing custody, so later room
     // cleanup does not have to re-observe a handle that this transaction erased.
     merge_inflight_events(session)?;

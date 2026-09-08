@@ -8,6 +8,11 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "attendee_cleanup_controls",
+        ddl: "CREATE TABLE IF NOT EXISTS attendee_cleanup_controls (room_id TEXT NOT NULL, session_id TEXT NOT NULL, cleanup_id TEXT NOT NULL CHECK(length(cleanup_id)=36), PRIMARY KEY(room_id,session_id), FOREIGN KEY(room_id,session_id) REFERENCES agent_sessions(room_id,session_id) ON DELETE CASCADE) STRICT",
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "attendee_connections",
         ddl: concat!(
             "CREATE TABLE IF NOT EXISTS attendee_connections (",

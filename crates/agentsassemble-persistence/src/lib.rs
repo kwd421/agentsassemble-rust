@@ -1,3 +1,9 @@
+mod attendee_cleanup;
+#[cfg(test)]
+mod attendee_cleanup_tests;
+pub use attendee_cleanup::{
+    AttendeeCleanupAuthorization, AttendeeCleanupDelivery, AttendeeCleanupReport,
+};
 mod attendee_admission;
 mod attendee_connection;
 mod attendee_ready;

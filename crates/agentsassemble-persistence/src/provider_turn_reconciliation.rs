@@ -359,75 +359,84 @@ impl SqliteStore {
         candidate: &ProviderTurnReconciliationCandidate,
         floor_progression: FloorProgression,
     ) -> Result<AgentTurnCommit, PersistenceError> {
-        let expected = &candidate.execution;
         let mut transaction = self.pool.begin().await?;
-        let session =
-            load_session(&mut transaction, &expected.room_id, &expected.session_id).await?;
-        let execution = load_execution_in(
-            &mut transaction,
-            &expected.room_id,
-            &expected.session_id,
-            expected.turn_generation,
-        )
-        .await?;
-        if expected != &execution {
-            return Err(stale_reconciliation());
-        }
-        validate_candidate(&session, &execution)?;
-        let current_effect = load_optional_effect_in(
-            &mut transaction,
-            &expected.room_id,
-            &expected.session_id,
-            expected.turn_generation,
-        )
-        .await?;
-        match (&candidate.effect, &current_effect) {
-            (Some(expected_effect), Some(current_effect)) => {
-                require_exact_effect(expected_effect, current_effect)?;
-                if current_effect.phase == crate::ProviderTurnEffectPhase::Finalized {
-                    return Err(stale_reconciliation());
-                }
-            }
-            (None, None) => {}
-            _ => return Err(stale_reconciliation()),
-        }
-        if stop_effect_is_confirmed_by_runtime_gone(&mut transaction, &session).await? {
-            crate::provider_turn_stop::terminalize_confirmed_stop_turn(&mut transaction, &session)
-                .await?;
-            let mut session = session;
-            session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectApplied;
-            session.public.updated_at = Utc::now();
-            save_session(&mut transaction, &session).await?;
-            transaction.commit().await?;
-            return Ok(AgentTurnCommit {
-                events: Vec::new(),
-                next_assignments: Vec::new(),
-            });
-        }
-        let terminal_phase = if current_effect.is_some() {
-            ProviderTurnExecutionPhase::Interrupted
-        } else {
-            ProviderTurnExecutionPhase::Failed
-        };
-        let now = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
-        terminalize_runtime_gone_authority(
-            &mut transaction,
-            &execution,
-            current_effect.as_ref(),
-            terminal_phase,
-            &now,
-        )
-        .await?;
-        let interrupt_cause = candidate.effect.as_ref().map(|effect| effect.cause);
-        finalize_runtime_gone_session(
-            transaction,
-            session,
-            &execution,
-            interrupt_cause,
-            floor_progression,
-        )
-        .await
+        let commit =
+            finalize_runtime_gone_in(&mut transaction, candidate, floor_progression).await?;
+        transaction.commit().await?;
+        Ok(commit)
     }
+}
+
+/// Applies positive runtime-absence proof inside the caller's custody transaction.
+pub(crate) async fn finalize_runtime_gone_in(
+    transaction: &mut Transaction<'_, Sqlite>,
+    candidate: &ProviderTurnReconciliationCandidate,
+    floor_progression: FloorProgression,
+) -> Result<AgentTurnCommit, PersistenceError> {
+    let expected = &candidate.execution;
+    let session = load_session(transaction, &expected.room_id, &expected.session_id).await?;
+    let execution = load_execution_in(
+        transaction,
+        &expected.room_id,
+        &expected.session_id,
+        expected.turn_generation,
+    )
+    .await?;
+    if expected != &execution {
+        return Err(stale_reconciliation());
+    }
+    validate_candidate(&session, &execution)?;
+    let current_effect = load_optional_effect_in(
+        transaction,
+        &expected.room_id,
+        &expected.session_id,
+        expected.turn_generation,
+    )
+    .await?;
+    match (&candidate.effect, &current_effect) {
+        (Some(expected_effect), Some(current_effect)) => {
+            require_exact_effect(expected_effect, current_effect)?;
+            if current_effect.phase == crate::ProviderTurnEffectPhase::Finalized {
+                return Err(stale_reconciliation());
+            }
+        }
+        (None, None) => {}
+        _ => return Err(stale_reconciliation()),
+    }
+    if stop_effect_is_confirmed_by_runtime_gone(transaction, &session).await? {
+        crate::provider_turn_stop::terminalize_confirmed_stop_turn(transaction, &session).await?;
+        let mut session = session;
+        session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectApplied;
+        session.public.updated_at = Utc::now();
+        save_session(transaction, &session).await?;
+        return Ok(AgentTurnCommit {
+            events: Vec::new(),
+            next_assignments: Vec::new(),
+        });
+    }
+    let terminal_phase = if current_effect.is_some() {
+        ProviderTurnExecutionPhase::Interrupted
+    } else {
+        ProviderTurnExecutionPhase::Failed
+    };
+    let now = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
+    terminalize_runtime_gone_authority(
+        transaction,
+        &execution,
+        current_effect.as_ref(),
+        terminal_phase,
+        &now,
+    )
+    .await?;
+    let interrupt_cause = candidate.effect.as_ref().map(|effect| effect.cause);
+    finalize_runtime_gone_session(
+        transaction,
+        session,
+        &execution,
+        interrupt_cause,
+        floor_progression,
+    )
+    .await
 }
 
 async fn stop_effect_is_confirmed_by_runtime_gone(
@@ -465,7 +474,7 @@ async fn stop_effect_is_confirmed_by_runtime_gone(
 }
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum FloorProgression {
+pub(crate) enum FloorProgression {
     Assign,
     Defer,
 }
@@ -519,7 +528,7 @@ async fn terminalize_runtime_gone_authority(
 }
 
 async fn finalize_runtime_gone_session(
-    mut transaction: Transaction<'_, Sqlite>,
+    transaction: &mut Transaction<'_, Sqlite>,
     mut session: DurableAgentSession,
     execution: &ProviderTurnExecution,
     interrupt_cause: Option<ProviderTurnInterruptCause>,
@@ -529,7 +538,7 @@ async fn finalize_runtime_gone_session(
     if interrupt_cause.is_none() {
         events.push(
             error_event(
-                &mut transaction,
+                transaction,
                 &session,
                 &execution.turn_id,
                 "provider_runtime_gone",
@@ -540,7 +549,7 @@ async fn finalize_runtime_gone_session(
     } else if interrupt_cause == Some(ProviderTurnInterruptCause::AgentInterrupt) {
         events.push(
             error_event(
-                &mut transaction,
+                transaction,
                 &session,
                 &execution.turn_id,
                 INTERRUPTED_CODE,
@@ -551,7 +560,7 @@ async fn finalize_runtime_gone_session(
     }
     events.push(
         turn_finished_event(
-            &mut transaction,
+            transaction,
             &session,
             &execution.turn_id,
             if interrupt_cause.is_some() {
@@ -593,28 +602,27 @@ async fn finalize_runtime_gone_session(
     session.public.recovery_required = false;
     clear_active_turn_fields(&mut session);
     session.public.updated_at = Utc::now();
-    save_session(&mut transaction, &session).await?;
+    save_session(transaction, &session).await?;
     let mut participant = load_participant(
-        &mut transaction,
+        transaction,
         &session.public.room_id,
         &session.public.participant_id,
     )
     .await?;
     participant.detach_runtime(Utc::now());
-    save_participant(&mut transaction, &participant).await?;
-    events.push(session_state_event(&mut transaction, &session).await?);
+    save_participant(transaction, &participant).await?;
+    events.push(session_state_event(transaction, &session).await?);
     let scheduled = if floor_progression == FloorProgression::Assign
         && interrupt_cause != Some(ProviderTurnInterruptCause::AgentInterrupt)
     {
-        let (room, settings) = load_active_room(&mut transaction, &execution.room_id).await?;
-        assign_pending_in(&mut transaction, &room, &settings).await?
+        let (room, settings) = load_active_room(transaction, &execution.room_id).await?;
+        assign_pending_in(transaction, &room, &settings).await?
     } else {
         AgentTurnCommit {
             events: Vec::new(),
             next_assignments: Vec::new(),
         }
     };
-    transaction.commit().await?;
     events.extend(scheduled.events);
     Ok(AgentTurnCommit {
         events,

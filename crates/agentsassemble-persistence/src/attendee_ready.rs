@@ -126,7 +126,14 @@ impl SqliteStore {
         )
         .await?;
         crate::agent_lifecycle::require_valid_turn_authority(&session)?;
-        if !session.lifecycle_intent_action.is_none() {
+        if !session.lifecycle_intent_action.is_none()
+            || crate::room_runtime_cleanup::cleanup_exists(
+                &mut tx,
+                &principal.room_id,
+                &principal.participant_id,
+            )
+            .await?
+        {
             return Err(rejected(
                 "operation_in_progress",
                 "An external lifecycle operation is still pending.",

@@ -99,7 +99,7 @@ impl SqliteStore {
         insert_event(&mut transaction, &event).await?;
         store_command_result(
             &mut transaction,
-            principal,
+            (&principal.room_id, &principal.principal_id),
             request_id,
             ACTION,
             &payload_hash,
