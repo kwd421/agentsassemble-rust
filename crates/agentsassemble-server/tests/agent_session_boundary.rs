@@ -9,7 +9,7 @@ use agentsassemble_domain::{
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
 use agentsassemble_server::{AppState, TicketStore, issue_local_ticket, serve};
-use provider_fixture::{agent_catalog, agent_catalog_with_fixture};
+use provider_fixture::agent_catalog;
 use reqwest::Client;
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
@@ -98,7 +98,7 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
         .await
         .unwrap_or_else(|error| panic!("open agent store: {error}"));
     bootstrap(&store).await;
-    let catalog = agent_catalog(directory.path());
+    let catalog = agent_catalog(directory.path(), None);
     let first = start(store, catalog.clone()).await;
     let mut socket = connect(&first.base_url, &first.state).await;
     subscribe(&mut socket).await;
@@ -172,7 +172,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
         .await
         .unwrap_or_else(|error| panic!("open lifecycle store: {error}"));
     bootstrap(&store).await;
-    let catalog = agent_catalog(directory.path());
+    let catalog = agent_catalog(directory.path(), None);
     let server = start(store, catalog.clone()).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
@@ -293,7 +293,7 @@ async fn verify_room_turn_publication(first_status: &str) {
     .await
     .unwrap_or_else(|error| panic!("open room-turn store: {error}"));
     bootstrap(&store).await;
-    let catalog = agent_catalog_with_fixture(directory.path(), fixture.as_bytes());
+    let catalog = agent_catalog(directory.path(), Some(fixture.as_bytes()));
     let server = start(store, catalog).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;

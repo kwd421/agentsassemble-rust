@@ -20,7 +20,7 @@ async fn current_generation_launch_retry(action: &'static str) {
         .unwrap_or_else(|error| panic!("open resume retry store: {error}"));
     bootstrap(&store).await;
     let staging_store = store.clone();
-    let server = start(store, agent_catalog(directory.path())).await;
+    let server = start(store, agent_catalog(directory.path(), None)).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
@@ -84,7 +84,7 @@ async fn rejected_and_previous_generation_launch_retry(
     let store = SqliteStore::open(&database_url).await?;
     bootstrap(&store).await;
     let staging_store = store.clone();
-    let catalog = agent_catalog(directory.path());
+    let catalog = agent_catalog(directory.path(), None);
     let first = start(store, catalog.clone()).await;
     let mut socket = connect(&first.base_url, &first.state).await;
     subscribe(&mut socket).await;
@@ -238,7 +238,7 @@ async fn listing_readd_replays_across_socket_reconnect_and_server_restart()
     let database_url = database_url(directory.path());
     let store = SqliteStore::open(&database_url).await?;
     bootstrap(&store).await;
-    let catalog = agent_catalog(directory.path());
+    let catalog = agent_catalog(directory.path(), None);
     let first = start(store, catalog.clone()).await;
     let mut socket = connect(&first.base_url, &first.state).await;
     subscribe(&mut socket).await;

@@ -14,7 +14,7 @@ async fn create_with_start_is_one_command_with_original_nested_result_and_replay
         .await
         .unwrap_or_else(|error| panic!("open create/start store: {error}"));
     bootstrap(&store).await;
-    let server = start(store, agent_catalog(directory.path())).await;
+    let server = start(store, agent_catalog(directory.path(), None)).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;
@@ -84,7 +84,7 @@ async fn shutdown_checkpoints_gone_after_aborting_initialization() {
         shell_quote(&started_path),
         shell_quote(&release_path),
     );
-    let catalog = agent_catalog_with_fixture(directory.path(), fixture.as_bytes());
+    let catalog = agent_catalog(directory.path(), Some(fixture.as_bytes()));
     let server = start(store, catalog.clone()).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
@@ -167,7 +167,7 @@ async fn same_sidecar_recovers_unconfirmed_start_after_browser_identity_is_lost(
         .unwrap_or_else(|error| panic!("open reconnect store: {error}"));
     bootstrap(&store).await;
     let recovery_store = store.clone();
-    let server = start(store, agent_catalog(directory.path())).await;
+    let server = start(store, agent_catalog(directory.path(), None)).await;
     let mut first_socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut first_socket).await;
     let _snapshot = receive_json(&mut first_socket).await;
@@ -261,7 +261,7 @@ async fn same_sidecar_quiesces_exact_running_runtime_after_browser_identity_is_l
         .unwrap_or_else(|error| panic!("open running recovery store: {error}"));
     bootstrap(&store).await;
     let recovery_store = store.clone();
-    let server = start(store, agent_catalog(directory.path())).await;
+    let server = start(store, agent_catalog(directory.path(), None)).await;
     let mut first_socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut first_socket).await;
     let _snapshot = receive_json(&mut first_socket).await;
@@ -350,7 +350,7 @@ async fn exact_stop_replay_releases_its_tombstone_before_a_fresh_start() {
         .unwrap_or_else(|error| panic!("open stop replay store: {error}"));
     bootstrap(&store).await;
     let recovery_store = store.clone();
-    let server = start(store, agent_catalog(directory.path())).await;
+    let server = start(store, agent_catalog(directory.path(), None)).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;

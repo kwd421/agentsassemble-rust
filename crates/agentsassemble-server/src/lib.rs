@@ -116,7 +116,7 @@ mod room_agent_lifecycle_runtime;
 mod room_channel;
 mod room_client_transport;
 pub use attendee_client::{AttendeeClientError, AttendeeJoined, RoomAttendeeClient};
-pub use attendee_client_runtime::AttendeeRuntime;
+pub use attendee_client_runtime::{AttendeeExecution, AttendeeRuntime};
 pub use attendee_client_socket::AttendeeSocket;
 pub use attendee_wire::{AttendeeSocketFailure, AttendeeSocketFrame, AttendeeSocketRequest};
 mod room_command_admission;

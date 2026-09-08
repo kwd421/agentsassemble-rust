@@ -97,6 +97,25 @@ catalog fixture moves to its shared test owner. The affected turn-delivery case,
 Clippy and unchanged mandatory gates pass. No real provider was run. Native turn
 execution/tool/request relay and CLI/packet entry still remain before acceptance.
 
+The native execution owner now accepts only its runtime's increasing exact turn
+generation, retains one owned task and completed report across socket replacement,
+and compares recovered input/authority without re-entering the provider. A recovered
+dispatch not yet entered by this same live local owner may start once; an already
+reported provider turn without local custody fails. Completed results retain one
+started/report request identity until acknowledgment. Uncertain or stopped-runtime
+errors require cleanup and are never converted to ordinary successful completion.
+The domain vote owner now encodes the canonical payload consumed by attendee reports.
+
+The real local socket/child-process test passes execution replacement, altered-input
+rejection, one observed native turn/start, one public result and report-receipt
+recovery after closing before ACK consumption. Its initial test client omitted the
+required room subscription; the test flow and bounded receives were corrected, and
+all owned test processes were observed gone after stopping that run. Seven vote
+contract cases pass, including canonical payloads for all four variants. Affected
+Clippy and unchanged mandatory gates pass. This adds one owned task per active turn,
+retaining bounded assignment/result data, with no timer or room-state polling.
+Interrupt/tool/request relay and CLI/packet entry remain in progress.
+
 ## Authority and data ownership
 
 Reuse mature HTTP/WebSocket/MCP/cryptographic/process libraries and existing

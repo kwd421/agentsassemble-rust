@@ -100,6 +100,23 @@ impl VoteCommand {
         }
     }
 
+    /// Encodes this validated command for the canonical room command boundary.
+    #[must_use]
+    pub fn to_payload(&self) -> Value {
+        let mut payload = match self {
+            Self::Create(create) => json!({
+                "vote_question": create.question, "vote_options": create.options,
+                "vote_duration_seconds": create.duration_seconds, "attachment_ids": create.attachment_ids,
+            }),
+            Self::Cast(cast) => json!({"vote_id": cast.vote_id, "vote_choice": cast.choice}),
+            Self::Withdraw(reference) | Self::Close(reference) => {
+                json!({"vote_id": reference.vote_id})
+            }
+        };
+        payload["kind"] = json!(self.message_kind());
+        payload
+    }
+
     #[must_use]
     pub const fn message_kind(&self) -> &'static str {
         match self {
@@ -398,6 +415,20 @@ mod tests {
         assert_eq!(command.options, ["Yes", "No"]);
         assert_eq!(command.duration_seconds, 30);
         assert_eq!(command.attachment_ids.len(), 1);
+    }
+
+    #[test]
+    fn canonical_wire_roundtrip_preserves_all_vote_variants() {
+        for payload in [
+            json!({"kind":"vote", "vote_question":"Ship?", "vote_options":["Yes","No"], "vote_duration_seconds":30, "attachment_ids":["ma_0123456789abcdef0123456789abcdef"]}),
+            json!({"kind":"vote_cast", "vote_id":"poll-1", "vote_choice":"Yes"}),
+            json!({"kind":"vote_withdraw", "vote_id":"poll-1"}),
+            json!({"kind":"vote_close", "vote_id":"poll-1"}),
+        ] {
+            let command = VoteCommand::from_payload(&payload)
+                .unwrap_or_else(|error| panic!("vote parse: {error}"));
+            assert_eq!(command.to_payload(), payload);
+        }
     }
 
     #[test]

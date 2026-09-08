@@ -8,6 +8,10 @@ use agentsassemble_provider::ProviderAdapter;
 
 use crate::{AttendeeClientError, AttendeeJoined};
 
+#[path = "attendee_client_execution.rs"]
+mod execution;
+pub use execution::AttendeeExecution;
+
 pub struct AttendeeRuntime {
     pub(crate) session: DurableAgentSession,
     pub(crate) adapter: ProviderAdapter,

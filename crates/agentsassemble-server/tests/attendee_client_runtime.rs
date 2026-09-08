@@ -20,7 +20,8 @@ mod room_socket_peer;
 async fn external_client_owns_fixture_process_and_only_reports_exact_confirmed_cleanup()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
-    let catalog = ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path()));
+    let catalog =
+        ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
     let (store, invite) = attendee::fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let url = format!("{}/join?token={}", server.base_url, invite.invite_bearer);

@@ -14,7 +14,7 @@ async fn http_room_termination_waits_for_exact_runtime_and_deletion_retires_the_
         bootstrap(&store).await;
         let authority = store.local_bootstrap_status().await?;
         let room = store.snapshot("general", 0, 20).await?.room;
-        let server = start(store.clone(), agent_catalog(directory.path())).await;
+        let server = start(store.clone(), agent_catalog(directory.path(), None)).await;
         let mut socket = connect(&server.base_url, &server.state).await;
         subscribe(&mut socket).await;
         receive_json(&mut socket).await;
@@ -127,7 +127,7 @@ async fn canonical_removal_stops_exact_runtime_and_old_replay_preserves_readded_
     let directory = tempfile::tempdir()?;
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
     bootstrap(&store).await;
-    let server = start(store.clone(), agent_catalog(directory.path())).await;
+    let server = start(store.clone(), agent_catalog(directory.path(), None)).await;
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let _snapshot = receive_json(&mut socket).await;

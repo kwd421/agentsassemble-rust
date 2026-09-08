@@ -3,9 +3,8 @@ use std::{fmt::Write, path::Path, time::Duration};
 use serde_json::{Value, json};
 
 use super::{
-    AGENT_BOUNDARY_LOCK, RoomSocketPeer, agent_catalog_with_fixture, bootstrap, connect,
-    receive_command_ack, receive_json, receive_json_with_timeout, send_command, send_create, start,
-    subscribe,
+    AGENT_BOUNDARY_LOCK, RoomSocketPeer, agent_catalog, bootstrap, connect, receive_command_ack,
+    receive_json, receive_json_with_timeout, send_command, send_create, start, subscribe,
 };
 
 #[tokio::test]
@@ -25,7 +24,7 @@ async fn busy_turn_interrupt_is_exact_and_runtime_retaining() {
     bootstrap(&store).await;
     let server = start(
         store,
-        agent_catalog_with_fixture(directory.path(), fixture.as_bytes()),
+        agent_catalog(directory.path(), Some(fixture.as_bytes())),
     )
     .await;
     let mut socket = connect(&server.base_url, &server.state).await;
