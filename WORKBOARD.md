@@ -36,9 +36,10 @@
 - Phase 6 is closed through `25c7961`: Daybreak approved all 17 commits,
   cumulative phase, exact HEAD and complete local contract at C0/H0/M0/L0.
   [Correction and approval](docs/VERIFICATION.md#phase-6-whole-phase-review-correction-http-incarnation-2026-09-08).
-- Active: Phase 7 external AI admission and bridges. Define all three custody
-  boundaries, implement Room Connector first, then external attendee and managed
-  bridge flows. [Contract](docs/specs/external-ai-admission-slice.md).
+- Active: Phase 7 passes local acceptance through `f6da14b`: all three custody
+  paths, direct packaged desktop/mobile flows, and Windows compile/lint/runtime
+  verification. Whole-phase Daybreak review is pending before Phase 8.
+  [Contract and evidence](docs/specs/external-ai-admission-slice.md).
   New Pro review and authorized real-provider proof remain at full closeout.
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).

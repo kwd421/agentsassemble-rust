@@ -1,9 +1,9 @@
 # External AI admission and bridges
 
 Status: all three custody implementations and local packaged user flows are complete
-through `fa691cd`. Windows runtime tests pass; final Windows Clippy is pending before
-whole-phase Daybreak review. Configured real-provider proof and Pro review remain
-final-closeout work. The dated implementation notes below retain their original
+through `f6da14b`. Windows all-target compilation, Clippy and all six actual runtime
+cases pass. Whole-phase Daybreak review is pending. Configured real-provider proof
+and Pro review remain final-closeout work. The dated implementation notes below retain their original
 intermediate verification status; this current status and the closure record govern.
 
 ## Definition and observed entry points
@@ -1498,13 +1498,13 @@ read/publication flows; final Windows lint verification remains pending.
 The existing verification records contain the independent boundary cases and
 measured local costs. The final packaged run is recorded in
 [VERIFICATION](../VERIFICATION.md#phase-7-packaged-external-attendee-completion-2026-09-09).
-The pre-correction commit audit contains 91 implementation/evidence commits since `25c7961`,
+The final source audit contains 93 implementation/evidence commits since `25c7961`,
 all under 1,000 changed lines (largest 986). Architecture, source growth, nineteen
 policy tests, formatting, diff and artifact checks remain unchanged and pass.
-The last source correction passes affected provider/server Clippy plus 24 ACP,
+The native/MCP source correction passes affected provider/server Clippy plus 24 ACP,
 Claude, Room Portal and Connector cases; the earlier frontend and attendee-flow
-corrections retain their separate passing evidence. Final Windows Clippy and
-whole-phase Daybreak disposition remain to be recorded.
+corrections retain their separate passing evidence. The final Windows result below
+closes local platform acceptance; whole-phase Daybreak disposition remains pending.
 
 The `fa691cd` Windows run passes compilation, all six managed runtime cases, and
 provider Clippy. Server Clippy identifies Windows-only unused test imports/helpers
@@ -1525,3 +1525,12 @@ Windows `05a55c7` passes production Clippy and identifies three unused Unix-only
 integration-fixture items in `agent_session_boundary`; their imports, observation
 handle and timeout helper now follow the already Unix-only consumers. The
 cross-platform durable-authority case and server-owned adapter remain unchanged.
+
+Final Windows [run 34285150667](https://github.com/kwd421/agentsassemble-rust/actions/runs/34285150667)
+at `f6da14b` succeeds: provider/server all-target compilation (3m 25s),
+all-target/all-feature Clippy (27.91s), and all six actual managed-worker cases
+(2.41s after test compilation). Native stop and pipe-loss cases observe the worker,
+Windows console host, native fixture and native child before whole-Job cleanup.
+No gate, toolchain policy or test expectation is weakened. No Windows UI or real
+provider run is claimed. The final Unix-only fixture correction also passes local
+Clippy, architecture, nineteen policy tests, formatting and diff checks.

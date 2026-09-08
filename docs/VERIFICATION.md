@@ -8418,3 +8418,9 @@ Jobs include the worker, `conhost.exe`, native fixture and native child; cleanup
 requires the entire Job empty. Windows Clippy exposed platform-specific source
 issues and a newly diagnosed RMCP generated async list method; corrections remain
 pending. This evidence does not claim Windows UI or real-provider execution.
+
+The final Windows correction checkpoint `f6da14b` passes [the complete workflow](https://github.com/kwd421/agentsassemble-rust/actions/runs/34285150667):
+provider/server all-target compilation, all-target/all-feature Clippy and six actual
+managed-worker tests (2.41 seconds). This supersedes the pending Windows Clippy
+status above. Scope remains local protocol fixtures and real Windows process/IPC
+custody; Windows UI and configured provider execution are not claimed.
