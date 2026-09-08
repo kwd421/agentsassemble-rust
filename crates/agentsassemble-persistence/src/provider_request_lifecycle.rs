@@ -9,6 +9,29 @@ use crate::{
 };
 
 impl SqliteStore {
+    /// Reads the durable pending set for event-driven live delivery reconciliation.
+    ///
+    /// # Errors
+    /// Propagates storage failures and invalid stored identities.
+    pub async fn pending_provider_request_ids(
+        &self,
+        room_id: &str,
+    ) -> Result<Vec<uuid::Uuid>, PersistenceError> {
+        let ids: Vec<String> = sqlx::query_scalar(
+            "SELECT request_id FROM provider_requests WHERE room_id=? AND state IN ('open','resolving')",
+        ).bind(room_id).fetch_all(&self.pool).await?;
+        ids.into_iter()
+            .map(|id| {
+                uuid::Uuid::parse_str(&id).map_err(|_| {
+                    crate::provider_requests::rejected(
+                        "invalid_state",
+                        "Stored request identity is invalid.",
+                    )
+                })
+            })
+            .collect()
+    }
+
     /// Fails pre-restart live requests before accepting network traffic.
     ///
     /// # Errors

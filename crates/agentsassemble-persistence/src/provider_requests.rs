@@ -27,6 +27,7 @@ pub struct OpenProviderRequest {
 }
 
 pub struct ProviderRequestCommit {
+    pub session_id: String,
     pub event: RoomEvent,
     pub expires_at: DateTime<Utc>,
     pub deduplicated: bool,
@@ -184,6 +185,7 @@ async fn open_in(
     .execute(&mut **tx)
     .await?;
     Ok(ProviderRequestCommit {
+        session_id: session_id.to_owned(),
         event,
         expires_at,
         deduplicated: false,
@@ -244,6 +246,7 @@ async fn replay_in(
         .await?
         .ok_or_else(|| rejected("invalid_state", "Provider request event is missing."))?;
     Ok(Some(ProviderRequestCommit {
+        session_id: session_id.to_owned(),
         event,
         expires_at,
         deduplicated: true,

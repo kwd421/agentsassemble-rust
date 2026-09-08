@@ -50,6 +50,11 @@ pub(crate) mod connector;
 #[path = "side_chat_runtime.rs"]
 mod side_chat;
 
+#[path = "provider_request_broker.rs"]
+mod provider_requests;
+pub use provider_requests::LiveProviderRequest;
+use provider_requests::{RequestBroker, RequestCommand};
+
 const ROOM_QUEUE_CAPACITY: usize = 128;
 const ROOM_TOOL_QUEUE_CAPACITY: usize = 64;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
@@ -63,6 +68,7 @@ struct RoomHandle {
     human_session_revocations: broadcast::Sender<[u8; 32]>,
     publication_wake: mpsc::Sender<RoomPublicationWake>,
     provider_recovery: mpsc::Sender<RecoveredAssignments>,
+    provider_requests: mpsc::Sender<RequestCommand>,
 }
 
 enum RoomPublicationWake {
@@ -405,12 +411,14 @@ impl RoomRuntime {
             ProviderRoomToolIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let (attachment_ingress, attachment_rx) =
             ProviderAttachmentReadIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
+        let (request_tx, request_rx) = mpsc::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let handle = RoomHandle {
             mutations: mutation_tx,
             events: event_tx.clone(),
             human_session_revocations: human_session_revocation_tx.clone(),
             publication_wake: publication_tx,
             provider_recovery: provider_recovery_tx,
+            provider_requests: request_tx,
         };
         rooms.insert(room_id.to_owned(), handle.clone());
         let store = self.store.clone();
@@ -436,6 +444,7 @@ impl RoomRuntime {
             room_tool_rx,
             attachment_rx,
             provider_recovery_rx,
+            request_rx,
         );
         self.tasks.lock().await.push(task);
         handle
@@ -449,9 +458,11 @@ fn spawn_room_task(
     mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
     mut attachment_rx: mpsc::Receiver<ProviderAttachmentReadCommand>,
     mut provider_recovery_rx: mpsc::Receiver<RecoveredAssignments>,
+    mut request_rx: mpsc::Receiver<RequestCommand>,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut turn_tasks = JoinSet::new();
+        let mut requests = RequestBroker::new();
         let startup_publication =
             publish_durable_room_events(&context.store, &context.event_tx, &context.room_id).await;
         let mut publication_retry = PublicationRetry::new(startup_publication);
@@ -461,6 +472,19 @@ fn spawn_room_task(
                 () = context.cancellation.cancelled() => {
                     abort_provider_turns(&mut turn_tasks).await;
                     break;
+                }
+                request = request_rx.recv() => {
+                    let Some(request) = request else { break; };
+                    requests.apply(&context.store, &context.room_id, request).await;
+                    RoomInput::Publication
+                }
+                wake = requests.wake(), if requests.has_watches() => {
+                    if let Some(wake) = wake
+                        && requests.complete(&context.store, &context.room_id, wake).await.is_err()
+                    {
+                        tracing::error!(room_id = %context.room_id, "provider request completion failed; durable state remains authoritative");
+                    }
+                    RoomInput::Publication
                 }
                 mutation = mutation_rx.recv() => {
                     let Some(mutation) = mutation else { break; };
@@ -501,6 +525,15 @@ fn spawn_room_task(
                 handle_room_input(&context, &mut turn_tasks, &mut provider_write_budget, input)
                     .await
                     .is_some_and(|publication| publication_retry.record(publication));
+            if requests
+                .reconcile(&context.store, &context.room_id)
+                .await
+                .is_err()
+            {
+                tracing::error!(room_id = %context.room_id, "provider request live reconciliation failed; room owner is stopping");
+                abort_provider_turns(&mut turn_tasks).await;
+                break;
+            }
             if retry_exhausted {
                 tracing::error!(
                     room_id = %context.room_id,

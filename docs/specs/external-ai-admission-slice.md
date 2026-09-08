@@ -366,6 +366,27 @@ a second delivery report. The focused exchange test verifies that an answer alon
 cannot complete delivery, the answer slot is single-use, and a lost native owner
 wakes the broker. Provider-request protocol consumers remain pending.
 
+
+The room actor now owns a bounded live request broker shared by managed and attendee
+entry methods. Its 64-entry queue and 64 live requests per room return explicit
+capacity errors; the durable one-pending-request-per-session rule is unchanged.
+Exact open retries retain the original recipient. Human answers use a typed path
+outside generic command receipts; only the first durable claim reaches that recipient.
+Upstream acknowledgement completes persistence before releasing the native waiter.
+A lost waiter cancels its exact execution request. Canonical room inputs reconcile
+the indexed durable pending set only while live requests exist; no periodic scan or
+per-request task is added. Each pending request has one cancellation/acknowledgement
+future and one bounded deadline. The monotonic deadline cannot be renewed by replay
+or extended by a wall-clock rollback. Storage failures remain explicit failed or
+unresolved delivery, never a successful native receipt.
+
+Three broker integration cases pass against the real store and room actor: concurrent
+secret answers have one recipient and require native acknowledgement, disconnect and
+lost native custody cancel promptly, and a controlled deadline expires the waiter.
+Secret answers are absent from stored events. Server all-target/all-feature Clippy,
+unchanged architecture/19 policy, format and artifact gates pass. WebSocket, managed
+native ingress and provider/UI consumers remain pending; this is not packaged proof.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after
