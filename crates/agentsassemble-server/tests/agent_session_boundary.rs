@@ -1,4 +1,6 @@
-use std::{path::Path, time::Duration};
+#[cfg(unix)]
+use std::path::Path;
+use std::time::Duration;
 
 use agentsassemble_domain::ProviderCatalog;
 #[cfg(unix)]
@@ -65,6 +67,7 @@ static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_n
 struct RunningServer {
     base_url: String,
     state: AppState,
+    #[cfg(unix)]
     provider_adapter: ProviderAdapter,
     cancellation: CancellationToken,
     task: JoinHandle<Result<(), String>>,
@@ -548,6 +551,7 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
     RunningServer {
         base_url,
         state: server_state,
+        #[cfg(unix)]
         provider_adapter,
         cancellation,
         task,
@@ -658,6 +662,7 @@ where
     socket.receive_json().await
 }
 
+#[cfg(unix)]
 async fn receive_json_with_timeout<S>(socket: &mut RoomSocketPeer<S>, timeout: Duration) -> Value
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,

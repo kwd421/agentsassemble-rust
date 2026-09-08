@@ -1520,3 +1520,8 @@ The equivalent HTTP correction passes server all-target/all-feature Clippy, the
 friends one-use-authority HTTP boundary, and the side-chat bounded/private/exact
 authority HTTP boundary. Architecture, growth, nineteen policy tests, formatting
 and diff checks also pass; Windows verification remains pending.
+
+Windows `05a55c7` passes production Clippy and identifies three unused Unix-only
+integration-fixture items in `agent_session_boundary`; their imports, observation
+handle and timeout helper now follow the already Unix-only consumers. The
+cross-platform durable-authority case and server-owned adapter remain unchanged.
