@@ -25,7 +25,9 @@ use crate::{
     lifecycle_command_tracker::LifecycleCommandTracker,
     principal_mutation_admission::PrincipalMutationAdmission,
     provider_recovery_tracker::ProviderRecoveryTracker,
-    provider_turn::{ProviderTurnTaskResult, handle_provider_result, spawn_provider_turn},
+    provider_turn::{
+        ProviderTurnIngress, ProviderTurnTaskResult, handle_provider_result, spawn_provider_turn,
+    },
     provider_write_budget::ProviderWriteBudget,
     room_command_result::{CommandFailure, public_command_outcome},
     room_recovery_runtime::{RecoveredAssignment, RecoveredAssignments, RecoveryRuntime},
@@ -53,7 +55,7 @@ mod side_chat;
 #[path = "provider_request_broker.rs"]
 mod provider_requests;
 pub use provider_requests::{LiveProviderRequest, ResolvedProviderRequest};
-use provider_requests::{RequestBroker, RequestCommand};
+use provider_requests::{RequestBroker, RequestCommand, RequestReceivers};
 
 const ROOM_QUEUE_CAPACITY: usize = 128;
 const ROOM_TOOL_QUEUE_CAPACITY: usize = 64;
@@ -84,8 +86,7 @@ struct RoomTaskContext {
     cancellation: CancellationToken,
     event_tx: broadcast::Sender<RoomEvent>,
     human_session_revocation_tx: broadcast::Sender<[u8; 32]>,
-    room_tool_ingress: ProviderRoomToolIngress,
-    attachment_ingress: ProviderAttachmentReadIngress,
+    ingress: ProviderTurnIngress,
     lifecycle_commands: LifecycleCommandTracker,
     active_rooms: Arc<Mutex<HashMap<String, RoomHandle>>>,
 }
@@ -96,8 +97,7 @@ struct RoomCommandOwners<'a> {
     provider_adapter: &'a ProviderAdapter,
     event_tx: &'a broadcast::Sender<RoomEvent>,
     turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
-    room_tool_ingress: &'a ProviderRoomToolIngress,
-    attachment_ingress: &'a ProviderAttachmentReadIngress,
+    ingress: &'a ProviderTurnIngress,
     lifecycle_commands: &'a LifecycleCommandTracker,
 }
 
@@ -412,6 +412,8 @@ impl RoomRuntime {
         let (attachment_ingress, attachment_rx) =
             ProviderAttachmentReadIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let (request_tx, request_rx) = mpsc::channel(ROOM_TOOL_QUEUE_CAPACITY);
+        let (request_ingress, native_requests) =
+            agentsassemble_provider::ProviderRequestIngress::channel(ROOM_TOOL_QUEUE_CAPACITY);
         let handle = RoomHandle {
             mutations: mutation_tx,
             events: event_tx.clone(),
@@ -434,8 +436,11 @@ impl RoomRuntime {
                 cancellation,
                 event_tx,
                 human_session_revocation_tx,
-                room_tool_ingress,
-                attachment_ingress,
+                ingress: ProviderTurnIngress {
+                    tools: room_tool_ingress,
+                    attachments: attachment_ingress,
+                    requests: request_ingress,
+                },
                 lifecycle_commands: self.lifecycle_commands.clone(),
                 active_rooms: self.rooms.clone(),
             },
@@ -444,7 +449,10 @@ impl RoomRuntime {
             room_tool_rx,
             attachment_rx,
             provider_recovery_rx,
-            request_rx,
+            RequestReceivers {
+                browser: request_rx,
+                native: native_requests,
+            },
         );
         self.tasks.lock().await.push(task);
         handle
@@ -458,7 +466,7 @@ fn spawn_room_task(
     mut room_tool_rx: mpsc::Receiver<ProviderRoomToolCommand>,
     mut attachment_rx: mpsc::Receiver<ProviderAttachmentReadCommand>,
     mut provider_recovery_rx: mpsc::Receiver<RecoveredAssignments>,
-    mut request_rx: mpsc::Receiver<RequestCommand>,
+    mut request_rx: RequestReceivers,
 ) -> JoinHandle<()> {
     tokio::spawn(async move {
         let mut turn_tasks = JoinSet::new();
@@ -473,7 +481,12 @@ fn spawn_room_task(
                     abort_provider_turns(&mut turn_tasks).await;
                     break;
                 }
-                request = request_rx.recv() => {
+                request = request_rx.native.recv() => {
+                    let Some(request) = request else { break; };
+                    requests.apply_native(&context.store, &context.room_id, request).await;
+                    RoomInput::Publication
+                }
+                request = request_rx.browser.recv() => {
                     let Some(request) = request else { break; };
                     requests.apply(&context.store, &context.room_id, request).await;
                     RoomInput::Publication
@@ -581,8 +594,7 @@ async fn handle_room_input(
                     provider_adapter: &context.provider_adapter,
                     event_tx: &context.event_tx,
                     turn_tasks,
-                    room_tool_ingress: &context.room_tool_ingress,
-                    attachment_ingress: &context.attachment_ingress,
+                    ingress: &context.ingress,
                     lifecycle_commands: &context.lifecycle_commands,
                 },
                 &context.room_id,
@@ -599,8 +611,7 @@ async fn handle_room_input(
                 &context.event_tx,
                 turn_tasks,
                 *result,
-                &context.room_tool_ingress,
-                &context.attachment_ingress,
+                &context.ingress,
             )
             .await;
         }
@@ -630,8 +641,7 @@ async fn handle_room_input(
                     room_id: &context.room_id,
                     turn_tasks,
                     provider_adapter: &context.provider_adapter,
-                    room_tool_ingress: &context.room_tool_ingress,
-                    attachment_ingress: &context.attachment_ingress,
+                    ingress: &context.ingress,
                 }
                 .publish_then_resume(*recovery)
                 .await,
@@ -718,8 +728,7 @@ async fn handle_room_command(
         provider_adapter,
         event_tx,
         turn_tasks,
-        room_tool_ingress,
-        attachment_ingress,
+        ingress,
         lifecycle_commands,
     } = owners;
     let lifecycle_guard = lifecycle_commands.try_claim(
@@ -774,8 +783,7 @@ async fn handle_room_command(
             store.clone(),
             provider_adapter.clone(),
             assignment,
-            room_tool_ingress.clone(),
-            attachment_ingress.clone(),
+            ingress.clone(),
         );
     }
     for fingerprint in revoked_human_sessions {

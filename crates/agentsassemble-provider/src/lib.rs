@@ -50,6 +50,7 @@ mod process;
 mod profile;
 mod provider_factory;
 mod provider_request_exchange;
+mod provider_request_ingress;
 mod registration;
 #[cfg(test)]
 mod registration_tests;
@@ -94,6 +95,7 @@ pub use provider_request_exchange::{
     ProviderRequestCompletion, ProviderRequestExchange, ProviderRequestExchangeError,
     ProviderRequestResponder,
 };
+pub use provider_request_ingress::{ProviderRequestCommand, ProviderRequestIngress};
 pub use registration::{registered_provider_id, registered_provider_kind};
 pub use room_attachment::{
     ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,

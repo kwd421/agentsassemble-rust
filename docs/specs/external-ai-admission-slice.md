@@ -413,6 +413,17 @@ broker/attendee socket cases pass, as do server Clippy and unchanged architectur
 policy, format and artifact gates. CLI/native request creation and visible controls
 remain pending; ordinary native sessions still reject unsolicited response frames.
 
+
+Managed turn creation and recovery now carry one explicit room ingress bundle for
+tools, attachments and interactive requests. Request descriptions are validated by
+the domain before entering the separate bounded native queue; storage revalidates
+request authority at its own boundary. Native callers receive the same live exchange,
+so losing a queued caller cannot retain an answer recipient. No global callback,
+additional task or provider-specific authority branch is introduced. The five broker
+cases and the existing local Codex canonical-turn fixture pass, along with server
+Clippy and unchanged mandatory gates. Native request mapping and external CLI ingress
+consumption remain the next consumers; no real provider execution is claimed.
+
 ## Failure, concurrency and lifecycle
 
 The attendee's explicit leave uses its sealed cleanup custody, including after

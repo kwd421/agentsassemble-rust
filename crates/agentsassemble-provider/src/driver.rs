@@ -108,6 +108,7 @@ impl From<RoomPortalError> for DriverError {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderTurnRequest {
+    pub request_ingress: Option<crate::ProviderRequestIngress>,
     pub turn_id: String,
     pub turn_generation: u64,
     pub execution_id: String,

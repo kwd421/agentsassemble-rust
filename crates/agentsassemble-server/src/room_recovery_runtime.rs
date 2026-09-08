@@ -1,8 +1,6 @@
 use agentsassemble_domain::RoomEvent;
 use agentsassemble_persistence::{AgentTurnAssignment, PersistenceError, SqliteStore};
-use agentsassemble_provider::{
-    ProviderAdapter, ProviderAttachmentReadIngress, ProviderRoomToolIngress,
-};
+use agentsassemble_provider::ProviderAdapter;
 use tokio::{
     sync::{broadcast, oneshot},
     task::JoinSet,
@@ -10,7 +8,7 @@ use tokio::{
 
 use crate::{
     provider_recovery_tracker::ProviderRecoveryGuard,
-    provider_turn::{ProviderTurnTaskResult, spawn_recovered_provider_turn},
+    provider_turn::{ProviderTurnIngress, ProviderTurnTaskResult, spawn_recovered_provider_turn},
 };
 
 pub(super) struct RecoveredAssignment {
@@ -29,8 +27,7 @@ pub(super) struct RecoveryRuntime<'a> {
     pub(super) room_id: &'a str,
     pub(super) turn_tasks: &'a mut JoinSet<ProviderTurnTaskResult>,
     pub(super) provider_adapter: &'a ProviderAdapter,
-    pub(super) room_tool_ingress: &'a ProviderRoomToolIngress,
-    pub(super) attachment_ingress: &'a ProviderAttachmentReadIngress,
+    pub(super) ingress: &'a ProviderTurnIngress,
 }
 
 impl RecoveryRuntime<'_> {
@@ -50,8 +47,7 @@ impl RecoveryRuntime<'_> {
                         self.store.clone(),
                         self.provider_adapter.clone(),
                         recovered.assignment,
-                        self.room_tool_ingress.clone(),
-                        self.attachment_ingress.clone(),
+                        self.ingress.clone(),
                         recovered.guard,
                     );
                 }

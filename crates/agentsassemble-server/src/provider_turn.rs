@@ -5,14 +5,21 @@ use agentsassemble_persistence::{
 };
 use agentsassemble_provider::{
     ProviderAdapter, ProviderAdapterError, ProviderAttachmentReadIngress,
-    ProviderExactTurnAuthority, ProviderRoomObservation, ProviderRoomToolIngress,
-    ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
+    ProviderExactTurnAuthority, ProviderRequestIngress, ProviderRoomObservation,
+    ProviderRoomToolIngress, ProviderTurnCompleted, ProviderTurnOutcome, ProviderTurnRequest,
 };
 use futures_util::FutureExt;
 use std::panic::AssertUnwindSafe;
 use tokio::{sync::broadcast, task::JoinSet};
 
 use crate::provider_recovery_tracker::ProviderRecoveryGuard;
+
+#[derive(Clone)]
+pub(crate) struct ProviderTurnIngress {
+    pub(crate) tools: ProviderRoomToolIngress,
+    pub(crate) attachments: ProviderAttachmentReadIngress,
+    pub(crate) requests: ProviderRequestIngress,
+}
 
 pub(crate) struct ProviderTurnTaskResult {
     pub(crate) assignment: AgentTurnAssignment,
@@ -26,8 +33,7 @@ pub(crate) fn spawn_provider_turn(
     store: SqliteStore,
     provider_adapter: ProviderAdapter,
     assignment: AgentTurnAssignment,
-    room_tool_ingress: ProviderRoomToolIngress,
-    attachment_ingress: ProviderAttachmentReadIngress,
+    ingress: ProviderTurnIngress,
 ) {
     // External assignments are delivered from the committed room event by their authenticated
     // connection owner. They never enter the host adapter or create a local provider task.
@@ -38,8 +44,7 @@ pub(crate) fn spawn_provider_turn(
         store,
         provider_adapter,
         assignment,
-        room_tool_ingress,
-        attachment_ingress,
+        ingress,
         None,
     ));
 }
@@ -49,16 +54,14 @@ pub(crate) fn spawn_recovered_provider_turn(
     store: SqliteStore,
     provider_adapter: ProviderAdapter,
     assignment: AgentTurnAssignment,
-    room_tool_ingress: ProviderRoomToolIngress,
-    attachment_ingress: ProviderAttachmentReadIngress,
+    ingress: ProviderTurnIngress,
     recovery_guard: ProviderRecoveryGuard,
 ) {
     tasks.spawn(run_provider_turn_task(
         store,
         provider_adapter,
         assignment,
-        room_tool_ingress,
-        attachment_ingress,
+        ingress,
         Some(recovery_guard),
     ));
 }
@@ -67,11 +70,10 @@ async fn run_provider_turn_task(
     store: SqliteStore,
     provider_adapter: ProviderAdapter,
     assignment: AgentTurnAssignment,
-    room_tool_ingress: ProviderRoomToolIngress,
-    attachment_ingress: ProviderAttachmentReadIngress,
+    ingress: ProviderTurnIngress,
     recovery_guard: Option<ProviderRecoveryGuard>,
 ) -> ProviderTurnTaskResult {
-    let request = provider_request(&assignment, room_tool_ingress, attachment_ingress);
+    let request = provider_request(&assignment, ingress);
     let Ok(prepared) = provider_adapter
         .prepare_turn(&assignment.session, &request)
         .await
@@ -144,8 +146,7 @@ async fn run_prepared_provider_turn(
 
 fn provider_request(
     assignment: &AgentTurnAssignment,
-    room_tool_ingress: ProviderRoomToolIngress,
-    attachment_ingress: ProviderAttachmentReadIngress,
+    ingress: ProviderTurnIngress,
 ) -> ProviderTurnRequest {
     let room_observation = matches!(
         assignment.delivery_kind,
@@ -156,12 +157,13 @@ fn provider_request(
         input_up_to_seq: assignment.session.input_up_to_seq,
         view: assignment.room_view.clone(),
         attachment_ids: assignment.attachment_ids.clone(),
-        attachment_ingress: (!assignment.attachment_ids.is_empty()).then_some(attachment_ingress),
+        attachment_ingress: (!assignment.attachment_ids.is_empty()).then_some(ingress.attachments),
         allowed_agent_ids: assignment.room_agent_ids.clone(),
         tabletop_tools: assignment.tabletop_tools,
-        room_tool_ingress: Some(room_tool_ingress),
+        room_tool_ingress: Some(ingress.tools),
     });
     ProviderTurnRequest {
+        request_ingress: Some(ingress.requests),
         turn_id: assignment.turn_id.clone(),
         turn_generation: assignment.turn_generation,
         execution_id: assignment.execution_id.clone(),
@@ -442,8 +444,7 @@ pub(crate) async fn publish_turn_commit(
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     tasks: &mut JoinSet<ProviderTurnTaskResult>,
     provider_adapter: ProviderAdapter,
-    room_tool_ingress: ProviderRoomToolIngress,
-    attachment_ingress: ProviderAttachmentReadIngress,
+    ingress: ProviderTurnIngress,
     commit: AgentTurnCommit,
 ) -> Option<crate::event_publication::PublicationAttempt> {
     let room_id = commit
@@ -467,8 +468,7 @@ pub(crate) async fn publish_turn_commit(
             store.clone(),
             provider_adapter.clone(),
             assignment,
-            room_tool_ingress.clone(),
-            attachment_ingress.clone(),
+            ingress.clone(),
         );
     }
     publication
@@ -480,8 +480,7 @@ pub(crate) async fn handle_provider_result(
     event_tx: &broadcast::Sender<agentsassemble_domain::RoomEvent>,
     turn_tasks: &mut JoinSet<ProviderTurnTaskResult>,
     result: Result<ProviderTurnTaskResult, tokio::task::JoinError>,
-    room_tool_ingress: &ProviderRoomToolIngress,
-    attachment_ingress: &ProviderAttachmentReadIngress,
+    ingress: &ProviderTurnIngress,
 ) -> Option<crate::event_publication::PublicationAttempt> {
     let result = match result {
         Ok(result) => result,
@@ -513,8 +512,7 @@ pub(crate) async fn handle_provider_result(
                 event_tx,
                 turn_tasks,
                 provider_adapter.clone(),
-                room_tool_ingress.clone(),
-                attachment_ingress.clone(),
+                ingress.clone(),
                 commit,
             )
             .await;

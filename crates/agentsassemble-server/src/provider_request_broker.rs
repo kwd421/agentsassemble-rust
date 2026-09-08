@@ -11,8 +11,8 @@ use agentsassemble_persistence::{
     ProviderRequestDelivery, ProviderRequestDeliveryOutcome, RoomSessionAuthorization, SqliteStore,
 };
 use agentsassemble_provider::{
-    ProviderRequestCompletion, ProviderRequestExchange, ProviderRequestExchangeError,
-    ProviderRequestResponder,
+    ProviderRequestCommand, ProviderRequestCompletion, ProviderRequestExchange,
+    ProviderRequestExchangeError, ProviderRequestResponder,
 };
 use chrono::Utc;
 use futures_util::{StreamExt, stream::FuturesUnordered};
@@ -62,6 +62,11 @@ pub(super) enum RequestCommand {
     },
 }
 
+pub(super) struct RequestReceivers {
+    pub browser: mpsc::Receiver<RequestCommand>,
+    pub native: mpsc::Receiver<ProviderRequestCommand>,
+}
+
 struct Pending {
     session_id: String,
     generation: u64,
@@ -97,6 +102,33 @@ impl RequestBroker {
 
     pub async fn wake(&mut self) -> Option<RequestWake> {
         self.watches.next().await
+    }
+
+    pub async fn apply_native(
+        &mut self,
+        store: &SqliteStore,
+        room_id: &str,
+        command: ProviderRequestCommand,
+    ) {
+        let input = OpenProviderRequest {
+            turn_generation: command.turn_generation,
+            execution_id: command.execution_id.clone(),
+            request: command.request.clone(),
+        };
+        let result = self
+            .open(
+                store,
+                room_id,
+                OpeningAuthority::Managed {
+                    session_id: command.session_id.clone(),
+                },
+                &input,
+            )
+            .await;
+        let exchange = result
+            .map_err(|_| ProviderRequestExchangeError::Rejected)
+            .and_then(|opened| opened.exchange.ok_or(ProviderRequestExchangeError::Closed));
+        command.complete(exchange);
     }
 
     pub async fn apply(&mut self, store: &SqliteStore, room_id: &str, command: RequestCommand) {

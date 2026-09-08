@@ -6,6 +6,10 @@ use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Error)]
 pub enum ProviderRequestExchangeError {
+    #[error("the provider request queue is full")]
+    Busy,
+    #[error("the provider request was rejected by its authority owner")]
+    Rejected,
     #[error("the provider request owner is unavailable or the request has closed")]
     Closed,
     #[error("the provider response delivery could not be committed")]

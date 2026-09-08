@@ -67,6 +67,7 @@ impl AttendeeRuntime {
             room_tool_ingress: Some(tools),
         });
         let request = ProviderTurnRequest {
+            request_ingress: None,
             turn_id: start.turn_id.clone(),
             turn_generation: start.turn_generation,
             execution_id: start.execution_id.clone(),

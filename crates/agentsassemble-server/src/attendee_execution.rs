@@ -126,8 +126,7 @@ pub(super) async fn execute(
                 owners.event_tx,
                 owners.turn_tasks,
                 owners.provider_adapter.clone(),
-                owners.room_tool_ingress.clone(),
-                owners.attachment_ingress.clone(),
+                owners.ingress.clone(),
                 commit,
             )
             .await;
