@@ -155,6 +155,7 @@ impl SqliteStore {
                 _ => Err(invalid_reservation()),
             };
         }
+        crate::runtime_restart::require_runtime_admission(transaction).await?;
         if reserve_budget {
             reserve_room_write_budget(
                 transaction,

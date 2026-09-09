@@ -76,6 +76,9 @@ pub(super) async fn assign_available_pending(
     room: &Room,
     settings: &RoomSettings,
 ) -> Result<Vec<PreparedAssignment>, PersistenceError> {
+    if crate::runtime_restart::restart_quiescing(transaction).await? {
+        return Ok(Vec::new());
+    }
     let mut any_active = false;
     let mut candidates = Vec::new();
     let mut empty_schedule_requests = Vec::new();

@@ -79,6 +79,9 @@ pub(crate) async fn inspect_non_lifecycle_command(
     )
     .await?;
     reject_reserved_request_id(transaction, room_id, principal_id, request_id).await?;
+    if outcome.is_none() {
+        crate::runtime_restart::require_runtime_admission(transaction).await?;
+    }
     Ok(outcome)
 }
 

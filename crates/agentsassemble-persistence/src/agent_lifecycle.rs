@@ -538,6 +538,10 @@ mod live_recovery_tests;
 mod resume_tests;
 
 #[cfg(test)]
+#[path = "runtime_restart_tests.rs"]
+mod restart_tests;
+
+#[cfg(test)]
 #[path = "agent_turn_recovery_tests.rs"]
 mod turn_recovery_tests;
 

@@ -87,6 +87,8 @@ pub use room_session_authority::RoomSessionAuthorization;
 mod bootstrap;
 mod channel_messages;
 mod command_admission;
+mod runtime_restart;
+pub use runtime_restart::{RuntimeRestartPhase, RuntimeRestartRecord, RuntimeRestartTarget};
 mod database_target;
 mod filesystem_authority;
 mod friends;

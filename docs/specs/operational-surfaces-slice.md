@@ -482,3 +482,37 @@ PID/address fails custody instead of entering the parent's control-response queu
 The existing stream test now covers repeated readiness plus the next control reply
 and both identity changes (0.00s); desktop Clippy and mandatory gates pass. This is
 control-stream verification; actual same-PID executable replacement remains pending.
+
+## Atomic restart admission
+
+After candidate preparation, the restart owner must check durable busy/lifecycle
+authority and record quiescence in one SQLite transaction. Existing room command
+admission and turn assignment must observe that same record in their own mutation
+transactions. A concurrent launch/turn either precedes the restart and blocks it,
+or follows quiescence and cannot cross the provider boundary. Committed command
+replays remain readable. New room commands receive an unresolved, retryable result;
+queued inputs remain durable and are not assigned during quiescence.
+
+The existing private `runtime_metadata` map owns the latest restart operation,
+source runtime generation and eligible managed session keys. No table migration or
+second in-memory admission flag is needed. Missing metadata means no restart;
+malformed metadata is an error. Retrying the same operation reads its receipt and
+never starts a second transition. Only its source runtime may abort preparation;
+an aborted operation is terminal and a new attempt requires a new operation ID.
+Abort releases admission; the coordinator must wake retained room-floor work once.
+External participants are not reconstructed as app-owned provider processes.
+
+Acceptance uses real store/lifecycle transactions to verify busy refusal, receipt
+replay, quiescent command/turn refusal, abort and subsequent retry, including a
+reopened store. This admission slice does not yet expose restart success or launch
+a replacement; executable handoff, recovery and readiness remain the next owners.
+
+The shared non-lifecycle inspection, lifecycle reservation and floor scheduler now
+read that transaction-owned record. Idle and paused managed session keys are retained;
+active lifecycle/turn/recovery authority blocks preparation. Three restart cases pass
+(0.05s), including a real queued room input that remains unassigned until abort,
+committed launch replay, source-generation refusal after reopen and malformed state.
+All 324 persistence tests pass (4.42s); persistence all-target/all-feature Clippy and
+mandatory gates pass. No process, background task, timer or provider call is added.
+Each affected admission reads one metadata row; full phase resource cost and the
+coordinator's abort wakeup remain pending.
