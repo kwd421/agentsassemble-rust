@@ -21,7 +21,7 @@ use crate::{
 // The current Vercel and LLM Gateway tool-capable projections are about 75 KiB
 // each. They remain beneath this authority and the outer WebSocket frame bound.
 const MAX_PROVIDER_BYTES: usize = 128 * 1024;
-const MAX_PROVIDER_OPTIONS: usize = 256;
+pub(crate) const MAX_PROVIDER_OPTIONS: usize = 256;
 pub(crate) const MAX_OPTION_VALUE_BYTES: usize = 128;
 const MAX_OPTION_LABEL_BYTES: usize = 256;
 

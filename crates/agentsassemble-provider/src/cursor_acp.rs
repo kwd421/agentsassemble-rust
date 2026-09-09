@@ -1,7 +1,6 @@
 use crate::{
-    acp_client::AcpClientConfiguration,
     acp_runtime::AcpRuntime,
-    cursor::effective_model,
+    cursor::{CursorCatalog, client_configuration},
     driver::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
         ProviderTurnCompleted, ProviderTurnRequest,
@@ -31,7 +30,7 @@ impl CursorAcpDriver {
             guardian,
             &["acp".to_owned()],
             &[],
-            AcpClientConfiguration::default(),
+            client_configuration(),
         )
         .await?;
         Ok(Self { runtime })
@@ -50,7 +49,7 @@ impl CursorAcpDriver {
             bind(session).await?,
             &["acp".to_owned()],
             &[],
-            AcpClientConfiguration::default(),
+            client_configuration(),
         )
         .await?;
         Ok(Self { runtime })
@@ -69,12 +68,14 @@ impl ProviderDriver for CursorAcpDriver {
         session: &'a DurableAgentSession,
     ) -> DriverFuture<'a, Result<ProviderSessionAttachment, DriverError>> {
         Box::pin(async move {
-            let model = effective_model(
-                &session.public.model,
-                &session.public.reasoning_effort,
-                &session.public.service_tier,
-            )
-            .ok_or_else(invalid_profile)?;
+            let catalog = CursorCatalog::read(&mut self.runtime.client).await?;
+            let selection = catalog
+                .selection(
+                    &session.public.model,
+                    &session.public.reasoning_effort,
+                    &session.public.service_tier,
+                )
+                .ok_or_else(invalid_profile)?;
             let server = self.runtime.room_portal_server();
             let attached = self
                 .runtime
@@ -83,13 +84,13 @@ impl ProviderDriver for CursorAcpDriver {
                     &session.workspace,
                     &session.provider_session_id,
                     server,
-                    &[("model".to_owned(), model.clone())],
+                    &selection,
                 )
                 .await?;
             Ok(ProviderSessionAttachment {
                 provider_session_id: attached.session_id,
                 reused: attached.reused,
-                observed_model_id: Some(model),
+                observed_model_id: Some(session.public.model.clone()),
             })
         })
     }

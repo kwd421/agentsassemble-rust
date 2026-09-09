@@ -8784,3 +8784,29 @@ single-file identity. The five Cursor tests pass after the move; four persistenc
 filesystem-authority tests pass, including acceptance of the shared identity followed
 by rejection after a module changes. Affected all-target/all-feature Clippy and
 unchanged architecture, growth, 19 policy, format, diff and artifact gates pass.
+
+### Cursor native model-configuration correction (2026-09-09)
+
+The `082bf1a` package creates the new Cursor row, but attachment still fails before
+any model turn. An owned native diagnostic separates the stages: package inspection
+takes about 451 ms, staging 2,471 ms, help 1,477 ms and ACP initialization 317 ms.
+The production guardian/driver initializes in 5,483 ms, then reports
+`provider_model_unconfirmed`; owned stop succeeds. CLI model slugs and ACP model
+identifiers are different. The recovered failed row is not a passing provider turn.
+
+Shared ACP configuration now accepts provider-owned initialization capabilities and
+exact extension method names, preserving Grok's existing billing wire method.
+Attachment confirms every advertised requested setting against the complete final
+receipt; duplicate, missing or reset model authority poisons the connection. Nine
+ACP tests and two Grok usage tests pass; affected all-target/all-feature Clippy and
+the unchanged architecture, growth, 19 policy, formatting and artifact gates pass.
+
+Cursor discovery and attachment now use its parameterized picker and native
+`cursor/list_available_models` authority. Context/thinking choices stay in the model
+selector; reasoning and fast choices use existing controls. Native inspection
+creates no conversation or model turn. The installed provider returns 38 base models,
+projected into 72 model/context/thinking choices and four controls (15,865 JSON
+bytes). The structured exchange takes 5,338 ms; the whole inspection including
+package binding and confirmed process cleanup takes 8.87 seconds. No protocol or
+filesystem limit is raised. Unsupported/ambiguous native data fail closed. Packaged
+Auto response and stop remain pending; no other real Cursor model was invoked.
