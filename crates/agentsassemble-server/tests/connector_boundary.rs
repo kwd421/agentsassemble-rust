@@ -104,18 +104,7 @@ async fn verify_commands(
             .status()
             .is_success()
     );
-    let leave =
-        json!({"request_id":Uuid::new_v4().to_string(),"action":"participant.leave","payload":{}});
-    assert_eq!(
-        client
-            .post(endpoint)
-            .bearer_auth(bearer)
-            .json(&leave)
-            .send()
-            .await?
-            .status(),
-        200
-    );
+    verify_leave(client, endpoint, bearer).await?;
     assert_eq!(
         client
             .post(endpoint)
@@ -126,6 +115,52 @@ async fn verify_commands(
             .status(),
         403
     );
+    Ok(())
+}
+
+async fn verify_leave(
+    client: &Client,
+    endpoint: &str,
+    bearer: &str,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let leave =
+        json!({"request_id":Uuid::new_v4().to_string(),"action":"participant.leave","payload":{}});
+    let completed: Value = client
+        .post(endpoint)
+        .bearer_auth(bearer)
+        .json(&leave)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    let repeated: Value = client
+        .post(endpoint)
+        .bearer_auth(bearer)
+        .json(&leave)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(repeated["result"], completed["result"]);
+    assert_eq!(repeated["deduplicated"], true);
+    for changed in [
+        json!({"request_id":Uuid::new_v4().to_string(),"action":"participant.leave","payload":{}}),
+        json!({"request_id":leave["request_id"],"action":"participant.leave","payload":{"changed":true}}),
+        json!({"request_id":leave["request_id"],"action":"message.send","payload":{"content":"Denied after leave"}}),
+    ] {
+        assert_eq!(
+            client
+                .post(endpoint)
+                .bearer_auth(bearer)
+                .json(&changed)
+                .send()
+                .await?
+                .status(),
+            403
+        );
+    }
     Ok(())
 }
 
@@ -165,3 +200,6 @@ mod mcp;
 
 #[path = "connector_boundary/mcp_remote.rs"]
 mod mcp_remote;
+
+#[path = "connector_boundary/leave_retry.rs"]
+mod leave_retry;

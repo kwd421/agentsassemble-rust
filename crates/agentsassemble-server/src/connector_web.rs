@@ -4,7 +4,7 @@ use crate::{
         BodyDecodeError, PRIVATE_NO_STORE, admission_client_fingerprint, decode_json_body,
         purpose_bearer_fingerprint,
     },
-    room_command_result::CommandFailure,
+    room_command_result::{CommandFailure, public_command_outcome, validate_command_envelope},
 };
 use agentsassemble_persistence::{
     CONNECTOR_INVITE_PREFIX, CONNECTOR_SESSION_PREFIX, PersistenceError,
@@ -83,12 +83,26 @@ async fn command(
     request: Request,
 ) -> Result<Json<Value>, ConnectorHttpError> {
     let fingerprint = credential(&request, CONNECTOR_SESSION_PREFIX)?;
+    let body: CommandRequest = decode_json_body(request, 65536).await?;
+    validate_command_envelope(&body.request_id).map_err(ConnectorHttpError::from_persistence)?;
+    if body.action == RoomAction::ParticipantLeave
+        && let Some((viewer, outcome)) = state
+            .store
+            .completed_connector_leave(&fingerprint, &body.request_id, &body.payload)
+            .await
+            .map_err(ConnectorHttpError::from_persistence)?
+    {
+        let outcome = public_command_outcome(&viewer, outcome)
+            .map_err(ConnectorHttpError::from_persistence)?;
+        return Ok(Json(
+            json!({"resolution":"committed","result":outcome.result,"deduplicated":true}),
+        ));
+    }
     let authority = state
         .store
         .authorize_connector_session(&fingerprint, chrono::Utc::now())
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    let body: CommandRequest = decode_json_body(request, 65536).await?;
     let outcome = state
         .rooms
         .execute_connector(&authority, body.request_id, body.action, body.payload)

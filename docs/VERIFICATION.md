@@ -9516,3 +9516,37 @@ preparation replies leave bounded unclaimed handles until the service closes, wi
 no consumed invite or room effect. These local protocol peers do not establish a
 real provider or external tunnel flow. The two remaining G3 corrections, final
 packaged verification and completed Pro coverage/re-review remain pending.
+
+
+## Final Pro G3-M1 correction: terminal Connector leave recovery (2026-09-10)
+
+The HTTP command owner now recognizes only an exact committed `participant.leave`
+receipt before requiring active session authority for new work. The persistence
+owner loads the original credential/participant/room identity separately from the
+active-session check and validates the current room incarnation. It reuses the
+existing exact action/payload/request receipt lookup. A replay returns through the
+canonical public-result projection and never creates a live session authorization.
+The leave transaction also returns its original outcome before active membership
+validation, with no repeated revocation notification or room event.
+
+Four persistence cases pass in 0.06 seconds. Controlled concurrent identical leaves
+return equal outcomes with exactly one fresh mutation; only the fresh mutation has
+one revocation notification. Replay does not restore active session authorization,
+and different request IDs/payloads, unknown credentials and a replaced room UID
+cannot recover the original result. The eight Connector TCP/MCP cases pass in
+1.18 seconds, including a real stdio subprocess whose upstream leave response is
+lost after commit. Its retry returns the original event ID and sequence with
+`deduplicated=true`, removes the old handle, frees the sole slot, and admits/leaves
+a different invitation. The public HTTP case compares the complete original/retry
+result for both read-write and read-only connectors and rejects changed request
+identity, payload and action after leave. Existing admission/message retry, remote
+private custody and normal stdio/interrupt flows remain passing.
+
+Persistence/server all-target/all-feature Clippy, architecture, source growth,
+nineteen policy/artifact-owner tests, formatting, diff and artifact maintenance pass.
+The final factored persistence and HTTP checks also pass. The normal active read
+path retains its existing three identity queries; terminal recovery performs only
+bounded identity and exact receipt reads. A fresh HTTP leave adds that receipt
+inspection before its existing mutation path. No table, token, process, background
+work or permissive session authorization is added. GUI validation and the remaining
+login correction precede the final completed Pro coverage/re-review.

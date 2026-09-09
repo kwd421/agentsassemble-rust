@@ -585,6 +585,25 @@ this storage checkpoint alone is not Phase 7 acceptance.
 
 ## Connector mutation transport
 
+### Final Pro correction: terminal leave receipt (2026-09-10)
+
+Pro G3-M1 confirms that a committed leave revokes its own credential before a lost
+HTTP acknowledgment can be retried. The existing command receipt remains the only
+completion authority. The command route may recover only `participant.leave` with
+its exact empty payload, original credential fingerprint and request ID, bound to
+the original participant and current room incarnation. This returns the existing
+public result; it never issues active session authority or accepts another room
+read/mutation after revocation. The transaction owner checks an exact receipt before
+requiring active membership for a new leave. Confirmed replay releases the client's
+existing pending command and MCP handle, including the sole stdio slot.
+
+Reuse the current invitation/session row and command-results table, bounded HTTP
+body decoding, room mutation queue and public-result projection. No schema, token,
+timer or cleanup process is added. Acceptance covers a leave response lost only
+after commit, exact public result and event count, released MCP capacity, and denial
+for another request ID, payload, action, credential or room incarnation. Existing
+message retry and attendee terminal acknowledgments remain independently applicable.
+
 Dedicated `/api/room-connector/join` and `/command` routes retain connector
 credential purposes and return explicit committed/rejected/unresolved outcomes.
 Admission and writes use the existing bounded room queue and durable publication.

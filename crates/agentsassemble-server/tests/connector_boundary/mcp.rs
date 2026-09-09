@@ -128,7 +128,7 @@ pub(super) async fn call(
     serde_json::from_str(&text.text).unwrap_or_else(|error| panic!("JSON tool result: {error}"))
 }
 
-async fn start_cli()
+pub(super) async fn start_cli()
 -> Result<(tokio::process::Child, RunningService<RoleClient, ()>), Box<dyn std::error::Error>> {
     let mut child = tokio::process::Command::new(env!("CARGO_BIN_EXE_assemble"))
         .args(["room", "connector-mcp"])

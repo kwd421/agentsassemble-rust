@@ -34,8 +34,9 @@
   and affected Phase 1–3 supplement at C0/H0/M0/L0; M1–M5 remain closed.
   Independent Phase 7–9 Pro review at that revision returns REVISE C0/H1/M2/L0:
   remote Connector retry custody, terminal leave receipt recovery and unconfirmed
-  login cleanup retention. Remote private custody now passes actual HTTP MCP and
-  stdio verification; the remaining two corrections and affected re-review continue.
+  login cleanup retention. Remote private custody and exact terminal leave recovery
+  now pass affected persistence, actual HTTP MCP and stdio verification. Login
+  cleanup retention and affected re-review continue.
   The reviewer also reports incomplete historical patch reading; all individual
   Phase 7–9 commits and whole-group completion still require finished coverage.
   [Correction contract](docs/specs/final-parity-slice.md#external-session-action-ownership-correction-2026-09-10).

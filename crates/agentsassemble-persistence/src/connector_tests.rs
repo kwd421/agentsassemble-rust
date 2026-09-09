@@ -173,6 +173,113 @@ async fn fixture() -> Result<(crate::SqliteStore, RoomManagerAuthority), Box<dyn
 }
 
 #[tokio::test]
+async fn connector_terminal_leave_receipt_requires_exact_credential_and_incarnation() -> TestResult
+{
+    let (store, manager) = fixture().await?;
+    let now = Utc::now();
+    let invite = store
+        .create_connector_invite(&manager, Uuid::new_v4(), InviteScope::ReadOnly, now)
+        .await?;
+    let fingerprint = Sha256::digest(invite.invite_bearer.as_bytes()).into();
+    let admitted = store
+        .admit_connector(&fingerprint, &[5; 32], Uuid::new_v4(), "Leaving AI", now)
+        .await?;
+    let authority = &admitted.authorization;
+    let (first, second) = tokio::join!(
+        store.leave_connector_session(authority, "same-leave"),
+        store.leave_connector_session(authority, "same-leave"),
+    );
+    let (first, second) = (first?, second?);
+    assert_eq!(first.outcome.result, second.outcome.result);
+    assert_ne!(first.outcome.deduplicated, second.outcome.deduplicated);
+    assert_eq!(
+        first.revoked_session_fingerprints.len() + second.revoked_session_fingerprints.len(),
+        1
+    );
+    let recovered = store
+        .completed_connector_leave(
+            authority.session_fingerprint(),
+            "same-leave",
+            &serde_json::json!({}),
+        )
+        .await?
+        .ok_or("receipt missing")?;
+    assert_eq!(recovered.1.result, first.outcome.result);
+    assert!(recovered.1.deduplicated);
+    assert!(
+        store
+            .authorize_connector_session(authority.session_fingerprint(), now)
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .leave_connector_session(authority, "different-leave")
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .completed_connector_leave(
+                authority.session_fingerprint(),
+                "different-leave",
+                &serde_json::json!({})
+            )
+            .await?
+            .is_none()
+    );
+    for (credential, payload) in [
+        (
+            authority.session_fingerprint(),
+            serde_json::json!({"changed":true}),
+        ),
+        (&[99; 32], serde_json::json!({})),
+    ] {
+        assert!(
+            store
+                .completed_connector_leave(credential, "same-leave", &payload)
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(
+        store
+            .snapshot("general", 0, 200)
+            .await?
+            .events
+            .iter()
+            .filter(|event| event.event_type == "participant_left")
+            .count(),
+        1
+    );
+
+    // Retain the original credential and receipt while replacing the room incarnation.
+    sqlx::query(
+        "UPDATE rooms SET room_json=json_set(room_json,'$.room_uid',?) WHERE room_id='general'",
+    )
+    .bind(Uuid::new_v4().to_string())
+    .execute(&store.pool)
+    .await?;
+    assert!(
+        store
+            .completed_connector_leave(
+                authority.session_fingerprint(),
+                "same-leave",
+                &serde_json::json!({})
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .leave_connector_session(authority, "same-leave")
+            .await
+            .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn connector_moderation_controls_membership_without_claiming_a_provider_process() -> TestResult
 {
     let (store, manager) = fixture().await?;
