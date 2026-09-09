@@ -315,7 +315,7 @@ async fn static_frontend_has_browser_security_and_cache_headers() {
         .unwrap_or_else(|error| panic!("create frontend root: {error}"));
     tokio::fs::write(
         frontend.join("index.html"),
-        "<!doctype html><title>test</title><script src=\"./assets/app.js\"></script>",
+        "<!doctype html><html><head><title>test</title><script src=\"./assets/app.js\"></script></head></html>",
     )
     .await
     .unwrap_or_else(|error| panic!("write frontend index: {error}"));
@@ -340,6 +340,54 @@ async fn static_frontend_has_browser_security_and_cache_headers() {
     tokio::fs::remove_file(frontend.join("assets/app.js"))
         .await
         .unwrap_or_else(|error| panic!("remove old build asset: {error}"));
+    assert_served_frontend(&server, &expected_build).await;
+    server.stop().await;
+    tokio::fs::write(
+        frontend.join("index.html"),
+        "<html><head><script src=\"./assets/new.js\"></script></head></html>",
+    )
+    .await
+    .unwrap_or_else(|error| panic!("write replacement build: {error}"));
+    tokio::fs::write(frontend.join("assets/new.js"), "new build")
+        .await
+        .unwrap_or_else(|error| panic!("write replacement asset: {error}"));
+    let release = FrontendRelease::materialize(&frontend, directory.path())
+        .unwrap_or_else(|error| panic!("materialize replacement: {error}"));
+    assert_ne!(release.build_id(), expected_build);
+    let store = SqliteStore::open(&database_url)
+        .await
+        .unwrap_or_else(|error| panic!("reopen test store: {error}"));
+    let server = start_with_frontend(store, release).await;
+    let asset = Client::new()
+        .get(format!(
+            "{}/frontend-builds/{expected_build}/assets/app.js",
+            server.base_url
+        ))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("read prior release asset: {error}"));
+    assert!(asset.status().is_success());
+    assert_eq!(
+        asset
+            .text()
+            .await
+            .unwrap_or_else(|error| panic!("read retained asset: {error}")),
+        "globalThis.loaded = true;"
+    );
+    let unknown = Client::new()
+        .get(format!(
+            "{}/frontend-builds/{}/assets/app.js",
+            server.base_url,
+            "0".repeat(64)
+        ))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("request missing build: {error}"));
+    assert_eq!(unknown.status(), reqwest::StatusCode::NOT_FOUND);
+    server.stop().await;
+}
+
+async fn assert_served_frontend(server: &RunningServer, expected_build: &str) {
     let response = Client::new()
         .get(format!("{}/app/", server.base_url))
         .send()
@@ -350,10 +398,7 @@ async fn static_frontend_has_browser_security_and_cache_headers() {
     let version = agentsassemble_server::runtime_version::read(&server.base_url)
         .await
         .unwrap_or_else(|error| panic!("inspect served frontend version: {error}"));
-    assert_eq!(
-        version.frontend_build_id.as_deref(),
-        Some(expected_build.as_str())
-    );
+    assert_eq!(version.frontend_build_id.as_deref(), Some(expected_build));
     assert_eq!(
         version.protocol_version,
         agentsassemble_protocol::PROTOCOL_VERSION
@@ -381,13 +426,14 @@ async fn static_frontend_has_browser_security_and_cache_headers() {
         assert_static_frontend_headers(&response);
         let asset_url = response
             .url()
-            .join("./assets/app.js")
+            .join(&format!("/frontend-builds/{expected_build}/assets/app.js"))
             .unwrap_or_else(|error| panic!("resolve browser asset from {entrance}: {error}"));
         let body = response
             .text()
             .await
             .unwrap_or_else(|error| panic!("read browser entrance {entrance}: {error}"));
-        assert!(body.contains("./assets/app.js"));
+        assert!(body.contains(&format!("/frontend-builds/{expected_build}/assets/app.js")));
+        assert!(body.contains(&format!("data-agentsassemble-build=\"{expected_build}\"")));
         let asset = Client::new()
             .get(asset_url)
             .send()
@@ -396,7 +442,6 @@ async fn static_frontend_has_browser_security_and_cache_headers() {
         assert!(asset.status().is_success(), "browser asset from {entrance}");
         assert_static_frontend_headers(&asset);
     }
-    server.stop().await;
 }
 
 fn assert_static_frontend_headers(response: &reqwest::Response) {

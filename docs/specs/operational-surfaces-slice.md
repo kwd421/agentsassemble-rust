@@ -402,3 +402,35 @@ protocol version (1.38s including CLI launch). Six ingress cases (0.19s) and the
 existing guest recovery boundary pass with snapshot custody. Server Clippy and
 unchanged mandatory gates pass. No provider/account runs or background observations
 are introduced; browser baseline/update behavior remains pending.
+
+## Browser build binding and retained assets
+
+A served HTML page must carry its own build/protocol baseline, rather than treating
+the first later version fetch as proof of the page already loaded. Rewrite the
+snapshot's HTML in memory once using Cloudflare's maintained `lol_html` parser;
+retain original release bytes for identity verification. Bind module/style asset
+URLs to an explicit build-ID route and validate referenced files before serving.
+The route addresses only that retained release's assets, never a search through
+other versions or a mutable build directory. Existing static entrances retain their
+ingress and cache policy. Old namespaced assets remain available after a new release
+is selected, while missing/invalid build IDs fail. No periodic filesystem reads or
+release deletion is introduced. Snapshot HTML transformation uses the same build ID
+and protocol owner as the version API, with no inline script or CSP relaxation.
+
+Browser update observation will compare against this embedded baseline, using the
+original bounded version-check cadence and visibility/reconnection triggers. It
+must expose unavailable checks rather than imply that an unknown server matches.
+The native Tauri UI is packaged in the desktop executable and is not the server's
+HTML page; its current protocol compatibility owner remains authoritative. The
+browser reload notice applies to the actual HTTP-served page.
+
+The served HTML now embeds its build/protocol identity and references only its
+namespaced release assets. `lol_html` 3.0.1 handles attribute parsing/rewriting;
+referenced missing assets fail snapshot preparation. The existing TCP static case
+verifies the embedded baseline, unchanged security/cache headers and CLI identity,
+then starts a replacement runtime/build and reads the prior build's exact asset
+through its retained URL. An unknown release returns 404 (1.31s total). Missing
+assets/corrupt releases pass the expanded snapshot case (0.01s); existing ingress,
+guest recovery, surface registry, Clippy and mandatory gates pass. This proves asset
+retention across runtime replacement, not rolling listener or provider handoff.
+The browser notice and full packaged/rolling evidence remain pending.

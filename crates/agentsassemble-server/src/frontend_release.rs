@@ -3,19 +3,32 @@ use std::{
     fs::{self, File, OpenOptions},
     io::{self, Read},
     path::{Path, PathBuf},
+    sync::Arc,
 };
 
 use fs2::FileExt;
 use sha2::{Digest, Sha256};
+
+pub(crate) fn is_build_id(id: &str) -> bool {
+    id.len() == 64
+        && id
+            .bytes()
+            .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
+}
 
 /// The exact files selected by this runtime, independent of later build output.
 #[derive(Clone)]
 pub struct FrontendRelease {
     root: PathBuf,
     build_id: String,
+    index_html: Arc<str>,
 }
 
 impl FrontendRelease {
+    pub(crate) fn index_html(&self) -> Arc<str> {
+        self.index_html.clone()
+    }
+
     #[must_use]
     pub fn root(&self) -> &Path {
         &self.root
@@ -63,6 +76,7 @@ impl FrontendRelease {
         if fingerprint(&source)? != build_id {
             return Err(io::Error::other("frontend build changed during snapshot"));
         }
+        let index_html = crate::frontend_document::render(staging.path(), &build_id)?;
         let root = releases.join(&build_id);
         if root.exists() {
             if !root.symlink_metadata()?.file_type().is_dir() {
@@ -76,7 +90,11 @@ impl FrontendRelease {
         } else {
             fs::rename(staging.path(), &root)?;
         }
-        Ok(Self { root, build_id })
+        Ok(Self {
+            root,
+            build_id,
+            index_html,
+        })
     }
 }
 
@@ -142,15 +160,25 @@ mod tests {
     fn source_replacement_retains_release_and_corruption_is_rejected() -> io::Result<()> {
         let source = tempfile::tempdir()?;
         let state = tempfile::tempdir()?;
-        fs::write(source.path().join("index.html"), "first")?;
+        fs::create_dir(source.path().join("assets"))?;
+        fs::write(source.path().join("assets/app.js"), "first")?;
+        fs::write(
+            source.path().join("index.html"),
+            "<html><head><script src=\"./assets/app.js\"></script></head></html>",
+        )?;
         let first = FrontendRelease::materialize(source.path(), state.path())?;
         let same = FrontendRelease::materialize(source.path(), state.path())?;
         assert_eq!(first.build_id, same.build_id);
-        fs::write(source.path().join("index.html"), "second")?;
+        fs::write(source.path().join("assets/app.js"), "second")?;
         let second = FrontendRelease::materialize(source.path(), state.path())?;
         assert_ne!(first.build_id, second.build_id);
-        assert_eq!(fs::read_to_string(first.root.join("index.html"))?, "first");
+        assert_eq!(
+            fs::read_to_string(first.root.join("assets/app.js"))?,
+            "first"
+        );
         fs::write(second.root.join("index.html"), "corrupt")?;
+        assert!(FrontendRelease::materialize(source.path(), state.path()).is_err());
+        fs::remove_file(source.path().join("assets/app.js"))?;
         assert!(FrontendRelease::materialize(source.path(), state.path()).is_err());
         Ok(())
     }

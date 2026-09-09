@@ -7,7 +7,7 @@ use axum::{
     extract::{Query, Request, State, WebSocketUpgrade},
     http::{HeaderValue, StatusCode, header},
     middleware,
-    response::{IntoResponse, Redirect, Response},
+    response::{Html, IntoResponse, Redirect, Response},
     routing::{get, get_service},
 };
 use serde::Deserialize;
@@ -16,9 +16,7 @@ use thiserror::Error;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
 use tower_http::{
-    services::{ServeDir, ServeFile},
-    set_header::SetResponseHeaderLayer,
-    timeout::RequestBodyDeadlineLayer,
+    services::ServeDir, set_header::SetResponseHeaderLayer, timeout::RequestBodyDeadlineLayer,
 };
 
 use crate::{
@@ -64,7 +62,12 @@ const APP_ROUTE: StaticFrontendRoute = StaticFrontendRoute {
     surface: "/app/{*path}",
     exposure: crate::product_surface::RouteExposure::Private,
 };
-const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 8] = [
+const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 9] = [
+    StaticFrontendRoute {
+        mount: "/app/index.html",
+        surface: "/app/index.html",
+        exposure: crate::product_surface::RouteExposure::Private,
+    },
     StaticFrontendRoute {
         mount: APP_PREFIX,
         surface: APP_PREFIX,
@@ -128,7 +131,7 @@ const FRONTEND_ASSET_ROUTES: [StaticFrontendRoute; 4] = [
         exposure: crate::product_surface::RouteExposure::SameOriginPublic,
     },
 ];
-const STATIC_FRONTEND_CACHE_CONTROL: HeaderValue = HeaderValue::from_static("no-cache");
+pub(crate) const STATIC_FRONTEND_CACHE_CONTROL: HeaderValue = HeaderValue::from_static("no-cache");
 #[derive(Debug, Error)]
 pub enum ServeError {
     #[error("server I/O failed: {0}")]
@@ -172,6 +175,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::provider_operations_web::routes())
         .merge(crate::operational_web::routes())
         .merge(crate::runtime_version::routes())
+        .merge(crate::frontend_assets::routes())
         .merge(crate::server_identity_web::routes())
         .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())
@@ -187,7 +191,11 @@ pub fn router(state: AppState) -> Router {
     app = app.route_layer(middleware::from_fn(require_trusted_ingress));
     if let Some(frontend_release) = frontend_release {
         let frontend_root = frontend_release.root();
-        let index = frontend_root.join("index.html");
+        let index_html = frontend_release.index_html();
+        let index = get(move || {
+            let html = index_html.clone();
+            async move { Html(html.to_string()) }
+        });
         let assets = frontend_root.join("assets");
         let mut frontend = static_ingress_router(
             Router::new().route(
@@ -199,15 +207,13 @@ pub fn router(state: AppState) -> Router {
         .merge(static_directory_router(
             Router::new().route(
                 APP_ROUTE.surface,
-                get_service(
-                    ServeDir::new(frontend_root).not_found_service(ServeFile::new(index.clone())),
-                ),
+                get_service(ServeDir::new(frontend_root).not_found_service(index.clone())),
             ),
             APP_ROUTE,
         ));
         for route in FRONTEND_INDEX_ROUTES {
             frontend = frontend.merge(static_ingress_router(
-                Router::new().route(route.mount, get_service(ServeFile::new(index.clone()))),
+                Router::new().route(route.mount, get_service(index.clone())),
                 route.exposure,
             ));
         }
@@ -257,7 +263,10 @@ fn static_directory_router(
     )
 }
 
-fn strip_static_prefix(mut request: Request, prefix: &str) -> Result<Request, StatusCode> {
+pub(crate) fn strip_static_prefix(
+    mut request: Request,
+    prefix: &str,
+) -> Result<Request, StatusCode> {
     let Some(path) = request.uri().path().strip_prefix(prefix) else {
         return Err(StatusCode::NOT_FOUND);
     };

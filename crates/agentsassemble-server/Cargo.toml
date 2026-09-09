@@ -46,6 +46,7 @@ tower-http.workspace = true
 url.workspace = true
 uuid.workspace = true
 which.workspace = true
+lol_html = "3.0.0"
 
 [target.'cfg(unix)'.dependencies]
 rustix.workspace = true

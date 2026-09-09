@@ -63,7 +63,7 @@ impl Server {
         checked(std::fs::create_dir(&source));
         checked(std::fs::write(
             source.join("index.html"),
-            "Recovery entry fixture",
+            "<html><head><script src=\"./assets/recovery.js\"></script></head><body>Recovery entry fixture</body></html>",
         ));
         checked(std::fs::create_dir(source.join("assets")));
         checked(std::fs::write(

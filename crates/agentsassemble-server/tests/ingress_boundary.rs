@@ -394,10 +394,13 @@ async fn public_frontend_fixture() -> (tempfile::TempDir, PathBuf) {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create frontend fixture: {error}"));
     let frontend = directory.path().join("frontend");
-    tokio::fs::create_dir_all(&frontend)
+    tokio::fs::create_dir_all(frontend.join("assets"))
         .await
         .unwrap_or_else(|error| panic!("create public frontend fixture: {error}"));
-    tokio::fs::write(frontend.join("index.html"), "PUBLIC INDEX")
+    tokio::fs::write(frontend.join("assets/app.js"), "ASSET")
+        .await
+        .unwrap_or_else(|error| panic!("write public frontend asset: {error}"));
+    tokio::fs::write(frontend.join("index.html"), "<html><head><script src=\"./assets/app.js\"></script></head><body>PUBLIC INDEX</body></html>")
         .await
         .unwrap_or_else(|error| panic!("write public frontend fixture: {error}"));
     (directory, frontend)
@@ -474,9 +477,12 @@ async fn static_routes_match_the_declared_mounts() {
     tokio::fs::create_dir_all(frontend.join("assets"))
         .await
         .unwrap_or_else(|error| panic!("create asset fixture: {error}"));
-    tokio::fs::write(frontend.join("index.html"), "INDEX")
-        .await
-        .unwrap_or_else(|error| panic!("write index fixture: {error}"));
+    tokio::fs::write(
+        frontend.join("index.html"),
+        "<html><head><script src=\"./assets/app.js\"></script></head><body>INDEX</body></html>",
+    )
+    .await
+    .unwrap_or_else(|error| panic!("write index fixture: {error}"));
     tokio::fs::write(frontend.join("assets/app.js"), "ASSET")
         .await
         .unwrap_or_else(|error| panic!("write asset fixture: {error}"));

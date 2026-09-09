@@ -75,12 +75,11 @@ pub async fn read(server: &str) -> anyhow::Result<RuntimeVersion> {
     }
     let version: RuntimeVersion = serde_json::from_value(value)
         .map_err(|_| anyhow::anyhow!("runtime version response invalid"))?;
-    if version.frontend_build_id.as_ref().is_some_and(|id| {
-        id.len() != 64
-            || !id
-                .bytes()
-                .all(|byte| byte.is_ascii_digit() || (b'a'..=b'f').contains(&byte))
-    }) {
+    if version
+        .frontend_build_id
+        .as_ref()
+        .is_some_and(|id| !crate::frontend_release::is_build_id(id))
+    {
         anyhow::bail!("runtime build identity invalid");
     }
     Ok(version)
