@@ -42,13 +42,13 @@ impl AcpRuntime {
     #[cfg(unix)]
     pub(crate) async fn spawn(
         session: &DurableAgentSession,
+        executable: BoundExecutable,
         runtime_lease: &HeldRuntimeLease,
         guardian: &GuardianLaunch,
         arguments: &[String],
         environment: &[(String, String)],
         permission_policy: AcpPermissionPolicy,
     ) -> Result<Self, DriverLaunchError> {
-        let executable = bind(session).await?;
         let mut room_portal = create_room_portal().await?;
         let started = UnixProcessCustody::start_with_children(
             runtime_lease,
@@ -87,6 +87,7 @@ impl AcpRuntime {
     #[cfg(not(unix))]
     pub(crate) async fn spawn(
         session: &DurableAgentSession,
+        executable: BoundExecutable,
         arguments: &[String],
         environment: &[(String, String)],
         permission_policy: AcpPermissionPolicy,
@@ -97,7 +98,6 @@ impl AcpRuntime {
             "ACP provider processes are unsupported on this platform.",
         )
         .into());
-        let executable = bind(session).await?;
         let mut room_portal = create_room_portal().await?;
         let mut command = CommandWrap::with_new(executable.launch_path(), |command| {
             command
@@ -241,7 +241,9 @@ impl Drop for AcpRuntime {
     }
 }
 
-async fn bind(session: &DurableAgentSession) -> Result<BoundExecutable, DriverLaunchError> {
+pub(crate) async fn bind(
+    session: &DurableAgentSession,
+) -> Result<BoundExecutable, DriverLaunchError> {
     bind_executable_with_children(
         session.executable.clone(),
         session.executable_identity.clone(),

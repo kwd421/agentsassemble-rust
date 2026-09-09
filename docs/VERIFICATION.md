@@ -8696,3 +8696,75 @@ Logs are `/tmp/aa-phase9-codex-grpc-tests.log`,
 rebuilt release; these local cases do not establish that result.
 Affected provider/server all-target/all-feature Clippy and unchanged architecture,
 growth, 19 policy cases, format, diff and artifact gates pass.
+
+## Phase 9 first managed real-provider integration (2026-09-09)
+
+The release package built from `c803c61` uses the isolated
+`app.agentsassemble.phase9.integration20260909` data root and native folder picker.
+Existing provider accounts are retained; only task-local PATH aliases select the
+installed approved CLIs. The Codex alias selects the working native ChatGPT bundle;
+the separately installed npm Codex cannot load the user's current configuration.
+No account/configuration fallback or credential copy is introduced.
+
+- Codex `gpt-5.6-luna`, Low, default tier: native UI start, real `2 + 3 = 5.`
+  publication, normal app quit, restart, same-session resume and second real
+  publication all pass. Durable `provider_session_reused=true`, `turn_count=2`,
+  no error/recovery flag, and UI stop completes. All eight observed exact owned
+  app/server/worker/guardian/anchor/provider/host PIDs are absent after the first quit.
+- OpenCode `opencode/muse-spark-1.2-contributor-free`: native UI start, real
+  `3 + 4 equals 7.` publication and UI stop pass; one durable turn, no error/recovery.
+- Grok `grok-4.6`, Medium: native UI start, real `4 + 5 equals 9.` publication
+  and UI stop pass; one durable turn, no error/recovery.
+- Cursor `auto`: actual start fails before any turn and retains uncertain authority.
+  Its installed shell launcher needs sibling `node`, `index.js` and package files;
+  single-file executable staging loses them. A help-only comparison reproduces
+  installed exit 0 versus staged exit 1 with the missing sibling Node error.
+  The installed package contains 459 files, 233,896,754 bytes and no symlinks.
+  Repair of this package authority remains pending; do not classify it as passing.
+- DeepSeek reaches the configured-key path but the secure store denies access to
+  this validation executable. No real API turn ran. Additional Keychain access
+  authorization remains pending; no credential/environment workaround is used.
+
+The reopened packaged room retains the real messages. Its room-named header search
+finds both `previous answer` messages, context navigation selects the real answer,
+and pinning exposes that answer in the pinned-message panel. The desktop screenshot
+shows the actual conversation, roster, composer and separate failed/stopped states.
+Current mobile/admitted-user and external Antigravity/AgentBridge proof are pending.
+
+A one-second `ps` sample of exact descendants covers 42 baseline samples at three
+processes and 174.55 MiB median summed RSS, then 48 Codex samples at eight processes
+and 316.69 MiB median / 347.62 MiB maximum observed summed RSS. Maximum observed
+summed CPU is 8.6% baseline and 81.9% with Codex, where 100% is one logical core on
+this ten-core host. These are point samples, not peaks or unique physical memory;
+separately hosted WebKit/XPC processes are outside this descendant measurement.
+Raw task-owned samples and allowlisted session status are retained under
+`/tmp/aa-phase9-integration-20260909/`; private provider identifiers are not logged.
+The second app run is normally quit and its exact app/server PIDs are absent.
+Its disposable room/data remain available for the remaining integrated verification.
+
+### Cursor installed-package authority correction (2026-09-09)
+
+The actual Unix `cursor-agent` is a shell entry in a 459-file, 233,896,754-byte
+installation. Its sibling `node`, `index.js`, chunks and native modules are required
+by its reachable launch path. Single-file staging reproduced exit 1 with a missing
+sibling Node; the original installed launcher passed the same help-only invocation.
+
+The Cursor executable owner now distinguishes native entries from Unix scripts.
+Script packages require Node and the entry module, and bind sorted relative names,
+file identities/content and executable modes into one durable package identity.
+WalkDir traversal is limited to 4,096 entries / 32 levels / 512 MiB within the
+existing four-worker, ten-second filesystem owner. Non-regular members fail closed.
+Verified members are copied into the existing leased private staging owner with
+relative paths intact. Source mutation cannot change staged launch bytes; existing
+staging cleanup owns the whole directory. Native entries retain their existing
+single-file contract. ACP receives the bound executable from the provider owner;
+model, permission, protocol and process-custody semantics remain unchanged.
+
+The cost is one private package copy per live Cursor process (about 223 MiB for the
+observed installation) plus bounded content verification. This repairs a reproduced
+launch failure without a mutable-source launch or a compatibility fallback.
+Five Cursor tests pass, including actual staged fixture execution, original-file
+replacement, dependency changes/removal/links, missing Node and byte bounds. Nine
+ACP tests pass; affected provider/server all-target/all-feature Clippy, architecture,
+growth, 19 policy/artifact-owner tests, formatting and diff checks pass. Real
+packaged Cursor response/stop verification remains pending below.

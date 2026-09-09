@@ -38,6 +38,7 @@ impl GrokAcpDriver {
         let environment = environment(state_root, session).await?;
         let runtime = AcpRuntime::spawn(
             session,
+            crate::acp_runtime::bind(session).await?,
             runtime_lease,
             guardian,
             &arguments,
@@ -57,6 +58,7 @@ impl GrokAcpDriver {
         let environment = environment(state_root, session).await?;
         let runtime = AcpRuntime::spawn(
             session,
+            crate::acp_runtime::bind(session).await?,
             &arguments,
             &environment,
             AcpPermissionPolicy::RoomTools,

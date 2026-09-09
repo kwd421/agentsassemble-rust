@@ -6,7 +6,8 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     catalog::{
-        control, failed_provider, option, permission_control, provider_executable, ready_provider,
+        await_filesystem, control, failed_provider, option, permission_control,
+        provider_executable, ready_provider,
     },
     process::{ProbeFailure, probe_with_timeout},
 };
@@ -20,11 +21,19 @@ pub(crate) async fn discover(
     mut provider: ProviderAvailability,
     cancellation: &CancellationToken,
 ) -> ProviderAvailability {
-    let (executable, executable_identity) =
-        match provider_executable("cursor-agent", cancellation).await {
-            Ok(authority) => authority,
-            Err(failure) => return failed_provider(provider, failure),
-        };
+    let (executable, _) = match provider_executable("cursor-agent", cancellation).await {
+        Ok(authority) => authority,
+        Err(failure) => return failed_provider(provider, failure),
+    };
+    let executable_identity = match await_filesystem(
+        cancellation,
+        crate::filesystem::cursor_executable_identity(executable.clone()),
+    )
+    .await
+    {
+        Ok(identity) => identity,
+        Err(failure) => return failed_provider(provider, failure),
+    };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
     let output = match probe_with_timeout(

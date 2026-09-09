@@ -13,6 +13,8 @@ use tokio::sync::{Semaphore, oneshot};
 
 #[path = "codex_executable.rs"]
 mod codex_executable;
+#[path = "cursor_executable.rs"]
+mod cursor_executable;
 #[cfg(unix)]
 #[path = "filesystem_executable_staging.rs"]
 mod executable_staging;
@@ -24,6 +26,8 @@ pub(crate) use codex_executable::{
 };
 #[cfg(unix)]
 use executable_staging::ExecutableStaging;
+
+pub(crate) use cursor_executable::{bind_cursor_executable, cursor_executable_identity};
 
 const FILESYSTEM_TIMEOUT: Duration = Duration::from_secs(10);
 const FILESYSTEM_WORKERS: usize = 4;
@@ -243,6 +247,8 @@ pub(crate) async fn runtime_executable_identity(
 ) -> Result<String, FilesystemFailure> {
     if provider_kind == "codex_live_session" {
         codex_executable_identity(path).await
+    } else if provider_kind == "cursor_live_session" {
+        cursor_executable_identity(path).await
     } else {
         executable_identity(path).await
     }

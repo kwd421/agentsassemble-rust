@@ -26,6 +26,7 @@ impl CursorAcpDriver {
     ) -> Result<Self, DriverLaunchError> {
         let runtime = AcpRuntime::spawn(
             session,
+            bind(session).await?,
             runtime_lease,
             guardian,
             &["acp".to_owned()],
@@ -46,6 +47,7 @@ impl CursorAcpDriver {
         .into());
         let runtime = AcpRuntime::spawn(
             session,
+            bind(session).await?,
             &["acp".to_owned()],
             &[],
             AcpPermissionPolicy::Reject,
@@ -156,4 +158,20 @@ const fn invalid_profile() -> DriverError {
         "invalid_runtime_profile",
         "The Cursor runtime profile is invalid.",
     )
+}
+
+async fn bind(
+    session: &DurableAgentSession,
+) -> Result<crate::filesystem::BoundExecutable, DriverLaunchError> {
+    crate::filesystem::bind_cursor_executable(
+        session.executable.clone(),
+        session.executable_identity.clone(),
+    )
+    .await
+    .map_err(|_| {
+        DriverLaunchError::safe(DriverError::new(
+            "provider_executable_changed",
+            "The Cursor executable package no longer matches discovery authority.",
+        ))
+    })
 }

@@ -53,6 +53,17 @@ contract. A controlled companion exit reproduces launcher fork/exit before clean
 the guardian deliberately cannot publish absence in that state. Preserve its
 uncertain generation and blocked retry instead of inferring absence from dead PIDs.
 
+Actual Cursor `auto` startup exposes another executable boundary: the installed
+shell launcher resolves its sibling Node, JavaScript chunks and native modules.
+Single-file staging makes those dependencies disappear. Bind the installed Cursor
+package at its executable owner, include its dependencies in the durable identity,
+and stage the verified package with the launcher's relative paths intact. Preserve
+bounded filesystem work, immutable launch bytes, exact process custody and the ACP
+driver's permission/model contract. Do not execute mutable original package paths,
+add a wrapper/environment fallback or weaken the existing cleanup proof. Verify
+dependency mutation/missing-file rejection, the installed launcher and complete
+packaged `auto` response/stop. The failed original generation remains uncertain.
+
 ## Acceptance and verification
 
 - Reconcile every retained exposed feature with its original entry, Rust owner,

@@ -36,7 +36,7 @@ pub(crate) async fn provider_executable(
     }
 }
 
-async fn await_filesystem<T>(
+pub(crate) async fn await_filesystem<T>(
     cancellation: &CancellationToken,
     operation: impl Future<Output = Result<T, FilesystemFailure>>,
 ) -> Result<T, ProbeFailure> {
