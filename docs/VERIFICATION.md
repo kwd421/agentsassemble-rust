@@ -9219,3 +9219,17 @@ The current corrections require affected final-head re-review; no pending answer
 is an approval. The latest user instruction is to continue through reviews,
 corrections and verification without pausing after each result. Broader mobile
 redesign remains explicitly deferred and incomplete.
+
+## Claude metadata inspection directory correction (2026-09-10)
+
+Source follow-up of the Music prompt found that Claude catalog/usage initialization
+inherited the packaged server's unspecified launch cwd. Installed SDK 0.3.258 defines
+omitted cwd as `process.cwd()`; `supportedModels()` awaits CLI initialization, so an
+empty input queue does not prevent native startup. No evidence identifies the old
+process's concrete cwd or the internal Claude operation that touched MediaLibrary.
+
+Inspection now sets cwd to the already-owned private SDK stage; actual session
+workspace selection is unchanged. The existing catalog test starts the bridge from
+a different temporary directory, and the fake SDK rejects inherited inspection cwd.
+All provider-runtime tests pass without executing a real provider. This verifies
+workspace isolation, not causation or elimination of the native permission prompt.

@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { spawn } from "node:child_process";
 import { createInterface } from "node:readline";
 import test from "node:test";
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const bridge = fileURLToPath(new URL("./claude-agent-sdk-bridge.mjs", import.meta.url));
 const fakeSdk = fileURLToPath(new URL("./claude-agent-sdk-fake.mjs", import.meta.url));
 
-function start(mode) {
+function start(mode, cwd) {
   const child = spawn(process.execPath, [bridge, fakeSdk, "/fixture/claude", mode], {
     stdio: ["pipe", "pipe", "pipe"],
+    cwd,
   });
   const lines = createInterface({ input: child.stdout });
   const iterator = lines[Symbol.asyncIterator]();
@@ -27,8 +31,10 @@ function closed(child) {
   return new Promise((resolve) => child.once("close", (code) => resolve(code)));
 }
 
-test("catalog emits only exact installed model authority", async () => {
-  const runtime = start("catalog");
+test("catalog emits exact model authority outside the caller workspace", async (t) => {
+  const cwd = await mkdtemp(join(tmpdir(), "aa-catalog-caller-"));
+  t.after(() => rm(cwd, { recursive: true, force: true }));
+  const runtime = start("catalog", cwd);
   assert.deepEqual(await runtime.next(), {
     type: "catalog",
     models: [

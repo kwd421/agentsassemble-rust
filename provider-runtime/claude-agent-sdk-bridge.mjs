@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { dirname } from "node:path";
 import { pathToFileURL } from "node:url";
 import { NativeDelivery } from "./claude-native-delivery.mjs";
 import { OwnerRequests } from "./claude-owner-requests.mjs";
@@ -132,9 +133,10 @@ function baseOptions(claudePath) {
   };
 }
 
-async function inspect(sdk, claudePath, mode) {
+async function inspect(sdk, sdkPath, claudePath, mode) {
   const input = new InputQueue();
-  const query = sdk.query({ prompt: input, options: baseOptions(claudePath) });
+  // Inspection has no user workspace; keep native initialization in its owned SDK stage.
+  const query = sdk.query({ prompt: input, options: { ...baseOptions(claudePath), cwd: dirname(sdkPath) } });
   try {
     if (mode === "catalog") {
       await emit({ type: "catalog", models: exactModels(await query.supportedModels()) });
@@ -334,7 +336,7 @@ async function main() {
   const [sdkPath, claudePath, mode] = process.argv.slice(2);
   const sdk = await loadSdk(sdkPath);
   if (mode === "catalog" || mode === "usage") {
-    await inspect(sdk, claudePath, mode);
+    await inspect(sdk, sdkPath, claudePath, mode);
     return;
   }
   if (mode !== "session") throw new Error("invalid bridge mode");

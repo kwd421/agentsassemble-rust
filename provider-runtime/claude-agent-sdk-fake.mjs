@@ -1,3 +1,6 @@
+import { dirname } from "node:path";
+import { fileURLToPath } from "node:url";
+
 const MODELS = [
   {
     value: "sonnet",
@@ -13,6 +16,9 @@ class FakeQuery {
     this.prompt = prompt;
     this.options = options;
     this.closed = false;
+    if (!options.sessionId && !options.resume && options.cwd !== dirname(fileURLToPath(import.meta.url))) {
+      throw new Error("inspection inherited the caller workspace");
+    }
   }
 
   async initializationResult() {

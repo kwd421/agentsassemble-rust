@@ -938,3 +938,17 @@ The second Windows lint pass reached the CLI's unsupported-platform branch and
 rejected an async function without awaits. It now returns an already-ready error
 future, preserving the CLI's common call contract and explicit unsupported result.
 Server Clippy and mandatory gates pass; the next Windows run verifies that branch.
+
+## Claude catalog inspection workspace (2026-09-10)
+
+Packaged catalog refresh was observed to launch installed Claude Code, which macOS
+attributed as accessing MediaLibrary. The SDK's metadata calls initialize that CLI
+even with an empty input stream. The old inspection omitted `cwd` and inherited
+the desktop/server launch directory; metadata inspection has no selected user
+workspace. Catalog and usage inspection must explicitly use the existing private
+SDK stage as cwd. That stage's current Rust owner retains and removes it after the
+probe. Managed sessions retain their explicitly selected workspace. No new temp
+owner, provider execution mode, permission suppression or alternate catalog is
+introduced. Acceptance is deterministic SDK-option verification from a different
+caller directory; whether this eliminates the native music prompt remains unknown
+without independent CLI access evidence.
