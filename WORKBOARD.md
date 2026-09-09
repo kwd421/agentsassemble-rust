@@ -42,9 +42,10 @@
   [Correction](docs/VERIFICATION.md#phase-7-whole-phase-review-correction-muted-owner-2026-09-09).
   [Contract and evidence](docs/specs/external-ai-admission-slice.md).
   New Pro review and authorized real-provider proof remain at full closeout.
-- Active: Phase 8 operational surfaces. Establish provider operations and runtime
-  diagnostics under their current owners, then complete direct packaged acceptance.
-  [Contract and acceptance](docs/specs/operational-surfaces-slice.md).
+- Active: Phase 8 operational surfaces pass affected local checks, Windows custody
+  verification and direct packaged desktop/mobile/browser acceptance through `60f4621`.
+  Whole-phase Daybreak review is pending before Phase 9.
+  [Contract](docs/specs/operational-surfaces-slice.md) and [evidence](docs/VERIFICATION.md#phase-8-packaged-operations-and-update-2026-09-09).
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:

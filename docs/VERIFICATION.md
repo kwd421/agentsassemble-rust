@@ -8457,3 +8457,90 @@ exact pushed HEAD and whole local Phase 7 contract at C0/H0/M0/L0. Historical co
 finding. The review confirms both transaction orderings: open-before-mute is
 cancelled by the mute owner, and mute-before-open is rejected before request custody.
 Phase 7 is locally closed; Phase 8 may begin.
+
+## Phase 8 packaged operations and update (2026-09-09)
+
+The thirty implementation commits after `d70224b` through `60f4621` connect the
+fourteen-provider operations matrix and the runtime diagnostics/update/restart
+surfaces. The [operational contract](specs/operational-surfaces-slice.md) owns source
+mapping, failure semantics and individual affected checks. Whole-phase Daybreak
+review remains pending; no real account/provider execution is claimed here.
+
+Direct manipulation used the debug bundle `AA Phase8 Operations.app` and isolated
+identifier `app.agentsassemble.phase8.operations20260909`, first at 1100×780 and
+then 390×480. Native local executables supplied explicitly labeled protocol data;
+they did not contact providers, authenticate accounts or execute model turns.
+
+- Codex login exercised pending/cancelled, failed and successful command exits.
+  The cancellation response race exposed English text replacing the Korean receipt;
+  `41397f2` maps typed failures and both reply orders pass. Packaged mobile cancellation
+  then displayed `로그인을 취소했어요.`. Successful command exit and explicit catalog
+  refresh each published the actual discovered local model and completion notice.
+- The distinct OpenCode flow launched the native Terminal through the product owner.
+  Its local executable completed and left a PID-only receipt; the packaged UI asked
+  the operator to finish login in Terminal and refresh, without claiming authentication.
+  Computer Use denied access to Terminal itself, so its window contents were not
+  visually verified. The fixture contacted no account and had already exited.
+- Desktop and mobile member usage displayed the native fixture's 37.5% used/62.5%
+  remaining bucket and a separate unknown usage/reset bucket. Mobile initially
+  omitted this shared component; `8f5012d` connects it to the existing provider owner.
+  The corrected 390×480 view showed the query button and complete final bucket after
+  scrolling. Usage inspection initialized the protocol and read rate limits only;
+  its process was positively absent afterward.
+- Server Status showed the first CPU sample as unknown, later measured values,
+  observation time and bounded process projections. The bottom controls and report
+  remained reachable at 390×480. An actual `assemble release-health run` selecting
+  only `git_diff` persisted a passing result; the panel showed the other five checks
+  as not run, and did not claim the report verified current source.
+- The desktop restart control completed real POSIX replacement. PID 759 and its
+  loopback listener at port 50009 survived; existing room/session/messages remained,
+  and a new UI message was accepted after reconnect. This fixture had no running
+  provider session, so it does not prove real-provider reconstruction.
+- A normal one-use human invitation admitted a browser guest. Existing messages
+  loaded; member detail displayed the operator-only account-usage explanation, with
+  no account query action or managed-session start action. Actual public requests to
+  login, usage, catalog refresh, restart and release-health report returned 403.
+- Browser update used the supported manual proxy configuration and a run-owned
+  `aiohttp`/Cloudflare transport so its origin survived server replacement. The
+  proxy supplied only configured ingress credentials; room admission, cookies,
+  commands and all operational authorization remained in the real Rust server.
+  An inert comment changed only the run-owned bundle's frontend source. Packaged
+  restart `85d7cded-e7ad-42df-85f9-92596a39f0d0` completed at 04:02:11 UTC with PID
+  29655 and the same kernel listener at port 55602. `frontend-info` changed from
+  `05215d3d…` to `0d822259…`, protocol 1. The existing browser visibly announced the
+  new screen version. Its refresh button retained guest identity and prior messages;
+  a newly sent message appeared in both browser and packaged desktop.
+
+The manual proxy observation is distinct from managed temporary-tunnel continuity.
+Both original `gui.py::GuiApplicationServices.shutdown` and Rust's serving owner
+stop their owned temporary tunnel at shutdown; this test does not claim its public
+origin survives. No ingress authentication or product route was bypassed.
+
+Whole Rust verification passed 866 unit/integration cases and doctests; desktop
+verification passed 28 cases. The full frontend run passed 797 cases and exposed
+four old surface-digest fixtures. Their thirteen affected cases passed after the
+fixture correction; the later four login and eight mobile/usage cases also passed.
+These overlapping groups are not added into a new full-suite count. Workspace
+Clippy, frontend build/CSS, generated bindings and unchanged mandatory gates passed.
+Windows run [34308467007](https://github.com/kwd421/agentsassemble-rust/actions/runs/34308467007)
+at `60f4621` passed affected compile/Clippy and all six managed-custody cases. It does
+not establish Windows rolling restart; that platform reports unsupported explicitly.
+
+Observed debug costs were three owned app/supervisor/runtime processes after probe
+cleanup. At the final sample they used 122048/11808/61920 KiB RSS and 0.1/0.1/0.0%
+CPU. The separate verification proxy and tunnel are not product runtime overhead.
+Isolated data used 331848 KiB and the bundle 203628 KiB. These are point observations,
+not performance improvements or real-provider workload measurements. The local
+usage interaction returned within its 0.64-second UI action observation; end-to-end
+restart duration and internal Tokio task count were not separately instrumented.
+
+Both verification browser tabs were closed. Normal app quit stopped its exact
+supervisor/runtime; the verification runner joined its own proxy and tunnel. The
+Terminal process was absent before this test; only its newly created process and
+two shell descendants were terminated afterward, and all recorded PIDs were absent.
+Computer Use was reset. The exact isolated data and `/tmp/aa-phase8-package-20260909`
+were removed. With no Cargo/Tauri work running, `make artifact-prune` removed the
+obsolete desktop target (1.6 GiB) and accumulated root artifacts (52.1 GiB), including
+this run's bundle; artifact-check then passed. Disk availability rose from 14 to
+68 GiB. User-owned `.agents/`, `scripts/__pycache__/`, source and unrelated processes
+were preserved. New builds are needed for subsequent packaged work.

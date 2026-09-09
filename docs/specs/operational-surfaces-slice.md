@@ -1,8 +1,10 @@
 # Operational surfaces
 
 Status: Phase 8 contract established after Phase 7 approval at `d70224b`.
-Operational entries are connected; whole-phase packaged acceptance is pending. Real-provider execution and both
-final reviewers remain governed by the product plan's final closeout gate.
+Operational entries, affected local checks and direct packaged acceptance pass through
+`60f4621`; whole-phase Daybreak review is pending. [Packaged evidence and limits](../VERIFICATION.md#phase-8-packaged-operations-and-update-2026-09-09)
+supersede the pending execution notes below. Real-provider execution and both final
+reviewers remain governed by the product plan's final closeout gate.
 
 ## Definition and current reachable contracts
 
