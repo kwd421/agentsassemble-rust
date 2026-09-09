@@ -8999,3 +8999,21 @@ release-source validation, concurrency/shutdown, terminal custody, response-loss
 uncertainty, optional updates, structure and unnecessary defensive complexity.
 This was source/diff review; it does not expand the runtime evidence above.
 All three feature commits were pushed and remote `main` verified at `9bfc3a9`.
+
+## Executable staging cleanup serialization (2026-09-09)
+
+The model-freshness full verification exposed a `bind executable: Failed` in the
+existing executable replacement test. Inspection found that `ExecutableStaging`
+released its root lock before its `TempDir` field destructor removed the directory;
+the automatic destructor also removed it when acquiring the root lock failed.
+Another owner's locked directory enumeration could therefore race removal.
+A deterministic regression holds that lock, drops a staging owner, and observes
+the forbidden removal before the fix; no timing or sleeps are needed. This proves
+the cleanup defect, although the original generic I/O error did not identify its
+exact failed syscall.
+
+The owner now disables automatic field cleanup and removes only while holding the
+root lock. A busy root retains the already-existing unlocked-lease recovery path.
+All 13 filesystem cases pass, including the original failing executable test and
+the new lock/reclamation test. Full verification and packaged closure follow with
+the model-freshness slice; no filesystem/process authority or gate is weakened.

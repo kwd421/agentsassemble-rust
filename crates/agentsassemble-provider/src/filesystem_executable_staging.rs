@@ -46,12 +46,17 @@ impl ExecutableStaging {
 
 impl Drop for ExecutableStaging {
     fn drop(&mut self) {
+        // TempDir's field destructor runs after this guard is released. Its automatic
+        // deletion could race another owner's enumeration. Retain the existing stale
+        // lease recovery path if the root is busy; otherwise remove under its lock.
+        self.directory.disable_cleanup(true);
         let Some(root) = self.directory.path().parent() else {
             return;
         };
         let Ok(root_lock) = acquire_lock(&root.join(ROOT_LOCK_NAME), false, false) else {
             return;
         };
+        let _ = fs::remove_dir_all(self.directory.path());
         let _ = reclaim_stale_directories(root);
         drop(root_lock);
     }
@@ -157,6 +162,22 @@ fn reclaim_stale_directory(path: &Path) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn drop_cannot_remove_a_directory_while_another_owner_holds_the_root_lock() {
+        let base = tempfile::tempdir().unwrap_or_else(|error| panic!("{error}"));
+        let root = base.path().join("staging");
+        let active = ExecutableStaging::create_in(&root).unwrap_or_else(|error| panic!("{error}"));
+        let path = active.path().to_path_buf();
+        let guard = acquire_lock(&root.join(ROOT_LOCK_NAME), false, true)
+            .unwrap_or_else(|error| panic!("{error}"));
+        drop(active);
+        assert!(path.is_dir(), "drop bypassed the root's enumeration lock");
+        drop(guard);
+        let next = ExecutableStaging::create_in(&root).unwrap_or_else(|error| panic!("{error}"));
+        assert!(!path.exists());
+        assert!(next.path().is_dir());
+    }
 
     #[test]
     fn next_owner_reclaims_only_unlocked_staging() {
