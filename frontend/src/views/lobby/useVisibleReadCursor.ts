@@ -1,4 +1,7 @@
 import { useEffect, useRef, type RefObject } from "react";
+import { feedIsNearBottom } from "./useLobbyHistory";
+
+const openModal = () => document.querySelector('dialog[open], [aria-modal="true"]:not(dialog)');
 
 // Acknowledgement belongs to the existing preference owner. This hook only
 // establishes that the active user is actually viewing the latest feed.
@@ -18,11 +21,30 @@ export function useVisibleReadCursor({
       attempted.current = null;
     }
     if (!enabled || !onMarkRead || latestSequence <= lastReadSequence) return;
+    let modalObserver: MutationObserver | null = null;
     const acknowledgeVisibleLatest = () => {
       const feed = scrollRef.current;
       if (!feed || feed.clientHeight <= 0 || document.visibilityState !== "visible" ||
-          !document.hasFocus() || document.querySelector('[aria-modal="true"]') ||
-          feed.scrollHeight - feed.scrollTop - feed.clientHeight > 2) return;
+          !document.hasFocus() ||
+          !feedIsNearBottom(feed)) return;
+      if (openModal()) {
+        // Modal state is owned by the dialog/portal DOM. Subscribe only while it
+        // blocks a visible read, then recheck all guards after its dismissal.
+        if (!modalObserver) {
+          modalObserver = new MutationObserver(() => {
+            if (openModal()) return;
+            modalObserver?.disconnect();
+            modalObserver = null;
+            acknowledgeVisibleLatest();
+          });
+          modalObserver.observe(document.body, {
+            childList: true, subtree: true, attributes: true, attributeFilter: ["open", "aria-modal"],
+          });
+        }
+        return;
+      }
+      modalObserver?.disconnect();
+      modalObserver = null;
       const bounds = feed.getBoundingClientRect();
       const pointX = (bounds.left + bounds.right) / 2;
       const pointY = Math.min(bounds.bottom, window.innerHeight) - 1;
@@ -38,6 +60,7 @@ export function useVisibleReadCursor({
     window.addEventListener("focus", acknowledgeVisibleLatest);
     document.addEventListener("visibilitychange", acknowledgeVisibleLatest);
     return () => {
+      modalObserver?.disconnect();
       feed?.removeEventListener("scroll", acknowledgeVisibleLatest);
       window.removeEventListener("focus", acknowledgeVisibleLatest);
       document.removeEventListener("visibilitychange", acknowledgeVisibleLatest);

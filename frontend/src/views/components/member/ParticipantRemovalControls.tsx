@@ -60,7 +60,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
         강퇴
       </button>
       <button type="button" className="dc-member-context-menu-item" data-variant="danger" style={{ minHeight: 44 }} disabled={busy}
-        aria-label={`${displayName} 참가 종료`} title="참가를 종료합니다. 에이전트는 다시 시작할 수 없습니다."
+        aria-label={`${displayName} 참가 종료`} title="현재 참가를 종료하고 방 접근 권한을 해제합니다."
         onClick={(event) => { actionTriggerRef.current = event.currentTarget; setConfirmAction("export"); }}>
         참가 종료
       </button>
@@ -70,7 +70,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
           aria-label={confirmAction === "kick" ? "참가자 강퇴 확인" : "참가 종료 확인"}
           onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) { setConfirmAction(null); setError(""); } }}>
           <h2 className="font-semibold" style={{ fontSize: 18 }}>{confirmAction === "kick" ? "참가자를 내보낼까요?" : "참가를 종료할까요?"}</h2>
-          <p className="preserve-words" style={{ margin: "20px 0" }}>{displayName}{confirmAction === "kick" ? "의 방 접속과 실행이 종료됩니다. 나중에 다시 참가시킬 수 있어요." : "의 참가와 실행이 종료됩니다. 이 에이전트 세션은 다시 시작할 수 없습니다."}</p>
+          <p className="preserve-words" style={{ margin: "20px 0" }}>{displayName}{confirmAction === "kick" ? "의 방 접속과 실행이 종료됩니다. 나중에 다시 참가시킬 수 있어요." : "의 참가가 종료되고 방 접근 권한이 해제됩니다. 이 참가 상태는 되돌릴 수 없어요."}</p>
           {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
           <div className="dc-create-channel-actions">
             <button type="button" autoFocus className="dc-agent-create-secondary" style={{ minHeight: 44 }} disabled={busy} onClick={() => { setConfirmAction(null); setError(""); }}>취소</button>

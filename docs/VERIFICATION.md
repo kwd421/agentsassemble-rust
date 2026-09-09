@@ -9180,3 +9180,42 @@ normal RoomPortal observation/publication with `8 + 9 = 17`, followed by stop. T
 closes the prior DeepSeek inference-proof gap for that flow. Cursor structured
 room-tool permission, external Antigravity admission/publication and broader mobile
 acceptance remain separate unresolved limits.
+
+## Final review corrections and visible-read boundaries (2026-09-10)
+
+Daybreak's whole-product source review identified five low-severity issues in the
+reviewed snapshot: outdated Codex WebSocket wording, missing Cursor package custody
+in the contract, outdated Cursor model-discovery wording, an unsupported channel
+rename/delete UI claim, and agent-specific permanent-export wording also shown for
+humans. Current documentation now names native HTTP/gRPC, package-member custody,
+ACP `cursor/list_available_models`, and the actually exposed channel creation and
+selection. The generic participant confirmation was directly opened for the
+isolated Browser Guest and cancelled; it states participation/access revocation,
+and the guest remains participating. This verifies wording and cancellation only.
+
+The read hook used a 2px threshold while its history owner used 64px, and modal
+removal did not independently re-evaluate a still-visible latest feed. It now
+reuses that owner's predicate and temporarily observes modal dismissal only when
+a modal blocks an otherwise eligible read. Dismissal disconnects the observer and
+rechecks visibility, focus, latest position and hit testing. Native open dialogs and
+portal modals are covered. No recurring timer, persisted state or native visibility
+fallback is introduced. The complete frontend suite passes 143 files / 814 tests;
+the affected cursor/history/removal/wiring batch passes 13 tests, including dismissal
+without a subsequent focus/scroll event and a hidden-document dismissal that must
+not mark read.
+
+An initial packaged unread observation under Computer Use occurred while the app
+was in the background: document focus was true but Page Visibility was hidden.
+That is not proof of a foreground WKWebView defect. Temporary diagnostic markup
+was removed, and the native-fallback hypothesis was withdrawn. After user interaction,
+the isolated lobby cursor advanced from seq:112 to seq:121 and survived restart;
+its exact foreground transition was not separately instrumented. These facts do
+not extend into mobile UX acceptance or a claim that background automation proves
+foreground reading.
+
+Pro's completed Phase 1–3 supplemental review of immutable `a41b12a` is APPROVE
+C0/H0/M0/L0. Its separate Phase 4–6 review is still in progress against that snapshot.
+The current corrections require affected final-head re-review; no pending answer
+is an approval. The latest user instruction is to continue through reviews,
+corrections and verification without pausing after each result. Broader mobile
+redesign remains explicitly deferred and incomplete.

@@ -128,7 +128,8 @@ packaged room containing the committed ballot and exercise voting and closure.
 - Obtain final GPT-6 Pro and Daybreak Blue xhigh approval for the complete retained
   product, original-to-Rust inventory, unreviewed individual commits, cumulative
   implementation and exact pushed HEAD. The master plan's per-slice gate owns the
-  user's latest requirement to brief and wait after Pro review before corrections.
+  user's latest requirement to continue through Pro review, supported corrections,
+  verification and final re-review without intermediate pauses.
 
 Unavailable external dependencies or authorization gaps remain explicit limits;
 they do not become successful or simulated real-provider evidence. At the accepted
@@ -141,7 +142,10 @@ computes unread state from the persisted sequence cursor, but only its manual
 button advanced it. Connect the existing loaded/latest viewport to the existing
 preference-write owner. Read only when the focused visible document displays the
 latest feed, with no modal or fixed historical/search window. Focus/visibility and
-actual scroll events trigger evaluation; no timer/polling or optimistic substitute
+actual scroll events trigger evaluation. Use the history owner's same 64px latest
+predicate. A visible feed blocked by a native or portal modal temporarily observes
+that modal's DOM lifetime, disconnects at dismissal, and rechecks every guard;
+closing a modal does not require a second scroll or app switch. No timer/polling or optimistic substitute
 for the preference owner is added. Deduplicate attempts by room and sequence and
 leave failed persistence with the existing preference error/recovery owner.
 Acceptance: the current latest view clears unread through persisted preference

@@ -723,18 +723,18 @@ At final closeout, GPT-6 Pro and Daybreak Blue at `xhigh` review the full retain
 product, original-to-Rust coverage, all not-yet-reviewed individual commits, the
 cumulative implementation range, and final HEAD. Reuse prior exact reviewed evidence
 without dropping final integration coverage. Latest user decision (2026-09-09):
-after reading the completed Pro review, briefly report its findings and severity to
-the user and wait. Do not make review-driven corrections until the user resumes
-that work. Then correct supported findings, run affected verification, and submit
-corrections together for final re-review.
+continue through the remaining reviews, supported corrections, verification, and
+final re-review without pausing for another instruction after each Pro answer.
+Briefly report completed results while continuing the authorized work. Stop only
+for an actual unresolved authorization or external dependency.
 Latest user review sequencing (2026-09-09): Pro review is split into Phase 1–3,
 then Phase 4–6, then Phase 7–9; do not replace this with one whole-repository
 request or an isolated recent-diff approval. Phase 1–3 was reviewed at `9a8d39d`.
 Changes since that snapshot that affect an already-reviewed group require a scoped
 supplemental review of that group at the new frozen HEAD. Include current changes
 in their owning groups and preserve coverage across all groups; reuse prior exact
-evidence only for unchanged reviewed scope. After each completed Pro answer,
-briefly report its findings/severity and wait without review-driven corrections.
+evidence only for unchanged reviewed scope. Immutable review snapshots remain
+available while corrections are prepared; affected final code requires re-review.
 The user explicitly deferred broader mobile UX implementation; mobile acceptance
 remains incomplete and must be disclosed to both reviewers.
 

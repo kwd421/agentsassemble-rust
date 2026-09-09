@@ -2,21 +2,31 @@
 
 ## Active work
 
+- Active: complete the final split Pro reviews without pausing between results,
+  correct supported findings, and verify/re-review the final changes, as requested
+  by the user. The immutable `a41b12a` review snapshot remains available while
+  corrections continue. Signed app/helper/server startup and stored-key access after
+  a different signed server build pass. The 2/64px visible-read mismatch and modal
+  dismissal re-evaluation are corrected; background automation was not proof of a
+  foreground WebView failure. Final affected-head reviews remain pending.
+  [Signing contract](docs/specs/operational-surfaces-slice.md#signed-desktop-supervisor-and-keychain-continuity).
+
 - Active: close out user-requested Harness/API freshness, inline OS credential
   approval, and the observed unread-state correction, then obtain Daybreak review.
   Broader mobile UI/UX is explicitly deferred by the user and remains incomplete;
   agent-selected desktop stress dimensions do not constitute mobile design acceptance.
   [Contract](docs/specs/operational-surfaces-slice.md#provider-model-freshness-2026-09-09).
   Pro sequence: supplement changed Phase 1–3 at the frozen HEAD, then 4–6, then
-  7–9; brief each completed result and wait. [Owner](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#per-slice-execution-gate).
+  7–9; brief each completed result and continue through corrections and re-review.
+  [Owner](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#per-slice-execution-gate).
 
 - User-requested browser-to-local provider setup is locally complete:
   login/installation guidance, local setup links and optional version updates
   preserve provider/device authority. Daybreak approved all three commits,
   cumulative changes and exact `9bfc3a9` integration at C0/H0/M0/L0.
   [Verification](docs/VERIFICATION.md#browser-to-local-provider-setup-and-optional-updates-2026-09-09). [Contract](docs/specs/operational-surfaces-slice.md#browser-to-local-provider-setup-user-request-2026-09-09).
-  The separate Pro review uses the fixed `9a8d39d` snapshot; review-driven
-  corrections remain paused until the user resumes them.
+  Final split Pro review uses immutable `a41b12a` snapshots; supported corrections
+  continue under the latest user instruction.
 
 - Test/security duplication follow-up is locally complete: same-transaction reads,
   redundant codec checks, and fake test crypto removed; [evidence and retained boundaries](docs/VERIFICATION.md#test-necessity-and-security-duplication-audit-2026-09-07).

@@ -25,7 +25,7 @@ const HISTORY_TOP_THRESHOLD = 120;
 const INITIAL_HISTORY_MESSAGE_TARGET = 20;
 
 
-function feedIsNearBottom(element: HTMLDivElement) {
+export function feedIsNearBottom(element: HTMLDivElement) {
   const { scrollHeight, scrollTop, clientHeight } = element;
   return scrollHeight - scrollTop - clientHeight <= 64;
 }
