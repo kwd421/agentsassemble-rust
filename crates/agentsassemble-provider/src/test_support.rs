@@ -29,6 +29,7 @@ pub(crate) fn durable_session(
             runtime_kind: "live_cli".to_owned(),
             connection_kind: "native_cli_bridge".to_owned(),
             external_owned: false,
+            external_retained_interrupt: None,
             process_ownership: "server".to_owned(),
             model: model.to_owned(),
             reasoning_effort: "high".to_owned(),

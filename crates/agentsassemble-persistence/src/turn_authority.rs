@@ -162,6 +162,7 @@ mod tests {
                 runtime_kind: "test".to_owned(),
                 connection_kind: "test".to_owned(),
                 external_owned: false,
+                external_retained_interrupt: None,
                 process_ownership: "server".to_owned(),
                 model: "test".to_owned(),
                 reasoning_effort: String::new(),

@@ -295,6 +295,8 @@ pub(crate) async fn session_state_event(
         Utc::now(),
     ))
     .await?;
+    let projection =
+        crate::attendee_ready::project_session_in(transaction, &session.public).await?;
     internal_event(
         transaction,
         session,
@@ -307,7 +309,7 @@ pub(crate) async fn session_state_event(
                 "runtime_status".to_owned(),
                 json!(session.public.runtime_status),
             ),
-            ("agent_session".to_owned(), json!(session.public())),
+            ("agent_session".to_owned(), json!(projection)),
         ]),
     )
     .await

@@ -448,13 +448,14 @@ export function useAppController(deviceToken: string, clientId: string) {
     });
   }
 
-  const roomReadReady = Boolean(
-    menuRoom && menuRoom.id === activeRoom.id && activeRoom.roomUid && !guestReadOnly &&
+  const channelReadReady = Boolean(
+    activeRoom.roomUid && !guestReadOnly &&
     canonicalRoom.room?.room_uid === activeRoom.roomUid &&
     canonicalRoom.connectionState === "connected" && !canonicalRoom.syncIssue &&
     canonicalRoom.roomSettings && canonicalRoom.history.initialized &&
     roomSettings.preferenceStateFor(activeRoom).status === "ready"
   );
+  const roomReadReady = channelReadReady && menuRoom?.id === activeRoom.id;
 
   async function markRoomRead(roomId: string) {
     if (!roomReadReady || roomId !== activeRoom.id || !canonicalRoom.socket?.ready()) return;
@@ -583,10 +584,8 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   function markChannelRead(channelId: string, cursor = "") {
-    const latestLobbySequence = channelId === "lobby"
-      ? canonicalRoom.timelineEvents.reduce((latest, event) => Math.max(latest, Number(event.seq) || 0), 0)
-      : 0;
-    const readCursor = cursor || (channelId === "lobby" ? `seq:${latestLobbySequence}` : new Date().toISOString());
+    if (!channelReadReady || !canonicalRoom.socket?.ready()) return;
+    const readCursor = cursor || `seq:${canonicalRoom.history.lastSeq}`;
     updateChannelSetting(channelId, { lastReadAt: readCursor });
     setChannelMenu(null);
   }
@@ -605,7 +604,7 @@ export function useAppController(deviceToken: string, clientId: string) {
       notificationSummary: channelNotificationSummary(setting),
       lastReadSummary: channelLastReadSummary(setting),
       lastReadCursor: setting?.lastReadAt || "",
-      onMarkRead: roomSettings.preferenceStateFor(activeRoom).status === "ready" ? (cursor) => markChannelRead(channelId, cursor) : undefined,
+      onMarkRead: channelReadReady ? (cursor) => markChannelRead(channelId, cursor) : undefined,
       onOpenSettings: !guestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined,
     };
   }
@@ -640,7 +639,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     inviteCopyStatus, inviteModalAppearance,
     inviteModalRoom, invitePublicUrl, inviteRoom,
     leaveRoom, leaveRoomTarget, loadCanonicalRoomHistory,
-    lobbyPostingState, markChannelRead, markRoomRead, roomReadReady,
+    lobbyPostingState, markChannelRead, channelReadReady, markRoomRead, roomReadReady,
     membersOpen, menuChannelDisplay, menuRoom, messageSearchChannelLabels,
     messageSearchScope, mobileRoomInfoOpen, mobileSidebarOpen, mobileViewport,
     openAgentCreate, openChannelMenu,

@@ -369,6 +369,10 @@ pub struct AgentSession {
     pub runtime_kind: String,
     pub connection_kind: String,
     pub external_owned: bool,
+    // Public projection of attendee connection capability; absent means unobserved.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub external_retained_interrupt: Option<bool>,
     pub process_ownership: String,
     pub model: String,
     pub reasoning_effort: String,

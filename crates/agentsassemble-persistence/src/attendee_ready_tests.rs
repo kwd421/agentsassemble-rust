@@ -18,6 +18,14 @@ async fn attendee_ready_reconnect_retains_exact_running_turn_and_external_custod
     let ready = report();
     let initial = store.record_attendee_ready(&first, &ready, now).await?;
     assert_eq!(initial.events.len(), 1);
+    assert_eq!(
+        initial.events[0].extra["agent_session"]["external_retained_interrupt"],
+        true
+    );
+    assert_eq!(
+        store.snapshot("general", 0, 200).await?.agent_sessions[0].external_retained_interrupt,
+        Some(true)
+    );
     assert!(
         store
             .record_attendee_ready(&first, &ready, now)
@@ -165,6 +173,17 @@ async fn verify_retained_turn(
     session: &crate::AttendeeSessionAuthorization,
     before: &crate::ProviderTurnReconciliationCandidate,
 ) -> TestResult {
+    let stored: String = sqlx::query_scalar(
+        "SELECT session_json FROM agent_sessions WHERE room_id='general' AND session_id=?",
+    )
+    .bind(&session.principal().participant_id)
+    .fetch_one(&store.pool)
+    .await?;
+    assert!(
+        serde_json::from_str::<serde_json::Value>(&stored)?
+            .get("external_retained_interrupt")
+            .is_none()
+    );
     let after = store
         .load_active_provider_turn_reconciliation_candidate(
             "general",

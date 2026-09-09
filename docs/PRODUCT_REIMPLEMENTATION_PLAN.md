@@ -738,9 +738,21 @@ available while corrections are prepared; affected final code requires re-review
 The user explicitly deferred broader mobile UX implementation; mobile acceptance
 remains incomplete and must be disclosed to both reviewers.
 
+Latest user decision (2026-09-10): areas already reviewed by Daybreak do not
+require another Daybreak review during final closeout. Continue the split Pro
+reviews, supported corrections, affected verification and Pro re-review for those
+areas; Daybreak model access is not a completion blocker for that scope. Retain
+the prior Daybreak evidence with its exact scope and revision, without claiming
+it approves later changes. This decision does not waive review of previously
+unreviewed areas or any local acceptance, mandatory gate, or real-flow requirement.
+The user also requests that review completion is checked at five-minute intervals
+and that the combined briefing follows completion of corrections, verification and
+the remaining reviews. Continue work without waiting for another instruction.
+
 Real-provider runs follow the user-owned final-stage scope above; packaged app flows
 are directly exercised at every phase, with final integration coverage at closeout.
-final completion requires both reviewers' approval and that authorized real-flow
+Final completion requires the applicable reviewer approvals under the latest
+user decision above and that authorized real-flow
 proof. A local phase exit never claims pending external or real-client proof.
 
 The already-running Pro review is the sole intermediate Pro exception: read its

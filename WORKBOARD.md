@@ -12,11 +12,16 @@
   [Signing contract](docs/specs/operational-surfaces-slice.md#signed-desktop-supervisor-and-keychain-continuity).
   Pro Group 2 completed at `7e10252`: REVISE C0/H0/M2/L0. Correct the
   external-session action mismatch and room-menu read persistence, then obtain
-  affected verification and both re-reviews before continuing the remaining groups.
+  affected verification and Pro re-review before continuing the remaining groups.
   Both Pro corrections pass packaged verification through `5c6199a`; Daybreak then
   identified unsupported external resident pause/resume advertising, now corrected
-  with affected tests passing. Its final review is blocked by model-access failure;
-  keep that approval pending while the authorized Pro workflow continues.
+  with affected tests passing. User decision (2026-09-10): reuse prior Daybreak
+  reviews for already-reviewed areas and continue with Pro only; its model-access
+  failure does not block this scope. Pro's completed `ea10659` review closes those
+  findings and identifies two further corrections: expose actual external interrupt
+  capability and guard channel read actions until preferences are loaded. Both
+  corrections now pass affected tests, gates and the scoped packaged checks;
+  final Pro re-review and the remaining groups are still pending.
   [Correction contract](docs/specs/final-parity-slice.md#external-session-action-ownership-correction-2026-09-10).
 
 - Active: close out user-requested Harness/API freshness, inline OS credential

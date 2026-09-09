@@ -59,7 +59,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     guestExpired, guestLocked,
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteRoom,
-    loadCanonicalRoomHistory, lobbyPostingState, markChannelRead,
+    loadCanonicalRoomHistory, lobbyPostingState, markChannelRead, channelReadReady,
     markRoomRead, roomReadReady, membersOpen, menuChannelDisplay, menuRoom,
     messageSearchChannelLabels, messageSearchScope, mobileRoomInfoOpen,
     mobileSidebarOpen, mobileViewport, openAgentCreate,
@@ -222,6 +222,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                 type="button"
                 className="dc-mobile-channel-tool"
                 onClick={() => markChannelRead(channel)}
+                disabled={!channelReadReady}
                 aria-label="현재 채널 읽음으로 표시"
                 title="현재 채널 읽음으로 표시"
               >
@@ -314,7 +315,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           />
         </footer>
         <nav className="dc-mobile-bottom-nav" aria-label="모바일 하단 탐색">
-          <button type="button" disabled={!hasRoom} onClick={() => markChannelRead(channel)}>
+          <button type="button" disabled={!hasRoom || !channelReadReady} onClick={() => markChannelRead(channel)}>
             <Bell size={19} />
             <span>알림</span>
           </button>

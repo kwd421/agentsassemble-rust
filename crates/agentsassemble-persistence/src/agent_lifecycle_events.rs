@@ -59,6 +59,7 @@ pub(crate) async fn append_state_event(
         Utc::now(),
     ))
     .await?;
+    let projection = crate::attendee_ready::project_session_in(transaction, session).await?;
     append_session_event(
         transaction,
         principal,
@@ -67,7 +68,7 @@ pub(crate) async fn append_state_event(
         BTreeMap::from([
             ("session_id".to_owned(), json!(session.session_id)),
             ("runtime_status".to_owned(), json!(session.runtime_status)),
-            ("agent_session".to_owned(), json!(session)),
+            ("agent_session".to_owned(), json!(projection)),
         ]),
         chrono::Utc::now(),
     )

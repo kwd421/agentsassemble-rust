@@ -2,10 +2,34 @@ use crate::{
     AgentTurnCommit, AttendeeConnectionAuthorization, PersistenceError, SqliteStore,
     attendee_invites::rejected,
 };
-use agentsassemble_domain::{AgentRuntimeStatus, DurableAgentSession};
+use agentsassemble_domain::{AgentRuntimeStatus, AgentSession, DurableAgentSession};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use sqlx::{Sqlite, Transaction};
+
+pub(crate) async fn retained_interrupt_supported_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    participant_id: &str,
+) -> Result<bool, PersistenceError> {
+    Ok(sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM room_attendee_invites invite JOIN attendee_connections connection USING(session_fingerprint) WHERE invite.room_id=? AND invite.participant_id=? AND connection.retained_interrupt=1)")
+        .bind(room_id).bind(participant_id).fetch_one(&mut **tx).await?)
+}
+
+pub(crate) async fn project_session_in(
+    tx: &mut Transaction<'_, Sqlite>,
+    session: &AgentSession,
+) -> Result<AgentSession, PersistenceError> {
+    let mut projection = session.clone();
+    projection.external_retained_interrupt = if session.external_owned
+        && session.process_ownership == "external"
+    {
+        Some(retained_interrupt_supported_in(tx, &session.room_id, &session.participant_id).await?)
+    } else {
+        None
+    };
+    Ok(projection)
+}
 
 /// The external client reports its own runtime and selected public profile; no host paths or keys.
 #[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]

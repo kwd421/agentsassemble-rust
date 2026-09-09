@@ -379,13 +379,14 @@ async fn load_agent_sessions(
             message: "This room exceeds its Agent Session capacity.".to_owned(),
         });
     }
-    rows.into_iter()
-        .map(|row| {
-            serde_json::from_str::<DurableAgentSession>(row.get::<&str, _>("session_json"))
-                .map(|session| session.public())
-                .map_err(PersistenceError::from)
-        })
-        .collect()
+    let mut sessions = Vec::with_capacity(rows.len());
+    for row in rows {
+        let session =
+            serde_json::from_str::<DurableAgentSession>(row.get::<&str, _>("session_json"))?;
+        sessions
+            .push(crate::attendee_ready::project_session_in(transaction, &session.public).await?);
+    }
+    Ok(sessions)
 }
 
 #[cfg(test)]

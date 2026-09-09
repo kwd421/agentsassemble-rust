@@ -161,9 +161,13 @@ async fn external_runtime_without_retained_interrupt_rejects_before_preparing_ef
         .authorization;
     let mut ready = crate::attendee_ready_tests::report();
     ready.retained_interrupt = false;
-    store
+    let ready_commit = store
         .record_attendee_ready(&connection, &ready, now)
         .await?;
+    assert_eq!(
+        ready_commit.events[0].extra["agent_session"]["external_retained_interrupt"],
+        false
+    );
     let human = store
         .authorize_human_session(
             &crate::human_session_authority_tests::session_fingerprint(&store).await,
@@ -178,6 +182,11 @@ async fn external_runtime_without_retained_interrupt_rejects_before_preparing_ef
         )
         .await?;
     let operator = local_operator_principal();
+    let snapshot = store.snapshot("general", 0, 200).await?;
+    assert_eq!(
+        snapshot.agent_sessions[0].external_retained_interrupt,
+        Some(false)
+    );
     let result = store
         .execute_agent_interrupt(
             TrustedPrincipal(&operator),

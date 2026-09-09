@@ -20,6 +20,7 @@ pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
             runtime_kind: "live_cli".to_owned(),
             connection_kind: "native_cli_bridge".to_owned(),
             external_owned: false,
+            external_retained_interrupt: None,
             process_ownership: "server".to_owned(),
             model: "gpt-5.6-terra".to_owned(),
             reasoning_effort: "medium".to_owned(),

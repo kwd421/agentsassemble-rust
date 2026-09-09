@@ -65,6 +65,7 @@ impl AgentSessionDraft {
             runtime_kind: self.runtime_kind.clone(),
             connection_kind: self.connection_kind.clone(),
             external_owned: custody == AgentRuntimeCustody::External,
+            external_retained_interrupt: None,
             process_ownership: match custody {
                 AgentRuntimeCustody::Server => "server",
                 AgentRuntimeCustody::External => "external",

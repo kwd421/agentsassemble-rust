@@ -6,6 +6,10 @@ import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import { agentSessionFixture } from "../../test/agentSession";
 import { codexProvider } from "./AgentCreateModal.testProviders";
 import AgentSessionDetails from "./AgentSessionDetails";
+import { agentSessionUpdatesFromEvents } from "../../lib/canonicalRoomProjection";
+import { publicRoomEventIsValid } from "../../lib/roomSocketValidation";
+import { event } from "../../test/roomSocketHarness";
+import type { RoomEvent } from "../../api";
 
 const personaApi = vi.hoisted(() => ({
   fetchPersonaAssets: vi.fn(),
@@ -139,6 +143,32 @@ describe("AgentSessionDetails diagnostics", () => {
       expect(screen.queryByRole("button", { name: "응답 중단" })).toBeNull();
       expect(screen.getByText("복구 필요")).toBeTruthy();
       expect(screen.queryByText("응답 중")).toBeNull();
+    } else {
+      expect(interrupt).toBeNull();
+      expect(onControl).not.toHaveBeenCalled();
+    }
+  });
+
+  it.each([undefined, false, true])("uses the external connection projection instead of the host catalog (%s)", async (support) => {
+    const session = agentSessionFixture({ room_id: "general", external_owned: true,
+      process_ownership: "external", runtime_status: "busy", enabled: true,
+      external_retained_interrupt: support });
+    const stateEvent = { ...event(1), type: "agent_session_state", participant_id: session.participant_id,
+      participant_type: "agent", session_id: session.session_id, runtime_status: session.runtime_status, display_name: session.display_name,
+      agent_session: session } as unknown as RoomEvent;
+    expect(publicRoomEventIsValid(stateEvent, "general")).toBe(true);
+    const projected = agentSessionUpdatesFromEvents([stateEvent])[0];
+    const onControl = vi.fn();
+    // Deliberately disagree with the external report, using the same provider kind.
+    const provider = { ...codexProvider(), turn_interrupt: support === true ? "unsupported" as const : "retained_runtime" as const };
+    const { rerender } = render(<AgentSessionDetails session={projected} provider={provider} onControl={onControl} />);
+    const interrupt = screen.queryByRole("button", { name: "응답 중단" });
+    if (support === true) {
+      expect(interrupt).toBeTruthy();
+      await userEvent.click(interrupt!);
+      expect(onControl).toHaveBeenCalledWith(projected, "interrupt");
+      rerender(<AgentSessionDetails session={{ ...projected, recovery_required: true }} provider={provider} onControl={onControl} />);
+      expect(screen.queryByRole("button", { name: "응답 중단" })).toBeNull();
     } else {
       expect(interrupt).toBeNull();
       expect(onControl).not.toHaveBeenCalled();

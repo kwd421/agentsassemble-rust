@@ -174,6 +174,18 @@ No server permission, session identity, process ownership or provider execution
 changes. Acceptance includes first external admission, stopped/error external
 sessions, managed controls and external cleanup through the existing shared UI.
 
+Pro follow-up G2-M3: host provider catalog capability is not an external runtime's
+capability. Project `external_retained_interrupt` from the existing attendee
+connection owner into public session snapshots and state events in their existing
+transaction. The projection is optional: an unobserved/historical value does not
+grant interrupt support. Durable session records do not own this value and session
+mutation must not copy the projection back into storage. Managed controls continue
+using the provider catalog; external controls require the reported value to be true.
+Reuse the server interrupt owner's capability lookup; do not weaken its gate or add
+a capability store, polling, provider-kind inference or runtime-private data.
+Verify reported false/true through snapshot and state events, UI action availability,
+managed controls and recovery. External stop and supported interrupt remain intact.
+
 ## Room-menu read persistence correction (2026-09-10)
 
 Pro Group 2 found that the room menu's explicit mark-read action only changed
@@ -197,3 +209,14 @@ No new read store, timestamp fallback, timer, server orchestration or provider r
 is introduced. Verify old-scroll explicit marking, batch preservation, rollback and
 retry, queued scope changes and stale-incarnation rejection, plus packaged restart
 persistence. The extra room comparison is bounded work on an explicit write.
+
+Pro's follow-up G2-M4 extends the same readiness predicate to the shared channel
+read handler and both existing small-screen shortcuts. Pending/failed preference
+loads must not turn an unknown channel map into an empty full-map replacement.
+The handler dispatches nothing until the current canonical UID, connection,
+history and preferences are ready; both shortcuts expose that same availability.
+Explicit shortcuts capture the accepted room sequence for lobby and custom channels;
+they do not manufacture a timestamp or derive an empty cursor from unloaded events.
+Keep the existing preference error/reload and serialized writer. Acceptance covers
+initial pending/failure without POST and successful load preserving other channel
+entries and notification values when the read cursor advances.

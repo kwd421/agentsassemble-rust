@@ -9302,3 +9302,50 @@ explanation without managed actions; stopped managed retains resume/settings. Th
 external idle/paused rejection is covered by the component test and server owner
 inspection, not a newly launched external provider in this pass. The exact app and
 owned runtime were normally quit, and Computer Use reset after verification.
+
+## Pro Group 2 follow-up capability and read readiness (2026-09-10)
+
+The completed `ea10659` Pro review closed original G2-M1/G2-M2, including the
+external resident pause/resume follow-up, and returned REVISE C0/H0/M2/L0 for
+G2-M3/G2-M4. These are newly confirmed existing paths, not regressions introduced
+by the three preceding correction commits. User direction now permits Pro-only
+closeout for areas already reviewed by Daybreak; prior Daybreak revisions retain
+their exact scope and are not approval of these later changes.
+
+- G2-M3: public snapshot and both session-state event owners project the existing
+  attendee connection's retained-interrupt report in the same transaction. The
+  actual server interrupt gate uses that same lookup. No second stored authority,
+  provider-kind inference, new timer or permission relaxation is introduced.
+  The optional field is absent in durable session JSON and old events, which
+  grants no external support. Managed catalog controls and external stop remain.
+  Snapshot projection adds one indexed lookup per external session (at most the
+  existing 64-session room bound); managed sessions require no added lookup.
+- G2-M4: channel handler, header/automatic callback and both existing small-screen
+  shortcuts share canonical UID/connection/history/preference readiness. Direct
+  calls while initial preferences are pending or failed dispatch no write. Explicit
+  shortcuts capture the accepted room sequence; the existing full-map writer,
+  notification preservation, queue, rollback and explicit reload remain owners.
+- Verification: frontend 144 files / 828 tests pass (including actual AppView +
+  controller + preference writer with controlled initial pending/failure, both
+  shortcuts, direct handler and successful reload; external true/false/unobserved
+  public-event validation/projection to controls; managed/recovery coverage).
+  Attendee persistence 20 tests, HTTP/WebSocket 4 tests and final adjusted ready
+  tests 2 pass. Affected protocol/provider/persistence/server all-target,
+  all-feature Clippy (including the domain library) with `-D warnings`, generated bindings, TypeScript/Vite/CSS,
+  architecture/growth, 19 policy tests, format and diff checks pass. Initial test
+  fixture/TypeScript errors and an overlong test were corrected without gate changes.
+- Signed packaged macOS 0.1.8 starts against the retained isolated verification
+  data. A 600px 0.1.9 verification configuration exposes both actual shortcuts;
+  after setting lobby notifications to mute through the real channel menu, both
+  buttons preserve lobby mute/seq:125 and custom default/seq:125 (read-only SQLite
+  confirmation). The notification setting was restored through the UI. Narrow
+  member-detail navigation shows external stopped ownership guidance and preserves
+  managed stopped resume/settings. No provider was launched for these checks.
+  Strict deep app signature verification passes. A mistyped identity hash first
+  failed signing; the corrected live identity signed successfully. Both app runs
+  were normally quit with no owned processes left; Computer Use was reset.
+- Limits: busy external false/true and failed preference GET are covered by the
+  controlled owner/projection/UI tests, not new real-provider or injected packaged
+  failures. The narrow desktop window is not broader mobile UX acceptance. Existing
+  Cursor publication, external Antigravity, notarization/updater and platform
+  limitations remain. Pro re-review and independent Phase 7–9 review are pending.
