@@ -790,3 +790,8 @@ passes its one selected provider to both session controls and `MemberUsage`;
 there is no separate quota state, request policy, timer or authorization path.
 Eight affected mobile/usage tests, frontend build/CSS and mandatory gates pass.
 Packaged re-verification of this connection is pending.
+
+The second Windows lint pass reached the CLI's unsupported-platform branch and
+rejected an async function without awaits. It now returns an already-ready error
+future, preserving the CLI's common call contract and explicit unsupported result.
+Server Clippy and mandatory gates pass; the next Windows run verifies that branch.

@@ -25,8 +25,10 @@ fn parse_wait(value: &str) -> Result<Duration, String> {
 }
 
 #[cfg(not(unix))]
-pub async fn run(_args: RuntimeRestart) -> anyhow::Result<()> {
-    anyhow::bail!("rolling restart is unsupported on this platform")
+pub fn run(_args: RuntimeRestart) -> std::future::Ready<anyhow::Result<()>> {
+    std::future::ready(Err(anyhow::anyhow!(
+        "rolling restart is unsupported on this platform"
+    )))
 }
 
 #[cfg(unix)]
