@@ -430,16 +430,20 @@ async fn serve_runtime(
     };
     let ingress_shutdown = tokio::spawn(async move { public_ingress.shutdown().await });
     drain_connections(&connections, &connection_shutdown).await;
-    let login_shutdown = provider_login.shutdown().await;
-    let usage_shutdown = provider_usage.shutdown().await;
     http_admission.report_rejections();
-    let (reconciliation_shutdown, (room_shutdown, provider_shutdown)) =
+    let (
+        login_shutdown,
+        usage_shutdown,
+        (reconciliation_shutdown, (room_shutdown, provider_shutdown)),
+    ) = tokio::join!(
+        provider_login.shutdown(),
+        provider_usage.shutdown(),
         drain_reconciliation_then(reconciliation_owner, async {
             let room_shutdown = rooms.shutdown().await;
             let provider_shutdown = provider_catalog.shutdown().await;
             (room_shutdown, provider_shutdown)
         })
-        .await;
+    );
     let ingress_shutdown = ingress_shutdown
         .await
         .map_err(|_| ServeError::PublicIngressCleanup)

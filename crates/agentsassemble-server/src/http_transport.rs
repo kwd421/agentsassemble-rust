@@ -42,13 +42,84 @@ pub(crate) async fn serve_connection(
     let connection = builder
         .serve_connection(TokioIo::new(stream), TowerToHyperService::new(app))
         .with_upgrades();
-    tokio::select! {
-        () = shutdown.cancelled() => {}
-        result = tokio::time::timeout(HTTP_CONNECTION_LIFETIME, connection) => match result {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => tracing::debug!(error = ?error, "HTTP connection closed"),
-            Err(_) => tracing::debug!("HTTP connection exceeded its absolute lifetime"),
+    tokio::pin!(connection);
+    let serving = async {
+        tokio::select! {
+            () = shutdown.cancelled() => {
+                connection.as_mut().graceful_shutdown();
+                connection.await
+            }
+            result = &mut connection => result,
         }
+    };
+    match tokio::time::timeout(HTTP_CONNECTION_LIFETIME, serving).await {
+        Ok(Ok(())) => {}
+        Ok(Err(error)) => tracing::debug!(error = ?error, "HTTP connection closed"),
+        Err(_) => tracing::debug!("HTTP connection exceeded its absolute lifetime"),
     }
     drop(admission_guard);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::routing::get;
+    use std::sync::Arc;
+    use tokio::{net::TcpListener, sync::Notify};
+
+    #[tokio::test]
+    async fn shutdown_finishes_the_admitted_http_response() -> Result<(), Box<dyn std::error::Error>>
+    {
+        let entered = Arc::new(Notify::new());
+        let released = Arc::new(Notify::new());
+        let handler_entered = entered.clone();
+        let handler_released = released.clone();
+        let app = Router::new().route(
+            "/accepted",
+            get(move || {
+                let entered = handler_entered.clone();
+                let released = handler_released.clone();
+                async move {
+                    entered.notify_one();
+                    released.notified().await;
+                    "accepted response"
+                }
+            }),
+        );
+        let listener = TcpListener::bind("127.0.0.1:0").await?;
+        let address = listener.local_addr()?;
+        let client = tokio::spawn(async move {
+            reqwest::get(format!("http://{address}/accepted"))
+                .await?
+                .text()
+                .await
+        });
+        let (stream, peer) = listener.accept().await?;
+        let admission = crate::http_admission::HttpAdmission::default()
+            .admit()
+            .ok_or("fixture admission rejected")?;
+        let shutdown = CancellationToken::new();
+        let mut serving = Box::pin(serve_connection(
+            stream,
+            peer,
+            LocalIngress::from_listener(address).ok_or("invalid fixture listener")?,
+            PublicIngress::disabled(),
+            app,
+            admission,
+            shutdown.clone(),
+        ));
+        tokio::select! {
+            () = entered.notified() => {},
+            () = &mut serving => panic!("connection ended before the handler was admitted"),
+        }
+        shutdown.cancel();
+        assert!(
+            futures_util::poll!(&mut serving).is_pending(),
+            "shutdown discarded the admitted response"
+        );
+        released.notify_one();
+        let ((), result) = tokio::join!(serving, client);
+        assert_eq!(result??, "accepted response");
+        Ok(())
+    }
 }

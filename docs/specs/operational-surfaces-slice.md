@@ -451,3 +451,26 @@ protocol exporter Clippy and mandatory gates pass. Operational type exports now
 share their existing generator's scoped helper, without changing previous output.
 No native Tauri polling is added. Direct desktop/mobile browser observation and
 whole-phase cost measurement remain pending.
+
+## Restart transition prerequisites
+
+The current HTTP shutdown drops an in-flight connection immediately, which can lose
+a durably accepted restart response. Preserve the existing absolute connection
+lifetime while asking Hyper to finish admitted HTTP responses during shutdown; the
+runtime's existing six-second connection-drain bound still owns the outer deadline.
+Do not wait longer or weaken admission limits. Verify cancellation while a handler
+is deterministically held, then release it and observe its actual response.
+
+Login, usage and the room/catalog shutdown owners are independent after connection
+drain. Start their cancellation/join paths together so one native cleanup does not
+delay cancellation of the others. Continue checking every result and retain the
+required reconciliation-before-room-cleanup order. No new retry, poller or provider
+execution is introduced by this transition preparation.
+
+The controlled TCP response case fails against the previous immediate-drop path
+and passes with graceful shutdown. Five affected shutdown cases pass (0.88s),
+including reconciliation failure and positive turn/lease cleanup. Server Clippy and
+unchanged architecture, growth, policy, format and diff gates pass. Independent
+cleanup futures now run concurrently after connection drain; their errors and
+reconciliation order are preserved. This establishes response-drain behavior,
+not rolling-restart completion or a measured whole-runtime latency improvement.
