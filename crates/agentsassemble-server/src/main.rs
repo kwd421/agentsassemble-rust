@@ -32,6 +32,8 @@ use tokio::{
 mod agent_avatar_control;
 mod appearance_control;
 mod chat_read_control;
+#[cfg(unix)]
+mod control_input;
 mod message_attachments_control;
 mod message_pins_control;
 
@@ -73,6 +75,9 @@ async fn main() -> anyhow::Result<()> {
         args.stable_entry_config.as_deref(),
         manual_public_ingress.is_some(),
     )?;
+    #[cfg(unix)]
+    let mut stdin = control_input::ControlInput::stdin()?;
+    #[cfg(not(unix))]
     let mut stdin = tokio::io::stdin();
     let cancellation = CancellationToken::new();
     if !local_bind_is_supported(args.bind) {
@@ -127,7 +132,7 @@ async fn main() -> anyhow::Result<()> {
         .await
         .map_err(std::io::Error::other)?;
         control_owner = Some(tokio::spawn(async move {
-            run_control_pipe(
+            let result = run_control_pipe(
                 &mut stdin,
                 &mut stdout,
                 control_state,
@@ -135,13 +140,18 @@ async fn main() -> anyhow::Result<()> {
             )
             .await;
             control_cancellation.cancel();
+            #[cfg(unix)]
+            stdin
+                .restore()
+                .context("restore local control descriptor")?;
+            result
         }));
         Ok(())
     })
     .await;
     cancellation.cancel();
     if let Some(control_owner) = control_owner {
-        control_owner.await.context("join local control pipe")?;
+        control_owner.await.context("join local control pipe")??;
     }
     serving?;
     Ok(())
@@ -214,22 +224,17 @@ async fn run_control_pipe<R, W>(
     writer: &mut W,
     state: AppState,
     cancellation: &CancellationToken,
-) where
+) -> anyhow::Result<()>
+where
     R: AsyncRead + Unpin,
     W: AsyncWrite + Unpin,
 {
     loop {
-        let line = tokio::select! {
-            () = cancellation.cancelled() => return,
-            line = read_control_line(reader) => line,
-        };
-        let Ok(Some(line)) = line else {
-            return;
+        let Some(line) = read_control_line(reader, cancellation).await? else {
+            return Ok(());
         };
         let response = control_response(&state, &line).await;
-        if write_json_line(writer, &response).await.is_err() {
-            return;
-        }
+        write_json_line(writer, &response).await?;
     }
 }
 
@@ -688,30 +693,45 @@ fn control_error(request_id: String, error: TicketIssueError) -> LocalControlRes
 
 async fn read_control_line<R: AsyncRead + Unpin>(
     reader: &mut R,
+    cancellation: &CancellationToken,
 ) -> anyhow::Result<Option<Vec<u8>>> {
-    let mut line = Vec::with_capacity(256);
     let mut byte = [0_u8; 1];
-    for _ in 0..=MAX_CONTROL_MESSAGE_BYTES {
-        let count = reader
-            .read(&mut byte)
-            .await
-            .context("read parent control pipe")?;
-        if count == 0 {
-            return if line.is_empty() {
-                Ok(None)
-            } else {
-                anyhow::bail!("control pipe closed during a request")
-            };
-        }
-        if byte[0] == b'\n' {
-            if line.last() == Some(&b'\r') {
-                line.pop();
-            }
-            return Ok(Some(line));
-        }
-        line.push(byte[0]);
+    let count = tokio::select! {
+        biased;
+        () = cancellation.cancelled() => return Ok(None),
+        count = reader.read(&mut byte) => count.context("read parent control pipe")?,
+    };
+    if count == 0 {
+        return Ok(None);
     }
-    anyhow::bail!("control request exceeds {MAX_CONTROL_MESSAGE_BYTES} bytes")
+    // Once the first byte is consumed, complete this frame before allowing handoff.
+    // A stalled parent gets a bounded error, never a silently discarded request prefix.
+    tokio::time::timeout(Duration::from_secs(10), async {
+        let mut line = Vec::with_capacity(256);
+        for _ in 0..=MAX_CONTROL_MESSAGE_BYTES {
+            if byte[0] == b'\n' {
+                if line.last() == Some(&b'\r') {
+                    line.pop();
+                }
+                return Ok(Some(line));
+            }
+            line.push(byte[0]);
+            if line.len() > MAX_CONTROL_MESSAGE_BYTES {
+                anyhow::bail!("control request exceeds {MAX_CONTROL_MESSAGE_BYTES} bytes");
+            }
+            if reader
+                .read(&mut byte)
+                .await
+                .context("read parent control frame")?
+                == 0
+            {
+                anyhow::bail!("control pipe closed during a request");
+            }
+        }
+        anyhow::bail!("control request exceeds {MAX_CONTROL_MESSAGE_BYTES} bytes")
+    })
+    .await
+    .context("parent control frame exceeded its deadline")?
 }
 
 async fn write_json_line<W: AsyncWrite + Unpin>(
@@ -756,5 +776,44 @@ fn unicode_environment(name: &str) -> anyhow::Result<Option<String>> {
         Err(std::env::VarError::NotUnicode(_)) => {
             anyhow::bail!("{name} must contain valid UTF-8")
         }
+    }
+}
+
+#[cfg(test)]
+mod control_frame_tests {
+    use super::*;
+
+    #[tokio::test(start_paused = true)]
+    async fn cancellation_finishes_started_frame_and_preserves_the_next_frame() -> anyhow::Result<()>
+    {
+        let (mut writer, mut reader) = tokio::io::duplex(128);
+        let cancellation = CancellationToken::new();
+        writer.write_all(b"first").await?;
+        {
+            let frame = read_control_line(&mut reader, &cancellation);
+            tokio::pin!(frame);
+            assert!(futures_util::poll!(&mut frame).is_pending());
+            cancellation.cancel();
+            assert!(futures_util::poll!(&mut frame).is_pending());
+            writer.write_all(b"\nnext\n").await?;
+            assert_eq!(frame.await?, Some(b"first".to_vec()));
+        }
+        assert!(
+            read_control_line(&mut reader, &cancellation)
+                .await?
+                .is_none()
+        );
+        let next = CancellationToken::new();
+        assert_eq!(
+            read_control_line(&mut reader, &next).await?,
+            Some(b"next".to_vec())
+        );
+        writer.write_all(b"partial").await?;
+        let partial = read_control_line(&mut reader, &next);
+        tokio::pin!(partial);
+        assert!(futures_util::poll!(&mut partial).is_pending());
+        tokio::time::advance(Duration::from_secs(10)).await;
+        assert!(partial.await.is_err());
+        Ok(())
     }
 }

@@ -583,3 +583,23 @@ incomplete completion, paused/idle restoration and cleanup before retry. All 326
 persistence tests pass (4.42s); persistence Clippy and mandatory gates pass. These
 are explicitly local store observations; executable replacement and provider startup
 remain unverified until their runtime owner and packaged flow are connected.
+
+
+The Unix control pipe now needs a handoff-safe input owner: no blocking stdin worker
+and no read-ahead across frames. Tokio `AsyncFd` owns readiness for pipes, sockets
+and terminals; bounded regular-file/device reads preserve ordinary redirected stdin.
+Restore the original descriptor flags before handoff and on drop, including a failed
+readiness registration. Cancellation is accepted between frames. After the first
+byte, the existing 4 KiB frame must finish within ten seconds and its response must
+flush before exit; incomplete/oversized/stalled frames return errors and cannot
+silently permit exec. Verify cancellation before input, cancellation mid-frame,
+unconsumed next-frame bytes, deadline failure and restored descriptor flags.
+
+Both controlled input cases pass (0.00s): a cancelled pending Unix read leaves the
+next bytes untouched and restores flags; mid-frame cancellation finishes exactly
+one frame, preserves the next frame and reports a stalled-frame deadline. All ten
+real control-pipe process/TCP boundary cases pass (2.03s), including parent EOF and
+writer-lease reacquisition. Server Clippy and mandatory gates pass. Unix input adds
+one readiness registration and removes Tokio stdin's blocking worker/read-ahead;
+one-byte syscalls are bounded by the existing 4 KiB control limit. Full packaged
+resource/latency measurement remains pending.
