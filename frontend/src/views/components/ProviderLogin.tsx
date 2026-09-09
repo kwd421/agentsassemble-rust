@@ -18,7 +18,9 @@ function errorMessage(error: unknown, message: string): string {
   return error instanceof Error ? error.message : message;
 }
 
-export default function ProviderLogin({ providerId, displayName }: { providerId: string; displayName: string }) {
+export default function ProviderLogin({ providerId, displayName, onAuthenticated }: {
+  providerId: string; displayName: string; onAuthenticated?: () => void;
+}) {
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [status, setStatus] = useState("");
@@ -30,6 +32,7 @@ export default function ProviderLogin({ providerId, displayName }: { providerId:
     try {
       const outcome = await loginProvider(providerId);
       setStatus(outcome === "started" ? "터미널에서 로그인을 마친 뒤 카탈로그를 갱신해 주세요." : "로그인을 완료했어요.");
+      if (outcome === "authenticated") onAuthenticated?.();
     } catch (error) {
       setStatus(errorMessage(error, "로그인하지 못했어요."));
     } finally {

@@ -1,4 +1,6 @@
 mod central_login;
+mod provider_setup;
+use provider_setup::open_provider_setup_help;
 mod local_runtime;
 use central_login::{open_central_google_login, runtime_central_login};
 mod message_attachment_save;
@@ -519,9 +521,23 @@ fn registered_host_product_surface() -> HostProductSurface {
 /// Panics when Tauri cannot initialize the bundled application context.
 pub fn run() {
     let app = tauri::Builder::default()
+        .plugin(tauri_plugin_single_instance::init(
+            |app, _arguments, _cwd| {
+                if let Some(window) = app.get_webview_window("main")
+                    && window
+                        .unminimize()
+                        .and_then(|()| window.set_focus())
+                        .is_err()
+                {
+                    eprintln!("desktop_window_focus_failed");
+                }
+            },
+        ))
+        .plugin(tauri_plugin_deep_link::init())
         .manage(LocalRuntime::default())
         .manage(registered_host_product_surface())
         .invoke_handler(registered_invoke_handler!())
+        .setup(|app| provider_setup::install(app.handle()))
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| panic!("AgentsAssemble desktop failed to initialize: {error}"));
     app.run(|handle, event| {
@@ -562,7 +578,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 28);
+        assert_eq!(surface.commands.len(), 29);
         assert!(
             surface
                 .commands
@@ -570,6 +586,7 @@ mod tests {
                 .any(|command| command == "host_product_surface")
         );
         for expected in [
+            "open_provider_setup_help",
             "runtime_attendee_invite_create_ticket",
             "runtime_central_login",
             "open_central_google_login",

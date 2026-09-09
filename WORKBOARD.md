@@ -2,6 +2,13 @@
 
 ## Active work
 
+- User-requested browser-to-local provider setup passes local verification:
+  login/installation guidance, local setup links and optional version updates
+  preserve provider/device authority. Manual review is pending.
+  [Verification](docs/VERIFICATION.md#browser-to-local-provider-setup-and-optional-updates-2026-09-09). [Contract](docs/specs/operational-surfaces-slice.md#browser-to-local-provider-setup-user-request-2026-09-09).
+  The separate Pro review uses the fixed `9a8d39d` snapshot; review-driven
+  corrections remain paused until the user resumes them.
+
 - Test/security duplication follow-up is locally complete: same-transaction reads,
   redundant codec checks, and fake test crypto removed; [evidence and retained boundaries](docs/VERIFICATION.md#test-necessity-and-security-duplication-audit-2026-09-07).
 - User-requested repository-wide optimization is locally complete: measured duplicate

@@ -1,6 +1,12 @@
-import { postEmptyServerOperator, postJsonServerOperator } from "./http";
+import { fetchJsonServerOperator, postEmptyServerOperator, postJsonServerOperator } from "./http";
 import { providerCatalogIsValid } from "../lib/providerCatalogContract";
 import type { ProviderCatalog } from "../types/generated/ProviderCatalog";
+
+export async function readProviderCatalog(signal?: AbortSignal): Promise<ProviderCatalog> {
+  const result = await fetchJsonServerOperator<unknown>("/api/provider-catalog", undefined, signal);
+  if (!providerCatalogIsValid(result)) throw new Error("Provider catalog response is invalid.");
+  return result;
+}
 
 export async function refreshProviderCatalog(): Promise<ProviderCatalog> {
   const result = await postEmptyServerOperator<unknown>("/api/provider-catalog/refresh");
@@ -29,4 +35,19 @@ export async function loginProvider(providerId: string): Promise<"authenticated"
 
 export async function cancelProviderLogin(providerId: string): Promise<boolean> {
   return (await providerLoginOperation(providerId, true)) === "cancelled";
+}
+
+export async function providerUpdateOperation(providerId: string, expectedVersion?: string): Promise<import("../types/generated/ProviderUpdate").ProviderUpdate> {
+  const result = await postJsonServerOperator<unknown>(
+    expectedVersion === undefined ? "/api/providers/update/check" : "/api/providers/update/start",
+    expectedVersion === undefined ? { provider_id: providerId } : { provider_id: providerId, expected_version: expectedVersion }
+  );
+  if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("버전 응답이 올바르지 않아요.");
+  const value = result as Record<string, unknown>;
+  if (Object.keys(value).length !== 7 || value.provider_id !== providerId ||
+      typeof value.current_version !== "string" || typeof value.latest_version !== "string" ||
+      typeof value.observed_at !== "string" || !Number.isFinite(Date.parse(value.observed_at)) ||
+      typeof value.update_available !== "boolean" || typeof value.native_update !== "boolean" ||
+      value.handoff_started !== (expectedVersion !== undefined)) throw new Error("버전 응답이 올바르지 않아요.");
+  return result as import("../types/generated/ProviderUpdate").ProviderUpdate;
 }

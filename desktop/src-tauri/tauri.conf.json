@@ -3,6 +3,13 @@
   "productName": "AgentsAssemble",
   "version": "0.1.0",
   "identifier": "app.agentsassemble.rust",
+  "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["agentsassemble"]
+      }
+    }
+  },
   "build": {
     "beforeDevCommand": "npm --prefix ../provider-runtime ci --omit=optional --ignore-scripts && npm --prefix ../frontend run build",
     "beforeBuildCommand": "npm --prefix ../provider-runtime ci --omit=optional --ignore-scripts && npm --prefix ../frontend run build",

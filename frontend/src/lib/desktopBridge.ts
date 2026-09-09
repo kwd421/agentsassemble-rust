@@ -183,6 +183,13 @@ export async function requestDesktopHostProductSurface(): Promise<HostProductSur
   return structuredClone(surface);
 }
 
+export async function openProviderSetupHelp(providerId: string): Promise<void> {
+  const tauri = tauriInternals();
+  if (!tauri) throw new Error("이 PC의 앱에서 설치·업데이트 안내를 열어 주세요.");
+  requireDesktopHostCommand("open_provider_setup_help");
+  await tauri.invoke("open_provider_setup_help", { providerId });
+}
+
 function validateDesktopBootstrapGrant(value: unknown): DesktopBootstrapGrant {
   const grant = exactObject(
     value,

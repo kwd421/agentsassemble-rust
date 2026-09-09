@@ -1,4 +1,5 @@
 desktop_commands! {
+    open_provider_setup_help => "allow-open-provider-setup-help",
     runtime_central_login => "allow-runtime-central-login",
     open_central_google_login => "allow-open-central-google-login",
     runtime_bootstrap_status => "allow-runtime-bootstrap-status",

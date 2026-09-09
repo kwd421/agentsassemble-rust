@@ -26,6 +26,7 @@ import {
 import ProviderLogo from "./ProviderLogo";
 import ProviderCatalogRefresh from "./ProviderCatalogRefresh";
 import ProviderLogin from "./ProviderLogin";
+import ProviderSetupActions from "./ProviderSetupActions";
 import ProviderControlSelect from "./ProviderControlSelect";
 import ProviderControlToggle from "./ProviderControlToggle";
 import AgentPersonaPicker from "./AgentPersonaPicker";
@@ -337,9 +338,6 @@ export default function AgentCreateModal({
         aria-label={presentation.providerName}
         title={presentation.providerName}
         data-active={provider.id === selectedProvider?.id}
-        disabled={!provider.available && !eligibleStoredSessions.some(
-          (session) => session.provider_kind === provider.provider_kind
-        )}
         onClick={() => {
           applyProvider(provider);
           setStatus("");
@@ -418,6 +416,7 @@ export default function AgentCreateModal({
           )}
 
           {selectedProvider?.login_supported && <ProviderLogin key={selectedProvider.id} providerId={selectedProvider.id} displayName={selectedProvider.display_name} />}
+          {selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id} />}
           {selectedProvider && (
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">기본 정보</p>

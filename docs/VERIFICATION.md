@@ -8920,3 +8920,74 @@ results do not claim the original `make verify` invocation exited successfully.
 Sampled whole-system CPU idle during the run is 38.97%, 41.79% and 68.8%; samples
 are not continuous headroom proof. Source and disposable pending-verification data
 remain intact. Final manual reviews and the three external limits remain open.
+
+## Browser-to-local provider setup and optional updates (2026-09-09)
+
+The user requested local login/update guidance from browser agent creation and
+explicitly rejected forced updates. The contract is in
+[operational surfaces](specs/operational-surfaces-slice.md#browser-to-local-provider-setup-user-request-2026-09-09).
+The separate Pro review remains scoped to its immutable `9a8d39d` snapshot; this
+feature is additional work and is not covered by that earlier review.
+
+Implemented behavior:
+
+- Unavailable providers remain selectable for diagnosis; creation still requires
+  the canonical startable catalog and the existing validated selection.
+- Browser setup links carry only a fixed provider ID and open the local desktop
+  setup window. They do not contain room credentials or request login/installation.
+  Native setup retains the startup identity boundary and one-use local-operator
+  HTTP tickets. Remote room authority does not become host-operation authority.
+- Version inspection is explicit and read-only. Available versions show installed
+  and offered versions with Update/Later choices. Later has no installation effect
+  or creation gate. Supported native updates use the provider's own command in an
+  operator-owned terminal after a freshly matching offer; a launch receipt is not
+  update completion. Lost HTTP replies retain the possibility of a started terminal.
+- Fixed public release endpoints use bounded reads; no upstream URL becomes an
+  executable or navigation target. Unsupported update/installation paths show the
+  provider's official instructions rather than guessing a package manager.
+
+Verification:
+
+- The full test stage passed: 876 workspace Rust tests, 29 desktop tests and 808
+  frontend tests. Architecture/source-growth, policy tests, format, TypeScript,
+  Vite and the unchanged approved CSS contract passed. The original `make verify`
+  invocation exited 2 at Clippy because the expanded boundary test exceeded its
+  function-length limit. Moving setup-authority assertions to their own helper
+  preserved the gate; the affected server boundary test and full all-target,
+  all-feature workspace Clippy then passed. No limit or exception was changed.
+- A subsequent response-loss UI correction passed TypeScript/Vite/CSS and both
+  ProviderUpdatePrompt tests. The native owner test proves that inspection invokes
+  only `update --check --json`, an outdated offer cannot launch, a following read
+  obtains fresh version data, and shutdown rejects new work. HTTP tests reject
+  unauthenticated update requests and caller-provided command fields.
+- Direct macOS packaged manipulation used the existing isolated Phase 9 identity
+  and data. A cold OS setup link opened the Grok window. Its actual read displayed
+  installed `1.0.5` and offered `1.0.24`; selecting Later kept the installed version.
+  Chrome navigation to the same emitted link, including its normal external-app
+  prompt, reopened the existing window with that choice intact. No updater or
+  Terminal process was started by Later. Explicit catalog refresh then displayed
+  ready, and the help button opened the fixed Grok documentation in the default
+  browser. The browser selector's exact link and unavailable-selection behavior
+  are also covered by the component test; no remote-operator browser enrollment
+  was manufactured for this check.
+- A second packaged configuration changed only the verification window inventory
+  and bounds to expose the same Grok setup page at 390x420. Real clicks/scrolling
+  reached both update choices and the bottom help/return guidance without clipping
+  the controls. This is packaged native responsive proof, not a claim of mobile OS
+  application-launch support. Windows/Linux OS delivery was not exercised here.
+- Existing provider accounts/installations were not changed for verification.
+  Real update installation and a fresh OAuth authorization were not performed;
+  native login/cancel behavior reuses the already-verified operation owner.
+
+Cost and cleanup: there is at most one setup window per supported provider and one
+in-flight version/handoff operation per updatable provider; there is no periodic
+version polling. Public release reads are capped at 128 KiB/8 seconds and ordinary
+native probes retain their existing 10-second/process-tree bounds. Cold plus warm
+navigation visibly reused two total app windows (main and Grok). No isolated new
+CPU/RSS benchmark is claimed. The original full verification took 607.22 seconds
+and reported 2,401,173,504 bytes maximum RSS; those are build/test costs, not product
+performance. Build artifacts reached about 26.4 GB, above the unchanged 18 GiB gate.
+After all builds and the exact app/owned runtime exited, `make artifact-prune`
+removed 24.1 GiB of regenerable Cargo artifacts. Final artifact/diff checks passed.
+The verification-only browser tabs were closed, Computer Use reset, and the
+existing isolated database and unrelated user applications/data were preserved.
