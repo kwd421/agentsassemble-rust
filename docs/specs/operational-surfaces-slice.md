@@ -773,6 +773,41 @@ cases pass (0.13s), including abandoned startup and positive cleanup after readi
 failure. Seven desktop supervisor cases pass (0.47s). Server/persistence Clippy and
 mandatory gates pass. No provider was launched; packaged UI acceptance remains pending.
 
+## Signed desktop supervisor and Keychain continuity
+
+Final packaged verification found that the ad-hoc app/server signatures do not
+retain a stable Keychain access identity across rebuilds. The stored provider key
+still exists at the existing service/account; repeated approval is not key loss.
+Developer ID signing exposed a second defect: copying the signed app's Mach-O
+alone into a standalone supervisor path loses its signed Info.plist/bundle context.
+The signed app passes strict verification, its standalone copy fails, and a signed
+standalone server copy passes. A test executable is insufficient bundle evidence.
+
+Live process signing inspection also found that debug packages selected the
+repository's ad-hoc `target/debug` server before their signed bundled server.
+The runtime must select its sibling external binary, which Tauri stages in both
+development and packaged builds. A missing bundled binary is an error; source-tree,
+environment override and resource-directory searches do not substitute authority.
+Verify the running server's signing identity, not only the bundle on disk.
+
+Package the existing desktop supervisor code as a separate standalone helper,
+using the same authority and implementation. Bind that helper and the server from
+opened files into private immutable stages. Preserve leases, exact child readiness,
+process-group/Job custody, private control pipes, original restart source, and
+positive cleanup semantics. The app bundle executable is not a standalone helper.
+No unsigned retry, mutable-source launch, signature removal, Keychain ACL widening,
+secret cache, or alternative credential source is permitted.
+
+The macOS distribution entry `npm --prefix desktop run build:signed:macos` requires
+`APPLE_SIGNING_IDENTITY` set to the publisher's Developer ID. Tauri signs helper and
+server with their stable executable-name identifiers before signing the app. Keep
+the same identifiers and signing team across updates. This distribution entry
+fails explicitly without a signing identity. Ordinary source tests remain independent of a
+developer certificate. Acceptance includes a signed-bundle regression, direct
+packaged app-to-helper-to-server startup, stored-key access after initial approval,
+and another signed build with the same requirements without key re-entry or renewed
+access approval. Passing codesign alone is not startup or Keychain continuity proof.
+
 ## Operator restart entry points
 
 `assemble rolling-restart --database PATH [--wait SECONDS] [--json]` preserves the

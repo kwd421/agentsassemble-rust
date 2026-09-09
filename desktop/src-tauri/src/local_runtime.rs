@@ -291,7 +291,9 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
         .map_err(|error| format!("cannot create {}: {error}", data_root.display()))?;
     make_private_directory(&data_root)
         .map_err(|error| format!("cannot secure {}: {error}", data_root.display()))?;
-    let executable = sidecar_executable(app)?;
+    let desktop = env::current_exe()
+        .map_err(|error| format!("cannot resolve desktop executable: {error}"))?;
+    let executable = sidecar_executable(&desktop)?;
     let resources = app
         .path()
         .resource_dir()
@@ -637,36 +639,20 @@ fn abort_startup(child: &mut Child, control: Option<ChildStdin>) {
     let _ = child.wait();
 }
 
-fn sidecar_executable(app: &AppHandle) -> Result<PathBuf, String> {
+fn sidecar_executable(desktop: &Path) -> Result<PathBuf, String> {
     let executable_name = if cfg!(windows) {
         "agentsassemble-server.exe"
     } else {
         "agentsassemble-server"
     };
-    let mut candidates = Vec::new();
-    if cfg!(debug_assertions) {
-        if let Some(explicit) = env::var_os("AGENTSASSEMBLE_SIDECAR") {
-            candidates.push(PathBuf::from(explicit));
-        }
-        candidates.push(
-            Path::new(env!("CARGO_MANIFEST_DIR"))
-                .join("../../target/debug")
-                .join(executable_name),
-        );
+    // Tauri stages both external binaries beside the desktop executable in dev
+    // and packaged builds. Debug assertions do not authorize a worktree runtime
+    // to shadow the packaged (and signed) server.
+    let executable = desktop.with_file_name(executable_name);
+    if !executable.is_file() {
+        return Err("the bundled AgentsAssemble Rust runtime is missing".to_owned());
     }
-    if let Ok(current) = env::current_exe()
-        && let Some(parent) = current.parent()
-    {
-        candidates.push(parent.join(executable_name));
-    }
-    if let Ok(resources) = app.path().resource_dir() {
-        candidates.push(resources.join(executable_name));
-        candidates.push(resources.join("binaries").join(executable_name));
-    }
-    candidates
-        .into_iter()
-        .find(|candidate| candidate.is_file())
-        .ok_or_else(|| "the bundled AgentsAssemble Rust runtime is missing".to_owned())
+    Ok(executable)
 }
 
 #[cfg(test)]
@@ -677,6 +663,24 @@ mod tests {
         RUNTIME_LOG_LIMIT_BYTES, StartupRecord, copy_capped, open_private_fresh_log,
         open_private_rotating_log, validate_startup_record,
     };
+
+    #[test]
+    fn sidecar_selection_requires_the_desktops_own_binary() {
+        let root = tempfile::tempdir().unwrap_or_else(|error| panic!("fixture: {error}"));
+        let binaries = root.path().join("Fixture.app/Contents/MacOS");
+        std::fs::create_dir_all(&binaries).unwrap_or_else(|error| panic!("bundle: {error}"));
+        let desktop = binaries.join("agentsassemble-desktop");
+        let name = format!("agentsassemble-server{}", std::env::consts::EXE_SUFFIX);
+        let worktree = root.path().join("target/debug");
+        std::fs::create_dir_all(&worktree).unwrap_or_else(|error| panic!("worktree: {error}"));
+        std::fs::write(worktree.join(&name), b"unrelated worktree binary")
+            .unwrap_or_else(|error| panic!("worktree binary: {error}"));
+        assert!(super::sidecar_executable(&desktop).is_err());
+        let bundled = binaries.join(name);
+        std::fs::write(&bundled, b"packaged binary")
+            .unwrap_or_else(|error| panic!("packaged binary: {error}"));
+        assert_eq!(super::sidecar_executable(&desktop), Ok(bundled));
+    }
 
     #[test]
     fn startup_record_is_bound_to_the_owned_loopback_process() {

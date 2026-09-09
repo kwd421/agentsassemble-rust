@@ -6,6 +6,11 @@ version = "0.1.0"
 description = "Tauri owner for the AgentsAssemble Rust runtime"
 edition = "2024"
 license = "MIT"
+default-run = "agentsassemble-desktop"
+
+[[bin]]
+name = "agentsassemble-runtime-supervisor"
+path = "src/supervisor_main.rs"
 
 [lib]
 name = "agentsassemble_desktop_lib"

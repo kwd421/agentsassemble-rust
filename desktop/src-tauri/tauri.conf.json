@@ -34,7 +34,10 @@
   "bundle": {
     "active": true,
     "targets": "all",
-    "externalBin": ["binaries/agentsassemble-server"],
+    "externalBin": [
+      "binaries/agentsassemble-server",
+      "binaries/agentsassemble-runtime-supervisor"
+    ],
     "resources": {
       "../../frontend/dist/": "frontend/",
       "../../provider-runtime/claude-owner-requests.mjs": "provider-runtime/claude-owner-requests.mjs",

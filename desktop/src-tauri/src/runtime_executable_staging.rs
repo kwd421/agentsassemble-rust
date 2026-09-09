@@ -46,13 +46,14 @@ impl RuntimeExecutableStaging {
 
 impl Drop for RuntimeExecutableStaging {
     fn drop(&mut self) {
+        self.directory.disable_cleanup(true);
         let Some(root) = self.directory.path().parent() else {
             return;
         };
         let Ok(root_lock) = acquire_lock(&root.join(ROOT_LOCK_NAME), false, false) else {
             return;
         };
-        let _ = reclaim_stale_directories(root);
+        let _ = fs::remove_dir_all(self.directory.path());
         drop(root_lock);
     }
 }
@@ -182,5 +183,16 @@ mod tests {
         assert!(active_path.is_dir());
         assert!(!abandoned_path.exists());
         assert!(replacement.path().is_dir());
+
+        let root_lock = acquire_lock(&root.join(ROOT_LOCK_NAME), false, true)
+            .unwrap_or_else(|error| panic!("hold runtime enumeration lock: {error}"));
+        drop(active);
+        assert!(active_path.is_dir());
+        drop(root_lock);
+        let next = RuntimeExecutableStaging::create_in(&root)
+            .unwrap_or_else(|error| panic!("reclaim released runtime staging: {error}"));
+        assert!(!active_path.exists());
+        assert!(replacement.path().is_dir());
+        assert!(next.path().is_dir());
     }
 }

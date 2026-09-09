@@ -9122,3 +9122,61 @@ limits. The original `make verify` took 828.00 seconds and peaked at 2,347,925,5
 bytes process RSS before its subsequently corrected Clippy failure; this is build
 cost, not a product runtime benchmark. The previous isolated integration database
 is retained for the still-open Phase 9 work. Computer Use has been reset.
+
+## Signed packaged runtime and stored-key continuity (2026-09-10)
+
+Repeated DeepSeek prompts were access-identity failures, not deletion of the stored
+key. Signing only the package was initially insufficient: a debug-only selector
+launched the ad-hoc repository server ahead of the signed bundled server. Live
+`SecCodeCopyGuestWithAttributes` / signing-information inspection proved that the
+actual process had an ad-hoc hash requirement. This invalidates the earlier inference
+that a signed file on disk meant the running credential owner was signed.
+
+The desktop now selects its sibling server in development and packaged builds.
+The existing supervisor is a separate Tauri external binary, retaining opened-file
+immutable staging and the existing process/control ownership. Copying a signed app
+executable outside its bundle is no longer used. The bundle fixture proves that
+such an app copy fails strict signature validation, while the selected standalone
+helper remains valid and executable. Desktop staging destruction now removes only
+its own directory under the existing root lock; busy-root cleanup is retained for
+the existing next-owner lease collector.
+
+Direct packaged verification used isolated versions 0.1.3 and 0.1.4 with the same
+Developer ID and executable identifiers. The actual 0.1.3 server's first approved
+access returned three DeepSeek models. After normal app exit and replacement by
+0.1.4, the actual server's code hash changed from
+`670683f65914f0df151e675fc37de5e5cfc52b85` to
+`7a8e51809aa1736be0b237f83b8e26beb4ee2192`, while its designated requirement remained
+identical. The second binary used different linker metadata to ensure different
+server code identity bytes, not merely a changed app version. Live signature
+validation returned success for both helper and server. Startup's noninteractive
+catalog read and direct API/DeepSeek menu selection showed the stored credential,
+three models, and a valid `deepseek-v4-flash` selection without key re-entry or a new
+approval. No credential/ACL was read by diagnostics or changed. Both app generations
+and their exact helper/server children exited normally. This is local signed-update
+continuity evidence, not notarization, updater delivery or Windows GUI proof.
+
+Affected validation: all 29 desktop library tests and desktop all-target/all-feature
+Clippy pass; Tauri TypeScript/Vite/CSS and both signed package builds pass; strict
+whole-bundle signature validation passes. Missing signing identity is rejected by
+the explicit signed macOS distribution entry before building. Architecture,
+source-growth, 19 policy tests, format and diff gates pass without changed limits.
+
+A bounded 400-sample, 419.42-second observation of the first app's owned process tree
+included catalog activity and native permission waits: median aggregate RSS 161,840
+KiB, maximum 996,208 KiB, median summed sampled CPU 3.1%, maximum 202.7%, at most eight
+owned processes. The final 60 samples had three processes, median RSS 165,120 KiB
+and median sampled CPU 3.2%. These are observations of this debug session, not a
+controlled performance comparison or complete WebKit/system-process cost.
+
+A separate unexpected Music permission prompt was traced through macOS TCC logs:
+the accessing process was installed Claude Code 2.1.231 during SDK catalog
+inspection, with the packaged app attributed as responsible. DeepSeek does not
+require MediaLibrary access. The precise internal Claude access is not yet proven;
+this observation does not authorize the permission or establish a music feature.
+
+The earlier real DeepSeek `deepseek-v4-flash` / low room turn also completed through
+normal RoomPortal observation/publication with `8 + 9 = 17`, followed by stop. This
+closes the prior DeepSeek inference-proof gap for that flow. Cursor structured
+room-tool permission, external Antigravity admission/publication and broader mobile
+acceptance remain separate unresolved limits.

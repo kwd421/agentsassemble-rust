@@ -8,6 +8,7 @@
     "prepare:sidecar:release": "node scripts/prepare_sidecar.mjs --release",
     "dev": "npm --prefix ../frontend run build && npm run prepare:sidecar && tauri dev",
     "build": "npm --prefix ../frontend run build && npm run prepare:sidecar:release && tauri build",
+    "build:signed:macos": "node scripts/build_signed_macos.mjs",
     "check": "npm run prepare:sidecar && cargo fmt --manifest-path src-tauri/Cargo.toml -- --check && cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets --all-features -- -D warnings && cargo test --manifest-path src-tauri/Cargo.toml"
   },
   "devDependencies": {
