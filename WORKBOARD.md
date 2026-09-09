@@ -21,7 +21,11 @@
   findings and identifies two further corrections: expose actual external interrupt
   capability and guard channel read actions until preferences are loaded. Both
   corrections now pass affected tests, gates and the scoped packaged checks;
-  final Pro re-review and the remaining groups are still pending.
+  Pro `80483c2` closes M3/M4 but finds one new profile ACK/state-event projection
+  mismatch (G2-M5). The persistence owner now reuses the committed event projection;
+  external pre-ready/false/true outcomes, exact replay, strict ACK/socket consumption
+  and signed packaged rename/restart/restoration pass. Pro re-review and the
+  remaining groups are pending.
   [Correction contract](docs/specs/final-parity-slice.md#external-session-action-ownership-correction-2026-09-10).
 
 - Active: close out user-requested Harness/API freshness, inline OS credential

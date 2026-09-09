@@ -107,9 +107,10 @@ impl SqliteStore {
         .await?;
         let session_event =
             append_state_event(&mut transaction, principal, &session.public).await?;
+        let public_session = session_event.extra["agent_session"].clone();
         let events = vec![participant_event, session_event];
         let result = json!({
-            "agent_session": session.public,
+            "agent_session": public_session,
             "participant": participant,
             "events": events,
             "event": events.last(),

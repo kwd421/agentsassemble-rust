@@ -9349,3 +9349,52 @@ their exact scope and are not approval of these later changes.
   failures. The narrow desktop window is not broader mobile UX acceptance. Existing
   Cursor publication, external Antigravity, notarization/updater and platform
   limitations remain. Pro re-review and independent Phase 7–9 review are pending.
+
+## Pro Group 2 profile ACK projection correction (2026-09-10)
+
+Pro's completed `80483c2` review (22m42s) closes G2-M3/M4 and retains M1/M2
+closure, but returns REVISE C0/H0/M1/L0 for newly introduced G2-M5. The external
+profile owner returned unprojected durable Session JSON while its state event
+contained the connection capability. Strict profile ACK equality rejected that
+committed result, leaving save completion uncertain and causing bounded reconnect/
+replay. This was a regression from the M3 implementation, not an older finding.
+
+`agent_profile` now copies the public Session already committed in its state event
+into the same command result. There is no second lookup, durable capability write,
+validator exception, retry change, or recomputation of historical receipts. Other
+profile authority, avatar, participant identity and atomic storage behavior remain.
+
+- Added one persistence regression covering first-ready not yet reported, false and
+  true reports. It fails before the correction on unequal result/event projections,
+  then passes. It checks exact replay and absence of the field in durable Session
+  JSON. A later true ready report does not change an earlier false receipt.
+- All four profile persistence tests pass (0.08s), including existing managed
+  identity/restart, authority/malformed target and rollback/retry cases. The existing
+  server HTTP/WebSocket configuration/profile flow also passes (1 test, 5.60s).
+- Captured the three actual public persistence outcomes and their replay results
+  using temporary test instrumentation. A temporary frontend harness passed those
+  unchanged results through `commandAckResultIsValid` and the actual RoomSocketClient
+  with original/deduplicated ACKs. All commands resolve, socket readiness remains,
+  no error/reconnect/additional send occurs, and removing the result capability is
+  still rejected. Three captured-outcome cases plus 22 existing Session contract
+  cases pass (25 total). Capture instrumentation/harness are removed from the tree;
+  the permanent persistence regression retains the result/event invariant.
+- Affected persistence/server all-target/all-feature Clippy, TypeScript/Vite/CSS,
+  architecture/source-growth/19 policy checks, format and diff checks pass. The first
+  make invocation incorrectly named a nonexistent `growth-check` target after the
+  checks had run; the correct `architecture-check format-check diff-check` invocation
+  was rerun successfully. Artifact maintenance reports no cleanup required.
+  No gate or warning limit was changed.
+- Rebuilt sidecar/helper and signed isolated macOS package 0.1.10. In the actual
+  stopped external profile, changed the name to `Codex External Profile Verified`;
+  save returned to the profile card with the success message. After normal quit and
+  relaunch, the timeline/roster/profile retain the name. Restored the original
+  `Codex External Verification` through the same UI and observed success again.
+  Read-only SQLite inspection confirms equal full Session projections in each
+  receipt/event (seq127 and seq129) and no capability field in durable Session JSON.
+  Strict deep codesign passes. The exact app and owned children are normally quit,
+  and Computer Use is reset. No new real provider or permission grant was used.
+
+This closes the local M5 acceptance path; Pro approval and the remaining split
+reviews are still pending. Prior actual-provider/mobile/notarization/updater/Windows
+limits remain. This is not a new full frontend or whole-workspace test run.

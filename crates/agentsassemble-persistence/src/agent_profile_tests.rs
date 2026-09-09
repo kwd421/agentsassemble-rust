@@ -11,6 +11,75 @@ use agentsassemble_domain::{ClientKind, ParticipantStatus};
 use serde_json::json;
 
 #[tokio::test]
+async fn external_profile_ack_reuses_state_projection_and_exact_replay()
+-> Result<(), Box<dyn std::error::Error>> {
+    for capability in [None, Some(false), Some(true)] {
+        let (store, attendee, now) = crate::attendee_connection_tests::fixture().await?;
+        let agent_id = &attendee.principal().participant_id;
+        if let Some(capability) = capability {
+            let connection = store
+                .claim_attendee_connection(&attendee, uuid::Uuid::new_v4(), now)
+                .await?
+                .authorization;
+            let mut ready = crate::attendee_ready_tests::report();
+            ready.retained_interrupt = capability;
+            store
+                .record_attendee_ready(&connection, &ready, now)
+                .await?;
+        }
+        let operator = crate::human_session_authority_tests::local_operator_principal();
+        let payload = json!({"agent_id": agent_id, "display_name": "External renamed"});
+        let outcome = store
+            .execute_agent_profile_update(TrustedPrincipal(&operator), "rename", &payload)
+            .await?;
+        assert_eq!(
+            outcome.result["agent_session"],
+            outcome.event.extra["agent_session"]
+        );
+        assert_eq!(
+            outcome.result["agent_session"]["external_retained_interrupt"],
+            capability == Some(true)
+        );
+        assert_eq!(
+            outcome.result["participant"]["display_name"],
+            "External renamed"
+        );
+        let stored: String = sqlx::query_scalar(
+            "SELECT session_json FROM agent_sessions WHERE room_id='general' AND session_id=?",
+        )
+        .bind(agent_id)
+        .fetch_one(&store.pool)
+        .await?;
+        assert!(
+            serde_json::from_str::<serde_json::Value>(&stored)?
+                .get("external_retained_interrupt")
+                .is_none()
+        );
+        // A later connection report must not rewrite the earlier committed receipt.
+        if capability.is_none() {
+            let connection = store
+                .claim_attendee_connection(&attendee, uuid::Uuid::new_v4(), now)
+                .await?
+                .authorization;
+            store
+                .record_attendee_ready(&connection, &crate::attendee_ready_tests::report(), now)
+                .await?;
+            assert_eq!(
+                store.snapshot("general", 0, 200).await?.agent_sessions[0]
+                    .external_retained_interrupt,
+                Some(true)
+            );
+        }
+        let replay = store
+            .execute_agent_profile_update(TrustedPrincipal(&operator), "rename", &payload)
+            .await?;
+        assert!(replay.deduplicated);
+        assert_eq!(replay.result, outcome.result);
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn identity_update_preserves_custody_and_membership_and_replays_after_restart()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, principal, directory) = fixture().await;

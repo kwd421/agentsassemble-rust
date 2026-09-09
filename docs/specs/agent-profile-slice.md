@@ -21,6 +21,13 @@ names, so this derived projection must update; role, mute, membership, runtime
 custody, persona and human identity remain untouched. The runtime profile key does
 not depend on cosmetic identity. No provider launch, restart or polling is added.
 
+The profile ACK and its state event reuse the same transaction-owned public Session
+projection, including the external connection's reported interrupt capability.
+This derived value stays out of durable Session JSON. Exact request replay returns
+the originally committed coherent result, without recomputing capability from a
+later connection. Verify external profiles before ready and with false/true reports,
+the strict ACK consumer, and successful packaged rename without reconnect/replay.
+
 Agent avatar bytes have separate room/session custody with one current and one
 pending asset. Upload authorization is bound to the exact room and Agent Session;
 only a validated owned reference can become current. Replacement, clear and later
