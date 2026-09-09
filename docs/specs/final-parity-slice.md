@@ -30,6 +30,16 @@ The Rust owner is Tauri's `choose_local_workspace`; remove the absent HTTP branc
 and preserve the native bridge's explicit unavailable error for browser callers.
 Do not expose host filesystem selection through an admitted browser credential.
 
+The baseline full Rust verification passes 867 tests but retains 31,892,033,536
+artifact bytes, exceeding the unchanged 18 GiB gate. Fifty-four test dSYM bundles
+alone occupy 20.37 GiB. Use Cargo's `line-tables-only` debug information in the root
+test profile, preserving file/line backtraces and the existing test assertions,
+overflow checks, optimization settings and SHA-256 override. The tradeoff is no
+default type/variable inspection in test binaries; full debug remains an explicit
+Cargo profile override. Ordinary development and release profiles stay unchanged.
+After all baseline work stops, use the existing artifact owner to retire the
+replaced artifacts, then verify the same full suite and measure the resulting size.
+
 ## Acceptance and verification
 
 - Reconcile every retained exposed feature with its original entry, Rust owner,

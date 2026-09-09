@@ -8632,3 +8632,40 @@ product surface and real transport tests retain those contracts. Deferred Mafia,
 voice and RimWorld code/API/handshake markers remain absent from emitted JavaScript.
 Unchanged architecture/growth, 19 policy cases, format, diff and artifact gates pass.
 Full Rust/desktop checks and direct final packaged integration remain pending.
+
+## Phase 9 measured test artifact cost (2026-09-09)
+
+The full workspace/all-feature Rust baseline passes 867 tests across 56 result
+blocks, with no failures or ignored cases. Its physical Cargo allocation is
+31,892,033,536 bytes (29.70 GiB), including 54 dSYM bundles occupying 20.37 GiB.
+The existing 18 GiB artifact gate correctly fails; its limit and implementation
+are unchanged. Two observed concurrent symbol-generation processes used about
+1.9–2.0 GiB RSS each. These are point samples, not measured memory peaks.
+
+The root test profile now uses Cargo's `line-tables-only` debug information.
+It preserves file/line backtraces, debug assertions, overflow checks, optimization
+settings, the SHA-256 override and macOS packed symbols. It omits default test
+variable/type inspection; full debugging remains an explicit Cargo profile
+override. Ordinary development and release profiles are unchanged. The tradeoff
+follows the [Cargo profile contract](https://doc.rust-lang.org/cargo/reference/profiles.html#debug).
+
+After all baseline work ended, the existing artifact owner retired only its
+regenerable Cargo outputs. The fresh two-job build and same full suite again pass
+867 tests, zero failed/ignored, across 56 result blocks. Final physical allocation
+is 19,202,854,912 bytes (17.88 GiB), 39.8 percent below the baseline; 55 final dSYM
+bundles occupy 10,908,246,016 bytes (10.16 GiB). The unchanged artifact gate passes.
+Compilation took 3m16s after that cleanup versus 4m56s for the earlier partially
+warmed baseline; differing initial cache states prevent a controlled latency claim.
+Both runs use two Cargo jobs and two test threads on this ten-core, 24 GiB host.
+
+Logs are `/tmp/aa-phase9-rust-full-tests.log` and
+`/tmp/aa-phase9-rust-line-tests.log`; final counts and allocation are recorded in
+`/tmp/aa-phase9-test-cost.json`. These measurements cover the full root test build,
+not subsequent native/release caches or packaged runtime resource consumption.
+Workspace all-target/all-feature Clippy passes in 1m26s. Native desktop preparation,
+format and Clippy pass, followed by all 28 native tests (0.50s). The unchanged
+architecture/growth, 19 policy cases, format and diff gates also pass. Combining
+the completed test, development and native caches then occupies 24,529,739,776
+bytes (22.85 GiB), again requiring ordinary artifact maintenance. This does not
+claim that the full mixed-profile cache fits the limit. Final release packaging
+and runtime measurements follow after those completed debug outputs are retired.
