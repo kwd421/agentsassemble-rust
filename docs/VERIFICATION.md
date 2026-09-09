@@ -8810,3 +8810,28 @@ bytes). The structured exchange takes 5,338 ms; the whole inspection including
 package binding and confirmed process cleanup takes 8.87 seconds. No protocol or
 filesystem limit is raised. Unsupported/ambiguous native data fail closed. Packaged
 Auto response and stop remain pending; no other real Cursor model was invoked.
+
+The rebuilt `e858ec8` package selects native Auto, creates `Cursor Native
+Verification` in the disposable workspace, and reaches attached/idle in 12.91
+seconds. The `5 + 6` room question enters responding, then reports recovery required
+without publishing a response. Normal UI stop leaves the row detached/stopped,
+zero completed turns, no active provider session, no recovery requirement and no
+last error. Normal app quit leaves its exact app/server processes absent.
+
+An owned Auto-only native diagnostic completes an ordinary answer containing 11
+in 9,396 ms and confirms process stop. The same driver with room observation fails
+`room_observation_unconfirmed`: native permission requests omit structured tool
+identity, and the observed preceding partial tool notification has empty raw input.
+The installed Cursor source confirms that it marks that partial call as sent,
+skips the later complete input notification, and puts the operation name only into
+a display title in its permission request. The read-only adapter rejects the
+unidentified operation. No title-based permission inference, global approval,
+credential/configuration workaround or native-package patch is added. Actual Cursor
+room publication remains blocked by this native permission contract; startup and
+stop success do not establish real-turn parity. Temporary diagnostics are removed.
+
+The 173 one-second descendant samples for that packaged run observe up to eleven
+processes, 604.95 MiB median / 744.73 MiB maximum summed RSS and 65.4% maximum
+summed CPU (100% is one of ten logical cores). These are point observations and
+include native discovery/startup workers, not exclusive steady-state runtime or
+unique physical memory; separate WebKit/XPC processes remain outside the sample.
