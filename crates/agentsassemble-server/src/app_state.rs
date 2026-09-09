@@ -49,7 +49,7 @@ pub struct AppState {
     pub(crate) recovery_attempts: Arc<crate::guest_recovery_attempts::GuestRecoveryAttempts>,
     pub(crate) public_ingress: PublicIngress,
     pub server_product_surface: Arc<ServerProductSurface>,
-    pub frontend_root: Option<PathBuf>,
+    pub(crate) frontend: Option<Arc<crate::frontend_release::FrontendRelease>>,
     pub(crate) runtime_state_root: Option<PathBuf>,
     pub(crate) central_registration_enabled: bool,
 }
@@ -173,15 +173,15 @@ impl AppState {
             server_product_surface: Arc::new(crate::product_surface::server_product_surface(
                 false, false,
             )),
-            frontend_root: None,
+            frontend: None,
             runtime_state_root: None,
             central_registration_enabled: false,
         })
     }
 
     #[must_use]
-    pub fn with_frontend(mut self, frontend_root: PathBuf) -> Self {
-        self.frontend_root = Some(frontend_root);
+    pub fn with_frontend(mut self, frontend: crate::frontend_release::FrontendRelease) -> Self {
+        self.frontend = Some(Arc::new(frontend));
         self.refresh_product_surface();
         self
     }
@@ -247,7 +247,7 @@ impl AppState {
 
     fn refresh_product_surface(&mut self) {
         self.server_product_surface = Arc::new(crate::product_surface::server_product_surface(
-            self.frontend_root.is_some(),
+            self.frontend.is_some(),
             self.central_registration_enabled,
         ));
     }

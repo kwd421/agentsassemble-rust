@@ -25,6 +25,7 @@ const PROXY_SECRET: &str = "manual-ingress-proxy-secret-000000001";
 const HELD_PUBLIC_BODY_BYTES: usize = 256;
 
 struct RunningServer {
+    _frontend_releases: tempfile::TempDir,
     address: SocketAddr,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
@@ -585,8 +586,15 @@ async fn start_on_with_manual(
             .with_manual_public_ingress(address, PUBLIC_ORIGIN, PROXY_SECRET)
             .unwrap_or_else(|error| panic!("configure manual public ingress: {error}"));
     }
+    let frontend_releases =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create release store: {error}"));
     if let Some(frontend) = frontend {
-        state = state.with_frontend(frontend);
+        let release = agentsassemble_server::frontend_release::FrontendRelease::materialize(
+            &frontend,
+            frontend_releases.path(),
+        )
+        .unwrap_or_else(|error| panic!("snapshot ingress frontend: {error}"));
+        state = state.with_frontend(release);
     }
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
@@ -596,6 +604,7 @@ async fn start_on_with_manual(
             .unwrap_or_else(|error| panic!("serve ingress boundary: {error}"));
     });
     RunningServer {
+        _frontend_releases: frontend_releases,
         address,
         cancellation,
         task,

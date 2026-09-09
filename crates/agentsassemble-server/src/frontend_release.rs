@@ -9,12 +9,23 @@ use fs2::FileExt;
 use sha2::{Digest, Sha256};
 
 /// The exact files selected by this runtime, independent of later build output.
+#[derive(Clone)]
 pub struct FrontendRelease {
-    pub root: PathBuf,
-    pub build_id: String,
+    root: PathBuf,
+    build_id: String,
 }
 
 impl FrontendRelease {
+    #[must_use]
+    pub fn root(&self) -> &Path {
+        &self.root
+    }
+
+    #[must_use]
+    pub fn build_id(&self) -> &str {
+        &self.build_id
+    }
+
     /// Copy and verify a build before publishing it to the serving runtime.
     ///
     /// # Errors

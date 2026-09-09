@@ -59,18 +59,25 @@ impl Server {
             .await,
         );
         let frontend = checked(tempfile::tempdir());
+        let source = frontend.path().join("source");
+        checked(std::fs::create_dir(&source));
         checked(std::fs::write(
-            frontend.path().join("index.html"),
+            source.join("index.html"),
             "Recovery entry fixture",
         ));
-        checked(std::fs::create_dir(frontend.path().join("assets")));
+        checked(std::fs::create_dir(source.join("assets")));
         checked(std::fs::write(
-            frontend.path().join("assets/recovery.js"),
+            source.join("assets/recovery.js"),
             "export {};",
         ));
         let state = checked(
             state
-                .with_frontend(frontend.path().to_owned())
+                .with_frontend(checked(
+                    agentsassemble_server::frontend_release::FrontendRelease::materialize(
+                        &source,
+                        frontend.path(),
+                    ),
+                ))
                 .with_manual_public_ingress(address, ORIGIN, PROXY),
         );
         let shutdown = CancellationToken::new();

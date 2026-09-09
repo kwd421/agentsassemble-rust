@@ -14,6 +14,11 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Inspect the frontend build actually served by a running runtime.
+    FrontendInfo {
+        #[arg(long)]
+        server: String,
+    },
     ReleaseHealth {
         #[command(subcommand)]
         command: release_health::ReleaseHealth,
@@ -58,6 +63,11 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(command: Command) -> anyhow::Result<()> {
     match command {
+        Command::FrontendInfo { server } => {
+            let version = agentsassemble_server::runtime_version::read(&server).await?;
+            println!("{}", serde_json::to_string_pretty(&version)?);
+            Ok(())
+        }
         Command::ReleaseHealth { command } => release_health::run(command).await,
         Command::Room {
             command: RoomCommand::Attend(args),

@@ -155,7 +155,7 @@ struct TicketQuery {
 }
 
 pub fn router(state: AppState) -> Router {
-    let frontend_root = state.frontend_root.clone();
+    let frontend_release = state.frontend.clone();
     let mut app = core_routes()
         .merge(crate::central_login::routes())
         .merge(crate::room_directory_web::routes())
@@ -171,6 +171,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::provider_credentials_web::routes())
         .merge(crate::provider_operations_web::routes())
         .merge(crate::operational_web::routes())
+        .merge(crate::runtime_version::routes())
         .merge(crate::server_identity_web::routes())
         .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())
@@ -184,7 +185,8 @@ pub fn router(state: AppState) -> Router {
         app = app.merge(crate::central_registration_web::routes());
     }
     app = app.route_layer(middleware::from_fn(require_trusted_ingress));
-    if let Some(frontend_root) = frontend_root {
+    if let Some(frontend_release) = frontend_release {
+        let frontend_root = frontend_release.root();
         let index = frontend_root.join("index.html");
         let assets = frontend_root.join("assets");
         let mut frontend = static_ingress_router(

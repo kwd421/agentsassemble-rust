@@ -13,6 +13,7 @@ use agentsassemble_protocol::{
     ServerProductSurface,
 };
 use agentsassemble_provider::ProviderCatalogService;
+use agentsassemble_server::frontend_release::FrontendRelease;
 use agentsassemble_server::{
     AppState, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError, TicketStore,
     issue_attendee_invite_create_ticket, issue_central_registration_ticket,
@@ -104,7 +105,7 @@ async fn main() -> anyhow::Result<()> {
     )
     .await?;
     if let Some(frontend) = frontend_release.as_ref() {
-        state = state.with_frontend(frontend.root.clone());
+        state = state.with_frontend(frontend.clone());
     }
     let mut stdout = tokio::io::stdout();
     if let Err(error) = write_json_line(
@@ -114,8 +115,8 @@ async fn main() -> anyhow::Result<()> {
             "runtime": "rust",
             "address": format!("http://{address}"),
             "database": database_path,
-            "frontend": frontend_release.as_ref().map(|release| &release.root),
-            "frontend_build_id": frontend_release.as_ref().map(|release| &release.build_id),
+            "frontend": frontend_release.as_ref().map(FrontendRelease::root),
+            "frontend_build_id": frontend_release.as_ref().map(FrontendRelease::build_id),
             "pid": std::process::id(),
         }),
     )
@@ -145,11 +146,7 @@ async fn main() -> anyhow::Result<()> {
 
 async fn prepare_runtime_storage(
     args: &Args,
-) -> anyhow::Result<(
-    SqliteStore,
-    PathBuf,
-    Option<agentsassemble_server::frontend_release::FrontendRelease>,
-)> {
+) -> anyhow::Result<(SqliteStore, PathBuf, Option<FrontendRelease>)> {
     if let Some(parent) = args.database.parent() {
         tokio::fs::create_dir_all(parent)
             .await
@@ -166,11 +163,8 @@ async fn prepare_runtime_storage(
         .frontend
         .as_deref()
         .map(|source| {
-            agentsassemble_server::frontend_release::FrontendRelease::materialize(
-                source,
-                database_state_root(&database_path)?,
-            )
-            .context("materialize served frontend release")
+            FrontendRelease::materialize(source, database_state_root(&database_path)?)
+                .context("materialize served frontend release")
         })
         .transpose()?;
     Ok((store, database_path, frontend_release))

@@ -380,3 +380,25 @@ Hashing uses an 8 KiB buffer and no resident task. Snapshot disk cost is one ful
 copy per distinct build, retained explicitly for the pending asset handoff. Whole
 phase packaged/cost verification and the identity/update/restart connection remain
 pending.
+
+## Runtime version projection
+
+Store the selected release as one immutable object in AppState, deriving both static
+paths and build identity from it. The same-origin version read exposes only the
+optional build ID and the protocol owner's version, with no state-directory paths or
+provider data. A runtime without a frontend returns an explicit null build identity.
+The retained `assemble frontend-info --server URL` entry queries this actual runtime
+using the shared bounded HTTP JSON reader, without redirects, rather than guessing
+which local source directory a process serves. Missing/unreachable/malformed server
+responses fail visibly. This read adds no resident task. Browser update notice and
+old-build asset routing follow this owner; the public version projection grants no
+host operation authority.
+
+AppState now accepts the verified release object, so serving paths and version
+projection cannot be assigned independently. The private-no-store same-origin
+version endpoint and generated schema are connected. The actual built CLI queries
+the TCP fixture after source replacement and reports exactly the retained build and
+protocol version (1.38s including CLI launch). Six ingress cases (0.19s) and the
+existing guest recovery boundary pass with snapshot custody. Server Clippy and
+unchanged mandatory gates pass. No provider/account runs or background observations
+are introduced; browser baseline/update behavior remains pending.

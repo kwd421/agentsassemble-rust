@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, path::PathBuf, time::Duration};
+use std::{collections::BTreeMap, time::Duration};
 
 use agentsassemble_domain::{
     MAX_MESSAGE_CHARACTERS, ProviderAvailability, ProviderCatalog, ProviderControl,
@@ -7,7 +7,7 @@ use agentsassemble_domain::{
 use agentsassemble_persistence::SqliteStore;
 use agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES;
 use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::{AppState, TicketStore, serve};
+use agentsassemble_server::{AppState, TicketStore, frontend_release::FrontendRelease, serve};
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use futures_util::{SinkExt, StreamExt};
 use reqwest::Client;
@@ -332,7 +332,8 @@ async fn static_frontend_has_browser_security_and_cache_headers() {
         directory.path(),
     )
     .unwrap_or_else(|error| panic!("materialize frontend: {error}"));
-    let server = start_with_frontend(store, release.root).await;
+    let expected_build = release.build_id().to_owned();
+    let server = start_with_frontend(store, release).await;
     tokio::fs::write(frontend.join("index.html"), "replacement build")
         .await
         .unwrap_or_else(|error| panic!("replace frontend index: {error}"));
@@ -346,6 +347,27 @@ async fn static_frontend_has_browser_security_and_cache_headers() {
         .unwrap_or_else(|error| panic!("request static frontend: {error}"));
     assert!(response.status().is_success());
     assert_static_frontend_headers(&response);
+    let version = agentsassemble_server::runtime_version::read(&server.base_url)
+        .await
+        .unwrap_or_else(|error| panic!("inspect served frontend version: {error}"));
+    assert_eq!(
+        version.frontend_build_id.as_deref(),
+        Some(expected_build.as_str())
+    );
+    assert_eq!(
+        version.protocol_version,
+        agentsassemble_protocol::PROTOCOL_VERSION
+    );
+    let output = tokio::process::Command::new(env!("CARGO_BIN_EXE_assemble"))
+        .args(["frontend-info", "--server", &server.base_url])
+        .kill_on_drop(true)
+        .output()
+        .await
+        .unwrap_or_else(|error| panic!("run frontend-info CLI: {error}"));
+    assert!(output.status.success());
+    let inspected: agentsassemble_domain::RuntimeVersion = serde_json::from_slice(&output.stdout)
+        .unwrap_or_else(|error| panic!("decode frontend-info output: {error}"));
+    assert_eq!(inspected, version);
     for entrance in ["/join?token=one-use", "/join/", "/pair", "/pair/"] {
         let response = Client::new()
             .get(format!("{}{entrance}", server.base_url))
@@ -600,13 +622,13 @@ fn large_provider_catalog() -> ProviderCatalog {
     }
 }
 
-async fn start_with_frontend(store: SqliteStore, frontend: PathBuf) -> RunningServer {
+async fn start_with_frontend(store: SqliteStore, frontend: FrontendRelease) -> RunningServer {
     start_server(store, Some(frontend), ProviderCatalog::default()).await
 }
 
 async fn start_server(
     store: SqliteStore,
-    frontend: Option<PathBuf>,
+    frontend: Option<FrontendRelease>,
     catalog: ProviderCatalog,
 ) -> RunningServer {
     let listener = TcpListener::bind("127.0.0.1:0")

@@ -30,9 +30,11 @@ pub use provider_request::{
     ProviderRequestQuestion, ProviderRequestResolution,
 };
 mod release_health;
+mod runtime_version;
 pub use release_health::{
     ReleaseHealthCheck, ReleaseHealthReport, ReleaseHealthResult, ReleaseHealthStatus,
 };
+pub use runtime_version::RuntimeVersion;
 mod local_resources;
 mod provider_turn;
 pub use local_resources::{LocalResourceProcess, LocalResourceStatus};

@@ -36,6 +36,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     RoomSnapshot::export_all(&config)?;
     agentsassemble_domain::ReleaseHealthReport::export_all(&config)?;
     agentsassemble_domain::ReleaseHealthCheck::export_all(&config)?;
+    agentsassemble_domain::RuntimeVersion::export_all(&config)?;
     agentsassemble_domain::LocalResourceStatus::export_all(&config)?;
     agentsassemble_domain::ProviderUsage::export_all(&config)?;
     agentsassemble_domain::ProviderRequestResolution::export_all(&config)?;
