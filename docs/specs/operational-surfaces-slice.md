@@ -434,3 +434,20 @@ assets/corrupt releases pass the expanded snapshot case (0.01s); existing ingres
 guest recovery, surface registry, Clippy and mandatory gates pass. This proves asset
 retention across runtime replacement, not rolling listener or provider handoff.
 The browser notice and full packaged/rolling evidence remain pending.
+
+The HTTP-served app now mounts the update notice after identity admission. Its
+baseline comes from the loaded document; its expected protocol is generated from
+the protocol crate at frontend build time. A changed first response is an update,
+not a new baseline. Reads coalesce, have a five-second abort deadline, run at the
+original fifteen-second cadence only while visible, and recheck on focus, visibility
+and room connection changes. Unmount aborts the current read and clears observers;
+a confirmed update stops them until the user's explicit reload. Failed/missing reads
+show an unavailable notice with retry, never a fabricated matching version.
+
+Three actual-fetch/React cases pass (57ms): first-read mismatch and stopped polling,
+failed observation followed by explicit successful retry, compiled-protocol mismatch
+and abort on unmount. Production frontend build and the unchanged CSS digest pass;
+protocol exporter Clippy and mandatory gates pass. Operational type exports now
+share their existing generator's scoped helper, without changing previous output.
+No native Tauri polling is added. Direct desktop/mobile browser observation and
+whole-phase cost measurement remain pending.
