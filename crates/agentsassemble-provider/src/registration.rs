@@ -143,7 +143,7 @@ pub(crate) static OPENCODE_PROVIDER: ProviderRegistration = ProviderRegistration
     executable_required: true,
     probe_executable: "opencode",
     remote_spec: None,
-    usage: None,
+    usage: Some(crate::opencode_usage::read),
     login: Some(crate::provider_login::ProviderLoginSpec {
         flow: crate::provider_login::ProviderLoginFlow::InteractiveTerminal,
         arguments: &["auth", "login"],

@@ -722,3 +722,19 @@ permission rejection and shutdown; the native inspection owner bounds the proces
 ten seconds and confirms cleanup. Two local cases pass (0.01s): exact sessionless
 billing exchange and native schema/unknown/error/privacy projections. Provider Clippy
 and mandatory gates pass. Actual Grok billing remains at the final authorized stage.
+
+OpenCode Go now uses the [official usage route](https://github.com/anomalyco/opencode/blob/dev/packages/console/app/src/routes/zen/go/v1/usage.ts)
+with its native `rolling`, `weekly`, and `monthly` percentages and absolute reset
+timestamps. Monthly duration remains unknown rather than assuming thirty days.
+The [native authentication owner](https://github.com/anomalyco/opencode/blob/dev/packages/opencode/src/auth/index.ts)
+and [Go provider definition](https://github.com/anomalyco/models.dev/blob/dev/providers/opencode-go/provider.toml)
+identify `OPENCODE_API_KEY`, then `OPENCODE_AUTH_CONTENT` or XDG
+`opencode/auth.json`'s exact `opencode-go` API key. This is the existing Go `/connect`
+authentication flow; old browser cookies are not automatically imported or converted.
+Invalid explicit content fails instead of switching credential sources. The file
+read is bounded to 1 MiB and eight seconds; fixed HTTPS is bounded to 16 KiB/eight
+seconds with redirects disabled and cancellation observed. HTTP account rejection,
+missing credentials and malformed measurements remain typed failures. No auth
+content or response body reaches diagnostics, persistence or frontend state.
+Two local projection/auth-file cases pass (0.01s), provider Clippy passes (4.37s),
+and unchanged mandatory gates pass. Real Go account execution remains pending.
