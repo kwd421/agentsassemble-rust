@@ -44,7 +44,8 @@
   New Pro review and authorized real-provider proof remain at full closeout.
 - Active: Phase 8 operational surfaces pass affected local checks, Windows custody
   verification and direct packaged desktop/mobile/browser acceptance through `60f4621`.
-  Whole-phase Daybreak review is pending before Phase 9.
+  Whole-phase Daybreak review found one usage freshness defect; its correction passes
+  affected verification and awaits re-approval before Phase 9.
   [Contract](docs/specs/operational-surfaces-slice.md) and [evidence](docs/VERIFICATION.md#phase-8-packaged-operations-and-update-2026-09-09).
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).

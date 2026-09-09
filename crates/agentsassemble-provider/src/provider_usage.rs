@@ -5,7 +5,7 @@ use futures_util::{
     FutureExt,
     future::{BoxFuture, Shared, join_all},
 };
-use tokio::sync::Mutex;
+use tokio::{sync::Mutex, task::AbortHandle};
 use tokio_util::sync::CancellationToken;
 
 use crate::{ProviderCredentialStore, registration::provider_registration_by_id};
@@ -55,10 +55,15 @@ impl From<crate::process::ProbeFailure> for ProviderUsageError {
 
 type UsageResult = Shared<BoxFuture<'static, Result<ProviderUsage, ProviderUsageError>>>;
 
+struct UsageRun {
+    task: AbortHandle,
+    result: UsageResult,
+}
+
 struct UsageOwner {
     credentials: ProviderCredentialStore,
     cancellation: CancellationToken,
-    runs: Mutex<BTreeMap<&'static str, UsageResult>>,
+    runs: Mutex<BTreeMap<&'static str, UsageRun>>,
 }
 
 impl Drop for UsageOwner {
@@ -101,8 +106,22 @@ impl ProviderUsageService {
             if self.0.cancellation.is_cancelled() {
                 return Err(ProviderUsageError::Cancelled);
             }
-            if let Some(result) = runs.get(id).filter(|result| result.peek().is_none()) {
-                result.clone()
+            // Shared completion depends on its consumers. A lost response must not
+            // turn a finished native read into a cached result for the next request.
+            let inflight = if let Some(run) = runs.get(id) {
+                if run.task.is_finished() {
+                    if run.result.clone().await == Err(ProviderUsageError::CleanupUnconfirmed) {
+                        return Err(ProviderUsageError::CleanupUnconfirmed);
+                    }
+                    None
+                } else {
+                    Some(run.result.clone())
+                }
+            } else {
+                None
+            };
+            if let Some(result) = inflight {
+                result
             } else {
                 let credentials = self.0.credentials.clone();
                 let cancellation = self.0.cancellation.child_token();
@@ -114,13 +133,20 @@ impl ProviderUsageService {
                         quota,
                     })
                 });
+                let completion = task.abort_handle();
                 let result = async move {
                     task.await
                         .map_err(|_| ProviderUsageError::CleanupUnconfirmed)?
                 }
                 .boxed()
                 .shared();
-                runs.insert(id, result.clone());
+                runs.insert(
+                    id,
+                    UsageRun {
+                        task: completion,
+                        result: result.clone(),
+                    },
+                );
                 result
             }
         };
@@ -134,7 +160,7 @@ impl ProviderUsageService {
     pub async fn shutdown(&self) -> Result<(), ProviderUsageError> {
         self.0.cancellation.cancel();
         let runs = std::mem::take(&mut *self.0.runs.lock().await);
-        let results = join_all(runs.into_values()).await;
+        let results = join_all(runs.into_values().map(|run| run.result)).await;
         if results.contains(&Err(ProviderUsageError::CleanupUnconfirmed)) {
             return Err(ProviderUsageError::CleanupUnconfirmed);
         }
@@ -151,6 +177,7 @@ mod tests {
     static CALLS: AtomicUsize = AtomicUsize::new(0);
     static ENTERED: Notify = Notify::const_new();
     static RELEASE: Notify = Notify::const_new();
+    static COMPLETED: Notify = Notify::const_new();
 
     fn controlled<'a>(
         _: &'a ProviderCredentialStore,
@@ -159,15 +186,17 @@ mod tests {
         async move {
             CALLS.fetch_add(1, Ordering::SeqCst);
             ENTERED.notify_one();
-            tokio::select! {
+            let result = tokio::select! {
                 () = cancellation.cancelled() => Err(ProviderUsageError::Cancelled),
                 () = RELEASE.notified() => Ok(ProviderQuota::Balance { is_available: false, balances: vec![] }),
-            }
+            };
+            COMPLETED.notify_one();
+            result
         }.boxed()
     }
 
-    #[tokio::test]
-    async fn concurrent_reads_share_one_operation_and_shutdown_joins_inflight_work() {
+    #[tokio::test(flavor = "current_thread")]
+    async fn reads_coalesce_refresh_after_response_loss_and_join_on_shutdown() {
         let service = ProviderUsageService::new(
             ProviderCredentialStore::isolated_test_store(),
             CancellationToken::new(),
@@ -185,7 +214,16 @@ mod tests {
         assert_eq!(first, retry);
         assert!(first.is_ok());
         assert_eq!(CALLS.load(Ordering::SeqCst), 1);
-        let next = service.read_with("deepseek", controlled);
+        COMPLETED.notified().await;
+        let mut abandoned = Box::pin(service.read_with("deepseek", controlled));
+        assert!(futures_util::poll!(abandoned.as_mut()).is_pending());
+        ENTERED.notified().await;
+        drop(abandoned);
+        RELEASE.notify_one();
+        // This current-thread task runs through completion before the waiter resumes.
+        COMPLETED.notified().await;
+        let mut next = Box::pin(service.read_with("deepseek", controlled));
+        assert!(futures_util::poll!(next.as_mut()).is_pending());
         let shutdown = async {
             ENTERED.notified().await;
             service.shutdown().await
@@ -193,7 +231,7 @@ mod tests {
         let (next, shutdown) = tokio::join!(next, shutdown);
         assert_eq!(next, Err(ProviderUsageError::Cancelled));
         assert_eq!(shutdown, Ok(()));
-        assert_eq!(CALLS.load(Ordering::SeqCst), 2);
+        assert_eq!(CALLS.load(Ordering::SeqCst), 3);
         assert_eq!(
             service.read("deepseek").await,
             Err(ProviderUsageError::Cancelled)
@@ -201,6 +239,45 @@ mod tests {
         assert_eq!(
             service.read("antigravity").await,
             Err(ProviderUsageError::Unsupported)
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn response_loss_preserves_completed_cleanup_failure() {
+        static ENTERED: Notify = Notify::const_new();
+        static RELEASE: Notify = Notify::const_new();
+        static COMPLETED: Notify = Notify::const_new();
+        fn failed_cleanup<'a>(
+            _: &'a ProviderCredentialStore,
+            _: &'a CancellationToken,
+        ) -> BoxFuture<'a, Result<ProviderQuota, ProviderUsageError>> {
+            async {
+                ENTERED.notify_one();
+                RELEASE.notified().await;
+                COMPLETED.notify_one();
+                Err(ProviderUsageError::CleanupUnconfirmed)
+            }
+            .boxed()
+        }
+        let service = ProviderUsageService::new(
+            ProviderCredentialStore::isolated_test_store(),
+            CancellationToken::new(),
+        );
+        let mut abandoned = Box::pin(service.read_with("deepseek", failed_cleanup));
+        assert!(futures_util::poll!(abandoned.as_mut()).is_pending());
+        ENTERED.notified().await;
+        drop(abandoned);
+        RELEASE.notify_one();
+        COMPLETED.notified().await;
+        let next = service.read_with("deepseek", failed_cleanup);
+        tokio::pin!(next);
+        assert_eq!(
+            futures_util::poll!(next.as_mut()),
+            std::task::Poll::Ready(Err(ProviderUsageError::CleanupUnconfirmed))
+        );
+        assert_eq!(
+            service.shutdown().await,
+            Err(ProviderUsageError::CleanupUnconfirmed)
         );
     }
 }

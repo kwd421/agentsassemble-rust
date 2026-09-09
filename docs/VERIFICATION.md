@@ -8544,3 +8544,32 @@ obsolete desktop target (1.6 GiB) and accumulated root artifacts (52.1 GiB), inc
 this run's bundle; artifact-check then passed. Disk availability rose from 14 to
 68 GiB. User-owned `.agents/`, `scripts/__pycache__/`, source and unrelated processes
 were preserved. New builds are needed for subsequent packaged work.
+
+## Phase 8 whole-phase review correction: usage freshness (2026-09-09)
+
+Daybreak Blue at xhigh manually reviewed every one of the 31 commits in
+`d70224b..b2fde65`, the cumulative range, exact HEAD and complete local Phase 8
+contract. It returned REVISE C0/H0/M1/L0: `eb32eb7` was REVISE and the other 30
+commits were APPROVE. The source/diff review confirmed the restart and desktop
+custody design and did not run providers, builds, UI, tests or scans.
+
+The supported finding affected all five usage readers. After every HTTP consumer
+was dropped, a spawned native read could finish while its unpolled shared result
+still appeared pending. The next explicit read then replayed the old observation.
+The usage owner now retains Tokio's task completion handle, joins completed custody
+before replacement, and shares only unfinished reads. Completed cleanup failure
+remains an error for the next request and shutdown; it cannot disappear behind a
+new observation. Login's separately specified response-loss result retention is
+unchanged. No new task, timer, polling, provider request policy or fallback is added;
+one completion handle is retained per existing provider-bounded run.
+
+The existing controlled concurrency/shutdown test now drops its response consumer,
+releases the native operation and proves the next query starts a new read. It failed
+on the original code at the fresh-read assertion and passes after the correction.
+A second event-controlled case proves completed cleanup failure survives response
+loss, replacement and shutdown. Both pass in 0.01s without arbitrary sleeps or any
+actual provider/account. Provider all-target/all-feature Clippy and unchanged
+architecture/growth, 19 policy tests, format, diff and artifact gates pass. The prior
+packaged operational proof remains scoped to its recorded build; this correction's
+response-loss schedule is verified at the service owner. Daybreak re-approval is
+pending before Phase 9, and final integrated real-provider proof remains pending.

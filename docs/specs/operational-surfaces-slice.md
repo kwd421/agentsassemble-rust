@@ -2,7 +2,8 @@
 
 Status: Phase 8 contract established after Phase 7 approval at `d70224b`.
 Operational entries, affected local checks and direct packaged acceptance pass through
-`60f4621`; whole-phase Daybreak review is pending. [Packaged evidence and limits](../VERIFICATION.md#phase-8-packaged-operations-and-update-2026-09-09)
+`60f4621`; whole-phase Daybreak review found one usage freshness defect, now corrected
+locally and awaiting re-approval. [Packaged evidence and limits](../VERIFICATION.md#phase-8-packaged-operations-and-update-2026-09-09)
 supersede the pending execution notes below. Real-provider execution and both final
 reviewers remain governed by the product plan's final closeout gate.
 
@@ -175,6 +176,9 @@ capability. The shared usage owner starts no resident task or periodic request:
 explicit reads coalesce while running, preserve their observation timestamp, and
 runtime shutdown cancels and joins them. Completed results are not a freshness cache.
 A failed refresh clears the visible observation instead of relabeling old data.
+Completion follows the native task even when every response consumer disconnects.
+A subsequent read joins completed custody before starting a new observation;
+unconfirmed cleanup is retained as a failure and prevents replacement.
 
 The first reader uses DeepSeek's fixed `/user/balance` endpoint and the existing
 credential store. The existing bounded HTTPS JSON read mechanism is shared with
