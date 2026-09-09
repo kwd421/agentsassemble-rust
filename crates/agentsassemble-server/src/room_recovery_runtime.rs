@@ -111,6 +111,9 @@ mod tests {
 
     #[tokio::test]
     async fn recovered_turn_enters_provider_only_after_durable_publication() {
+        let _serial = crate::runtime_reconciliation::RUNTIME_RECONCILIATION_TEST_LOCK
+            .lock()
+            .await;
         let fixture = stage_recovery_assignment().await;
         let tracker = ProviderRecoveryTracker::default();
         let guard = tracker

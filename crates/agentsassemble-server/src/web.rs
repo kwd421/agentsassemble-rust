@@ -658,6 +658,7 @@ mod static_route_tests {
             [
                 ("/", RouteExposure::Private),
                 ("/app/{*path}", RouteExposure::Private),
+                ("/app/index.html", RouteExposure::Private),
                 ("/app", RouteExposure::Private),
                 ("/app/", RouteExposure::Private),
                 ("/join", RouteExposure::SameOriginPublic),

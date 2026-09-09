@@ -770,3 +770,16 @@ Whole-frontend verification found four failures from old fixed test-surface dige
 after the Phase 8 product revision changed. Both fixture digests now match revision
 13; production integrity checking is unchanged. All thirteen affected tests pass
 (0.60s); the other 797 tests passed during the full run.
+
+Whole Rust verification also exposed an old static-route fixture missing the now
+explicit private `/app/index.html` entry, and a recovery-publication fixture that
+did not join the existing reconciliation-test lock while sharing the bounded
+filesystem authority pool. Both fixtures are corrected; the production route and
+four-worker admission gate are unchanged. The 105 server unit tests and all 866
+workspace unit/integration tests pass, as do 28 desktop tests and workspace Clippy.
+Windows compiled the full affected targets but rejected an unnecessary mutable
+binding used only by POSIX restart. That binding is now POSIX-scoped; CI recheck is
+pending. Direct packaged login cancellation exposed the English cancelled response
+overwriting its Korean receipt; presentation now maps typed login errors, and both
+reply orders pass with the same confirmed cancellation text (four component tests).
+Frontend build and unchanged CSS plus mandatory gates pass after the correction.

@@ -120,7 +120,7 @@ pub(super) async fn run(
 ) -> anyhow::Result<StartupExit> {
     let Startup {
         args,
-        mut state,
+        state,
         listener,
         frontend_release,
         #[cfg(unix)]
@@ -131,6 +131,8 @@ pub(super) async fn run(
         inherited,
     )
     .await?;
+    #[cfg(unix)]
+    let mut state = state;
     let cancellation = CancellationToken::new();
     #[cfg(unix)]
     let http_descriptor = listener.as_fd().try_clone_to_owned()?;
