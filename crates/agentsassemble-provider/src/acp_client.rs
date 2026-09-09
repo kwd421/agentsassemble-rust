@@ -292,6 +292,23 @@ impl AcpClient {
             .map_err(|_| protocol_error())
     }
 
+    pub(super) async fn request_extension(
+        &self,
+        method: &str,
+        params: serde_json::Value,
+    ) -> Result<serde_json::Value, DriverError> {
+        use agent_client_protocol::schema::v1::{ClientRequest, ExtRequest};
+        let params = serde_json::value::to_raw_value(&params).map_err(|_| protocol_error())?;
+        self.connection
+            .send_request(ClientRequest::ExtMethodRequest(ExtRequest::new(
+                format!("_{method}"),
+                params.into(),
+            )))
+            .block_task()
+            .await
+            .map_err(|_| protocol_error())
+    }
+
     pub(super) async fn shutdown(&mut self) {
         self.state
             .lock()

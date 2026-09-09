@@ -32,6 +32,7 @@ mod driver;
 mod filesystem;
 mod grok;
 mod grok_acp;
+mod grok_usage;
 #[cfg(unix)]
 mod guardian;
 #[cfg(unix)]

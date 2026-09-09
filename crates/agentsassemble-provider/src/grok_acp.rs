@@ -246,7 +246,7 @@ fn secure_directory(path: &Path) -> std::io::Result<()> {
     Ok(())
 }
 
-fn auth_path() -> Option<PathBuf> {
+pub(crate) fn auth_path() -> Option<PathBuf> {
     env::var_os(AUTH_PATH_ENV).map(PathBuf::from).or_else(|| {
         env::var_os(crate::grok::HOME_ENV)
             .map(PathBuf::from)

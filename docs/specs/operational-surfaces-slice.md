@@ -1,7 +1,7 @@
 # Operational surfaces
 
 Status: Phase 8 contract established after Phase 7 approval at `d70224b`.
-Implementation and local acceptance are pending. Real-provider execution and both
+Operational entries are connected; whole-phase packaged acceptance is pending. Real-provider execution and both
 final reviewers remain governed by the product plan's final closeout gate.
 
 ## Definition and current reachable contracts
@@ -20,10 +20,9 @@ The original checkout `d504647` supplies these reachable entry points:
   `provider_usage.py` dispatches provider-specific readers. Codex reads app-server
   rate limits; DeepSeek reads its authenticated balance endpoint. Claude's original
   terminal reader can be replaced by the already-pinned SDK's structured usage API.
-- Grok terminal-screen extraction and OpenCode Go HTML extraction are original
-  implementations, not permission to introduce scraping under the current Rust
-  contract. Their operational capabilities require a supported current native/API
-  owner; absent evidence must remain explicitly unsupported, never fabricated usage.
+- Grok terminal-screen extraction and OpenCode Go HTML extraction were original
+  usage entry points. Current structured native/API owners have since been found;
+  the correction below restores those operations without reproducing their parsers.
 - `web/routes/observability.py` mounts resource and release-health projections.
   `assemble release-health list/run` selects fixed local checks, bounds their
   execution and persists a latest report. Retain this CLI behavior using current
@@ -692,3 +691,34 @@ terminal receipt (6.65s). Three frontend cases pass (0.73s), including lost resp
 exact-ID recovery, deadline stop and same-ID retry. Production frontend build and
 unchanged CSS, generated bindings, server Clippy and mandatory gates pass. Direct
 packaged desktop/mobile operation remains the next whole-phase acceptance step.
+
+## Remaining usage contract correction
+
+The complete original registry proves Grok and OpenCode usage are independent retained
+entry points, so their earlier provisional unsupported classification is insufficient.
+Current official sources now expose structured owners: Grok's `x.ai/billing` ACP
+extension (`xai-org/grok-build`, `extensions/billing.rs`) and OpenCode's
+`GET https://opencode.ai/zen/go/v1/usage` (`anomalyco/opencode`, console route).
+Restore both through the existing on-demand usage service, not terminal/HTML parsing.
+
+Grok account inspection initializes the existing ACP client, requests billing without
+creating a session/turn/tools, and positively cleans up its bounded native process.
+Authentication remains inside the CLI through the existing auth-path owner; a private
+inspection home avoids loading unrelated room configuration. Project only native
+usage percentage and period reset, keeping absent measurements unknown. OpenCode
+uses its explicitly configured native Go API credential and fixed HTTPS endpoint,
+without browser-cookie import or account/payment mutation. Missing native auth,
+unsupported server response and malformed data remain explicit errors. No real
+provider/account execution occurs until the authorized final matrix.
+
+
+Grok now uses the [official billing extension](https://github.com/xai-org/grok-build/blob/main/crates/codegen/xai-grok-shell/src/extensions/billing.rs),
+including its current percentage/period and documented monthly-budget projections.
+Malformed current fields never switch to the other shape. Native missing measurements
+stay unknown; zero cents follows the native proto3 empty-object contract, and only a
+ratio is projected. Subscription/account metadata, credit purchases and automatic
+payment rules are excluded. The existing ACP client owns framing, initialization,
+permission rejection and shutdown; the native inspection owner bounds the process to
+ten seconds and confirms cleanup. Two local cases pass (0.01s): exact sessionless
+billing exchange and native schema/unknown/error/privacy projections. Provider Clippy
+and mandatory gates pass. Actual Grok billing remains at the final authorized stage.

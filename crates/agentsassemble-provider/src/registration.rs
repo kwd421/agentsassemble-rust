@@ -191,7 +191,7 @@ pub(crate) static GROK_PROVIDER: ProviderRegistration = ProviderRegistration {
     executable_required: true,
     probe_executable: "grok",
     remote_spec: None,
-    usage: None,
+    usage: Some(crate::grok_usage::read),
     login: Some(crate::provider_login::ProviderLoginSpec {
         flow: crate::provider_login::ProviderLoginFlow::BrowserOauth,
         arguments: &["login"],
