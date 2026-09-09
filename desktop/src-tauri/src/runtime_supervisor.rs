@@ -322,19 +322,25 @@ fn forward_owned_output(
     writer: &mut impl Write,
     expected_pid: u32,
 ) -> io::Result<()> {
-    let mut startup_seen = false;
+    let mut startup_address: Option<String> = None;
     loop {
         let mut line = String::new();
         if reader.read_line(&mut line)? == 0 {
-            return if startup_seen {
+            return if startup_address.is_some() {
                 Ok(())
             } else {
                 Err(io::Error::other("sidecar closed output before readiness"))
             };
         }
-        if !startup_seen && !line.trim().is_empty() {
+        if !line.trim().is_empty() {
             let record: serde_json::Value = serde_json::from_str(line.trim())?;
-            if record.get("status").and_then(serde_json::Value::as_str) != Some("ready")
+            let ready = record.get("status").and_then(serde_json::Value::as_str) == Some("ready");
+            if startup_address.is_some() && !ready {
+                writer.write_all(line.as_bytes())?;
+                writer.flush()?;
+                continue;
+            }
+            if !ready
                 || record.get("runtime").and_then(serde_json::Value::as_str) != Some("rust")
                 || record.get("pid").and_then(serde_json::Value::as_u64)
                     != Some(u64::from(expected_pid))
@@ -343,7 +349,22 @@ fn forward_owned_output(
                     "sidecar readiness did not match the owned child handle",
                 ));
             }
-            startup_seen = true;
+            let address = record
+                .get("address")
+                .and_then(serde_json::Value::as_str)
+                .filter(|address| !address.is_empty())
+                .ok_or_else(|| io::Error::other("sidecar readiness has no address"))?;
+            if let Some(expected) = &startup_address {
+                if address != expected {
+                    return Err(io::Error::other(
+                        "sidecar restart changed the owned listener address",
+                    ));
+                }
+                // The parent's control queue accepts responses after initial readiness.
+                // Same-PID reexecution announces readiness again on this same pipe.
+                continue;
+            }
+            startup_address = Some(address.to_owned());
         }
         writer.write_all(line.as_bytes())?;
         writer.flush()?;
@@ -400,12 +421,27 @@ mod tests {
 
     #[test]
     fn sidecar_readiness_is_bound_to_the_owned_child_pid() {
-        let valid = b"{\"status\":\"ready\",\"runtime\":\"rust\",\"pid\":42}\n";
+        let valid = b"{\"status\":\"ready\",\"runtime\":\"rust\",\"pid\":42,\"address\":\"http://127.0.0.1:1234\"}\n";
         let mut output = Vec::new();
         forward_owned_output(&mut Cursor::new(valid), &mut output, 42)
             .unwrap_or_else(|error| panic!("forward valid readiness: {error}"));
         assert_eq!(output, valid);
         assert!(forward_owned_output(&mut Cursor::new(valid), &mut Vec::new(), 41).is_err());
+        let response = b"{\"type\":\"error\",\"request_id\":\"control-after-restart\"}\n";
+        let mut restarted = valid.to_vec();
+        restarted.extend_from_slice(valid);
+        restarted.extend_from_slice(response);
+        output.clear();
+        forward_owned_output(&mut Cursor::new(&restarted), &mut output, 42)
+            .unwrap_or_else(|error| panic!("forward restarted runtime: {error}"));
+        assert_eq!(output, [valid.as_slice(), response.as_slice()].concat());
+        for replacement in [
+            "{\"status\":\"ready\",\"runtime\":\"rust\",\"pid\":43,\"address\":\"http://127.0.0.1:1234\"}\n",
+            "{\"status\":\"ready\",\"runtime\":\"rust\",\"pid\":42,\"address\":\"http://127.0.0.1:5678\"}\n",
+        ] {
+            let input = [valid.as_slice(), replacement.as_bytes()].concat();
+            assert!(forward_owned_output(&mut Cursor::new(input), &mut Vec::new(), 42).is_err());
+        }
     }
 
     #[test]

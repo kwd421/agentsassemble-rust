@@ -474,3 +474,11 @@ unchanged architecture, growth, policy, format and diff gates pass. Independent
 cleanup futures now run concurrently after connection drain; their errors and
 reconciliation order are preserved. This establishes response-drain behavior,
 not rolling-restart completion or a measured whole-runtime latency improvement.
+
+The desktop supervisor validates every readiness record against its original child
+PID and first listener address. It forwards the initial record, consumes subsequent
+matching records, and continues forwarding ordinary control responses. A changed
+PID/address fails custody instead of entering the parent's control-response queue.
+The existing stream test now covers repeated readiness plus the next control reply
+and both identity changes (0.00s); desktop Clippy and mandatory gates pass. This is
+control-stream verification; actual same-PID executable replacement remains pending.
