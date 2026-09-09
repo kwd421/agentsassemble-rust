@@ -60,16 +60,26 @@ async fn actual_reexec_preserves_pid_tcp_control_and_replaces_frontend() -> anyh
     // A second replacement must still read the original source, and keep the first receipt.
     std::fs::write(frontend.join("assets/app.js"), "console.log('third');")?;
     let second = uuid::Uuid::new_v4();
-    let accepted = runtime_restart_ipc::request(
-        &database,
-        RuntimeControlRequest::Restart {
-            operation_id: second,
-        },
-    )
-    .await?;
+    let output = Command::new(env!("CARGO_BIN_EXE_assemble"))
+        .arg("rolling-restart")
+        .arg("--database")
+        .arg(&database)
+        .arg("--operation-id")
+        .arg(second.to_string())
+        .args(["--wait", "20", "--json"])
+        .output()
+        .await?;
     assert!(
-        matches!(accepted, RuntimeControlResponse::Accepted { operation } if operation.phase == RuntimeRestartPhase::Quiescing)
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
     );
+    let replies = serde_json::Deserializer::from_slice(&output.stdout)
+        .into_iter::<Value>()
+        .collect::<Result<Vec<_>, _>>()?;
+    assert_eq!(replies.len(), 2);
+    assert_eq!(replies[0]["operation"]["phase"], "quiescing");
+    assert_eq!(replies[1]["phase"], "completed");
     replacement_ready(&mut server).await?;
     assert_eq!(server.child.id(), pid);
     assert_ne!(

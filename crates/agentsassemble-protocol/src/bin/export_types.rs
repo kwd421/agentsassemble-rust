@@ -135,6 +135,8 @@ fn export_operational_contracts(
     agentsassemble_domain::ReleaseHealthReport::export_all(config)?;
     agentsassemble_domain::ReleaseHealthCheck::export_all(config)?;
     agentsassemble_domain::RuntimeVersion::export_all(config)?;
+    agentsassemble_domain::RuntimeRestartStatus::export_all(config)?;
+    agentsassemble_domain::RuntimeRestartRequest::export_all(config)?;
     agentsassemble_domain::LocalResourceStatus::export_all(config)?;
     agentsassemble_domain::ProviderUsage::export_all(config)?;
     fs::write(

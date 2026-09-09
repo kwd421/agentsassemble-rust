@@ -96,9 +96,10 @@ export async function postJson<T>(url: string, body: object): Promise<T> {
 
 export async function fetchJsonServerOperator<T>(
   url: string,
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  signal?: AbortSignal
 ): Promise<T> {
-  const res = await fetchServerOperator(url, undefined, beforeDispatch);
+  const res = await fetchServerOperator(url, signal ? { signal } : undefined, beforeDispatch);
   if (!res.ok) throw await responseError(res);
   return res.json();
 }
@@ -115,7 +116,8 @@ export async function postEmptyServerOperator<T>(
 export async function postJsonServerOperator<T>(
   url: string,
   body: object,
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  signal?: AbortSignal
 ): Promise<T> {
   const res = await fetchServerOperator(
     url,
@@ -123,6 +125,7 @@ export async function postJsonServerOperator<T>(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
+      ...(signal ? { signal } : {}),
     },
     beforeDispatch
   );

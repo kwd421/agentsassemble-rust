@@ -5,6 +5,8 @@ use clap::{Parser, Subcommand};
 mod attendee;
 #[path = "../release_health_cli.rs"]
 mod release_health;
+#[path = "../runtime_restart_cli.rs"]
+mod runtime_restart;
 
 #[derive(Parser)]
 #[command(name = "assemble", about = "AgentsAssemble external room clients")]
@@ -14,6 +16,8 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    /// Restart the local runtime or inspect its durable result.
+    RollingRestart(runtime_restart::RuntimeRestart),
     /// Inspect the frontend build actually served by a running runtime.
     FrontendInfo {
         #[arg(long)]
@@ -63,6 +67,7 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(command: Command) -> anyhow::Result<()> {
     match command {
+        Command::RollingRestart(args) => runtime_restart::run(args).await,
         Command::FrontendInfo { server } => {
             let version = agentsassemble_server::runtime_version::read(&server).await?;
             println!("{}", serde_json::to_string_pretty(&version)?);

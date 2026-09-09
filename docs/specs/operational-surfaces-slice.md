@@ -665,3 +665,30 @@ Incomplete handoffs create no database or readiness output. Six persistence rest
 cases pass (0.13s), including abandoned startup and positive cleanup after readiness
 failure. Seven desktop supervisor cases pass (0.47s). Server/persistence Clippy and
 mandatory gates pass. No provider was launched; packaged UI acceptance remains pending.
+
+## Operator restart entry points
+
+`assemble rolling-restart --database PATH [--wait SECONDS] [--json]` preserves the
+original command and busy-wait behavior using the same-user control endpoint instead
+of the retired host-token transport. The wait also observes the accepted operation's
+terminal receipt within its remaining budget. `--status [--operation-id UUID]` reads
+latest or retained results; explicit `--operation-id` reuses an uncertain request.
+Missing responses and elapsed waits remain unknown, with the operation ID printed
+before dispatch. Failed/aborted receipts never produce a successful completion exit.
+No provider turn or public credential transport is introduced by the CLI.
+
+The desktop's Server Status panel now exposes restart and result lookup. Generated
+Rust receipt types drive the UI. An accepted or lost response starts observation of
+that exact operation: one request at a time, one second between observations, at
+most sixty seconds, cancelled on unmount. Initial idle status is read once, and
+terminal results stop observation. Missing outcomes remain explicit; a manual retry
+reuses the same request ID. Request dispatch has a thirty-second deadline. There is
+no permanent restart poller or optimistic completion state. Button sizes and wrapping
+reuse the approved CSS cascade. React review retains event-owned mutation, bounded
+cancelled effects and derived phase presentation without a second restart authority.
+
+The actual binary CLI `--wait --json` case passes through in-place replacement and
+terminal receipt (6.65s). Three frontend cases pass (0.73s), including lost response,
+exact-ID recovery, deadline stop and same-ID retry. Production frontend build and
+unchanged CSS, generated bindings, server Clippy and mandatory gates pass. Direct
+packaged desktop/mobile operation remains the next whole-phase acceptance step.
