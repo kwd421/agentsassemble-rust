@@ -569,7 +569,11 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   function markChannelRead(channelId: string, cursor = "") {
-    updateChannelSetting(channelId, { lastReadAt: cursor || new Date().toISOString() });
+    const latestLobbySequence = channelId === "lobby"
+      ? canonicalRoom.timelineEvents.reduce((latest, event) => Math.max(latest, Number(event.seq) || 0), 0)
+      : 0;
+    const readCursor = cursor || (channelId === "lobby" ? `seq:${latestLobbySequence}` : new Date().toISOString());
+    updateChannelSetting(channelId, { lastReadAt: readCursor });
     setChannelMenu(null);
   }
 

@@ -133,3 +133,22 @@ packaged room containing the committed ballot and exercise voting and closure.
 Unavailable external dependencies or authorization gaps remain explicit limits;
 they do not become successful or simulated real-provider evidence. At the accepted
 parity exit, stop and report before any repository-wide 500+ LOC cleanup.
+
+## Visible latest-message read cursor correction (2026-09-09)
+
+The user observed an unread banner while viewing the latest message. LobbyView
+computes unread state from the persisted sequence cursor, but only its manual
+button advanced it. Connect the existing loaded/latest viewport to the existing
+preference-write owner. Read only when the focused visible document displays the
+latest feed, with no modal or fixed historical/search window. Focus/visibility and
+actual scroll events trigger evaluation; no timer/polling or optimistic substitute
+for the preference owner is added. Deduplicate attempts by room and sequence and
+leave failed persistence with the existing preference error/recovery owner.
+Acceptance: the current latest view clears unread through persisted preference
+state; scrolling older, hiding/defocusing, and search context do not acknowledge
+new messages. Direct packaged verification includes re-entry/restart persistence.
+
+The sidebar's lobby “mark read” action also wrote a timestamp while the unread
+projection consumes sequence cursors; use the canonical lobby sequence at that
+existing action owner. Confirmed cursor advancement releases attempt deduplication,
+so a later user cursor change does not suppress a new visible read.

@@ -30,6 +30,7 @@ import {
   LobbyTypingRow,
 } from "./lobby/LobbyEventRows";
 import { useLobbyHistory } from "./lobby/useLobbyHistory";
+import { useVisibleReadCursor } from "./lobby/useVisibleReadCursor";
 import { projectRoomEventsToTimeline } from "../lib/roomEventProjection";
 import { useRoomSocket } from "../RoomSocketContext";
 import {
@@ -284,6 +285,14 @@ export default function LobbyView({
     const match = /^seq:(\d+)$/.exec(headerActions?.lastReadCursor || "");
     return match ? Number(match[1]) : 0;
   }, [headerActions?.lastReadCursor]);
+  useVisibleReadCursor({
+    roomId: roomUid || activeRoom.id,
+    enabled: loaded && pinnedToLatest && !historyWindowActive,
+    latestSequence: latestReadSequence,
+    lastReadSequence,
+    scrollRef,
+    onMarkRead: headerActions?.onMarkRead,
+  });
   const firstUnreadEvent = useMemo(
     () =>
       headerActions?.onMarkRead
