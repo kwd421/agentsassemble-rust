@@ -17,13 +17,17 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
         .await?;
     let tickets = TicketStore::new(Duration::from_secs(30), 16);
     // This provider only discovers static local metadata; no account or executable runs.
-    let catalog = ProviderCatalogService::discovering_selected("custom_api")?;
+    let catalog = ProviderCatalogService::discovering_selected(
+        "custom_api",
+        agentsassemble_provider::ProviderCredentialStore::production(),
+    )?;
     let root = tempfile::tempdir()?;
     let state = AppState::local_with_provider_state_root(
         store,
         tickets.clone(),
         catalog.clone(),
         root.path(),
+        agentsassemble_provider::ProviderCredentialStore::production(),
     )
     .await?;
     let listener = TcpListener::bind("127.0.0.1:0").await?;

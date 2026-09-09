@@ -31,8 +31,11 @@ use crate::{
 
 pub(crate) type ProviderDiscoveryFuture<'a> =
     Pin<Box<dyn Future<Output = ProviderAvailability> + Send + 'a>>;
-pub(crate) type ProviderDiscovery =
-    for<'a> fn(ProviderAvailability, &'a CancellationToken) -> ProviderDiscoveryFuture<'a>;
+pub(crate) type ProviderDiscovery = for<'a> fn(
+    ProviderAvailability,
+    &'a crate::ProviderCredentialStore,
+    &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a>;
 #[cfg(unix)]
 pub(crate) type ProviderLaunch =
     for<'a> fn(
@@ -416,92 +419,105 @@ pub(crate) fn provider_registration_by_profile(
 
 pub(crate) fn discover_provider<'a>(
     registration: &'static ProviderRegistration,
+    credentials: &'a crate::ProviderCredentialStore,
     cancellation: &'a CancellationToken,
 ) -> ProviderDiscoveryFuture<'a> {
-    (registration.discover)(loading_provider(registration), cancellation)
+    (registration.discover)(loading_provider(registration), credentials, cancellation)
 }
 
-fn discover_codex_registered(
+fn discover_codex_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_codex(provider, cancellation))
 }
 
-fn discover_claude_registered(
+fn discover_claude_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(crate::claude::discover(provider, cancellation))
 }
 
-fn discover_opencode_registered(
+fn discover_opencode_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_opencode(provider, cancellation))
 }
 
-fn discover_cursor_registered(
+fn discover_cursor_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(cursor::discover(provider, cancellation))
 }
 
-fn discover_grok_registered(
+fn discover_grok_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(grok::discover(provider, cancellation))
 }
 
-fn discover_deepseek_registered(
+fn discover_deepseek_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
-    Box::pin(discover_deepseek(provider, cancellation))
+    credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
+    Box::pin(discover_deepseek(provider, credentials, cancellation))
 }
 
-fn discover_cerebras_registered(
+fn discover_cerebras_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_cerebras(provider, cancellation))
 }
 
-fn discover_openrouter_registered(
+fn discover_openrouter_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_openrouter(provider, cancellation))
 }
 
-fn discover_vercel_registered(
+fn discover_vercel_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_vercel(provider, cancellation))
 }
 
-fn discover_llm_gateway_registered(
+fn discover_llm_gateway_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_llm_gateway(provider, cancellation))
 }
 
-fn discover_tokenrouter_registered(
+fn discover_tokenrouter_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_tokenrouter(provider, cancellation))
 }
 
-fn discover_custom_api_registered(
+fn discover_custom_api_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover_custom_api(provider, cancellation))
 }
 

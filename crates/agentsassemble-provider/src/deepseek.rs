@@ -89,7 +89,7 @@ mod tests {
             "https",
         );
         session.public.runtime_kind = "api".to_owned();
-        session.public.reasoning_effort = "max".to_owned();
+        session.public.reasoning_effort = "low".to_owned();
         session.public.variant = "non_thinking".to_owned();
         session.public.max_output_tokens = 8_192;
         let messages = [json!({"role": "user", "content": "hello"})];
@@ -101,7 +101,7 @@ mod tests {
                 "model": "deepseek-v4-flash",
                 "messages": messages,
                 "thinking": {"type": "disabled"},
-                "reasoning_effort": "max",
+                "reasoning_effort": "low",
                 "max_tokens": 8192,
                 "stream": true,
                 "stream_options": {"include_usage": true},

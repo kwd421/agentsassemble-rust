@@ -150,7 +150,15 @@ pub(crate) async fn discover_opencode(
         };
     provider.executable.clone_from(&executable);
     provider.executable_identity = executable_identity;
-    let output = match Box::pin(probe(&executable, &["models"], cancellation, &[])).await {
+    // Native --refresh updates OpenCode's own model cache when discovery is requested.
+    let output = match Box::pin(probe(
+        &executable,
+        &["models", "--refresh"],
+        cancellation,
+        &[],
+    ))
+    .await
+    {
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };
@@ -177,69 +185,7 @@ pub(crate) async fn discover_opencode(
     )
 }
 
-pub(crate) async fn discover_deepseek(
-    mut provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderAvailability {
-    if cancellation.is_cancelled() {
-        return failed_provider(provider, ProbeFailure::Cancelled);
-    }
-    let models = [
-        ("deepseek-v4-flash", "DeepSeek V4 Flash", "0.14", "0.28"),
-        ("deepseek-v4-pro", "DeepSeek V4 Pro", "0.435", "0.87"),
-    ]
-    .into_iter()
-    .map(|(value, label, input_price, output_price)| {
-        let metadata = BTreeMap::from([
-            ("relation_scope".to_owned(), json!("global")),
-            ("reasoning_efforts".to_owned(), json!(["high", "max"])),
-            ("context_length".to_owned(), json!(1_000_000)),
-            ("max_output_tokens".to_owned(), json!(384_000)),
-            ("input_price_per_million".to_owned(), json!(input_price)),
-            ("output_price_per_million".to_owned(), json!(output_price)),
-            ("pricing".to_owned(), json!("paid")),
-            ("reasoning".to_owned(), json!(true)),
-            ("tools".to_owned(), json!(true)),
-            (
-                "training_policy".to_owned(),
-                json!("사용될 수 있음 · opt-out 가능"),
-            ),
-        ]);
-        ProviderControlOption {
-            value: value.to_owned(),
-            label: label.to_owned(),
-            metadata,
-        }
-    })
-    .collect();
-    "static_manifest".clone_into(&mut provider.catalog_source);
-    ready_provider(
-        provider,
-        "deepseek-v4-flash".to_owned(),
-        vec![
-            control("model", "모델", "combobox", models, "deepseek-v4-flash"),
-            control(
-                "reasoning_effort",
-                "추론 강도",
-                "select",
-                vec![option("high", "High"), option("max", "Max")],
-                "high",
-            ),
-            control(
-                "variant",
-                "Thinking",
-                "select",
-                vec![
-                    option("thinking", "사용"),
-                    option("non_thinking", "사용 안 함"),
-                ],
-                "thinking",
-            ),
-            remote_output_token_control(),
-            permission_control(false),
-        ],
-    )
-}
+pub(crate) use crate::deepseek_catalog::discover as discover_deepseek;
 
 pub(crate) async fn discover_cerebras(
     provider: ProviderAvailability,
@@ -270,15 +216,11 @@ pub(crate) async fn discover_openrouter(
     provider: ProviderAvailability,
     cancellation: &CancellationToken,
 ) -> ProviderAvailability {
-    discover_gateway(
-        provider,
-        cancellation,
-        openrouter::CATALOG_ENDPOINT,
-        "OpenRouter",
-        "openai/gpt-4.1-mini",
-        None,
-    )
-    .await
+    let models = match openrouter::model_options(cancellation).await {
+        Ok(models) => models,
+        Err(error) => return failed_provider(provider, remote_catalog_failure(error)),
+    };
+    ready_gateway(provider, models, "OpenRouter", "openai/gpt-4.1-mini", None)
 }
 
 pub(crate) async fn discover_vercel(
@@ -394,7 +336,7 @@ fn ready_gateway(
     ready_provider(provider, default_model.clone(), controls)
 }
 
-const fn remote_catalog_failure(error: RemoteCatalogError) -> ProbeFailure {
+pub(crate) const fn remote_catalog_failure(error: RemoteCatalogError) -> ProbeFailure {
     match error {
         RemoteCatalogError::Cancelled => ProbeFailure::Cancelled,
         RemoteCatalogError::Timeout => ProbeFailure::Timeout,
@@ -518,7 +460,7 @@ pub(crate) fn permission_control(workspace_write: bool) -> ProviderControl {
     )
 }
 
-fn remote_output_token_control() -> ProviderControl {
+pub(crate) fn remote_output_token_control() -> ProviderControl {
     control(
         "max_output_tokens",
         "최대 응답 길이",
@@ -545,7 +487,7 @@ fn push_unique(values: &mut Vec<ProviderControlOption>, value: ProviderControlOp
     }
 }
 
-fn preferred_model(options: &[ProviderControlOption], preferred: &str) -> String {
+pub(crate) fn preferred_model(options: &[ProviderControlOption], preferred: &str) -> String {
     options
         .iter()
         .find(|option| option.value == preferred)

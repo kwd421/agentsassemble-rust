@@ -12,11 +12,42 @@ use crate::{
     },
 };
 
-// The public endpoint currently contains more entries than the bounded public
-// ProviderAvailability projection can carry. OpenRouter orders this one finite page
-// server-side; it is provider policy, not a generic catalog fallback or paginator.
+// Keep both new releases and popular choices inside the existing public frame bound.
+// Both pages are required: a failed newest read must not look like a fresh catalog.
 pub(crate) const CATALOG_ENDPOINT: &str =
     "https://openrouter.ai/api/v1/models?supported_parameters=tools&sort=most-popular&limit=32";
+const NEWEST_CATALOG_ENDPOINT: &str =
+    "https://openrouter.ai/api/v1/models?supported_parameters=tools&sort=newest&limit=32";
+
+pub(crate) async fn model_options(
+    cancellation: &tokio_util::sync::CancellationToken,
+) -> Result<
+    Vec<agentsassemble_domain::ProviderControlOption>,
+    crate::remote_catalog::RemoteCatalogError,
+> {
+    let (newest, popular) = tokio::try_join!(
+        crate::remote_catalog::fetch_gateway_model_options(NEWEST_CATALOG_ENDPOINT, cancellation),
+        crate::remote_catalog::fetch_gateway_model_options(CATALOG_ENDPOINT, cancellation),
+    )?;
+    merge_model_options(newest, popular)
+}
+
+fn merge_model_options(
+    newest: Vec<agentsassemble_domain::ProviderControlOption>,
+    popular: Vec<agentsassemble_domain::ProviderControlOption>,
+) -> Result<
+    Vec<agentsassemble_domain::ProviderControlOption>,
+    crate::remote_catalog::RemoteCatalogError,
+> {
+    let mut seen = std::collections::BTreeSet::new();
+    crate::remote_catalog::bound_catalog_options(
+        newest
+            .into_iter()
+            .chain(popular)
+            .filter(|model| seen.insert(model.value.clone()))
+            .collect(),
+    )
+}
 
 pub(crate) static OPENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     authentication: RemoteOpenAiAuthentication::Bearer {
@@ -84,6 +115,30 @@ mod tests {
 
     use super::{CATALOG_ENDPOINT, OPENROUTER_SPEC, request_payload};
     use crate::test_support::durable_session;
+
+    #[test]
+    fn new_releases_are_included_even_before_becoming_popular() {
+        let model = crate::catalog::option;
+        let options = super::merge_model_options(
+            vec![
+                model("new/release", "New"),
+                model("shared/model", "Current metadata"),
+            ],
+            vec![
+                model("popular/model", "Popular"),
+                model("shared/model", "Other page"),
+            ],
+        )
+        .unwrap_or_else(|error| panic!("{error:?}"));
+        assert_eq!(
+            options
+                .iter()
+                .map(|item| item.value.as_str())
+                .collect::<Vec<_>>(),
+            ["new/release", "shared/model", "popular/model"]
+        );
+        assert_eq!(options[1].label, "Current metadata");
+    }
 
     #[test]
     fn request_profile_preserves_openrouter_headers_and_controls() {

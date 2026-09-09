@@ -61,7 +61,10 @@ async fn run_owned(
     client: &mut RoomAttendeeClient,
     cancellation: &CancellationToken,
 ) -> anyhow::Result<()> {
-    let catalog = ProviderCatalogService::discovering_selected(&args.provider)?;
+    let catalog = ProviderCatalogService::discovering_selected(
+        &args.provider,
+        agentsassemble_provider::ProviderCredentialStore::production(),
+    )?;
     let discovered = discover(&catalog, cancellation).await;
     let shutdown = catalog.shutdown().await;
     shutdown.context("attendee_discovery_shutdown_failed")?;

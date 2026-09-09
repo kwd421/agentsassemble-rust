@@ -61,22 +61,31 @@ impl Drop for CatalogOwner {
 
 impl ProviderCatalogService {
     #[must_use]
-    pub fn discovering() -> Self {
-        Self::discovering_registrations(provider_registrations().to_vec())
+    pub fn discovering(credentials: crate::ProviderCredentialStore) -> Self {
+        Self::discovering_registrations(provider_registrations().to_vec(), credentials)
     }
 
     /// Discovers only the explicitly selected external attendee provider.
     ///
     /// # Errors
     /// Rejects unknown or excluded providers before any discovery work starts.
-    pub fn discovering_selected(provider_id: &str) -> Result<Self, ProviderSelectionError> {
+    pub fn discovering_selected(
+        provider_id: &str,
+        credentials: crate::ProviderCredentialStore,
+    ) -> Result<Self, ProviderSelectionError> {
         let registration = provider_registration_by_id(provider_id).ok_or_else(|| {
             ProviderSelectionError::new("unsupported_provider", "Provider is not supported.")
         })?;
-        Ok(Self::discovering_registrations(vec![registration]))
+        Ok(Self::discovering_registrations(
+            vec![registration],
+            credentials,
+        ))
     }
 
-    fn discovering_registrations(registrations: Vec<&'static ProviderRegistration>) -> Self {
+    fn discovering_registrations(
+        registrations: Vec<&'static ProviderRegistration>,
+        credentials: crate::ProviderCredentialStore,
+    ) -> Self {
         let initial = loading_catalog(&registrations);
         let (sender, receiver) = watch::channel(initial);
         let refresh_sender = sender.clone();
@@ -87,7 +96,8 @@ impl ProviderCatalogService {
         let task = tokio::spawn(async move {
             loop {
                 let generation = *requests.borrow_and_update();
-                let catalog = discover_catalog(&registrations, &discovery_cancellation).await;
+                let catalog =
+                    discover_catalog(&registrations, &credentials, &discovery_cancellation).await;
                 if discovery_cancellation.is_cancelled() {
                     break;
                 }
@@ -214,12 +224,13 @@ impl ProviderCatalogService {
 
 async fn discover_catalog(
     registrations: &[&'static ProviderRegistration],
+    credentials: &crate::ProviderCredentialStore,
     cancellation: &CancellationToken,
 ) -> ProviderCatalog {
     let providers = futures_util::future::join_all(
         registrations
             .iter()
-            .map(|registration| discover_provider(registration, cancellation)),
+            .map(|registration| discover_provider(registration, credentials, cancellation)),
     )
     .await;
     let (status, catalog_revision) = match catalog_revision(&providers) {
@@ -263,14 +274,102 @@ fn loading_catalog(registrations: &[&'static ProviderRegistration]) -> ProviderC
 mod tests {
     use super::ProviderCatalogService;
 
+    fn credentialed_discovery<'a>(
+        provider: agentsassemble_domain::ProviderAvailability,
+        credentials: &'a crate::ProviderCredentialStore,
+        _cancellation: &'a tokio_util::sync::CancellationToken,
+    ) -> crate::registration::ProviderDiscoveryFuture<'a> {
+        Box::pin(async move {
+            if credentials
+                .status(crate::ProviderCredentialId::DeepSeek)
+                .await
+                .is_ok_and(|status| status.configured)
+            {
+                crate::catalog::ready_provider(
+                    provider,
+                    "new-model".to_owned(),
+                    vec![crate::catalog::control(
+                        "model",
+                        "Model",
+                        "combobox",
+                        vec![crate::catalog::option("new-model", "New model")],
+                        "new-model",
+                    )],
+                )
+            } else {
+                crate::catalog::failed_provider(
+                    provider,
+                    crate::process::ProbeFailure::Authentication,
+                )
+            }
+        })
+    }
+
+    #[tokio::test]
+    async fn refresh_observes_credential_changes_and_replaces_a_previous_ready_snapshot() {
+        let credentials = crate::ProviderCredentialStore::isolated_test_store();
+        let registration = Box::leak(Box::new(crate::registration::ProviderRegistration {
+            discover: credentialed_discovery,
+            login: None,
+            ..crate::registration::DEEPSEEK_PROVIDER
+        }));
+        let service = ProviderCatalogService::discovering_registrations(
+            vec![registration],
+            credentials.clone(),
+        );
+        let first = service
+            .refresh()
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(!first.providers[0].startable);
+        credentials
+            .set(
+                crate::ProviderCredentialId::DeepSeek,
+                "isolated-fixture-value",
+            )
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        let fresh = service
+            .refresh()
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(fresh.providers[0].startable);
+        assert_eq!(fresh.providers[0].default_model, "new-model");
+        assert_ne!(first.catalog_revision, fresh.catalog_revision);
+        credentials
+            .delete(crate::ProviderCredentialId::DeepSeek)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        let failed = service
+            .refresh()
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        assert!(!failed.providers[0].startable);
+        assert!(failed.providers[0].controls.is_empty());
+        assert_ne!(failed.catalog_revision, fresh.catalog_revision);
+        service
+            .shutdown()
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+    }
+
     #[tokio::test]
     async fn selected_discovery_rejects_excluded_providers_and_only_publishes_selection() {
         for provider in ["freebuff", "antigravity", "unknown"] {
-            assert!(ProviderCatalogService::discovering_selected(provider).is_err());
+            assert!(
+                ProviderCatalogService::discovering_selected(
+                    provider,
+                    crate::ProviderCredentialStore::isolated_test_store()
+                )
+                .is_err()
+            );
         }
         // Custom API discovery is local metadata only; no CLI or remote catalog is needed.
-        let service = ProviderCatalogService::discovering_selected("custom_api")
-            .unwrap_or_else(|error| panic!("select custom API: {error}"));
+        let service = ProviderCatalogService::discovering_selected(
+            "custom_api",
+            crate::ProviderCredentialStore::isolated_test_store(),
+        )
+        .unwrap_or_else(|error| panic!("select custom API: {error}"));
         let mut updates = service.subscribe();
         let catalog = tokio::time::timeout(std::time::Duration::from_secs(2), async {
             loop {

@@ -97,6 +97,12 @@ fn gateway_model_option(entry: &Value) -> Option<ProviderControlOption> {
     }
     if let Some(max_output) = positive_u64(entry.get("max_tokens"))
         .or_else(|| positive_u64(entry.get("max_output_tokens")))
+        .or_else(|| positive_u64(entry.get("max_output_length")))
+        .or_else(|| {
+            entry
+                .get("top_provider")
+                .and_then(|provider| positive_u64(provider.get("max_completion_tokens")))
+        })
     {
         metadata.insert("max_output_tokens".to_owned(), json!(max_output));
     }
@@ -277,10 +283,12 @@ mod tests {
                     "input_modalities": ["text"],
                     "supported_features": ["tools", "reasoning"],
                     "context_length": 131_072,
+                    "max_output_length": 32_768,
                     "pricing": {"prompt": "0.00000099", "completion": "0.00000149"}
                 },
                 {
                     "id": "vision-model",
+                    "top_provider": {"max_completion_tokens": 65_536},
                     "input_modalities": ["text", "image"],
                     "providers": [{"tools": true, "reasoning_efforts": ["high", "low"]}]
                 },
@@ -298,6 +306,8 @@ mod tests {
             ["zai-glm-4.7", "vision-model"]
         );
         assert_eq!(options[0].metadata["context_length"], json!(131_072));
+        assert_eq!(options[0].metadata["max_output_tokens"], json!(32_768));
+        assert_eq!(options[1].metadata["max_output_tokens"], json!(65_536));
         assert_eq!(
             options[0].metadata["input_price_per_million"],
             json!("0.99")

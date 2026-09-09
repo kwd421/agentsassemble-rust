@@ -84,11 +84,13 @@ async fn prepare(
     let address = listener.local_addr()?;
     args.bind = address;
     args.database.clone_from(&database_path);
+    let credentials = agentsassemble_provider::ProviderCredentialStore::production();
     let mut state = AppState::local_with_provider_state_root(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
-        ProviderCatalogService::discovering(),
+        ProviderCatalogService::discovering(credentials.clone()),
         database_state_root(&database_path)?,
+        credentials,
     )
     .await?;
     state.google_accounts = agentsassemble_server::GoogleAccountService::from_environment()?;

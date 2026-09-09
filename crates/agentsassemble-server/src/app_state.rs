@@ -89,8 +89,8 @@ impl AppState {
         tickets: TicketStore,
         provider_catalog: ProviderCatalogService,
         state_root: &Path,
+        provider_credentials: ProviderCredentialStore,
     ) -> Result<Self, AppStateBuildError> {
-        let provider_credentials = ProviderCredentialStore::production();
         let provider_adapter = ProviderAdapter::with_credentials_and_state_root(
             provider_credentials.clone(),
             state_root,

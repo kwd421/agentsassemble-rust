@@ -9017,3 +9017,36 @@ root lock. A busy root retains the already-existing unlocked-lease recovery path
 All 13 filesystem cases pass, including the original failing executable test and
 the new lock/reclamation test. Full verification and packaged closure follow with
 the model-freshness slice; no filesystem/process authority or gate is weakened.
+
+## Harness and API model freshness (2026-09-09)
+
+The catalog keeps its existing startup/manual-refresh lifetime and local-operator
+authority. DeepSeek now reads authenticated `/models` with the same credential
+store used by settings and execution; no static or environment fallback is added.
+Official IDs replace the previous list, while unsupported price/limit claims are
+removed. Provider-level low/high/max effort remains in the request dialect.
+OpenRouter requires newest and popular tool-capable pages, deduplicated newest
+first within existing bounds. OpenCode runs native `models --refresh`. Other
+native/API discovery owners remain dynamic; Custom API keeps explicit model IDs.
+Existing agent selections are never silently changed.
+
+Regression coverage proves new IDs are selectable, removed IDs are rejected,
+credential changes affect the next refresh, and a failed refresh replaces the
+previous ready snapshot. Frontend coverage distinguishes partial provider failures
+from global failure and proves there is no mount-triggered refresh. Discovery
+keeps existing timeout/response/catalog bounds; OpenRouter adds one concurrent
+bounded HTTP read per discovery. No periodic task or software installer is added.
+
+Packaged desktop manipulation confirmed a real refresh reports nine providers
+ready and five unavailable, then re-enables the button. OpenRouter's native model
+menu exposed newer upstream families, including Mercury 2.5 and DeepSeek Vision
+Exp. This proves list exposure, not execution compatibility. DeepSeek's saved-key
+status was visible, but OS credential access was denied to the verification
+binary; the UI correctly showed `secure_store_unavailable` and disabled creation.
+No key was replaced and no new-model inference turn was run. A native-menu
+keyboard selection caused Computer Use to lose window access while the process
+remained alive; that attempt does not prove selection completion.
+
+Full workspace, frontend and desktop tests passed. The following Clippy gate
+identified one `manual_let_else` style error in the new HTTP-client construction;
+the equivalent `let ... else` correction is applied and the gate is rerun.

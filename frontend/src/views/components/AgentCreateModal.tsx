@@ -293,7 +293,7 @@ export default function AgentCreateModal({
       );
       setCredentialStatus(credentialStatus);
       setProviderApiKey("");
-      setStatus(`${selectedProvider.display_name} 키가 서버의 보안 저장소에 저장됐습니다`);
+      setStatus(`${selectedProvider.display_name} 키가 서버의 보안 저장소에 저장됐습니다. 모델 목록을 새로고침해 주세요.`);
     } catch (error) {
       setStatus(
         error instanceof Error

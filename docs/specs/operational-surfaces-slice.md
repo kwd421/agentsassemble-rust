@@ -294,6 +294,47 @@ including exact inspection process absence after success and cancellation. Exist
 provider/server Clippy and mandatory gates pass. No real Codex/account is invoked;
 packaged phase and final real-provider evidence remain pending.
 
+## Provider model freshness (2026-09-09)
+
+The user requests current Harness/API model discovery while retaining OS-keyring
+credential storage and optional software updates. The current discovery service
+runs once at startup and on explicit local-operator refresh, publishes a revision
+through the existing catalog subscription, and joins concurrent refresh requests.
+Keep this owner and cadence; do not add timers or silently replace an agent's model.
+
+Observed gaps: DeepSeek hardcodes two model IDs, obsolete price metadata and only
+high/max effort despite the official low/high/max contract. OpenRouter's bounded
+popular-only page can omit new models. Refresh UI reports success even when an
+individual provider fails discovery. Native Codex/Claude/OpenCode/Cursor/Grok and
+Ollama/LM Studio already discover from their actual installed provider; OpenCode
+must additionally request its documented `models --refresh` to refresh its native
+model cache during discovery. Other API
+gateways fetch their public catalogs. Custom API retains explicit user model IDs.
+
+DeepSeek must use its fixed authenticated HTTPS `/models` endpoint through the
+existing bounded client and OS credential owner. Credential absence, denial,
+malformed data, network failure and cancellation remain failures, with no static
+or environment fallback. The model list supplies IDs, not pricing or capability
+metadata: do not manufacture current prices/context limits for newly listed IDs.
+The provider-owned Chat Completions request dialect supplies low/high/max and
+thinking controls; discovery is not runtime certification of unreleased models.
+Preserve the existing response-size/model-count/public-catalog limits.
+
+OpenRouter combines its required bounded popular and newest tool-capable pages,
+deduplicated by model ID; either failed read fails discovery. It remains a bounded
+selection, not a claim to expose every historic upstream model. Other provider
+model IDs remain discovered, without date/name allowlists. Keep per-provider
+protocol differences with their owner and shared HTTP/projection/lifecycle common.
+
+Acceptance: fixture catalogs containing new IDs are selectable after refresh;
+removed IDs cannot be newly selected; failed reads never publish old lists as fresh.
+DeepSeek's low effort reaches the request payload; unknown metadata is not shown
+as current. Credential save and subsequent discovery outcomes remain distinct.
+Run affected provider/server/frontend tests and mandatory gates, direct packaged
+desktop/390px refresh flows, then the plan-owned manual review. Real provider runs
+remain within the existing approved matrix; public documentation/catalog research
+does not authorize new model turns or installation/account changes.
+
 ## Interactive login custody decision
 
 OpenCode's original interactive login hands a graphical terminal to the operator;

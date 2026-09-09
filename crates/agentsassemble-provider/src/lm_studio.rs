@@ -73,10 +73,11 @@ static SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
     },
 };
 
-fn discover_registered(
+fn discover_registered<'a>(
     provider: ProviderAvailability,
-    cancellation: &CancellationToken,
-) -> ProviderDiscoveryFuture<'_> {
+    _credentials: &'a crate::ProviderCredentialStore,
+    cancellation: &'a CancellationToken,
+) -> ProviderDiscoveryFuture<'a> {
     Box::pin(discover(provider, cancellation))
 }
 

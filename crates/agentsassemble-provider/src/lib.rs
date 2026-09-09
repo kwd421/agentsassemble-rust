@@ -31,6 +31,7 @@ mod cursor;
 mod cursor_acp;
 mod custom_api;
 mod deepseek;
+mod deepseek_catalog;
 mod driver;
 mod filesystem;
 mod grok;

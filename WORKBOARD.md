@@ -2,6 +2,11 @@
 
 ## Active work
 
+- Active: user-requested Harness/API model freshness. Preserve native discovery,
+  replace DeepSeek's static IDs with authenticated discovery, include OpenRouter's
+  newest models, and expose refresh outcomes without forced software updates.
+  [Contract](docs/specs/operational-surfaces-slice.md#provider-model-freshness-2026-09-09).
+
 - User-requested browser-to-local provider setup is locally complete:
   login/installation guidance, local setup links and optional version updates
   preserve provider/device authority. Daybreak approved all three commits,
