@@ -9284,3 +9284,21 @@ The read-only database observation matched the current room sequence. Normal qui
 relaunch and restored room/channel UI retained both `seq:125` values. The exact app
 and owned runtime were then normally quit and Computer Use reset. Existing isolated
 verification data remains needed by final closeout. Both re-reviews are pending.
+
+Daybreak's frozen `5c6199a` re-review delivered a supported follow-up: the original
+M1 correction incorrectly retained external idle pause/paused resume. The actual
+`agent_pause::require_resident_state` requires server custody; a component callback
+assertion did not prove a supported server transition. The consumer now applies
+server custody to both controls and the existing test rejects their external
+advertising while retaining cleanup. Existing managed pause/resume coverage remains.
+External stop and reported retained-turn interrupt keep their real external owners.
+The changed component's 12 tests, existing connection panel's 19 tests, frontend
+build and mandatory gates pass. Daybreak's later final verdict was interrupted twice
+by model-access authorization failure; its preliminary M2 assessment was favorable
+but is not approval. Final exact-head Daybreak and Pro approvals remain required.
+The follow-up signed package 0.1.7 also passes strict app/helper/server signature
+validation and direct profile opening: stopped external exposes its ownership
+explanation without managed actions; stopped managed retains resume/settings. The
+external idle/paused rejection is covered by the component test and server owner
+inspection, not a newly launched external provider in this pass. The exact app and
+owned runtime were normally quit, and Computer Use reset after verification.

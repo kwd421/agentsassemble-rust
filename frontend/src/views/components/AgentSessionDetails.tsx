@@ -109,13 +109,11 @@ export default function AgentSessionDetails({
   const canStart =
     serverOwned && !session.recovery_required && !hasRunBefore &&
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
-  const canPause = status === "idle" && !session.recovery_required;
+  const canPause = serverOwned && status === "idle" && !session.recovery_required;
   const canStop = agentSessionIsPresent(status) || status === "error" || session.recovery_required;
   const canResume =
-    !session.recovery_required && (status === "paused" ||
-    (serverOwned &&
-      hasRunBefore &&
-      ["stopped", "error", "disconnected", "available"].includes(status || "")));
+    serverOwned && !session.recovery_required && (status === "paused" ||
+    (hasRunBefore && ["stopped", "error", "disconnected", "available"].includes(status || "")));
   const canInterrupt =
     provider?.turn_interrupt === "retained_runtime" && status === "busy" && !session.recovery_required;
   const continuity = providerSessionContinuity(session);

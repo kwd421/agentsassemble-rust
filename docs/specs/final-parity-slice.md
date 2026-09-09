@@ -164,9 +164,12 @@ managed start action and stopped external attendees could edit runtime/persona
 settings, although the server correctly rejects both through `require_server_custody`.
 The shared session details consumer derives server custody from the same canonical
 fields: `!external_owned && process_ownership == "server"`. Managed start, stopped
-restart/resume, and runtime/persona configuration require that custody. External
-ownership is explained without advertising a later managed start. Supported
-external pause, resident resume, stop/cleanup and activity display remain available.
+restart/resume, resident pause/resume, and runtime/persona configuration require
+that custody. Daybreak's correction review confirmed that `require_resident_state`
+also rejects external custody; a UI-only external pause/resume callback is not a
+supported contract. External ownership is explained without advertising managed
+controls. Supported external turn interrupt, stop/cleanup and activity display
+remain available through their existing external owners.
 No server permission, session identity, process ownership or provider execution
 changes. Acceptance includes first external admission, stopped/error external
 sessions, managed controls and external cleanup through the existing shared UI.

@@ -53,16 +53,15 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(personaApi.fetchPersonaAssets).not.toHaveBeenCalled();
   });
 
-  it("preserves external pause, resident resume, and cleanup", async () => {
+  it("keeps resident pause/resume managed-only while preserving external cleanup", async () => {
     const onControl = vi.fn().mockResolvedValue(undefined);
     const session = agentSessionFixture({ external_owned: true, process_ownership: "external", enabled: true, runtime_status: "idle" });
     const { rerender } = render(<AgentSessionDetails session={session} onControl={onControl} />);
-    await userEvent.click(screen.getByRole("button", { name: "일시정지" }));
-    expect(onControl).toHaveBeenLastCalledWith(session, "pause");
+    expect(screen.queryByRole("button", { name: "일시정지" })).toBeNull();
     const paused: RoomAgentSession = { ...session, runtime_status: "paused" };
     rerender(<AgentSessionDetails session={paused} onControl={onControl} />);
-    await userEvent.click(screen.getByRole("button", { name: "재개" }));
-    expect(onControl).toHaveBeenLastCalledWith(paused, "resume");
+    expect(screen.queryByRole("button", { name: "재개" })).toBeNull();
+    expect(onControl).not.toHaveBeenCalled();
     const recovery: RoomAgentSession = { ...session, runtime_status: "disconnected", recovery_required: true };
     rerender(<AgentSessionDetails session={recovery} onControl={onControl} />);
     await userEvent.click(screen.getByRole("button", { name: "중지" }));
