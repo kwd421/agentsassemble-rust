@@ -40,6 +40,19 @@ Cargo profile override. Ordinary development and release profiles stay unchanged
 After all baseline work stops, use the existing artifact owner to retire the
 replaced artifacts, then verify the same full suite and measure the resulting size.
 
+Actual Codex startup exposes an upstream transport mismatch: the installed native
+Code Mode Host accepts a `grpc://127.0.0.1:0` listener and publishes a canonical
+`http://127.0.0.1:<port>` gRPC endpoint. Its former `ws://` invocation exits before
+readiness. Update the existing host launcher and strict readiness parser to that
+observed contract, preserving the same executable bundle, loopback-only binding,
+process group, descriptor isolation and cleanup authority. Do not add transport
+fallback or infer successful cleanup from a closed pipe. Verify the real CLI
+readiness, existing guardian/transport cases and a complete packaged Codex turn;
+distinguish failed-start cleanup evidence from the existing macOS uncertainty
+contract. A controlled companion exit reproduces launcher fork/exit before cleanup;
+the guardian deliberately cannot publish absence in that state. Preserve its
+uncertain generation and blocked retry instead of inferring absence from dead PIDs.
+
 ## Acceptance and verification
 
 - Reconcile every retained exposed feature with its original entry, Rust owner,

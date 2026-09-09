@@ -376,7 +376,7 @@ async fn codex_code_mode_host_stays_in_the_guardian_process_group() {
         .windows(2)
         .find_map(|pair| (pair[0] == "--code-mode-host").then_some(pair[1].as_str()))
         .unwrap_or_else(|| panic!("provider did not receive the code-mode host endpoint"));
-    assert_eq!(host_argument, "ws://127.0.0.1:43123");
+    assert_eq!(host_argument, "http://127.0.0.1:43123");
     let host_pid = std::fs::read_to_string(&host_pid_report)
         .ok()
         .and_then(|value| value.parse::<i32>().ok())
@@ -419,6 +419,61 @@ async fn codex_code_mode_host_stays_in_the_guardian_process_group() {
         .shutdown()
         .await
         .unwrap_or_else(|error| panic!("shutdown code-mode host fixture owner: {error}"));
+}
+
+#[tokio::test]
+async fn codex_code_mode_host_start_failure_preserves_cleanup_authority() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create failing code-mode host fixture: {error}"));
+    let (mut session, arguments_report, host_pid_report) =
+        code_mode_host_fixture(directory.path()).await;
+    std::fs::write(
+        directory
+            .path()
+            .join(agentsassemble_domain::codex_code_mode_host_name()),
+        format!(
+            "#!/bin/sh\nprintf '%s' \"$$\" > '{}'\nexit 1\n",
+            host_pid_report.display()
+        ),
+    )
+    .unwrap_or_else(|error| panic!("write failing companion: {error}"));
+    session.executable_identity = codex_executable_identity(session.executable.clone())
+        .await
+        .unwrap_or_else(|error| panic!("identify failing companion: {error:?}"));
+    session = self::session(
+        session.executable,
+        session.executable_identity,
+        &session.workspace,
+        &session.workspace_identity,
+    );
+    let adapter = ProviderAdapter::new();
+    let Err(failure) = adapter.start(&session).await else {
+        panic!("failed companion must prevent provider startup");
+    };
+    assert!(!arguments_report.exists());
+    assert!(
+        host_pid_report.exists(),
+        "companion must have executed: {failure:?}"
+    );
+    #[cfg(target_os = "macos")]
+    {
+        // The launcher has forked and exited. Existing macOS custody cannot prove
+        // that history absent, even when this controlled fixture has no survivor.
+        assert!(failure.effect_uncertain);
+        assert!(!failure.runtime_handle_id.is_empty());
+        let retry = adapter.start(&session).await;
+        assert!(matches!(retry, Err(error) if error.effect_uncertain));
+        assert!(adapter.shutdown().await.is_err());
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        assert!(!failure.effect_uncertain, "companion failure: {failure:?}");
+        adapter
+            .shutdown()
+            .await
+            .unwrap_or_else(|error| panic!("shutdown failed companion owner: {error}"));
+    }
 }
 
 #[tokio::test]
@@ -489,7 +544,7 @@ pub(super) async fn code_mode_host_fixture(root: &Path) -> (DurableAgentSession,
         arguments_report.display()
     );
     let host_script = format!(
-        "#!/bin/sh\nprintf '%s\\n' 'SIDE_CAR_PROTOCOL_LEAK' >&5\nprintf '%s' \"$$\" > '{}'\nprintf '%s\\n' 'ws://127.0.0.1:43123'\nexec /bin/sleep 30\n",
+        "#!/bin/sh\n[ \"$1\" = '--listen' ] && [ \"$2\" = 'grpc://127.0.0.1:0' ] || exit 2\nprintf '%s\\n' 'SIDE_CAR_PROTOCOL_LEAK' >&5\nprintf '%s' \"$$\" > '{}'\nprintf '%s\\n' 'http://127.0.0.1:43123'\nexec /bin/sleep 30\n",
         host_pid_report.display()
     );
     for (path, contents) in [

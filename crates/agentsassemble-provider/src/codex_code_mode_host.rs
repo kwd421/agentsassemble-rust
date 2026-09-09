@@ -30,7 +30,7 @@ impl CodexCodeModeHost {
         let mut command = Command::new(executable);
         crate::process::sanitize_std_environment(&mut command);
         command
-            .args(["--listen", "ws://127.0.0.1:0"])
+            .args(["--listen", "grpc://127.0.0.1:0"])
             .current_dir(working_directory)
             .env(crate::unix_process_tree::RUNTIME_TOKEN_ENV, runtime_token)
             .stdin(Stdio::null())
@@ -114,11 +114,12 @@ fn parse_endpoint(line: &str, count: usize) -> io::Result<String> {
         .strip_suffix('\r')
         .unwrap_or_else(|| line.trim_end_matches('\n'));
     let address = endpoint
-        .strip_prefix("ws://")
+        // Native gRPC readiness publishes its HTTP transport URL, not its listen scheme.
+        .strip_prefix("http://")
         .and_then(|value| value.parse::<SocketAddr>().ok())
         .filter(|address| address.ip() == IpAddr::V4(Ipv4Addr::LOCALHOST) && address.port() != 0)
         .ok_or_else(|| io::Error::other("Codex code-mode host endpoint is invalid"))?;
-    let canonical = format!("ws://{address}");
+    let canonical = format!("http://{address}");
     if endpoint != canonical {
         return Err(io::Error::other(
             "Codex code-mode host endpoint is not canonical",
@@ -130,18 +131,20 @@ fn parse_endpoint(line: &str, count: usize) -> io::Result<String> {
 #[cfg(test)]
 mod tests {
     #[test]
-    fn readiness_accepts_only_canonical_loopback_websockets() {
-        let value = "ws://127.0.0.1:43123\n";
+    fn readiness_accepts_only_canonical_loopback_http_endpoints() {
+        let value = "http://127.0.0.1:43123\n";
         assert_eq!(
             super::parse_endpoint(value, value.len())
                 .unwrap_or_else(|error| panic!("parse endpoint: {error}")),
-            "ws://127.0.0.1:43123"
+            "http://127.0.0.1:43123"
         );
         for value in [
-            "ws://0.0.0.0:43123\n",
-            "ws://127.0.0.1:0\n",
-            " ws://127.0.0.1:43123\n",
-            "ws://127.0.0.1:43123/path\n",
+            "http://0.0.0.0:43123\n",
+            "http://127.0.0.1:0\n",
+            " http://127.0.0.1:43123\n",
+            "http://127.0.0.1:43123/path\n",
+            "ws://127.0.0.1:43123\n",
+            "grpc://127.0.0.1:43123\n",
         ] {
             assert!(super::parse_endpoint(value, value.len()).is_err());
         }

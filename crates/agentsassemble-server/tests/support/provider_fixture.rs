@@ -19,7 +19,7 @@ pub fn write_codex_bundle(root: &Path, fixture: &[u8]) -> (String, String) {
     #[cfg(unix)]
     write_executable(
         &companion,
-        b"#!/bin/sh\nprintf '%s\\n' 'ws://127.0.0.1:43123'\nexec /usr/bin/tail -f /dev/null\n",
+        b"#!/bin/sh\n[ \"$1\" = '--listen' ] && [ \"$2\" = 'grpc://127.0.0.1:0' ] || exit 2\nprintf '%s\\n' 'http://127.0.0.1:43123'\nexec /usr/bin/tail -f /dev/null\n",
     );
     #[cfg(not(unix))]
     write_executable(&companion, b"codex companion fixture");

@@ -8669,3 +8669,30 @@ the completed test, development and native caches then occupies 24,529,739,776
 bytes (22.85 GiB), again requiring ordinary artifact maintenance. This does not
 claim that the full mixed-profile cache fits the limit. Final release packaging
 and runtime measurements follow after those completed debug outputs are retired.
+
+## Phase 9 native Codex host transport correction (2026-09-09)
+
+The installed native `codex-code-mode-host` rejects `--listen ws://127.0.0.1:0`
+before readiness. A bounded direct probe of that exact binary exits in 0.028s;
+its documented gRPC listener instead publishes a canonical loopback HTTP endpoint
+in about 0.025s. Each probe's exact child is terminated and reaped. These are
+readiness probes, not model turns. The existing launcher now requests
+`grpc://127.0.0.1:0` and validates the returned `http://127.0.0.1:<nonzero-port>`;
+wildcard, noncanonical, path-bearing and mismatched transport URLs are rejected.
+The executable bundle, process group and descriptor isolation remain unchanged.
+
+All 32 affected Codex tests pass (71.64s), the resident-proof case passes (3.50s),
+and all 17 server Agent Session boundary cases pass (121.58s), including actual
+managed-worker execution, lifecycle retries, interruption and room publication.
+An additional controlled companion-exit case passes (12.99s): the provider never
+executes, and macOS retains uncertain custody and blocks a retry after launcher
+fork/exit. That is the existing conservative authority contract, not confirmed
+absence; the failed real session is preserved for the same reason. No PID-only
+cleanup proof, transport fallback or authorization bypass is introduced.
+
+Logs are `/tmp/aa-phase9-codex-grpc-tests.log`,
+`/tmp/aa-phase9-codex-host-failure.log`, `/tmp/aa-phase9-grpc-resident.log` and
+`/tmp/aa-phase9-grpc-server-boundary.log`. Packaged real-turn proof follows the
+rebuilt release; these local cases do not establish that result.
+Affected provider/server all-target/all-feature Clippy and unchanged architecture,
+growth, 19 policy cases, format, diff and artifact gates pass.
