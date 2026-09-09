@@ -26,6 +26,8 @@ rfd = "0.17.2"
 tauri = { version = "2.11.0", features = [] }
 url = "2.5.7"
 uuid = { version = "1.24.1", features = ["v4"] }
+tauri-plugin-deep-link = "2.4.10"
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.2", features = ["process", "signal", "user"] }
