@@ -430,6 +430,7 @@ export const ROOM_SESSION_PREFERENCES_UNAVAILABLE =
 
 type RoomSettingsUpdate = {
   roomId: string;
+  roomUid: string;
   appearance?: Pick<RoomAppearance, "notifications">;
   channelSettings?: Record<string, ChannelSettings>;
   identity?: RoomSettingsIdentity;
@@ -460,12 +461,14 @@ export function fetchRoomSettings(
 
 export function saveRoomSettings({
   roomId,
+  roomUid,
   appearance,
   channelSettings,
   identity = {},
 }: RoomSettingsUpdate): Promise<RoomSettings> {
   const body = {
     room_id: roomId,
+    room_uid: roomUid,
     ...(appearance
       ? { appearance: { notifications: appearance.notifications } }
       : {}),

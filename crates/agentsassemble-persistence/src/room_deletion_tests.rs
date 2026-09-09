@@ -115,6 +115,46 @@ async fn assert_deletion_replay(
         .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "general", &room.label)
         .await?;
     assert_ne!(new.room.room_uid, room.room_uid);
+    // A queued preference intent must not follow the same name into the new room.
+    for patch in [
+        json!({}),
+        json!({"channel_settings": {
+            "lobby": {"notifications": "default", "last_read_at": "seq:99"}
+        }}),
+    ] {
+        assert!(matches!(
+            store.update_room_preferences("general", room.room_uid,
+                &principal.principal_id, &principal.participant_id, serde_json::from_value(patch)?).await,
+            Err(PersistenceError::CommandRejected { code, .. }) if code == "room_incarnation_changed"
+        ));
+    }
+    assert!(
+        store
+            .room_preferences(
+                "general",
+                &principal.principal_id,
+                &principal.participant_id
+            )
+            .await?
+            .preferences
+            .channel_settings
+            .is_empty()
+    );
+    let marked = store
+        .update_room_preferences(
+            "general",
+            new.room.room_uid,
+            &principal.principal_id,
+            &principal.participant_id,
+            serde_json::from_value(json!({"channel_settings": {
+                "lobby": {"notifications": "default", "last_read_at": "seq:1"}
+            }}))?,
+        )
+        .await?;
+    assert_eq!(
+        marked.preferences.channel_settings["lobby"].last_read_at,
+        "seq:1"
+    );
     assert!(
         store
             .execute_room_delete(TrustedPrincipal(principal), "delete", payload)

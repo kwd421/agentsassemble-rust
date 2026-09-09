@@ -9253,4 +9253,34 @@ remain. The affected component's 12 tests pass, including external custody,
 preserved external control callbacks and managed settings. The frontend build
 (TypeScript, Vite and CSS contract) passes after correcting test fixture literal
 types. Architecture, source-growth, 19 policy/artifact tests, formatting and diff
-checks also pass. Direct packaged verification and reviewer closure are pending.
+checks also pass. Direct packaged evidence follows below; reviewer closure is pending.
+
+M2 replaces the directory timestamp mutation with one serialized preference write
+for the captured canonical sequence across the lobby and current text channels.
+The existing preference owner preserves notifications, rolls back failures and
+provides explicit reload/retry. All preference POST callers now capture `room_uid`;
+the shared persistence transaction rejects a different incarnation before writing,
+including empty updates. Queued client writes stop when room/device/session scope
+changes. The native and remote authorization owners remain unchanged.
+
+Affected local verification passes: frontend 143 files/823 tests and the
+TypeScript/Vite/CSS build; persistence preferences (4), actual room recreation (2),
+native preference HTTP (2), remote human admission/preferences (4), operator pairing
+(2), and strict preference parser (1). The pairing tests pass again after extracting
+the create-request boundary assertions. Server/persistence Clippy with all targets,
+all features and warnings denied passes after clarifying incarnation variable names
+and separating those assertions; architecture, source growth, 19 policy/artifact
+tests, formatting and diff checks pass without gate exceptions.
+
+Direct packaged verification passes on isolated signed macOS app 0.1.6 (strict
+recursive signature validation includes app/helper/server). The saved stopped
+`Codex External Verification` profile shows the external-owner explanation and
+activity control without restart or runtime settings. The saved managed Codex
+profile retains resume and runtime settings; no provider was started. With the
+lobby scrolled to old messages and the latest-message jump visibly available,
+room-menu mark-read closed successfully and persisted both lobby and the existing
+`phase9-check` channel at `seq:125` (previous lobby `seq:121`, custom entry absent).
+The read-only database observation matched the current room sequence. Normal quit,
+relaunch and restored room/channel UI retained both `seq:125` values. The exact app
+and owned runtime were then normally quit and Computer Use reset. Existing isolated
+verification data remains needed by final closeout. Both re-reviews are pending.

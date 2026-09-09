@@ -38,6 +38,10 @@ export default function RoomRail({
   onOpenAdmin, onAddRoom, onManageRooms, onOpenFriends, friendsOpen = false,
   onOpenRoomMenu,
   onMarkRoomRead,
+  readReady = false,
+  readStatus = "loading",
+  readError = "",
+  onRetryRoomRead,
   onInviteRoom,
   onOpenRoomSettings,
   onLeaveRoom,
@@ -59,7 +63,11 @@ export default function RoomRail({
   onOpenFriends?: () => void;
   friendsOpen?: boolean;
   onOpenRoomMenu: (event: ReactMouseEvent, room: RoomDockItem) => void;
-  onMarkRoomRead: (roomId: string) => void;
+  onMarkRoomRead: (roomId: string) => void | Promise<void>;
+  readReady?: boolean;
+  readStatus?: "loading" | "ready" | "saving" | "stale" | "error";
+  readError?: string;
+  onRetryRoomRead?: () => void;
   onInviteRoom: (roomId: string) => void;
   onOpenRoomSettings: (roomId: string) => void;
   onLeaveRoom: (roomId: string) => void;
@@ -134,10 +142,14 @@ export default function RoomRail({
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
-          <button type="button" role="menuitem" onClick={() => onMarkRoomRead(menuRoom.id)}>
+          <button type="button" role="menuitem" disabled={!readReady} onClick={() => void onMarkRoomRead(menuRoom.id)}>
             <Check size={16} />
-            읽음으로 표시하기
+            {readStatus === "saving" ? "읽음 저장 중…" : "읽음으로 표시하기"}
           </button>
+          {readError && <p role="alert" className="preserve-words">{readError}</p>}
+          {(readStatus === "stale" || readStatus === "error") && onRetryRoomRead && (
+            <button type="button" role="menuitem" onClick={onRetryRoomRead}>읽음 설정 다시 불러오기</button>
+          )}
           {!guestLocked && menuRoom && !roomIsDisconnected(menuRoom) && (
             <button type="button" role="menuitem" onClick={() => onInviteRoom(menuRoom.id)}>
               <UserPlus size={16} />

@@ -92,7 +92,6 @@ export function useAppController(deviceToken: string, clientId: string) {
   const {
     rooms, managementRooms,
     replaceRooms,
-    markRoomRead: markRoomDirectoryRead,
     removeRoom,
     updateRoom,
     updateRoomByMeetingId,
@@ -449,11 +448,26 @@ export function useAppController(deviceToken: string, clientId: string) {
     });
   }
 
-  function markRoomRead(roomId: string) {
-    const readAt = new Date().toISOString();
-    markRoomDirectoryRead(roomId, readAt);
-    setRoomMenu(null);
-    setChannelMenu(null);
+  const roomReadReady = Boolean(
+    menuRoom && menuRoom.id === activeRoom.id && activeRoom.roomUid && !guestReadOnly &&
+    canonicalRoom.room?.room_uid === activeRoom.roomUid &&
+    canonicalRoom.connectionState === "connected" && !canonicalRoom.syncIssue &&
+    canonicalRoom.roomSettings && canonicalRoom.history.initialized &&
+    roomSettings.preferenceStateFor(activeRoom).status === "ready"
+  );
+
+  async function markRoomRead(roomId: string) {
+    if (!roomReadReady || roomId !== activeRoom.id || !canonicalRoom.socket?.ready()) return;
+    const cursor = `seq:${canonicalRoom.history.lastSeq}`;
+    const channelIds = ["lobby", ...roomChannels.activeChannels.filter((item) => item.type === "text").map((item) => item.id)];
+    try {
+      await roomSettings.updateChannelSettings(activeRoom, Object.fromEntries(
+        channelIds.map((channelId) => [channelId, { lastReadAt: cursor }])
+      ));
+      setRoomMenu((current) => current === roomMenu ? null : current);
+    } catch {
+      // The preference owner retains the confirmed values and exposes retry state.
+    }
   }
 
   function inviteRoom(roomId: string) {
@@ -565,7 +579,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   function updateChannelSetting(channelId: string, updates: Partial<ChannelSettings>) {
-    void roomSettings.updateChannelSetting(activeRoom, channelId, updates).catch(() => undefined);
+    void roomSettings.updateChannelSettings(activeRoom, { [channelId]: updates }).catch(() => undefined);
   }
 
   function markChannelRead(channelId: string, cursor = "") {
@@ -626,7 +640,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     inviteCopyStatus, inviteModalAppearance,
     inviteModalRoom, invitePublicUrl, inviteRoom,
     leaveRoom, leaveRoomTarget, loadCanonicalRoomHistory,
-    lobbyPostingState, markChannelRead, markRoomRead,
+    lobbyPostingState, markChannelRead, markRoomRead, roomReadReady,
     membersOpen, menuChannelDisplay, menuRoom, messageSearchChannelLabels,
     messageSearchScope, mobileRoomInfoOpen, mobileSidebarOpen, mobileViewport,
     openAgentCreate, openChannelMenu,

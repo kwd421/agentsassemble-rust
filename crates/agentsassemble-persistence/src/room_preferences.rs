@@ -126,15 +126,21 @@ impl SqliteStore {
     pub async fn update_room_preferences(
         &self,
         room_id: &str,
+        expected_incarnation: uuid::Uuid,
         user_id: &str,
         participant_id: &str,
         patch: RoomUserPreferencesPatch,
     ) -> Result<RoomPreferencesSnapshot, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         resolve_room_user_identity(&mut transaction, room_id, user_id, participant_id).await?;
-        let snapshot =
-            update_room_preferences_in_transaction(&mut transaction, room_id, user_id, patch)
-                .await?;
+        let snapshot = update_room_preferences_in_transaction(
+            &mut transaction,
+            room_id,
+            expected_incarnation,
+            user_id,
+            patch,
+        )
+        .await?;
         transaction.commit().await?;
         Ok(snapshot)
     }
@@ -148,6 +154,7 @@ impl SqliteStore {
     pub async fn update_room_session_room_preferences(
         &self,
         expected: &RoomSessionAuthorization,
+        expected_incarnation: uuid::Uuid,
         patch: RoomUserPreferencesPatch,
     ) -> Result<RoomPreferencesSnapshot, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
@@ -158,6 +165,7 @@ impl SqliteStore {
         let snapshot = update_room_preferences_in_transaction(
             &mut transaction,
             &principal.room_id,
+            expected_incarnation,
             &principal.principal_id,
             patch,
         )
@@ -170,9 +178,20 @@ impl SqliteStore {
 async fn update_room_preferences_in_transaction(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
+    expected_incarnation: uuid::Uuid,
     user_id: &str,
     patch: RoomUserPreferencesPatch,
 ) -> Result<RoomPreferencesSnapshot, PersistenceError> {
+    let room = crate::authority::load_active_room(transaction, room_id).await?;
+    if room.room_uid != expected_incarnation {
+        return Err(PersistenceError::CommandRejected {
+            code: "room_incarnation_changed".into(),
+            message: "The exact room no longer exists.".into(),
+        });
+    }
+    if patch.notifications.is_none() && patch.channel_settings.is_none() {
+        return load_room_preferences_snapshot(transaction, user_id, room_id).await;
+    }
     let current = load_room_preferences(transaction, user_id, room_id).await?;
     let preferences =
         current
@@ -270,6 +289,7 @@ mod tests {
         let local = store
             .update_room_preferences(
                 "general",
+                room_uid(&store).await,
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
                 local_patch,
@@ -291,7 +311,13 @@ mod tests {
         let second_patch = serde_json::from_value(json!({"notifications": "all"}))
             .unwrap_or_else(|error| panic!("parse second patch: {error}"));
         store
-            .update_room_preferences("general", "user-2", "participant-2", second_patch)
+            .update_room_preferences(
+                "general",
+                room_uid(&store).await,
+                "user-2",
+                "participant-2",
+                second_patch,
+            )
             .await
             .unwrap_or_else(|error| panic!("write second preferences: {error}"));
         let local_again = store
@@ -351,6 +377,7 @@ mod tests {
             store
                 .update_room_preferences(
                     "general",
+                    room_uid(&store).await,
                     LOCAL_OPERATOR_USER_ID,
                     LOCAL_OPERATOR_PARTICIPANT_ID,
                     invalid_patch,
@@ -401,6 +428,7 @@ mod tests {
         store
             .update_room_preferences(
                 "general",
+                room_uid(&store).await,
                 LOCAL_OPERATOR_USER_ID,
                 LOCAL_OPERATOR_PARTICIPANT_ID,
                 patch,
@@ -439,6 +467,18 @@ mod tests {
             store.local_room_preferences_directory().await,
             Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"bootstrap_repair_required")
         ));
+    }
+
+    async fn room_uid(store: &SqliteStore) -> uuid::Uuid {
+        store
+            .list_room_directory(false)
+            .await
+            .unwrap_or_else(|error| panic!("read room identity: {error}"))
+            .into_iter()
+            .find(|entry| entry.room.room_id == "general")
+            .unwrap_or_else(|| panic!("general room missing"))
+            .room
+            .room_uid
     }
 
     async fn fixture() -> SqliteStore {

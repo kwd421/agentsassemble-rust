@@ -203,6 +203,12 @@ async fn remote_preferences_authorize_the_session_at_the_target() {
 
 async fn assert_writable_remote_preferences(client: &Client) {
     let (store, credentials) = fixture_with_max_uses(InviteScope::ReadWrite, 5).await;
+    let room_uid = store
+        .list_room_directory(false)
+        .await
+        .unwrap_or_else(|error| panic!("read preference room: {error}"))[0]
+        .room
+        .room_uid;
     let replacement = persist_invite(
         &store,
         InviteScope::ReadWrite,
@@ -234,11 +240,21 @@ async fn assert_writable_remote_preferences(client: &Client) {
             .unwrap_or_else(|error| panic!("probe retired preference exchange: {error}"));
         assert_eq!(response.status(), reqwest::StatusCode::NOT_FOUND);
     }
+    let stale = client
+        .post(format!("{}/api/room-settings", server.base_url))
+        .bearer_auth(session_token)
+        .json(&json!({"room_id": "general", "room_uid": uuid::Uuid::nil(),
+            "appearance": {"notifications": "mute"}}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("write stale remote preferences: {error}"));
+    assert_eq!(stale.status(), reqwest::StatusCode::CONFLICT);
     let updated = client
         .post(format!("{}/api/room-settings", server.base_url))
         .bearer_auth(session_token)
         .json(&json!({
             "room_id": "general",
+            "room_uid": room_uid,
             "appearance": {"notifications": "mute"}
         }))
         .send()

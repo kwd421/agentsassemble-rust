@@ -621,7 +621,6 @@ describe("useRoomDirectory", () => {
       result.current.prependRoom(prependedRoom);
       result.current.updateRoom("second", { label: "Updated" });
       result.current.updateRoomByMeetingId("meeting-1", { topic: "Meeting topic" });
-      result.current.markRoomRead("first", "2026-07-12T01:02:03Z");
     });
 
     let remainingRooms: RoomDockItem[] = [];
@@ -629,7 +628,7 @@ describe("useRoomDirectory", () => {
       remainingRooms = result.current.removeRoom("prepended");
     });
     expect(remainingRooms).toEqual([
-      { ...firstRoom, topic: "Meeting topic", createdAt: "2026-07-12T01:02:03Z" },
+      { ...firstRoom, topic: "Meeting topic" },
       { ...secondRoom, label: "Updated" },
     ]);
     expect(result.current.rooms).toEqual(remainingRooms);

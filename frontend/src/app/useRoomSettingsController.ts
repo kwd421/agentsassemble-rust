@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   fetchRoomSettings,
   ROOM_SESSION_PREFERENCES_UNAVAILABLE,
@@ -118,6 +118,11 @@ export function useRoomSettingsController({
     preferenceAuthority.kind !== "remote-unavailable" ? preferenceAuthority.deviceToken ?? "" : "";
   const preferenceSessionToken =
     preferenceAuthority.kind === "remote" ? preferenceAuthority.sessionToken : "";
+  const preferenceScope = useMemo(() => ({}), [
+    activeRoomKey, activeRoom.roomUid, preferenceAuthorityKind, preferenceDeviceToken, preferenceSessionToken, enabled,
+  ]);
+  const preferenceScopeRef = useRef(preferenceScope);
+  preferenceScopeRef.current = preferenceScope;
   const canonicalGlobalSettingsSignature = canonicalGlobalSettings
     ? JSON.stringify(canonicalGlobalSettings)
     : "";
@@ -326,16 +331,22 @@ export function useRoomSettingsController({
     preferenceAuthorityKind,
     preferenceDeviceToken,
     preferenceSessionToken,
+    preferenceScope,
   ]);
 
   const savePreferences = useCallback(
     (
       room: RoomDockItem,
-      updates: Omit<Parameters<typeof saveRoomSettings>[0], "roomId" | "identity">
+      updates: Omit<Parameters<typeof saveRoomSettings>[0], "roomId" | "roomUid" | "identity">
     ) => {
-      if (!room.meetingId) return Promise.resolve();
       const key = roomSettingsKey(room);
       const generation = beginPreferenceOperation(key);
+      const roomUid = room.roomUid;
+      if (!room.meetingId || !roomUid) {
+        const error = new Error("방 연결이 완료된 뒤 설정을 저장해 주세요.");
+        setPreferenceStates((previous) => ({ ...previous, [key]: { status: "error", error } }));
+        return Promise.reject(error);
+      }
       if (preferenceAuthorityKind === "remote-unavailable") {
         const error = new Error(ROOM_SESSION_PREFERENCES_UNAVAILABLE);
         setPreferenceStates((previous) => ({
@@ -352,23 +363,27 @@ export function useRoomSettingsController({
         preferenceWriteChainsRef.current[key] || Promise.resolve();
       const write = previousWrite
         .catch(() => undefined)
-        .then(() =>
-          saveRoomSettings({
+        .then(() => {
+          if (preferenceScopeRef.current !== preferenceScope) {
+            throw new Error("설정을 저장하기 전에 방이나 접속 신원이 바뀌었어요.");
+          }
+          return saveRoomSettings({
             roomId: room.meetingId,
+            roomUid,
             ...updates,
             identity: {
               sessionToken: preferenceSessionToken,
               deviceToken: preferenceDeviceToken,
             },
-          })
-        )
+          });
+        })
         .then((settings) => {
-          if (isCurrentPreferenceOperation(key, generation)) {
+          if (preferenceScopeRef.current === preferenceScope && isCurrentPreferenceOperation(key, generation)) {
             applyPreferences(key, settings);
           }
         })
         .catch((errorValue) => {
-          if (isCurrentPreferenceOperation(key, generation)) {
+          if (preferenceScopeRef.current === preferenceScope && isCurrentPreferenceOperation(key, generation)) {
             const error = settingsError(errorValue, "Room preferences save failed");
             const confirmed = confirmedPreferencesRef.current[key];
             if (confirmed) {
@@ -399,6 +414,7 @@ export function useRoomSettingsController({
       preferenceAuthorityKind,
       preferenceDeviceToken,
       preferenceSessionToken,
+      preferenceScope,
     ]
   );
 
@@ -527,21 +543,22 @@ export function useRoomSettingsController({
     [appearanceFor, persist, persistPreferences, preferenceAuthorityKind]
   );
 
-  const updateChannelSetting = useCallback(
-    (room: RoomDockItem, channelId: string, updates: Partial<ChannelSettings>) => {
+  const updateChannelSettings = useCallback(
+    (room: RoomDockItem, updates: Record<string, Partial<ChannelSettings>>) => {
       if (preferenceAuthorityKind === "remote-unavailable") {
         return persistPreferences(room, {
           channelSettings: channelSettingsFor(room),
         });
       }
       const key = roomSettingsKey(room);
-      const currentSettings = channelSettingsFor(room);
-      const current = currentSettings[channelId];
-      const nextSetting: ChannelSettings = {
-        notifications: updates.notifications ?? current?.notifications ?? "default",
-        lastReadAt: updates.lastReadAt ?? current?.lastReadAt,
-      };
-      const nextSettings = { ...currentSettings, [channelId]: nextSetting };
+      const nextSettings = { ...channelSettingsFor(room) };
+      for (const [channelId, update] of Object.entries(updates)) {
+        const current = nextSettings[channelId];
+        nextSettings[channelId] = {
+          notifications: update.notifications ?? current?.notifications ?? "default",
+          lastReadAt: update.lastReadAt ?? current?.lastReadAt,
+        };
+      }
       setChannelSettings((previous) => ({ ...previous, [key]: nextSettings }));
       return persistPreferences(room, { channelSettings: nextSettings });
     },
@@ -657,7 +674,7 @@ export function useRoomSettingsController({
     refresh,
     persist,
     updateAppearance,
-    updateChannelSetting,
+    updateChannelSettings,
     updateConversationMode,
     updateToolMode,
     updateOrderedExcludePreviousSpeaker,

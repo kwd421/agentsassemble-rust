@@ -86,6 +86,7 @@ describe("room preference HTTP authority", () => {
     const loaded = await fetchRoomSettings("general", { deviceToken: "not-authority" });
     const saved = await saveRoomSettings({
       roomId: "general",
+      roomUid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
       appearance: { notifications: "mute" },
       channelSettings: {
         lobby: { notifications: "all" },
@@ -126,6 +127,7 @@ describe("room preference HTTP authority", () => {
     expect(writeHeaders.get("Authorization")).toBe(`Bearer ${"b".repeat(64)}`);
     expect(JSON.parse(String(writeInit.body))).toEqual({
       room_id: "general",
+      room_uid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
       appearance: { notifications: "mute" },
       channel_settings: {
         lobby: { notifications: "all", last_read_at: "" },
@@ -161,6 +163,7 @@ describe("room preference HTTP authority", () => {
     await fetchRoomSettings("general", identity);
     await saveRoomSettings({
       roomId: "general",
+      roomUid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
       appearance: { notifications: "mute" },
       identity,
     });
@@ -190,6 +193,7 @@ describe("room preference HTTP authority", () => {
     expect(writeHeaders.get("Content-Type")).toBe("application/json");
     expect(JSON.parse(String(writeInit.body))).toEqual({
       room_id: "general",
+      room_uid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
       appearance: { notifications: "mute" },
     });
   });
@@ -209,6 +213,7 @@ describe("room preference HTTP authority", () => {
     await expect(
       saveRoomSettings({
         roomId: "general",
+        roomUid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
         appearance: { notifications: "mute" },
         identity: { sessionToken: "aas1.read-only-session" },
       })
@@ -220,6 +225,7 @@ describe("room preference HTTP authority", () => {
       headers: expect.any(Headers),
       body: JSON.stringify({
         room_id: "general",
+        room_uid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
         appearance: { notifications: "mute" },
       }),
     });

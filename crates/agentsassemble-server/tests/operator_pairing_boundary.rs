@@ -164,6 +164,7 @@ async fn redeem_with_boundary_checks(
 
 async fn paired_room_http(
     client: &Client,
+    room_uid: &Value,
     base: &str,
     session: &str,
     device: &str,
@@ -190,7 +191,7 @@ async fn paired_room_http(
     for (path, body) in [
         (
             "/api/room-settings",
-            json!({"room_id": "general", "appearance": {"notifications": "mute"}}),
+            json!({"room_id": "general", "room_uid": room_uid, "appearance": {"notifications": "mute"}}),
         ),
         (
             "/api/message-attachments",
@@ -229,6 +230,38 @@ async fn paired_room_http(
     assert_eq!(private.status(), StatusCode::FORBIDDEN);
 }
 
+async fn create_with_boundary_checks(
+    client: &Client,
+    state: &AppState,
+    base: &str,
+    authority: &Value,
+) -> Value {
+    let mut outdated = authority.clone();
+    outdated["room_uid"] = json!("bf6889dc-0173-4e05-888d-508ef49bb3df");
+    let rejected = client
+        .post(format!("{base}/api/operator-pairing/create"))
+        .bearer_auth(operator_ticket(state).await)
+        .json(&outdated)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("stale create: {error}"));
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    let created = client
+        .post(format!("{base}/api/operator-pairing/create"))
+        .bearer_auth(operator_ticket(state).await)
+        .json(authority)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("create: {error}"));
+    assert_eq!(created.status(), StatusCode::OK);
+    assert_eq!(created.headers()["cache-control"], "private, no-store");
+    let created: Value = created
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("created response: {error}"));
+    created
+}
+
 #[tokio::test]
 async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
     let PairingServer {
@@ -240,29 +273,7 @@ async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
         running,
     } = PairingServer::start().await;
     let client = Client::new();
-    let mut outdated = authority.clone();
-    outdated["room_uid"] = json!("bf6889dc-0173-4e05-888d-508ef49bb3df");
-    let rejected = client
-        .post(format!("{base}/api/operator-pairing/create"))
-        .bearer_auth(operator_ticket(&state).await)
-        .json(&outdated)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("stale create: {error}"));
-    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
-    let created = client
-        .post(format!("{base}/api/operator-pairing/create"))
-        .bearer_auth(operator_ticket(&state).await)
-        .json(&authority)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("create: {error}"));
-    assert_eq!(created.status(), StatusCode::OK);
-    assert_eq!(created.headers()["cache-control"], "private, no-store");
-    let created: Value = created
-        .json()
-        .await
-        .unwrap_or_else(|error| panic!("created response: {error}"));
+    let created = create_with_boundary_checks(&client, &state, &base, &authority).await;
     let pairing_url = created["pairing_url"]
         .as_str()
         .unwrap_or_else(|| panic!("pairing URL missing"));
@@ -272,9 +283,25 @@ async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
     let payload = json!({"pairing_token": token});
     let device = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x91; 32]));
     let session = redeem_with_boundary_checks(&client, &base, &payload, &device).await;
-    paired_room_http(&client, &base, &session, &device, StatusCode::OK).await;
+    paired_room_http(
+        &client,
+        &authority["room_uid"],
+        &base,
+        &session,
+        &device,
+        StatusCode::OK,
+    )
+    .await;
     let other = format!("aad1_{}", URL_SAFE_NO_PAD.encode([0x92; 32]));
-    paired_room_http(&client, &base, &session, &other, StatusCode::UNAUTHORIZED).await;
+    paired_room_http(
+        &client,
+        &authority["room_uid"],
+        &base,
+        &session,
+        &other,
+        StatusCode::UNAUTHORIZED,
+    )
+    .await;
     let wrong = public(client.post(format!("{base}/api/session-tickets/socket")))
         .bearer_auth(&session)
         .header("x-device-token", &other)
@@ -322,7 +349,15 @@ async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
         .await
         .unwrap_or_else(|error| panic!("revoked retry: {error}"));
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
-    paired_room_http(&client, &base, &session, &device, StatusCode::UNAUTHORIZED).await;
+    paired_room_http(
+        &client,
+        &authority["room_uid"],
+        &base,
+        &session,
+        &device,
+        StatusCode::UNAUTHORIZED,
+    )
+    .await;
     shutdown.cancel();
     running
         .await

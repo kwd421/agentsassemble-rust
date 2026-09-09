@@ -60,7 +60,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteRoom,
     loadCanonicalRoomHistory, lobbyPostingState, markChannelRead,
-    markRoomRead, membersOpen, menuChannelDisplay, menuRoom,
+    markRoomRead, roomReadReady, membersOpen, menuChannelDisplay, menuRoom,
     messageSearchChannelLabels, messageSearchScope, mobileRoomInfoOpen,
     mobileSidebarOpen, mobileViewport, openAgentCreate,
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
@@ -136,6 +136,10 @@ export default function AppView({ controller }: { controller: AppController }) {
         onManageRooms={roomLifecycle.enabled ? roomLifecycle.show : pairedRoomLifecycle.enabled ? pairedRoomLifecycle.show : undefined}
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
+        readReady={roomReadReady}
+        readStatus={roomSettings.preferenceStateFor(activeRoom).status}
+        readError={roomSettings.preferenceStateFor(activeRoom).error?.message || ""}
+        onRetryRoomRead={() => roomSettings.refresh(activeRoom)}
         onInviteRoom={inviteRoom}
         canManageActiveRoom={canManageActiveRoom}
         onOpenRoomSettings={openRoomSettings}

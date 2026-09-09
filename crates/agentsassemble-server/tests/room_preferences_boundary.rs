@@ -14,6 +14,7 @@ use tokio_util::sync::CancellationToken;
 struct RunningServer {
     base_url: String,
     tickets: TicketStore,
+    room_uid: uuid::Uuid,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
 }
@@ -67,12 +68,27 @@ async fn preference_http_surface_binds_room_purpose_and_global_transport() {
     assert_eq!(global.status(), StatusCode::CONFLICT);
     assert_eq!(global.headers()["cache-control"], "private, no-store");
 
+    for room_uid in [Value::Null, json!("not-a-uuid"), json!(uuid::Uuid::nil())] {
+        let expected = if room_uid == json!(uuid::Uuid::nil()) {
+            StatusCode::CONFLICT
+        } else {
+            StatusCode::BAD_REQUEST
+        };
+        let rejected = client.post(format!("{}/api/room-settings", server.base_url))
+            .bearer_auth(issue_write(&server.tickets, "general").await)
+            .json(&json!({"room_id": "general", "room_uid": room_uid,
+                "channel_settings": {"lobby": {"notifications": "default", "last_read_at": "seq:999"}}}))
+            .send().await.unwrap_or_else(|error| panic!("send stale preference write: {error}"));
+        assert_eq!(rejected.status(), expected);
+    }
+
     let write_ticket = issue_write(&server.tickets, "general").await;
     let updated = client
         .post(format!("{}/api/room-settings", server.base_url))
         .bearer_auth(write_ticket)
         .json(&json!({
             "room_id": "general",
+            "room_uid": server.room_uid,
             "appearance": {"notifications": "mute"},
             "channel_settings": {
                 "lobby": {"notifications": "default", "last_read_at": "cursor-1"}
@@ -205,7 +221,7 @@ async fn start() -> RunningServer {
         )
         .await
         .unwrap_or_else(|error| panic!("bootstrap preference authority: {error}"));
-    store
+    let room = store
         .create_room_for_local_operator(
             "f237462e-d761-4863-9f89-c25b74ad26d2",
             "general",
@@ -236,6 +252,7 @@ async fn start() -> RunningServer {
     });
     RunningServer {
         base_url: format!("http://{address}"),
+        room_uid: room.room.room_uid,
         tickets,
         cancellation,
         task,

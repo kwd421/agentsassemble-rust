@@ -113,7 +113,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
               roomAppearanceAssets.upload(settingsModalRoom, file, slot)
             }
             onChannelSettingChange={(channelId, updates) =>
-              roomSettings.updateChannelSetting(settingsModalRoom, channelId, updates)
+              roomSettings.updateChannelSettings(settingsModalRoom, { [channelId]: updates })
             }
             onConversationModeChange={(mode) =>
               roomSettings.updateConversationMode(settingsModalRoom, mode)

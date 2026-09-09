@@ -170,3 +170,27 @@ external pause, resident resume, stop/cleanup and activity display remain availa
 No server permission, session identity, process ownership or provider execution
 changes. Acceptance includes first external admission, stopped/error external
 sessions, managed controls and external cleanup through the existing shared UI.
+
+## Room-menu read persistence correction (2026-09-10)
+
+Pro Group 2 found that the room menu's explicit mark-read action only changed
+directory `createdAt`. Remove that fake write. Once the exact active room's
+canonical connection, channel inventory, history and preferences are ready, mark
+the lobby and current custom text channels at the accepted room sequence in one
+existing serialized preference write. Preserve notification settings and unrelated
+channel entries. This explicit user action does not require latest-scroll visibility;
+automatic read guards remain unchanged. Disable unavailable/pending actions, retain
+the menu on failure with the preference owner's error and explicit reload, and close
+only that menu after success. New messages after the captured sequence stay unread.
+
+Preference POSTs must carry the caller's expected `room_uid`. Both local and remote
+write owners compare it with the current active room in the same transaction as
+the preference update. The current native ticket alone binds only room name and
+user/participant, so a ticket issued around same-name room recreation cannot replace
+this intent check. A missing UID is an error; no compatibility fallback is added.
+The shared writer retains captured room/device/session identity and prevents a
+queued operation from dispatching after its UI authority or room scope changes.
+No new read store, timestamp fallback, timer, server orchestration or provider run
+is introduced. Verify old-scroll explicit marking, batch preservation, rollback and
+retry, queued scope changes and stale-incarnation rejection, plus packaged restart
+persistence. The extra room comparison is bounded work on an explicit write.

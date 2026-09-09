@@ -19,6 +19,7 @@ const roomA: RoomDockItem = {
   id: "room-a",
   label: "Room A",
   meetingId: "meeting-a",
+  roomUid: "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
   topic: "A",
   shortLabel: "A",
   icon: Hash,
@@ -105,6 +106,77 @@ describe("useRoomSettingsController", () => {
     saveCanonicalGlobalSettings.mockResolvedValue(globalSettings(roomA, "forest"));
   });
 
+  it("persists a room read as one exact-room batch and retains rollback/retry", async () => {
+    const confirmed = { ...settings(roomA, "forest"), channelSettings: {
+      lobby: { notifications: "mentions" as const, lastReadAt: "seq:2" },
+      cabc: { notifications: "mute" as const, lastReadAt: "seq:3" },
+      cold: { notifications: "all" as const, lastReadAt: "seq:1" },
+    } };
+    apiMocks.fetchRoomSettings.mockResolvedValue(confirmed);
+    apiMocks.saveRoomSettings.mockRejectedValueOnce(new Error("storage unavailable"));
+    const { result } = renderHook(() => useRoomSettingsController({
+      activeRoom: roomA, preferenceAuthority: localPreferenceAuthority,
+      canonicalGlobalSettings: globalSettings(roomA, "forest"), saveCanonicalGlobalSettings,
+      onRoomMetadataLoaded: vi.fn(),
+    }));
+    await waitFor(() => expect(result.current.preferenceStateFor(roomA).status).toBe("ready"));
+    const updates = { lobby: { lastReadAt: "seq:9" }, cabc: { lastReadAt: "seq:9" } };
+    await act(async () => {
+      await expect(result.current.updateChannelSettings(roomA, updates)).rejects.toThrow("storage unavailable");
+    });
+    const expectedSettings = {
+      ...confirmed.channelSettings,
+      lobby: { notifications: "mentions", lastReadAt: "seq:9" },
+      cabc: { notifications: "mute", lastReadAt: "seq:9" },
+    };
+    expect(apiMocks.saveRoomSettings).toHaveBeenCalledExactlyOnceWith({
+      roomId: roomA.meetingId, roomUid: roomA.roomUid, channelSettings: expectedSettings,
+      identity: { sessionToken: "", deviceToken: "device-test" },
+    });
+    expect(result.current.channelSettingsFor(roomA)).toEqual(confirmed.channelSettings);
+    expect(result.current.preferenceStateFor(roomA)).toMatchObject({ status: "stale", error: { message: "storage unavailable" } });
+    act(() => result.current.refresh(roomA));
+    await waitFor(() => expect(result.current.preferenceStateFor(roomA).status).toBe("ready"));
+    apiMocks.saveRoomSettings.mockResolvedValueOnce({ ...confirmed, channelSettings: expectedSettings });
+    await act(async () => { await result.current.updateChannelSettings(roomA, updates); });
+    expect(apiMocks.saveRoomSettings).toHaveBeenCalledTimes(2);
+    expect(result.current.channelSettingsFor(roomA)).toEqual(expectedSettings);
+  });
+
+  it.each(["incarnation", "device", "session"])("does not dispatch a queued read after %s changes", async (change) => {
+    const pending = deferred<RoomSettings>();
+    apiMocks.saveRoomSettings.mockReturnValueOnce(pending.promise);
+    const initial = { room: roomA, sessionToken: "aas1.first", deviceToken: "first-device" };
+    const hook = renderHook(({ room, sessionToken, deviceToken }) => useRoomSettingsController({
+      activeRoom: room, preferenceAuthority: { kind: "remote", sessionToken, deviceToken },
+      canonicalGlobalSettings: globalSettings(room, "forest"), saveCanonicalGlobalSettings,
+      onRoomMetadataLoaded: vi.fn(),
+    }), { initialProps: initial });
+    await waitFor(() => expect(hook.result.current.preferenceStateFor(roomA).status).toBe("ready"));
+    let first!: Promise<void>;
+    act(() => { first = hook.result.current.updateChannelSettings(roomA, { lobby: { lastReadAt: "seq:5" } }); });
+    await waitFor(() => expect(apiMocks.saveRoomSettings).toHaveBeenCalledOnce());
+    let queued!: Promise<unknown>;
+    act(() => {
+      queued = hook.result.current.updateChannelSettings(roomA, { lobby: { lastReadAt: "seq:9" } }).catch((error) => error);
+    });
+    const next = {
+      ...initial,
+      ...(change === "incarnation" ? { room: { ...roomA, roomUid: "b34cb82c-31c5-4b83-9a24-0e74e97aef2c" } } : {}),
+      ...(change === "device" ? { deviceToken: "next-device" } : {}),
+      ...(change === "session" ? { sessionToken: "aas1.next" } : {}),
+    };
+    hook.rerender(next);
+    await act(async () => {
+      pending.resolve({ ...settings(roomA, "forest"), channelSettings: { lobby: { notifications: "default", lastReadAt: "seq:5" } } });
+      await first;
+      expect(await queued).toBeInstanceOf(Error);
+    });
+    expect(apiMocks.saveRoomSettings).toHaveBeenCalledOnce();
+    await waitFor(() => expect(hook.result.current.preferenceStateFor(next.room).status).toBe("ready"));
+    expect(hook.result.current.channelSettingsFor(next.room)).toEqual({});
+  });
+
   it("uses canonical settings when a stale preference response resolves after the room changes", async () => {
     const roomARequest = deferred<RoomSettings>();
     apiMocks.fetchRoomSettings
@@ -167,15 +239,16 @@ describe("useRoomSettingsController", () => {
     await waitFor(() => expect(hook.result.current.appearanceFor(roomA).bannerPreset).toBe("forest"));
 
     act(() => {
-      hook.result.current.updateChannelSetting(roomA, "lobby", {
+      hook.result.current.updateChannelSettings(roomA, { lobby: {
         notifications: "mute",
         lastReadAt: "cursor-9",
-      });
+      } });
     });
 
     await waitFor(() => expect(apiMocks.saveRoomSettings).toHaveBeenCalledTimes(1));
     expect(apiMocks.saveRoomSettings).toHaveBeenCalledWith({
       roomId: roomA.meetingId,
+      roomUid: roomA.roomUid,
       channelSettings: {
         lobby: { notifications: "mute", lastReadAt: "cursor-9" },
       },
@@ -210,6 +283,7 @@ describe("useRoomSettingsController", () => {
     });
     expect(apiMocks.saveRoomSettings).toHaveBeenCalledWith({
       roomId: roomA.meetingId,
+      roomUid: roomA.roomUid,
       appearance: { notifications: "mute" },
       identity: {
         sessionToken: "aas1.remote-preference-session",
@@ -299,9 +373,9 @@ describe("useRoomSettingsController", () => {
         hook.result.current.updateAppearance(roomA, { notifications: "mute" })
       ).rejects.toThrow("방 세션 인증");
       await expect(
-        hook.result.current.updateChannelSetting(roomA, "lobby", {
+        hook.result.current.updateChannelSettings(roomA, { lobby: {
           notifications: "mute",
-        })
+        } })
       ).rejects.toThrow("방 세션 인증");
     });
 

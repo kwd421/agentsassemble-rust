@@ -110,41 +110,25 @@ async fn update_preferences(
         .await
         .map_err(RoomPreferencesHttpError::from_body)?;
     let room_id = preference_room_id(&grant);
-    let patch = parse_preference_update(&payload, room_id)?;
-    let snapshot = if patch.notifications.is_none() && patch.channel_settings.is_none() {
-        match &grant {
-            RoomSessionHttpAuthority::LocalTicket(grant) => {
-                state
-                    .store
-                    .room_preferences(&grant.room_id, &grant.principal_id, &grant.participant_id)
-                    .await?
-            }
-            RoomSessionHttpAuthority::Session(authorization) => {
-                state
-                    .store
-                    .room_session_room_preferences(authorization)
-                    .await?
-            }
+    let (expected_incarnation, patch) = parse_preference_update(&payload, room_id)?;
+    let snapshot = match &grant {
+        RoomSessionHttpAuthority::LocalTicket(grant) => {
+            state
+                .store
+                .update_room_preferences(
+                    &grant.room_id,
+                    expected_incarnation,
+                    &grant.principal_id,
+                    &grant.participant_id,
+                    patch,
+                )
+                .await?
         }
-    } else {
-        match &grant {
-            RoomSessionHttpAuthority::LocalTicket(grant) => {
-                state
-                    .store
-                    .update_room_preferences(
-                        &grant.room_id,
-                        &grant.principal_id,
-                        &grant.participant_id,
-                        patch,
-                    )
-                    .await?
-            }
-            RoomSessionHttpAuthority::Session(authorization) => {
-                state
-                    .store
-                    .update_room_session_room_preferences(authorization, patch)
-                    .await?
-            }
+        RoomSessionHttpAuthority::Session(authorization) => {
+            state
+                .store
+                .update_room_session_room_preferences(authorization, expected_incarnation, patch)
+                .await?
         }
     };
     Ok(Json(json!({
@@ -258,7 +242,7 @@ fn preference_room_id(grant: &RoomSessionHttpAuthority) -> &str {
 fn parse_preference_update(
     payload: &Value,
     bound_room_id: &str,
-) -> Result<RoomUserPreferencesPatch, RoomPreferencesHttpError> {
+) -> Result<(uuid::Uuid, RoomUserPreferencesPatch), RoomPreferencesHttpError> {
     let object = payload
         .as_object()
         .ok_or_else(|| RoomPreferencesHttpError::bad_request("Request body must be an object."))?;
@@ -295,11 +279,23 @@ fn parse_preference_update(
             return Err(RoomPreferencesHttpError::global_conflict());
         }
     }
-    let allowed = ["room_id", "appearance", "channel_settings"];
+    let allowed = ["room_id", "room_uid", "appearance", "channel_settings"];
     if let Some(unknown) = object.keys().find(|key| !allowed.contains(&key.as_str())) {
         return Err(RoomPreferencesHttpError::bad_request(format!(
             "Unsupported room preference field: {unknown}."
         )));
+    }
+
+    let expected_incarnation = object
+        .get("room_uid")
+        .and_then(Value::as_str)
+        .ok_or_else(|| RoomPreferencesHttpError::bad_request("room_uid is required."))?;
+    let parsed_uid = uuid::Uuid::parse_str(expected_incarnation)
+        .map_err(|_| RoomPreferencesHttpError::bad_request("room_uid must be a canonical UUID."))?;
+    if parsed_uid.to_string() != expected_incarnation {
+        return Err(RoomPreferencesHttpError::bad_request(
+            "room_uid must be a canonical UUID.",
+        ));
     }
 
     let mut strict_patch = Map::new();
@@ -314,6 +310,7 @@ fn parse_preference_update(
         strict_patch.insert("channel_settings".to_owned(), channel_settings.clone());
     }
     serde_json::from_value(Value::Object(strict_patch))
+        .map(|patch| (parsed_uid, patch))
         .map_err(|error| RoomPreferencesHttpError::bad_request(error.to_string()))
 }
 
@@ -441,6 +438,15 @@ impl From<PersistenceError> for RoomPreferencesHttpError {
                 message: "Room does not exist.".to_owned(),
             },
             PersistenceError::ParticipantMissing => Self::unauthorized(),
+            PersistenceError::CommandRejected { code, message }
+                if code == "room_incarnation_changed" =>
+            {
+                Self {
+                    status: StatusCode::CONFLICT,
+                    code: "room_incarnation_changed",
+                    message,
+                }
+            }
             PersistenceError::CommandRejected { code, .. }
                 if matches!(
                     code.as_bytes(),
@@ -515,10 +521,20 @@ mod tests {
             panic!("ticket-bound room mismatch was accepted");
         };
         assert_eq!(mismatch.status, axum::http::StatusCode::UNAUTHORIZED);
+        for body in [
+            json!({"room_id": "general"}),
+            json!({"room_id": "general", "room_uid": "A53A3F5C-0E7B-4DE1-A70C-8F548E03E90C"}),
+        ] {
+            let Err(error) = parse_preference_update(&body, "general") else {
+                panic!("missing or noncanonical room UID was accepted");
+            };
+            assert_eq!(error.status, axum::http::StatusCode::BAD_REQUEST);
+        }
         assert!(
             parse_preference_update(
                 &json!({
                     "room_id": "general",
+                    "room_uid": "a53a3f5c-0e7b-4de1-a70c-8f548e03e90c",
                     "appearance": {"notifications": "mute"},
                     "channel_settings": {
                         "lobby": {"notifications": "default", "last_read_at": "cursor"}

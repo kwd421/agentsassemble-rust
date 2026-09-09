@@ -279,15 +279,6 @@ export function useRoomDirectory({
     [commit]
   );
 
-  const markRoomRead = useCallback(
-    (roomId: string, readAt = new Date().toISOString()) => {
-      commit((current) =>
-        current.map((room) => (room.id === roomId ? { ...room, createdAt: readAt } : room))
-      );
-    },
-    [commit]
-  );
-
   const removeRoom = useCallback(
     (roomId: string) => {
       membershipRevisionRef.current += 1;
@@ -556,7 +547,6 @@ export function useRoomDirectory({
     replaceRooms,
     prependRoom,
     mergeFlowRoom,
-    markRoomRead,
     removeRoom,
     updateRoom,
     updateRoomByMeetingId,
