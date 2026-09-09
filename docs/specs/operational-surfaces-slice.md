@@ -354,3 +354,29 @@ report null and corrupt-report 503 (0.05s). Two frontend cases cover resource re
 and health missing/timeout/error rendering; production build with unchanged CSS,
 Clippy and mandatory gates pass. No automatic command execution or polling is mounted.
 Direct packaged whole-phase proof remains pending.
+
+## Served frontend release custody
+
+The executable currently serves mutable build output directly. Startup will instead
+materialize a private, content-addressed copy beneath the runtime state directory,
+then serve only that copy. Hash every relative file name and byte, reject links and
+special files, and verify the source has not changed while copying. Reusing a release
+requires verifying its actual contents; corruption fails startup. Publication uses
+an atomic same-filesystem rename under a release-store lock. No background watcher,
+new provider process or automatic release deletion is introduced. Retaining releases
+is necessary for the following update/restart asset handoff; routing old build assets
+and the runtime identity query remain separate integration work, not implied by a
+snapshot alone. Startup readiness identifies the actual snapshot. Verify source
+replacement leaves the served copy unchanged, repeated startup reuses the same
+identity, and changed content or corrupted retained files are distinguished.
+
+Startup now materializes that snapshot before listening or launching runtime
+operations, and readiness includes its actual full-content build ID. The existing
+TCP static-frontend case replaces the original HTML and deletes its asset after
+server startup: all browser entrances still serve the retained build with unchanged
+security/cache policy (0.04s). Identity reuse/change and retained corruption pass
+(0.00s); all-target/all-feature server Clippy and unchanged mandatory gates pass.
+Hashing uses an 8 KiB buffer and no resident task. Snapshot disk cost is one full
+copy per distinct build, retained explicitly for the pending asset handoff. Whole
+phase packaged/cost verification and the identity/update/restart connection remain
+pending.

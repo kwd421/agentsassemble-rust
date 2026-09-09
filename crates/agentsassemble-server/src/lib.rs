@@ -59,6 +59,7 @@ mod agent_create_runtime;
 mod app_state;
 mod central_host_identity;
 mod central_login;
+pub mod frontend_release;
 mod google_accounts;
 mod google_token_verifier;
 pub use central_login::central_login_control;

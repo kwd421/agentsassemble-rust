@@ -327,7 +327,18 @@ async fn static_frontend_has_browser_security_and_cache_headers() {
         .await
         .unwrap_or_else(|error| panic!("open test store: {error}"));
     bootstrap(&store).await;
-    let server = start_with_frontend(store, frontend).await;
+    let release = agentsassemble_server::frontend_release::FrontendRelease::materialize(
+        &frontend,
+        directory.path(),
+    )
+    .unwrap_or_else(|error| panic!("materialize frontend: {error}"));
+    let server = start_with_frontend(store, release.root).await;
+    tokio::fs::write(frontend.join("index.html"), "replacement build")
+        .await
+        .unwrap_or_else(|error| panic!("replace frontend index: {error}"));
+    tokio::fs::remove_file(frontend.join("assets/app.js"))
+        .await
+        .unwrap_or_else(|error| panic!("remove old build asset: {error}"));
     let response = Client::new()
         .get(format!("{}/app/", server.base_url))
         .send()

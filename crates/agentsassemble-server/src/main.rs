@@ -67,7 +67,6 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
-    let frontend_path = resolve_frontend_path(args.frontend.as_deref())?;
     let manual_public_ingress = manual_public_ingress_environment()?;
     let stable_entry = stable_entry_configuration(
         args.stable_entry_config.as_deref(),
@@ -78,18 +77,7 @@ async fn main() -> anyhow::Result<()> {
     if !local_bind_is_supported(args.bind) {
         anyhow::bail!("the local runtime may bind only to loopback");
     }
-    if let Some(parent) = args.database.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .with_context(|| format!("create database directory {}", parent.display()))?;
-        secure_private_directory(parent)
-            .with_context(|| format!("secure database directory {}", parent.display()))?;
-    }
-    let store = open_store(&args).await?;
-    let database_path = args
-        .database
-        .canonicalize()
-        .with_context(|| format!("resolve database path {}", args.database.display()))?;
+    let (store, database_path, frontend_release) = prepare_runtime_storage(&args).await?;
     let listener = TcpListener::bind(args.bind).await?;
     let address = listener.local_addr()?;
     let signal = cancellation.clone();
@@ -115,8 +103,8 @@ async fn main() -> anyhow::Result<()> {
         args.desktop_native_registration,
     )
     .await?;
-    if let Some(frontend) = frontend_path.as_ref() {
-        state = state.with_frontend(frontend.clone());
+    if let Some(frontend) = frontend_release.as_ref() {
+        state = state.with_frontend(frontend.root.clone());
     }
     let mut stdout = tokio::io::stdout();
     if let Err(error) = write_json_line(
@@ -126,7 +114,8 @@ async fn main() -> anyhow::Result<()> {
             "runtime": "rust",
             "address": format!("http://{address}"),
             "database": database_path,
-            "frontend": frontend_path,
+            "frontend": frontend_release.as_ref().map(|release| &release.root),
+            "frontend_build_id": frontend_release.as_ref().map(|release| &release.build_id),
             "pid": std::process::id(),
         }),
     )
@@ -154,25 +143,41 @@ async fn main() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn open_store(args: &Args) -> anyhow::Result<SqliteStore> {
-    Ok(SqliteStore::open_path(&args.database).await?)
+async fn prepare_runtime_storage(
+    args: &Args,
+) -> anyhow::Result<(
+    SqliteStore,
+    PathBuf,
+    Option<agentsassemble_server::frontend_release::FrontendRelease>,
+)> {
+    if let Some(parent) = args.database.parent() {
+        tokio::fs::create_dir_all(parent)
+            .await
+            .with_context(|| format!("create database directory {}", parent.display()))?;
+        secure_private_directory(parent)
+            .with_context(|| format!("secure database directory {}", parent.display()))?;
+    }
+    let store = SqliteStore::open_path(&args.database).await?;
+    let database_path = args
+        .database
+        .canonicalize()
+        .with_context(|| format!("resolve database path {}", args.database.display()))?;
+    let frontend_release = args
+        .frontend
+        .as_deref()
+        .map(|source| {
+            agentsassemble_server::frontend_release::FrontendRelease::materialize(
+                source,
+                database_state_root(&database_path)?,
+            )
+            .context("materialize served frontend release")
+        })
+        .transpose()?;
+    Ok((store, database_path, frontend_release))
 }
 
 fn database_state_root(database: &Path) -> anyhow::Result<&Path> {
     database.parent().context("database path has no state root")
-}
-
-fn resolve_frontend_path(frontend: Option<&Path>) -> anyhow::Result<Option<PathBuf>> {
-    let Some(frontend) = frontend else {
-        return Ok(None);
-    };
-    let path = frontend
-        .canonicalize()
-        .with_context(|| format!("resolve frontend directory {}", frontend.display()))?;
-    if !path.join("index.html").is_file() {
-        anyhow::bail!("frontend directory {} has no index.html", path.display());
-    }
-    Ok(Some(path))
 }
 
 async fn configure_startup_surface(
