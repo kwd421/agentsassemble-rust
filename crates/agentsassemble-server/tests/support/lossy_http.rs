@@ -71,12 +71,11 @@ async fn forward(State(relay): State<Relay>, request: Request) -> Response {
         .await
         .unwrap_or_else(|_| panic!("relay request failed"));
     let status = response.status();
-    assert!(status.is_success(), "upstream status {status} on {path}");
     let bytes = response
         .bytes()
         .await
         .unwrap_or_else(|_| panic!("relay response failed"));
-    let body = if mutation && relay.pending_loss.lock().await.remove(path) {
+    let body = if status.is_success() && mutation && relay.pending_loss.lock().await.remove(path) {
         Body::from("{")
     } else {
         Body::from(bytes)

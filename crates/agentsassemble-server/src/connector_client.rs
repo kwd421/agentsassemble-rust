@@ -52,6 +52,7 @@ struct PendingJoin {
     request_id: Uuid,
     client_secret: String,
     invite_bearer: String,
+    attempted: bool,
 }
 enum JoinState {
     Pending(PendingJoin),
@@ -114,6 +115,7 @@ impl RoomConnectorClient {
                 request_id: Uuid::new_v4(),
                 client_secret: URL_SAFE_NO_PAD.encode(rand::random::<[u8; 32]>()),
                 invite_bearer,
+                attempted: false,
             })),
             pending_command: Mutex::new(None),
             cancellation: CancellationToken::new(),
@@ -131,17 +133,18 @@ impl RoomConnectorClient {
     /// # Errors
     /// Reports transport uncertainty, rejected admission or malformed public room responses.
     pub async fn join(&self) -> Result<ConnectorJoined, ConnectorClientError> {
+        let mut state = self.state.lock().await;
         if self.cancellation.is_cancelled() {
             return Err(ConnectorClientError::local("connector_closed"));
         }
-        let mut state = self.state.lock().await;
         if let JoinState::Ready(session) = &*state {
             let snapshot = self.get("read", &[], &session.bearer, false).await?;
             let mut joined = session.joined.clone();
             joined.last_seq = sequence(&snapshot)?;
             return Ok(joined);
         }
-        if let JoinState::Pending(pending) = &*state {
+        if let JoinState::Pending(pending) = &mut *state {
+            pending.attempted = true;
             let response = self.request(self.http.post(self.endpoint("join")).bearer_auth(&pending.invite_bearer).json(&json!({"request_id":pending.request_id,"client_secret":pending.client_secret,"display_name":self.display_name})).timeout(Duration::from_secs(10))).await?;
             let admission: Admission = serde_json::from_value(response)
                 .map_err(|_| ConnectorClientError::local("invalid_connector_admission"))?;
@@ -168,6 +171,17 @@ impl RoomConnectorClient {
         match &*state {
             JoinState::Ready(session) => Ok(session.joined.clone()),
             _ => Err(ConnectorClientError::local("connector_not_ready")),
+        }
+    }
+
+    /// Cancels preparation only before this owner has attempted any admission I/O.
+    pub(crate) async fn cancel_prepared(&self) -> bool {
+        let state = self.state.lock().await;
+        if matches!(&*state, JoinState::Pending(pending) if !pending.attempted) {
+            self.close();
+            true
+        } else {
+            false
         }
     }
 

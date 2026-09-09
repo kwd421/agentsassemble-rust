@@ -653,6 +653,33 @@ pending; affected Clippy and unchanged architecture/format/diff gates pass.
 
 ## Current-conversation MCP and CLI
 
+### Final Pro correction: remote admission retry custody (2026-09-10)
+
+Pro G3-H1 identifies a reachable cross-conversation admission bypass: the shared
+remote registry selected an already admitted client using only an invitation
+fingerprint and public display name. The locked RMCP HTTP transport is stateless
+(including the current protocol's removal of sessions); a new handler per request
+would instead discard legitimate retry custody. Keep the existing bounded registry
+and private handle authority. A remote `room_join` without a handle now only
+prepares one client and returns `connection_prepared`; it consumes no invitation
+and creates no participant. The caller retains that handle before confirming the
+same invitation/name with `room_join`, and supplies it on every uncertain retry.
+Invitation identity never selects another remote client's credential or handle.
+Stdio retains its exclusive conversation and original one-call admission/retry.
+
+The existing 128-handle bound includes preparation and uncertain admission. No new
+credential purpose, persistent store, session emulation, background work or expiry
+policy is added. Lost preparation replies have no room effect; unclaimed handles
+remain bounded until this user-owned service closes, as do unresolved admissions.
+The caller can cancel a retained preparation with `room_leave`; the existing client
+state mutex closes it only if admission I/O has never been attempted. Once attempted,
+uncertainty remains with the normal admission/leave owners and is never cancelled
+as if no room effect occurred.
+Acceptance requires two independent actual HTTP MCP clients sharing one endpoint
+and used invite/name, private-handle and destination rejection, retained exact
+admission after a committed-but-lost reply, one participant, and the existing stdio
+flow. These are local protocol peers, not real-provider or tunnel deployment proof.
+
 `assemble room connector-mcp` exposes the fourteen retained room tools over stdio.
 `assemble room connector-mcp-remote --allow-room-server <base>` exposes loopback
 Streamable HTTP at `/mcp`; a user-owned tunnel must preserve the loopback Host.

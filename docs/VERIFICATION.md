@@ -9461,5 +9461,58 @@ lookup is introduced; the existing bounded pending-request check changes positio
 Pending-request deadline behavior is controlled owner/socket verification; packaged
 checks exercise the existing stopped profile, without injecting a provider deadline
 into the real app. Timing frequency and broader network stability were not measured.
-Pro re-review and independent Phase 7–9 remain pending, as do the previously recorded
-real-provider, deferred mobile UX, notarization/updater and Windows GUI limitations.
+The completed `e1dfd235` Pro review (17m38s, read with its full verdict artifact)
+closes M6 and retains M1–M5 closure. It approves the entire new commit, correction
+cumulative range, exact-revision whole Phase 4–6 integration and affected Phase 1–3
+supplement at C0/H0/M0/L0. The reviewer verifies the 99-patch inventory and reuses
+98 unchanged patches with their prior dispositions, while rereading the complete
+new change and final owner/consumer connections. Historical REVISE decisions are
+not retroactively changed. This is source/contract approval, not new execution.
+Independent Phase 7–9 review is submitted at the same immutable source revision:
+137 historical patches and 18 later impacts, three complete snapshots and cumulative
+ranges. Its completed answer (143m26s) is REVISE C0/H1/M2/L0: remote Connector
+client reuse without private custody (H1), lost terminal Connector leave receipts
+(M1), and login retry replacing unconfirmed cleanup ownership (M2). The reviewer
+also explicitly could not finish every historical patch because tool output omitted
+source ranges. Snapshot hashes and cumulative reconstruction passed, but do not
+prove manual coverage of all 155 patches. Whole-group and individual coverage remain
+incomplete; G2 M1–M6 closure and its exact scoped approvals remain intact. Previously
+recorded real-provider, deferred mobile UX, notarization/updater and Windows GUI
+limitations remain.
+
+## Final Pro G3-H1 correction: remote Connector admission custody (2026-09-10)
+
+The source confirms the shared remote hub could return an admitted client based only
+on its consumed invitation and public name. The locked RMCP 3.1.4 transport is
+stateless, so per-request handler isolation would destroy retained retry custody.
+Remote `room_join` now first returns a private prepared handle without contacting
+the room server. Admission and retries require that same handle and exact invite/name.
+Stdio keeps its exclusive conversation and existing single-call flow. The client
+records whether admission I/O has been attempted under its existing state mutex;
+`room_leave` can cancel a preparation only before that boundary. An uncertain
+admission never becomes a claimed no-effect cancellation.
+
+Two independent real HTTP MCP clients share the stateless endpoint and the same
+consumed invitation/default display name. The second receives only its own prepared
+handle and then `invite_already_used`; it cannot read with that removed handle,
+no handle, or an unknown handle. A controlled relay loses the original admission
+response only after the server commits. The first handle recovers the original
+participant and then reads and publishes once. Preparation/cancellation creates
+no participant, changed-name confirmation is rejected, and a second valid invitation
+still creates a distinct participant. Both normal leaves complete. The existing
+actual stdio subprocess path retains join/rejoin, 14-tool discovery, concurrent
+wait/contribution, search, leave, EOF and Ctrl-C exit. All seven Connector boundary
+cases pass in 1.07 seconds. Server all-target/all-feature Clippy, architecture,
+source growth, nineteen policy/artifact-owner tests, formatting, diff and cache
+maintenance gates pass. Both existing attendee client cases also pass after the
+shared loss relay retains non-success responses unchanged;
+the test scenario was separated at preparation and admission boundaries after the
+unchanged function-length lint identified the initial monolithic case.
+
+The remote path adds one preparation round trip before admission and no room I/O
+for preparation. It retains the existing 128-client bound and per-client transport;
+there is no timer, session shim, new credential purpose or persistent table. Lost
+preparation replies leave bounded unclaimed handles until the service closes, with
+no consumed invite or room effect. These local protocol peers do not establish a
+real provider or external tunnel flow. The two remaining G3 corrections, final
+packaged verification and completed Pro coverage/re-review remain pending.

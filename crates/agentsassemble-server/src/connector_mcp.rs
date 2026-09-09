@@ -68,13 +68,13 @@ fn encode(value: &Value) -> Result<String, String> {
 #[tool_router]
 impl ConnectorMcp {
     #[tool(
-        description = "Join the current AI conversation using the complete unchanged AgentsAssemble /join?token= URL. Do not fetch the URL or launch a provider."
+        description = "Join the current AI conversation using the complete unchanged AgentsAssemble /join?token= URL. Remote MCP first returns status connection_prepared without entering the room: retain its private connection_id, then call room_join again with that ID and the same invite and name. Reuse that ID on every retry. Do not fetch the URL or launch a provider."
     )]
     async fn room_join(&self, Parameters(input): Parameters<Join>) -> Result<String, String> {
         encode(
             &self
                 .hub
-                .join(&input.invite_url, &input.display_name)
+                .join(&input.invite_url, &input.display_name, &input.connection_id)
                 .await?,
         )
     }

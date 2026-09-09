@@ -37,10 +37,29 @@ impl ConnectorHub {
         })
     }
 
-    pub(super) async fn join(&self, invite: &str, name: &str) -> Result<Value, String> {
+    pub(super) async fn join(&self, invite: &str, name: &str, id: &str) -> Result<Value, String> {
         let candidate = RoomConnectorClient::new(invite, name, self.allowed_servers.as_deref())
             .map_err(|error| error.code)?;
-        let (id, client) = self.reserve(candidate)?;
+        let (id, client) = if id.is_empty() {
+            let reserved = self.reserve(candidate)?;
+            // Remote HTTP is stateless. Establish private retry custody before any
+            // admission effect; an invitation and public name cannot select a client.
+            if self.allowed_servers.is_some() {
+                return Ok(json!({
+                    "status": "connection_prepared", "connection_id": reserved.0,
+                    "instructions": "No room admission has occurred. Keep connection_id private. Call room_join again with this exact connection_id and the same invite_url and display_name; retain that ID through any failed response."
+                }));
+            }
+            reserved
+        } else {
+            let client = self.client(id)?;
+            if client.invitation_identity() != candidate.invitation_identity()
+                || client.display_name != candidate.display_name
+            {
+                return Err("connector_join_identity_conflict".to_owned());
+            }
+            (id.to_owned(), client)
+        };
         match client.join().await {
             Ok(joined) => Ok(json!({
                 "status": "joined", "connection_id": id,
@@ -65,10 +84,11 @@ impl ConnectorHub {
         if state.closed {
             return Err("connector_closed".to_owned());
         }
-        if let Some((id, client)) = state
-            .clients
-            .iter()
-            .find(|(_, client)| client.invitation_identity() == candidate.invitation_identity())
+        if self.allowed_servers.is_none()
+            && let Some((id, client)) = state
+                .clients
+                .iter()
+                .find(|(_, client)| client.invitation_identity() == candidate.invitation_identity())
         {
             if client.display_name != candidate.display_name {
                 return Err("connector_join_name_conflict".to_owned());
@@ -116,6 +136,10 @@ impl ConnectorHub {
 
     pub(super) async fn leave(&self, id: &str) -> Result<Value, String> {
         let client = self.client(id)?;
+        if client.cancel_prepared().await {
+            self.remove(id, &client);
+            return Ok(json!({"status":"connection_cancelled"}));
+        }
         let result = client
             .command(RoomAction::ParticipantLeave, json!({}))
             .await

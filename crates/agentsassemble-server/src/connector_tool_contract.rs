@@ -7,6 +7,9 @@ pub(super) struct Join {
     pub(super) invite_url: String,
     #[serde(default)]
     pub(super) display_name: String,
+    /// Remote MCP: retain the prepared private handle before confirming admission.
+    #[serde(default)]
+    pub(super) connection_id: String,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]
