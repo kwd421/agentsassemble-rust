@@ -307,3 +307,35 @@ build with the unchanged approved CSS cascade, all-target/all-feature Clippy and
 mandatory architecture/growth/19-policy/format/diff gates pass. No resident resource
 task or timer is added; the native initial sample took under 0.02s in the local test.
 Full repeated-sample cost and packaged desktop/mobile evidence remain phase acceptance.
+
+## Release-health execution contract
+
+A fixed Rust-owned catalog replaces the old Python check implementations: frontend
+build/tests, Rust check/tests, mandatory architecture/format gates and Git diff.
+The explicit local `assemble release-health list/run` entry selects catalog IDs;
+HTTP only reads catalog/latest report and cannot launch repository commands. The CLI
+accepts an explicit repository and output root (default current checkout and the
+server's default state directory). Packaged runtimes need no source checkout to
+read a report. A missing latest report means not run; malformed/unreadable reports
+fail visibly, and the report timestamp is not a claim about current source.
+
+Reuse the existing bounded local-command owner with a working-directory argument:
+fixed executable/arguments, sanitized build environment, null streams, owned native
+process group/Job, per-check timeout and explicit cancellation/cleanup outcome. Do
+not collect raw build/test output into the report or web API. Sequential checks
+stop on cancellation or unconfirmed cleanup; remaining checks are not run.
+Atomic latest-report replacement follows actual completion and sync; failure to
+persist is a CLI error. A repository-local advisory lock prevents overlapping
+release-health invocations from racing frontend artifacts. No polling or resident
+worker is introduced. Verify a real CLI Git check/report read, invalid selection,
+missing/corrupt report distinctions, process outcomes and private read-only UI.
+
+The CLI now lists six current checks and runs exact selected IDs. A native built
+`assemble release-health run --check git_diff` passed in 0.013s, wrote a matching
+report and preserved it after rejected invalid selection. Missing/corrupt/failed
+report projection passes its local case (0.01s). Seven existing stable-entry cases
+pass (0.44s) after extracting their unchanged native launch/environment/stop owner;
+release-health adds only an explicit working directory and pre-cancel rejection.
+Generated types, all-target/all-feature Clippy, CLI build and unchanged mandatory
+gates pass. No provider, account or remote publication ran; stable-entry tests use
+local protocol fixtures. The private HTTP/report UI connection is the next slice.

@@ -3,6 +3,8 @@ use clap::{Parser, Subcommand};
 
 #[path = "../attendee_cli.rs"]
 mod attendee;
+#[path = "../release_health_cli.rs"]
+mod release_health;
 
 #[derive(Parser)]
 #[command(name = "assemble", about = "AgentsAssemble external room clients")]
@@ -12,6 +14,10 @@ struct Cli {
 }
 #[derive(Subcommand)]
 enum Command {
+    ReleaseHealth {
+        #[command(subcommand)]
+        command: release_health::ReleaseHealth,
+    },
     Room {
         #[command(subcommand)]
         command: RoomCommand,
@@ -52,6 +58,7 @@ fn main() -> anyhow::Result<()> {
 
 async fn run(command: Command) -> anyhow::Result<()> {
     match command {
+        Command::ReleaseHealth { command } => release_health::run(command).await,
         Command::Room {
             command: RoomCommand::Attend(args),
         } => attendee::run(args).await,

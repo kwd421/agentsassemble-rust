@@ -12,8 +12,8 @@ mod ownership;
 use ownership::{OwnershipFailure, StableOwnership};
 
 use crate::{
+    owned_command::{OwnedCommandOutcome, run_owned_command},
     public_ingress::CanonicalPublicOrigin,
-    public_ingress_process::{OwnedCommandOutcome, run_owned_command},
 };
 
 const OPERATION_ATTEMPTS: usize = 3;
@@ -355,6 +355,7 @@ async fn run_operation(
         match run_owned_command(
             executable,
             &arguments,
+            None,
             &WRANGLER_ENVIRONMENT,
             cancellation,
             OPERATION_TIMEOUT,
