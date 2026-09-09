@@ -1,6 +1,6 @@
 // Aggregate exports for the current frontend API client.
 import { fetchJson, postJson } from "./api/http";
-import { chooseDesktopWorkspace, isDesktopWebview } from "./lib/desktopBridge";
+export { chooseDesktopWorkspace as chooseLocalWorkspace } from "./lib/desktopBridge";
 
 export * from "./api/agentSessions";
 export * from "./api/humanInviteManager";
@@ -111,16 +111,6 @@ export interface MafiaGame {
 export interface MafiaGameResponse {
   game: MafiaGame | null;
 }
-
-export async function chooseLocalWorkspace(): Promise<{
-  selected: boolean;
-  path: string;
-}> {
-  if (isDesktopWebview()) return chooseDesktopWorkspace();
-  return postJson("/api/local/workspace-picker", {});
-}
-
-
 
 export function fetchMafiaGame(gameId: string, viewerAgentId = "") {
   const query = new URLSearchParams({

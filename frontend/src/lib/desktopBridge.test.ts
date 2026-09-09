@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
+import { chooseLocalWorkspace } from "../api";
 import {
   fetchDesktopCentralRegistration,
   fetchDesktopHumanInviteCreate,
@@ -22,6 +23,7 @@ import {
 } from "./desktopBridge";
 
 const hostCommands = [
+  "choose_local_workspace",
   "host_product_surface",
   "runtime_agent_avatar_upload_ticket",
   "runtime_appearance_bound_read_ticket",
@@ -51,6 +53,26 @@ describe("desktop exact-purpose HTTP bridge", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
+
+  it("selects a workspace only through the native owner without a browser HTTP substitute", async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(chooseLocalWorkspace()).rejects.toThrow("workspace_picker_unavailable");
+    const invoke = vi.fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockResolvedValueOnce({ selected: true, path: "/tmp/selected-workspace" });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    await requestDesktopHostProductSurface();
+    await expect(chooseLocalWorkspace()).resolves.toEqual({
+      selected: true, path: "/tmp/selected-workspace",
+    });
+    expect(invoke).toHaveBeenNthCalledWith(2, "choose_local_workspace");
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("sends attachment bytes through raw IPC with only the canonical filename header", async () => {

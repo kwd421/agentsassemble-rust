@@ -1,48 +1,88 @@
 # Frontend/backend exposure map
 
-Status: source-derived exposure inventory reopened by the 2026-09-01 repository
-audit. It records exposure evidence, not product completion.
+Status: current Phase 9 source exposure reconciled after startup correction
+`5f881ad` and the workspace-picker HTTP removal, following Phase 1–8 local acceptance and Daybreak approval. Final integrated
+packaged/real-provider verification and both full-product reviews remain pending.
+This is an exposure inventory, not a claim that final parity has passed.
 
-Comparison baseline: original
-`d5046473010d1353a81ee38337360e6d98f7bd6f`; audited Rust `8a5f75a`.
-Earlier dated sections retain their execution evidence, but their completion claims
-do not override the current findings in
-`docs/architecture/REPOSITORY_AUDIT_2026-09-01.md` or the sequence in
-`docs/PRODUCT_REIMPLEMENTATION_PLAN.md`. Friends, side-chat, custom-channel, Room
-Connector, pairing-issuer, companion, and public Google account entry points are now
-inactive while their Rust owners are absent; copied provider controls and a dormant
-source set still require correction, and Agent Session identity plus several provider
-completion/lifecycle contracts are reopened. D-01 removed the uncalled
-HTTP host-challenge routes and startup secret at `a7949bd`; remote profile,
-preferences, message pins, message search, message attachments, and bound
-room-appearance reads now authorize the session at their target routes. D-02 removed
-the evidence-free room frame proof at `3ffb9eb`, `77cae0e`, `0d24741`, and `57fd6ec`;
-the completed D-03 implementation batch and corrections received final manual
-cross-review approval at `5693e13`.
+Comparison baseline: original `d5046473010d1353a81ee38337360e6d98f7bd6f`.
+The current table below supersedes the older dated snapshots and Phase 5 update.
+The original and audited-baseline tables later in this file are discovery evidence;
+their old “absent”, “inactive” and “pending” states do not override current owners.
+The product plan owns exclusions, phase order and final verification limits.
 
-## Current Phase 5 exposure update (2026-09-08)
+## Current retained exposure (2026-09-09)
 
-This update supersedes the older account/friend/pairing rows below. Those rows
-retain their dated discovery evidence; the current contract is
-[identity/accounts/friends](specs/identity-accounts-friends-slice.md).
+The route owner is `crates/agentsassemble-server/src/product_surface.rs`, derived
+from the same registrations mounted by `web.rs`. Room actions and per-viewer
+capabilities come from the protocol/domain and room command owners. A route's
+existence alone does not establish a frontend entry or authorize its caller.
 
-- Accounts now have Rust status, Google challenge/connect/disconnect and native
-  central-login handoff owners. Configured Google verification is covered with local
-  signed-proof cases; the isolated packaged server truthfully reports unconfigured
-  Google login. No real Google authentication is claimed by that package.
-- Saved friends now have private operator-owned persistence and add/edit/delete,
-  filter and human-invite presentation. Packaged editing, cancellation, deletion,
-  restart retention and a selected-contact human invite are verified.
-- Pairing now has native create/revoke, public device-bound redemption and exact
-  room-session HTTP/WebSocket authority. Packaged remote room settings, local-fixture
-  agent creation/control/profile editing and revocation are verified. Fresh packaged
-  archive and device departure confirm the terminal-response corrections; native
-  membership and agent custody survive the paired device's departure.
-- Human recovery now issues/rotates at the identity owner, atomically redeems to a
-  new device and retires the replaced session. Separate-browser packaged recovery
-  continues without reload and commits a new message; the old session expires.
-- Companion/Room Connector/AgentBridge remain Phase 7. Custom channels/side chat
-  remain Phase 6. These are not provided by human or paired session credentials.
+| Retained flow / original entry | Current Rust authority | Current frontend or client exposure |
+| --- | --- | --- |
+| Desktop bootstrap, local identity, room directory/create | native control/tickets, device identity and `room_directory_web` | `StartupIdentityBoundary`, native Tauri bridge, room rail and creation dialog; canonical server directory replaces cached presentation |
+| Room settings, ordered/ambient and tool modes, appearance and notifications | room settings transaction, per-person preferences and room appearance assets | room/header menus, `RoomSettingsModal`, channel context menus; exact permission projection and server validation |
+| Close/archive/restore/delete | `room_directory_web`, room lifecycle and durable cleanup owner | `useRoomLifecycle` and paired-room lifecycle dialogs; uncertainty and pending cleanup stay explicit |
+| Person profile/avatar/status | person profile repository, `profile_web`, current/pending asset custody | left-bottom profile, user settings and canonical timeline/search/roster projections |
+| Participant role, mute, leave, kick and export | room participant authority and joined runtime removal | desktop/mobile member context menus; export is presented as “참가 종료” with its terminal semantics |
+| Agent Session create/configure/profile/avatar | Agent Session repository, provider registration validation, separate agent-avatar owner | `AgentCreateModal`, session/runtime editor and member profile controls; room roles remain separate |
+| Local workspace selection | Tauri `choose_local_workspace` and OS folder picker | Agent Add folder control; the browser receives an explicit unavailable error without an absent HTTP request |
+| Agent start/pause/resume/interrupt/stop/re-add and permission response | exact provider-native capability/receipt, turn ownership and request broker | generated session controls and request panel; unsupported operations are not offered |
+| Ordinary conversation, scheduling and allowed tools | room floor/turn persistence and provider-native adapters | canonical room messages, ordered/ambient settings, agent tool protocol; no scripted meeting runner |
+| General message send/edit/delete/history | message transaction, event/replay and pagination owners | lobby composer, timeline menus and previous-page controls |
+| Search/context, pins and attachments | `message_search_web`, `message_pins_web`, message attachment custody | stable room-named header search, context jump, pin controls, upload/preview/download; remote HTTP uses room-session authority |
+| Vote create/cast/withdraw/close/summary | room vote owner and canonical publication | vote dialog, `/vote`, poll cards and no-deadline mode; provider tools use the same room authority |
+| Custom text channels/history/search/pins | room channel settings and dedicated channel message/event owner | channel create/rename/delete/context menus, text composer, room-wide search and pins; original text-only scope adds no custom-channel attachments |
+| Side chat | `side_chat_web`, room side-chat mutation and event owner | right panel and mobile room information; bootstrap plus live projection, without copied missing-route polling |
+| Persona-card/Risu library and explicit selection | `persona_web`, persona custody and safe prompt construction | `AgentPersonaPicker` import/search/select and session persona settings for supported API/Local profiles; executable card data stays inert |
+| Human invite/admission/session and invite revocation | human invite manager, admission, session and recovery owners | human invite/copy/revoke, join/preflight/leave and room reconnect; retained client receipts are presentation, not invite authority |
+| Account/Google/native handoff/recovery | account challenge/connect/disconnect, central return broker and human recovery transaction | account settings, native browser handoff and recovery-code UI; unconfigured external identity dependencies remain explicit |
+| Operator pairing | issuance/revocation and device-bound redemption owner | create/copy/revoke and paired-room management; exact paired session capabilities do not borrow native authority |
+| Saved friends and human/AI invitation | private friend persistence, human invite and separate attendee entry owners | FriendsView add/edit/delete/filter and selected-contact invitation; no automatic assignment or synthesized friend state |
+| Current external AI through Room Connector | connector invite/session/principal, room tools and MCP client | external-AI invite UI plus `assemble room connector-mcp` / remote MCP; external Antigravity uses this path exclusively |
+| External AgentBridge attendee and companion | attendee invite/admission, WebSocket/report/tool and cleanup owners | AI-friend/companion packet UI plus `assemble room attend`; no human credential alias |
+| Server-managed AgentBridge runtime | managed provider process custody and report/turn owner | server-managed Agent Sessions through the provider chooser; distinct from both external admission paths |
+| Fourteen-provider catalog, credentials and runtime availability | provider registration, credential store, catalog worker and native/API/local drivers | Harness/API/Local chooser, exact model controls and credential settings; availability follows actual dependencies, not permission to collect real-run evidence |
+| Provider login/usage/refresh | `provider_operations_web`, registration-owned login/usage and catalog refresh | desktop Agent Add login/cancel/refresh and member account usage; admitted browsers get no host account operation |
+| Public ingress | manual, managed tunnel and stable-entry owners | invite connection panel and external-open controls; errors remain visible and temporary tunnel continuity is not promised across restart |
+| Runtime version/update/restart | immutable frontend release, durable restart receipt, POSIX executor and desktop supervisor | update notice, local Server Status restart and CLI; exact build identity and cleanup failure are exposed |
+| Resources/release health | local sampler, persisted report reader and explicit release-health command | reachable Server Status/AdminPanel and CLI report workflow; no hidden background health run |
+
+Provider IDs are Codex, Claude, OpenCode, Cursor, Grok, DeepSeek, Cerebras,
+OpenRouter, Vercel, LLM Gateway, TokenRouter, Custom API, Ollama and LM Studio.
+Browser OAuth login is supported for Codex/Claude/Grok/Cursor; OpenCode reports a
+terminal handoff. Usage is supported for Codex/Claude/Grok/OpenCode/DeepSeek.
+Unsupported login/usage controls are absent by registration. Freebuff and managed
+Antigravity are excluded; their absence is not an unavailable managed provider.
+
+## Backend-only, indirect and unavailable exposure
+
+| Classification | Surface | Consumer or explicit limit |
+| --- | --- | --- |
+| Retained backend/tool-only | server random roll/choice, room observation and provider turn/report/tool commands | provider/Room Connector/AgentBridge tools; no new random-roll React control is invented |
+| Indirect native transport | local control/ticket issuance, central login start/poll/cancel and callback/completion pages | Tauri/native handoff and browser navigation rather than public React HTTP authority |
+| Indirect admission transport | session socket exchange, connector join/read/wait/search/context/vote/command, attendee join/WS/cleanup/interrupt/leave/tool routes | the specific admitted client owns its own credential and lifecycle; issuance UI is not the joining client |
+| Service-only | server identity/challenge and optional central registration proof | public ingress/directory identity verification; no ordinary room button required |
+| CLI report producer | release-health report writing | `assemble release-health`; the UI reads the stored report and does not pretend to execute a check |
+| Metadata/asset transport | runtime version and build-addressed frontend assets | desktop/browser version observer and static loader, including retained old-browser assets |
+| Original standalone HTTP alternatives not retained | HTTP Agent Session creation, duplicate catalog/session discovery, SSE/state reads and participant mutation alternatives | the original canonical consumers use room WebSocket commands/snapshots; no distinct retained integration was found |
+| Original host enumeration endpoints not retained | `/api/room-invite/invites` and `/api/room-invite/sessions` | original source search finds definitions/security registration but no canonical frontend HTTP caller; internal admission enumeration is preserved by the Rust persistence/recovery owners, not these standalone endpoints |
+| Dependency unavailable | Google/central identity when unconfigured; native/API/local providers when dependencies fail | typed unavailable/error state; static/local contract proof does not claim actual external authentication or inference |
+| Platform unavailable | Windows rolling restart | explicit unsupported result; Windows process/IPC custody tests do not prove Windows rolling restart |
+| Native-only operation | host workspace selection from an admitted browser | original picker is local-operator-only; the desktop native picker remains the owner, and browser credentials do not select host directories |
+| Deferred and inactive | voice, Mafia and RimWorld | preserved source, no production mount/request/poll/heartbeat; `5f881ad` removes the final Mafia startup invocation and emitted-graph proof is recorded in VERIFICATION |
+| Excluded | v0 scripted meeting/research/automatic synthesis, Freebuff, managed Antigravity, Python fallback and legacy compatibility | no parity claim or replacement client orchestration |
+
+No additional partially connected visible control was found in this source pass.
+That is a source finding, not final user-flow proof. Current integrated desktop,
+390px/low-height browser, retained provider and restart measurements are still open
+under [final acceptance](specs/final-parity-slice.md). Only the already configured
+DeepSeek, Codex, OpenCode, external Antigravity, Grok and Cursor `auto` are authorized
+for final real-provider runs; all other providers retain source/contract evidence.
+The linked Phase 1–8 contracts and dated packaged records remain evidence only for
+the exact flow/build they tested. Terminal-window contents, real-provider restart
+reconstruction, total Tokio task counts and end-to-end restart latency are not
+inferred from prior build/test success.
 
 ## Scope and method
 
@@ -85,13 +125,11 @@ A backend route, command, or event existing in source is not evidence that the
 frontend exposes its real user flow. Tests, copied components, fixtures, and local
 fake state likewise cannot close an exposure row.
 
-## Current audited exposure snapshot
+## Historical audited exposure snapshot
 
-This compact table is the current exposure owner at Rust baseline `8a5f75a`.
-The separately named `Current frontend change allowlist` below is also active.
-Everything else after this table is frozen original evidence or a dated execution
-journal and must not be read as a newer current-state override; that historical
-boundary resumes explicitly at `Historical public Rust slice and provenance record`.
+This table preserves Rust baseline `8a5f75a` discovery evidence. The current retained
+exposure and explicit limits above supersede its old progress states. Later dated
+sections remain revision-bounded execution evidence, not current-state overrides.
 
 | Surface | Current exposure |
 | --- | --- |
@@ -386,7 +424,11 @@ write grant. The copied channel menu uses this path after admission, while a tok
 pre-admission remote remains failed closed. No local-operator authority, cached
 default, compatibility bearer branch, or client-owned mutation substitutes for it.
 
-## Current frontend change allowlist
+## Historical frontend change allowlist
+
+The following records the pre-reimplementation allowlist. Later user-authorized
+Phase 1–8 product/UI changes are owned by their slice contracts and verification
+records; the current UX and unchanged CSS artifact gate still apply.
 
 The frontend source, styles, assets, and component hierarchy were copied from the
 original React frontend rather than recreated, but that statement is not parity

@@ -8602,3 +8602,33 @@ Architecture/growth, 19 policy cases, format, diff and artifact gates pass. Curr
 production-graph evidence is at `/tmp/aa-phase9-production-graph.json` with build
 output in `/tmp/aa-phase9-production-build.log`. Direct packaged final integration,
 current full exposure reconciliation and resource measurements remain pending.
+
+## Phase 9 exposure reconciliation and native workspace picker (2026-09-09)
+
+The current exposure inventory now maps retained flows to Rust authority and
+frontend/CLI/service consumers, with explicit backend-only, indirect, dependency,
+platform, deferred and excluded states. Original source at `d504647` confirms the
+standalone invite/session enumeration endpoints have no canonical frontend HTTP
+caller; internal admission enumeration is a separate retained persistence concern.
+Older audit snapshots and the early frontend allowlist are marked historical;
+current slice/UX contracts and the unchanged CSS gate remain authoritative.
+
+The emitted-API comparison found one copied absent endpoint:
+`/api/local/workspace-picker`. Original `providers.py:183` admits only the local
+operator. Rust already owns this operation in Tauri's `choose_local_workspace`.
+The aggregate frontend API now directly exports that native operation. Browser
+calls produce its existing typed unavailable error and the existing folder field
+renders the useful message; no HTTP substitute or host-filesystem permission is
+introduced. A bridge boundary case checks browser rejection without any fetch and
+preserves the exact native invocation and selected path result.
+
+Affected bridge/picker/Agent Add verification passes 41 cases. The full frontend
+suite passes all 804 tests in 139 files (33.12s, two workers); production TypeScript,
+Vite output and unchanged CSS verification pass. The emitted bundle contains 51
+API path literals, all accounted for by the 76 unique dynamic paths read from the
+registered server route owners. This literal audit supports source inventory only:
+it is not an exhaustive method, dynamic-input or authorization test. The generated
+product surface and real transport tests retain those contracts. Deferred Mafia,
+voice and RimWorld code/API/handshake markers remain absent from emitted JavaScript.
+Unchanged architecture/growth, 19 policy cases, format, diff and artifact gates pass.
+Full Rust/desktop checks and direct final packaged integration remain pending.

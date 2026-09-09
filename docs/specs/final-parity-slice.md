@@ -24,6 +24,12 @@ that startup branch while preserving canonical direct-room and admission routes.
 Inspect the emitted production module graph and code for deferred mount/request/
 poll/heartbeat paths, then exercise the packaged entry points.
 
+The emitted API audit also finds a copied `/api/local/workspace-picker` branch.
+Original `providers.py` explicitly limits that operation to the local operator.
+The Rust owner is Tauri's `choose_local_workspace`; remove the absent HTTP branch
+and preserve the native bridge's explicit unavailable error for browser callers.
+Do not expose host filesystem selection through an admitted browser credential.
+
 ## Acceptance and verification
 
 - Reconcile every retained exposed feature with its original entry, Rust owner,
