@@ -156,3 +156,17 @@ The sidebar's lobby “mark read” action also wrote a timestamp while the unre
 projection consumes sequence cursors; use the canonical lobby sequence at that
 existing action owner. Confirmed cursor advancement releases attempt deduplication,
 so a later user cursor change does not suppress a new visible read.
+
+## External session action ownership correction (2026-09-10)
+
+Pro Group 2 found that an external attendee with no prior turn could see the
+managed start action and stopped external attendees could edit runtime/persona
+settings, although the server correctly rejects both through `require_server_custody`.
+The shared session details consumer derives server custody from the same canonical
+fields: `!external_owned && process_ownership == "server"`. Managed start, stopped
+restart/resume, and runtime/persona configuration require that custody. External
+ownership is explained without advertising a later managed start. Supported
+external pause, resident resume, stop/cleanup and activity display remain available.
+No server permission, session identity, process ownership or provider execution
+changes. Acceptance includes first external admission, stopped/error external
+sessions, managed controls and external cleanup through the existing shared UI.

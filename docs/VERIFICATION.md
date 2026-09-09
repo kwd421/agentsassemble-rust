@@ -9233,3 +9233,24 @@ workspace selection is unchanged. The existing catalog test starts the bridge fr
 a different temporary directory, and the fake SDK rejects inherited inspection cwd.
 All provider-runtime tests pass without executing a real provider. This verifies
 workspace isolation, not causation or elimination of the native permission prompt.
+
+## Final Pro Group 2 correction status (2026-09-10)
+
+The replacement GPT-6 Pro review completed after 93m 11s at exact `7e10252`:
+REVISE, unique C0/H0/M2/L0. Its full answer and attached per-commit report were
+read. It covered 81 historical Phase 4–6 patches, 12 later impact patches, their
+related cumulative changes, final owners and connected consumers. Phase 6's own
+custom/sidechat contract and the recent signed-runtime, metadata-cwd and visible
+read-hook corrections were approved within their stated scope. Phase 4/5 and
+the full read contract remain open for external-session action advertising (M1)
+and the room menu's missing preference write (M2). Independent Phase 7–9 review
+and final affected-scope supplements remain pending.
+
+M1 now derives managed-only actions from canonical server custody in the shared
+session details consumer. External start, stopped restart and runtime/persona
+configuration are not advertised; external pause/resident resume and cleanup
+remain. The affected component's 12 tests pass, including external custody,
+preserved external control callbacks and managed settings. The frontend build
+(TypeScript, Vite and CSS contract) passes after correcting test fixture literal
+types. Architecture, source-growth, 19 policy/artifact tests, formatting and diff
+checks also pass. Direct packaged verification and reviewer closure are pending.

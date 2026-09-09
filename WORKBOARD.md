@@ -10,6 +10,10 @@
   dismissal re-evaluation are corrected; background automation was not proof of a
   foreground WebView failure. Final affected-head reviews remain pending.
   [Signing contract](docs/specs/operational-surfaces-slice.md#signed-desktop-supervisor-and-keychain-continuity).
+  Pro Group 2 completed at `7e10252`: REVISE C0/H0/M2/L0. Correct the
+  external-session action mismatch and room-menu read persistence, then obtain
+  affected verification and both re-reviews before continuing the remaining groups.
+  [Correction contract](docs/specs/final-parity-slice.md#external-session-action-ownership-correction-2026-09-10).
 
 - Active: close out user-requested Harness/API freshness, inline OS credential
   approval, and the observed unread-state correction, then obtain Daybreak review.

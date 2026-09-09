@@ -101,25 +101,26 @@ export default function AgentSessionDetails({
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [settingsBusy, setSettingsBusy] = useState(false);
   const status = session.runtime_status;
+  const serverOwned = !session.external_owned && session.process_ownership === "server";
   const hasRunBefore = Boolean(
     session.turn_count ||
       session.last_seen_event_id
   );
   const canStart =
-    !session.recovery_required && !hasRunBefore &&
+    serverOwned && !session.recovery_required && !hasRunBefore &&
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
   const canPause = status === "idle" && !session.recovery_required;
   const canStop = agentSessionIsPresent(status) || status === "error" || session.recovery_required;
   const canResume =
     !session.recovery_required && (status === "paused" ||
-    (!session.external_owned &&
+    (serverOwned &&
       hasRunBefore &&
       ["stopped", "error", "disconnected", "available"].includes(status || "")));
   const canInterrupt =
     provider?.turn_interrupt === "retained_runtime" && status === "busy" && !session.recovery_required;
   const continuity = providerSessionContinuity(session);
   const canConfigure =
-    !session.enabled && !session.recovery_required &&
+    serverOwned && !session.enabled && !session.recovery_required &&
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
   const runtimeSettingLabels =
     (provider?.controls || []).map((control) => control.label).join("·") || "런타임 설정";
@@ -284,7 +285,10 @@ export default function AgentSessionDetails({
           </button>}
         </div>
       )}
-      {provider && onConfigure && (
+      {!serverOwned && (
+        <p className="preserve-words">외부에서 실행하는 에이전트예요. 시작과 실행 설정은 연결한 앱에서 관리해 주세요.</p>
+      )}
+      {serverOwned && provider && onConfigure && (
         <details className="dc-agent-runtime-settings" aria-label={`${session.display_name} 런타임 설정`}>
           <summary>실행 설정</summary>
           {displayProviderControls(provider).map((control) => {
@@ -334,7 +338,7 @@ export default function AgentSessionDetails({
           </p>
         </details>
       )}
-      {provider && onConfigure && (
+      {serverOwned && provider && onConfigure && (
         <AgentSessionPersonaSettings
           session={session}
           provider={provider}
