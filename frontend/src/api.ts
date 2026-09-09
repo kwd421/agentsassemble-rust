@@ -73,42 +73,6 @@ export interface LiveAgent {
   capabilities?: string[];
 }
 
-export interface LocalResourceProcess {
-  pid: number;
-  ppid: number;
-  comm: string;
-  role: string;
-  cpu_pct: number;
-  rss_kb: number;
-}
-
-export interface LocalResourceStatus {
-  status: string;
-  generated_at?: string;
-  cpu_count: number;
-  load_average: {
-    one: number;
-    five: number;
-    fifteen: number;
-  };
-  summary: {
-    process_count: number;
-    supervised_resident_count: number;
-    total_cpu_pct: number;
-    total_rss_kb: number;
-    role_breakdown?: Record<
-      string,
-      {
-        count: number;
-        cpu_pct: number;
-        rss_kb: number;
-      }
-    >;
-    attention: string[];
-  };
-  processes: LocalResourceProcess[];
-}
-
 export interface ReleaseHealthCheck {
   id: string;
   label: string;
@@ -229,10 +193,6 @@ export async function chooseLocalWorkspace(): Promise<{
 }> {
   if (isDesktopWebview()) return chooseDesktopWorkspace();
   return postJson("/api/local/workspace-picker", {});
-}
-
-export function fetchLocalResources() {
-  return fetchJson<LocalResourceStatus>("/api/local-resources");
 }
 
 export function fetchReleaseHealth() {

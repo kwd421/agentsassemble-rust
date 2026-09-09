@@ -1,5 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
+import { Activity, Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
 import {
   completeRoomAppearance,
   roomAppearanceStyle,
@@ -35,7 +35,7 @@ export default function RoomRail({
   mobileViewport = false,
   inert = false,
   onSelectRoom,
-  onAddRoom, onManageRooms, onOpenFriends, friendsOpen = false,
+  onOpenAdmin, onAddRoom, onManageRooms, onOpenFriends, friendsOpen = false,
   onOpenRoomMenu,
   onMarkRoomRead,
   onInviteRoom,
@@ -55,6 +55,7 @@ export default function RoomRail({
   onSelectRoom: (roomId: string) => void;
   onAddRoom: () => void;
   onManageRooms?: () => void;
+  onOpenAdmin?: () => void;
   onOpenFriends?: () => void;
   friendsOpen?: boolean;
   onOpenRoomMenu: (event: ReactMouseEvent, room: RoomDockItem) => void;
@@ -117,6 +118,7 @@ export default function RoomRail({
           </button>
         )}
       </div>
+      {onOpenAdmin && <button type="button" className="dc-server-btn" style={buttonStyle} aria-label="서버 상태" title="서버 상태" aria-pressed={adminOpen} onClick={onOpenAdmin}><Activity size={20} /></button>}
       {onManageRooms && <button type="button" className="dc-server-btn" style={{ marginBottom: 80, ...buttonStyle }} aria-label="방 관리" title="방 관리" onClick={onManageRooms}><Settings size={20} /></button>}
       {menuRoom && roomMenu && (
         <div

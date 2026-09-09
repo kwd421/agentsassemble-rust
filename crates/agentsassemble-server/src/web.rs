@@ -170,6 +170,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::guest_identity_recovery_web::routes())
         .merge(crate::provider_credentials_web::routes())
         .merge(crate::provider_operations_web::routes())
+        .merge(crate::operational_web::routes())
         .merge(crate::server_identity_web::routes())
         .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())

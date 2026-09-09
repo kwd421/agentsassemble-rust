@@ -87,6 +87,7 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
     );
     assert_login_authority(&client, &route, &tickets).await?;
     assert_usage_authority(&client, &route, &tickets).await?;
+    assert_resource_authority(&client, &route, &tickets).await?;
     cancellation.cancel();
     tokio::time::timeout(Duration::from_secs(8), server).await???;
     Ok(())
@@ -167,6 +168,46 @@ async fn assert_usage_authority(
     assert_eq!(
         response.json::<serde_json::Value>().await?["code"],
         "provider_usage_unsupported"
+    );
+    Ok(())
+}
+
+async fn assert_resource_authority(
+    client: &Client,
+    route: &str,
+    tickets: &TicketStore,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let route = route.replace("provider-catalog/refresh", "local-resources");
+    assert_eq!(
+        client.get(&route).body("invalid").send().await?.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let token = tickets
+        .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await?
+        .ticket;
+    let response = client
+        .get(&route)
+        .bearer_auth(&token)
+        .header("origin", "tauri://localhost")
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    assert_eq!(
+        response.headers()["access-control-allow-origin"],
+        "tauri://localhost"
+    );
+    let resources: agentsassemble_domain::LocalResourceStatus = response.json().await?;
+    assert!(resources.cpu_sample_seconds.is_none());
+    assert_eq!(
+        client
+            .get(&route)
+            .bearer_auth(&token)
+            .send()
+            .await?
+            .status(),
+        StatusCode::UNAUTHORIZED
     );
     Ok(())
 }

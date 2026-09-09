@@ -1,105 +1,66 @@
-import { useCallback } from "react";
-import { Activity, ClipboardCheck, Shield, X } from "lucide-react";
-import {
-  fetchLocalResources,
-  fetchReleaseHealth,
-  fetchReleaseHealthQueue,
-  type LocalResourceStatus,
-  type ReleaseHealthCatalog,
-  type ReleaseHealthQueue,
-} from "../api";
-import { usePoll } from "../hooks";
-import { formatResourceMemory } from "../lib/localResourceLabels";
-import {
-  partitionReleaseHealthChecks,
-  releaseHealthLatestById,
-  releaseHealthStatusLabel,
-} from "../lib/releaseHealthLabels";
+import { useEffect, useState } from "react";
+import { Activity, RefreshCw, X } from "lucide-react";
+import { fetchLocalResources, type LocalResourceStatus } from "../api/localResources";
 
-export default function AdminPanel({ onClose }: { onClose: () => void; activeMeetingId?: string }) {
-  const resourcesFetcher = useCallback(() => fetchLocalResources(), []);
-  const healthFetcher = useCallback(() => fetchReleaseHealth(), []);
-  const queueFetcher = useCallback(() => fetchReleaseHealthQueue(), []);
-  const [resources, resourcesLoading, resourcesError] = usePoll<LocalResourceStatus>(
-    resourcesFetcher,
-    8000
-  );
-  const [catalog] = usePoll<ReleaseHealthCatalog>(healthFetcher, 30000);
-  const [queue] = usePoll<ReleaseHealthQueue>(queueFetcher, 30000);
-  const checks = partitionReleaseHealthChecks(catalog);
-  const latest = releaseHealthLatestById(queue);
-
+export default function AdminPanel({ onClose }: { onClose: () => void }) {
+  const [resources, setResources] = useState<LocalResourceStatus | null>(null);
+  const [error, setError] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [revision, setRevision] = useState(0);
+  useEffect(() => {
+    let active = true;
+    void fetchLocalResources().then((value) => {
+      if (active) setResources(value);
+    }).catch(() => {
+      if (active) setError(true);
+    }).finally(() => {
+      if (active) setLoading(false);
+    });
+    return () => { active = false; };
+  }, [revision]);
+  const refresh = () => {
+    setResources(null); setError(false); setLoading(true); setRevision((value) => value + 1);
+  };
   return (
-    <div className="ops-panel ops-cut mx-auto flex h-full min-h-0 max-w-5xl flex-col overflow-hidden">
-      <header className="flex shrink-0 items-center justify-between border-b border-accent/14 px-5 py-4">
-        <div className="flex items-center gap-3">
-          <span className="hex-badge"><Shield size={17} /></span>
-          <div>
-            <h1 className="text-[20px] font-black">관리</h1>
-            <p className="text-[12px] text-text-muted">현재 로컬 엔진의 읽기 전용 상태</p>
-          </div>
+    <section className="ops-panel mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden" aria-label="서버 상태">
+      <header className="flex shrink-0 items-center justify-between gap-3 border-b border-accent/14 px-5 py-4" style={{ padding: 24 }}>
+        <h1 className="flex items-center gap-3 text-[20px] font-black"><Activity size={20} />서버 상태</h1>
+        <div className="flex gap-2">
+          <button type="button" onClick={refresh} disabled={loading} className="ops-button grid h-10 w-10 place-items-center rounded-lg" style={{ width: 44, height: 44 }} aria-label="상태 새로고침"><RefreshCw size={18} /></button>
+          <button type="button" onClick={onClose} className="ops-button grid h-10 w-10 place-items-center rounded-lg" style={{ width: 44, height: 44 }} aria-label="서버 상태 닫기"><X size={18} /></button>
         </div>
-        <button type="button" onClick={onClose} className="ops-button grid h-10 w-10 place-items-center rounded-lg" aria-label="관리 닫기">
-          <X size={16} />
-        </button>
       </header>
-
-      <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 chat-scroll">
-        <section className="ops-inner rounded-xl p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <Activity size={17} className={resources?.status === "ok" ? "text-online" : "text-idle"} />
-            <h2 className="text-[15px] font-black">로컬 리소스</h2>
+      <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 chat-scroll" style={{ padding: 24 }}>
+        {loading && <p role="status">자원 사용량을 확인하고 있어요.</p>}
+        {error && <p role="alert">자원 정보를 불러오지 못했어요. 새로고침해 주세요.</p>}
+        {resources && <>
+          <p className="text-[12px] text-text-muted">{new Date(resources.observed_at).toLocaleString()} 기준 · 수동 새로고침</p>
+          <div className="grid gap-3 text-[13px] sm:grid-cols-2 lg:grid-cols-4">
+            <Metric label="CPU 코어" value={resources.cpu_count?.toString() ?? "확인 불가"} />
+            <Metric label="전체 메모리" value={memory(resources.total_memory_bytes)} />
+            <Metric label="사용 가능한 메모리" value={memory(resources.available_memory_bytes)} />
+            <Metric label="부하 평균 (1·5·15분)" value={resources.load_average?.map((value) => value.toFixed(2)).join(" · ") ?? "확인 불가"} />
           </div>
-          {resources ? (
-            <div className="grid gap-3 text-[13px] text-text-secondary sm:grid-cols-2 lg:grid-cols-4">
-              <Metric label="상태" value={resources.status === "ok" ? "정상" : resources.status} />
-              <Metric label="CPU" value={String(resources.cpu_count)} />
-              <Metric label="표시 프로세스" value={String(resources.summary.process_count)} />
-              <Metric label="RSS 합계" value={formatResourceMemory(resources.summary.total_rss_kb)} />
-            </div>
-          ) : (
-            <p className="text-[13px] text-text-muted">
-              {resourcesError ? "리소스 정보를 불러오지 못했습니다." : resourcesLoading ? "확인 중..." : "정보 없음"}
-            </p>
-          )}
-        </section>
-
-        <section className="ops-inner rounded-xl p-5">
-          <div className="mb-4 flex items-center gap-2">
-            <ClipboardCheck size={17} className="text-accent" />
-            <h2 className="text-[15px] font-black">릴리스 헬스</h2>
-          </div>
-          {catalog ? (
-            <div className="grid gap-2 sm:grid-cols-2">
-              {[...checks.defaultChecks, ...checks.optInChecks].map((check) => {
-                const result = latest.get(check.id);
-                return (
-                  <article key={check.id} className="ops-inner rounded-lg px-4 py-3">
-                    <div className="flex items-center justify-between gap-3">
-                      <strong className="text-[13px] text-text-primary preserve-words">{check.label}</strong>
-                      <span className="text-[10px] font-black text-text-muted">
-                        {releaseHealthStatusLabel(result?.latest_status || "not_run")}
-                      </span>
-                    </div>
-                    <p className="mt-1 text-[11px] text-text-muted preserve-words">{check.category} · {check.kind}</p>
-                  </article>
-                );
-              })}
-            </div>
-          ) : (
-            <p className="text-[13px] text-text-muted">카탈로그 확인 중...</p>
-          )}
-        </section>
+          <section className="flex flex-col gap-3" aria-label="관련 프로세스">
+            <h2 className="mb-4 font-bold">앱과 관련 도구 · {resources.matching_process_count}개</h2>
+            <p className="text-[12px] text-text-muted">최대 30개를 표시해요. 다른 앱에서 실행한 같은 도구도 포함돼요.</p>
+            <p className="text-[12px] text-text-muted">{resources.cpu_sample_seconds === null
+              ? "CPU는 비교할 표본이 필요해요. 잠시 후 새로고침해 주세요."
+              : `CPU는 최근 ${resources.cpu_sample_seconds.toFixed(1)}초 평균이며 코어 하나가 100%예요.`}</p>
+            {resources.processes.map((process) => <article key={process.pid} className="ops-inner rounded-lg p-4 text-[13px]">
+              <strong>{process.label}</strong><span className="text-text-muted"> · PID {process.pid}</span>
+              <p>CPU {process.cpu_percent === null ? "측정 전 또는 확인 불가" : `${process.cpu_percent.toFixed(1)}%`} · 메모리 {memory(process.memory_bytes)}</p>
+            </article>)}
+          </section>
+        </>}
       </div>
-    </div>
+    </section>
   );
 }
 
+function memory(bytes: number | null) {
+  return bytes === null ? "확인 불가" : `${(bytes / 1024 / 1024).toFixed(1)} MiB`;
+}
 function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="ops-inner rounded-lg px-4 py-3">
-      <span className="text-text-muted">{label}</span>{" "}
-      <strong className="text-text-primary">{value}</strong>
-    </div>
-  );
+  return <div className="ops-inner rounded-lg p-4"><span className="text-text-muted">{label}</span> <strong>{value}</strong></div>;
 }

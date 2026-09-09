@@ -34,6 +34,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_large_int("number")
         .with_import_extension(Some("js"));
     RoomSnapshot::export_all(&config)?;
+    agentsassemble_domain::LocalResourceStatus::export_all(&config)?;
     agentsassemble_domain::ProviderUsage::export_all(&config)?;
     agentsassemble_domain::ProviderRequestResolution::export_all(&config)?;
     agentsassemble_protocol::AttendeeEntryPacket::export_all(&config)?;

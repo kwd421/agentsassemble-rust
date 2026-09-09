@@ -275,3 +275,35 @@ API decoder/rendering path distinguishes started from authenticated (26 affected
 frontend tests); HTTP operation regression (0.04s), frontend build/CSS, Clippy and
 mandatory gates pass. Packaged terminal launch and cross-platform runtime evidence
 remain phase acceptance work.
+
+## Resource observation contract
+
+The runtime owns one on-demand sysinfo sampler. It reads memory and process CPU,
+never arguments, environment, executable paths or task lists. The original scope
+remains the runtime, direct children and fixed related CLI/tool names; all displayed
+names come from that fixed vocabulary. Rows are capped at thirty after sorting;
+counts describe all matching processes. This is not a whole-machine process viewer.
+
+CPU needs two native samples at least the library minimum interval apart. First
+reads, new/reused PIDs and reads too close together expose unknown CPU, not zero.
+Memory/load unavailable on the platform stays null. A single async mutex is acquired
+before dispatching the blocking OS read, so there is no resident sampler, timer or
+queue of blocking workers. A disconnected reader does not release the sampler while
+its OS read still runs. Private GET authority is consumed before body validation.
+
+Connect the desktop-only server-status opener, an initial resource read and explicit
+refresh with observation time, unknown/error states and related-process rows. Remove
+the copied unimplemented health pollers; the subsequent release-health owner will
+restore that section with actual results. Verify native sampling privacy and first
+sample semantics, operator HTTP denial, frontend refresh/error behavior, affected
+builds and unchanged gates. Direct packaged proof remains whole-phase acceptance.
+
+The resource sampler, private GET route and desktop server-status rail entry are
+connected. Native first-sample/privacy verification passes (0.02s); the shared
+real-TCP operator boundary verifies denial, one-use consumption and private
+CORS/cache headers (0.04s). The frontend case verifies unknown CPU and removal of
+stale observations after an explicit failed refresh. Generated types, production
+build with the unchanged approved CSS cascade, all-target/all-feature Clippy and
+mandatory architecture/growth/19-policy/format/diff gates pass. No resident resource
+task or timer is added; the native initial sample took under 0.02s in the local test.
+Full repeated-sample cost and packaged desktop/mobile evidence remain phase acceptance.

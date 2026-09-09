@@ -29,7 +29,9 @@ pub use provider_request::{
     ProviderRequest, ProviderRequestKind, ProviderRequestOption, ProviderRequestPrompt,
     ProviderRequestQuestion, ProviderRequestResolution,
 };
+mod local_resources;
 mod provider_turn;
+pub use local_resources::{LocalResourceProcess, LocalResourceStatus};
 mod provider_usage;
 pub use provider_usage::{ProviderBalance, ProviderQuota, ProviderRateWindow, ProviderUsage};
 mod room_history;

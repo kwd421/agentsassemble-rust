@@ -1,3 +1,4 @@
+import { isDesktopWebview } from "../lib/desktopBridge";
 import ProviderRequestsPanel from "../views/components/ProviderRequestsPanel";
 import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
@@ -129,7 +130,8 @@ export default function AppView({ controller }: { controller: AppController }) {
         inert={mobileViewport && !mobileSidebarOpen}
         onSelectRoom={(roomId) => { setFriendsOpen(false); selectRoom(roomId); }}
         friendsOpen={friendsOpen && roomLifecycle.enabled}
-        onOpenFriends={roomLifecycle.enabled ? () => { setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
+        onOpenAdmin={!guestLocked && isDesktopWebview() ? () => { setAdminOpen(true); setFriendsOpen(false); closeMobileSidebar(); setRoomMenu(null); } : undefined}
+        onOpenFriends={roomLifecycle.enabled ? () => { setAdminOpen(false); setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onAddRoom={addFreshRoom}
         onManageRooms={roomLifecycle.enabled ? roomLifecycle.show : pairedRoomLifecycle.enabled ? pairedRoomLifecycle.show : undefined}
         onOpenRoomMenu={openRoomMenu}
@@ -352,10 +354,10 @@ export default function AppView({ controller }: { controller: AppController }) {
               <p>{GUEST_SESSION_EXPIRED_MESSAGE}</p>
               <button type="button" className="dc-agent-create-secondary" style={{ minHeight: 44, marginTop: 20 }} onClick={exitGuestSurface}>접속 화면 나가기</button>
             </section>
+          ) : adminOpen ? (
+            <AdminPanel onClose={() => setAdminOpen(false)} />
           ) : activeRoomDisconnected ? (
             <DisconnectedRoomView room={activeRoom} />
-          ) : adminOpen ? (
-            <AdminPanel onClose={() => setAdminOpen(false)} activeMeetingId={activeRoom.meetingId} />
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
               <h1 id="empty-room-title">열려 있는 방이 없어요</h1>
