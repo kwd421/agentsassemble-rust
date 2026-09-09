@@ -64,6 +64,7 @@ mod frontend_document;
 pub mod frontend_release;
 mod google_accounts;
 mod google_token_verifier;
+pub mod runtime_image;
 pub mod runtime_version;
 pub use central_login::central_login_control;
 pub use google_accounts::{GoogleAccountError, GoogleAccountService};

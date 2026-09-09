@@ -49,6 +49,8 @@ const TRUSTED_PROXY_TOKEN_ENV: &str = "AGENTSASSEMBLE_TRUSTED_PROXY_TOKEN";
 struct Args {
     #[arg(long, default_value = "127.0.0.1:0")]
     bind: SocketAddr,
+    #[arg(long = agentsassemble_server::runtime_image::PREFLIGHT_ARGUMENT, hide = true)]
+    runtime_preflight: bool,
     #[arg(long, default_value = ".agentsassemble-rust/runtime.sqlite3")]
     database: PathBuf,
     #[arg(long)]
@@ -59,10 +61,13 @@ struct Args {
     stable_entry_config: Option<PathBuf>,
 }
 
-#[tokio::main]
-async fn main() -> anyhow::Result<()> {
+fn main() -> anyhow::Result<()> {
     run_internal_provider_mode();
-    if let Some(code) = agentsassemble_provider::run_managed_bridge_if_requested().await {
+    let runtime = tokio::runtime::Builder::new_multi_thread()
+        .enable_all()
+        .build()?;
+    if let Some(code) = runtime.block_on(agentsassemble_provider::run_managed_bridge_if_requested())
+    {
         std::process::exit(code);
     }
     tracing_subscriber::fmt()
@@ -70,6 +75,19 @@ async fn main() -> anyhow::Result<()> {
         .with_writer(std::io::stderr)
         .init();
     let args = Args::parse();
+    if args.runtime_preflight {
+        println!(
+            "{}",
+            serde_json::to_string(
+                &agentsassemble_server::runtime_image::RuntimePreflight::current()
+            )?
+        );
+        return Ok(());
+    }
+    runtime.block_on(run_runtime(args))
+}
+
+async fn run_runtime(args: Args) -> anyhow::Result<()> {
     let manual_public_ingress = manual_public_ingress_environment()?;
     let stable_entry = stable_entry_configuration(
         args.stable_entry_config.as_deref(),

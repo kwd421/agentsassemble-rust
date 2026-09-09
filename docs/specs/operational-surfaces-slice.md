@@ -603,3 +603,20 @@ writer-lease reacquisition. Server Clippy and mandatory gates pass. Unix input a
 one readiness registration and removes Tokio stdin's blocking worker/read-ahead;
 one-byte syscalls are bounded by the existing 4 KiB control limit. Full packaged
 resource/latency measurement remains pending.
+
+
+The fixed `--runtime-preflight` entry reports the current handoff, protocol and
+schema versions without opening runtime storage or providers. `RuntimeImage`
+snapshots the selected executable, verifies source/copy content identity, retains
+it under that identity and runs that exact image's bounded preflight. Invalid,
+changing, corrupt or incompatible images return errors. Startup now explicitly owns
+the Tokio runtime lifetime, while preserving both existing provider helper modes.
+
+The actual server binary preflight creates no files in its isolated working directory;
+its immutable copy runs successfully, a corrupted retained image and a non-executable
+candidate are rejected. This case passes (3.51s); all ten real control-pipe cases pass
+(2.09s), with server Clippy and mandatory gates. The measured debug image is
+162,872,200 bytes; snapshots retain one copy per content identity and hashing uses
+a bounded 64 KiB buffer. Candidate preparation occurs only on explicit restart,
+not a periodic scan. Handoff triggering/listener inheritance and full packaged
+acceptance remain pending.

@@ -161,6 +161,7 @@ mod room_write_budget;
 mod schema;
 mod schema_message_search;
 mod schema_version;
+pub use schema_version::CURRENT_SCHEMA_VERSION;
 mod schema_votes;
 mod sqlite;
 mod store_open;
