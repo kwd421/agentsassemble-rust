@@ -1,6 +1,4 @@
 use crate::participant_rows::save_participant_exact as save_participant;
-use std::collections::BTreeMap;
-
 use agentsassemble_domain::{
     AGENT_PROFILE_NAME_CHARACTER_LIMIT, DurableAgentSession, Participant, canonical_payload_hash,
 };
@@ -13,7 +11,7 @@ use crate::{
     agent_avatar_assets::replace_agent_avatar,
     agent_lifecycle::{load_participant, load_session, save_session},
     agent_lifecycle_authority::{authorize_control, payload_agent_id_with_fields},
-    agent_lifecycle_events::{append_session_event, append_state_event, store_result},
+    agent_lifecycle_events::{append_profile_events, store_result},
     authority::active_room_for_principal,
     command_admission::admit_non_lifecycle_command,
     room_write_budget::command_size,
@@ -93,20 +91,8 @@ impl SqliteStore {
             &participant,
         )
         .await?;
-        let participant_event = append_session_event(
-            &mut transaction,
-            principal,
-            &session.public,
-            "participant_updated",
-            BTreeMap::from([(
-                "avatar_image_url".to_owned(),
-                json!(session.public.avatar_image_url),
-            )]),
-            session.public.updated_at,
-        )
-        .await?;
-        let session_event =
-            append_state_event(&mut transaction, principal, &session.public).await?;
+        let [participant_event, session_event] =
+            append_profile_events(&mut transaction, principal, &session.public).await?;
         let public_session = session_event.extra["agent_session"].clone();
         let events = vec![participant_event, session_event];
         let result = json!({

@@ -9398,3 +9398,68 @@ profile authority, avatar, participant identity and atomic storage behavior rema
 This closes the local M5 acceptance path; Pro approval and the remaining split
 reviews are still pending. Prior actual-provider/mobile/notarization/updater/Windows
 limits remain. This is not a new full frontend or whole-workspace test run.
+
+## Pro Group 2 profile event sequence correction (2026-09-10)
+
+The completed `ac94b922` Pro review (21m2s) approves its M5 correction and closes
+M1–M5, but returns REVISE C0/H0/M1/L0 for existing G2-M6 in whole Phase 4–6 and
+the affected Phase 1–3 supplement. A busy external profile can encounter a pending
+request deadline: reconciliation between its two events inserts a private close
+event, breaking the strict ACK adjacency contract. This exists at least at
+`7e10252`; it is not an `ac94b922` regression. The committed identity is retained,
+but the malformed stored ACK causes uncertain save completion and bounded replay.
+
+The existing lifecycle event owner now reconciles once before appending the exact
+two-event profile batch. A private state-projection writer is shared with ordinary
+state changes, whose existing reconciliation remains. No deadline check runs between
+the profile pair. Request closure retains its canonical sequence and visibility;
+M5 projection reuse, exact historical receipt replay and the same atomic transaction
+remain. No validator relaxation, stored flag, polling, provider launch or additional
+lookup is introduced; the existing bounded pending-request check changes position.
+
+- One permanent regression establishes actual external admission, current connection,
+  ready, started turn and provider request through their persistence owners. It covers
+  open and claimed resolving states. Only the fixture deadline is then set
+  to `now - 1ms`; no sleep or fabricated authority rows are used. Before the fix,
+  sequence 12 fails the expected 10+1 adjacency. Both states now have one close
+  immediately before two adjacent profile events, coherent full Session projections,
+  owner visibility/unrelated-viewer hiding with unchanged sequence, exact replay and
+  no additional event on subsequent expiry.
+- An injected state-event INSERT failure rolls back identity, participant, request
+  closure and events in both cases. Removing the trigger allows the same request ID
+  to commit as a new command. All five profile tests pass (0.11s), including retained
+  managed restart/authority/malformed input and exact-write failure cases. Request
+  persistence tests pass (5), server broker tests pass (5; 0.13s, including live
+  deadline/cancel/delivery and authenticated sockets), and the actual HTTP/WebSocket
+  configuration/live-profile/avatar flow passes (1; 5.10s).
+- Temporary instrumentation captures both final-owner public outcomes, replay and
+  close projection. Passing the unchanged results and normal close/profile event
+  stream into the strict validator and actual RoomSocketClient accepts original and
+  deduplicated ACKs, resolves the commands, retains readiness and one socket, and
+  emits no error or extra send. A sequence mismatch still fails. The two captured
+  cases plus 25 existing Session/request consumer cases pass (27; 734ms). This uses
+  the existing FakeWebSocket harness; actual server socket tests are separate.
+  Capture instrumentation and frontend harness are removed from the source tree.
+- Persistence/server all-target/all-feature Clippy with `-D warnings`, frontend
+  TypeScript/Vite/CSS, architecture/source-growth/19 policy checks, fmt and diff pass.
+  The first inline correction exceeded the existing 100-line function limit; the
+  cohesive ordered batch now belongs to the event owner, without an exception or
+  gate change. An initial test incorrectly treated the target Agent as unrelated;
+  the existing visibility contract includes that Agent, so the test now uses an
+  unrelated human identity. No product privacy rule changed. Artifact maintenance
+  reports no cleanup required.
+- Rebuilt sidecar/helper and signed isolated macOS 0.1.11. The actual external
+  profile saves `Codex External Sequence Verified` and shows success; after normal
+  quit/relaunch the timeline, roster and profile retain it. Restoring the original
+  `Codex External Verification` also shows success. Read-only receipts confirm
+  adjacent pairs 130/131 and 132/133, equal full result/state-event Session values,
+  and no derived capability in durable Session JSON. One initial restoration click
+  did not dispatch (no new receipt); a fresh UI read and click completed the save.
+  Strict deep codesign passes, the exact app/owned children are normally quit, and
+  Computer Use is reset. No real provider or new permission was used.
+
+Pending-request deadline behavior is controlled owner/socket verification; packaged
+checks exercise the existing stopped profile, without injecting a provider deadline
+into the real app. Timing frequency and broader network stability were not measured.
+Pro re-review and independent Phase 7–9 remain pending, as do the previously recorded
+real-provider, deferred mobile UX, notarization/updater and Windows GUI limitations.

@@ -28,6 +28,14 @@ the originally committed coherent result, without recomputing capability from a
 later connection. Verify external profiles before ready and with false/true reports,
 the strict ACK consumer, and successful packaged rename without reconnect/replay.
 
+Pending provider requests reconcile once in the profile transaction before its
+two-event identity batch. A request close retains its own canonical sequence and
+owner-only publication, followed by exactly two adjacent profile ACK events:
+`participant_updated` and `agent_session_state`. No second deadline check may insert
+an event between that pair. Expiry, identity, events and the replay receipt roll back
+together on storage failure. Verify both open and resolving requests at a controlled
+deadline, private-close projection, exact replay and the actual strict socket consumer.
+
 Agent avatar bytes have separate room/session custody with one current and one
 pending asset. Upload authorization is bound to the exact room and Agent Session;
 only a validated owned reference can become current. Replacement, clear and later

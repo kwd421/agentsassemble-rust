@@ -24,8 +24,13 @@
   Pro `80483c2` closes M3/M4 but finds one new profile ACK/state-event projection
   mismatch (G2-M5). The persistence owner now reuses the committed event projection;
   external pre-ready/false/true outcomes, exact replay, strict ACK/socket consumption
-  and signed packaged rename/restart/restoration pass. Pro re-review and the
-  remaining groups are pending.
+  and signed packaged rename/restart/restoration pass. Pro `ac94b92` closes M5
+  and approves that correction, but identifies a pre-existing deadline interleaving
+  in profile ACK event sequencing (G2-M6). The event owner now reconciles once
+  before its contiguous profile pair. Controlled open/resolving expiry, atomic
+  failure/retry, public ACK/socket consumption, server integration and signed
+  packaged save/restart/restoration pass. Pro re-review and the remaining groups
+  are pending.
   [Correction contract](docs/specs/final-parity-slice.md#external-session-action-ownership-correction-2026-09-10).
 
 - Active: close out user-requested Harness/API freshness, inline OS credential

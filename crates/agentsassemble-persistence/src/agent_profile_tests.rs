@@ -11,6 +11,135 @@ use agentsassemble_domain::{ClientKind, ParticipantStatus};
 use serde_json::json;
 
 #[tokio::test]
+async fn expired_external_request_precedes_atomic_profile_ack_and_replay()
+-> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_domain::{ProviderRequestResolution, public_event_for_principal};
+    for resolving in [false, true] {
+        let (store, connection, turn, now) =
+            crate::attendee_turn_report_tests::assigned_report().await?;
+        let operator = crate::human_session_authority_tests::local_operator_principal();
+        let request = crate::provider_request_tests::request_for(&turn);
+        let id = request.request.provider_request_id;
+        let agent_id = &connection.session().principal().participant_id;
+        store
+            .open_attendee_provider_request(
+                connection.session().session_fingerprint(),
+                connection.connection_id(),
+                &request,
+                now,
+            )
+            .await?;
+        let human = store
+            .authorize_human_session(
+                &crate::human_session_authority_tests::session_fingerprint(&store).await,
+            )
+            .await?;
+        if resolving {
+            let claimed = store
+                .resolve_provider_request(
+                    crate::RoomMutationAuthority::HumanSession(&human),
+                    id,
+                    &ProviderRequestResolution::Acknowledge,
+                    now,
+                )
+                .await?;
+            assert!(claimed.delivery.is_some());
+        }
+        // Advance only the fixture deadline after real admission, turn and request owners
+        // have established authority. No sleep or fabricated execution/connection rows.
+        sqlx::query("UPDATE provider_requests SET expires_at=? WHERE request_id=?")
+            .bind((now - chrono::TimeDelta::milliseconds(1)).timestamp_millis())
+            .bind(id.to_string())
+            .execute(&store.pool)
+            .await?;
+        let payload = json!({"agent_id": agent_id, "display_name": "Busy external renamed"});
+        assert_profile_event_failure_rolls_back(&store, &operator, &payload).await?;
+        let outcome = store
+            .execute_agent_profile_update(TrustedPrincipal(&operator), "expiry-rename", &payload)
+            .await?;
+        assert!(!outcome.deduplicated);
+        assert_eq!(outcome.events.len(), 2);
+        assert_eq!(outcome.events[0].event_type, "participant_updated");
+        assert_eq!(outcome.events[1].event_type, "agent_session_state");
+        assert_eq!(outcome.events[1].seq, outcome.events[0].seq + 1);
+        assert_eq!(
+            outcome.result["agent_session"],
+            outcome.event.extra["agent_session"]
+        );
+        let snapshot = store.snapshot("general", 0, 200).await?;
+        let closed: Vec<_> = snapshot
+            .events
+            .iter()
+            .filter(|event| event.event_type == "provider_request_closed")
+            .collect();
+        assert_eq!(closed.len(), 1);
+        assert_eq!(closed[0].extra["state"], "expired");
+        assert_eq!(closed[0].seq + 1, outcome.events[0].seq);
+        assert_eq!(
+            public_event_for_principal(closed[0], human.principal()).event_type,
+            "provider_request_closed"
+        );
+        let mut unrelated = human.principal().clone();
+        unrelated.principal_id = "unrelated".to_owned();
+        unrelated.participant_id = "unrelated".to_owned();
+        let hidden = public_event_for_principal(closed[0], &unrelated);
+        assert_eq!(hidden.event_type, "event_hidden");
+        assert_eq!(hidden.seq, closed[0].seq);
+        let replay = store
+            .execute_agent_profile_update(TrustedPrincipal(&operator), "expiry-rename", &payload)
+            .await?;
+        assert!(replay.deduplicated);
+        assert_eq!(replay.result, outcome.result);
+        assert!(
+            store
+                .pending_provider_request_ids("general")
+                .await?
+                .is_empty()
+        );
+        assert!(
+            store
+                .expire_provider_request("general", id, now)
+                .await?
+                .is_none()
+        );
+        assert_eq!(
+            store.snapshot("general", 0, 200).await?.events,
+            snapshot.events
+        );
+    }
+    Ok(())
+}
+
+async fn assert_profile_event_failure_rolls_back(
+    store: &SqliteStore,
+    operator: &agentsassemble_domain::AuthenticatedPrincipal,
+    payload: &serde_json::Value,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let before = store.snapshot("general", 0, 200).await?;
+    let pending = store.pending_provider_request_ids("general").await?;
+    sqlx::query("CREATE TRIGGER fail_profile_event BEFORE INSERT ON room_events WHEN json_extract(NEW.event_json, '$.type') = 'agent_session_state' BEGIN SELECT RAISE(ABORT, 'fixture profile event failure'); END")
+        .execute(&store.pool).await?;
+    assert!(matches!(
+        store
+            .execute_agent_profile_update(TrustedPrincipal(operator), "expiry-rename", payload)
+            .await,
+        Err(PersistenceError::Database(_))
+    ));
+    let after = store.snapshot("general", 0, 200).await?;
+    assert_eq!(after.events, before.events);
+    assert_eq!(after.agent_sessions, before.agent_sessions);
+    assert_eq!(after.participants, before.participants);
+    assert_eq!(
+        store.pending_provider_request_ids("general").await?,
+        pending
+    );
+    sqlx::query("DROP TRIGGER fail_profile_event")
+        .execute(&store.pool)
+        .await?;
+    Ok(())
+}
+
+#[tokio::test]
 async fn external_profile_ack_reuses_state_projection_and_exact_replay()
 -> Result<(), Box<dyn std::error::Error>> {
     for capability in [None, Some(false), Some(true)] {

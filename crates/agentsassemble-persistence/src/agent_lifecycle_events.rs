@@ -59,6 +59,43 @@ pub(crate) async fn append_state_event(
         Utc::now(),
     ))
     .await?;
+    append_state_projection_event(transaction, principal, session).await
+}
+
+// Reconcile once before this exact pair. A second deadline check between its events
+// could insert a private close event and invalidate the committed profile ACK.
+pub(crate) async fn append_profile_events(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    session: &AgentSession,
+) -> Result<[RoomEvent; 2], PersistenceError> {
+    Box::pin(crate::provider_request_lifecycle::reconcile_session_in(
+        transaction,
+        session,
+        Utc::now(),
+    ))
+    .await?;
+    let participant_event = append_session_event(
+        transaction,
+        principal,
+        session,
+        "participant_updated",
+        BTreeMap::from([(
+            "avatar_image_url".to_owned(),
+            json!(session.avatar_image_url),
+        )]),
+        session.updated_at,
+    )
+    .await?;
+    let state_event = append_state_projection_event(transaction, principal, session).await?;
+    Ok([participant_event, state_event])
+}
+
+async fn append_state_projection_event(
+    transaction: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    session: &AgentSession,
+) -> Result<RoomEvent, PersistenceError> {
     let projection = crate::attendee_ready::project_session_in(transaction, session).await?;
     append_session_event(
         transaction,
