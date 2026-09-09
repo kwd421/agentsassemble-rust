@@ -47,6 +47,51 @@ credential import, browser-cookie extraction or provider simulation is introduce
 
 ## Authority, state and lifecycle
 
+### Browser-to-local provider setup (user request, 2026-09-09)
+
+The agent creation dialog must keep unavailable providers selectable for diagnosis
+without making them startable. It shows the catalog's actual failure and offers a
+local setup link for providers with a supported native installation. The link opens
+AgentsAssemble on the browser user's computer, not an operation on the room server.
+It carries only a known provider ID: no room authority, credential, arbitrary URL,
+path, shell command, or automatic login/update instruction.
+
+The desktop deep-link owner validates the exact route and opens/reuses one bounded
+setup window per provider. Cold and already-running launches use Tauri's deep-link
+and single-instance owners. The existing startup identity boundary and local-operator
+tickets still govern the bundled setup UI. Login and cancellation reuse the current
+provider operation owner; catalog reads/refresh remain local to that runtime.
+Version checks are read-only and on demand. An available release shows installed
+and offered versions with Update and Later choices; Later preserves use of the
+installed version. Only Update may hand off to a supported native updater, and its
+launch receipt is not installation success. Unsupported installation methods expose
+the fixed official instructions explicitly. Checks never execute an installer, and
+ordinary discovery failure is not evidence of an available update. Provider-owned
+update preferences are not rewritten. Native reads reuse bounded process custody;
+public release requests have fixed endpoints, bounded bodies/time and cancellation.
+Concurrent identical reads coalesce; shutdown joins owned work. No update polling,
+compatibility fallback or version-based creation gate is introduced.
+
+Opening the app/help is not authentication or update completion. The setup window
+reports actual local catalog state; browser readiness remains its serving runtime's
+canonical catalog. A different computer's setup cannot mark that server ready.
+The browser explains that an installed desktop app is required and does not infer
+launch success from a timer. Acceptance covers missing/auth-required selection,
+strict deep-link rejection, local-only operation authority, cold/warm packaged
+opening, login failure/cancellation, official-help opening, and desktop/390px layout.
+Existing provider installations/accounts must not be updated merely to test this UI.
+
+Version inspection covers Codex and Claude public npm releases, OpenCode's official
+GitHub release, Cursor's native download service (using its configured channel),
+and Grok's `update --check --json` contract. Grok, Cursor and OpenCode hand off to
+their own updater in an operator-owned terminal. Codex and Claude show version
+information and official update instructions: the app does not guess their package
+manager or replace their configured release channel. Ollama and LM Studio expose
+official app setup instructions and explicit unsupported version inspection.
+Cursor's `get-channel` empty output means its native default `prod`; static/unknown
+channels remain unsupported. No endpoint supplied by a browser or upstream response
+is opened or executed; upstream version strings only populate validated display data.
+
 Provider registration owns advertised login and usage capabilities. Runtime
 availability and operation support are separate facts. Existing catalog discovery
 owns explicit refresh and publication; concurrent refreshes join one operation,

@@ -161,6 +161,7 @@ dependencies = [
  "same-file",
  "security-framework 3.7.0 (git+https://github.com/kwd421/rust-security-framework?rev=85407d113b978b27728e162c8485c11e233c3e3e)",
  "security-framework-sys 2.17.0 (git+https://github.com/kwd421/rust-security-framework?rev=85407d113b978b27728e162c8485c11e233c3e3e)",
+ "semver",
  "serde",
  "serde_json",
  "sha2 0.10.9",

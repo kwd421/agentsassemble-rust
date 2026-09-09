@@ -94,6 +94,7 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
             .status(),
         StatusCode::UNAUTHORIZED
     );
+    assert_provider_setup_authority(&client, &route, &tickets, &catalog).await?;
     assert_restart_authority(&client, &route, &tickets).await?;
     assert_login_authority(&client, &route, &tickets).await?;
     assert_usage_authority(&client, &route, &tickets).await?;
@@ -101,6 +102,56 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
     assert_health_authority(&client, &route, &tickets, root.path()).await?;
     cancellation.cancel();
     tokio::time::timeout(Duration::from_secs(8), server).await???;
+    Ok(())
+}
+
+async fn assert_provider_setup_authority(
+    client: &Client,
+    route: &str,
+    tickets: &TicketStore,
+    catalog: &ProviderCatalogService,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let read_route = route.replace("provider-catalog/refresh", "provider-catalog");
+    assert_eq!(
+        client.get(&read_route).send().await?.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let read = client
+        .get(&read_route)
+        .bearer_auth(
+            tickets
+                .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+                .await?
+                .ticket,
+        )
+        .send()
+        .await?;
+    assert_eq!(read.status(), StatusCode::OK);
+    assert_eq!(read.json::<ProviderCatalog>().await?, catalog.snapshot());
+    for suffix in ["providers/update/check", "providers/update/start"] {
+        let update_route = route.replace("provider-catalog/refresh", suffix);
+        assert_eq!(
+            client
+                .post(&update_route)
+                .json(&serde_json::json!({"provider_id":"grok","expected_version":"1.0.24"}))
+                .send()
+                .await?
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let rejected = client
+            .post(&update_route)
+            .bearer_auth(
+                tickets
+                    .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+                    .await?
+                    .ticket,
+            )
+            .json(&serde_json::json!({"provider_id":"grok", "command":"update"}))
+            .send()
+            .await?;
+        assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
+    }
     Ok(())
 }
 

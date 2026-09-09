@@ -37,6 +37,7 @@ pub struct AppState {
     pub runtime_restart: crate::runtime_restart::RuntimeRestartControl,
     pub(crate) local_resources: crate::local_resources::LocalResources,
     pub provider_usage: agentsassemble_provider::ProviderUsageService,
+    pub provider_update: agentsassemble_provider::ProviderUpdateService,
     pub provider_login: agentsassemble_provider::ProviderLoginService,
     pub provider_adapter: ProviderAdapter,
     pub(crate) provider_credentials: ProviderCredentialStore,
@@ -152,6 +153,9 @@ impl AppState {
             provider_catalog,
             runtime_restart: crate::runtime_restart::RuntimeRestartControl::default(),
             local_resources: crate::local_resources::LocalResources::default(),
+            provider_update: agentsassemble_provider::ProviderUpdateService::new(
+                shutdown.child_token(),
+            ),
             provider_login: agentsassemble_provider::ProviderLoginService::new(
                 shutdown.child_token(),
             ),

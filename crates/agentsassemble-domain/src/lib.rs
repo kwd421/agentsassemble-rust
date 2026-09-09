@@ -26,10 +26,15 @@ mod persona_text;
 mod profile;
 mod projection;
 mod provider_request;
+mod provider_setup;
 pub use provider_request::{
     DurableProviderResolution, PendingProviderRequest, PendingProviderRequestState,
     ProviderRequest, ProviderRequestKind, ProviderRequestOption, ProviderRequestPrompt,
     ProviderRequestQuestion, ProviderRequestResolution,
+};
+pub use provider_setup::{
+    PROVIDER_SETUP_DESTINATIONS, PROVIDER_SETUP_HOST, PROVIDER_SETUP_SCHEME,
+    ProviderSetupDestination, ProviderUpdate, provider_setup_destination, provider_setup_from_url,
 };
 mod release_health;
 mod runtime_restart;

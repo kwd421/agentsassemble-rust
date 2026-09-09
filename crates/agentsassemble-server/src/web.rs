@@ -142,6 +142,8 @@ pub enum ServeError {
     ProviderLogin(#[from] agentsassemble_provider::ProviderLoginError),
     #[error("provider usage cleanup failed")]
     ProviderUsage(#[from] agentsassemble_provider::ProviderUsageError),
+    #[error(transparent)]
+    ProviderUpdate(#[from] agentsassemble_provider::ProviderUpdateError),
     #[error("runtime reconciliation task failed: {0}")]
     RuntimeReconciliationTask(tokio::task::JoinError),
     #[error("room runtime shutdown failed: {0}")]
@@ -392,6 +394,7 @@ async fn serve_runtime(
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();
     let provider_login = state.provider_login.clone();
+    let provider_update = state.provider_update.clone();
     let provider_usage = state.provider_usage.clone();
     let public_ingress = state.public_ingress();
     let connections = state.connections.clone();
@@ -439,10 +442,12 @@ async fn serve_runtime(
     http_admission.report_rejections();
     let (
         login_shutdown,
+        update_shutdown,
         usage_shutdown,
         (reconciliation_shutdown, (room_shutdown, provider_shutdown)),
     ) = tokio::join!(
         provider_login.shutdown(),
+        provider_update.shutdown(),
         provider_usage.shutdown(),
         drain_reconciliation_then(reconciliation_owner, async {
             let room_shutdown = rooms.shutdown().await;
@@ -456,6 +461,7 @@ async fn serve_runtime(
         .and_then(|result| result.map_err(|_| ServeError::PublicIngressCleanup));
     room_shutdown?;
     login_shutdown?;
+    update_shutdown?;
     usage_shutdown?;
     provider_shutdown?;
     reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;

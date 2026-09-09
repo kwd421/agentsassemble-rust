@@ -1,3 +1,6 @@
+mod provider_update;
+mod provider_update_specs;
+pub use provider_update::{ProviderUpdateError, ProviderUpdateService};
 mod acp_client;
 mod acp_runtime;
 mod catalog;
