@@ -8571,5 +8571,34 @@ loss, replacement and shutdown. Both pass in 0.01s without arbitrary sleeps or a
 actual provider/account. Provider all-target/all-feature Clippy and unchanged
 architecture/growth, 19 policy tests, format, diff and artifact gates pass. The prior
 packaged operational proof remains scoped to its recorded build; this correction's
-response-loss schedule is verified at the service owner. Daybreak re-approval is
-pending before Phase 9, and final integrated real-provider proof remains pending.
+response-loss schedule is verified at the service owner. Daybreak subsequently
+approved correction `f776e2e`, cumulative `d70224b..f776e2e`, exact pushed HEAD and
+the whole local Phase 8 contract at C0/H0/M0/L0. Its re-review was source/diff-only;
+historical `eb32eb7` retains its original REVISE disposition. Final integrated
+real-provider proof remains pending.
+
+## Phase 9 deferred startup and production graph (2026-09-09)
+
+Current source tracing found a remaining Mafia startup branch in
+`createStartupRoute`: `?mafia=` or `?mafiaGameId=` fabricated a game-labelled room
+and selected `live`. That invocation and its unused startup projection are now
+removed. Canonical direct-room and human-admission routing remain; the deferred
+Mafia parser, poller and API definitions, voice API source and RimWorld view are
+preserved for the user-deferred product scope.
+
+The updated existing startup test confirms those game parameters create no room,
+select no active room and keep the canonical lobby. All eight room-dock cases pass
+(0.007s). The production build passes TypeScript and the unchanged CSS check.
+A temporary read-only Vite output hook records the actual emitted module graph:
+one 541-module entry chunk, seven modules in the lazy AdminPanel chunk, and one in
+FriendsView. Neither the Mafia poller nor RimWorld view is in an emitted chunk.
+No emitted JavaScript contains the Mafia/voice API paths, Mafia startup key,
+RimWorld title or plugin-host handshake markers. The preserved game parser is
+eliminated from the production bundle after its invocation is disconnected.
+The main chunk is 948.09 kB (284.77 kB gzip); the existing 500 kB warning remains
+unchanged and is not evidence of a measured runtime bottleneck.
+
+Architecture/growth, 19 policy cases, format, diff and artifact gates pass. Current
+production-graph evidence is at `/tmp/aa-phase9-production-graph.json` with build
+output in `/tmp/aa-phase9-production-build.log`. Direct packaged final integration,
+current full exposure reconciliation and resource measurements remain pending.

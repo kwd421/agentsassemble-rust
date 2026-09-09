@@ -8,7 +8,9 @@ order below. The provider-first ordering has prior manual documentation cross-re
 the current checkpoint records later findings, not a new approval.
 Phase 1's corrected local contract is closed through `2a49599`: the completed Pro
 review's three medium findings are resolved, and Daybreak approved all 136 commits,
-the cumulative phase, final HEAD and complete local product contract. Phases 2 and 3 are closed through `5c8d17b` and `b8fd15b`; Phase 4 is active.
+the cumulative phase, final HEAD and complete local product contract. Phases 2–8
+are closed through their recorded Daybreak approvals in `WORKBOARD.md`; Phase 9 is
+active after the complete Phase 8 approval at `f776e2e`.
 Subsequent phases require Daybreak only; new Pro review waits until the full
 reimplementation is complete, as owned below.
 Freebuff is excluded; Antigravity moves exclusively to

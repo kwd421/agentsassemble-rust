@@ -42,11 +42,11 @@
   [Correction](docs/VERIFICATION.md#phase-7-whole-phase-review-correction-muted-owner-2026-09-09).
   [Contract and evidence](docs/specs/external-ai-admission-slice.md).
   New Pro review and authorized real-provider proof remain at full closeout.
-- Active: Phase 8 operational surfaces pass affected local checks, Windows custody
-  verification and direct packaged desktop/mobile/browser acceptance through `60f4621`.
-  Whole-phase Daybreak review found one usage freshness defect; its correction passes
-  affected verification and awaits re-approval before Phase 9.
-  [Contract](docs/specs/operational-surfaces-slice.md) and [evidence](docs/VERIFICATION.md#phase-8-packaged-operations-and-update-2026-09-09).
+- Phase 8 is closed through `f776e2e`: Daybreak approved its usage correction,
+  cumulative phase, exact HEAD and whole local contract at C0/H0/M0/L0.
+  [Contract](docs/specs/operational-surfaces-slice.md) and [correction](docs/VERIFICATION.md#phase-8-whole-phase-review-correction-usage-freshness-2026-09-09).
+- Active: Phase 9 final exposure, integration, resource measurement and authorized
+  real-provider verification. [Acceptance](docs/specs/final-parity-slice.md).
 - Scope, acceptance, dependency order, and finding placement:
   [product plan](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#phase-1--provider-contract-and-process-correctness).
 - Execution cadence and reviewer settings:

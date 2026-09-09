@@ -2,8 +2,8 @@
 
 Status: Phase 8 contract established after Phase 7 approval at `d70224b`.
 Operational entries, affected local checks and direct packaged acceptance pass through
-`60f4621`; whole-phase Daybreak review found one usage freshness defect, now corrected
-locally and awaiting re-approval. [Packaged evidence and limits](../VERIFICATION.md#phase-8-packaged-operations-and-update-2026-09-09)
+`60f4621`. Daybreak approved the usage correction, cumulative phase, exact `f776e2e`
+and whole local contract at C0/H0/M0/L0. [Packaged evidence and limits](../VERIFICATION.md#phase-8-packaged-operations-and-update-2026-09-09)
 supersede the pending execution notes below. Real-provider execution and both final
 reviewers remain governed by the product plan's final closeout gate.
 

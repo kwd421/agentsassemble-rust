@@ -38,10 +38,9 @@ export type StartupRoute = {
   guestSession: RoomGuestSession | null;
   guestJoinToken: string;
   directRoom: RoomDockItem | null;
-  mafiaRoom: RoomDockItem | null;
   startupRooms: RoomDockItem[];
   activeRoomId: string;
-  initialChannel: "lobby" | "live";
+  initialChannel: "lobby";
 };
 
 export type ServerRoomDockSource = {
@@ -414,19 +413,15 @@ export function createStartupRoute({ operatorPairingPending = false } = {}): Sta
         ? roomFromGuestSession(guestSession)
         : null;
   const directRoom = guestInvite ? null : roomFromDirectParams();
-  const mafiaRoom = guestInvite || directRoom ? null : roomFromMafiaParams();
-  const routeRoom = directRoom || mafiaRoom;
-  const startupRooms = guestInvite ? [guestInvite] : initialOperatorRooms(routeRoom);
-  const initialChannel: StartupRoute["initialChannel"] = mafiaRoom ? "live" : "lobby";
+  const startupRooms = guestInvite ? [guestInvite] : initialOperatorRooms(directRoom);
   return {
     guestInvite,
     guestSession,
     guestJoinToken,
-    directRoom: routeRoom,
-    mafiaRoom,
+    directRoom,
     startupRooms,
-    activeRoomId: guestInvite?.id || activeRoomIdForStartup(startupRooms, routeRoom),
-    initialChannel,
+    activeRoomId: guestInvite?.id || activeRoomIdForStartup(startupRooms, directRoom),
+    initialChannel: "lobby",
   };
 }
 

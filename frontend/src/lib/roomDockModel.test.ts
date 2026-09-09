@@ -42,8 +42,13 @@ describe("createStartupRoute", () => {
     expect(route.activeRoomId).toBe("");
   });
 
-  it("starts on the canonical lobby while the friends service has no Rust owner", () => {
-    expect(createStartupRoute().initialChannel).toBe("lobby");
+  it("does not activate a deferred game from startup parameters", () => {
+    window.history.replaceState({}, "", "/?mafia=deferred-game&mafiaGameId=other-game");
+    const route = createStartupRoute();
+    expect(route.initialChannel).toBe("lobby");
+    expect(route.directRoom).toBeNull();
+    expect(route.startupRooms).toEqual([]);
+    expect(route.activeRoomId).toBe("");
   });
 
   it("keeps a stored room session while a new invite is preflighted", () => {
