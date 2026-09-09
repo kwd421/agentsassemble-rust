@@ -63,6 +63,11 @@ driver's permission/model contract. Do not execute mutable original package path
 add a wrapper/environment fallback or weaken the existing cleanup proof. Verify
 dependency mutation/missing-file rejection, the installed launcher and complete
 packaged `auto` response/stop. The failed original generation remains uncertain.
+The first corrected package is rejected by persistence's still-single-file commit
+check. Share the Cursor package inspection/identity contract at the domain authority
+boundary, used by both bounded filesystem owners. Keep private staging and process
+lifetime with the provider; preserve persistence's pre-commit revalidation and
+transaction ordering. Do not duplicate the manifest policy or bypass the check.
 
 ## Acceptance and verification
 

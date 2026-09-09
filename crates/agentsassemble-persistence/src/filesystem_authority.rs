@@ -132,6 +132,13 @@ fn validate_sync(draft: &AgentSessionDraft) -> io::Result<()> {
 }
 
 fn runtime_executable_identity(provider_kind: &str, executable: &Path) -> io::Result<String> {
+    #[cfg(unix)]
+    if provider_kind == "cursor_live_session"
+        && let Some(package) =
+            agentsassemble_domain::cursor_package::CursorExecutablePackage::inspect(executable)?
+    {
+        return Ok(package.identity());
+    }
     let executable_identity = open_executable_identity(executable)?;
     if provider_kind != "codex_live_session" {
         return Ok(executable_identity);
@@ -263,6 +270,33 @@ mod tests {
         let changed = runtime_executable_identity("codex_live_session", &executable)
             .unwrap_or_else(|error| panic!("reidentify Codex bundle: {error}"));
         assert_ne!(first, changed);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn cursor_package_authority_is_accepted_then_revalidated_before_commit() {
+        use agentsassemble_domain::cursor_package::CursorExecutablePackage;
+        let root =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create Cursor fixture: {error}"));
+        let entry = root.path().join("cursor-agent");
+        write_executable(&entry, b"#!/bin/sh\n");
+        write_executable(&root.path().join("node"), b"node-fixture");
+        std::fs::write(root.path().join("index.js"), "original-entry")
+            .unwrap_or_else(|error| panic!("write Cursor entry: {error}"));
+        let entry = entry
+            .canonicalize()
+            .unwrap_or_else(|error| panic!("canonicalize Cursor: {error}"));
+        let package = CursorExecutablePackage::inspect(&entry)
+            .unwrap_or_else(|error| panic!("inspect Cursor: {error}"))
+            .unwrap_or_else(|| panic!("script package missing"));
+        let mut draft = api_draft();
+        draft.provider_kind = "cursor_live_session".to_owned();
+        draft.executable = entry.to_string_lossy().into_owned();
+        draft.executable_identity = package.identity();
+        assert!(validate_sync(&draft).is_ok());
+        std::fs::write(root.path().join("index.js"), "changed-entry")
+            .unwrap_or_else(|error| panic!("change Cursor entry: {error}"));
+        assert!(validate_sync(&draft).is_err());
     }
 
     #[test]

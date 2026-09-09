@@ -44,6 +44,8 @@ dependencies = [
  "caseless",
  "chrono",
  "regex",
+ "rustix",
+ "same-file",
  "serde",
  "serde_json",
  "sha2",
@@ -52,6 +54,7 @@ dependencies = [
  "unicode-general-category",
  "url",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]

@@ -8768,3 +8768,19 @@ replacement, dependency changes/removal/links, missing Node and byte bounds. Nin
 ACP tests pass; affected provider/server all-target/all-feature Clippy, architecture,
 growth, 19 policy/artifact-owner tests, formatting and diff checks pass. Real
 packaged Cursor response/stop verification remains pending below.
+
+The first corrected release (`55653d8`) reaches the real packaged add/start action,
+but persistence rejects its bundle identity before committing a new session. Its
+independent executable check still assumes one file. No Cursor process/row starts;
+normal app quit leaves the exact three observed app/server PIDs absent. This is
+additional integration evidence, not a passing provider turn.
+
+Cursor package inspection and identity now have one shared domain owner used by
+both provider and persistence filesystem workers. Runtime staging remains with the
+provider, and persistence retains the same pre-commit check and transaction order.
+The shared package is synchronous bounded filesystem authority; it owns no task,
+process, credential, protocol, or database state. Native entries keep the existing
+single-file identity. The five Cursor tests pass after the move; four persistence
+filesystem-authority tests pass, including acceptance of the shared identity followed
+by rejection after a module changes. Affected all-target/all-feature Clippy and
+unchanged architecture, growth, 19 policy, format, diff and artifact gates pass.

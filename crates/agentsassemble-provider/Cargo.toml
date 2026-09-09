@@ -37,7 +37,6 @@ uuid.workspace = true
 url.workspace = true
 
 [target.'cfg(unix)'.dependencies]
-walkdir = "2.5.0"
 command-fds.workspace = true
 nix = { version = "0.31.3", default-features = false }
 rustix.workspace = true

@@ -17,5 +17,10 @@ unicode-general-category.workspace = true
 uuid.workspace = true
 url.workspace = true
 
+[target.'cfg(unix)'.dependencies]
+same-file.workspace = true
+walkdir = "2.5.0"
+rustix.workspace = true
+
 [lints]
 workspace = true

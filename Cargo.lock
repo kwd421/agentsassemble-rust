@@ -76,6 +76,8 @@ dependencies = [
  "caseless",
  "chrono",
  "regex",
+ "rustix",
+ "same-file",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -84,6 +86,7 @@ dependencies = [
  "unicode-general-category",
  "url",
  "uuid",
+ "walkdir",
 ]
 
 [[package]]
@@ -172,7 +175,6 @@ dependencies = [
  "toml",
  "url",
  "uuid",
- "walkdir",
  "windows-sys 0.61.2",
 ]
 

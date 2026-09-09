@@ -10,6 +10,8 @@ mod asset;
 mod canonical_json;
 mod channel_messages;
 mod command;
+#[cfg(unix)]
+pub mod cursor_package;
 mod diagnostic;
 mod friend;
 pub use friend::{FriendDetails, FriendParticipantType, SaveFriend, SavedFriend};
