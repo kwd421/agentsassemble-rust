@@ -3,6 +3,7 @@ import { afterEach, expect, it, vi } from "vitest";
 import { fetchLocalResources } from "../api/localResources";
 import AdminPanel from "./AdminPanel";
 
+vi.mock("./components/ReleaseHealthPanel", () => ({ default: () => null }));
 vi.mock("../api/localResources", () => ({ fetchLocalResources: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 

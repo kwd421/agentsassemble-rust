@@ -1,3 +1,4 @@
+import ReleaseHealthPanel from "./components/ReleaseHealthPanel";
 import { useEffect, useState } from "react";
 import { Activity, RefreshCw, X } from "lucide-react";
 import { fetchLocalResources, type LocalResourceStatus } from "../api/localResources";
@@ -53,6 +54,7 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
             </article>)}
           </section>
         </>}
+        <ReleaseHealthPanel />
       </div>
     </section>
   );

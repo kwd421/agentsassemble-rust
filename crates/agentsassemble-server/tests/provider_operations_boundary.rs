@@ -18,7 +18,14 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
     let tickets = TicketStore::new(Duration::from_secs(30), 16);
     // This provider only discovers static local metadata; no account or executable runs.
     let catalog = ProviderCatalogService::discovering_selected("custom_api")?;
-    let state = AppState::local(store, tickets.clone(), catalog.clone()).await?;
+    let root = tempfile::tempdir()?;
+    let state = AppState::local_with_provider_state_root(
+        store,
+        tickets.clone(),
+        catalog.clone(),
+        root.path(),
+    )
+    .await?;
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let route = format!(
         "http://{}/api/provider-catalog/refresh",
@@ -88,6 +95,7 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
     assert_login_authority(&client, &route, &tickets).await?;
     assert_usage_authority(&client, &route, &tickets).await?;
     assert_resource_authority(&client, &route, &tickets).await?;
+    assert_health_authority(&client, &route, &tickets, root.path()).await?;
     cancellation.cancel();
     tokio::time::timeout(Duration::from_secs(8), server).await???;
     Ok(())
@@ -209,5 +217,47 @@ async fn assert_resource_authority(
             .status(),
         StatusCode::UNAUTHORIZED
     );
+    Ok(())
+}
+
+async fn assert_health_authority(
+    client: &Client,
+    route: &str,
+    tickets: &TicketStore,
+    root: &std::path::Path,
+) -> Result<(), Box<dyn std::error::Error>> {
+    for suffix in ["release-health", "release-health/queue"] {
+        let route = route.replace("provider-catalog/refresh", suffix);
+        assert_eq!(
+            client.get(&route).body("invalid").send().await?.status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let token = tickets
+            .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+            .await?
+            .ticket;
+        let response = client.get(&route).bearer_auth(token).send().await?;
+        assert_eq!(response.status(), StatusCode::OK);
+        assert_eq!(response.headers()["cache-control"], "private, no-store");
+        let value: serde_json::Value = response.json().await?;
+        if suffix.ends_with("queue") {
+            assert!(value.is_null());
+        } else {
+            assert_eq!(value.as_array().map(Vec::len), Some(6));
+        }
+    }
+    std::fs::create_dir(root.join("release_health"))?;
+    std::fs::write(root.join("release_health/latest.json"), b"corrupt")?;
+    let response = client
+        .get(route.replace("provider-catalog/refresh", "release-health/queue"))
+        .bearer_auth(
+            tickets
+                .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+                .await?
+                .ticket,
+        )
+        .send()
+        .await?;
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     Ok(())
 }

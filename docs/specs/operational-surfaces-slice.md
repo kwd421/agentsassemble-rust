@@ -339,3 +339,18 @@ release-health adds only an explicit working directory and pre-cancel rejection.
 Generated types, all-target/all-feature Clippy, CLI build and unchanged mandatory
 gates pass. No provider, account or remote publication ran; stable-entry tests use
 local protocol fixtures. The private HTTP/report UI connection is the next slice.
+
+The runtime's existing state-root constructor now binds report reads to the same
+directory as its database/provider state. Private catalog and queue GETs consume
+operator authority before body handling; reads use the bounded typed report owner
+on the blocking pool. A runtime without a configured state root explicitly rejects
+report reads. The server-status panel reads on opening and explicit refresh only,
+shows last completion time, and distinguishes missing, failed/timed-out and unreadable
+reports. Directly replaced Python-era label/schema helpers and their self-tests are
+removed; the generated current contract owns status labels.
+
+The actual TCP route verifies unauthenticated denial, private cache headers, missing
+report null and corrupt-report 503 (0.05s). Two frontend cases cover resource refresh
+and health missing/timeout/error rendering; production build with unchanged CSS,
+Clippy and mandatory gates pass. No automatic command execution or polling is mounted.
+Direct packaged whole-phase proof remains pending.

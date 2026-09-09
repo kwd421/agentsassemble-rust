@@ -50,6 +50,7 @@ pub struct AppState {
     pub(crate) public_ingress: PublicIngress,
     pub server_product_surface: Arc<ServerProductSurface>,
     pub frontend_root: Option<PathBuf>,
+    pub(crate) runtime_state_root: Option<PathBuf>,
     pub(crate) central_registration_enabled: bool,
 }
 
@@ -92,14 +93,16 @@ impl AppState {
             provider_credentials.clone(),
             state_root,
         );
-        Self::local_with_provider_dependencies(
+        let mut state = Self::local_with_provider_dependencies(
             store,
             tickets,
             provider_catalog,
             provider_adapter,
             provider_credentials,
         )
-        .await
+        .await?;
+        state.runtime_state_root = Some(state_root.to_owned());
+        Ok(state)
     }
 
     /// Builds a local runtime with the database-bound central host identity.
@@ -171,6 +174,7 @@ impl AppState {
                 false, false,
             )),
             frontend_root: None,
+            runtime_state_root: None,
             central_registration_enabled: false,
         })
     }

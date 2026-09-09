@@ -73,81 +73,6 @@ export interface LiveAgent {
   capabilities?: string[];
 }
 
-export interface ReleaseHealthCheck {
-  id: string;
-  label: string;
-  kind: string;
-  category: string;
-  requires: string[];
-  optional?: boolean;
-  order?: number | null;
-  default_run?: boolean;
-  safety_class?: string;
-}
-
-export interface ReleaseHealthQueueCheck extends ReleaseHealthCheck {
-  latest_status: "passed" | "failed" | "skipped" | "not_run" | "unknown";
-  latest_duration_seconds?: number | null;
-  skipped_reason?: string;
-  benchmark_summary?: ReleaseHealthBenchmarkSummary;
-}
-
-export interface ReleaseHealthBenchmarkSignal {
-  name: string;
-  ok: boolean;
-  value_ms?: number;
-  ceiling_ms?: number;
-  value?: number;
-  floor?: number;
-}
-
-export interface ReleaseHealthBenchmarkSummary {
-  status: string;
-  metrics_summary?: {
-    lobby_append_p99_ms?: number | null;
-    live_append_p99_ms?: number | null;
-    lobby_read_after_cursor_p99_ms?: number | null;
-    live_read_after_cursor_p99_ms?: number | null;
-    lobby_tail_read_ms?: number | null;
-    live_tail_read_ms?: number | null;
-    lobby_sse_append_to_frame_p99_ms?: number | null;
-    flow_normalized_improvement?: number | null;
-    flow_anchor_share_off?: number | null;
-    flow_anchor_share_on?: number | null;
-    flow_anchor_share_improvement?: number | null;
-    flow_scheduler_predicate_p99_ms?: number | null;
-  };
-  regression_signals?: ReleaseHealthBenchmarkSignal[];
-}
-
-export interface ReleaseHealthCatalog {
-  status: string;
-  schema_version: number;
-  generated_at?: string;
-  checks: ReleaseHealthCheck[];
-}
-
-export interface ReleaseHealthQueue {
-  status: string;
-  schema_version: number;
-  generated_at?: string;
-  source: {
-    has_latest_run: boolean;
-    latest_status?: string;
-    latest_completed_at?: string;
-    latest_duration_seconds?: number | null;
-  };
-  summary: {
-    default_total: number;
-    opt_in_total: number;
-    latest_total: number;
-    latest_passed: number;
-    latest_failed: number;
-    latest_skipped: number;
-  };
-  checks: ReleaseHealthQueueCheck[];
-}
-
 export interface MafiaPlayer {
   agent_id: string;
   display_name: string;
@@ -195,13 +120,7 @@ export async function chooseLocalWorkspace(): Promise<{
   return postJson("/api/local/workspace-picker", {});
 }
 
-export function fetchReleaseHealth() {
-  return fetchJson<ReleaseHealthCatalog>("/api/release-health");
-}
 
-export function fetchReleaseHealthQueue() {
-  return fetchJson<ReleaseHealthQueue>("/api/release-health/queue");
-}
 
 export function fetchMafiaGame(gameId: string, viewerAgentId = "") {
   const query = new URLSearchParams({
