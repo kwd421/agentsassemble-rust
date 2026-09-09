@@ -88,6 +88,7 @@ mod bootstrap;
 mod channel_messages;
 mod command_admission;
 mod runtime_restart;
+mod runtime_restart_recovery;
 pub use runtime_restart::{RuntimeRestartPhase, RuntimeRestartRecord, RuntimeRestartTarget};
 mod database_target;
 mod filesystem_authority;

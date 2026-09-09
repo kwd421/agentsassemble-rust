@@ -11,6 +11,10 @@ const RESTART_KEY: &str = "runtime_restart_v1";
 #[serde(rename_all = "snake_case")]
 pub enum RuntimeRestartPhase {
     Quiescing,
+    Draining,
+    Recovering,
+    Completed,
+    Failed,
     Aborted,
 }
 
@@ -29,7 +33,15 @@ pub struct RuntimeRestartRecord {
     pub phase: RuntimeRestartPhase,
     pub updated_at: DateTime<Utc>,
     pub targets: Vec<RuntimeRestartTarget>,
-    source_generation: String,
+    pub(crate) source_generation: String,
+    pub(crate) recovery_generation: Option<String>,
+    pub(crate) candidate_identity: Option<String>,
+}
+
+impl RuntimeRestartPhase {
+    pub(crate) const fn blocks_admission(self) -> bool {
+        matches!(self, Self::Quiescing | Self::Draining | Self::Recovering)
+    }
 }
 
 impl SqliteStore {
@@ -67,7 +79,7 @@ impl SqliteStore {
                 transaction.commit().await?;
                 return Ok(previous);
             }
-            if previous.phase == RuntimeRestartPhase::Quiescing {
+            if previous.phase.blocks_admission() {
                 return Err(busy());
             }
         }
@@ -78,6 +90,8 @@ impl SqliteStore {
             updated_at: Utc::now(),
             targets,
             source_generation: self.runtime_generation().to_owned(),
+            recovery_generation: None,
+            candidate_identity: None,
         };
         save_restart(&mut transaction, &record).await?;
         transaction.commit().await?;
@@ -99,6 +113,12 @@ impl SqliteStore {
         {
             return Err(stale());
         }
+        if !matches!(
+            record.phase,
+            RuntimeRestartPhase::Quiescing | RuntimeRestartPhase::Aborted
+        ) {
+            return Err(stale());
+        }
         if record.phase == RuntimeRestartPhase::Quiescing {
             record.phase = RuntimeRestartPhase::Aborted;
             record.updated_at = Utc::now();
@@ -114,7 +134,7 @@ pub(crate) async fn restart_quiescing(
 ) -> Result<bool, PersistenceError> {
     Ok(load_restart(transaction)
         .await?
-        .is_some_and(|record| record.phase == RuntimeRestartPhase::Quiescing))
+        .is_some_and(|record| record.phase.blocks_admission()))
 }
 
 pub(crate) async fn require_runtime_admission(
@@ -131,7 +151,7 @@ pub(crate) async fn require_runtime_admission(
     Ok(())
 }
 
-async fn load_restart(
+pub(crate) async fn load_restart(
     transaction: &mut Transaction<'_, Sqlite>,
 ) -> Result<Option<RuntimeRestartRecord>, PersistenceError> {
     let stored: Option<String> =
@@ -144,7 +164,7 @@ async fn load_restart(
         .transpose()
 }
 
-async fn save_restart(
+pub(crate) async fn save_restart(
     transaction: &mut Transaction<'_, Sqlite>,
     record: &RuntimeRestartRecord,
 ) -> Result<(), PersistenceError> {
@@ -230,7 +250,7 @@ fn busy() -> PersistenceError {
     )
 }
 
-fn stale() -> PersistenceError {
+pub(crate) fn stale() -> PersistenceError {
     rejected(
         "runtime_restart_stale",
         "This runtime does not own the requested restart transition.",

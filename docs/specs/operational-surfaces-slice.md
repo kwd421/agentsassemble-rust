@@ -539,3 +539,47 @@ pass. The managed-ingress test's old plain-text HTML fixture now contains the re
 asset entry required by the existing frontend-release owner. No added background
 work or polling; readiness latency now includes the required startup reconciliation.
 POSIX control-frame/descriptor handoff and full restart completion remain pending.
+
+
+## Restart handoff and reconstruction ownership
+
+The accepted operation progresses from quiescing to draining, then recovering and
+completed. Only the source generation may begin draining, bound to the prepared
+executable's content identity. A replacement must present that operation and image
+identity after ordinary positive custody reconciliation. The replacement generation
+then owns reconstruction; an older generation cannot release its barrier. Failed
+reconstruction can become terminal only after positive cleanup has removed all
+owned runtime authority. Unconfirmed cleanup retains the nonterminal barrier.
+
+The durable restart target list grants only reconstruction of those exact managed
+session keys. It does not manufacture human membership or a room command. Load the
+positively stopped target, reserve through the existing provider supervisor, then
+atomically persist the exact handles and `starting` state under the restart operation
+before any provider launch. The existing provider confirmation validator and session
+transition apply the actual result. Keep paused targets paused and keep floor
+assignment blocked until every target is confirmed. Existing runtime reconciliation
+already owns complete handles without a pending human lifecycle command; use that
+path for interrupted reconstruction, without introducing a second custody store or
+changing ordinary command reservation rules.
+
+POSIX replacement will preserve the desktop-owned PID, process group, control pipe,
+loopback listener and private CLI socket. Validate the staged executable's fixed
+protocol/schema preflight before quiescence, finish admitted responses and owned
+cleanup before exec, and report completed only after replacement reconstruction.
+The original executable/frontend source paths remain the candidate sources for later
+updates. Malformed inheritance, incompatible images, failed exec and uncertain
+response loss must remain explicit errors or unknown outcomes; none may bind a new
+address and claim a successful handoff. Local lifecycle tests precede real packaged
+same-PID listener/reconnect proof. Real providers remain at the authorized final stage.
+
+The persistence owner now binds drain to a candidate identity and reconstruction to
+the replacement generation. It validates positively stopped targets before reserving
+new custody, applies exact provider confirmations, preserves paused state, and keeps
+admission blocked through recovery. Failure can release admission only after captured
+custody is positively stopped. The interrupted-start case uses ordinary runtime
+reconciliation with no fabricated human command reservation. Five restart scenarios
+pass (0.11s), including wrong image/generation/target, pre-authorization confirmation,
+incomplete completion, paused/idle restoration and cleanup before retry. All 326
+persistence tests pass (4.42s); persistence Clippy and mandatory gates pass. These
+are explicitly local store observations; executable replacement and provider startup
+remain unverified until their runtime owner and packaged flow are connected.

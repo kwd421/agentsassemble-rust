@@ -172,24 +172,8 @@ async fn queue_local_fixture(
     store: &SqliteStore,
     principal: &AuthenticatedPrincipal,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let mut transaction = store.pool.begin().await?;
-    let session = super::load_session(&mut transaction, "general", AGENT_ID).await?;
-    transaction.commit().await?;
-    let runtime = crate::AgentResidentRuntime {
-        runtime_handle_id: session.runtime_handle_id,
-        runtime_owner_id: session.runtime_owner_id,
-        runtime_lease_token: session.runtime_lease_token,
-        runtime_profile_key: session.runtime_profile_key,
-    };
+    let runtime = pause_local_fixture(store, principal).await?;
     let payload = json!({"agent_id": AGENT_ID});
-    store
-        .execute_agent_pause(
-            TrustedPrincipal(principal),
-            "fixture-pause",
-            &payload,
-            &runtime,
-        )
-        .await?;
     let message = store
         .execute_message_with_turn(
             principal,
@@ -209,4 +193,237 @@ async fn queue_local_fixture(
         .await?
         .ok_or("fixture was not paused")?;
     Ok(message.outcome.event.id)
+}
+
+#[tokio::test]
+async fn replacement_reconstructs_only_captured_targets_and_preserves_pause()
+-> Result<(), Box<dyn std::error::Error>> {
+    use agentsassemble_domain::AgentRuntimeStatus;
+    for paused in [false, true] {
+        let (store, principal, directory) = fixture().await;
+        start_local_fixture(&store, &principal).await?;
+        if paused {
+            pause_local_fixture(&store, &principal).await?;
+        }
+        assert_eq!(
+            store.prepare_runtime_restart(OPERATION).await?.targets[0].paused,
+            paused
+        );
+        store
+            .begin_runtime_restart_drain(OPERATION, "candidate-image")
+            .await?;
+        assert!(store.abort_runtime_restart(OPERATION).await.is_err());
+        assert!(
+            store
+                .begin_runtime_restart_recovery(OPERATION, "candidate-image")
+                .await
+                .is_err()
+        );
+        assert!(
+            store
+                .fail_runtime_restart_after_cleanup(OPERATION)
+                .await
+                .is_err()
+        );
+        stop_restart_fixture(&store).await?;
+        store.pool.close().await;
+        drop(store);
+        let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
+        assert!(
+            store
+                .begin_runtime_restart_recovery(OPERATION, "wrong-image")
+                .await
+                .is_err()
+        );
+        store
+            .begin_runtime_restart_recovery(OPERATION, "candidate-image")
+            .await?;
+        assert!(store.complete_runtime_restart(OPERATION).await.is_err());
+        assert!(
+            store
+                .runtime_restart_target(OPERATION, "general", "unrelated")
+                .await
+                .is_err()
+        );
+        reconstruct_local_fixture(&store, paused).await?;
+        assert!(store.assign_pending_turn("general").await?.is_none());
+        let complete = store.complete_runtime_restart(OPERATION).await?;
+        assert_eq!(complete.phase, RuntimeRestartPhase::Completed);
+        assert_eq!(store.prepare_runtime_restart(OPERATION).await?, complete);
+        let session = store
+            .snapshot("general", 0, 200)
+            .await?
+            .agent_sessions
+            .remove(0);
+        assert_eq!(
+            session.runtime_status,
+            if paused {
+                AgentRuntimeStatus::Paused
+            } else {
+                AgentRuntimeStatus::Idle
+            }
+        );
+        assert_eq!(session.enabled, !paused);
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn interrupted_reconstruction_uses_existing_custody_cleanup_before_failure()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, principal, directory) = fixture().await;
+    start_local_fixture(&store, &principal).await?;
+    store.prepare_runtime_restart(OPERATION).await?;
+    store
+        .begin_runtime_restart_drain(OPERATION, "candidate-image")
+        .await?;
+    stop_restart_fixture(&store).await?;
+    store.pool.close().await;
+    drop(store);
+    let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
+    store
+        .begin_runtime_restart_recovery(OPERATION, "candidate-image")
+        .await?;
+    store
+        .authorize_runtime_restart_target(
+            OPERATION,
+            &crate::RuntimeRestartTarget {
+                room_id: "general".into(),
+                session_id: AGENT_ID.into(),
+                paused: false,
+            },
+            "handle",
+            "owner",
+            "lease",
+        )
+        .await?;
+    assert!(
+        store
+            .fail_runtime_restart_after_cleanup(OPERATION)
+            .await
+            .is_err()
+    );
+    stop_restart_fixture(&store).await?;
+    assert_eq!(
+        store
+            .fail_runtime_restart_after_cleanup(OPERATION)
+            .await?
+            .phase,
+        RuntimeRestartPhase::Failed
+    );
+    assert!(matches!(
+        store
+            .prepare_agent_start(
+                TrustedPrincipal(&principal),
+                "retry-after-failed-restart",
+                &json!({"agent_id": AGENT_ID})
+            )
+            .await?,
+        AgentStartPlan::Start(_)
+    ));
+    Ok(())
+}
+
+async fn stop_restart_fixture(store: &SqliteStore) -> Result<(), Box<dyn std::error::Error>> {
+    let candidate = store
+        .load_runtime_reconciliation_candidate("general", AGENT_ID)
+        .await?
+        .ok_or("fixture runtime custody missing")?;
+    store
+        .apply_runtime_shutdown_reconciliation(
+            &candidate,
+            &crate::RuntimeReconciliationObservation::Gone,
+        )
+        .await?;
+    Ok(())
+}
+
+async fn pause_local_fixture(
+    store: &SqliteStore,
+    principal: &AuthenticatedPrincipal,
+) -> Result<crate::AgentResidentRuntime, Box<dyn std::error::Error>> {
+    let mut transaction = store.pool.begin().await?;
+    let session = super::load_session(&mut transaction, "general", AGENT_ID).await?;
+    transaction.commit().await?;
+    let runtime = crate::AgentResidentRuntime {
+        runtime_handle_id: session.runtime_handle_id,
+        runtime_owner_id: session.runtime_owner_id,
+        runtime_lease_token: session.runtime_lease_token,
+        runtime_profile_key: session.runtime_profile_key,
+    };
+    let payload = json!({"agent_id": AGENT_ID});
+    store
+        .execute_agent_pause(
+            TrustedPrincipal(principal),
+            "fixture-pause",
+            &payload,
+            &runtime,
+        )
+        .await?;
+    Ok(runtime)
+}
+
+async fn reconstruct_local_fixture(
+    store: &SqliteStore,
+    paused: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let old = store
+        .runtime_restart_target(OPERATION, "general", AGENT_ID)
+        .await?;
+    let started = AgentRuntimeStarted {
+        runtime_handle_id: "restart-handle".into(),
+        runtime_owner_id: "restart-owner".into(),
+        runtime_lease_token: "restart-lease".into(),
+        provider_session_id: old.provider_session_id,
+        runtime_reused: false,
+        provider_session_reused: true,
+        provider_session_active: true,
+    };
+    assert!(
+        store
+            .complete_runtime_restart_target(OPERATION, "general", AGENT_ID, &started)
+            .await
+            .is_err()
+    );
+    store
+        .authorize_runtime_restart_target(
+            OPERATION,
+            &crate::RuntimeRestartTarget {
+                room_id: "general".into(),
+                session_id: AGENT_ID.into(),
+                paused,
+            },
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await?;
+    assert!(
+        store
+            .runtime_restart_target(OPERATION, "general", AGENT_ID)
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .fail_runtime_restart_after_cleanup(OPERATION)
+            .await
+            .is_err()
+    );
+    let candidate = store
+        .load_runtime_reconciliation_candidate("general", AGENT_ID)
+        .await?
+        .ok_or("restart custody disappeared")?;
+    assert!(
+        candidate.reservation.is_none(),
+        "restart must not fabricate a human command"
+    );
+    assert_eq!(
+        candidate.session.runtime_handle_id,
+        started.runtime_handle_id
+    );
+    store
+        .complete_runtime_restart_target(OPERATION, "general", AGENT_ID, &started)
+        .await?;
+    Ok(())
 }
