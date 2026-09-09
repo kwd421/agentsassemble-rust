@@ -36,7 +36,8 @@
   remote Connector retry custody, terminal leave receipt recovery and unconfirmed
   login cleanup retention. Remote private custody and exact terminal leave recovery
   now pass affected persistence, actual HTTP MCP and stdio verification. Login
-  cleanup retention and affected re-review continue.
+  cleanup retention also passes controlled task-loss, retry/cancel/shutdown and
+  affected transport checks. Final packaged verification and Pro re-review continue.
   The reviewer also reports incomplete historical patch reading; all individual
   Phase 7–9 commits and whole-group completion still require finished coverage.
   [Correction contract](docs/specs/final-parity-slice.md#external-session-action-ownership-correction-2026-09-10).

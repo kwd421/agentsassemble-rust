@@ -59,6 +59,15 @@ struct LoginRun {
     result: LoginResult,
 }
 
+impl LoginRun {
+    fn retains_custody(&self) -> bool {
+        matches!(
+            self.result.peek(),
+            None | Some(Err(ProviderLoginError::CleanupUnconfirmed))
+        )
+    }
+}
+
 struct LoginOwner {
     cancellation: CancellationToken,
     runs: Mutex<BTreeMap<&'static str, LoginRun>>,
@@ -107,7 +116,7 @@ impl ProviderLoginService {
             }
             if let Some(run) = runs
                 .get(registration.id)
-                .filter(|run| run.result.peek().is_none())
+                .filter(|run| run.retains_custody())
             {
                 run.result.clone()
             } else {
@@ -143,10 +152,7 @@ impl ProviderLoginService {
     pub async fn cancel(&self, provider_id: &str) -> Result<bool, ProviderLoginError> {
         let result = {
             let runs = self.0.runs.lock().await;
-            let Some(run) = runs
-                .get(provider_id)
-                .filter(|run| run.result.peek().is_none())
-            else {
+            let Some(run) = runs.get(provider_id).filter(|run| run.retains_custody()) else {
                 return Ok(false);
             };
             run.cancellation.cancel();
@@ -165,8 +171,15 @@ impl ProviderLoginService {
     /// Reports unconfirmed process cleanup or task failure.
     pub async fn shutdown(&self) -> Result<(), ProviderLoginError> {
         self.0.cancellation.cancel();
-        let runs = std::mem::take(&mut *self.0.runs.lock().await);
-        let results = join_all(runs.into_values().map(|run| run.result)).await;
+        let results: Vec<_> = self
+            .0
+            .runs
+            .lock()
+            .await
+            .values()
+            .map(|run| run.result.clone())
+            .collect();
+        let results = join_all(results).await;
         if results.contains(&Err(ProviderLoginError::CleanupUnconfirmed)) {
             return Err(ProviderLoginError::CleanupUnconfirmed);
         }
@@ -261,6 +274,10 @@ mod tests {
             service.login_registered(&FAILURE).await,
             Err(ProviderLoginError::Failed)
         );
+        assert_eq!(
+            service.login_registered(&SUCCESS).await,
+            Ok(ProviderLoginOutcome::Authenticated)
+        );
         for provider in ["custom_api", "antigravity", "freebuff", "unknown"] {
             assert_eq!(
                 service.login(provider).await,
@@ -269,6 +286,51 @@ mod tests {
         }
         assert_eq!(service.cancel("codex").await, Ok(false));
         assert_eq!(service.shutdown().await, Ok(()));
+        assert_eq!(
+            service.login_registered(&SUCCESS).await,
+            Err(ProviderLoginError::Cancelled)
+        );
+    }
+
+    #[tokio::test]
+    async fn observed_cleanup_failure_blocks_replacement_and_survives_cancel_and_shutdown() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static LAUNCHES: AtomicUsize = AtomicUsize::new(0);
+        fn interrupted_launch() -> Result<Vec<(String, String)>, crate::runtime::DriverError> {
+            LAUNCHES.fetch_add(1, Ordering::SeqCst);
+            panic!("controlled login task loss before native authentication launch");
+        }
+        static UNCONFIRMED: ProviderRegistration = ProviderRegistration {
+            probe_executable: "/usr/bin/true",
+            login: Some(ProviderLoginSpec {
+                flow: ProviderLoginFlow::BrowserOauth,
+                arguments: &[],
+                environment: Some(interrupted_launch),
+            }),
+            ..crate::registration::CODEX_PROVIDER
+        };
+        let service = ProviderLoginService::new(CancellationToken::new());
+        let expected = Err(ProviderLoginError::CleanupUnconfirmed);
+        assert_eq!(service.login_registered(&UNCONFIRMED).await, expected);
+        assert_eq!(LAUNCHES.load(Ordering::SeqCst), 1);
+        // The first failure is already observed, including Shared::peek returning Some.
+        assert_eq!(service.login_registered(&UNCONFIRMED).await, expected);
+        assert_eq!(service.login_registered(&SUCCESS).await, expected);
+        assert_eq!(LAUNCHES.load(Ordering::SeqCst), 1);
+        assert_eq!(
+            service.cancel("codex").await,
+            Err(ProviderLoginError::CleanupUnconfirmed)
+        );
+        for _ in 0..2 {
+            assert_eq!(
+                service.shutdown().await,
+                Err(ProviderLoginError::CleanupUnconfirmed)
+            );
+            assert_eq!(
+                service.cancel("codex").await,
+                Err(ProviderLoginError::CleanupUnconfirmed)
+            );
+        }
         assert_eq!(
             service.login_registered(&SUCCESS).await,
             Err(ProviderLoginError::Cancelled)

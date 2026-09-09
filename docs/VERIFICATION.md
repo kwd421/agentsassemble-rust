@@ -9550,3 +9550,32 @@ bounded identity and exact receipt reads. A fresh HTTP leave adds that receipt
 inspection before its existing mutation path. No table, token, process, background
 work or permissive session authorization is added. GUI validation and the remaining
 login correction precede the final completed Pro coverage/re-review.
+
+
+## Final Pro G3-M2 correction: retained login cleanup uncertainty (2026-09-10)
+
+The login owner now retains both pending runs and observed `CleanupUnconfirmed`
+results. Repeated login or cancel returns the same owned uncertainty and cannot
+replace the provider's slot with a new task. Shutdown clones and joins the bounded
+retained results instead of draining away custody evidence; a second shutdown or
+cancel cannot report success merely because the first caller observed the error.
+Ordinary authentication failure remains replaceable after confirmed native exit.
+No additional authority, task, timer, persistent store or cleanup probe is added.
+
+Both login service cases pass in 0.01 seconds. A controlled failure in the actual
+spawned login task reaches the owner's existing unconfirmed-cleanup mapping. After
+that result has been observed, two retries cannot enter another launch; a successful
+fixture cannot overwrite it. Cancel and two successive shutdown/cancel attempts
+continue returning `CleanupUnconfirmed`, and shutdown rejects new work. The ordinary
+native failure-then-success path remains passing. Four existing process cases pass,
+including explicit synthetic unconfirmed cleanup and observed native descendant
+absence after confirmed cancellation. The existing local-operator operation TCP
+boundary passes in 0.07 seconds, and all four login UI receipt/cancellation tests
+pass. Provider/server all-target/all-feature Clippy, architecture, source growth,
+nineteen policy/artifact-owner tests, formatting, diff and artifact maintenance pass.
+
+The controlled task-loss test does not claim an actual orphaned provider process or
+a live GUI cleanup failure. Its failure is observed before native authentication
+launch; the lower process owner separately exercises its unconfirmed-cleanup result.
+The existing UI continues rendering the server's explicit failure. Final packaged
+integration and completed Pro coverage/re-review remain pending.

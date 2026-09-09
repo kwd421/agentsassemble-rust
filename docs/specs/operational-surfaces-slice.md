@@ -188,6 +188,24 @@ Packaged operation proof and whole-phase cost measurement remain pending.
 
 ## Browser OAuth login implementation
 
+### Final Pro correction: unconfirmed login cleanup ownership (2026-09-10)
+
+Pro G3-M2 confirms that observing `CleanupUnconfirmed` made a login run replaceable:
+the next login could overwrite that provider's record and make shutdown forget the
+unresolved process custody. Keep the existing per-provider run for both a pending
+result and an observed unconfirmed cleanup. Retry and cancel return that same
+uncertainty until the owning service has actual cleanup evidence; the current owner
+has no operation that can supply a later positive observation. Shutdown cancels and
+joins retained results without discarding this evidence, including repeated calls.
+Ordinary authentication failure and confirmed cancellation remain retryable.
+
+Reuse the bounded registration/run map and shared task result, following the existing
+usage/update owners' refusal to replace unconfirmed custody. No new state store,
+process, timer, probe loop or success inference is introduced. Acceptance controls
+a real login task failure mapped by its owner to unconfirmed cleanup, then verifies
+no second launch, unchanged retry/cancel/shutdown outcomes, and ordinary failure
+retry. The fixture does not imply observation of an actual orphaned provider process.
+
 Codex, Claude, Grok and Cursor registrations now own their original login arguments;
 the public optional `login_supported` flag is derived from those registrations.
 API/local providers, Freebuff and managed Antigravity do not gain login authority.
