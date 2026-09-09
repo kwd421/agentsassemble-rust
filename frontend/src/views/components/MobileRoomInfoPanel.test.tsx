@@ -94,6 +94,7 @@ describe("MobileRoomInfoPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: /Agent One/ }));
 
     expect(screen.queryByTitle("세션 시작")).toBeNull();
+    expect(screen.getByRole("region", { name: "Agent One 사용량" })).toBeTruthy();
   });
 
   it("does not group a room participant by stale LiveAgent ownership", () => {

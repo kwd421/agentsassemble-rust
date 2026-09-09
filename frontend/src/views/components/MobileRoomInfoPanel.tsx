@@ -27,6 +27,7 @@ import { participantTypeMeta } from "../../lib/participantTypes";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import AgentProfileCard from "./member/AgentProfileCard";
+import MemberUsage from "./member/MemberUsage";
 import AgentSessionDetails, { type AgentSessionControlAction } from "./AgentSessionDetails";
 import { memberRole } from "./member/memberHelpers";
 import ProviderLogo from "./ProviderLogo";
@@ -368,6 +369,9 @@ export default function MobileRoomInfoPanel({
   const selectedAgentSession = agentSessions.find(
     (session) => session.session_id === selectedAgentSessionId
   );
+  const selectedProvider = availableProviders.find(
+    (provider) => provider.provider_kind === selectedAgentSession?.provider_kind
+  );
   const memberGroups = useMemo(
     () => buildMobileMembers({
       agents,
@@ -452,13 +456,16 @@ export default function MobileRoomInfoPanel({
             >
             <AgentSessionDetails
               session={selectedAgentSession}
-              provider={availableProviders.find(
-                (provider) => provider.provider_kind === selectedAgentSession.provider_kind
-              )}
+              provider={selectedProvider}
               onControl={capabilities["agent.control"] ? onAgentControl : undefined}
               onConfigure={capabilities["agent.control"] ? onAgentConfigure : undefined}
               activityVisible={agentActivityVisibility[selectedAgentSession.participant_id] === true}
               onActivityVisibilityChange={onAgentActivityVisibilityChange}
+            />
+            <MemberUsage
+              key={selectedProvider?.id || selectedAgentSession.session_id}
+              displayName={selectedAgentSession.display_name}
+              provider={selectedProvider}
             />
             </AgentProfileCard>
           </section>

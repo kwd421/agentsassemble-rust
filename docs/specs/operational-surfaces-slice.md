@@ -783,3 +783,10 @@ pending. Direct packaged login cancellation exposed the English cancelled respon
 overwriting its Korean receipt; presentation now maps typed login errors, and both
 reply orders pass with the same confirmed cancellation text (four component tests).
 Frontend build and unchanged CSS plus mandatory gates pass after the correction.
+
+Direct 390×480 packaged inspection found that mobile member detail omitted the
+shared usage component mounted by desktop. The existing mobile detail owner now
+passes its one selected provider to both session controls and `MemberUsage`;
+there is no separate quota state, request policy, timer or authorization path.
+Eight affected mobile/usage tests, frontend build/CSS and mandatory gates pass.
+Packaged re-verification of this connection is pending.
