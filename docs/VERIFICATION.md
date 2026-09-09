@@ -8991,3 +8991,11 @@ After all builds and the exact app/owned runtime exited, `make artifact-prune`
 removed 24.1 GiB of regenerable Cargo artifacts. Final artifact/diff checks passed.
 The verification-only browser tabs were closed, Computer Use reset, and the
 existing isolated database and unrelated user applications/data were preserved.
+
+Manual review: Daybreak Blue at `xhigh` approved each of `6ec3106`, `d38f3d2` and
+`9bfc3a9`, cumulative `9a8d39d..9bfc3a9`, exact `9bfc3a9` and the resulting setup
+contract at C0/H0/M0/L0. Review covered local authority, deep-link boundaries,
+release-source validation, concurrency/shutdown, terminal custody, response-loss
+uncertainty, optional updates, structure and unnecessary defensive complexity.
+This was source/diff review; it does not expand the runtime evidence above.
+All three feature commits were pushed and remote `main` verified at `9bfc3a9`.

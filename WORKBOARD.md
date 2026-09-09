@@ -2,9 +2,10 @@
 
 ## Active work
 
-- User-requested browser-to-local provider setup passes local verification:
+- User-requested browser-to-local provider setup is locally complete:
   login/installation guidance, local setup links and optional version updates
-  preserve provider/device authority. Manual review is pending.
+  preserve provider/device authority. Daybreak approved all three commits,
+  cumulative changes and exact `9bfc3a9` integration at C0/H0/M0/L0.
   [Verification](docs/VERIFICATION.md#browser-to-local-provider-setup-and-optional-updates-2026-09-09). [Contract](docs/specs/operational-surfaces-slice.md#browser-to-local-provider-setup-user-request-2026-09-09).
   The separate Pro review uses the fixed `9a8d39d` snapshot; review-driven
   corrections remain paused until the user resumes them.
