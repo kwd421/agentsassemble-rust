@@ -738,3 +738,35 @@ missing credentials and malformed measurements remain typed failures. No auth
 content or response body reaches diagnostics, persistence or frontend state.
 Two local projection/auth-file cases pass (0.01s), provider Clippy passes (4.37s),
 and unchanged mandatory gates pass. Real Go account execution remains pending.
+
+## Complete retained provider operations matrix
+
+Original `d504647` owners are `providers/launch_specs.py` for login commands and
+`providers/provider_usage.py::default_provider_usage_registry` for account readers.
+Current `registration.rs` plus `ollama.rs`/`lm_studio.rs` own all fourteen capability
+records; `ProviderCatalogService` owns explicit refresh for every discovery entry.
+Unsupported means no original retained account operation, not missing installation.
+
+| Provider | Local login | Account usage owner |
+| --- | --- | --- |
+| Codex | `codex login`, browser OAuth | `codex_usage.rs`, native app-server rate limits |
+| Claude | `claude auth login`, browser OAuth | `claude_usage.rs`, native SDK usage |
+| OpenCode | `opencode auth login`, operator terminal | `opencode_usage.rs`, Go quota HTTPS |
+| Cursor | `cursor-agent login`, browser OAuth | Unsupported |
+| Grok | `grok login`, browser OAuth | `grok_usage.rs`, native ACP billing |
+| DeepSeek | Existing API credential settings | `deepseek_usage.rs`, balance HTTPS |
+| Cerebras | Existing API credential settings | Unsupported |
+| OpenRouter | Existing API credential settings | Unsupported |
+| Vercel AI Gateway | Existing API credential settings | Unsupported |
+| LLM Gateway | Existing API credential settings | Unsupported |
+| TokenRouter | Existing API credential settings | Unsupported |
+| Custom API | Existing API credential settings | Unsupported |
+| Ollama | No account login | Unsupported |
+| LM Studio | No account login | Unsupported |
+
+Freebuff and app-managed Antigravity remain excluded by user scope. External
+Antigravity's Room Connector admission is independent of this account matrix.
+Whole-frontend verification found four failures from old fixed test-surface digests
+after the Phase 8 product revision changed. Both fixture digests now match revision
+13; production integrity checking is unchanged. All thirteen affected tests pass
+(0.60s); the other 797 tests passed during the full run.
