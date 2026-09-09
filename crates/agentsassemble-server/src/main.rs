@@ -6,28 +6,22 @@ use std::{
 
 use agentsassemble_persistence::{
     LocalBootstrapPhase as PersistenceBootstrapPhase, LocalBootstrapStatus, PersistenceError,
-    SqliteStore, secure_private_directory,
 };
 use agentsassemble_protocol::{
     LocalBootstrapGrant, LocalBootstrapPhase, LocalControlRequest, LocalControlResponse,
     ServerProductSurface,
 };
-use agentsassemble_provider::ProviderCatalogService;
-use agentsassemble_server::frontend_release::FrontendRelease;
 use agentsassemble_server::{
-    AppState, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError, TicketStore,
+    AppState, ManagerRoomAuthorityRequest, StableEntryConfig, TicketIssueError,
     issue_attendee_invite_create_ticket, issue_central_registration_ticket,
     issue_connector_invite_create_ticket, issue_human_invite_create_ticket,
     issue_human_invite_revoke_ticket, issue_local_operator_http_ticket, issue_local_ticket,
     issue_preferences_read_ticket, issue_preferences_write_ticket,
-    issue_settings_directory_read_ticket, local_bind_is_supported, serve,
+    issue_settings_directory_read_ticket,
 };
 use anyhow::Context;
 use clap::Parser;
-use tokio::{
-    io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt},
-    net::TcpListener,
-};
+use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 mod agent_avatar_control;
 mod appearance_control;
@@ -36,6 +30,10 @@ mod chat_read_control;
 mod control_input;
 mod message_attachments_control;
 mod message_pins_control;
+mod runtime_ready;
+#[cfg(unix)]
+mod runtime_reexec;
+mod runtime_startup;
 
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
@@ -55,6 +53,16 @@ struct Args {
     database: PathBuf,
     #[arg(long)]
     frontend: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    frontend_build: Option<String>,
+    #[arg(long, hide = true)]
+    restart_source: Option<PathBuf>,
+    #[arg(long, hide = true)]
+    reexec_operation: Option<String>,
+    #[arg(long, hide = true)]
+    reexec_image: Option<String>,
+    #[arg(long, hide = true)]
+    reexec_control: Option<String>,
     #[arg(long)]
     desktop_native_registration: bool,
     #[arg(long)]
@@ -63,6 +71,8 @@ struct Args {
 
 fn main() -> anyhow::Result<()> {
     run_internal_provider_mode();
+    #[cfg(unix)]
+    let inherited = runtime_reexec::InheritedListeners::take()?;
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
@@ -84,150 +94,19 @@ fn main() -> anyhow::Result<()> {
         );
         return Ok(());
     }
-    runtime.block_on(run_runtime(args))
-}
-
-async fn run_runtime(args: Args) -> anyhow::Result<()> {
-    let manual_public_ingress = manual_public_ingress_environment()?;
-    let stable_entry = stable_entry_configuration(
-        args.stable_entry_config.as_deref(),
-        manual_public_ingress.is_some(),
-    )?;
+    let exit = runtime.block_on(runtime_startup::run(
+        args,
+        #[cfg(unix)]
+        inherited,
+    ))?;
+    drop(runtime);
     #[cfg(unix)]
-    let mut stdin = control_input::ControlInput::stdin()?;
+    if let Some(restart) = exit.restart {
+        return restart.execute();
+    }
     #[cfg(not(unix))]
-    let mut stdin = tokio::io::stdin();
-    let cancellation = CancellationToken::new();
-    if !local_bind_is_supported(args.bind) {
-        anyhow::bail!("the local runtime may bind only to loopback");
-    }
-    let (store, database_path, frontend_release) = prepare_runtime_storage(&args).await?;
-    let listener = TcpListener::bind(args.bind).await?;
-    let address = listener.local_addr()?;
-    let signal = cancellation.clone();
-    tokio::spawn(async move {
-        if tokio::signal::ctrl_c().await.is_ok() {
-            signal.cancel();
-        }
-    });
-    let mut state = AppState::local_with_provider_state_root(
-        store,
-        TicketStore::new(Duration::from_secs(30), 4_096),
-        ProviderCatalogService::discovering(),
-        database_state_root(&database_path)?,
-    )
-    .await?;
-    state.google_accounts = agentsassemble_server::GoogleAccountService::from_environment()?;
-    state = configure_startup_surface(
-        state,
-        manual_public_ingress,
-        address,
-        stable_entry,
-        &database_path,
-        args.desktop_native_registration,
-    )
-    .await?;
-    if let Some(frontend) = frontend_release.as_ref() {
-        state = state.with_frontend(frontend.clone());
-    }
-    let mut stdout = tokio::io::stdout();
-    let control_state = state.clone();
-    let control_cancellation = cancellation.clone();
-    let mut control_owner = None;
-    let serving = serve(listener, state, cancellation.clone(), async {
-        write_json_line(
-            &mut stdout,
-            &serde_json::json!({
-                "status": "ready",
-                "runtime": "rust",
-                "address": format!("http://{address}"),
-                "database": database_path,
-                "frontend": frontend_release.as_ref().map(FrontendRelease::root),
-                "frontend_build_id": frontend_release.as_ref().map(FrontendRelease::build_id),
-                "pid": std::process::id(),
-            }),
-        )
-        .await
-        .map_err(std::io::Error::other)?;
-        control_owner = Some(tokio::spawn(async move {
-            let result = run_control_pipe(
-                &mut stdin,
-                &mut stdout,
-                control_state,
-                &control_cancellation,
-            )
-            .await;
-            control_cancellation.cancel();
-            #[cfg(unix)]
-            stdin
-                .restore()
-                .context("restore local control descriptor")?;
-            result
-        }));
-        Ok(())
-    })
-    .await;
-    cancellation.cancel();
-    if let Some(control_owner) = control_owner {
-        control_owner.await.context("join local control pipe")??;
-    }
-    serving?;
+    let _ = exit;
     Ok(())
-}
-
-async fn prepare_runtime_storage(
-    args: &Args,
-) -> anyhow::Result<(SqliteStore, PathBuf, Option<FrontendRelease>)> {
-    if let Some(parent) = args.database.parent() {
-        tokio::fs::create_dir_all(parent)
-            .await
-            .with_context(|| format!("create database directory {}", parent.display()))?;
-        secure_private_directory(parent)
-            .with_context(|| format!("secure database directory {}", parent.display()))?;
-    }
-    let store = SqliteStore::open_path(&args.database).await?;
-    let database_path = args
-        .database
-        .canonicalize()
-        .with_context(|| format!("resolve database path {}", args.database.display()))?;
-    let frontend_release = args
-        .frontend
-        .as_deref()
-        .map(|source| {
-            FrontendRelease::materialize(source, database_state_root(&database_path)?)
-                .context("materialize served frontend release")
-        })
-        .transpose()?;
-    Ok((store, database_path, frontend_release))
-}
-
-fn database_state_root(database: &Path) -> anyhow::Result<&Path> {
-    database.parent().context("database path has no state root")
-}
-
-async fn configure_startup_surface(
-    state: AppState,
-    manual: Option<(String, String)>,
-    listener: SocketAddr,
-    stable_entry: Option<StableEntryConfig>,
-    database: &Path,
-    central_registration: bool,
-) -> anyhow::Result<AppState> {
-    let state = match manual {
-        Some((origin, proxy_secret)) => {
-            state.with_manual_public_ingress(listener, &origin, &proxy_secret)?
-        }
-        None => {
-            state
-                .with_managed_public_ingress(listener, stable_entry, database_state_root(database)?)
-                .await?
-        }
-    };
-    Ok(if central_registration {
-        state.with_central_registration()
-    } else {
-        state
-    })
 }
 
 fn run_internal_provider_mode() {

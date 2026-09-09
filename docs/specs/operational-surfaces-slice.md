@@ -638,3 +638,30 @@ operator-ticket/replay/unsupported checks pass (0.07s), and the actual private s
 verifies status, active-listener refusal, inheritance identity and preservation of an
 unrelated replacement file (0.04s). Server/persistence Clippy and mandatory gates
 pass. These checks launch no provider; executable replacement is not yet exercised.
+
+The executable now owns actual POSIX replacement. It consumes and validates inherited
+listeners before constructing Tokio, checks the exact address and image identity,
+reconciles old custody, reconstructs captured sessions and publishes readiness. Source
+shutdown joins HTTP/room/provider owners, both control transports and the signal task;
+only then records drain and drops the entire async runtime before exec. The desktop
+supervisor passes the original executable source before its immutable launch binding.
+The replacement loads the prepared frontend snapshot while retaining its original
+source for future updates. Windows explicitly rejects inherited handoff arguments.
+Apple does not implement SO_ACCEPTCONN: listener validation there uses socket type,
+unconnected endpoint, exact address and durable operation/image identity; other Unix
+platforms additionally check SO_ACCEPTCONN. No alternate bind path handles bad input.
+
+Normal startup can terminate an abandoned older-generation restart only after positive
+custody reconciliation. Startup notification failure can similarly record failure in
+the replacement generation only after captured sessions are positively stopped; an
+ordinary successful runtime shutdown does not rewrite a completed restart receipt.
+The startup owner separates construction and handoff from readiness/control task
+ownership, and boxes the combined serving future (measured 48,368 bytes by Clippy).
+
+All twelve real control-pipe/process/TCP cases pass (5.52s), including two actual
+same-PID replacements, original-source frontend updates, HTTP and private-CLI receipts,
+retired receipt lookup, continued parent control and final writer-lease reacquisition.
+Incomplete handoffs create no database or readiness output. Six persistence restart
+cases pass (0.13s), including abandoned startup and positive cleanup after readiness
+failure. Seven desktop supervisor cases pass (0.47s). Server/persistence Clippy and
+mandatory gates pass. No provider was launched; packaged UI acceptance remains pending.

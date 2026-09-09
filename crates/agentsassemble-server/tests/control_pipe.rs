@@ -14,6 +14,9 @@ mod control_pipe_invite_tickets;
 #[path = "control_pipe/managed_ingress.rs"]
 mod control_pipe_managed_ingress;
 mod control_pipe_message_attachments;
+#[cfg(unix)]
+#[path = "control_pipe/runtime_restart.rs"]
+mod runtime_restart;
 mod support {
     #[path = "../support/room_socket_peer.rs"]
     pub mod room_socket_peer;

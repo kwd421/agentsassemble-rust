@@ -112,6 +112,12 @@ async fn reopened_runtime_cannot_abort_previous_custody_or_ignore_corrupt_restar
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, principal, directory) = fixture().await;
     let record = store.prepare_runtime_restart(OPERATION).await?;
+    assert!(
+        store
+            .fail_abandoned_runtime_restart_after_cleanup()
+            .await
+            .is_err()
+    );
     store.pool.close().await;
     drop(store);
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
@@ -121,6 +127,15 @@ async fn reopened_runtime_cannot_abort_previous_custody_or_ignore_corrupt_restar
     assert!(
         matches!(store.prepare_agent_start(TrustedPrincipal(&principal), "after-reopen", &json!({"agent_id": AGENT_ID})).await,
         Err(PersistenceError::CommandUnresolved { code, .. }) if code == "runtime_restarting")
+    );
+    assert!(store.fail_abandoned_runtime_restart_after_cleanup().await?);
+    assert!(!store.fail_abandoned_runtime_restart_after_cleanup().await?);
+    assert_eq!(
+        store
+            .runtime_restart_status()
+            .await?
+            .map(|record| record.phase),
+        Some(RuntimeRestartPhase::Failed)
     );
     sqlx::query("UPDATE runtime_metadata SET value = '{' WHERE key = 'runtime_restart_v1'")
         .execute(&store.pool)
@@ -280,6 +295,20 @@ async fn replacement_reconstructs_only_captured_targets_and_preserves_pause()
             }
         );
         assert_eq!(session.enabled, !paused);
+        assert!(
+            store
+                .fail_runtime_restart_after_cleanup(OPERATION)
+                .await
+                .is_err()
+        );
+        stop_restart_fixture(&store).await?;
+        assert_eq!(
+            store
+                .fail_runtime_restart_after_cleanup(OPERATION)
+                .await?
+                .phase,
+            RuntimeRestartPhase::Failed
+        );
     }
     Ok(())
 }

@@ -216,6 +216,21 @@ pub async fn recover(
     Ok(())
 }
 
+/// Resolves abandoned handoffs only after normal startup has positively reconciled custody.
+///
+/// # Errors
+/// Refuses uncertain cleanup or failed floor recovery.
+pub async fn recover_abandoned(state: &AppState) -> anyhow::Result<()> {
+    if state
+        .store
+        .fail_abandoned_runtime_restart_after_cleanup()
+        .await?
+    {
+        wake_floor(state).await?;
+    }
+    Ok(())
+}
+
 async fn wake_floor(state: &AppState) -> Result<(), PersistenceError> {
     for summary in state.store.list_room_directory(false).await? {
         let room = summary.room;

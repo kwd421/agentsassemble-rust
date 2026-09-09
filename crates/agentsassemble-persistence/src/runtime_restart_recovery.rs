@@ -188,7 +188,7 @@ impl SqliteStore {
         let mut record = load_restart(&mut tx).await?.ok_or_else(stale)?;
         let owned = match record.phase {
             Phase::Draining => record.source_generation == self.runtime_generation(),
-            Phase::Recovering | Phase::Failed => {
+            Phase::Recovering | Phase::Completed | Phase::Failed => {
                 record.recovery_generation.as_deref() == Some(self.runtime_generation())
                     || (record.recovery_generation.is_none()
                         && record.source_generation == self.runtime_generation())
@@ -207,6 +207,37 @@ impl SqliteStore {
         save_restart(&mut tx, &record).await?;
         tx.commit().await?;
         Ok(record)
+    }
+
+    /// Terminates an interrupted older generation after normal startup reconciles custody.
+    ///
+    /// # Errors
+    /// Refuses current-generation ownership and remaining or uncertain captured custody.
+    pub async fn fail_abandoned_runtime_restart_after_cleanup(
+        &self,
+    ) -> Result<bool, PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        let Some(mut record) = load_restart(&mut tx).await? else {
+            return Ok(false);
+        };
+        if !record.phase.blocks_admission() {
+            return Ok(false);
+        }
+        if record.source_generation == self.runtime_generation()
+            || record.recovery_generation.as_deref() == Some(self.runtime_generation())
+        {
+            return Err(stale());
+        }
+        for target in &record.targets {
+            let session = load_session(&mut tx, &target.room_id, &target.session_id).await?;
+            require_stopped(&session)?;
+        }
+        record.phase = Phase::Failed;
+        record.recovery_generation = Some(self.runtime_generation().to_owned());
+        record.updated_at = Utc::now();
+        save_restart(&mut tx, &record).await?;
+        tx.commit().await?;
+        Ok(true)
     }
 
     /// Ends reconstruction only after every captured target has confirmed its required state.

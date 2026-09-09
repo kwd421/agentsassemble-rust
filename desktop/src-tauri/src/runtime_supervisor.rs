@@ -85,6 +85,7 @@ pub fn run_if_requested() -> Option<i32> {
 }
 
 fn supervise(executable: &std::path::Path, arguments: &[std::ffi::OsString]) -> io::Result<()> {
+    let restart_source = executable.canonicalize()?;
     let _container = supervisor_container()?;
     #[cfg(target_os = "macos")]
     let bound_executable = BoundSidecar::bind(executable)?;
@@ -93,6 +94,8 @@ fn supervise(executable: &std::path::Path, arguments: &[std::ffi::OsString]) -> 
     let mut command = Command::new(executable);
     command
         .args(arguments)
+        .arg("--restart-source")
+        .arg(restart_source)
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())
