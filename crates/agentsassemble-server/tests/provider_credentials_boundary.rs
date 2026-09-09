@@ -183,7 +183,7 @@ async fn start() -> RunningServer {
     .await
     .unwrap_or_else(|error| panic!("build credential app state: {error}"));
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .unwrap_or_else(|error| panic!("serve credential runtime: {error}"));
     });

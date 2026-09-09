@@ -530,7 +530,7 @@ async fn start_local() -> LocalServer {
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .unwrap_or_else(|error| panic!("serve message-attachment runtime: {error}"));
     });

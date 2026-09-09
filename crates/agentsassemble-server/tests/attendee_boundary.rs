@@ -350,3 +350,64 @@ async fn send_human_input(
     .await?;
     Ok(())
 }
+
+#[tokio::test]
+async fn readiness_observes_reconciled_custody_and_failure_closes_listener() -> TestResult {
+    use agentsassemble_domain::ProviderCatalog;
+    use agentsassemble_provider::ProviderCatalogService;
+    use agentsassemble_server::{AppState, ServeError, TicketStore, serve};
+    use sha2::{Digest as _, Sha256};
+    use std::{io, time::Duration};
+    use tokio::net::{TcpListener, TcpStream};
+    use tokio_util::sync::CancellationToken;
+
+    let (store, invite) = fixture().await?;
+    let now = chrono::Utc::now();
+    let admitted = store
+        .admit_attendee(
+            agentsassemble_persistence::AttendeeAdmissionRequest {
+                invite_fingerprint: &Sha256::digest(invite.invite_bearer.as_bytes()).into(),
+                client_fingerprint: &[9; 32],
+                request_id: Uuid::new_v4(),
+                provider_kind: "codex_live_session",
+                display_name: "External Codex",
+            },
+            now,
+        )
+        .await?;
+    let previous = store
+        .claim_attendee_connection(&admitted.authorization, Uuid::new_v4(), now)
+        .await?
+        .authorization;
+    store.revalidate_attendee_connection(&previous, now).await?;
+    let state = AppState::local(
+        store.clone(),
+        TicketStore::new(Duration::from_secs(30), 16),
+        ProviderCatalogService::fixed(ProviderCatalog::default()),
+    )
+    .await?;
+    let listener = TcpListener::bind("127.0.0.1:0").await?;
+    let address = listener.local_addr()?;
+    let mut notified = false;
+    let result = serve(listener, state, CancellationToken::new(), async {
+        assert!(
+            store
+                .revalidate_attendee_connection(&previous, now)
+                .await
+                .is_err(),
+            "ready must not precede old connection invalidation"
+        );
+        notified = true;
+        Err(io::Error::new(
+            io::ErrorKind::BrokenPipe,
+            "readiness closed",
+        ))
+    })
+    .await;
+    assert!(notified);
+    assert!(
+        matches!(result, Err(ServeError::Io(error)) if error.kind() == io::ErrorKind::BrokenPipe)
+    );
+    assert!(TcpStream::connect(address).await.is_err());
+    Ok(())
+}

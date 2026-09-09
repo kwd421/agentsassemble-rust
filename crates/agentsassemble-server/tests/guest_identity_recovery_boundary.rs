@@ -81,7 +81,9 @@ impl Server {
                 .with_manual_public_ingress(address, ORIGIN, PROXY),
         );
         let shutdown = CancellationToken::new();
-        let running = tokio::spawn(serve(listener, state.clone(), shutdown.clone()));
+        let running = tokio::spawn(serve(listener, state.clone(), shutdown.clone(), async {
+            Ok(())
+        }));
         let base = format!("http://{address}");
         let client = Client::new();
         let human = join(

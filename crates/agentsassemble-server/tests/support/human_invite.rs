@@ -279,7 +279,7 @@ pub async fn start(store: SqliteStore) -> RunningServer {
     let server_state = state.clone();
     let rooms = state.rooms.clone();
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .unwrap_or_else(|error| panic!("serve human invite runtime: {error}"));
     });

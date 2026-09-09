@@ -108,39 +108,42 @@ async fn main() -> anyhow::Result<()> {
         state = state.with_frontend(frontend.clone());
     }
     let mut stdout = tokio::io::stdout();
-    if let Err(error) = write_json_line(
-        &mut stdout,
-        &serde_json::json!({
-            "status": "ready",
-            "runtime": "rust",
-            "address": format!("http://{address}"),
-            "database": database_path,
-            "frontend": frontend_release.as_ref().map(FrontendRelease::root),
-            "frontend_build_id": frontend_release.as_ref().map(FrontendRelease::build_id),
-            "pid": std::process::id(),
-        }),
-    )
-    .await
-    {
-        state
-            .shutdown_public_ingress()
-            .await
-            .context("clean public ingress after readiness reporting failed")?;
-        return Err(error);
-    }
     let control_state = state.clone();
     let control_cancellation = cancellation.clone();
-    tokio::spawn(async move {
-        run_control_pipe(
-            &mut stdin,
+    let mut control_owner = None;
+    let serving = serve(listener, state, cancellation.clone(), async {
+        write_json_line(
             &mut stdout,
-            control_state,
-            &control_cancellation,
+            &serde_json::json!({
+                "status": "ready",
+                "runtime": "rust",
+                "address": format!("http://{address}"),
+                "database": database_path,
+                "frontend": frontend_release.as_ref().map(FrontendRelease::root),
+                "frontend_build_id": frontend_release.as_ref().map(FrontendRelease::build_id),
+                "pid": std::process::id(),
+            }),
         )
-        .await;
-        control_cancellation.cancel();
-    });
-    serve(listener, state, cancellation).await?;
+        .await
+        .map_err(std::io::Error::other)?;
+        control_owner = Some(tokio::spawn(async move {
+            run_control_pipe(
+                &mut stdin,
+                &mut stdout,
+                control_state,
+                &control_cancellation,
+            )
+            .await;
+            control_cancellation.cancel();
+        }));
+        Ok(())
+    })
+    .await;
+    cancellation.cancel();
+    if let Some(control_owner) = control_owner {
+        control_owner.await.context("join local control pipe")?;
+    }
+    serving?;
     Ok(())
 }
 

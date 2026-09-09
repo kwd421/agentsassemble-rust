@@ -47,7 +47,7 @@ impl Fixture {
         let cancellation = CancellationToken::new();
         let stop = cancellation.clone();
         let task = tokio::spawn(async move {
-            checked(serve(listener, state, stop).await);
+            checked(serve(listener, state, stop, async { Ok(()) }).await);
         });
         (
             Self {

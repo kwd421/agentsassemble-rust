@@ -487,7 +487,7 @@ async fn start_server(
         state = state.with_central_registration();
     }
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .unwrap_or_else(|error| panic!("serve room directory runtime: {error}"));
     });

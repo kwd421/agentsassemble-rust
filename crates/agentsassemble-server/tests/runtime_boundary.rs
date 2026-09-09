@@ -696,7 +696,7 @@ async fn start_server(
     }
     let server_state = state.clone();
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .unwrap_or_else(|error| panic!("serve test runtime: {error}"));
     });

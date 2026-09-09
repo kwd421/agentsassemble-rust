@@ -522,7 +522,7 @@ async fn start(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
     .unwrap_or_else(|error| panic!("build test app state: {error}"));
     let server_state = state.clone();
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .map_err(|error| error.to_string())
     });

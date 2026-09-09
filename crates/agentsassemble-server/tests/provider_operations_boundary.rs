@@ -32,7 +32,9 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
         listener.local_addr()?
     );
     let cancellation = CancellationToken::new();
-    let server = tokio::spawn(serve(listener, state, cancellation.clone()));
+    let server = tokio::spawn(serve(listener, state, cancellation.clone(), async {
+        Ok(())
+    }));
     let client = Client::new();
     let wrong = tickets
         .issue_settings_directory_read(LOCAL_OPERATOR_USER_ID.to_owned())

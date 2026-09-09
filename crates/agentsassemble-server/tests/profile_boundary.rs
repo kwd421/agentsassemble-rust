@@ -474,7 +474,7 @@ async fn start_with_tickets(store: SqliteStore, tickets: TicketStore) -> Running
     .unwrap_or_else(|error| panic!("build profile app state: {error}"));
     let server_state = state.clone();
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .unwrap_or_else(|error| panic!("serve profile runtime: {error}"));
     });

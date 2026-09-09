@@ -273,7 +273,7 @@ async fn serve_preflight_failure_clears_claimed_stable_entry() {
         .unwrap_or_else(|error| panic!("activate cleanup stable entry: {error}"));
 
     assert!(
-        serve(listener, state, CancellationToken::new())
+        serve(listener, state, CancellationToken::new(), async { Ok(()) })
             .await
             .is_err()
     );

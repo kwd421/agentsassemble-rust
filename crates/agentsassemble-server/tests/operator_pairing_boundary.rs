@@ -79,7 +79,9 @@ impl PairingServer {
         .with_manual_public_ingress(address, ORIGIN, PROXY)
         .unwrap_or_else(|error| panic!("ingress: {error}"));
         let shutdown = CancellationToken::new();
-        let running = tokio::spawn(serve(listener, state.clone(), shutdown.clone()));
+        let running = tokio::spawn(serve(listener, state.clone(), shutdown.clone(), async {
+            Ok(())
+        }));
         let base = format!("http://{address}");
         let manager = store
             .authorize_local_room_manager(

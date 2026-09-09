@@ -596,7 +596,7 @@ async fn start() -> RunningServer {
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .unwrap_or_else(|error| panic!("serve search runtime: {error}"));
     });

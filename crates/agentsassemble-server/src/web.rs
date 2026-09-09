@@ -313,14 +313,15 @@ registered_routes! {
 ///
 /// # Errors
 ///
-/// Returns the listener's serving error.
+/// Returns reconciliation, readiness notification, serving, or owned cleanup errors.
 pub async fn serve(
     listener: TcpListener,
     state: AppState,
     cancellation: CancellationToken,
+    ready: impl Future<Output = Result<(), std::io::Error>>,
 ) -> Result<(), ServeError> {
     let public_ingress = state.public_ingress();
-    let result = serve_runtime(listener, state, cancellation).await;
+    let result = serve_runtime(listener, state, cancellation, ready).await;
     public_ingress
         .shutdown()
         .await
@@ -377,6 +378,7 @@ async fn serve_runtime(
     listener: TcpListener,
     state: AppState,
     cancellation: CancellationToken,
+    ready: impl Future<Output = Result<(), std::io::Error>>,
 ) -> Result<(), ServeError> {
     let listener_address = listener.local_addr()?;
     let ingress = LocalIngress::from_listener(listener_address).ok_or_else(|| {
@@ -401,32 +403,35 @@ async fn serve_runtime(
         connection_shutdown.clone(),
     ));
     let app = router(state);
-    let result = loop {
-        let accepted = tokio::select! {
-            () = cancellation.cancelled() => break Ok(()),
-            accepted = listener.accept() => accepted,
-        };
-        let (stream, peer) = match accepted {
-            Ok(accepted) => accepted,
-            Err(error) => break Err(error),
-        };
-        let Some(admission) = http_admission.admit() else {
-            drop(stream);
-            continue;
-        };
-        let connection_app = app.clone();
-        let connection_ingress = ingress;
-        let connection_public_ingress = public_ingress.clone();
-        let shutdown = connection_shutdown.clone();
-        connections.spawn(serve_connection(
-            stream,
-            peer,
-            connection_ingress,
-            connection_public_ingress,
-            connection_app,
-            admission,
-            shutdown,
-        ));
+    let result = match ready.await {
+        Err(error) => Err(error),
+        Ok(()) => loop {
+            let accepted = tokio::select! {
+                () = cancellation.cancelled() => break Ok(()),
+                accepted = listener.accept() => accepted,
+            };
+            let (stream, peer) = match accepted {
+                Ok(accepted) => accepted,
+                Err(error) => break Err(error),
+            };
+            let Some(admission) = http_admission.admit() else {
+                drop(stream);
+                continue;
+            };
+            let connection_app = app.clone();
+            let connection_ingress = ingress;
+            let connection_public_ingress = public_ingress.clone();
+            let shutdown = connection_shutdown.clone();
+            connections.spawn(serve_connection(
+                stream,
+                peer,
+                connection_ingress,
+                connection_public_ingress,
+                connection_app,
+                admission,
+                shutdown,
+            ));
+        },
     };
     let ingress_shutdown = tokio::spawn(async move { public_ingress.shutdown().await });
     drain_connections(&connections, &connection_shutdown).await;

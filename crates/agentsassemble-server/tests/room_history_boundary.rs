@@ -275,7 +275,7 @@ async fn start_local(store: SqliteStore) -> RunningServer {
     .unwrap_or_else(|error| panic!("build room-history app state: {error}"));
     let server_state = state.clone();
     let task = tokio::spawn(async move {
-        serve(listener, state, server_cancellation)
+        serve(listener, state, server_cancellation, async { Ok(()) })
             .await
             .unwrap_or_else(|error| panic!("serve room-history runtime: {error}"));
     });

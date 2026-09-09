@@ -516,3 +516,26 @@ All 324 persistence tests pass (4.42s); persistence all-target/all-feature Clipp
 mandatory gates pass. No process, background task, timer or provider call is added.
 Each affected admission reads one metadata row; full phase resource cost and the
 coordinator's abort wakeup remain pending.
+
+
+## Reconciled startup and control ownership
+
+The server's readiness notification must run after durable ownership reconciliation
+and before network admission. The serving owner accepts the notification future;
+notification failure follows the same owned shutdown as listener failure. Tests
+must observe recovered durable state at notification and verify that a failed
+notification closes the listener. The main executable starts its control pipe only
+after that notification succeeds and joins the control task after serving ends.
+This removes the current premature `ready` record and detached control task. It
+does not yet establish POSIX descriptor inheritance or restart session recovery.
+
+The serving owner now awaits readiness after reconciliation and routes notification
+failure through owned room/catalog/login/usage/ingress cleanup. The executable joins
+its control task. A real attendee admission/connection case observes its old
+connection invalidated inside readiness, then verifies notification failure and a
+closed TCP listener. All 23 affected attendee/control-pipe/runtime boundary cases
+pass (0.05s, 1.95s, 7.19s); server all-target/all-feature Clippy and mandatory gates
+pass. The managed-ingress test's old plain-text HTML fixture now contains the real
+asset entry required by the existing frontend-release owner. No added background
+work or polling; readiness latency now includes the required startup reconciliation.
+POSIX control-frame/descriptor handoff and full restart completion remain pending.

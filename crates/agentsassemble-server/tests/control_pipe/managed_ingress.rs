@@ -152,7 +152,16 @@ async fn managed_ingress_fixture() -> ManagedIngressFixture {
     tokio::fs::create_dir(&frontend)
         .await
         .unwrap_or_else(|error| panic!("create frontend fixture: {error}"));
-    tokio::fs::write(frontend.join("index.html"), "MANAGED PUBLIC INDEX")
+    tokio::fs::create_dir(frontend.join("assets"))
+        .await
+        .unwrap_or_else(|error| panic!("create frontend assets: {error}"));
+    tokio::fs::write(frontend.join("assets/app.js"), "globalThis.loaded = true;")
+        .await
+        .unwrap_or_else(|error| panic!("write frontend entry: {error}"));
+    tokio::fs::write(
+        frontend.join("index.html"),
+        r#"<html><head><script src="./assets/app.js"></script></head><body>MANAGED PUBLIC INDEX</body></html>"#,
+    )
         .await
         .unwrap_or_else(|error| panic!("write frontend fixture: {error}"));
     let cloudflared = bin.join("cloudflared");
