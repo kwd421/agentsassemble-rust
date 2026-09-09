@@ -8835,3 +8835,88 @@ processes, 604.95 MiB median / 744.73 MiB maximum summed RSS and 65.4% maximum
 summed CPU (100% is one of ten logical cores). These are point observations and
 include native discovery/startup workers, not exclusive steady-state runtime or
 unique physical memory; separate WebKit/XPC processes remain outside the sample.
+
+## Phase 9 external attendee and admitted-browser integration (2026-09-09)
+
+The same disposable release app creates a saved Codex AI friend and one-use external
+attendee invitation through its normal UI. The installed CLI runs `assemble room
+attend --provider codex` with `gpt-5.6-luna`, Low and default tier in the disposable
+workspace. The native roster shows external-attendee custody. Two actual room turns
+publish `7 + 8 = 15.` and read the UI-uploaded `attachment.txt` through the room
+attachment tool, reporting its harmless verification text. Normal UI stop returns
+CLI exit 0 with room cleanup confirmed; the durable row has two completed turns,
+detached/stopped status and no recovery/error. This adds external-attendee proof to
+the separately verified managed Codex custody; it does not stand in for Connector.
+
+The attendee's 97 one-second descendant samples start about ten seconds after launch:
+median summed RSS 2,374.48 MiB, maximum 4,142.09 MiB, maximum five processes and
+149.1% summed CPU (100% is one of ten logical cores). These are sampled process RSS,
+not startup peaks, unique physical memory or whole-app cost. All sampled PIDs are
+absent after stop.
+
+External Antigravity's installed CLI accepts its native NDJSON user input and finds
+the temporary Room Connector MCP schema, but its headless execution denies the MCP
+call because it cannot prompt for permission. No join, publication or leave occurs.
+Its exit 0 / SUCCESS envelope is not room success. Permission to allow only the test
+server's join/read/say/leave operations remains unanswered. No permission rule or
+approval bypass is added. The temporary MCP registration is removed, the owned CLI
+exits, and provider-private diagnostic logs are removed. DeepSeek's additional
+Keychain authorization and Cursor's unidentified ACP permission request remain the
+separate unresolved limits recorded above. Other providers are not run.
+
+A fresh human invitation admits a browser guest with its chosen name. Sending a
+message, reloading the admitted session, searching actual attachment-response text,
+and navigating from the result to its timeline context pass. At a 390 x 420 CSS
+viewport, channel navigation, composer, header and right-panel entry remain usable.
+Sidechat publication reaches the native host. A host-created custom text channel
+appears in the browser; messages travel both ways. Header pins fetch the actual
+pinned message. This is on-demand pin evidence, not background pin synchronization.
+The one-use human link is explicitly revoked after admission.
+
+### Anonymous vote receipt and mobile collection correction
+
+The browser's first ballot commits once in SQLite, but the pre-correction frontend
+rejects the domain's anonymous vote marker in both live events and the command
+receipt, leaving controls waiting. The common decoder now accepts the existing
+cast/withdraw/close shape with empty actor/content and a nonempty vote reference.
+It retains ordinary-message actor validation and changes no server privacy,
+persistence, retry, command identity or timeout contract. The socket-harness case
+fails before the correction and passes afterward, covering snapshot recovery,
+live delivery, the matched command receipt, history and malformed marker rejection.
+
+The corrected release package reopens the same database and displays the already
+committed ballot without migration or clearing data. A newly admitted guest votes
+for the other option: both real UIs show one vote per option, total two. Clicking the
+selected option withdraws it: both show total one again. Host closure reaches both
+UIs, disables voting and survives browser reload with the admitted identity intact.
+
+The mobile files/media/links/pins collection tabs had the same unconditional empty
+branch in original `d504647`; they now explicitly say collection browsing is not
+supported. The corrected files message is verified in the actual 390 x 420 browser
+screen, with CSS viewport dimensions also checked. Working header pins, search and
+timeline attachments retain their consumers; no new collection API is implied.
+
+Affected socket tests pass (17 files / 116 tests), mobile component tests pass
+(4 tests), and the full frontend suite passes (140 files / 806 tests). The packaged
+build passes TypeScript, Vite and the unchanged CSS integrity gate. A test helper
+name initially added an unused Tailwind class; renaming that helper restores the
+original CSS hash without changing the gate. Architecture, growth, 19 policy tests,
+format, diff and artifact checks pass. Final integrated workspace gates are recorded
+below. The final human invitation is revoked, the browser viewport reset and test
+tab closed, the exact app normally quit, and no matching app/server/tunnel process
+remains. Computer Use is reset. Disposable data remain only for pending final
+review/authorization-dependent verification; no real-provider process remains active.
+
+Final integrated verification completes every code check: 873 workspace Rust tests
+plus 28 desktop tests, zero failed/ignored; 806 frontend tests; bindings, desktop
+checks, TypeScript/Vite/CSS, all-feature Clippy, architecture/growth/19 policy tests,
+format and diff checks pass. `make verify` takes 668.35 seconds and 2,331,443,200
+bytes maximum RSS, but exits 2 at its final artifact check: accumulated debug/test/
+release artifacts occupy 31,100,928,000 bytes, above the unchanged 18 GiB limit.
+After all Cargo/Tauri work ends, the existing `make artifact-prune` owner removes
+only the repository target cache (25,374 files); the subsequent artifact check
+passes. No code test is repeated after this cache-only maintenance. These combined
+results do not claim the original `make verify` invocation exited successfully.
+Sampled whole-system CPU idle during the run is 38.97%, 41.79% and 68.8%; samples
+are not continuous headroom proof. Source and disposable pending-verification data
+remain intact. Final manual reviews and the three external limits remain open.

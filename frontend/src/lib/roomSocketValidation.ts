@@ -31,6 +31,7 @@ import {
 import { isParticipantRole } from "./participantRole";
 import { providerCatalogIsValid } from "./providerCatalogContract";
 import { voteSummaryResultIsValid } from "./roomVoteSummaryContract";
+import { isVoteTransitionKind } from "./voteEventKind";
 import {
   assertExactKeys,
   strictRecord,
@@ -209,6 +210,8 @@ export function eventProjectionIsValid(event: RoomEvent): boolean {
 
 export function publicRoomEventIsValid(value: unknown, expectedRoomId: string): value is RoomEvent {
   const actor = isRecord(value) && isRecord(value.actor) ? value.actor : null;
+  const voteTransition = isRecord(value) && value.type === "message_final" &&
+    typeof value.message_kind === "string" && isVoteTransitionKind(value.message_kind);
   return Boolean(
     isRecord(value) &&
     value.v === 1 &&
@@ -223,11 +226,12 @@ export function publicRoomEventIsValid(value: unknown, expectedRoomId: string): 
     Object.keys(actor).length === ACTOR_KEYS.length &&
     ACTOR_KEYS.every(
       (key) => typeof actor[key] === "string" && (
-        // The server retains the cursor of an owner-only event while removing its actor.
-        value.type === "event_hidden" ? actor[key] === "" : Boolean(actor[key])
+        // Hidden events and privacy-minimized vote markers deliberately carry no actor.
+        value.type === "event_hidden" || voteTransition ? actor[key] === "" : Boolean(actor[key])
       )
     ) &&
     (value.type !== "event_hidden" || value.visibility === "owner") &&
+    (!voteTransition || (typeof value.vote_id === "string" && value.vote_id && value.content === "")) &&
     ROOM_EVENT_OPTIONAL_STRING_KEYS.every(
       (key) =>
         value[key] === undefined ||

@@ -497,7 +497,7 @@ export default function MobileRoomInfoPanel({
       ) : (
         <section className="dc-mobile-info-empty">
           <p>{tabLabel}</p>
-          <span>아직 이 채널에 표시할 항목이 없습니다.</span>
+          <span>이 탭의 모아보기는 아직 지원하지 않아요.</span>
         </section>
       )}
     </section>

@@ -70,12 +70,14 @@ Antigravity are excluded; their absence is not an unavailable managed provider.
 | Dependency unavailable | Google/central identity when unconfigured; native/API/local providers when dependencies fail | typed unavailable/error state; static/local contract proof does not claim actual external authentication or inference |
 | Platform unavailable | Windows rolling restart | explicit unsupported result; Windows process/IPC custody tests do not prove Windows rolling restart |
 | Native-only operation | host workspace selection from an admitted browser | original picker is local-operator-only; the desktop native picker remains the owner, and browser credentials do not select host directories |
+| Original collection views unavailable | mobile channel-information media/pins/links/files tabs | original `MobileRoomInfoPanel` has only an unconditional empty branch; current tabs explicitly state that collection browsing is unsupported. Timeline attachment downloads, header pins and search remain separate working entries |
 | Deferred and inactive | voice, Mafia and RimWorld | preserved source, no production mount/request/poll/heartbeat; `5f881ad` removes the final Mafia startup invocation and emitted-graph proof is recorded in VERIFICATION |
 | Excluded | v0 scripted meeting/research/automatic synthesis, Freebuff, managed Antigravity, Python fallback and legacy compatibility | no parity claim or replacement client orchestration |
 
-No additional partially connected visible control was found in this source pass.
-That is a source finding, not final user-flow proof. Current integrated desktop,
-390px/low-height browser, retained provider and restart measurements are still open
+The initial source pass missed the inherited mobile collection tabs; the actual
+390px browser flow found and classified them above. Integrated desktop/browser,
+restart and provider evidence is recorded in VERIFICATION. DeepSeek Keychain access,
+Antigravity MCP permission and Cursor native tool identity remain explicit limits
 under [final acceptance](specs/final-parity-slice.md). Only the already configured
 DeepSeek, Codex, OpenCode, external Antigravity, Grok and Cursor `auto` are authorized
 for final real-provider runs; all other providers retain source/contract evidence.

@@ -722,8 +722,11 @@ review by count. No new GPT-6 Pro review is requested until full reimplementatio
 At final closeout, GPT-6 Pro and Daybreak Blue at `xhigh` review the full retained
 product, original-to-Rust coverage, all not-yet-reviewed individual commits, the
 cumulative implementation range, and final HEAD. Reuse prior exact reviewed evidence
-without dropping final integration coverage. Correct source-supported findings,
-run affected verification, and submit corrections together for final re-review.
+without dropping final integration coverage. Latest user decision (2026-09-09):
+after reading the completed Pro review, briefly report its findings and severity to
+the user and wait. Do not make review-driven corrections until the user resumes
+that work. Then correct supported findings, run affected verification, and submit
+corrections together for final re-review.
 Real-provider runs follow the user-owned final-stage scope above; packaged app flows
 are directly exercised at every phase, with final integration coverage at closeout.
 final completion requires both reviewers' approval and that authorized real-flow

@@ -86,6 +86,26 @@ Cursor Auto turn and stop; other real model turns remain outside authorization.
 
 ## Acceptance and verification
 
+The real 390px admitted-browser flow exposes an inherited presentation gap:
+`MobileRoomInfoPanel` reports no items in its media/pins/links/files tabs even when
+the room contains an attachment. Original `d504647` has the same unconditional
+empty branch; these collection views never had a retained data consumer. State
+that these tabs are unsupported instead of asserting an empty channel, and record
+the limit in the exposure inventory. Preserve working timeline downloads, header
+pins and search. This is a presentation correction, with no new collection API,
+client-derived collection, request, timer or authorization change. Verify the
+existing component cases, frontend build and packaged narrow-screen wording.
+
+An actual admitted-browser ballot is committed once but leaves the poll controls
+waiting: the common event decoder rejects the empty actor in the domain's
+`privacy_minimized_vote_transition`. Accept that existing anonymous cast/withdraw/
+close marker in snapshots, live events, history and command receipts. Require its
+vote reference, empty content and empty actor; ordinary messages retain their
+nonempty actor requirement. Keep ballot identity/choice with the server's private
+vote owner, without changing stored events, command replay, timeouts or privacy.
+Verify the actual wire shape through the existing socket harness, then recover the
+packaged room containing the committed ballot and exercise voting and closure.
+
 - Reconcile every retained exposed feature with its original entry, Rust owner,
   state/failure semantics and frontend or explicit service-only consumer. Report
   remaining partial, indirect and intentionally unavailable operations accurately.
@@ -107,7 +127,8 @@ Cursor Auto turn and stop; other real model turns remain outside authorization.
   processes; use the existing artifact owner after active builds have ended.
 - Obtain final GPT-6 Pro and Daybreak Blue xhigh approval for the complete retained
   product, original-to-Rust inventory, unreviewed individual commits, cumulative
-  implementation and exact pushed HEAD, correcting supported findings first.
+  implementation and exact pushed HEAD. The master plan's per-slice gate owns the
+  user's latest requirement to brief and wait after Pro review before corrections.
 
 Unavailable external dependencies or authorization gaps remain explicit limits;
 they do not become successful or simulated real-provider evidence. At the accepted
