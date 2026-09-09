@@ -58,7 +58,7 @@ describe("AgentCreateModal Custom API", () => {
     expect(primaryActionButton().disabled).toBe(false);
 
     await userEvent.type(screen.getByLabelText("API 키"), "secret-value");
-    await userEvent.click(screen.getByRole("button", { name: "보안 저장" }));
+    await userEvent.click(screen.getByRole("button", { name: "저장" }));
     await waitFor(() =>
       expect(apiMocks.setProviderCredential).toHaveBeenCalledWith(
         "custom_api",

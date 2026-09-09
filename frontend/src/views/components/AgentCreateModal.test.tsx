@@ -799,7 +799,7 @@ describe("AgentCreateModal", () => {
 
     await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));
-    const deleteButton = await screen.findByRole("button", { name: "저장 키 삭제" });
+    const deleteButton = await screen.findByRole("button", { name: "키 삭제" });
     await userEvent.click(deleteButton);
 
     await waitFor(() =>
@@ -807,6 +807,6 @@ describe("AgentCreateModal", () => {
     );
     expect(screen.getByRole("dialog", { name: "에이전트 추가" })).toBeTruthy();
     expect((deleteButton as HTMLButtonElement).disabled).toBe(false);
-    expect(screen.getByText(/키 설정됨/)).toBeTruthy();
+    expect(screen.getByPlaceholderText("설정됨")).toBeTruthy();
   });
 });

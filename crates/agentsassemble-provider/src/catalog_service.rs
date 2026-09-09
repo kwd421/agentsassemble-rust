@@ -96,8 +96,20 @@ impl ProviderCatalogService {
         let task = tokio::spawn(async move {
             loop {
                 let generation = *requests.borrow_and_update();
-                let catalog =
-                    discover_catalog(&registrations, &credentials, &discovery_cancellation).await;
+                // Generation zero is automatic startup. Subsequent generations are
+                // requested by an authenticated local operator; only those may ask
+                // the OS for access to an already saved key.
+                let discovery_credentials = if generation == 0 {
+                    credentials.clone()
+                } else {
+                    credentials.for_user_requested_access()
+                };
+                let catalog = discover_catalog(
+                    &registrations,
+                    &discovery_credentials,
+                    &discovery_cancellation,
+                )
+                .await;
                 if discovery_cancellation.is_cancelled() {
                     break;
                 }

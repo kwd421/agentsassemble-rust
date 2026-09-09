@@ -42,19 +42,14 @@ export default function ProviderCredentialField({
             disabled={!value.trim() || busy}
             onClick={onSave}
           >
-            보안 저장
+            저장
           </button>
           {status?.source === "keyring" && (
             <button type="button" disabled={busy} onClick={onDelete}>
-              저장 키 삭제
+              키 삭제
             </button>
           )}
         </div>
-        <p>
-          {status?.configured
-            ? `키 설정됨 · ${status.source}`
-            : "키 없음"}
-        </p>
       </div>
     </section>
   );

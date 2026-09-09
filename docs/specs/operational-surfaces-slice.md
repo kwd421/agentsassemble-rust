@@ -335,6 +335,22 @@ desktop/390px refresh flows, then the plan-owned manual review. Real provider ru
 remain within the existing approved matrix; public documentation/catalog research
 does not authorize new model turns or installation/account changes.
 
+## User-requested secure-store interaction (2026-09-09)
+
+The user authorizes keychain access and explicitly rejects a separate authorization
+button. Existing native reads suppress authentication UI, so ordinary retries
+cannot request approval. Keep the existing user operations: explicit catalog
+refresh (including completion of a user-requested provider login), credential save,
+and deletion may request the native OS dialog. Startup/status/runtime reads remain
+noninteractive. The catalog generation owner scopes interactive credential access
+to a user-requested discovery and retains the same credential semaphore/backend;
+no secret or permission is cached. OS denial stays a typed failure. The blocking
+native call retains its permit until the user completes/cancels the OS dialog even
+if the requesting HTTP connection closes; no automatic retry or timeout reports
+success. A one-time OS grant is not advertised as persistent access.
+Acceptance covers unchanged operator authorization, interactive refresh versus
+noninteractive startup/runtime, and the real packaged user-approved flow.
+
 ## Interactive login custody decision
 
 OpenCode's original interactive login hands a graphical terminal to the operator;

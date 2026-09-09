@@ -18,7 +18,7 @@ impl CredentialBackend for PrivateCredentialBackend {
         &self,
         provider: ProviderCredentialId,
     ) -> Result<BackendAvailability<bool>, ProviderCredentialError> {
-        self.read(provider).map(|result| match result {
+        self.read(provider, false).map(|result| match result {
             BackendAvailability::Available(secret) => {
                 BackendAvailability::Available(secret.is_some())
             }
@@ -29,7 +29,11 @@ impl CredentialBackend for PrivateCredentialBackend {
     fn read(
         &self,
         provider: ProviderCredentialId,
+        allow_authentication_ui: bool,
     ) -> Result<BackendAvailability<Option<String>>, ProviderCredentialError> {
+        if allow_authentication_ui {
+            return Err(ProviderCredentialError::SecureStoreUnavailable);
+        }
         match self
             .0
             .as_ref()

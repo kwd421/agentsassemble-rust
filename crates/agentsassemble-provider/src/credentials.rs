@@ -65,6 +65,7 @@ trait CredentialBackend: Send + Sync {
     fn read(
         &self,
         provider: ProviderCredentialId,
+        allow_authentication_ui: bool,
     ) -> Result<BackendAvailability<Option<String>>, ProviderCredentialError>;
     fn set(
         &self,
@@ -110,9 +111,16 @@ impl CredentialBackend for NativeCredentialBackend {
     fn read(
         &self,
         provider: ProviderCredentialId,
+        allow_authentication_ui: bool,
     ) -> Result<BackendAvailability<Option<String>>, ProviderCredentialError> {
         #[cfg(target_os = "macos")]
-        let _interaction = macos_disable_keychain_ui()?;
+        let _interaction = if allow_authentication_ui {
+            None
+        } else {
+            Some(macos_disable_keychain_ui()?)
+        };
+        #[cfg(not(target_os = "macos"))]
+        let _ = allow_authentication_ui;
         let BackendAvailability::Available(entry) = native_entry(provider)? else {
             return Ok(BackendAvailability::Absent);
         };
@@ -128,8 +136,6 @@ impl CredentialBackend for NativeCredentialBackend {
         provider: ProviderCredentialId,
         secret: &str,
     ) -> Result<BackendAvailability<()>, ProviderCredentialError> {
-        #[cfg(target_os = "macos")]
-        let _interaction = macos_disable_keychain_ui()?;
         let BackendAvailability::Available(entry) = native_entry(provider)? else {
             return Ok(BackendAvailability::Absent);
         };
@@ -143,8 +149,6 @@ impl CredentialBackend for NativeCredentialBackend {
         &self,
         provider: ProviderCredentialId,
     ) -> Result<BackendAvailability<()>, ProviderCredentialError> {
-        #[cfg(target_os = "macos")]
-        let _interaction = macos_disable_keychain_ui()?;
         let BackendAvailability::Available(entry) = native_entry(provider)? else {
             return Ok(BackendAvailability::Absent);
         };
@@ -215,6 +219,7 @@ fn native_store_available() -> Result<BackendAvailability<()>, ProviderCredentia
 pub struct ProviderCredentialStore {
     backend: Arc<dyn CredentialBackend>,
     access: Arc<Semaphore>,
+    allow_authentication_ui: bool,
 }
 
 pub(crate) struct ProviderCredential(String);
@@ -232,6 +237,7 @@ impl ProviderCredentialStore {
         Self {
             backend: Arc::new(private_handoff::PrivateCredentialBackend(selected)),
             access: Arc::new(Semaphore::new(1)),
+            allow_authentication_ui: false,
         }
     }
 
@@ -245,6 +251,7 @@ impl ProviderCredentialStore {
         Self {
             backend: Arc::new(NativeCredentialBackend),
             access: Arc::new(Semaphore::new(1)),
+            allow_authentication_ui: false,
         }
     }
 
@@ -275,8 +282,9 @@ impl ProviderCredentialStore {
         &self,
         provider: ProviderCredentialId,
     ) -> Result<ProviderCredential, ProviderCredentialError> {
+        let allow_authentication_ui = self.allow_authentication_ui;
         let keyring = self
-            .run_backend(move |backend| backend.read(provider))
+            .run_backend(move |backend| backend.read(provider, allow_authentication_ui))
             .await?;
         match keyring {
             BackendAvailability::Available(Some(secret)) => {
@@ -285,6 +293,14 @@ impl ProviderCredentialStore {
             BackendAvailability::Available(None) | BackendAvailability::Absent => {
                 Err(ProviderCredentialError::MissingSecret)
             }
+        }
+    }
+
+    /// Scopes native UI to an explicit user operation while sharing access serialization.
+    pub(crate) fn for_user_requested_access(&self) -> Self {
+        Self {
+            allow_authentication_ui: true,
+            ..self.clone()
         }
     }
 
@@ -390,6 +406,7 @@ mod tests {
         absent: bool,
         fail: bool,
         stored: BTreeMap<ProviderCredentialId, String>,
+        read_ui_modes: Vec<bool>,
     }
 
     impl CredentialBackend for TestBackend {
@@ -416,8 +433,9 @@ mod tests {
         fn read(
             &self,
             provider: ProviderCredentialId,
+            allow_authentication_ui: bool,
         ) -> Result<BackendAvailability<Option<String>>, ProviderCredentialError> {
-            let state = self
+            let mut state = self
                 .state
                 .lock()
                 .unwrap_or_else(std::sync::PoisonError::into_inner);
@@ -427,6 +445,7 @@ mod tests {
             if state.absent {
                 return Ok(BackendAvailability::Absent);
             }
+            state.read_ui_modes.push(allow_authentication_ui);
             Ok(BackendAvailability::Available(
                 state.stored.get(&provider).cloned(),
             ))
@@ -474,11 +493,38 @@ mod tests {
         ProviderCredentialStore {
             backend,
             access: Arc::new(tokio::sync::Semaphore::new(1)),
+            allow_authentication_ui: false,
         }
     }
 
     pub(super) fn isolated_store() -> ProviderCredentialStore {
         store(Arc::new(TestBackend::default()))
+    }
+
+    #[tokio::test]
+    async fn explicit_access_does_not_enable_background_keychain_ui() {
+        let backend = Arc::new(TestBackend::default());
+        let store = store(backend.clone());
+        store
+            .set(ProviderCredentialId::DeepSeek, "private-fixture-key")
+            .await
+            .unwrap_or_else(|error| panic!("set fixture: {error}"));
+        assert!(
+            store
+                .for_user_requested_access()
+                .secret(ProviderCredentialId::DeepSeek)
+                .await
+                .is_ok()
+        );
+        assert!(store.secret(ProviderCredentialId::DeepSeek).await.is_ok());
+        assert_eq!(
+            backend
+                .state
+                .lock()
+                .unwrap_or_else(std::sync::PoisonError::into_inner)
+                .read_ui_modes,
+            [true, false]
+        );
     }
 
     #[tokio::test]
