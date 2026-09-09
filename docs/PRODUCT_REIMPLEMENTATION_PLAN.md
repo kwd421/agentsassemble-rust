@@ -727,6 +727,17 @@ after reading the completed Pro review, briefly report its findings and severity
 the user and wait. Do not make review-driven corrections until the user resumes
 that work. Then correct supported findings, run affected verification, and submit
 corrections together for final re-review.
+Latest user review sequencing (2026-09-09): Pro review is split into Phase 1–3,
+then Phase 4–6, then Phase 7–9; do not replace this with one whole-repository
+request or an isolated recent-diff approval. Phase 1–3 was reviewed at `9a8d39d`.
+Changes since that snapshot that affect an already-reviewed group require a scoped
+supplemental review of that group at the new frozen HEAD. Include current changes
+in their owning groups and preserve coverage across all groups; reuse prior exact
+evidence only for unchanged reviewed scope. After each completed Pro answer,
+briefly report its findings/severity and wait without review-driven corrections.
+The user explicitly deferred broader mobile UX implementation; mobile acceptance
+remains incomplete and must be disclosed to both reviewers.
+
 Real-provider runs follow the user-owned final-stage scope above; packaged app flows
 are directly exercised at every phase, with final integration coverage at closeout.
 final completion requires both reviewers' approval and that authorized real-flow

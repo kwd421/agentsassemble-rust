@@ -2,10 +2,13 @@
 
 ## Active work
 
-- Active: user-requested Harness/API model freshness. Preserve native discovery,
-  replace DeepSeek's static IDs with authenticated discovery, include OpenRouter's
-  newest models, and expose refresh outcomes without forced software updates.
+- Active: close out user-requested Harness/API freshness, inline OS credential
+  approval, and the observed unread-state correction, then obtain Daybreak review.
+  Broader mobile UI/UX is explicitly deferred by the user and remains incomplete;
+  agent-selected desktop stress dimensions do not constitute mobile design acceptance.
   [Contract](docs/specs/operational-surfaces-slice.md#provider-model-freshness-2026-09-09).
+  Pro sequence: supplement changed Phase 1–3 at the frozen HEAD, then 4–6, then
+  7–9; brief each completed result and wait. [Owner](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#per-slice-execution-gate).
 
 - User-requested browser-to-local provider setup is locally complete:
   login/installation guidance, local setup links and optional version updates

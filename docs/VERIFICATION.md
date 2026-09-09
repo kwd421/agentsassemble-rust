@@ -9047,6 +9047,78 @@ No key was replaced and no new-model inference turn was run. A native-menu
 keyboard selection caused Computer Use to lose window access while the process
 remained alive; that attempt does not prove selection completion.
 
-Full workspace, frontend and desktop tests passed. The following Clippy gate
-identified one `manual_let_else` style error in the new HTTP-client construction;
-the equivalent `let ... else` correction is applied and the gate is rerun.
+Full workspace (882 tests), frontend (142 files/810 tests), and desktop (29 tests)
+passed. The following Clippy gate identified one `manual_let_else` style error in
+the new HTTP-client construction; its equivalent correction passes workspace
+Clippy. Thus the original `make verify` run exited nonzero, and completion uses
+its passing test evidence plus the corrected affected gates. The post-build
+artifact gate also requires the existing maintenance owner after active packaged
+work finishes; its 18 GiB limit is unchanged.
+
+## Inline keychain interaction and minimal credential controls (2026-09-09)
+
+The user approved a native key-access attempt, then explicitly rejected a separate
+authorization button and redundant “secure save”/stored-key text. The final flow
+uses the existing explicit model refresh, save and delete operations to request OS
+interaction when needed. Startup and runtime reads remain noninteractive. A scoped
+credential handle shares the existing backend/semaphore and retains no secret or
+authorization cache. The OS dialog must complete or be cancelled by the user.
+
+The final packaged app first reported noninteractive access denial, then its normal
+model-refresh button completed authenticated discovery after native authorization:
+10 providers ready, 4 unavailable, and 3 DeepSeek model IDs in the actual menu.
+Direct clicks selected `deepseek-v4-flash` and `low`; the draft was cancelled without
+creating an agent or running inference. The credential section has only the key
+input's configured placeholder, Save and Delete; no separate approval control or
+redundant stored-key sentence remains. No key was replaced or deleted.
+
+Eight credential tests, two catalog-service tests, the existing operator-authority
+refresh boundary, workspace check/Clippy and structure/format gates pass. The new
+credential regression proves interactive access does not enable background reads.
+No new HTTP route, timer, fallback, installer or credential source is introduced.
+
+## Visible latest read cursor and mobile acceptance boundary (2026-09-09)
+
+The user's observed 16-unread banner at the latest message had two owners missing
+a connection: viewport reading never advanced the preference cursor, and the
+sidebar's manual action wrote a timestamp while the unread projection uses a
+sequence. The active visible latest feed now invokes the existing preference
+writer; the manual lobby action uses the canonical sequence. The hook requires a
+focused visible document, a latest loaded nonhistorical viewport, and a successful
+hit test inside the feed, with no modal. It deduplicates attempts and adds no timer
+or persistence owner. Failed writes stay with the existing preference error state.
+
+Two deterministic viewport tests cover latest/new-sequence acknowledgement,
+deduplication, room change, older scrolling, hidden/unfocused documents, modal
+coverage and non-feed hit targets. The complete frontend suite passes 143 files /
+812 tests. Actual 390×420 packaged manipulation showed no unread banner at latest;
+read-only SQLite inspection confirmed `seq:107` for the isolated operator's lobby.
+The sidebar's Mark Read action and channel re-entry also retained the no-unread
+state. No test message or provider turn was sent for this check.
+
+Mobile UI/UX is **not accepted**. The user did not specify 390px or 390×420;
+those were agent-selected desktop stress dimensions, and must not be attributed
+to the user or treated as a representative phone viewport. The repository guide
+has been corrected to distinguish actual target mobile layouts from low-window
+clipping checks. Earlier functional manipulation was insufficient to establish
+mobile layout/interaction acceptance. The user explicitly deferred broader
+mobile redesign and requested review of the current work. This correction does not
+claim mobile design completion or overall Phase 9/full-product closure.
+
+The user reported these unresolved mobile defects: unrequested “알림 / 나” bottom
+navigation, an oversized profile with empty space, side chat placed below the
+main conversation, and unclear room-information entry. Source inspection confirms
+`AppView.tsx` places that navigation in the sidebar, wires “알림” to Mark Read, and
+mounts `SideChatDock` beneath channel content; `MobileRoomInfoPanel` is a separate
+entry. These observations are not an approved mobile design. The former frontend
+improvement/completion assessment is withdrawn; the requested broader UX review
+must carry this evidence rather than infer acceptance from tests.
+
+A final restart in the ordinary desktop window retained the no-unread state.
+After all owned app/runtime processes and build commands exited, the existing
+artifact maintenance owner removed 24.0 GiB of regenerable Cargo artifacts. Final
+artifact, architecture, source-growth, format and diff gates pass with unchanged
+limits. The original `make verify` took 828.00 seconds and peaked at 2,347,925,504
+bytes process RSS before its subsequently corrected Clippy failure; this is build
+cost, not a product runtime benchmark. The previous isolated integration database
+is retained for the still-open Phase 9 work. Computer Use has been reset.
