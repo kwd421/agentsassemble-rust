@@ -62,6 +62,7 @@ fn registered_routes(
         crate::provider_operations_web::HTTP_ROUTES,
         crate::operational_web::HTTP_ROUTES,
         crate::runtime_version::HTTP_ROUTES,
+        crate::runtime_restart_web::HTTP_ROUTES,
         crate::frontend_assets::HTTP_ROUTES,
         crate::public_ingress_web::HTTP_ROUTES,
         crate::human_invite_manager_web::HTTP_ROUTES,

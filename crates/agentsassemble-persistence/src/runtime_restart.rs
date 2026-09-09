@@ -7,16 +7,7 @@ use crate::{PersistenceError, SqliteStore};
 
 const RESTART_KEY: &str = "runtime_restart_v1";
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "snake_case")]
-pub enum RuntimeRestartPhase {
-    Quiescing,
-    Draining,
-    Recovering,
-    Completed,
-    Failed,
-    Aborted,
-}
+pub use agentsassemble_domain::RuntimeRestartPhase;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -38,12 +29,6 @@ pub struct RuntimeRestartRecord {
     pub(crate) candidate_identity: Option<String>,
 }
 
-impl RuntimeRestartPhase {
-    pub(crate) const fn blocks_admission(self) -> bool {
-        matches!(self, Self::Quiescing | Self::Draining | Self::Recovering)
-    }
-}
-
 impl SqliteStore {
     /// Reads the latest durable restart receipt, without implying current readiness.
     ///
@@ -55,6 +40,28 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         let record = load_restart(&mut transaction).await?;
         transaction.commit().await?;
+        Ok(record)
+    }
+
+    /// Reads the requested receipt, including immutable retired operations.
+    ///
+    /// # Errors
+    /// Returns storage or malformed-state failures.
+    pub async fn runtime_restart_operation(
+        &self,
+        operation_id: &str,
+    ) -> Result<Option<RuntimeRestartRecord>, PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        let current = load_restart(&mut tx).await?;
+        let record = if current
+            .as_ref()
+            .is_some_and(|record| record.operation_id == operation_id)
+        {
+            current
+        } else {
+            load_at(&mut tx, &format!("{RESTART_KEY}:{operation_id}")).await?
+        };
+        tx.commit().await?;
         Ok(record)
     }
 
@@ -74,6 +81,12 @@ impl SqliteStore {
             )
         })?;
         let mut transaction = self.pool.begin().await?;
+        if let Some(retired) =
+            load_at(&mut transaction, &format!("{RESTART_KEY}:{operation_id}")).await?
+        {
+            transaction.commit().await?;
+            return Ok(retired);
+        }
         if let Some(previous) = load_restart(&mut transaction).await? {
             if previous.operation_id == operation_id {
                 transaction.commit().await?;
@@ -82,6 +95,13 @@ impl SqliteStore {
             if previous.phase.blocks_admission() {
                 return Err(busy());
             }
+            // Retired receipts are immutable; only RESTART_KEY owns the active transition.
+            save_at(
+                &mut transaction,
+                &format!("{RESTART_KEY}:{}", previous.operation_id),
+                &previous,
+            )
+            .await?;
         }
         let targets = quiescent_targets(&mut transaction).await?;
         let record = RuntimeRestartRecord {
@@ -154,9 +174,16 @@ pub(crate) async fn require_runtime_admission(
 pub(crate) async fn load_restart(
     transaction: &mut Transaction<'_, Sqlite>,
 ) -> Result<Option<RuntimeRestartRecord>, PersistenceError> {
+    load_at(transaction, RESTART_KEY).await
+}
+
+async fn load_at(
+    transaction: &mut Transaction<'_, Sqlite>,
+    key: &str,
+) -> Result<Option<RuntimeRestartRecord>, PersistenceError> {
     let stored: Option<String> =
         sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key = ?")
-            .bind(RESTART_KEY)
+            .bind(key)
             .fetch_optional(&mut **transaction)
             .await?;
     stored
@@ -168,8 +195,16 @@ pub(crate) async fn save_restart(
     transaction: &mut Transaction<'_, Sqlite>,
     record: &RuntimeRestartRecord,
 ) -> Result<(), PersistenceError> {
+    save_at(transaction, RESTART_KEY, record).await
+}
+
+async fn save_at(
+    transaction: &mut Transaction<'_, Sqlite>,
+    key: &str,
+    record: &RuntimeRestartRecord,
+) -> Result<(), PersistenceError> {
     sqlx::query("INSERT INTO runtime_metadata (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
-        .bind(RESTART_KEY).bind(serde_json::to_string(record)?).execute(&mut **transaction).await?;
+        .bind(key).bind(serde_json::to_string(record)?).execute(&mut **transaction).await?;
     Ok(())
 }
 

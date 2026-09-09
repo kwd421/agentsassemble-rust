@@ -39,6 +39,25 @@ impl FrontendRelease {
         &self.build_id
     }
 
+    /// Loads an exact previously prepared release without re-reading the mutable source.
+    ///
+    /// # Errors
+    /// Rejects invalid identities, changed files, links or malformed frontend documents.
+    pub fn load(state_root: &Path, build_id: &str) -> io::Result<Self> {
+        if !is_build_id(build_id) {
+            return Err(io::Error::other("frontend build identity is invalid"));
+        }
+        let root = state_root.join("frontend-releases").join(build_id);
+        if !root.symlink_metadata()?.is_dir() || fingerprint(&root)? != build_id {
+            return Err(io::Error::other("retained frontend release is corrupt"));
+        }
+        Ok(Self {
+            index_html: crate::frontend_document::render(&root, build_id)?,
+            root,
+            build_id: build_id.to_owned(),
+        })
+    }
+
     /// Copy and verify a build before publishing it to the serving runtime.
     ///
     /// # Errors

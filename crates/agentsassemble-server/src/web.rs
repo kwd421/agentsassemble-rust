@@ -175,6 +175,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::provider_operations_web::routes())
         .merge(crate::operational_web::routes())
         .merge(crate::runtime_version::routes())
+        .merge(crate::runtime_restart_web::routes())
         .merge(crate::frontend_assets::routes())
         .merge(crate::server_identity_web::routes())
         .merge(crate::public_ingress_web::routes())

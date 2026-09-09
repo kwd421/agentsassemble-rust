@@ -620,3 +620,21 @@ candidate are rejected. This case passes (3.51s); all ten real control-pipe case
 a bounded 64 KiB buffer. Candidate preparation occurs only on explicit restart,
 not a periodic scan. Handoff triggering/listener inheritance and full packaged
 acceptance remain pending.
+
+Restart HTTP uses the existing one-use local-operator ticket. The private CLI socket
+uses OS-user custody and a bounded one-command EOF frame; admitted responses finish
+before shutdown. Its short per-user path supports long database paths, rejects active
+or unresolved listeners, and removes only the exact owned socket inode. Terminal
+receipts are retained under their operation IDs; only the latest record can own
+admission. A repeated old request returns its immutable receipt without replacing
+that owner. Candidate image/frontend preparation precedes durable quiescence; the
+main process receives the prepared effect and owns drain, cleanup and replacement.
+A runtime without that executor reports restart unsupported. Reconstruction uses
+the captured session authority and existing provider supervisor, with floor wake-up
+only after all targets are confirmed. Main-process handoff is the next integration.
+
+The retained-receipt test and 20 affected restart cases pass (0.40s). Real HTTP
+operator-ticket/replay/unsupported checks pass (0.07s), and the actual private socket
+verifies status, active-listener refusal, inheritance identity and preservation of an
+unrelated replacement file (0.04s). Server/persistence Clippy and mandatory gates
+pass. These checks launch no provider; executable replacement is not yet exercised.

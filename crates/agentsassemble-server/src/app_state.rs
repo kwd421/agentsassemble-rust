@@ -34,6 +34,7 @@ pub struct AppState {
     pub rooms: RoomRuntime,
     pub tickets: TicketStore,
     pub provider_catalog: ProviderCatalogService,
+    pub runtime_restart: crate::runtime_restart::RuntimeRestartControl,
     pub(crate) local_resources: crate::local_resources::LocalResources,
     pub provider_usage: agentsassemble_provider::ProviderUsageService,
     pub provider_login: agentsassemble_provider::ProviderLoginService,
@@ -149,6 +150,7 @@ impl AppState {
             google_accounts: crate::GoogleAccountService::default(),
             tickets,
             provider_catalog,
+            runtime_restart: crate::runtime_restart::RuntimeRestartControl::default(),
             local_resources: crate::local_resources::LocalResources::default(),
             provider_login: agentsassemble_provider::ProviderLoginService::new(
                 shutdown.child_token(),

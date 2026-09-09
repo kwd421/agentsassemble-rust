@@ -94,6 +94,7 @@ async fn refresh_requires_exact_operator_ticket_and_publishes_owned_catalog()
             .status(),
         StatusCode::UNAUTHORIZED
     );
+    assert_restart_authority(&client, &route, &tickets).await?;
     assert_login_authority(&client, &route, &tickets).await?;
     assert_usage_authority(&client, &route, &tickets).await?;
     assert_resource_authority(&client, &route, &tickets).await?;
@@ -261,5 +262,46 @@ async fn assert_health_authority(
         .send()
         .await?;
     assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
+    Ok(())
+}
+
+async fn assert_restart_authority(
+    client: &Client,
+    route: &str,
+    tickets: &TicketStore,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let route = route.replace("provider-catalog/refresh", "runtime/rolling-restart");
+    assert_eq!(
+        client.post(&route).body("invalid").send().await?.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let token = tickets
+        .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await?
+        .ticket;
+    let response = client.get(&route).bearer_auth(&token).send().await?;
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(response.headers()["cache-control"], "private, no-store");
+    let status: agentsassemble_domain::RuntimeRestartStatus = response.json().await?;
+    assert!(!status.supported);
+    assert!(status.operation.is_none());
+    assert_eq!(
+        client.get(&route).bearer_auth(token).send().await?.status(),
+        StatusCode::UNAUTHORIZED
+    );
+    let token = tickets
+        .issue_server_operator(LOCAL_OPERATOR_USER_ID.to_owned())
+        .await?
+        .ticket;
+    assert_eq!(
+        client
+            .post(&route)
+            .bearer_auth(token)
+            .json(&serde_json::json!({"operation_id": uuid::Uuid::new_v4()}))
+            .send()
+            .await?
+            .status(),
+        StatusCode::SERVICE_UNAVAILABLE
+    );
     Ok(())
 }

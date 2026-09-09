@@ -11,6 +11,22 @@ const OPERATION: &str = "2c368489-1783-454f-b40e-947504f51014";
 const NEXT_OPERATION: &str = "2c368489-1783-454f-b40e-947504f51015";
 
 #[tokio::test]
+async fn retired_restart_receipt_cannot_replace_current_admission_owner()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, _, _directory) = fixture().await;
+    store.prepare_runtime_restart(OPERATION).await?;
+    let retired = store.abort_runtime_restart(OPERATION).await?;
+    let current = store.prepare_runtime_restart(NEXT_OPERATION).await?;
+    assert_eq!(store.prepare_runtime_restart(OPERATION).await?, retired);
+    assert_eq!(
+        store.runtime_restart_operation(OPERATION).await?,
+        Some(retired)
+    );
+    assert_eq!(store.runtime_restart_status().await?, Some(current));
+    Ok(())
+}
+
+#[tokio::test]
 async fn restart_admission_precedes_launch_and_abort_releases_retry()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, principal, _directory) = fixture().await;
