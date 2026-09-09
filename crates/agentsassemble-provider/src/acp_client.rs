@@ -11,12 +11,11 @@ use std::{
 use agent_client_protocol::schema::{
     ProtocolVersion,
     v1::{
-        AgentCapabilities, CancelNotification, ContentBlock, InitializeRequest, LoadSessionRequest,
-        McpServer, NewSessionRequest, PermissionOptionKind, PromptRequest,
+        AgentCapabilities, CancelNotification, ClientCapabilities, ContentBlock, InitializeRequest,
+        LoadSessionRequest, McpServer, NewSessionRequest, PermissionOptionKind, PromptRequest,
         RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
-        SelectedPermissionOutcome, SessionConfigKind, SessionConfigOption,
-        SessionConfigOptionCategory, SessionConfigSelectOptions, SessionId, SessionNotification,
-        SessionUpdate, SetSessionConfigOptionRequest, StopReason, TextContent,
+        SelectedPermissionOutcome, SessionConfigOption, SessionId, SessionNotification,
+        SessionUpdate, StopReason, TextContent,
     },
 };
 use agent_client_protocol::{Agent, Client, ConnectionTo, Lines};
@@ -46,6 +45,15 @@ type ProtocolReady = (ConnectionTo<Agent>, AgentCapabilities, Option<String>);
 mod delivery;
 #[path = "acp_permissions.rs"]
 mod permissions;
+
+#[path = "acp_configuration.rs"]
+mod configuration;
+
+#[derive(Default)]
+pub(crate) struct AcpClientConfiguration {
+    pub(crate) permission_policy: AcpPermissionPolicy,
+    pub(crate) capabilities: ClientCapabilities,
+}
 
 #[derive(Default)]
 struct ProtocolState {
@@ -101,14 +109,14 @@ impl AcpClient {
     pub(super) async fn connect<I, O>(
         stdin: I,
         stdout: O,
-        permission_policy: AcpPermissionPolicy,
+        configuration: AcpClientConfiguration,
     ) -> Result<Self, DriverLaunchError>
     where
         I: tokio::io::AsyncWrite + Unpin + Send + 'static,
         O: tokio::io::AsyncRead + Unpin + Send + 'static,
     {
         let state = Arc::new(Mutex::new(ProtocolState {
-            permission_policy,
+            permission_policy: configuration.permission_policy,
             ..ProtocolState::default()
         }));
         let shutdown = CancellationToken::new();
@@ -121,6 +129,7 @@ impl AcpClient {
             shutdown.clone(),
             Arc::clone(&closed),
             ready_sender,
+            configuration.capabilities,
         );
         let ready = match tokio::time::timeout(PROTOCOL_TIMEOUT, ready_receiver).await {
             Ok(Ok(ready)) => ready,
@@ -154,12 +163,13 @@ impl AcpClient {
         workspace: &str,
         existing_session_id: &str,
         server: McpServer,
-        model: &str,
+        selection: &[(String, String)],
     ) -> Result<AcpAttachment, DriverError> {
         let opened = self
             .open_session(workspace, existing_session_id, server)
             .await?;
-        self.select_model(&opened.id, opened.options, model).await?;
+        self.select_configuration(&opened.id, opened.options, selection)
+            .await?;
         self.bind_session(opened.id)?;
         Ok(opened.attachment)
     }
@@ -301,7 +311,7 @@ impl AcpClient {
         let params = serde_json::value::to_raw_value(&params).map_err(|_| protocol_error())?;
         self.connection
             .send_request(ClientRequest::ExtMethodRequest(ExtRequest::new(
-                format!("_{method}"),
+                method.to_owned(),
                 params.into(),
             )))
             .block_task()
@@ -507,57 +517,6 @@ impl AcpClient {
         Ok(())
     }
 
-    async fn select_model(
-        &mut self,
-        session_id: &SessionId,
-        options: Option<Vec<SessionConfigOption>>,
-        model: &str,
-    ) -> Result<(), DriverError> {
-        let mut models = options
-            .unwrap_or_default()
-            .into_iter()
-            .filter(is_model_option);
-        let Some(option) = models.next() else {
-            return self.poison(DriverError::new(
-                "provider_model_unconfirmed",
-                "The ACP provider did not expose its selected model authority.",
-            ));
-        };
-        if models.next().is_some() || !select_contains(&option.kind, model) {
-            return self.poison(DriverError::new(
-                "provider_model_unconfirmed",
-                "The ACP provider did not advertise the selected model.",
-            ));
-        }
-        if selected_value(&option.kind) == Some(model) {
-            return Ok(());
-        }
-        let Ok(response) = self
-            .connection
-            .send_request(SetSessionConfigOptionRequest::new(
-                session_id.clone(),
-                option.id,
-                model,
-            ))
-            .block_task()
-            .await
-        else {
-            return self.poison(protocol_error());
-        };
-        if response
-            .config_options
-            .iter()
-            .any(|option| is_model_option(option) && selected_value(&option.kind) == Some(model))
-        {
-            Ok(())
-        } else {
-            self.poison(DriverError::new(
-                "provider_model_unconfirmed",
-                "The ACP provider did not confirm the selected model.",
-            ))
-        }
-    }
-
     fn poison<T>(&mut self, error: DriverError) -> Result<T, DriverError> {
         self.poisoned = true;
         Err(error)
@@ -583,6 +542,7 @@ fn spawn_protocol<I, O>(
     shutdown: CancellationToken,
     closed: Arc<AtomicBool>,
     ready: oneshot::Sender<Result<ProtocolReady, DriverLaunchError>>,
+    capabilities: ClientCapabilities,
 ) -> JoinHandle<()>
 where
     I: tokio::io::AsyncWrite + Unpin + Send + 'static,
@@ -619,7 +579,10 @@ where
             )
             .connect_with(Lines::new(outgoing, incoming), async move |connection| {
                 let initialized = connection
-                    .send_request(InitializeRequest::new(ProtocolVersion::V1))
+                    .send_request(
+                        InitializeRequest::new(ProtocolVersion::V1)
+                            .client_capabilities(capabilities),
+                    )
                     .block_task()
                     .await;
                 match initialized {
@@ -761,35 +724,6 @@ fn initialized_model_id(
         && model.len() <= crate::catalog::MAX_OPTION_VALUE_BYTES
         && !model.chars().any(char::is_control))
     .then(|| model.to_owned())
-}
-
-fn select_contains(kind: &SessionConfigKind, model: &str) -> bool {
-    let SessionConfigKind::Select(select) = kind else {
-        return false;
-    };
-    match &select.options {
-        SessionConfigSelectOptions::Ungrouped(options) => options
-            .iter()
-            .any(|option| option.value.to_string() == model),
-        SessionConfigSelectOptions::Grouped(groups) => groups.iter().any(|group| {
-            group
-                .options
-                .iter()
-                .any(|option| option.value.to_string() == model)
-        }),
-        _ => false,
-    }
-}
-
-fn selected_value(kind: &SessionConfigKind) -> Option<&str> {
-    let SessionConfigKind::Select(select) = kind else {
-        return None;
-    };
-    Some(&select.current_value.0)
-}
-
-fn is_model_option(option: &SessionConfigOption) -> bool {
-    option.category == Some(SessionConfigOptionCategory::Model) || option.id.to_string() == "model"
 }
 
 const fn protocol_error() -> DriverError {

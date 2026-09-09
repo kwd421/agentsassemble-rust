@@ -7,7 +7,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     ProviderCredentialStore, ProviderUsageError,
-    acp_client::{AcpClient, AcpPermissionPolicy},
+    acp_client::{AcpClient, AcpClientConfiguration},
     catalog::provider_executable,
     process::{ProbeFailure, inspect},
 };
@@ -57,11 +57,11 @@ where
     I: AsyncWrite + Unpin + Send + 'static,
     O: AsyncRead + Unpin + Send + 'static,
 {
-    let mut client = AcpClient::connect(input, output, AcpPermissionPolicy::Reject)
+    let mut client = AcpClient::connect(input, output, AcpClientConfiguration::default())
         .await
         .map_err(|_| ProbeFailure::Failed)?;
     let result = client
-        .request_extension("x.ai/billing", serde_json::json!({}))
+        .request_extension("_x.ai/billing", serde_json::json!({}))
         .await;
     client.shutdown().await;
     result.map_err(|_| ProbeFailure::Failed)

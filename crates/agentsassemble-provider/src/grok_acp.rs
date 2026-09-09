@@ -9,7 +9,7 @@ use agentsassemble_domain::DurableAgentSession;
 use sha2::{Digest, Sha256};
 
 use crate::{
-    acp_client::AcpPermissionPolicy,
+    acp_client::{AcpClientConfiguration, AcpPermissionPolicy},
     acp_runtime::AcpRuntime,
     driver::{
         DriverError, DriverFuture, ProviderDriver, ProviderSessionAttachment,
@@ -43,7 +43,10 @@ impl GrokAcpDriver {
             guardian,
             &arguments,
             &environment,
-            AcpPermissionPolicy::RoomTools,
+            AcpClientConfiguration {
+                permission_policy: AcpPermissionPolicy::RoomTools,
+                ..Default::default()
+            },
         )
         .await?;
         Ok(Self { runtime })
@@ -61,7 +64,10 @@ impl GrokAcpDriver {
             crate::acp_runtime::bind(session).await?,
             &arguments,
             &environment,
-            AcpPermissionPolicy::RoomTools,
+            AcpClientConfiguration {
+                permission_policy: AcpPermissionPolicy::RoomTools,
+                ..Default::default()
+            },
         )
         .await?;
         Ok(Self { runtime })

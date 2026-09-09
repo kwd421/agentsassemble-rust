@@ -1,5 +1,5 @@
 use crate::{
-    acp_client::AcpPermissionPolicy,
+    acp_client::AcpClientConfiguration,
     acp_runtime::AcpRuntime,
     cursor::effective_model,
     driver::{
@@ -31,7 +31,7 @@ impl CursorAcpDriver {
             guardian,
             &["acp".to_owned()],
             &[],
-            AcpPermissionPolicy::Reject,
+            AcpClientConfiguration::default(),
         )
         .await?;
         Ok(Self { runtime })
@@ -50,7 +50,7 @@ impl CursorAcpDriver {
             bind(session).await?,
             &["acp".to_owned()],
             &[],
-            AcpPermissionPolicy::Reject,
+            AcpClientConfiguration::default(),
         )
         .await?;
         Ok(Self { runtime })
@@ -83,7 +83,7 @@ impl ProviderDriver for CursorAcpDriver {
                     &session.workspace,
                     &session.provider_session_id,
                     server,
-                    &model,
+                    &[("model".to_owned(), model.clone())],
                 )
                 .await?;
             Ok(ProviderSessionAttachment {

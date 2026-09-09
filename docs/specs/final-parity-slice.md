@@ -69,6 +69,21 @@ boundary, used by both bounded filesystem owners. Keep private staging and proce
 lifetime with the provider; preserve persistence's pre-commit revalidation and
 transaction ordering. Do not duplicate the manifest policy or bypass the check.
 
+The staged native Cursor now initializes successfully, but its CLI model slugs
+do not match ACP model authority (`auto` versus `default[]`, with similarly
+different reasoning/speed representations). Use Cursor's parameterized ACP picker
+and `cursor/list_available_models` response for discovery and attachment. Native
+model parameters own available choices and defaults; expose context/thinking
+variants in the model selector and thought-level/fast parameters through existing
+controls. Re-read that authority at attachment and require the complete returned
+configuration to confirm every requested value before binding the session. Unknown,
+missing, ambiguous or changed options fail closed; do not infer aliases from CLI
+text or add a protocol fallback. Shared ACP owns typed extension exchanges and
+configuration receipts, while Cursor owns parameter meaning. Catalog inspection
+creates no native conversation and retains bounded process cleanup. Verify native
+metadata, changed/contradictory receipts, existing Grok ACP behavior, and a packaged
+Cursor Auto turn and stop; other real model turns remain outside authorization.
+
 ## Acceptance and verification
 
 - Reconcile every retained exposed feature with its original entry, Rust owner,

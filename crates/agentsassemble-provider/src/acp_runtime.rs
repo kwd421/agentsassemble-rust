@@ -15,7 +15,7 @@ use tokio::{
 #[cfg(not(unix))]
 use crate::process::sanitize_environment;
 use crate::{
-    acp_client::{AcpClient, AcpPermissionPolicy},
+    acp_client::{AcpClient, AcpClientConfiguration},
     driver::{DriverError, ProviderTurnRequest},
     filesystem::{BoundExecutable, bind_executable_with_children},
     launch_cleanup,
@@ -47,7 +47,7 @@ impl AcpRuntime {
         guardian: &GuardianLaunch,
         arguments: &[String],
         environment: &[(String, String)],
-        permission_policy: AcpPermissionPolicy,
+        configuration: AcpClientConfiguration,
     ) -> Result<Self, DriverLaunchError> {
         let mut room_portal = create_room_portal().await?;
         let started = UnixProcessCustody::start_with_children(
@@ -64,7 +64,7 @@ impl AcpRuntime {
             Err(error) => return Err(launch_cleanup::portal(&mut room_portal, error).await),
         };
         let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
-        let client = match AcpClient::connect(pipes.stdin, pipes.stdout, permission_policy).await {
+        let client = match AcpClient::connect(pipes.stdin, pipes.stdout, configuration).await {
             Ok(client) => client,
             Err(error) => {
                 let process = process_group.stop().await;
@@ -90,7 +90,7 @@ impl AcpRuntime {
         executable: BoundExecutable,
         arguments: &[String],
         environment: &[(String, String)],
-        permission_policy: AcpPermissionPolicy,
+        configuration: AcpClientConfiguration,
     ) -> Result<Self, DriverLaunchError> {
         #[cfg(not(any(unix, windows)))]
         return Err(DriverError::new(
@@ -135,7 +135,7 @@ impl AcpRuntime {
             return Err(launch_cleanup::owned_and_portal(&mut room_portal, process, failure).await);
         };
         let stderr_task = tokio::spawn(drain_stderr(stderr));
-        let client = match AcpClient::connect(stdin, stdout, permission_policy).await {
+        let client = match AcpClient::connect(stdin, stdout, configuration).await {
             Ok(client) => client,
             Err(error) => {
                 let process = stop_failed_child(child.as_mut()).await;

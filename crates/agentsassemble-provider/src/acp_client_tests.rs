@@ -19,8 +19,8 @@ use tokio::{
 };
 
 use super::{
-    AcpClient, AcpPermissionPolicy, MAX_PROTOCOL_LINE_BYTES, ProtocolState, permission_response,
-    record_tool_identity,
+    AcpClient, AcpClientConfiguration, AcpPermissionPolicy, MAX_PROTOCOL_LINE_BYTES, ProtocolState,
+    permission_response, record_tool_identity,
 };
 
 #[tokio::test]
@@ -28,7 +28,12 @@ async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
     let (mut client, fixture_task, _prompt_seen) =
         fixture(false, AcpPermissionPolicy::Reject).await;
     let attached = client
-        .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
+        .attach(
+            "/tmp",
+            "",
+            mcp_server(),
+            &[("model".into(), "gpt-5.6-sol-high-fast".into())],
+        )
         .await
         .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
     assert_eq!(attached.session_id, "cursor-session");
@@ -60,7 +65,12 @@ async fn tool_only_completion_is_reserved_for_room_publication_validation() {
     for room_observation in [false, true] {
         let (mut client, fixture_task, _) = fixture(false, AcpPermissionPolicy::Reject).await;
         client
-            .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
+            .attach(
+                "/tmp",
+                "",
+                mcp_server(),
+                &[("model".into(), "gpt-5.6-sol-high-fast".into())],
+            )
             .await
             .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
         let result = client
@@ -93,7 +103,12 @@ async fn tool_only_completion_is_reserved_for_room_publication_validation() {
 async fn cancellation_waits_for_the_exact_acp_cancelled_receipt() {
     let (mut client, fixture, prompt_seen) = fixture(true, AcpPermissionPolicy::Reject).await;
     client
-        .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
+        .attach(
+            "/tmp",
+            "",
+            mcp_server(),
+            &[("model".into(), "gpt-5.6-sol-high-fast".into())],
+        )
         .await
         .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
     let request = turn("turn-cancel", "Wait", false);
@@ -125,7 +140,12 @@ async fn native_permission_uses_exact_owner_and_waits_for_delivery_receipt_or_ca
         };
         let (mut client, fixture, _) = fixture(cancel, policy).await;
         client
-            .attach("/tmp", "", mcp_server(), "gpt-5.6-sol-high-fast")
+            .attach(
+                "/tmp",
+                "",
+                mcp_server(),
+                &[("model".into(), "gpt-5.6-sol-high-fast".into())],
+            )
             .await
             .unwrap_or_else(|error| panic!("attach: {error}"));
         let (ingress, mut requests) = crate::ProviderRequestIngress::channel(1);
@@ -208,7 +228,7 @@ async fn durable_session_load_accepts_the_exact_uncategorized_model_option() {
             "/tmp",
             "cursor-session",
             mcp_server(),
-            "gpt-5.6-sol-high-fast",
+            &[("model".into(), "gpt-5.6-sol-high-fast".into())],
         )
         .await
         .unwrap_or_else(|error| panic!("load ACP session: {error}"));
@@ -312,9 +332,16 @@ async fn fixture(
         cancel_prompt,
         prompt_seen_sender,
     ));
-    let client = AcpClient::connect(client_input, client_output, policy)
-        .await
-        .unwrap_or_else(|error| panic!("connect ACP fixture: {:?}", error.error));
+    let client = AcpClient::connect(
+        client_input,
+        client_output,
+        AcpClientConfiguration {
+            permission_policy: policy,
+            ..Default::default()
+        },
+    )
+    .await
+    .unwrap_or_else(|error| panic!("connect ACP fixture: {:?}", error.error));
     (client, task, prompt_seen)
 }
 
