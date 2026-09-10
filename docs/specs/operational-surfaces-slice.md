@@ -159,8 +159,21 @@ from the requesting computer, and preserves the browser creation draft.
 
 The creation destination is explicit. The existing room-host managed-session path
 retains its room authority and stored-session re-add behavior. Own-computer creation
-uses a companion attendee invitation issued by the current room's human-admission
-owner. Its browser draft carries the selected provider and display name into a
+uses a companion attendee invitation issued by the current room-session authority,
+including the paired operator's device- and origin-bound session. The HTTP boundary
+selects the existing human or paired credential owner; issuance revalidates that
+exact owner within its transaction. The invite retains the issuing session's
+fingerprint, bounded lifetime and eight-companion limit. Admission and ongoing
+attendee authorization resolve that stored fingerprint to exactly one durable
+human-session or operator-pairing record, then revalidate its current room and
+posting authority. Missing, ambiguous, corrupt, expired or revoked parents fail
+closed; a rejected credential is never retried against another authority. This
+uses the existing parent relationship and session owners without converting human
+credentials, copying device secrets into packets or changing the storage schema.
+Verification starts at real paired redemption, covers its actual browser API and
+invite HTTP, wrong device/origin, exact replay and parent revocation before/after
+admission, and preserves the existing human companion and native friend boundaries.
+Its browser draft carries the selected provider and display name into a
 bundled local creation window; it does not carry a host model, executable, workspace,
 API credential or human session bearer. Only the invitation and expected room
 incarnation cross the app handoff. Opening the window has no provider-launch effect.

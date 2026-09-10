@@ -12,13 +12,15 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-mod support {
-    pub mod room_socket_peer;
-}
-use support::room_socket_peer::RoomSocketPeer;
+#[path = "support/room_socket_peer.rs"]
+mod room_socket_peer;
+use room_socket_peer::RoomSocketPeer;
 
 const ORIGIN: &str = "https://pairing.example.test";
 const PROXY: &str = "pairing-test-proxy-secret-00000000001";
+
+#[path = "operator_pairing_boundary/companion.rs"]
+mod companion;
 
 fn public(request: RequestBuilder) -> RequestBuilder {
     request

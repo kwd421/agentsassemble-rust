@@ -100,6 +100,7 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
     let (store, now) = admitted_fixture(InviteScope::ReadWrite).await;
     let fingerprint = session_fingerprint(&store).await;
     let human = store.authorize_human_session(&fingerprint).await?;
+    let issuer = crate::RoomSessionAuthorization::Human(human);
     let make = |request_id| CompanionInviteRequest {
         request_id,
         provider_kind: "codex",
@@ -107,16 +108,16 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
     };
     let first_id = Uuid::new_v4();
     let first = store
-        .create_companion_attendee_invite(&human, make(first_id), now)
+        .create_companion_attendee_invite(&issuer, make(first_id), now)
         .await?;
     for _ in 0..6 {
         store
-            .create_companion_attendee_invite(&human, make(Uuid::new_v4()), now)
+            .create_companion_attendee_invite(&issuer, make(Uuid::new_v4()), now)
             .await?;
     }
     let (left, right) = tokio::join!(
-        store.create_companion_attendee_invite(&human, make(Uuid::new_v4()), now),
-        store.create_companion_attendee_invite(&human, make(Uuid::new_v4()), now),
+        store.create_companion_attendee_invite(&issuer, make(Uuid::new_v4()), now),
+        store.create_companion_attendee_invite(&issuer, make(Uuid::new_v4()), now),
     );
     assert_ne!(left.is_ok(), right.is_ok());
     let ((Err(error), Ok(_)) | (Ok(_), Err(error))) = (left, right) else {
@@ -127,7 +128,7 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
         PersistenceError::CommandRejected { code, .. } if matches!(code.as_bytes(), b"companion_limit_reached")
     ));
     let retry = store
-        .create_companion_attendee_invite(&human, make(first_id), now + Duration::seconds(1))
+        .create_companion_attendee_invite(&issuer, make(first_id), now + Duration::seconds(1))
         .await?;
     assert_eq!(first.invite_id, retry.invite_id);
     assert_eq!(retry.expires_at, now + Duration::minutes(10));
@@ -137,7 +138,7 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
         .await?;
     assert!(
         store
-            .create_companion_attendee_invite(&human, make(first_id), now)
+            .create_companion_attendee_invite(&issuer, make(first_id), now)
             .await
             .is_err()
     );
@@ -147,7 +148,7 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
         .await?;
     assert!(matches!(
         store
-            .create_companion_attendee_invite(&human, make(Uuid::new_v4()), now)
+            .create_companion_attendee_invite(&crate::RoomSessionAuthorization::Human(human.clone()), make(Uuid::new_v4()), now)
             .await,
         Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"permission_denied")
     ));

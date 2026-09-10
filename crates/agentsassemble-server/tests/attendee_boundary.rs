@@ -389,7 +389,7 @@ async fn readiness_observes_reconciled_custody_and_failure_closes_listener() -> 
     let listener = TcpListener::bind("127.0.0.1:0").await?;
     let address = listener.local_addr()?;
     let mut notified = false;
-    let result = serve(listener, state, CancellationToken::new(), async {
+    let result = Box::pin(serve(listener, state, CancellationToken::new(), async {
         assert!(
             store
                 .revalidate_attendee_connection(&previous, now)
@@ -402,7 +402,7 @@ async fn readiness_observes_reconciled_custody_and_failure_closes_listener() -> 
             io::ErrorKind::BrokenPipe,
             "readiness closed",
         ))
-    })
+    }))
     .await;
     assert!(notified);
     assert!(

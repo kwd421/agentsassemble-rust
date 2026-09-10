@@ -1,10 +1,11 @@
-//! Entry packets preserve the friend-manager and admitted-human ownership boundaries.
+//! Entry packets preserve friend-manager and exact room-session ownership boundaries.
 use super::AttendeeHttpError;
 use crate::{
     AppState,
     http_api::{PRIVATE_NO_STORE, bearer_credential, decode_json_body, exact_tauri_cors},
-    human_session_http_authority::{
-        HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
+    ingress_trust::TrustedIngressOrigin,
+    room_session_http_authority::{
+        RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
     },
 };
 use agentsassemble_persistence::{AttendeeInvite, CompanionInviteRequest, RoomManagerAuthority};
@@ -69,12 +70,19 @@ async fn companion(
     request: Request,
 ) -> Result<Json<AttendeeEntryPacket>, AttendeeHttpError> {
     let bearer = bearer_credential(request.headers()).ok_or_else(unauthorized)?;
-    let human = match resolve_human_session_bearer(&state, bearer).await {
-        Ok(HumanSessionBearerResolution::Authorized(human)) => human,
-        Ok(HumanSessionBearerResolution::Other) | Err(HumanSessionBearerError::Invalid) => {
+    let issuer = match resolve_room_session_bearer(
+        &state,
+        request.headers(),
+        request.extensions().get::<TrustedIngressOrigin>(),
+        bearer,
+    )
+    .await
+    {
+        Ok(RoomSessionBearerResolution::Authorized(issuer)) => issuer,
+        Ok(RoomSessionBearerResolution::Other) | Err(RoomSessionBearerError::Invalid) => {
             return Err(unauthorized());
         }
-        Err(HumanSessionBearerError::Persistence(error)) => {
+        Err(RoomSessionBearerError::Persistence(error)) => {
             return Err(AttendeeHttpError::from_persistence(error));
         }
     };
@@ -86,7 +94,7 @@ async fn companion(
     let invite = state
         .store
         .create_companion_attendee_invite(
-            &human,
+            &issuer,
             CompanionInviteRequest {
                 request_id: parse_id(&body.request_id)?,
                 provider_kind,
@@ -99,7 +107,7 @@ async fn companion(
     packet(
         &origin,
         body.request_id,
-        human.principal().room_id.clone(),
+        issuer.principal().room_id.clone(),
         invite,
     )
     .map(Json)

@@ -246,7 +246,7 @@ async fn assigned_request(
     let now = chrono::Utc::now();
     let invite = store
         .create_companion_attendee_invite(
-            human,
+            &agentsassemble_persistence::RoomSessionAuthorization::Human(human.clone()),
             CompanionInviteRequest {
                 request_id: Uuid::new_v4(),
                 provider_kind: "codex_live_session",

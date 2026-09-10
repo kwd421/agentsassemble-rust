@@ -10095,3 +10095,44 @@ remote participant. This case passes without sleeps or real provider execution.
 Frontend TypeScript/Vite/CSS build, server all-target/all-feature Clippy,
 architecture/growth, 19 policy cases and formatting pass. Packaged UI verification
 and final Pro re-review remain pending; no OS dispatch proof is inferred.
+
+P13-M1 now issues companion invitations through the existing exact room-session
+owner for both humans and paired operators. The browser forwards its device token
+only in the HTTP header. Admission and ongoing attendee authorization resolve the
+retained parent fingerprint to exactly one durable session owner, then enforce its
+current posting, expiry, revocation, host and room authority. The existing schema
+and credential domains are unchanged; invalid authority is not retried elsewhere.
+The extra provenance read uses the existing fingerprint indexes inside the current
+transaction and adds no background work, retry or duplicate credential storage.
+
+Affected persistence cases pass (22), including paired parent expiry clamping,
+muting and changed room/host lineage. Existing human and friend invite HTTP cases
+pass (5); paired room boundary cases pass (3), including actual redeem, companion
+issue/replay, missing/wrong device, foreign/unproven origin, admission and parent
+revocation. Revocation denies both an admitted attendee's ordinary access and an
+unused packet's admission while retaining the admitted attendee's exact cleanup.
+Initial assertions expected 401 for a revoked parent or mismatched valid device;
+the existing durable owner returns 403 (missing device remains 401), and the
+assertions now preserve that contract. A proposed missing
+stored-device case was rejected by the existing SQLite invariant and removed,
+including its redundant production check; the storage gate was not weakened.
+
+The actual frontend `redeemOperatorPairing` and `createCompanionAttendeeInvite`
+functions also pass against an isolated current Rust binary with its configured
+manual-ingress owner: live paired redemption, missing-device rejection, packet
+issuance with the exact room UID, and identical invitation replay. The temporary
+Vitest harness supplies the already-created room UID and maps fetch to real local
+HTTP with the configured proxy headers; responses and authority are not mocked.
+Node fetch was observed replacing the explicit Host header, so the harness uses
+Node HTTP to preserve the ingress contract. The first harness attempt also loaded
+a DOM setup in a Node-only environment; the final run uses the existing jsdom
+setup. This is API-to-server integration, not browser UI, TLS or OS-dispatch proof.
+The isolated runtime exited normally; the temporary test is not product source.
+
+Affected frontend cases pass (6). Workspace all-target/all-feature Clippy and
+architecture/growth, 19 policy cases and formatting pass. Clippy identified a
+17,568-byte composite readiness-test future after the owner expansion; that test
+now heap-pins its server future, with no production allowance or changed limit.
+Full affected-head workspace/frontend/native checks and packaged M1/M4/M5
+verification continue before re-review. Direct browser/OS dispatch and two-machine
+acceptance remain open with the previous tool-policy blocks preserved.

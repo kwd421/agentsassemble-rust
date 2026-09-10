@@ -322,12 +322,7 @@ async fn resolve_operator_session(
     origin: &str,
     now: DateTime<Utc>,
 ) -> Result<OperatorSessionAuthorization, PersistenceError> {
-    let row = sqlx::query("SELECT * FROM operator_pairings WHERE session_fingerprint = ?")
-        .bind(fingerprint.as_slice())
-        .fetch_optional(&mut **tx)
-        .await?
-        .ok_or_else(unavailable)?;
-    let record = PairingRecord::decode(&row)?;
+    let record = session_record(tx, fingerprint).await?;
     record.require_origin_and_live(origin)?;
     if record.device_fingerprint.as_ref() != Some(device) {
         return Err(unavailable());
@@ -341,6 +336,33 @@ async fn resolve_operator_session(
         principal,
         expires_at,
     })
+}
+
+// Validates the stored parent of an attendee, never a presented operator credential.
+pub(crate) async fn require_attendee_parent(
+    tx: &mut Transaction<'_, Sqlite>,
+    fingerprint: &[u8; 32],
+    room_id: &str,
+    now: DateTime<Utc>,
+) -> Result<(AuthenticatedPrincipal, DateTime<Utc>), PersistenceError> {
+    let record = session_record(tx, fingerprint).await?;
+    if record.revoked || record.manager.manager.room_id != room_id {
+        return Err(unavailable());
+    }
+    let expires_at = record.require_session(fingerprint, now)?;
+    Ok((record.resolve_manager(tx).await?, expires_at))
+}
+
+async fn session_record(
+    tx: &mut Transaction<'_, Sqlite>,
+    fingerprint: &[u8; 32],
+) -> Result<PairingRecord, PersistenceError> {
+    let row = sqlx::query("SELECT * FROM operator_pairings WHERE session_fingerprint = ?")
+        .bind(fingerprint.as_slice())
+        .fetch_optional(&mut **tx)
+        .await?
+        .ok_or_else(unavailable)?;
+    PairingRecord::decode(&row)
 }
 
 struct PairingRecord {

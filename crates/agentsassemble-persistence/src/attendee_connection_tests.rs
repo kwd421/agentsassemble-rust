@@ -103,7 +103,7 @@ pub(super) async fn fixture()
         .await?;
     let invite = store
         .create_companion_attendee_invite(
-            &human,
+            &crate::RoomSessionAuthorization::Human(human.clone()),
             CompanionInviteRequest {
                 request_id: Uuid::new_v4(),
                 provider_kind: "codex_live_session",

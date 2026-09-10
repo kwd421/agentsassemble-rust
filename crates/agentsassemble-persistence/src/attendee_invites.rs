@@ -8,9 +8,8 @@ use sqlx::{Row, Sqlite, Transaction};
 use uuid::Uuid;
 
 use crate::{
-    HumanSessionAuthorization, PersistenceError, RoomManagerAuthority, RoomUserIdentity,
+    PersistenceError, RoomManagerAuthority, RoomSessionAuthorization, RoomUserIdentity,
     SqliteStore,
-    human_session_authority::revalidate_human_session,
     session_bearer::{SessionBearerPurpose, derive_session_bearer},
 };
 
@@ -106,18 +105,18 @@ impl SqliteStore {
         Ok(invite)
     }
 
-    /// Creates an attendee packet under a current posting human's room custody.
+    /// Creates an attendee packet under a current posting browser session's room custody.
     ///
     /// # Errors
     /// Rejects revoked/read-only/muted owners, conflicting retries and the existing eight-companion limit.
     pub async fn create_companion_attendee_invite(
         &self,
-        human: &HumanSessionAuthorization,
+        issuer: &RoomSessionAuthorization,
         request: CompanionInviteRequest<'_>,
         now: DateTime<Utc>,
     ) -> Result<AttendeeInvite, PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let (current, _) = revalidate_human_session(&mut tx, human, now).await?;
+        let current = crate::room_session_authority::revalidate_in(&mut tx, issuer, now).await?;
         let principal = current.principal();
         let (_, participant) = crate::authority::load_active_membership(
             &mut tx,
@@ -128,7 +127,7 @@ impl SqliteStore {
         if principal.invite_scope != InviteScope::ReadWrite || participant.muted {
             return Err(rejected(
                 "permission_denied",
-                "A current posting human session is required.",
+                "A current posting room session is required.",
             ));
         }
         let owner = InvitationOwner {

@@ -166,29 +166,53 @@ pub(crate) async fn require_parent(
     fingerprint: &[u8],
     now: DateTime<Utc>,
 ) -> Result<DateTime<Utc>, PersistenceError> {
-    let fingerprint = fingerprint
+    let fingerprint: [u8; 32] = fingerprint
         .try_into()
         .map_err(|_| rejected("invalid_state", "Stored attendee parent is invalid."))?;
-    let crate::human_session_authority::ResolvedHumanSession::Live { authorization, .. } =
-        crate::human_session_authority::resolve_human_session(tx, &fingerprint, Some(room_id), now)
+    // Select exactly one stored provenance before validating it. An invalid human
+    // parent cannot fall through to operator authority (or vice versa).
+    let owners: Vec<String> = sqlx::query_scalar(
+        "SELECT 'human' FROM human_room_sessions WHERE session_fingerprint=? UNION ALL SELECT 'operator' FROM operator_pairings WHERE session_fingerprint=?",
+    ).bind(fingerprint.as_slice()).bind(fingerprint.as_slice()).fetch_all(&mut **tx).await?;
+    let (principal, expires_at) = match owners.as_slice() {
+        [kind] if kind == "human" => {
+            let crate::human_session_authority::ResolvedHumanSession::Live {
+                authorization, ..
+            } = crate::human_session_authority::resolve_human_session(
+                tx,
+                &fingerprint,
+                Some(room_id),
+                now,
+            )
             .await?
-    else {
-        return Err(rejected(
-            "session_revoked",
-            "The companion's human authority has ended.",
-        ));
+            else {
+                return Err(rejected(
+                    "session_revoked",
+                    "The companion's parent session has ended.",
+                ));
+            };
+            (
+                authorization.principal().clone(),
+                authorization.expires_at(),
+            )
+        }
+        [kind] if kind == "operator" => {
+            crate::operator_pairing::require_attendee_parent(tx, &fingerprint, room_id, now).await?
+        }
+        _ => {
+            return Err(rejected(
+                "session_revoked",
+                "The companion's parent authority is missing or ambiguous.",
+            ));
+        }
     };
-    let (_, participant) = crate::authority::load_active_membership(
-        tx,
-        room_id,
-        &authorization.principal().participant_id,
-    )
-    .await?;
-    if authorization.principal().invite_scope != InviteScope::ReadWrite || participant.muted {
+    let (_, participant) =
+        crate::authority::load_active_membership(tx, room_id, &principal.participant_id).await?;
+    if principal.invite_scope != InviteScope::ReadWrite || participant.muted {
         return Err(rejected(
             "permission_denied",
-            "The companion's human posting authority is unavailable.",
+            "The companion's posting authority is unavailable.",
         ));
     }
-    Ok(authorization.expires_at())
+    Ok(expires_at)
 }

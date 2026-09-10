@@ -17,7 +17,7 @@ async fn attendee_admission_has_one_provider_bound_external_owner_and_exact_retr
         .await?;
     let invite = store
         .create_companion_attendee_invite(
-            &human,
+            &crate::RoomSessionAuthorization::Human(human.clone()),
             CompanionInviteRequest {
                 request_id: Uuid::new_v4(),
                 provider_kind: "codex_live_session",

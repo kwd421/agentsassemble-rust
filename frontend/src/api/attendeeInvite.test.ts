@@ -25,7 +25,7 @@ it("uses one distinct native ticket and rejects changed room or injected shell a
   }
 });
 
-it("uses only the admitted human bearer for a companion and requires the current public origin", async () => {
+it("uses the room bearer and paired device for a companion and requires the current public origin", async () => {
   vi.stubGlobal("window", { location: { origin: "https://room.example.test" } });
   const fetch = vi.fn().mockResolvedValueOnce(new Response(JSON.stringify(packet), { status: 200 }));
   vi.stubGlobal("fetch", fetch);
@@ -34,6 +34,11 @@ it("uses only the admitted human bearer for a companion and requires the current
   await createCompanionAttendeeInvite(session, body);
   expect(requestDesktopAttendeeInviteCreateTicket).not.toHaveBeenCalled();
   expect(fetch).toHaveBeenCalledWith("/api/room-attendee/companion-invite", expect.objectContaining({ headers: { Authorization: "Bearer human-session", "Content-Type": "application/json" } }));
+  fetch.mockResolvedValueOnce(new Response(JSON.stringify(packet), { status: 200 }));
+  await createCompanionAttendeeInvite({ ...session, sessionToken: "paired-session", deviceToken: "paired-device" }, body);
+  expect(fetch).toHaveBeenLastCalledWith("/api/room-attendee/companion-invite", expect.objectContaining({
+    headers: { Authorization: "Bearer paired-session", "X-Device-Token": "paired-device", "Content-Type": "application/json" },
+  }));
   fetch.mockResolvedValueOnce(new Response(JSON.stringify({ ...packet, join_url: "https://changed.example.test/join?token=private" }), { status: 200 }));
   await expect(createCompanionAttendeeInvite(session, body)).rejects.toThrow("공개 주소가 변경");
 });

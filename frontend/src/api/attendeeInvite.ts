@@ -22,12 +22,13 @@ export async function createFriendAttendeeInvite(
 }
 
 export async function createCompanionAttendeeInvite(
-  session: Pick<RoomGuestSession, "roomUid" | "sessionToken" | "meetingId">, request: CreateCompanionAttendeeInvite,
+  session: Pick<RoomGuestSession, "roomUid" | "sessionToken" | "meetingId"> & { deviceToken?: string }, request: CreateCompanionAttendeeInvite,
 ): Promise<AttendeePacketCustody> {
   if (!session.roomUid || !session.sessionToken) throw new Error("현재 방의 참가 권한을 확인할 수 없어요.");
   const response = await fetch("/api/room-attendee/companion-invite", {
     method: "POST", cache: "no-store", redirect: "error",
-    headers: { Authorization: `Bearer ${session.sessionToken}`, "Content-Type": "application/json" }, body: JSON.stringify(request),
+    headers: { Authorization: `Bearer ${session.sessionToken}`, "Content-Type": "application/json",
+      ...(session.deviceToken ? { "X-Device-Token": session.deviceToken } : {}) }, body: JSON.stringify(request),
   });
   const packet = await readPacket(response, { requestId: request.request_id, roomId: session.meetingId, roomUid: session.roomUid });
   if (packet.origin !== window.location.origin) throw new Error("공개 주소가 변경됐어요. 현재 방 주소에서 다시 시도해 주세요.");

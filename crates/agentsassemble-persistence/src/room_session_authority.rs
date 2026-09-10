@@ -57,22 +57,25 @@ impl SqliteStore {
         expected: &RoomSessionAuthorization,
     ) -> Result<RoomSessionAuthorization, PersistenceError> {
         let mut tx = self.pool.begin().await?;
-        let current = match expected {
-            RoomSessionAuthorization::Human(session) => {
-                let (current, _) = crate::human_session_authority::revalidate_human_session(
-                    &mut tx,
-                    session,
-                    Utc::now(),
-                )
-                .await?;
-                RoomSessionAuthorization::Human(current)
-            }
-            RoomSessionAuthorization::Operator(session) => RoomSessionAuthorization::Operator(
-                crate::operator_pairing::revalidate_operator_session(&mut tx, session, Utc::now())
-                    .await?,
-            ),
-        };
+        let current = revalidate_in(&mut tx, expected, Utc::now()).await?;
         tx.commit().await?;
         Ok(current)
     }
+}
+
+pub(crate) async fn revalidate_in(
+    tx: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    expected: &RoomSessionAuthorization,
+    now: DateTime<Utc>,
+) -> Result<RoomSessionAuthorization, PersistenceError> {
+    Ok(match expected {
+        RoomSessionAuthorization::Human(session) => {
+            let (current, _) =
+                crate::human_session_authority::revalidate_human_session(tx, session, now).await?;
+            RoomSessionAuthorization::Human(current)
+        }
+        RoomSessionAuthorization::Operator(session) => RoomSessionAuthorization::Operator(
+            crate::operator_pairing::revalidate_operator_session(tx, session, now).await?,
+        ),
+    })
 }

@@ -90,7 +90,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     guestSession && guestSession.meetingId === activeRoom.meetingId &&
     canonicalRoom.room?.room_id === guestSession.meetingId
     // Ordinary admission has no room UID; the accepted authenticated snapshot owns it.
-    ? { ...guestSession, roomUid: canonicalRoom.room.room_uid } : null, canonicalRoom.events);
+    ? { ...guestSession, roomUid: canonicalRoom.room.room_uid } : null, canonicalRoom.events, deviceToken);
   useLayoutEffect(() => { setCreateChannelScope(""); setSideChatScope(""); }, [channelScope]);
   // Recovery owns the entrance until its current session surface is accepted.
   // Do not mount native directory/profile controls beneath that entrance.

@@ -357,3 +357,90 @@ async fn consumed_pairing_survives_restart_and_queued_authority_observes_revocat
         "session_revoked"
     );
 }
+
+#[tokio::test]
+async fn paired_attendee_observes_parent_expiry_membership_and_exact_host_room()
+-> Result<(), Box<dyn std::error::Error>> {
+    use crate::{AttendeeAdmissionRequest, CompanionInviteRequest, RoomSessionAuthorization};
+    use sha2::{Digest, Sha256};
+    use uuid::Uuid;
+
+    for invalidation in ["expiry", "muted", "room_uid", "authority_lineage_id"] {
+        let (store, manager) = fixture("sqlite::memory:").await;
+        let now = Utc::now();
+        // A nearly expired real pairing makes the parent's lifetime, rather than
+        // the attendee's ordinary hour, the limiting authority.
+        let paired_at = now - SESSION_TTL + Duration::seconds(20);
+        store
+            .create_operator_pairing(&manager, &[1; 32], ORIGIN, paired_at)
+            .await?;
+        let paired = store
+            .redeem_operator_pairing(&[1; 32], &[2; 32], ORIGIN, paired_at)
+            .await?;
+        let issuer = RoomSessionAuthorization::Operator(paired.authorization);
+        let request = || CompanionInviteRequest {
+            request_id: Uuid::new_v4(),
+            provider_kind: "codex_live_session",
+            display_name: "Paired AI",
+        };
+        let invite = store
+            .create_companion_attendee_invite(&issuer, request(), now)
+            .await?;
+        assert_eq!(invite.expires_at, issuer.expires_at());
+        let fingerprint: [u8; 32] = Sha256::digest(invite.invite_bearer.as_bytes()).into();
+        let admission = store
+            .admit_attendee(
+                AttendeeAdmissionRequest {
+                    invite_fingerprint: &fingerprint,
+                    client_fingerprint: &[3; 32],
+                    request_id: Uuid::new_v4(),
+                    provider_kind: "codex_live_session",
+                    display_name: "Paired AI",
+                },
+                now,
+            )
+            .await?;
+        assert_eq!(admission.authorization.expires_at(), issuer.expires_at());
+        store
+            .revalidate_attendee_session(&admission.authorization, now)
+            .await?;
+        let checked_at = match invalidation {
+            "expiry" => issuer.expires_at(),
+            "muted" => {
+                sqlx::query("UPDATE participants SET participant_json=json_set(participant_json,'$.muted',json('true')) WHERE participant_id=?")
+                    .bind(LOCAL_OPERATOR_PARTICIPANT_ID).execute(&store.pool).await?;
+                now
+            }
+            "room_uid" => {
+                sqlx::query("UPDATE operator_pairings SET room_uid=?")
+                    .bind(Uuid::new_v4().to_string())
+                    .execute(&store.pool)
+                    .await?;
+                now
+            }
+            "authority_lineage_id" => {
+                sqlx::query("UPDATE operator_pairings SET authority_lineage_id=?")
+                    .bind(Uuid::new_v4().to_string())
+                    .execute(&store.pool)
+                    .await?;
+                now
+            }
+            _ => unreachable!(),
+        };
+        assert!(
+            store
+                .revalidate_attendee_session(&admission.authorization, checked_at)
+                .await
+                .is_err(),
+            "{invalidation}"
+        );
+        assert!(
+            store
+                .create_companion_attendee_invite(&issuer, request(), checked_at)
+                .await
+                .is_err(),
+            "{invalidation}"
+        );
+    }
+    Ok(())
+}

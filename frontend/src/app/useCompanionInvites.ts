@@ -5,7 +5,7 @@ import { attendeePacketText, createCompanionAttendeeInvite, type AttendeePacketC
 import { copyText } from "../lib/copyInviteText";
 import { roomGuestSessionExpired, type RoomGuestSession } from "../lib/roomGuestSession";
 
-export function useCompanionInvites(session: RoomGuestSession | null, events: RoomEvent[] = []) {
+export function useCompanionInvites(session: RoomGuestSession | null, events: RoomEvent[] = [], deviceToken?: string) {
   const current = useRef(session); current.current = session;
   const active = useRef(true);
   const busy = useRef(false);
@@ -37,7 +37,7 @@ export function useCompanionInvites(session: RoomGuestSession | null, events: Ro
     const requestId = pending.current.get(key) ?? crypto.randomUUID();
     pending.current.set(key, requestId);
     try {
-      const packet = await createCompanionAttendeeInvite(owner, { ...request, request_id: requestId });
+      const packet = await createCompanionAttendeeInvite({ ...owner, deviceToken }, { ...request, request_id: requestId });
       pending.current.delete(key);
       if (!isCurrent(owner)) return;
       setRecords((prior) => [...prior, { ...packet, sessionToken: owner.sessionToken }]);
