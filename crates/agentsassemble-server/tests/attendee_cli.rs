@@ -137,6 +137,10 @@ fn fixture_bundle(root: &Path) -> Result<std::path::PathBuf, Box<dyn std::error:
         "completed",
     );
     let script = script.replacen("#!/bin/sh", r#"#!/bin/sh
+if [ "$1 $2" = "login status" ]; then
+    printf '%s\n' 'Logged in using an API key' >&2
+    exit 0
+fi
 if [ "$1" = debug ]; then
     printf '%s\n' '{"models":[{"slug":"gpt-5.6-luna","display_name":"Fixture","supported_reasoning_levels":[{"effort":"low"}],"service_tiers":[]}]}'
     exit 0

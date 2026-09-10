@@ -203,7 +203,7 @@ pub(crate) static GROK_PROVIDER: ProviderRegistration = ProviderRegistration {
     usage: Some(crate::grok_usage::read),
     login: Some(crate::provider_login::ProviderLoginSpec {
         flow: crate::provider_login::ProviderLoginFlow::BrowserOauth,
-        arguments: &["login"],
+        arguments: &["login", "--oauth"],
         environment: None,
     }),
     turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::RetainedRuntime,
