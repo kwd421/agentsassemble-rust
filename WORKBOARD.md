@@ -29,9 +29,10 @@
   returns REVISE C0/H0/M3/L2. Correct own-PC setup-to-creation continuity,
   update transport-loss custody, setup readiness after update and the obsolete
   updater contract. Catalog cleanup uncertainty now retains terminal ownership and
-  passes controlled lifecycle and affected workspace verification. Complete packaged
-  checks for the other corrections, then obtain Pro
-  re-review before continuing the split groups. Real installer/OAuth outcomes
+  passes controlled lifecycle and affected workspace verification. Update transport
+  loss and readiness corrections pass signed packaged 0.1.20/0.1.22 checks, including
+  the held installer, lost response and catalog-only recovery. Complete own-PC
+  setup-to-creation continuity and obtain Pro re-review before continuing the split groups. Real installer/OAuth outcomes
   remain unverified.
   [Review disposition](docs/VERIFICATION.md#completed-setup-supplemental-pro-review-2026-09-10).
   [Update evidence](docs/VERIFICATION.md#optional-update-execution-during-creation-2026-09-10).

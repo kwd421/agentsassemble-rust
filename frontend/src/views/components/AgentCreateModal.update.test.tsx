@@ -54,9 +54,13 @@ it.each(["remote", "authentication_required", "command_missing", "loading"])(
 
 it("retains each pending installation when selections and completion order differ", async () => {
   const finishes = new Map<string, (value: typeof offer) => void>();
+  const pending = new Map<string, Promise<typeof offer>>();
   vi.mocked(providerUpdateOperation).mockImplementation(async (id, version) => {
+    if (pending.has(id)) return pending.get(id)!;
     if (!version) return { ...offer, provider_id: id };
-    return new Promise((resolve) => finishes.set(id, resolve));
+    const result = new Promise<typeof offer>((resolve) => finishes.set(id, resolve));
+    pending.set(id, result);
+    return result;
   });
   vi.mocked(chooseLocalWorkspace).mockResolvedValue({ selected: true, path: "/tmp/agentsassemble-workspace" });
   render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" catalogRevision="revision"
@@ -67,10 +71,40 @@ it("retains each pending installation when selections and completion order diffe
   fireEvent.click(screen.getByRole("listitem", { name: "Claude Code" }));
   fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
   fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
-  await screen.findByRole("button", { name: "업데이트" });
+  await screen.findByText("새 버전을 확인하고 있어요…");
   expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(true);
   await act(async () => finishes.get("claude")?.({ ...offer, provider_id: "claude", current_version: "2.0.0", completed: true, update_available: false }));
   expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(true);
   await act(async () => finishes.get("codex")?.({ ...offer, current_version: "2.0.0", completed: true, update_available: false }));
   expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(false);
+});
+
+
+it("keeps creation blocked after transport loss and while a read joins the installer", async () => {
+  const onCreate = vi.fn();
+  vi.mocked(providerUpdateOperation).mockResolvedValueOnce(offer)
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"));
+  vi.mocked(chooseLocalWorkspace).mockResolvedValue({ selected: true, path: "/tmp/agentsassemble-workspace" });
+  render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" catalogRevision="revision"
+    onClose={vi.fn()} onCreate={onCreate} providers={[{ ...codexProvider(), update_supported: true }]} />);
+  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  const update = await screen.findByRole("button", { name: "업데이트" });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "폴더 선택" })));
+  fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "Retained draft" } });
+  fireEvent.click(update);
+  await screen.findByRole("alert");
+  const create = screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement;
+  expect(create.disabled).toBe(true);
+  fireEvent.click(create);
+  expect(onCreate).not.toHaveBeenCalled();
+  let finish!: (value: typeof offer) => void;
+  vi.mocked(providerUpdateOperation).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  fireEvent.click(screen.getByRole("button", { name: "버전 다시 확인" }));
+  expect(create.disabled).toBe(true);
+  expect(providerUpdateOperation).toHaveBeenLastCalledWith("codex", undefined);
+  expect(providerUpdateOperation).toHaveBeenCalledTimes(3);
+  await act(async () => finish({ ...offer, completed: true, update_available: false, current_version: "2.0.0" }));
+  expect(create.disabled).toBe(false);
+  expect((screen.getByLabelText("표시 이름") as HTMLInputElement).value).toBe("Retained draft");
+  expect(onCreate).not.toHaveBeenCalled();
 });

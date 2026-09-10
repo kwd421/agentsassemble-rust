@@ -4,11 +4,12 @@ import { useState } from "react";
 import { isDesktopWebview, openProviderSetupHelp } from "../../lib/desktopBridge";
 import { providerSetupDestination, providerSetupLink } from "../../lib/providerSetup";
 
-export default function ProviderSetupActions({ providerId, provider, localAvailable = true, onUpdating }: {
+export default function ProviderSetupActions({ providerId, provider, localAvailable = true, onUpdating, onUpdated }: {
   providerId: string;
   provider?: ProviderAvailability | null;
   localAvailable?: boolean;
   onUpdating?: (updating: boolean) => void;
+  onUpdated?: () => void;
 }) {
   const [status, setStatus] = useState("");
   const destination = providerSetupDestination(providerId);
@@ -20,7 +21,7 @@ export default function ProviderSetupActions({ providerId, provider, localAvaila
     if (provider.discovery_error_code !== "command_missing") {
       return provider.update_supported && provider.available && provider.discovery_status !== "loading" &&
         provider.discovery_error_code !== "authentication_required"
-        ? <ProviderUpdatePrompt key={providerId} providerId={providerId} onUpdating={onUpdating} /> : null;
+        ? <ProviderUpdatePrompt key={providerId} providerId={providerId} provider={provider} onUpdating={onUpdating} onUpdated={onUpdated} /> : null;
     }
   }
   return <section className="dc-agent-section" aria-label={`${destination.display_name} 설치 및 로그인 도움말`}>

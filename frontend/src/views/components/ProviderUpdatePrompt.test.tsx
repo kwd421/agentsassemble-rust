@@ -3,6 +3,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-libra
 import { afterEach, expect, it, vi } from "vitest";
 import { providerUpdateOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
+import { ApiError } from "../../lib/apiErrors";
 import ProviderUpdatePrompt from "./ProviderUpdatePrompt";
 
 vi.mock("../../api/providerOperations", () => ({ providerUpdateOperation: vi.fn() }));
@@ -33,6 +34,7 @@ it("sends the displayed version once and reports only the confirmed installed ve
   const updating = vi.fn();
   render(<ProviderUpdatePrompt providerId="grok" onUpdating={updating} />);
   const button = await screen.findByRole("button", { name: "업데이트" });
+  updating.mockClear();
   let finish!: (value: typeof offer) => void;
   vi.mocked(providerUpdateOperation).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
   fireEvent.click(button);
@@ -58,4 +60,19 @@ it("rechecks a lost response without repeating the installation", async () => {
   fireEvent.click(screen.getByRole("button", { name: "버전 다시 확인" }));
   await screen.findByText("1.0.24 버전으로 업데이트했어요.");
   expect(providerUpdateOperation).toHaveBeenLastCalledWith("grok", undefined);
+});
+
+
+it.each([
+  ["provider_update_installation_unconfirmed", false],
+  ["provider_update_cleanup_unconfirmed", true],
+  ["provider_update_busy", true],
+])("keeps the execution guard consistent with owner error %s", async (code, guarded) => {
+  vi.mocked(providerUpdateOperation).mockResolvedValueOnce(offer)
+    .mockRejectedValueOnce(new ApiError(503, "업데이트 결과", code));
+  const updating = vi.fn();
+  render(<ProviderUpdatePrompt providerId="grok" onUpdating={updating} />);
+  fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
+  await screen.findByRole("alert");
+  expect(updating).toHaveBeenLastCalledWith(guarded);
 });

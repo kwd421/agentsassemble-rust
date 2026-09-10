@@ -1,31 +1,55 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ApiError } from "../../lib/apiErrors";
 import { providerUpdateOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
+import type { ProviderAvailability } from "../../types/generated/ProviderAvailability";
 import type { ProviderUpdate } from "../../types/generated/ProviderUpdate";
 
-export default function ProviderUpdatePrompt({ providerId, onUpdating }: {
+export default function ProviderUpdatePrompt({ providerId, provider, onUpdating, onUpdated }: {
   providerId: string;
+  provider?: ProviderAvailability;
   onUpdating?: (updating: boolean) => void;
+  onUpdated?: () => void;
 }) {
   const [observation, setObservation] = useState<ProviderUpdate | null>(null);
   const [busy, setBusy] = useState(false);
   const [installing, setInstalling] = useState(false);
-  const [error, setError] = useState("");
+  const [error, setError] = useState<{ message: string; code?: string } | null>(null);
   const [deferred, setDeferred] = useState(false);
   const inflight = useRef(false);
+  const updatingCallback = useRef(onUpdating);
+  updatingCallback.current = onUpdating;
+  const updatedCallback = useRef(onUpdated);
+  updatedCallback.current = onUpdated;
   const run = useCallback(async (version?: string) => {
     if (inflight.current) return;
     inflight.current = true;
+    // A read may join an installer owned by an earlier view or lost request.
+    updatingCallback.current?.(true);
     setBusy(true);
     setInstalling(version !== undefined);
-    setError("");
+    setError(null);
     try {
       const result = await providerUpdateOperation(providerId, version);
       setObservation(result);
+      if (result.completed) updatedCallback.current?.();
+      updatingCallback.current?.(false);
     } catch (failure) {
       setObservation(null);
+      if (failure instanceof ApiError && failure.code === "provider_update_catalog_unavailable") {
+        updatedCallback.current?.();
+      }
+      // Only these owner responses confirm that no updater remains active.
+      // Transport/authentication errors, busy and cleanup uncertainty retain the guard.
+      const terminalFailure = failure instanceof ApiError && [
+        "provider_update_unsupported", "provider_update_missing", "provider_update_offer_changed",
+        "provider_update_unavailable", "provider_update_invalid",
+        "provider_update_installation_unconfirmed", "provider_update_catalog_unavailable",
+      ].includes(failure.code);
+      if (terminalFailure) updatingCallback.current?.(false);
       const message = failure instanceof Error ? failure.message : "버전을 확인하지 못했어요.";
-      setError(version ? `${message} 업데이트 결과를 다시 확인해 주세요.` : message);
+      setError({ message: version && !terminalFailure ? `${message} 업데이트 결과를 다시 확인해 주세요.` : message,
+        code: failure instanceof ApiError ? failure.code : undefined });
     } finally {
       inflight.current = false;
       setBusy(false);
@@ -36,11 +60,15 @@ export default function ProviderUpdatePrompt({ providerId, onUpdating }: {
     void Promise.resolve().then(() => { if (active) void run(); });
     return () => { active = false; };
   }, [run]);
+  useEffect(() => {
+    // A fresh owner projection can resolve the catalog failure without another updater.
+    if (provider?.startable && provider.discovery_status === "ready") {
+      setError((current) => current?.code === "provider_update_catalog_unavailable" ? null : current);
+    }
+  }, [provider]);
   async function update() {
     if (inflight.current || !observation) return;
-    onUpdating?.(true);
-    try { await run(observation.latest_version); }
-    finally { onUpdating?.(false); }
+    await run(observation.latest_version);
   }
   if (deferred || (!busy && !error && !observation?.update_available && !observation?.completed)) return null;
   return <section className="dc-agent-section" aria-label="제공자 버전">
@@ -54,14 +82,14 @@ export default function ProviderUpdatePrompt({ providerId, onUpdating }: {
             onClick={() => {
               if (observation.native_update) void update();
               else void openProviderSetupHelp(providerId).catch((failure: unknown) =>
-                setError(failure instanceof Error ? failure.message : "공식 안내를 열지 못했어요."));
+                setError({ message: failure instanceof Error ? failure.message : "공식 안내를 열지 못했어요." }));
             }}>{observation.native_update ? "업데이트" : "업데이트 방법 보기"}</button>
           <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }}
             onClick={() => setDeferred(true)}>나중에</button>
         </div>
       </>}
     {error && <>
-      <p role="alert" className="dc-agent-hint preserve-words">{error}</p>
+      <p role="alert" className="dc-agent-hint preserve-words">{error.message}</p>
       <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }}
         disabled={busy} onClick={() => void run()}>버전 다시 확인</button>
     </>}

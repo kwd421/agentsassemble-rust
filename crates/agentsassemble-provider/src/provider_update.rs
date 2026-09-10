@@ -143,10 +143,17 @@ impl ProviderUpdateService {
                     let installed =
                         install(registration, &executable, &expected, &cancellation).await?;
                     // This task owns completion even if the requesting HTTP handler disappears.
-                    catalog
-                        .refresh_provider(registration.id, true)
-                        .await
-                        .map_err(|_| ProviderUpdateError::CatalogUnavailable)?;
+                    let refreshed = catalog.refresh_provider(registration.id, true).await;
+                    if !refreshed.is_ok_and(|catalog| {
+                        catalog.status == "ready"
+                            && catalog.providers.iter().any(|provider| {
+                                provider.id == registration.id
+                                    && provider.discovery_status == "ready"
+                                    && provider.startable
+                            })
+                    }) {
+                        return Err(ProviderUpdateError::CatalogUnavailable);
+                    }
                     return Ok(installed);
                 }
                 Ok(observation)
@@ -241,6 +248,7 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
+    static CATALOG_FAILS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
     static CATALOG_READS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
 
     fn refreshed_catalog<'a>(
@@ -250,6 +258,12 @@ mod tests {
     ) -> crate::registration::ProviderDiscoveryFuture<'a> {
         Box::pin(async move {
             CATALOG_READS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            if CATALOG_FAILS.load(std::sync::atomic::Ordering::SeqCst) {
+                return crate::catalog::failed_provider(
+                    provider,
+                    crate::process::ProbeFailure::Failed,
+                );
+            }
             crate::catalog::ready_provider(
                 provider,
                 "updated-model".into(),
@@ -264,10 +278,13 @@ mod tests {
         })
     }
 
-    #[tokio::test]
-    async fn update_outlives_its_request_and_check_joins_confirmed_installation_and_catalog()
-    -> Result<(), Box<dyn std::error::Error>> {
-        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    fn update_fixture() -> Result<
+        (
+            tempfile::TempDir,
+            &'static crate::registration::ProviderRegistration,
+        ),
+        Box<dyn std::error::Error>,
+    > {
         let root = tempfile::tempdir()?;
         let executable = root.path().join("grok-fixture");
         let root_literal = serde_json::to_string(root.path().to_str().ok_or("fixture path")?)?;
@@ -310,6 +327,14 @@ else:
                 login: None,
                 ..crate::registration::GROK_PROVIDER
             }));
+        Ok((root, registration))
+    }
+
+    #[tokio::test]
+    async fn update_outlives_its_request_and_check_joins_confirmed_installation_and_catalog()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let (root, registration) = update_fixture()?;
         let catalog = crate::ProviderCatalogService::discovering_registrations(
             vec![registration],
             &crate::ProviderCredentialStore::isolated_test_store(),
@@ -358,6 +383,39 @@ else:
             );
             assert_eq!(CATALOG_READS.load(std::sync::atomic::Ordering::SeqCst), 1);
         }
+        // Successful installation is separate from a failed selected catalog.
+        std::fs::write(root.path().join("mode"), "gated")?;
+        CATALOG_FAILS.store(true, std::sync::atomic::Ordering::SeqCst);
+        let update = service.perform_registered(registration, Some("2.0.0".into()));
+        tokio::pin!(update);
+        let release = async {
+            let (mut gate, _) =
+                tokio::time::timeout(std::time::Duration::from_secs(10), listener.accept())
+                    .await??;
+            gate.read_u8().await?;
+            gate.write_all(b"1").await
+        };
+        let (result, released) = tokio::join!(update, release);
+        released?;
+        assert_eq!(result, Err(ProviderUpdateError::CatalogUnavailable));
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("version"))?,
+            "2.0.0"
+        );
+        assert!(!catalog.snapshot().providers[0].startable);
+        let calls_after_install = std::fs::read_to_string(root.path().join("calls"))?;
+        CATALOG_FAILS.store(false, std::sync::atomic::Ordering::SeqCst);
+        assert!(
+            catalog
+                .refresh_provider(registration.id, true)
+                .await?
+                .providers[0]
+                .startable
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("calls"))?,
+            calls_after_install
+        );
         service.shutdown().await?;
         catalog.shutdown().await?;
         Ok(())

@@ -9863,3 +9863,41 @@ maintenance). After all Cargo/native work ended, the existing artifact owner rem
 24.0 GiB of regenerable build data; the subsequent artifact check passes. The
 original verification invocation is not reported as an uninterrupted success.
 Packaged update-flow verification and Pro re-review remain pending at this point.
+
+
+### Update transport custody and readiness correction
+
+Version reads now guard creation because they may join an installer started by an
+earlier view or a lost request. Transport/authorization errors, busy and unconfirmed
+cleanup retain the per-provider guard. A valid result or a known terminal owner
+failure releases it; manual recheck never requests another installation. The update
+owner also checks the selected provider's actual discovery readiness after installation,
+returning the existing partial-success error when that refresh failed. The standalone
+setup panel rereads that local observation, suppresses stale readiness while checking
+or after a failed read, and clears the resolved catalog error on a fresh ready result.
+
+Affected owner tests pass, including a held installer after request loss and successful
+installation followed by failed discovery with a catalog-only recovery. All 851 frontend
+tests, TypeScript/Vite/CSS build, workspace all-target/all-feature Clippy and applicable
+structure, format, native and artifact gates pass (see the discovery-custody entry for
+the combined workspace verification and its intermediate failure limits).
+
+Signed package 0.1.20 was directly operated with disposable Codex/OpenCode executables.
+An OpenCode update was held while selection changed to Codex and back. The new read
+joined that update and blocked creation. WebKit then reported `Load failed` while the
+fixture installer still held custody; creation stayed disabled. A single manual recheck
+joined the same installer, whose one controlled successful completion restored creation
+with `Retained after response loss` and the selected disposable workspace unchanged.
+This proves the actual lost-response UI path, not a real provider installation.
+
+The standalone setting surface was operated in signed 0.1.21 and corrected 0.1.22,
+using only the isolated package's initial bundled-window URL override. A successful
+fixture installer followed by failed model discovery removed the old ready status and
+reported installation success separately. A single normal state-refresh click after
+restoring the fixture executed only `models --refresh`, restored readiness and, in
+0.1.22, removed the old failure notice. The ordinary next-build start route was restored.
+The browser tool rejected the custom-scheme navigation under its URL policy; that
+browser action was not bypassed and this run does not claim browser deep-link dispatch.
+No real installer or fresh OAuth was exercised. The exact apps and owned children
+exited normally, the run's disposable fixture was removed, and artifact check passes.
+Own-PC setup-to-creation continuity (P13-M1) and completed Pro re-review remain open.
