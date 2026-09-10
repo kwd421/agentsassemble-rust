@@ -269,10 +269,15 @@ impl ProviderOperationHttpError {
                 "provider_update_cleanup_unconfirmed",
                 "버전 확인 프로세스의 종료를 확인하지 못했어요.",
             ),
-            E::HandoffUnconfirmed => (
+            E::InstallationUnconfirmed => (
                 StatusCode::SERVICE_UNAVAILABLE,
-                "provider_update_handoff_unconfirmed",
-                "업데이트 터미널이 열렸을 수 있어요. 다시 시도하기 전에 확인해 주세요.",
+                "provider_update_installation_unconfirmed",
+                "업데이트 완료를 확인하지 못했어요. 설치 상태를 확인한 뒤 다시 시도해 주세요.",
+            ),
+            E::CatalogUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_update_catalog_unavailable",
+                "업데이트했지만 모델 목록을 갱신하지 못했어요. 모델 목록을 새로고침해 주세요.",
             ),
         };
         Self {

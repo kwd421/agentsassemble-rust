@@ -96,7 +96,7 @@ impl ProviderCatalogService {
         ))
     }
 
-    fn discovering_registrations(
+    pub(crate) fn discovering_registrations(
         registrations: Vec<&'static ProviderRegistration>,
         credentials: &crate::ProviderCredentialStore,
         eager: bool,

@@ -1,4 +1,5 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { StrictMode } from "react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { providerUpdateOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
@@ -8,35 +9,53 @@ vi.mock("../../api/providerOperations", () => ({ providerUpdateOperation: vi.fn(
 vi.mock("../../lib/desktopBridge", () => ({ openProviderSetupHelp: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 const offer = { provider_id: "grok", current_version: "1.0.5", latest_version: "1.0.24",
-  update_available: true, native_update: true, observed_at: "2026-09-09T00:00:00Z", handoff_started: false };
+  update_available: true, native_update: true, observed_at: "2026-09-09T00:00:00Z", completed: false };
 
-it("only checks on demand, Later has no update effect, and explicit consent carries the displayed offer", async () => {
+it("checks automatically once in StrictMode and Later dismisses without an update", async () => {
   vi.mocked(providerUpdateOperation).mockResolvedValue(offer);
-  render(<ProviderUpdatePrompt providerId="grok" />);
-  expect(providerUpdateOperation).not.toHaveBeenCalled();
-  fireEvent.click(screen.getByRole("button", { name: "새 버전 확인" }));
-  await screen.findByText("새 버전이 있어요. 지금 업데이트할까요?");
-  fireEvent.click(screen.getByRole("button", { name: "나중에" }));
+  render(<StrictMode><ProviderUpdatePrompt providerId="grok" /></StrictMode>);
+  fireEvent.click(await screen.findByRole("button", { name: "나중에" }));
   expect(providerUpdateOperation).toHaveBeenCalledExactlyOnceWith("grok", undefined);
-  expect(screen.queryByRole("button", { name: "업데이트" })).toBeNull();
-  expect(screen.getByText(/현재 버전으로 계속/)).toBeTruthy();
-  fireEvent.click(screen.getByRole("button", { name: "새 버전 확인" }));
-  await screen.findByRole("button", { name: "업데이트" });
-  vi.mocked(providerUpdateOperation).mockResolvedValue({ ...offer, handoff_started: true });
-  fireEvent.click(screen.getByRole("button", { name: "업데이트" }));
-  await screen.findByText(/업데이트 터미널을 열었어요/);
-  expect(providerUpdateOperation).toHaveBeenLastCalledWith("grok", "1.0.24");
-  expect(openProviderSetupHelp).not.toHaveBeenCalled();
-  expect(screen.queryByRole("button", { name: "업데이트" })).toBeNull();
+  expect(screen.queryByRole("region")).toBeNull();
+  expect(screen.queryByRole("button")).toBeNull();
 });
 
-it("keeps a lost update response uncertain instead of claiming no update started", async () => {
-  vi.mocked(providerUpdateOperation).mockResolvedValue(offer);
+it("leaves no permanent controls when no newer version exists", async () => {
+  vi.mocked(providerUpdateOperation).mockResolvedValue({ ...offer, update_available: false });
+  const { container } = render(<ProviderUpdatePrompt providerId="grok" />);
+  await waitFor(() => expect(providerUpdateOperation).toHaveBeenCalledOnce());
+  expect(container.textContent).toBe("");
+  expect(screen.queryByRole("button")).toBeNull();
+});
+
+it("sends the displayed version once and reports only the confirmed installed version", async () => {
+  vi.mocked(providerUpdateOperation).mockResolvedValueOnce(offer);
+  const updating = vi.fn();
+  render(<ProviderUpdatePrompt providerId="grok" onUpdating={updating} />);
+  const button = await screen.findByRole("button", { name: "업데이트" });
+  let finish!: (value: typeof offer) => void;
+  vi.mocked(providerUpdateOperation).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  fireEvent.click(button);
+  fireEvent.click(button);
+  expect(providerUpdateOperation).toHaveBeenCalledTimes(2);
+  expect(providerUpdateOperation).toHaveBeenLastCalledWith("grok", offer.latest_version);
+  expect(updating).toHaveBeenCalledExactlyOnceWith(true);
+  expect(screen.queryByText(/업데이트했어요/)).toBeNull();
+  await act(async () => finish({ ...offer, current_version: offer.latest_version, update_available: false, completed: true }));
+  expect(screen.getByText("1.0.24 버전으로 업데이트했어요.")).toBeTruthy();
+  expect(updating).toHaveBeenLastCalledWith(false);
+  expect(openProviderSetupHelp).not.toHaveBeenCalled();
+});
+
+it("rechecks a lost response without repeating the installation", async () => {
+  vi.mocked(providerUpdateOperation).mockResolvedValueOnce(offer)
+    .mockRejectedValueOnce(new TypeError("Failed to fetch"))
+    .mockResolvedValueOnce({ ...offer, current_version: offer.latest_version, update_available: false, completed: true });
   render(<ProviderUpdatePrompt providerId="grok" />);
-  fireEvent.click(screen.getByRole("button", { name: "새 버전 확인" }));
-  await screen.findByRole("button", { name: "업데이트" });
-  vi.mocked(providerUpdateOperation).mockRejectedValue(new TypeError("Failed to fetch"));
-  fireEvent.click(screen.getByRole("button", { name: "업데이트" }));
-  expect(await screen.findByText(/업데이트 터미널이 열렸을 수/)).toBeTruthy();
+  fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
+  expect((await screen.findByRole("alert")).textContent).toContain("업데이트 결과를 다시 확인");
   expect(screen.queryByRole("button", { name: "업데이트" })).toBeNull();
+  fireEvent.click(screen.getByRole("button", { name: "버전 다시 확인" }));
+  await screen.findByText("1.0.24 버전으로 업데이트했어요.");
+  expect(providerUpdateOperation).toHaveBeenLastCalledWith("grok", undefined);
 });

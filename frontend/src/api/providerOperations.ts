@@ -47,6 +47,7 @@ export async function providerUpdateOperation(providerId: string, expectedVersio
       typeof value.current_version !== "string" || typeof value.latest_version !== "string" ||
       typeof value.observed_at !== "string" || !Number.isFinite(Date.parse(value.observed_at)) ||
       typeof value.update_available !== "boolean" || typeof value.native_update !== "boolean" ||
-      value.handoff_started !== (expectedVersion !== undefined)) throw new Error("버전 응답이 올바르지 않아요.");
+      typeof value.completed !== "boolean" ||
+      (expectedVersion !== undefined && !value.completed)) throw new Error("버전 응답이 올바르지 않아요.");
   return result as import("../types/generated/ProviderUpdate").ProviderUpdate;
 }

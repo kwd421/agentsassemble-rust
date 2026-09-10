@@ -54,7 +54,7 @@ export default function ProviderSetupPanel({ providerId }: { providerId: string 
     </section>
     {provider?.login_supported && <ProviderLogin key={provider.id} providerId={provider.id} displayName={provider.display_name}
       onAuthenticated={() => void read(false)} />}
-    <ProviderSetupActions providerId={providerId} />
+    <ProviderSetupActions providerId={providerId} provider={provider} />
     <p className="dc-agent-hint preserve-words">작업을 마치면 브라우저의 에이전트 추가 화면으로 돌아가 주세요.
       다른 PC에서 실행되는 에이전트의 상태는 여기서 변경되지 않아요.</p>
   </main>;

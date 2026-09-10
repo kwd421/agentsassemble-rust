@@ -110,6 +110,29 @@ Cursor's installed `2026.08.11-e8db854` `src/commands/status.ts` implementation 
 `status --help` establish its JSON field and exit semantics. Claude is verified with
 controlled fixtures only under the approved real-provider scope.
 
+Optional updates use the existing local update service. Selection reads versions
+automatically for a registered update-capable installed provider, after discovery
+and required login. No-newer-version results leave no permanent control. A newer
+release offers Update/Later; Later has no installation effect. Unsupported local
+installation methods cannot advertise an executable Update action.
+
+Update rechecks the displayed offer before starting the provider's supported updater.
+The local service owns the bounded updater process through completion/cancellation;
+a terminal-launch receipt is no longer the completion contract. Fresh executable and
+version observation must confirm the offered version (or a provably newer version)
+before reporting completion. A check may join an already running update without
+starting another. Failure, lost transport and unconfirmed cleanup are distinct from
+success; retained custody cannot disappear on a repeated shutdown. A completed
+update refreshes only the affected local provider's catalog. The creation draft stays
+in place and cannot submit through an update it is currently awaiting.
+
+Native update commands retain each CLI's installation owner. Codex's npm installation
+is update-capable only when the globally configured npm prefix contains the exact
+resolved Codex launcher; the command pins that prefix and the offered package version.
+It does not install into another prefix or silently switch installation methods.
+No real package update is part of agent verification without a separate user choice;
+controlled updater fixtures cover installed-version, failure and concurrency outcomes.
+
 Acceptance must exercise the complete packaged creation flow: already authenticated,
 authentication required/completed/cancelled/failed, no update, Update/Later, updater
 completion/failure, and draft preservation. Confirm desktop rendering and disclose

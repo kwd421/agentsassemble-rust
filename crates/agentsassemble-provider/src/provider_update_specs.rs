@@ -4,6 +4,7 @@ use serde::Deserialize;
 use tokio_util::sync::CancellationToken;
 
 use super::provider_update::ProviderUpdateError;
+use super::provider_updater::UpdateMethod;
 use crate::{
     process::probe,
     remote_https::{fetch_bounded_json, fixed_catalog_client},
@@ -16,7 +17,7 @@ pub(crate) struct ProviderUpdateSpec {
     pub(crate) source: ReleaseSource,
     pub(crate) version_prefix: &'static str,
     pub(crate) version_suffix: &'static str,
-    pub(crate) update_arguments: Option<&'static [&'static str]>,
+    pub(crate) updater: UpdateMethod,
 }
 
 pub(crate) enum ReleaseSource {
@@ -38,7 +39,11 @@ pub(crate) const CODEX: ProviderUpdateSpec = ProviderUpdateSpec {
     },
     version_prefix: "codex-cli ",
     version_suffix: "",
-    update_arguments: None,
+    updater: UpdateMethod::GlobalNpm {
+        package: "@openai/codex",
+        launcher: "codex",
+        entry: "bin/codex.js",
+    },
 };
 pub(crate) const CLAUDE: ProviderUpdateSpec = ProviderUpdateSpec {
     bundled_codex: false,
@@ -49,7 +54,10 @@ pub(crate) const CLAUDE: ProviderUpdateSpec = ProviderUpdateSpec {
     },
     version_prefix: "",
     version_suffix: " (Claude Code)",
-    update_arguments: None,
+    updater: UpdateMethod::Native {
+        arguments: &["update"],
+        version_argument: false,
+    },
 };
 pub(crate) const OPENCODE: ProviderUpdateSpec = ProviderUpdateSpec {
     bundled_codex: false,
@@ -60,21 +68,30 @@ pub(crate) const OPENCODE: ProviderUpdateSpec = ProviderUpdateSpec {
     },
     version_prefix: "",
     version_suffix: "",
-    update_arguments: Some(&["upgrade"]),
+    updater: UpdateMethod::Native {
+        arguments: &["upgrade"],
+        version_argument: true,
+    },
 };
 pub(crate) const CURSOR: ProviderUpdateSpec = ProviderUpdateSpec {
     bundled_codex: false,
     source: ReleaseSource::Cursor,
     version_prefix: "",
     version_suffix: "",
-    update_arguments: Some(&["update"]),
+    updater: UpdateMethod::Native {
+        arguments: &["update"],
+        version_argument: false,
+    },
 };
 pub(crate) const GROK: ProviderUpdateSpec = ProviderUpdateSpec {
     bundled_codex: false,
     source: ReleaseSource::Grok,
     version_prefix: "",
     version_suffix: "",
-    update_arguments: Some(&["update"]),
+    updater: UpdateMethod::Native {
+        arguments: &["update", "--version"],
+        version_argument: true,
+    },
 };
 
 impl ProviderUpdateSpec {
@@ -160,15 +177,39 @@ impl ProviderUpdateSpec {
             };
             (current, latest, available)
         };
+        let native_update = match self
+            .updater
+            .command(executable, &latest, cancellation)
+            .await
+        {
+            Ok(_) => true,
+            Err(Error::Unsupported) => false,
+            Err(error) => return Err(error),
+        };
         Ok(ProviderUpdate {
             provider_id: id.to_owned(),
             current_version: current,
             latest_version: latest,
             update_available: available,
-            native_update: self.update_arguments.is_some(),
+            native_update,
             observed_at: chrono::Utc::now(),
-            handoff_started: false,
+            completed: false,
         })
+    }
+
+    pub(crate) fn confirms_installation(
+        &self,
+        installed: &str,
+        offered: &str,
+    ) -> Result<bool, Error> {
+        if matches!(self.source, ReleaseSource::Cursor) {
+            // Different hashes on one date are unordered. Equality or a later
+            // release date proves that the offered update was reached.
+            newer_cursor(offered, installed)?;
+            Ok(installed == offered || installed[..10] > offered[..10])
+        } else {
+            Ok(installed == offered || newer_semver(offered, installed)?)
+        }
     }
 }
 

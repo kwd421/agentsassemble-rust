@@ -95,6 +95,7 @@ pub fn agent_catalog(root: &Path, fixture_override: Option<&[u8]>) -> ProviderCa
             custom_endpoint: false,
             custom_model: false,
             login_supported: false,
+            update_supported: false,
             usage_supported: false,
             controls: vec![
                 ProviderControl {

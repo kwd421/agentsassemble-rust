@@ -3,4 +3,4 @@
 /**
  * A private local observation; release availability never gates agent creation.
  */
-export type ProviderUpdate = { provider_id: string, current_version: string, latest_version: string, update_available: boolean, native_update: boolean, observed_at: string, handoff_started: boolean, };
+export type ProviderUpdate = { provider_id: string, current_version: string, latest_version: string, update_available: boolean, native_update: boolean, observed_at: string, completed: boolean, };

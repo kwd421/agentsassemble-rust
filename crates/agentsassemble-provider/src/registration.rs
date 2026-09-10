@@ -572,6 +572,7 @@ pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderA
             .and_then(crate::remote_openai_spec::RemoteOpenAiSpec::credential_id)
             .is_some(),
         login_supported: registration.login.is_some(),
+        update_supported: registration.update.is_some(),
         usage_supported: registration.usage.is_some(),
         custom_endpoint: registration.configuration_authority.custom_endpoint(),
         custom_model: registration.configuration_authority.custom_model(),

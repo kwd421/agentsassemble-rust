@@ -9676,3 +9676,51 @@ OpenCode handoff are not established by these packaged authenticated-provider ch
 Codex's current CLI/configuration compatibility remains an external verification
 blocker. Optional-update presentation/execution, independent Pro review and deferred
 mobile acceptance remain active; this is not completion of the combined setup flow.
+
+## Optional update execution during creation (2026-09-10)
+
+The selected local installed provider now checks its version automatically after
+catalog discovery and required authentication. Only a newer version offers
+Update/Later. No-newer results and Later leave no permanent version/help controls.
+Missing installations retain contextual installation help; browser setup links still
+address the user's own computer. The registration owns update capability metadata.
+
+Update executes the supported installer under the local update service, rechecks
+its offered version, confirms the newly resolved installed version, and refreshes
+only that provider's catalog. HTTP request loss does not cancel this owned task;
+a read can join it. Native updater failure and unchanged installed versions are not
+reported as completed. Codex npm updates require the exact launcher in the current
+global prefix and pin both that prefix and the offered version. Other installation
+methods, including Windows launchers that cannot establish that npm identity, show
+help instead of advertising an executable update.
+
+Controlled native fixture verification passes: a dropped request, a simultaneous
+check joining the running update, a conflicting offer, exactly one catalog refresh,
+installer failure, and successful exit with unchanged version. The npm fixture
+verifies the exact target and rejects a different installation. All four affected
+Rust tests pass (0.49 s). Workspace all-target/all-feature Clippy passes; formatting,
+architecture/source-growth checks, 19 policy/artifact tests and diff checks pass.
+Frontend tests pass: 146 files, 844 tests (16.86 s), including StrictMode automatic
+check deduplication, no-newer rendering, Later, confirmed installation, lost-response
+read-only retry, remote/auth/loading exclusion and creation draft preservation while
+submission is disabled during an awaited update. TypeScript/Vite/approved CSS pass.
+
+Signed isolated app `AA Phase9 Integration` 0.1.18 passes strict deep signature
+verification and launches its owned supervisor/server. In the foreground creation
+flow, selecting OpenCode automatically offers version `1.18.30`. After entering
+`Optional update draft`, keyboard activation of Later removes the complete offer
+and retains the draft, selected model and permission. The creation form remains
+usable and cancellation closes it. Initial automated pointer activations of Later
+produced no observed change; the verified dismissal here is keyboard activation,
+not proof of that single-pointer path. A fresh 0.1.18 run subsequently dismisses
+the offer through a double pointer click; its second click opens the now-relocated
+existing-session selector, which is cancelled. This confirms pointer reachability
+but does not resolve the single-click observation. No real updater or OAuth login
+was executed. All
+available tested CLIs are not assumed to be current; no-newer and installer outcomes
+are controlled-test evidence, not real package-update evidence. Broader mobile UX
+and independent final reviews remain incomplete.
+
+The app was normally quit and its exact app/supervisor/server PIDs were confirmed
+absent. Computer Use was reset. The active isolated Phase 9 dataset and build
+artifacts remain available for continuing verification; artifact-check passes.

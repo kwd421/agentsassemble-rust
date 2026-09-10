@@ -20,7 +20,7 @@ pub struct ProviderUpdate {
     pub update_available: bool,
     pub native_update: bool,
     pub observed_at: chrono::DateTime<chrono::Utc>,
-    pub handoff_started: bool,
+    pub completed: bool,
 }
 
 pub const PROVIDER_SETUP_SCHEME: &str = "agentsassemble";

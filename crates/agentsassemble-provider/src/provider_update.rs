@@ -31,8 +31,10 @@ pub enum ProviderUpdateError {
     Cancelled,
     #[error("Provider version process cleanup could not be confirmed.")]
     CleanupUnconfirmed,
-    #[error("The update terminal may have opened. Check it before trying again.")]
-    HandoffUnconfirmed,
+    #[error("The provider updater failed; installation completion is unconfirmed.")]
+    InstallationUnconfirmed,
+    #[error("The provider was updated, but its model catalog could not be refreshed.")]
+    CatalogUnavailable,
 }
 
 impl From<crate::process::ProbeFailure> for ProviderUpdateError {
@@ -56,6 +58,7 @@ struct UpdateRun {
 }
 struct UpdateOwner {
     cancellation: CancellationToken,
+    catalog: crate::ProviderCatalogService,
     runs: Mutex<BTreeMap<&'static str, UpdateRun>>,
 }
 impl Drop for UpdateOwner {
@@ -67,13 +70,14 @@ impl Drop for UpdateOwner {
 pub struct ProviderUpdateService(Arc<UpdateOwner>);
 impl ProviderUpdateService {
     #[must_use]
-    pub fn new(cancellation: CancellationToken) -> Self {
+    pub fn new(cancellation: CancellationToken, catalog: crate::ProviderCatalogService) -> Self {
         Self(Arc::new(UpdateOwner {
             cancellation,
+            catalog,
             runs: Mutex::new(BTreeMap::new()),
         }))
     }
-    /// None only reads versions. Some requires a fresh matching offer before native handoff.
+    /// None reads versions or joins an active update. Some requires a matching offer.
     /// # Errors
     /// Reports unsupported, busy, stale offer, read, cancellation and custody failures.
     pub async fn perform(
@@ -105,7 +109,7 @@ impl ProviderUpdateService {
             }
             if let Some(run) = runs.get(registration.id) {
                 if !run.task.is_finished() {
-                    if run.expected != expected {
+                    if expected.is_some() && run.expected != expected {
                         return Err(ProviderUpdateError::Busy);
                     }
                     let result = run.result.clone();
@@ -118,6 +122,7 @@ impl ProviderUpdateService {
             }
             let cancellation = self.0.cancellation.child_token();
             let requested = expected.clone();
+            let catalog = self.0.catalog.clone();
             let task = tokio::spawn(async move {
                 let spec = registration
                     .update
@@ -128,30 +133,21 @@ impl ProviderUpdateService {
                     provider_executable(registration.probe_executable, &cancellation).await
                 }
                 .map_err(ProviderUpdateError::from)?;
-                let mut observation = spec
+                let observation = spec
                     .read(registration.id, &executable, &cancellation)
                     .await?;
                 if let Some(expected) = requested {
                     if !observation.update_available || observation.latest_version != expected {
                         return Err(ProviderUpdateError::OfferChanged);
                     }
-                    let arguments = spec
-                        .update_arguments
-                        .ok_or(ProviderUpdateError::Unsupported)?;
-                    crate::terminal_login::launch(&executable, arguments, &cancellation)
+                    let installed =
+                        install(registration, &executable, &expected, &cancellation).await?;
+                    // This task owns completion even if the requesting HTTP handler disappears.
+                    catalog
+                        .refresh_provider(registration.id, true)
                         .await
-                        .map_err(|error| match error {
-                            crate::ProviderLoginError::Cancelled => ProviderUpdateError::Cancelled,
-                            crate::ProviderLoginError::CleanupUnconfirmed => {
-                                ProviderUpdateError::CleanupUnconfirmed
-                            }
-                            crate::ProviderLoginError::Unsupported => {
-                                ProviderUpdateError::Unsupported
-                            }
-                            crate::ProviderLoginError::Missing => ProviderUpdateError::Missing,
-                            _ => ProviderUpdateError::HandoffUnconfirmed,
-                        })?;
-                    observation.handoff_started = true;
+                        .map_err(|_| ProviderUpdateError::CatalogUnavailable)?;
+                    return Ok(installed);
                 }
                 Ok(observation)
             });
@@ -174,13 +170,20 @@ impl ProviderUpdateService {
         };
         result.await
     }
-    /// Cancels and joins checks and launcher helpers; handed-off terminals belong to the user.
+    /// Cancels and joins every owned check/updater, retaining unconfirmed custody.
     /// # Errors
     /// Reports unconfirmed process cleanup.
     pub async fn shutdown(&self) -> Result<(), ProviderUpdateError> {
         self.0.cancellation.cancel();
-        let runs = std::mem::take(&mut *self.0.runs.lock().await);
-        let results = join_all(runs.into_values().map(|run| run.result)).await;
+        let results = self
+            .0
+            .runs
+            .lock()
+            .await
+            .values()
+            .map(|run| run.result.clone())
+            .collect::<Vec<_>>();
+        let results = join_all(results).await;
         if results.contains(&Err(ProviderUpdateError::CleanupUnconfirmed)) {
             return Err(ProviderUpdateError::CleanupUnconfirmed);
         }
@@ -188,10 +191,177 @@ impl ProviderUpdateService {
     }
 }
 
+async fn install(
+    registration: &crate::registration::ProviderRegistration,
+    executable: &str,
+    expected: &str,
+    cancellation: &CancellationToken,
+) -> Result<ProviderUpdate, ProviderUpdateError> {
+    let spec = registration
+        .update
+        .ok_or(ProviderUpdateError::Unsupported)?;
+    let command = spec
+        .updater
+        .command(executable, expected, cancellation)
+        .await?;
+    let arguments = command
+        .arguments
+        .iter()
+        .map(String::as_str)
+        .collect::<Vec<_>>();
+    crate::process::probe_with_timeout(
+        &command.executable,
+        &arguments,
+        std::time::Duration::from_mins(10),
+        cancellation,
+        &[],
+    )
+    .await
+    .map_err(|error| match error {
+        crate::process::ProbeFailure::Cancelled => ProviderUpdateError::Cancelled,
+        crate::process::ProbeFailure::CleanupUnconfirmed => ProviderUpdateError::CleanupUnconfirmed,
+        _ => ProviderUpdateError::InstallationUnconfirmed,
+    })?;
+    let (installed, _) = if spec.bundled_codex {
+        resolved_codex(cancellation).await
+    } else {
+        provider_executable(registration.probe_executable, cancellation).await
+    }
+    .map_err(ProviderUpdateError::from)?;
+    let mut observation = spec.read(registration.id, &installed, cancellation).await?;
+    if !spec.confirms_installation(&observation.current_version, expected)? {
+        return Err(ProviderUpdateError::InstallationUnconfirmed);
+    }
+    observation.completed = true;
+    Ok(observation)
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
+
+    static CATALOG_READS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+    fn refreshed_catalog<'a>(
+        provider: agentsassemble_domain::ProviderAvailability,
+        _: &'a crate::ProviderCredentialStore,
+        _: &'a CancellationToken,
+    ) -> crate::registration::ProviderDiscoveryFuture<'a> {
+        Box::pin(async move {
+            CATALOG_READS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+            crate::catalog::ready_provider(
+                provider,
+                "updated-model".into(),
+                vec![crate::catalog::control(
+                    "model",
+                    "Model",
+                    "combobox",
+                    vec![crate::catalog::option("updated-model", "Updated")],
+                    "updated-model",
+                )],
+            )
+        })
+    }
+
+    #[tokio::test]
+    async fn update_outlives_its_request_and_check_joins_confirmed_installation_and_catalog()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let root = tempfile::tempdir()?;
+        let executable = root.path().join("grok-fixture");
+        let root_literal = serde_json::to_string(root.path().to_str().ok_or("fixture path")?)?;
+        std::fs::write(root.path().join("version"), "1.0.0")?;
+        std::fs::write(root.path().join("mode"), "gated")?;
+        std::fs::write(
+            &executable,
+            format!(
+                r"#!/usr/bin/env python3
+import sys,json,socket
+from pathlib import Path
+root=Path({root_literal})
+with (root/'calls').open('a') as out: out.write(' '.join(sys.argv[1:])+'\n')
+if '--check' in sys.argv:
+    current=(root/'version').read_text()
+    print(json.dumps(dict(currentVersion=current,latestVersion='2.0.0',updateAvailable=current=='1.0.0',error=None)))
+else:
+    mode=(root/'mode').read_text()
+    if mode=='failure': sys.exit(1)
+    if mode=='unchanged': sys.exit(0)
+    with socket.socket(socket.AF_UNIX) as channel:
+        channel.connect(str(root/'ready'))
+        channel.sendall(b'1')
+        channel.recv(1)
+    (root/'version').write_text(sys.argv[-1])
+"
+            ),
+        )?;
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
+        let registration: &'static crate::registration::ProviderRegistration =
+            Box::leak(Box::new(crate::registration::ProviderRegistration {
+                probe_executable: Box::leak(
+                    executable
+                        .to_str()
+                        .ok_or("fixture path")?
+                        .to_owned()
+                        .into_boxed_str(),
+                ),
+                discover: refreshed_catalog,
+                login: None,
+                ..crate::registration::GROK_PROVIDER
+            }));
+        let catalog = crate::ProviderCatalogService::discovering_registrations(
+            vec![registration],
+            &crate::ProviderCredentialStore::isolated_test_store(),
+            false,
+        );
+        let service = ProviderUpdateService::new(CancellationToken::new(), catalog.clone());
+        let listener = tokio::net::UnixListener::bind(root.path().join("ready"))?;
+        let request_service = service.clone();
+        let request = tokio::spawn(async move {
+            request_service
+                .perform_registered(registration, Some("2.0.0".into()))
+                .await
+        });
+        let (mut gate, _) =
+            tokio::time::timeout(std::time::Duration::from_secs(10), listener.accept()).await??;
+        gate.read_u8().await?;
+        request.abort();
+        assert!(request.await.is_err());
+        assert_eq!(
+            service
+                .perform_registered(registration, Some("3.0.0".into()))
+                .await,
+            Err(ProviderUpdateError::Busy)
+        );
+        let joined = service.perform_registered(registration, None);
+        tokio::pin!(joined);
+        assert!(futures_util::poll!(&mut joined).is_pending());
+        gate.write_all(b"1").await?;
+        let result = joined.await?;
+        assert!(result.completed);
+        assert_eq!(result.current_version, "2.0.0");
+        assert!(!result.update_available);
+        assert_eq!(CATALOG_READS.load(std::sync::atomic::Ordering::SeqCst), 1);
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("calls"))?,
+            "update --check --json\nupdate --version 2.0.0\nupdate --check --json\n"
+        );
+        for mode in ["failure", "unchanged"] {
+            std::fs::write(root.path().join("mode"), mode)?;
+            std::fs::write(root.path().join("version"), "1.0.0")?;
+            assert_eq!(
+                service
+                    .perform_registered(registration, Some("2.0.0".into()))
+                    .await,
+                Err(ProviderUpdateError::InstallationUnconfirmed)
+            );
+            assert_eq!(CATALOG_READS.load(std::sync::atomic::Ordering::SeqCst), 1);
+        }
+        service.shutdown().await?;
+        catalog.shutdown().await?;
+        Ok(())
+    }
 
     #[tokio::test]
     async fn check_never_updates_and_lost_or_changed_offers_are_rechecked()
@@ -221,9 +391,12 @@ mod tests {
             login: None,
             ..crate::registration::GROK_PROVIDER
         }));
-        let service = ProviderUpdateService::new(CancellationToken::new());
+        let service = ProviderUpdateService::new(
+            CancellationToken::new(),
+            crate::ProviderCatalogService::fixed(agentsassemble_domain::ProviderCatalog::default()),
+        );
         let first = service.perform_registered(registration, None).await?;
-        assert!(!first.handoff_started);
+        assert!(!first.completed);
         assert!(first.update_available);
         write_version("3.0.0")?;
         assert_eq!(

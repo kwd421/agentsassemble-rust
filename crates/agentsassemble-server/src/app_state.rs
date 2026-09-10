@@ -150,11 +150,12 @@ impl AppState {
             store,
             google_accounts: crate::GoogleAccountService::default(),
             tickets,
-            provider_catalog,
+            provider_catalog: provider_catalog.clone(),
             runtime_restart: crate::runtime_restart::RuntimeRestartControl::default(),
             local_resources: crate::local_resources::LocalResources::default(),
             provider_update: agentsassemble_provider::ProviderUpdateService::new(
                 shutdown.child_token(),
+                provider_catalog,
             ),
             provider_login: agentsassemble_provider::ProviderLoginService::new(
                 shutdown.child_token(),

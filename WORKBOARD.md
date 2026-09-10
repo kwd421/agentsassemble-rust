@@ -22,8 +22,10 @@
   tests and signed packaged creation, refresh, existing settings and restart pass.
   Confirmed authentication-need handling now passes scoped tests and packaged
   OpenCode/Cursor creation checks; Codex's installed CLI rejects the current personal
-  configuration, which remains unchanged. Optional update flow correction,
-  unverified authentication outcomes and independent review remain active.
+  configuration, which remains unchanged. Optional update execution and automatic
+  offers pass controlled checks and the signed OpenCode/Later keyboard flow; real
+  installer/OAuth outcomes, pointer activation and independent review remain open.
+  [Update evidence](docs/VERIFICATION.md#optional-update-execution-during-creation-2026-09-10).
   [Scoped evidence](docs/VERIFICATION.md#selected-local-provider-discovery-2026-09-10).
   [Authentication evidence](docs/VERIFICATION.md#authentication-need-during-creation-2026-09-10).
 

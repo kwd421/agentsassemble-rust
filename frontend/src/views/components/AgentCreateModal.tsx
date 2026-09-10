@@ -81,6 +81,7 @@ export default function AgentCreateModal({
   const [startNow, setStartNow] = useState(false);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
+  const [updatingProviderId, setUpdatingProviderId] = useState<string | null>(null);
   const [providerApiKey, setProviderApiKey] = useState("");
   const [personaCardId, setPersonaCardId] = useState("");
   const [credentialStatus, setCredentialStatus] = useState<ProviderCredentialStatus | null>(null);
@@ -116,7 +117,7 @@ export default function AgentCreateModal({
         )
       );
   const canCreate = Boolean(
-    meetingId && selectedProvider && (
+    meetingId && selectedProvider && updatingProviderId !== selectedProvider.id && (
       existingSessionId
         ? existingSession && (!startNow || selectedProvider.startable)
         : catalogRevision && selectedProvider.startable && !invalidControl && displayName.trim() &&
@@ -439,7 +440,10 @@ export default function AgentCreateModal({
             selectedProvider.discovery_error_code === "authentication_required" &&
             <ProviderLogin key={selectedProvider.id} providerId={selectedProvider.id}
               displayName={selectedProvider.display_name} automatic />}
-          {selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id} />}
+          {selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id}
+            provider={selectedProvider} localAvailable={localProviderActions}
+            onUpdating={(updating) => setUpdatingProviderId((current) => updating ? selectedProvider.id
+              : current === selectedProvider.id ? null : current)} />}
           {selectedProvider && (
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">기본 정보</p>
