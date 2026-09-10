@@ -10037,3 +10037,42 @@ limit. With all Cargo/Tauri work idle, the existing artifact owner pruned 25.2 G
 the final artifact check passes. A post-cancel observation measured 134240 KiB RSS
 for the native app and 9184/51088 KiB for its two server/supervisor processes, each
 at 0% sampled CPU; that is an idle sample, not a comparative performance benchmark.
+
+### Completed local-creation Pro re-review (2026-09-10)
+
+The completed `7a3d6359e353219557d6f3bbca51e35dc442ea89` Phase 1–3
+supplement/current integration review is REVISE, unique C0/H0/M3/L0. Its entire
+answer, separate verdict and all E01–E51 source excerpts were read. P13-M2/M3/L1/L2
+are closed. P13-M1 is partly corrected but remains open because the paired browser
+session reaches a human-only companion-invite owner. New P13-M4 blocks independent
+cancel while the UI awaits local start; P13-M5 closes this runtime's listener and
+ingress before its self-targeted local attendees can finish exact remote cleanup.
+These are concrete source paths, not findings based merely on absent UI proof.
+
+The reviewer read all eight new patches, their correction cumulative and final
+affected connections. Existing G2-M1–M6 and G3-H1/M1/M2 closures remain scoped to
+unchanged owners. This does not complete independent Phase 4–6/7–9 review or the
+155 historical patches' remaining manual reading. Earlier packaged success used
+friend admission, completed Ready before cancel and separate target/local runtimes;
+it does not refute these three different paths. Direct browser/OS dispatch and
+two-physical-machine acceptance remain unverified, with the prior tool-policy
+blocks preserved. Supported corrections and affected verification continue.
+
+P13-M5's source correction keeps accept/ingress and room authority alive while the
+existing local-attendee owner closes creation and joins cleanup. It adds no task,
+timer, retry or durable state. Shutdown now includes the existing cleanup latency
+before network teardown, rather than making cleanup lose its own transport. Four
+local-attendee integration cases pass, including one actual AppState as both host
+and local owner for add-only and Running, without prior cancel. The add-only relay
+uses a fresh upstream client on every HTTP request; cleanup reads and reports both
+commit before the listener closes. Existing rejected-cleanup, repeated shutdown and
+lost-admission custody checks remain passing. The first assertion incorrectly
+counted only the cleanup read, omitting its report; it was corrected to count the
+actual pair, with no production change to suppress either request.
+
+Affected web/shutdown tests pass (7), as do the local private HTTP and restart socket
+cases (1 each). Server all-target/all-feature Clippy, architecture/growth, 19 policy
+cases, formatting and diff checks pass. Clippy initially rejected the 104-line
+server function; eliminating four unnecessary clone aliases kept the same owner
+and behavior at the existing limit without an allowance. Packaged verification and
+Pro re-review of this correction remain pending alongside M1/M4.

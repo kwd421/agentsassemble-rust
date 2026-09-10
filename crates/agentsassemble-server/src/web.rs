@@ -411,11 +411,25 @@ async fn serve_runtime(
         connection_shutdown.clone(),
     ));
     let app = router(state);
+    // Local attendees may target this very listener. Keep their room authority and
+    // ingress alive until positive stop and exact remote cleanup have completed.
+    let attendee_shutdown = local_attendees.shutdown();
+    tokio::pin!(attendee_shutdown);
+    let mut quiescing = false;
+    let mut attendee_outcome = None;
     let result = match ready.await {
         Err(error) => Err(error),
         Ok(()) => loop {
             let accepted = tokio::select! {
-                () = cancellation.cancelled() => break Ok(()),
+                biased;
+                outcome = &mut attendee_shutdown, if quiescing => {
+                    attendee_outcome = Some(outcome);
+                    break Ok(());
+                }
+                () = cancellation.cancelled(), if !quiescing => {
+                    quiescing = true;
+                    continue;
+                }
                 accepted = listener.accept() => accepted,
             };
             let (stream, peer) = match accepted {
@@ -426,20 +440,20 @@ async fn serve_runtime(
                 drop(stream);
                 continue;
             };
-            let connection_app = app.clone();
-            let connection_ingress = ingress;
-            let connection_public_ingress = public_ingress.clone();
-            let shutdown = connection_shutdown.clone();
             connections.spawn(serve_connection(
                 stream,
                 peer,
-                connection_ingress,
-                connection_public_ingress,
-                connection_app,
+                ingress,
+                public_ingress.clone(),
+                app.clone(),
                 admission,
-                shutdown,
+                connection_shutdown.clone(),
             ));
         },
+    };
+    let attendee_shutdown = match attendee_outcome {
+        Some(outcome) => outcome,
+        None => attendee_shutdown.await,
     };
     let ingress_shutdown = tokio::spawn(async move { public_ingress.shutdown().await });
     drain_connections(&connections, &connection_shutdown).await;
@@ -448,13 +462,11 @@ async fn serve_runtime(
         login_shutdown,
         update_shutdown,
         usage_shutdown,
-        attendee_shutdown,
         (reconciliation_shutdown, (room_shutdown, provider_shutdown)),
     ) = tokio::join!(
         provider_login.shutdown(),
         provider_update.shutdown(),
         provider_usage.shutdown(),
-        local_attendees.shutdown(),
         drain_reconciliation_then(reconciliation_owner, async {
             let room_shutdown = rooms.shutdown().await;
             let provider_shutdown = provider_catalog.shutdown().await;

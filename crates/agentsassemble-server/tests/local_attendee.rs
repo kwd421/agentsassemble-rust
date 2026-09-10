@@ -132,6 +132,61 @@ async fn own_catalog_add_only_start_and_exact_cleanup_do_not_use_the_room_host_c
 }
 
 #[tokio::test]
+async fn self_targeted_attendees_finish_cleanup_before_their_server_closes_ingress()
+-> Result<(), Box<dyn std::error::Error>> {
+    for start in [false, true] {
+        let directory = tempfile::tempdir()?;
+        let catalog =
+            ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
+        let (store, invite) = attendee::fixture().await?;
+        let server = human_invite::start(store.clone()).await;
+        let service = server.state().local_attendees.clone();
+        // The add-only relay creates a fresh upstream client for every request, so
+        // cleanup cannot succeed by reusing the admission connection after accept closes.
+        let relay = Relay::start(&server.base_url, false, false).await?;
+        let base = if start { &server.base_url } else { &relay.base };
+        let mut request = request(base, &invite, directory.path());
+        request.creation["start"] = start.into();
+        let created = service
+            .create(request.clone(), catalog.clone(), adapter())
+            .await?;
+        assert_eq!(
+            created.phase,
+            if start {
+                Phase::Running
+            } else {
+                Phase::Admitted
+            }
+        );
+        // No explicit attendee cancel: this is the actual AppState shutdown owner.
+        server.stop().await;
+        assert_eq!(
+            service.status(request.request_id).await?.phase,
+            Phase::Stopped
+        );
+        let snapshot = store.snapshot("general", 0, 200).await?;
+        assert_eq!(snapshot.agent_sessions.len(), 1);
+        assert!(!snapshot.agent_sessions[0].provider_session_active);
+        assert!(!snapshot.agent_sessions[0].recovery_required);
+        assert_eq!(
+            service
+                .create(request, catalog, adapter())
+                .await
+                .err()
+                .ok_or("expected closed local creation")?
+                .code,
+            "local_attendee_closed"
+        );
+        if !start {
+            // One cleanup read and its one exact completion report.
+            assert_eq!(relay.gate.cleanups.load(Ordering::SeqCst), 2);
+        }
+        relay.stop().await?;
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn dropped_waiter_retains_lost_admission_for_read_only_observation_and_exact_retry()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;

@@ -36,8 +36,13 @@
   remote admission, add-only/start/cancel and restart-guard checks with controlled
   CLI execution. Full workspace tests and affected mandatory gates pass. Direct
   browser interaction/OS dispatch is blocked by browser policy and remains unverified,
-  as does real two-machine proof. Obtain Pro code re-review with those limits before
-  continuing the split groups; full flow acceptance is still open. Real installer/OAuth
+  as does real two-machine proof. Pro's completed `7a3d6359` re-review closes
+  M2/M3/L1/L2 and returns REVISE C0/H0/M3/L0: remaining paired-operator invite
+  issuance (M1), cancellation during pending local start (M4), and self-targeted
+  local-attendee cleanup before ingress shutdown (M5). The complete answer, separate
+  verdict and E01–E51 source evidence have been read. Correct supported findings,
+  verify and re-review before continuing the split groups; full flow acceptance is
+  still open. Real installer/OAuth
   outcomes remain unverified.
   [Review disposition](docs/VERIFICATION.md#completed-setup-supplemental-pro-review-2026-09-10).
   [Update evidence](docs/VERIFICATION.md#optional-update-execution-during-creation-2026-09-10).

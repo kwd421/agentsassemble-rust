@@ -182,13 +182,24 @@ selection identity is never presented as remote membership authority.
 Add without start retains admitted local custody until an explicit local start or
 cancel. Running is reported only after the room acknowledges actual local readiness.
 Remote room events remain authoritative for membership and external controls.
+The pending create/start HTTP waiter must not disable the separate cancel action.
+Cancel uses the same operation identity and waits for its real cleanup; it does not
+abort the UI promise and infer stop. A later response from a superseded waiter cannot
+replace the cancellation result. A missing/failed cancel remains unconfirmed with
+explicit status and cancel access, never permission to submit a replacement draft.
 
 Admission uncertainty retains the same client secret for explicit retry; a read
 does not dispatch another admission or provider start. Cancellation joins admission
 resolution and positive local stop before reporting remote cleanup. Unconfirmed
 cleanup retains the client, runtime and terminal failure, including on repeated
-shutdown; it cannot become a fresh operation. Normal application shutdown joins
-these owners. Process restart never automatically launches a replacement attendee
+shutdown; it cannot become a fresh operation. Normal application shutdown first
+closes local creation and joins these owners while the listener, public ingress and
+room authority remain available for exact cleanup, including self-targeted attendees.
+Only then does it close ingress/connections and stop room owners. A real remote
+cleanup failure still fails shutdown; no local shortcut or inferred receipt replaces
+that protocol. Verification covers add-only and running self-targets without prior
+cancel, fresh cleanup connections, and retained failure on a real rejected cleanup.
+Process restart never automatically launches a replacement attendee
 or treats an old invitation as an unused draft. Existing provider lease/guardian
 recovery and server expiry remain authoritative after process loss. Before dispatch,
 reserve the request ID and invitation fingerprint atomically in the local runtime's
