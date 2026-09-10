@@ -41,6 +41,7 @@ fn started(
 pub(super) async fn reuse_owned_runtime(
     session: &DurableAgentSession,
     runtime: &mut OwnedRuntime,
+    requested_stop: Option<&CancellationToken>,
 ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
     validate_owned_runtime(session, runtime)?;
     if let Err(error) = revalidate_runtime_authority(session).await {
@@ -57,6 +58,7 @@ pub(super) async fn reuse_owned_runtime(
         true,
         &runtime.handle_id,
         &runtime.owner_id,
+        requested_stop.cloned(),
     )
     .await?;
     started(session, runtime, true, attachment).map_err(|error| {
@@ -67,6 +69,7 @@ pub(super) async fn reuse_owned_runtime(
 pub(super) async fn initialize_owned_runtime(
     session: &DurableAgentSession,
     runtime: &mut OwnedRuntime,
+    requested_stop: Option<&CancellationToken>,
 ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
     let attachment = attach_owned(
         runtime.driver.clone(),
@@ -75,6 +78,7 @@ pub(super) async fn initialize_owned_runtime(
         false,
         &runtime.handle_id,
         &runtime.owner_id,
+        requested_stop.cloned(),
     )
     .await?;
     started(session, runtime, false, attachment).map_err(|error| {
@@ -89,16 +93,26 @@ async fn attach_owned(
     require_health: bool,
     handle_id: &str,
     owner_id: &str,
+    requested_stop: Option<CancellationToken>,
 ) -> Result<ProviderSessionAttachment, ProviderAdapterError> {
     let task = tokio::spawn(async move {
+        let requested_stop = async {
+            match requested_stop {
+                Some(token) => token.cancelled_owned().await,
+                None => std::future::pending().await,
+            }
+        };
+        tokio::pin!(requested_stop);
         let mut driver = tokio::select! {
             biased;
             () = cancellation.cancelled() => return Err(attachment_cancelled()),
+            () = &mut requested_stop => return Err(attachment_cancelled()),
             driver = driver_cell.take() => driver?,
         };
         let result = tokio::select! {
             biased;
             () = cancellation.cancelled() => Err(attachment_cancelled()),
+            () = &mut requested_stop => Err(attachment_cancelled()),
             result = attach_driver_session(driver.as_mut(), &session, require_health) => result,
         };
         driver_cell.put(driver).await;

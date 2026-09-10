@@ -192,7 +192,10 @@ pub async fn recover(
                 return Err(error.into());
             }
         };
-        let started = state.provider_adapter.start_reserved(&authorized).await?;
+        let started = state
+            .provider_adapter
+            .start_reserved(&authorized, None)
+            .await?;
         state
             .store
             .complete_runtime_restart_target(

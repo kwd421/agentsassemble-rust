@@ -58,7 +58,10 @@ impl AttendeeRuntime {
     ///
     /// # Errors
     /// Returns redacted launch errors. The owner must still be stopped after a failed launch.
-    pub async fn start(&mut self) -> Result<AttendeeRuntimeReady, AttendeeClientError> {
+    pub async fn start(
+        &mut self,
+        cancellation: Option<&tokio_util::sync::CancellationToken>,
+    ) -> Result<AttendeeRuntimeReady, AttendeeClientError> {
         if self.stopped {
             return Err(AttendeeClientError::local("attendee_runtime_stopped"));
         }
@@ -75,7 +78,7 @@ impl AttendeeRuntime {
         self.session.runtime_lease_token = reserved.runtime_lease_token;
         let started = self
             .adapter
-            .start_reserved(&self.session)
+            .start_reserved(&self.session, cancellation)
             .await
             .map_err(|error| provider_error(&error))?;
         self.session.provider_session_id = started.provider_session_id;

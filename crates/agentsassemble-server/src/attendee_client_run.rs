@@ -50,11 +50,12 @@ pub async fn run_attendee_session(
     if joined.expires_at <= chrono::Utc::now() {
         return Err(error("attendee_session_expired"));
     }
-    let ready = tokio::select! {
-        biased;
-        () = cancellation.cancelled() => return Ok(None),
-        ready = runtime.start() => ready?,
-    };
+    // Expected cancellation joins launch custody instead of dropping the factory future.
+    let ready = runtime.start(Some(cancellation)).await;
+    if cancellation.is_cancelled() {
+        return Ok(None);
+    }
+    let ready = ready?;
     let mut session = Session {
         client,
         runtime,
@@ -298,7 +299,7 @@ impl Session<'_> {
     async fn ready_request(&mut self) -> Result<Request, AttendeeClientError> {
         Ok(Request::Ready {
             request_id: Uuid::new_v4(),
-            report: Box::new(self.runtime.start().await?),
+            report: Box::new(self.runtime.start(None).await?),
         })
     }
 }

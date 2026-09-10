@@ -481,7 +481,7 @@ async fn stage_unconfirmed_running_reuse(
         .unwrap_or_else(|error| panic!("load authorized running reuse: {error}"))
         .unwrap_or_else(|| panic!("authorized running reuse had no recovery candidate"));
     let started = provider_adapter
-        .start_reserved(&authorized.session)
+        .start_reserved(&authorized.session, None)
         .await
         .unwrap_or_else(|error| panic!("execute running reuse: {error}"));
     store

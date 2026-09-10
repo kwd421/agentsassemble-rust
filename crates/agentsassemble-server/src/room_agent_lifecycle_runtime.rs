@@ -108,7 +108,10 @@ pub(crate) async fn execute_agent_start(
             return CommandExecution::unresolved_failure(error);
         }
     };
-    match provider_adapter.start_reserved(&authorized.session).await {
+    match provider_adapter
+        .start_reserved(&authorized.session, None)
+        .await
+    {
         Ok(started) => complete_agent_start(store, command, &authorized, started).await,
         Err(error) => {
             record_agent_start_failure(store, provider_adapter, command, &authorized, error).await

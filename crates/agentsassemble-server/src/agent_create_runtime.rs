@@ -81,15 +81,14 @@ pub(crate) async fn execute_agent_create(
 async fn execute_agent_create_start(
     store: &SqliteStore,
     provider_catalog: &ProviderCatalogService,
-    provider_adapter: &ProviderAdapter,
+    adapter: &ProviderAdapter,
     event_tx: &broadcast::Sender<RoomEvent>,
     command: &RoomCommand,
 ) -> Result<AgentCreateExecution, CommandFailure> {
     let principal = &command.principal;
     let request_id = command.request_id.as_str();
     let payload = &command.payload;
-    let plan =
-        resolve_create_start_plan(store, provider_catalog, provider_adapter, command).await?;
+    let plan = resolve_create_start_plan(store, provider_catalog, adapter, command).await?;
     let effect = match plan {
         AgentCreateStartPlan::Outcome(outcome) => return Ok(success(*outcome, false)),
         AgentCreateStartPlan::Start(effect) => effect,
@@ -111,7 +110,7 @@ async fn execute_agent_create_start(
             advance_ordered_floor: false,
         });
     }
-    let reservation = match provider_adapter.reserve_start(&effect.session).await {
+    let reservation = match adapter.reserve_start(&effect.session).await {
         Ok(reservation) => reservation,
         Err(error) => {
             return fail_created_agent_start_before_effect(
@@ -141,7 +140,7 @@ async fn execute_agent_create_start(
     let authorized = match authorized {
         Ok(effect) => effect,
         Err(error) => {
-            provider_adapter
+            adapter
                 .cancel_start_reservation(
                     &effect.session.public.room_id,
                     &effect.session.public.session_id,
@@ -157,7 +156,7 @@ async fn execute_agent_create_start(
             return Err(CommandFailure::unresolved(error));
         }
     };
-    match provider_adapter.start_reserved(&authorized.session).await {
+    match adapter.start_reserved(&authorized.session, None).await {
         Ok(started) => {
             complete_created_agent_start(
                 store,
@@ -172,7 +171,7 @@ async fn execute_agent_create_start(
         Err(error) => {
             fail_created_agent_start(
                 store,
-                provider_adapter,
+                adapter,
                 principal,
                 request_id,
                 payload,

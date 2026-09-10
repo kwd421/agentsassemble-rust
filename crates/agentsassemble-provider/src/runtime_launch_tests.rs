@@ -56,6 +56,95 @@ impl DriverFactory for NeverFactory {
     }
 }
 
+struct HeldFactory {
+    entered: Arc<tokio::sync::Notify>,
+    release: Arc<tokio::sync::Notify>,
+    inner: ProductionDriverFactory,
+}
+
+impl DriverFactory for HeldFactory {
+    fn launch<'a>(
+        &'a self,
+        session: &'a agentsassemble_domain::DurableAgentSession,
+        runtime_lease: &'a HeldRuntimeLease,
+    ) -> DriverFuture<'a, Result<Box<dyn ProviderDriver>, DriverLaunchError>> {
+        Box::pin(async move {
+            self.entered.notify_one();
+            self.release.notified().await;
+            self.inner.launch(session, runtime_lease).await
+        })
+    }
+}
+
+#[tokio::test]
+async fn requested_cancel_joins_factory_handoff_before_confirming_stop() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create held launch fixture: {error}"));
+    let (mut session, _, _) = super::tests::code_mode_host_fixture(directory.path()).await;
+    let entered = Arc::new(tokio::sync::Notify::new());
+    let release = Arc::new(tokio::sync::Notify::new());
+    let adapter = ProviderAdapter::with_factory(Arc::new(HeldFactory {
+        entered: entered.clone(),
+        release: release.clone(),
+        inner: ProductionDriverFactory {
+            managed: false,
+            credentials: crate::ProviderCredentialStore::production(),
+            state_root: None,
+            guardian: std::sync::OnceLock::from(Ok(GuardianLaunch::test_harness()
+                .unwrap_or_else(|error| panic!("bind held launch guardian: {error}")))),
+        },
+    }));
+    let reserved = adapter
+        .reserve_start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("reserve held launch: {error}"));
+    session.runtime_handle_id = reserved.runtime_handle_id;
+    session.runtime_owner_id = reserved.runtime_owner_id;
+    session.runtime_lease_token = reserved.runtime_lease_token;
+    let cancelled = tokio_util::sync::CancellationToken::new();
+    cancelled.cancel();
+    let Err(failure) = adapter.start_reserved(&session, Some(&cancelled)).await else {
+        panic!("pre-cancelled request must not start a factory");
+    };
+    assert_eq!(failure.code, "provider_start_cancelled");
+    assert!(!failure.effect_uncertain);
+    let cancellation = tokio_util::sync::CancellationToken::new();
+    let starting = adapter.clone();
+    let authority = session.clone();
+    let stopping = cancellation.clone();
+    let task =
+        tokio::spawn(async move { starting.start_reserved(&authority, Some(&stopping)).await });
+    entered.notified().await;
+    cancellation.cancel();
+    assert!(
+        !task.is_finished(),
+        "cancel must retain an in-flight factory"
+    );
+    release.notify_one();
+    let Err(failure) = task
+        .await
+        .unwrap_or_else(|error| panic!("held start owner: {error}"))
+    else {
+        panic!("cancelled start must not publish ready");
+    };
+    assert_eq!(failure.code, "provider_attachment_cancelled");
+    let outcome = adapter.shutdown_with_observations().await;
+    assert!(outcome.failure.is_none());
+    assert_eq!(outcome.gone.len(), 1);
+    assert_eq!(outcome.gone[0].runtime_handle_id, session.runtime_handle_id);
+    adapter
+        .release_confirmed_stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &session.runtime_handle_id,
+            &session.runtime_owner_id,
+            &session.runtime_lease_token,
+        )
+        .await;
+    assert!(adapter.shutdown_with_observations().await.gone.is_empty());
+}
+
 #[cfg(unix)]
 #[tokio::test]
 async fn guardian_binding_failure_reaches_provider_start() {
@@ -159,7 +248,7 @@ async fn safe_launch_failure_retains_exact_gone_proof_until_terminal_commit() {
         .runtime_lease_token
         .clone_from(&reservation.runtime_lease_token);
 
-    let Err(error) = adapter.start_reserved(&authorized).await else {
+    let Err(error) = adapter.start_reserved(&authorized, None).await else {
         panic!("safe launch failure must remain a terminal error");
     };
     assert!(error.runtime_stopped);
@@ -212,7 +301,7 @@ async fn begin_failure_observation_retains_exact_proof_until_db_checkpoint() {
         &authorized.public.session_id,
     );
 
-    let Err(failure) = adapter.start_reserved(&authorized).await else {
+    let Err(failure) = adapter.start_reserved(&authorized, None).await else {
         panic!("missing launch lifetime must fail before the provider effect");
     };
     assert!(!failure.effect_uncertain);
@@ -254,7 +343,7 @@ async fn terminal_start_failure_release_permits_one_fresh_generation() {
     authorized.runtime_handle_id = reservation.runtime_handle_id;
     authorized.runtime_owner_id = reservation.runtime_owner_id;
     authorized.runtime_lease_token = reservation.runtime_lease_token.clone();
-    let Err(error) = adapter.start_reserved(&authorized).await else {
+    let Err(error) = adapter.start_reserved(&authorized, None).await else {
         panic!("fixture launch must fail safely");
     };
     assert!(error.runtime_stopped);

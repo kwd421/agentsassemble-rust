@@ -48,11 +48,11 @@ async fn verify_cleanup(publish_ready: bool) -> Result<(), Box<dyn std::error::E
         "CARGO_BIN_EXE_agentsassemble-server"
     )));
     let mut runtime = AttendeeRuntime::new(&joined, draft, adapter.clone(), None)?;
-    let ready = runtime.start().await?;
+    let ready = runtime.start(None).await?;
     assert!(ready.retained_interrupt);
     assert!(!ready.runtime_handle_id.is_empty());
     assert_eq!(
-        runtime.start().await?.runtime_handle_id,
+        runtime.start(None).await?.runtime_handle_id,
         ready.runtime_handle_id
     );
     assert!(runtime.acknowledge_cleanup(None).await.is_err());
@@ -96,7 +96,7 @@ async fn verify_cleanup(publish_ready: bool) -> Result<(), Box<dyn std::error::E
     assert!(client.cleanup().await?.is_none());
     let snapshot = store.snapshot("general", 0, 200).await?;
     assert!(!snapshot.agent_sessions[0].provider_session_active);
-    assert!(runtime.start().await.is_err());
+    assert!(runtime.start(None).await.is_err());
     server.stop().await;
     Ok(())
 }

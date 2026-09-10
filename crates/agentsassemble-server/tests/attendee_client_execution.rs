@@ -154,7 +154,7 @@ async fn ready_socket(
     socket
         .send(&Request::Ready {
             request_id: Uuid::new_v4(),
-            report: Box::new(runtime.start().await?),
+            report: Box::new(runtime.start(None).await?),
         })
         .await?;
     assert!(matches!(
@@ -232,7 +232,7 @@ async fn prepare_runtime(
         "asset_kind":"card", "source_kind":"fixture", "asset_count":0, "ignored_features":{}, "tag_count":0
     }))?;
     let mut runtime = AttendeeRuntime::new(&joined, draft, adapter, Some(persona))?;
-    runtime.start().await?;
+    runtime.start(None).await?;
     Ok(runtime)
 }
 

@@ -185,13 +185,21 @@ impl ProviderAdapter {
     ///
     /// # Errors
     ///
-    /// Returns a redacted fail-closed runtime error.
+    /// Returns a redacted fail-closed runtime error. Explicit cancellation joins the factory
+    /// handoff before cancelling attachment; callers must still stop any reserved runtime.
     pub async fn start_reserved(
         &self,
         session: &DurableAgentSession,
+        cancellation: Option<&CancellationToken>,
     ) -> Result<ProviderRuntimeStarted, ProviderAdapterError> {
         let slot = self.slot(session).await;
         let mut slot = slot.lock().await;
+        if cancellation.is_some_and(CancellationToken::is_cancelled) {
+            return Err(ProviderAdapterError::safe(DriverError::new(
+                "provider_start_cancelled",
+                "The provider start was cancelled before launch.",
+            )));
+        }
         match &mut slot.state {
             RuntimeState::Launching(runtime)
                 if runtime.handle_id != session.runtime_handle_id
@@ -209,11 +217,7 @@ impl ProviderAdapter {
                 ))
             }
             RuntimeState::Launching(_) => {
-                super::launch_state::begin_launch_effect(&mut slot)?;
-                let RuntimeState::Launching(runtime) = &mut slot.state else {
-                    unreachable!("authorized provider runtime must remain launching");
-                };
-                runtime.effect_started = true;
+                let runtime = super::launch_state::begin_launch_effect(&mut slot)?;
                 let launch = self
                     .owner
                     .factory
@@ -268,9 +272,11 @@ impl ProviderAdapter {
                 let RuntimeState::Running(runtime) = &mut slot.state else {
                     unreachable!("new provider runtime slot must be running");
                 };
-                initialize_owned_runtime(session, runtime).await
+                initialize_owned_runtime(session, runtime, cancellation).await
             }
-            RuntimeState::Running(runtime) => reuse_owned_runtime(session, runtime).await,
+            RuntimeState::Running(runtime) => {
+                reuse_owned_runtime(session, runtime, cancellation).await
+            }
             RuntimeState::StopConfirmed { .. } => {
                 Err(ProviderAdapterError::safe(DriverError::new(
                     "operation_in_progress",
@@ -299,6 +305,6 @@ impl ProviderAdapter {
         authorized.runtime_handle_id = reservation.runtime_handle_id;
         authorized.runtime_owner_id = reservation.runtime_owner_id;
         authorized.runtime_lease_token = reservation.runtime_lease_token;
-        self.start_reserved(&authorized).await
+        self.start_reserved(&authorized, None).await
     }
 }

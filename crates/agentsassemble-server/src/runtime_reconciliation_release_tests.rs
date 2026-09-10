@@ -193,7 +193,10 @@ async fn confirmed_absence_fixture(id_suffix: &str) -> ConfirmedAbsenceFixture {
         )
         .await
         .unwrap_or_else(|error| panic!("authorize confirmed absence: {error}"));
-    let Err(failure) = provider_adapter.start_reserved(&authorized.session).await else {
+    let Err(failure) = provider_adapter
+        .start_reserved(&authorized.session, None)
+        .await
+    else {
         panic!("non-provider fixture executable must create confirmed absence");
     };
     assert!(failure.runtime_stopped);

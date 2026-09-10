@@ -223,6 +223,15 @@ stop delivery, the positively stopped local owner releases its own lease artifac
 A failed leave/read retains those artifacts. Verify the unassigned read before and
 after host completion and preserve assigned-runtime report replay, rejection and
 unresolved cleanup.
+A normal attendee cancellation must not drop the provider factory's in-flight
+launch future before it returns process custody or an exact safe launch failure.
+Pass explicit cancellation through the existing adapter start and attachment owner:
+reject a cancelled request before new launch effects, join an already-dispatched
+factory launch, and cancel attachment/readiness after the driver is owned. This
+adds no detached task or periodic retry. Unexpected task loss still retains the
+existing unconfirmed launch custody; cancellation never invents a gone receipt.
+Verify cancellation during the factory handoff and during held initialization,
+then confirm real stop, departure and local lease release.
 Process restart never automatically launches a replacement attendee
 or treats an old invitation as an unused draft. Existing provider lease/guardian
 recovery and server expiry remain authoritative after process loss. Before dispatch,

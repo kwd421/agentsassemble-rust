@@ -138,7 +138,7 @@ async fn connect_ready(
     socket
         .send(&Request::Ready {
             request_id: Uuid::new_v4(),
-            report: Box::new(runtime.start().await?),
+            report: Box::new(runtime.start(None).await?),
         })
         .await?;
     assert!(matches!(receive(&mut socket).await?, Frame::Ack { .. }));
@@ -158,7 +158,7 @@ async fn start_runtime(
         "CARGO_BIN_EXE_agentsassemble-server"
     )));
     let mut runtime = AttendeeRuntime::new(&joined, draft, adapter, None)?;
-    runtime.start().await?;
+    runtime.start(None).await?;
     Ok(runtime)
 }
 

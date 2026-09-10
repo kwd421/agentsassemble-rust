@@ -459,7 +459,10 @@ pub(crate) mod tests {
             )
             .await
             .unwrap_or_else(|error| panic!("authorize failed generation: {error}"));
-        let Err(failure) = provider_adapter.start_reserved(&authorized.session).await else {
+        let Err(failure) = provider_adapter
+            .start_reserved(&authorized.session, None)
+            .await
+        else {
             panic!("non-provider fixture executable must fail safely");
         };
         assert!(failure.runtime_stopped);
