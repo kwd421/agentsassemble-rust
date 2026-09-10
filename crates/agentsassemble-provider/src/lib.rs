@@ -5,6 +5,8 @@ pub use provider_update::{ProviderUpdateError, ProviderUpdateService};
 mod acp_client;
 mod acp_runtime;
 mod catalog;
+#[cfg(test)]
+mod catalog_lifecycle_tests;
 mod catalog_service;
 mod deepseek_usage;
 mod provider_login;
@@ -98,7 +100,7 @@ mod unix_custody;
 mod unix_process_tree;
 mod vercel;
 
-pub use catalog_service::{CatalogRefreshError, ProviderCatalogService};
+pub use catalog_service::{CatalogRefreshError, CatalogShutdownError, ProviderCatalogService};
 pub use credential_provider::ProviderCredentialId;
 pub use credentials::{
     ProviderCredentialError, ProviderCredentialSource, ProviderCredentialStatus,

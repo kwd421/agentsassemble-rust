@@ -137,7 +137,7 @@ pub enum ServeError {
     #[error("server I/O failed: {0}")]
     Io(#[from] std::io::Error),
     #[error("provider discovery task failed: {0}")]
-    ProviderDiscovery(#[from] tokio::task::JoinError),
+    ProviderDiscovery(#[from] agentsassemble_provider::CatalogShutdownError),
     #[error("provider login shutdown failed: {0}")]
     ProviderLogin(#[from] agentsassemble_provider::ProviderLoginError),
     #[error("provider usage cleanup failed")]

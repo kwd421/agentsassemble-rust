@@ -147,6 +147,36 @@ completion/failure, and draft preservation. Confirm desktop rendering and disclo
 the separate deferred mobile acceptance. The earlier setup tests and manual review
 cover their recorded mechanics only and do not establish this corrected acceptance.
 
+#### Completed Pro review corrections (2026-09-10)
+
+The completed `bfa62144` review identifies five owner/consumer gaps. Own-PC setup
+must continue through selection and creation to that same computer's execution
+owner using the existing external-admission/runtime contract. It must not mark
+another room server's catalog ready, transfer credentials, or restore remote host
+discovery authority. The current provider-only help link does not complete that flow.
+Acceptance distinguishes a cold room host from a ready host whose catalog differs
+from the requesting computer, and preserves the browser creation draft.
+
+An update request losing its HTTP response does not establish terminal completion.
+Retain the selected provider's creation guard through uncertainty and a read-only
+check joining the existing task; release it only on confirmed terminal observation.
+Do not relaunch the installer to resolve transport uncertainty or add polling.
+Confirmed installation and failed selected-provider discovery are separate outcomes;
+the independent setup window must display current readiness and permit a catalog-only
+retry without repeating installation.
+
+The provider discovery owner must retain cleanup-unconfirmed results across force
+requests, cancellation and repeated shutdown. A subsequent successful probe cannot
+erase unresolved process custody. Ordinary failures with confirmed cleanup remain
+retryable. The public failed provider projection is evidence of the failure, not
+a substitute for retaining the owner's shutdown result. Controlled failure-boundary
+verification must establish no additional probe and persistent shutdown failure.
+
+Remove superseded terminal-handoff/guide-only update descriptions from the current
+contract when reconciling the updater implementation. Review findings and execution
+status are recorded in the verification owner rather than treated as prior approval
+of later changes.
+
 ### Browser-to-local provider setup (user request, 2026-09-09)
 
 The agent creation dialog must keep unavailable providers selectable for diagnosis
@@ -183,10 +213,12 @@ Existing provider installations/accounts must not be updated merely to test this
 
 Version inspection covers Codex and Claude public npm releases, OpenCode's official
 GitHub release, Cursor's native download service (using its configured channel),
-and Grok's `update --check --json` contract. Grok, Cursor and OpenCode hand off to
-their own updater in an operator-owned terminal. Codex and Claude show version
-information and official update instructions: the app does not guess their package
-manager or replace their configured release channel. Ollama and LM Studio expose
+and Grok's `update --check --json` contract. Grok, Cursor, OpenCode and Claude use
+registration-owned native updater commands with bounded process custody and
+post-install version confirmation. Codex supports an in-app update only when the
+installed executable is verified to belong to the supported global npm installation;
+other installation methods keep explicit official instructions. The app does not
+guess a package manager or replace the configured release channel. Ollama and LM Studio expose
 official app setup instructions and explicit unsupported version inspection.
 Cursor's `get-channel` empty output means its native default `prod`; static/unknown
 channels remain unsupported. No endpoint supplied by a browser or upstream response

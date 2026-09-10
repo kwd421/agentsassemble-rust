@@ -393,6 +393,8 @@ pub(crate) fn ready_provider(
     provider
 }
 
+pub(crate) const MODEL_DISCOVERY_CLEANUP_FAILED: &str = "model_discovery_cleanup_failed";
+
 pub(crate) fn failed_provider(
     provider: ProviderAvailability,
     failure: ProbeFailure,
@@ -426,7 +428,7 @@ pub(crate) fn failed_provider(
             true,
         ),
         ProbeFailure::CleanupUnconfirmed => (
-            "model_discovery_cleanup_failed",
+            MODEL_DISCOVERY_CLEANUP_FAILED,
             "provider model discovery process cleanup could not be confirmed",
             false,
         ),

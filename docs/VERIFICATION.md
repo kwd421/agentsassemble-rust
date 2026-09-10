@@ -9803,3 +9803,63 @@ PIDs 63643/63702/64001. Computer Use was reset. Controlled invocation/version ev
 is retained at `/tmp/aa-setup-ui-019-evidence`; only that run's fixture directory was
 removed. Existing isolated room data and the next-needed signed build were retained;
 the final artifact check passes.
+
+## Completed setup supplemental Pro review (2026-09-10)
+
+The completed GPT-6 Pro response and its separate full verdict were read at
+`bfa6214409256e010215c393b6d8eea4f258287c`, together with the E01–E44 source
+evidence. Browser downloads were blocked; the artifact previews supplied the full
+verdict and source excerpts. The final verdict is **REVISE C0/H0/M3/L2**:
+
+- P13-M1: own-PC setup and discovery do not continue into the current browser's
+  room-server catalog and creation/execution path. A cold host remains non-startable.
+- P13-M2: a lost updater HTTP response clears the frontend creation guard even
+  while the independently owned installer continues; read-only joining is also unguarded.
+- P13-M3: catalog cleanup-unconfirmed outcomes can be overwritten by force discovery
+  or lost during cancellation/shutdown.
+- P13-L1: successful installation followed by selected-provider discovery failure
+  leaves the independent setup window displaying its previous readiness.
+- P13-L2: current operational documentation retains the superseded terminal-handoff
+  and guide-only updater contract.
+
+All five require correction and affected verification/re-review. The original
+G3-H1/M1/M2 and G2-M1–M6 are CLOSED only within their reviewed correction scope.
+The reviewer completed the ten new individual patches, cumulative change and
+current Phase 1–3 supplemental integration; independent Phase 4–6 and Phase 7–9
+remain pending. The historical 155-patch Group 3 manual-reading gap is not closed.
+The source verdict does not add real OAuth/installer/two-computer execution proof.
+
+
+### Discovery cleanup custody correction
+
+The discovery owner now retains its terminal task result in one shared completion.
+A process-owner `CleanupUnconfirmed` result is published and retained even during
+cancellation, stops that provider's worker and prevents cached/forced refresh from
+starting another probe. Concurrent, repeated and abandoned shutdown waiters observe
+the same cleanup failure; task loss likewise remains a shutdown failure. Confirmed
+ordinary timeout/failure remains explicitly retryable. The server's shutdown error
+now exposes this owner result without converting it into successful shutdown.
+
+Four controlled lifecycle tests pass, including cancellation, an abandoned shutdown
+waiter, concurrent/repeated shutdown, no additional discovery and lost task custody.
+The existing catalog/selection/authentication tests also pass. Combined workspace
+coverage is 901 tests across the completed and affected follow-up runs, plus 29
+native tests; workspace all-target/all-feature Clippy, structure/growth, 19 policy
+tests, format, bindings, frontend build and desktop checks pass.
+
+The initial workspace invocation stopped at the HTTP overload test: macOS delivered
+the admission owner's deliberate connection reset during `connect`, while the test
+only accepted rejection after writing. Its assertion now counts the same reset at
+connect/write/read and first proves a below-limit incomplete request stays pending;
+the admission and header deadline assertions and production limits remain intact.
+The final 10-test HTTP boundary suite and the five remaining integration tests pass.
+One intermediate repeat reported a writer-lease conflict while reopening a stopped
+server's database; three exact standalone repetitions and the final whole boundary
+suite passed. Its intermittent cause remains unconfirmed; no retry, delay or lease
+bypass was added. Document tests pass.
+
+Mixed build profiles exceeded the existing artifact limit (26,559,963,136 bytes at
+maintenance). After all Cargo/native work ended, the existing artifact owner removed
+24.0 GiB of regenerable build data; the subsequent artifact check passes. The
+original verification invocation is not reported as an uninterrupted success.
+Packaged update-flow verification and Pro re-review remain pending at this point.

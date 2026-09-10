@@ -146,19 +146,50 @@ async fn incomplete_http_headers_expire_and_admission_is_bounded() {
     bootstrap(&store).await;
     let server = start(store).await;
     let address = server.base_url.replacen("http://", "", 1);
-    let mut sockets = Vec::new();
-    for _ in 0..160 {
-        let mut socket = TcpStream::connect(&address)
+    let mut first = TcpStream::connect(&address)
+        .await
+        .unwrap_or_else(|error| panic!("connect admitted HTTP client: {error}"));
+    first
+        .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nX-Slow: ")
+        .await
+        .unwrap_or_else(|error| panic!("write admitted HTTP header: {error}"));
+    let mut byte = [0_u8; 1];
+    assert!(
+        tokio::time::timeout(Duration::from_millis(20), first.read(&mut byte))
             .await
-            .unwrap_or_else(|error| panic!("connect partial HTTP client: {error}"));
-        socket
+            .is_err(),
+        "a partial header below the admission limit must initially remain pending"
+    );
+    let mut sockets = vec![first];
+    let mut rejected = 0;
+    for _ in 1..160 {
+        let mut socket = match TcpStream::connect(&address).await {
+            Ok(socket) => socket,
+            // The admission owner drops excess TCP streams before reading HTTP.
+            // macOS may deliver that reset during connect, write, or the later read.
+            Err(error) if error.kind() == std::io::ErrorKind::ConnectionReset => {
+                rejected += 1;
+                continue;
+            }
+            Err(error) => panic!("connect partial HTTP client: {error}"),
+        };
+        match socket
             .write_all(b"GET /healthz HTTP/1.1\r\nHost: localhost\r\nX-Slow: ")
             .await
-            .unwrap_or_else(|error| panic!("write partial HTTP header: {error}"));
-        sockets.push(socket);
+        {
+            Ok(()) => sockets.push(socket),
+            Err(error)
+                if matches!(
+                    error.kind(),
+                    std::io::ErrorKind::ConnectionReset | std::io::ErrorKind::BrokenPipe
+                ) =>
+            {
+                rejected += 1;
+            }
+            Err(error) => panic!("write partial HTTP header: {error}"),
+        }
     }
     tokio::time::sleep(Duration::from_millis(200)).await;
-    let mut rejected = 0;
     for socket in &mut sockets {
         let mut byte = [0_u8; 1];
         if matches!(

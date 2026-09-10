@@ -25,7 +25,15 @@
   configuration, which remains unchanged. Optional update execution and automatic
   offers pass controlled checks and signed 0.1.19 login/update cancellation, failure,
   retry, completion and draft-preservation flows; single-click Later also passes.
-  Real installer/OAuth outcomes and independent review remain open.
+  Pro's completed `bfa62144` Phase 1–3 supplemental/current integration review
+  returns REVISE C0/H0/M3/L2. Correct own-PC setup-to-creation continuity,
+  update transport-loss custody, setup readiness after update and the obsolete
+  updater contract. Catalog cleanup uncertainty now retains terminal ownership and
+  passes controlled lifecycle and affected workspace verification. Complete packaged
+  checks for the other corrections, then obtain Pro
+  re-review before continuing the split groups. Real installer/OAuth outcomes
+  remain unverified.
+  [Review disposition](docs/VERIFICATION.md#completed-setup-supplemental-pro-review-2026-09-10).
   [Update evidence](docs/VERIFICATION.md#optional-update-execution-during-creation-2026-09-10).
   [Scoped evidence](docs/VERIFICATION.md#selected-local-provider-discovery-2026-09-10).
   [Authentication evidence](docs/VERIFICATION.md#authentication-need-during-creation-2026-09-10).

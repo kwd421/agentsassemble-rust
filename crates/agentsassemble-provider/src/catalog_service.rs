@@ -7,16 +7,19 @@ use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use agentsassemble_domain::{ProviderAvailability, ProviderCatalog};
 use chrono::Utc;
+use futures_util::{
+    FutureExt,
+    future::{BoxFuture, Shared},
+};
 use serde_json::Value;
 use tokio::{
     sync::{Mutex, watch},
-    task::JoinHandle,
     time::Instant,
 };
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    catalog::catalog_revision,
+    catalog::{MODEL_DISCOVERY_CLEANUP_FAILED, catalog_revision},
     registration::{
         ProviderRegistration, discover_provider, loading_provider, provider_registration_by_id,
         provider_registrations,
@@ -38,7 +41,7 @@ pub struct ProviderCatalogService {
 
 struct CatalogOwner {
     cancellation: CancellationToken,
-    task: Mutex<Option<JoinHandle<()>>>,
+    task: Shared<BoxFuture<'static, Result<(), CatalogShutdownError>>>,
     refresh: BTreeMap<&'static str, CatalogRefresh>,
 }
 
@@ -51,6 +54,7 @@ struct CatalogRefresh {
 struct DiscoveryCompletion {
     generation: u64,
     finished_at: Option<Instant>,
+    cleanup_unconfirmed: bool,
 }
 
 struct DiscoveryPublisher {
@@ -64,6 +68,14 @@ pub enum CatalogRefreshError {
     Unsupported,
     #[error("Provider catalog discovery is unavailable.")]
     Unavailable,
+}
+
+#[derive(Clone, Debug, thiserror::Error)]
+pub enum CatalogShutdownError {
+    #[error("Provider discovery process cleanup could not be confirmed.")]
+    CleanupUnconfirmed,
+    #[error("Provider discovery task failed before cleanup was confirmed.")]
+    TaskFailed,
 }
 
 impl Drop for CatalogOwner {
@@ -140,14 +152,20 @@ impl ProviderCatalogService {
             ));
         }
         let task = tokio::spawn(async move {
-            futures_util::future::join_all(discoveries).await;
+            futures_util::future::join_all(discoveries)
+                .await
+                .into_iter()
+                .collect::<Result<Vec<_>, _>>()
+                .map(|_| ())
         });
         Self {
             _sender: sender,
             receiver,
             owner: Arc::new(CatalogOwner {
                 cancellation,
-                task: Mutex::new(Some(task)),
+                task: async move { task.await.map_err(|_| CatalogShutdownError::TaskFailed)? }
+                    .boxed()
+                    .shared(),
                 refresh,
             }),
         }
@@ -161,7 +179,7 @@ impl ProviderCatalogService {
             receiver,
             owner: Arc::new(CatalogOwner {
                 cancellation: CancellationToken::new(),
-                task: Mutex::new(None),
+                task: futures_util::future::ready(Ok(())).boxed().shared(),
                 refresh: BTreeMap::new(),
             }),
         }
@@ -205,7 +223,10 @@ impl ProviderCatalogService {
             .refresh
             .get(provider_id)
             .ok_or(CatalogRefreshError::Unsupported)?;
-        if self.owner.cancellation.is_cancelled() || refresh.requested.is_closed() {
+        if refresh.completed.borrow().cleanup_unconfirmed
+            || self.owner.cancellation.is_cancelled()
+            || refresh.requested.is_closed()
+        {
             return Err(CatalogRefreshError::Unavailable);
         }
         let completed = *refresh.completed.borrow();
@@ -254,7 +275,7 @@ impl ProviderCatalogService {
         }
         let mut completion = refresh.completed.clone();
         loop {
-            if self.owner.cancellation.is_cancelled() {
+            if completion.borrow().cleanup_unconfirmed || self.owner.cancellation.is_cancelled() {
                 return Err(CatalogRefreshError::Unavailable);
             }
             if completion.borrow_and_update().generation >= generation {
@@ -271,13 +292,10 @@ impl ProviderCatalogService {
     ///
     /// # Errors
     ///
-    /// Returns the discovery task's join error instead of hiding a panic or cancellation.
-    pub async fn shutdown(&self) -> Result<(), tokio::task::JoinError> {
+    /// Retains cleanup uncertainty and task failure across concurrent/repeated calls.
+    pub async fn shutdown(&self) -> Result<(), CatalogShutdownError> {
         self.owner.cancellation.cancel();
-        if let Some(task) = self.owner.task.lock().await.take() {
-            task.await?;
-        }
-        Ok(())
+        self.owner.task.clone().await
     }
 
     /// Validates a raw `agent.create` request against one exact catalog revision.
@@ -311,7 +329,7 @@ async fn run_provider_discovery(
     mut requests: watch::Receiver<u64>,
     completed: watch::Sender<DiscoveryCompletion>,
     mut eager: bool,
-) {
+) -> Result<(), CatalogShutdownError> {
     loop {
         if !eager {
             tokio::select! {
@@ -327,7 +345,10 @@ async fn run_provider_discovery(
             credentials.for_user_requested_access()
         };
         let provider = discover_provider(registration, &access, &cancellation).await;
-        if cancellation.is_cancelled() {
+        // This code is produced by the process owner, never provider output.
+        // Retain it even when cancellation initiated the failed cleanup.
+        let cleanup_unconfirmed = provider.discovery_error_code == MODEL_DISCOVERY_CLEANUP_FAILED;
+        if cancellation.is_cancelled() && !cleanup_unconfirmed {
             break;
         }
         let mut providers = publisher.providers.lock().await;
@@ -344,8 +365,13 @@ async fn run_provider_discovery(
         completed.send_replace(DiscoveryCompletion {
             generation,
             finished_at: Some(Instant::now()),
+            cleanup_unconfirmed,
         });
+        if cleanup_unconfirmed {
+            return Err(CatalogShutdownError::CleanupUnconfirmed);
+        }
     }
+    Ok(())
 }
 
 fn published_catalog(
