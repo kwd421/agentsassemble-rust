@@ -22,6 +22,7 @@ mod agent_avatar;
 mod appearance;
 mod central_login;
 mod control;
+mod control_exchange;
 pub(crate) use central_login::CentralLoginGrant;
 mod human_invite;
 mod message_attachments;
@@ -73,6 +74,7 @@ struct RuntimeProcess {
     child: Child,
     control: Option<ChildStdin>,
     output: mpsc::Receiver<Result<RuntimeOutput, String>>,
+    pending_response: Option<control_exchange::PendingResponse>,
     address: Url,
 }
 
@@ -111,7 +113,7 @@ impl LocalRuntime {
             .lock()
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
         let result = request_bootstrap_status(ensure_runtime(&mut process, app)?);
-        handle_bootstrap_result(&mut process, result)
+        handle_ticket_result(&mut process, result)
     }
 
     /// Initializes durable local authority over the private control pipe.
@@ -135,7 +137,7 @@ impl LocalRuntime {
             request_id,
             display_name,
         );
-        handle_bootstrap_result(&mut process, result)
+        handle_ticket_result(&mut process, result)
     }
 
     /// Issues the one-use WebSocket ticket for one validated room.
@@ -362,26 +364,9 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
         child,
         control: Some(control),
         output,
+        pending_response: None,
         address,
     })
-}
-
-fn handle_bootstrap_result(
-    process: &mut Option<RuntimeProcess>,
-    result: Result<LocalBootstrapGrant, TicketFailure>,
-) -> Result<LocalBootstrapGrant, String> {
-    match result {
-        Ok(grant) => Ok(grant),
-        Err(TicketFailure::Rejected(message)) => Err(message),
-        Err(TicketFailure::Broken(message)) => {
-            if let Some(mut broken) = process.take() {
-                terminate_owned_runtime(&mut broken);
-            }
-            Err(format!(
-                "{message}; the owned runtime was stopped and will restart on the next attempt"
-            ))
-        }
-    }
 }
 
 fn handle_ticket_result<T>(
@@ -390,7 +375,7 @@ fn handle_ticket_result<T>(
 ) -> Result<T, String> {
     match result {
         Ok(grant) => Ok(grant),
-        Err(TicketFailure::Rejected(message)) => Err(message),
+        Err(TicketFailure::Rejected(message) | TicketFailure::Unavailable(message)) => Err(message),
         Err(TicketFailure::Broken(message)) => {
             if let Some(mut broken) = process.take() {
                 terminate_owned_runtime(&mut broken);

@@ -66,8 +66,16 @@
   queued-control replacement and signed 0.1.30 early cancellation plus controlled
   held-factory normal Quit. The app scheduling control and existing five-second
   ticket-timeout behavior are disclosed in the evidence. Isolated artifacts are
-  cleaned and artifact check passes. Obtain current Phase 1–3 re-review before
-  the remaining split groups.
+  cleaned and artifact check passes. Pro's completed `a9d37b05` review approves
+  M6/M6-R1 and the correction delta, but current Phase 1–3 remains REVISE
+  C0/H0/M1/L0 for P13-M7: a normal status ticket's five-second wait closes the
+  parent pipe and cancels legitimate recovery. The full answer, separate verdict
+  and A00–A21/R01–R05 evidence are read. Correct the native waiter/pending-response
+  lifetime. The correction passes 36 native tests and mandatory source gates;
+  signed 0.1.31 natural restart survives delayed thread resume, visibly completes,
+  restores both Idle sessions and permits fresh result/status queries. Normal Quit
+  cleans all owned processes and exact leases. Isolated artifacts are removed and
+  artifact check passes. Affected-head Pro re-review remains before later groups.
   [Recovery evidence](docs/VERIFICATION.md#parent-loss-during-replacement-recovery-2026-09-11).
   Full flow acceptance remains open.
   [Latest evidence](docs/VERIFICATION.md#outer-shutdown-lifetime-correction-2026-09-10).

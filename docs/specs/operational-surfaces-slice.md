@@ -1132,6 +1132,26 @@ access approval. Passing codesign alone is not startup or Keychain continuity pr
 
 ## Operator restart entry points
 
+Native control waits and runtime lifetime (P13-M7, 2026-09-11): the existing
+five-second response budget bounds the caller, not the owned runtime. In-place
+recovery can legitimately hold a request beyond that budget. A timed-out call
+returns unavailable without closing the private pipe or reporting a restart
+outcome. The same serialized native owner retains exactly one pending response,
+including its original request-specific decoder and identity. Before writing a
+later request it consumes and validates that response; it never gives an old grant
+to a new caller or automatically resends a timed-out operation. Invalid output,
+identity/purpose mismatch, write failure and actual child/channel death retain
+the existing fail-closed stop path. Explicit Quit still closes the pipe and joins
+positive cleanup. One caller budget covers both pending response drain and its
+new request; no new timer, worker, queue or runtime deadline is introduced.
+The retained decoder costs one bounded outstanding request context per runtime.
+Acceptance requires natural packaged restart/result lookup across a response delay
+longer than five seconds, Completed for the same operation, fresh subsequent
+tickets, and explicit Quit cleanup. Controlled channel tests must reject late
+malformed/mismatched replies, keep repeated timeouts from queuing more requests,
+and preserve actual child/channel failure. Provider deadlines and authority remain
+unchanged; source tests do not replace the packaged flow.
+
 `assemble rolling-restart --database PATH [--wait SECONDS] [--json]` preserves the
 original command and busy-wait behavior using the same-user control endpoint instead
 of the retired host-token transport. The wait also observes the accepted operation's

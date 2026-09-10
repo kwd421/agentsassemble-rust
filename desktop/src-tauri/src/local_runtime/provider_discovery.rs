@@ -20,6 +20,7 @@ impl LocalRuntime {
             .lock()
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
         let request_id = Uuid::new_v4().to_string();
+        let expected_provider = provider_id.to_owned();
         let result = request_control(
             ensure_runtime(&mut process, app)?,
             &LocalControlRequest::DiscoverLocalProvider {
@@ -27,22 +28,24 @@ impl LocalRuntime {
                 provider_id: provider_id.to_owned(),
                 force,
             },
-        )
-        .and_then(|response| match response {
-            LocalControlResponse::ProviderDiscoveryOk {
-                request_id: response_id,
-                provider_id: response_provider,
-                generation,
-            } if response_id == request_id && response_provider == provider_id => Ok(generation),
-            LocalControlResponse::Error {
-                request_id: response_id,
-                message,
-                ..
-            } if response_id == request_id => Err(TicketFailure::Rejected(message)),
-            _ => Err(TicketFailure::Broken(
-                "Local provider discovery response did not match its request.".into(),
-            )),
-        });
+            move |response| match response {
+                LocalControlResponse::ProviderDiscoveryOk {
+                    request_id: response_id,
+                    provider_id: response_provider,
+                    generation,
+                } if response_id == request_id && response_provider == expected_provider => {
+                    Ok(generation)
+                }
+                LocalControlResponse::Error {
+                    request_id: response_id,
+                    message,
+                    ..
+                } if response_id == request_id => Err(TicketFailure::Rejected(message)),
+                _ => Err(TicketFailure::Broken(
+                    "Local provider discovery response did not match its request.".into(),
+                )),
+            },
+        );
         handle_ticket_result(&mut process, result)
     }
 }

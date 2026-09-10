@@ -10365,7 +10365,11 @@ run without a tool round-trip exceeding the unchanged native initialization limi
 This controlled scheduling is disclosed; it is not an unmodified timing run of
 the restart button. At parent EOF, 5.030 seconds after the barrier, app/supervisor/
 server remain alive. Only then is the companion released. All owned processes are
-gone 0.149 seconds later; both sessions are Stopped/inactive/recovery false with
+gone 0.149 seconds after the observer detects parent loss (the harness timestamp
+precedes its survival check and release, not a separate release-to-gone measurement).
+Cmd-Q and ticket failure both reach the same pipe-close owner; that sanitized
+marker does not identify which call site closed it first in this controlled run.
+Both sessions are Stopped/inactive/recovery false with
 no lease/lifetime files. Exactly one recovery companion starts, the next target is
 not launched, only the initial Ready exists and the barrier becomes Failed.
 Earlier attempts that missed the native barrier or resumed after its deadline are
@@ -10377,3 +10381,57 @@ observations remain. Artifact check reports 48,930,889,728 bytes against the unc
 19,327,352,832-byte limit. After all builds and app runs finish, the existing
 maintenance owner removes 44.3 GiB; final artifact check passes. Affected-head Pro
 re-review and independent later split groups remain pending.
+
+### Native control wait during legitimate recovery (2026-09-11)
+
+Pro's completed `a9d37b05` answer, separate verdict and all A00–A21/R01–R05 source
+evidence have been read. M6/M6-R1 and the correction delta are approved, but current
+Phase 1–3 remains REVISE C0/H0/M1/L0 for P13-M7: a five-second native control wait
+closes the parent pipe and cancels valid replacement recovery. This reopens the
+native caller lifetime, not the verified parent-loss cancellation contract.
+
+The serial exchange owner now retains exactly one pending response decoder after
+its existing five-second caller budget expires. The runtime stays owned and the
+caller receives an explicit pending failure. A subsequent call first consumes and
+validates the original response using its original identity, purpose and grant
+checks, discards that old grant, and only then may send its own request within the
+same total wait budget. No resend, response borrowing, additional thread, timer or
+unbounded queue is introduced. Actual child death, pipe loss, malformed output,
+duplicate startup, wrong identity/purpose and invalid grants retain fatal handling.
+All existing bootstrap, ticket, discovery and login decoders use this exchange;
+normal Quit still closes the owned input and joins the existing shutdown owner.
+
+Native checks pass all 36 tests, formatting and all-target/all-feature Clippy with
+warnings denied. The new controlled child tests hold the actual serial response,
+cross two caller budgets without another request or runtime replacement, release
+the old grant and observe only fresh grants on later calls. Late wrong identity,
+wrong purpose, invalid grant, malformed JSON and child exit remain fatal. Explicit
+stop also closes and reaps a runtime with a response pending. Architecture/growth,
+all 19 policy cases, root formatting and diff checks pass. Prior unchanged server
+917/frontend 859 results remain scoped evidence; those suites were not rerun for
+this native-only correction. The signed package rebuilds frontend and sidecar.
+
+Signed 0.1.31 uses the real app, supervisor and server with two native controlled
+CLI fixtures, created by direct Add and Run. The first thread/resume sleeps seven
+seconds within the unchanged ten-second provider deadline. The natural UI restart
+and automatic status lookup initially show uncertainty, then the same operation
+visibly completes. First resume observation to Completed is 10.479 seconds,
+including subsequent recovery work; it is not a pure resume-latency measurement.
+App/supervisor/server remain alive with the same server PID and no parent-loss
+marker. Both exact session identities and provider/profile/workspace identities
+are preserved, restored Idle/active with no recovery requirement and live lease/
+lifetime files. Fresh result and status buttons work, and both Idle labels are
+visible after returning to the room. No process scheduling pause, CLI restart or
+production deadline change is used in this run.
+
+A second natural restart followed by normal Cmd-Q cleans every owned process and
+both exact lease/lifetime files; both sessions finish Stopped/inactive without a
+recovery requirement. That attempt completes recovery before parent-loss detection
+and therefore does not prove cancellation during recovery: its stricter observer
+assertion fails and is not counted as a passing cancellation test. The native
+pending-response stop test and prior scoped M6-R1 evidence retain their own limits.
+Only controlled providers are executed. Computer Use is reset; the exact isolated
+app data, fixture root, bundle and build configuration are removed. Artifact check
+passes and keeps useful build output. Pro re-review and independent later groups,
+real browser/OS dispatch, two-machine proof, broader mobile and the previously
+deferred real-provider/OAuth/installer outcomes remain open.

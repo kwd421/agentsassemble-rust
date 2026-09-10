@@ -36,31 +36,31 @@ impl LocalRuntime {
             .map_err(|_| "invalid runtime address".to_owned())?
             .to_string();
         let request_id = Uuid::new_v4().to_string();
-        let response = request_control(
+        let result = request_control(
             runtime,
             &LocalControlRequest::CentralLogin {
                 request_id: request_id.clone(),
                 action,
                 state: state.to_owned(),
             },
+            move |response| match response {
+                LocalControlResponse::CentralLoginOk {
+                    request_id: response_id,
+                    result,
+                } if response_id == request_id => Ok(CentralLoginGrant {
+                    result,
+                    redirect_uri,
+                }),
+                LocalControlResponse::Error {
+                    request_id: response_id,
+                    message,
+                    ..
+                } if response_id == request_id => Err(TicketFailure::Rejected(message)),
+                _ => Err(TicketFailure::Broken(
+                    "local runtime login response did not match the request".into(),
+                )),
+            },
         );
-        let result = response.and_then(|response| match response {
-            LocalControlResponse::CentralLoginOk {
-                request_id: response_id,
-                result,
-            } if response_id == request_id => Ok(CentralLoginGrant {
-                result,
-                redirect_uri,
-            }),
-            LocalControlResponse::Error {
-                request_id: response_id,
-                message,
-                ..
-            } if response_id == request_id => Err(TicketFailure::Rejected(message)),
-            _ => Err(TicketFailure::Broken(
-                "local runtime login response did not match the request".into(),
-            )),
-        });
         handle_ticket_result(&mut process, result)
     }
 

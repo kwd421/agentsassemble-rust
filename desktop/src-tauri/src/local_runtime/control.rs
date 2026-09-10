@@ -1,20 +1,19 @@
 #[path = "control_invites.rs"]
 mod invites;
 
-use std::{io::Write, time::Duration};
-
 use agentsassemble_protocol::{LocalBootstrapGrant, LocalControlRequest, LocalControlResponse};
 use uuid::Uuid;
 
 use super::{
-    CentralRegistrationTicketGrant, HttpTicketGrant, ManagerRoomAuthority, RuntimeOutput,
-    RuntimeProcess, TicketGrant,
+    CentralRegistrationTicketGrant, HttpTicketGrant, ManagerRoomAuthority, RuntimeProcess,
+    TicketGrant,
 };
 
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+pub(super) use super::control_exchange::request_control;
 
 pub(super) enum TicketFailure {
     Rejected(String),
+    Unavailable(String),
     Broken(String),
 }
 
@@ -45,7 +44,8 @@ fn request_bootstrap(
     request_id: &str,
     request: &LocalControlRequest,
 ) -> Result<LocalBootstrapGrant, TicketFailure> {
-    match request_control(runtime, request)? {
+    let request_id = request_id.to_owned();
+    request_control(runtime, request, move |response| match response {
         LocalControlResponse::BootstrapOk {
             request_id: response_id,
             bootstrap,
@@ -64,7 +64,7 @@ fn request_bootstrap(
         _ => Err(TicketFailure::Broken(
             "local runtime bootstrap response did not match the request".to_owned(),
         )),
-    }
+    })
 }
 
 pub(super) fn request_ticket(
@@ -76,35 +76,37 @@ pub(super) fn request_ticket(
         request_id: request_id.clone(),
         meeting_id: room_id.to_owned(),
     };
-    let response = request_control(runtime, &request)?;
-    let (ticket, ttl_seconds) = match response {
-        LocalControlResponse::Ok {
-            request_id: response_id,
-            ticket,
-            ttl_seconds,
-        } if response_id == request_id => (ticket, ttl_seconds),
-        LocalControlResponse::Error {
-            request_id: response_id,
-            code,
-            message,
-        } if response_id == request_id => {
-            return if is_application_rejection(&code) {
-                Err(TicketFailure::Rejected(message))
-            } else {
-                Err(TicketFailure::Broken(message))
-            };
-        }
-        _ => {
+    let (ticket, ttl_seconds) = request_control(runtime, &request, move |response| {
+        let (ticket, ttl_seconds) = match response {
+            LocalControlResponse::Ok {
+                request_id: response_id,
+                ticket,
+                ttl_seconds,
+            } if response_id == request_id => (ticket, ttl_seconds),
+            LocalControlResponse::Error {
+                request_id: response_id,
+                code,
+                message,
+            } if response_id == request_id => {
+                return if is_application_rejection(&code) {
+                    Err(TicketFailure::Rejected(message))
+                } else {
+                    Err(TicketFailure::Broken(message))
+                };
+            }
+            _ => {
+                return Err(TicketFailure::Broken(
+                    "local runtime ticket response id did not match the request".to_owned(),
+                ));
+            }
+        };
+        if ticket.is_empty() || ttl_seconds == 0 {
             return Err(TicketFailure::Broken(
-                "local runtime ticket response id did not match the request".to_owned(),
+                "local runtime returned an invalid ticket grant".to_owned(),
             ));
         }
-    };
-    if ticket.is_empty() || ttl_seconds == 0 {
-        return Err(TicketFailure::Broken(
-            "local runtime returned an invalid ticket grant".to_owned(),
-        ));
-    }
+        Ok((ticket, ttl_seconds))
+    })?;
     let port = runtime
         .address
         .port()
@@ -284,9 +286,12 @@ fn request_http_ticket(
 ) -> Result<HttpTicketGrant, TicketFailure> {
     let request_id = Uuid::new_v4().to_string();
     let request = http_ticket_request(kind, &request_id);
-    let response = request_control(runtime, &request)?;
-    let (ticket, ttl_seconds) = decode_http_ticket_response(kind, &request_id, response)?;
-    validate_http_ticket_grant(&ticket, ttl_seconds)?;
+    let expected = request.clone();
+    let (ticket, ttl_seconds) = request_control(runtime, &request, move |response| {
+        let (ticket, ttl_seconds) = decode_http_ticket_response(&expected, &request_id, response)?;
+        validate_http_ticket_grant(&ticket, ttl_seconds)?;
+        Ok((ticket, ttl_seconds))
+    })?;
     Ok(HttpTicketGrant {
         ticket,
         ttl_seconds,
@@ -421,33 +426,35 @@ fn asset_ticket_request(kind: HttpTicketKind<'_>, request_id: &str) -> Option<Lo
 }
 
 fn decode_http_ticket_response(
-    kind: HttpTicketKind<'_>,
+    request: &LocalControlRequest,
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
-    match kind {
-        HttpTicketKind::AttendeeInviteCreate(_)
-        | HttpTicketKind::ConnectorInviteCreate(_)
-        | HttpTicketKind::HumanInviteCreate(_)
-        | HttpTicketKind::HumanInviteRevoke(_) => {
-            return invites::response(kind, request_id, response);
+    match request {
+        LocalControlRequest::IssueAttendeeInviteCreateTicket { .. }
+        | LocalControlRequest::IssueConnectorInviteCreateTicket { .. }
+        | LocalControlRequest::IssueHumanInviteCreateTicket { .. }
+        | LocalControlRequest::IssueHumanInviteRevokeTicket { .. } => {
+            return invites::response(request, request_id, response);
         }
-        HttpTicketKind::MessageSearchRead(_) | HttpTicketKind::SideChatRead(_) => {
-            return decode_chat_read_ticket_response(kind, request_id, response);
+        LocalControlRequest::IssueMessageSearchReadTicket { .. }
+        | LocalControlRequest::IssueSideChatReadTicket { .. } => {
+            return decode_chat_read_ticket_response(request, request_id, response);
         }
-        HttpTicketKind::MessagePinsRead(_) | HttpTicketKind::MessagePinsWrite(_) => {
-            return decode_message_pin_ticket_response(kind, request_id, response);
+        LocalControlRequest::IssueMessagePinsReadTicket { .. }
+        | LocalControlRequest::IssueMessagePinsWriteTicket { .. } => {
+            return decode_message_pin_ticket_response(request, request_id, response);
         }
-        HttpTicketKind::MessageAttachmentUpload(_)
-        | HttpTicketKind::MessageAttachmentRead(_, _)
-        | HttpTicketKind::AgentAvatarUpload(_, _) => {
-            return decode_asset_ticket_response(kind, request_id, response);
+        LocalControlRequest::IssueMessageAttachmentUploadTicket { .. }
+        | LocalControlRequest::IssueMessageAttachmentReadTicket { .. }
+        | LocalControlRequest::IssueAgentAvatarUploadTicket { .. } => {
+            return decode_asset_ticket_response(request, request_id, response);
         }
         _ => {}
     }
-    match (kind, response) {
+    match (request, response) {
         (
-            HttpTicketKind::Operator,
+            LocalControlRequest::IssueOperatorHttpTicket { .. },
             LocalControlResponse::OperatorHttpOk {
                 request_id: response_id,
                 ticket,
@@ -455,7 +462,7 @@ fn decode_http_ticket_response(
             },
         )
         | (
-            HttpTicketKind::PreferencesRead(_),
+            LocalControlRequest::IssuePreferencesReadTicket { .. },
             LocalControlResponse::PreferencesReadOk {
                 request_id: response_id,
                 ticket,
@@ -463,7 +470,7 @@ fn decode_http_ticket_response(
             },
         )
         | (
-            HttpTicketKind::PreferencesWrite(_),
+            LocalControlRequest::IssuePreferencesWriteTicket { .. },
             LocalControlResponse::PreferencesWriteOk {
                 request_id: response_id,
                 ticket,
@@ -471,7 +478,7 @@ fn decode_http_ticket_response(
             },
         )
         | (
-            HttpTicketKind::AppearanceUpload(_),
+            LocalControlRequest::IssueAppearanceUploadTicket { .. },
             LocalControlResponse::AppearanceUploadOk {
                 request_id: response_id,
                 ticket,
@@ -479,7 +486,7 @@ fn decode_http_ticket_response(
             },
         )
         | (
-            HttpTicketKind::AppearancePendingRead(_, _),
+            LocalControlRequest::IssueAppearancePendingReadTicket { .. },
             LocalControlResponse::AppearancePendingReadOk {
                 request_id: response_id,
                 ticket,
@@ -487,7 +494,7 @@ fn decode_http_ticket_response(
             },
         )
         | (
-            HttpTicketKind::AppearanceBoundRead(_, _),
+            LocalControlRequest::IssueAppearanceBoundReadTicket { .. },
             LocalControlResponse::AppearanceBoundReadOk {
                 request_id: response_id,
                 ticket,
@@ -495,7 +502,7 @@ fn decode_http_ticket_response(
             },
         )
         | (
-            HttpTicketKind::SettingsDirectoryRead,
+            LocalControlRequest::IssueSettingsDirectoryReadTicket { .. },
             LocalControlResponse::SettingsDirectoryReadOk {
                 request_id: response_id,
                 ticket,
@@ -517,13 +524,13 @@ fn decode_http_ticket_response(
 }
 
 fn decode_asset_ticket_response(
-    kind: HttpTicketKind<'_>,
+    request: &LocalControlRequest,
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
-    match (kind, response) {
+    match (request, response) {
         (
-            HttpTicketKind::MessageAttachmentUpload(_),
+            LocalControlRequest::IssueMessageAttachmentUploadTicket { .. },
             LocalControlResponse::MessageAttachmentUploadOk {
                 request_id: response_id,
                 ticket,
@@ -531,7 +538,7 @@ fn decode_asset_ticket_response(
             },
         )
         | (
-            HttpTicketKind::MessageAttachmentRead(_, _),
+            LocalControlRequest::IssueMessageAttachmentReadTicket { .. },
             LocalControlResponse::MessageAttachmentReadOk {
                 request_id: response_id,
                 ticket,
@@ -539,7 +546,7 @@ fn decode_asset_ticket_response(
             },
         )
         | (
-            HttpTicketKind::AgentAvatarUpload(_, _),
+            LocalControlRequest::IssueAgentAvatarUploadTicket { .. },
             LocalControlResponse::AgentAvatarUploadOk {
                 request_id: response_id,
                 ticket,
@@ -561,13 +568,13 @@ fn decode_asset_ticket_response(
 }
 
 fn decode_chat_read_ticket_response(
-    kind: HttpTicketKind<'_>,
+    request: &LocalControlRequest,
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
-    match (kind, response) {
+    match (request, response) {
         (
-            HttpTicketKind::MessageSearchRead(_),
+            LocalControlRequest::IssueMessageSearchReadTicket { .. },
             LocalControlResponse::MessageSearchReadOk {
                 request_id: response_id,
                 ticket,
@@ -575,7 +582,7 @@ fn decode_chat_read_ticket_response(
             },
         )
         | (
-            HttpTicketKind::SideChatRead(_),
+            LocalControlRequest::IssueSideChatReadTicket { .. },
             LocalControlResponse::SideChatReadOk {
                 request_id: response_id,
                 ticket,
@@ -597,13 +604,13 @@ fn decode_chat_read_ticket_response(
 }
 
 fn decode_message_pin_ticket_response(
-    kind: HttpTicketKind<'_>,
+    request: &LocalControlRequest,
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
-    match (kind, response) {
+    match (request, response) {
         (
-            HttpTicketKind::MessagePinsRead(_),
+            LocalControlRequest::IssueMessagePinsReadTicket { .. },
             LocalControlResponse::MessagePinsReadOk {
                 request_id: response_id,
                 ticket,
@@ -611,7 +618,7 @@ fn decode_message_pin_ticket_response(
             },
         )
         | (
-            HttpTicketKind::MessagePinsWrite(_),
+            LocalControlRequest::IssueMessagePinsWriteTicket { .. },
             LocalControlResponse::MessagePinsWriteOk {
                 request_id: response_id,
                 ticket,
@@ -647,58 +654,61 @@ pub(super) fn request_central_registration_ticket(
     let request = LocalControlRequest::IssueCentralRegistrationTicket {
         request_id: request_id.clone(),
     };
-    let response = request_control(runtime, &request)?;
-    let (ticket, ttl_seconds, server_id, host_public_key_x, host_key_fingerprint) = match response {
-        LocalControlResponse::CentralRegistrationOk {
-            request_id: response_id,
-            ticket,
-            ttl_seconds,
-            server_id,
-            host_public_key_x,
-            host_key_fingerprint,
-        } if response_id == request_id => (
-            ticket,
-            ttl_seconds,
-            server_id,
-            host_public_key_x,
-            host_key_fingerprint,
-        ),
-        LocalControlResponse::Error {
-            request_id: response_id,
-            code,
-            message,
-        } if response_id == request_id => {
-            return if is_application_rejection(&code) {
-                Err(TicketFailure::Rejected(message))
-            } else {
-                Err(TicketFailure::Broken(message))
-            };
-        }
-        _ => {
-            return Err(TicketFailure::Broken(
+    let http_base_url = runtime.address.to_string().trim_end_matches('/').to_owned();
+    request_control(runtime, &request, move |response| {
+        let (ticket, ttl_seconds, server_id, host_public_key_x, host_key_fingerprint) =
+            match response {
+                LocalControlResponse::CentralRegistrationOk {
+                    request_id: response_id,
+                    ticket,
+                    ttl_seconds,
+                    server_id,
+                    host_public_key_x,
+                    host_key_fingerprint,
+                } if response_id == request_id => (
+                    ticket,
+                    ttl_seconds,
+                    server_id,
+                    host_public_key_x,
+                    host_key_fingerprint,
+                ),
+                LocalControlResponse::Error {
+                    request_id: response_id,
+                    code,
+                    message,
+                } if response_id == request_id => {
+                    return if is_application_rejection(&code) {
+                        Err(TicketFailure::Rejected(message))
+                    } else {
+                        Err(TicketFailure::Broken(message))
+                    };
+                }
+                _ => {
+                    return Err(TicketFailure::Broken(
                 "local runtime central registration ticket response did not match the request"
                     .to_owned(),
             ));
+                }
+            };
+        if ticket.len() != 64
+            || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit())
+            || ttl_seconds == 0
+            || Uuid::parse_str(&server_id).is_err()
+            || !valid_base64url_32(&host_public_key_x)
+            || !valid_base64url_32(&host_key_fingerprint)
+        {
+            return Err(TicketFailure::Broken(
+                "local runtime returned an invalid central registration ticket grant".to_owned(),
+            ));
         }
-    };
-    if ticket.len() != 64
-        || !ticket.bytes().all(|byte| byte.is_ascii_hexdigit())
-        || ttl_seconds == 0
-        || Uuid::parse_str(&server_id).is_err()
-        || !valid_base64url_32(&host_public_key_x)
-        || !valid_base64url_32(&host_key_fingerprint)
-    {
-        return Err(TicketFailure::Broken(
-            "local runtime returned an invalid central registration ticket grant".to_owned(),
-        ));
-    }
-    Ok(CentralRegistrationTicketGrant {
-        ticket,
-        ttl_seconds,
-        http_base_url: runtime.address.to_string().trim_end_matches('/').to_owned(),
-        server_id,
-        host_public_key_x,
-        host_key_fingerprint,
+        Ok(CentralRegistrationTicketGrant {
+            ticket,
+            ttl_seconds,
+            http_base_url,
+            server_id,
+            host_public_key_x,
+            host_key_fingerprint,
+        })
     })
 }
 
@@ -707,49 +717,6 @@ fn valid_base64url_32(value: &str) -> bool {
         && value
             .bytes()
             .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-}
-
-pub(super) fn request_control(
-    runtime: &mut RuntimeProcess,
-    request: &LocalControlRequest,
-) -> Result<LocalControlResponse, TicketFailure> {
-    if runtime
-        .child
-        .try_wait()
-        .map_err(|error| TicketFailure::Broken(format!("cannot inspect local runtime: {error}")))?
-        .is_some()
-    {
-        return Err(TicketFailure::Broken(
-            "the owned Rust runtime exited before ticket issuance".to_owned(),
-        ));
-    }
-    let mut encoded = serde_json::to_vec(request).map_err(|error| {
-        TicketFailure::Broken(format!("cannot encode local ticket request: {error}"))
-    })?;
-    encoded.push(b'\n');
-    let control = runtime
-        .control
-        .as_mut()
-        .ok_or_else(|| TicketFailure::Broken("local runtime control pipe is closed".to_owned()))?;
-    control
-        .write_all(&encoded)
-        .and_then(|()| control.flush())
-        .map_err(|error| {
-            TicketFailure::Broken(format!("cannot write local ticket request: {error}"))
-        })?;
-    let response = runtime
-        .output
-        .recv_timeout(REQUEST_TIMEOUT)
-        .map_err(|error| {
-            TicketFailure::Broken(format!("local runtime ticket response timed out: {error}"))
-        })?
-        .map_err(TicketFailure::Broken)?;
-    let RuntimeOutput::Control(response) = response else {
-        return Err(TicketFailure::Broken(
-            "local runtime returned a duplicate startup record".to_owned(),
-        ));
-    };
-    Ok(*response)
 }
 
 pub(super) fn is_application_rejection(code: &str) -> bool {

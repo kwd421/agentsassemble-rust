@@ -10,7 +10,7 @@ use url::Url;
 
 use super::{
     HttpTicketKind, ManagerRoomAuthority, TicketFailure, control_ticket_failure,
-    decode_http_ticket_response,
+    http_ticket_request,
 };
 use crate::local_runtime::{RuntimeProcess, handle_ticket_result};
 
@@ -191,6 +191,7 @@ fn application_denials_preserve_the_same_owned_runtime() {
         child,
         control: Some(control),
         output,
+        pending_response: None,
         address: Url::parse("http://127.0.0.1:43123")
             .unwrap_or_else(|error| panic!("parse runtime fixture address: {error}")),
     });
@@ -288,4 +289,12 @@ fn agent_avatar_ticket_response_requires_its_exact_purpose_and_request() {
         ),
         Err(TicketFailure::Broken(_))
     ));
+}
+
+fn decode_http_ticket_response(
+    kind: HttpTicketKind<'_>,
+    request_id: &str,
+    response: LocalControlResponse,
+) -> Result<(String, u64), TicketFailure> {
+    super::decode_http_ticket_response(&http_ticket_request(kind, request_id), request_id, response)
 }

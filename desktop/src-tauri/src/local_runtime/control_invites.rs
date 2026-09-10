@@ -46,13 +46,13 @@ pub(super) fn request(kind: HttpTicketKind<'_>, request_id: &str) -> LocalContro
 }
 
 pub(super) fn response(
-    kind: HttpTicketKind<'_>,
+    request: &LocalControlRequest,
     request_id: &str,
     response: LocalControlResponse,
 ) -> Result<(String, u64), TicketFailure> {
-    match (kind, response) {
+    match (request, response) {
         (
-            HttpTicketKind::AttendeeInviteCreate(_),
+            LocalControlRequest::IssueAttendeeInviteCreateTicket { .. },
             LocalControlResponse::AttendeeInviteCreateOk {
                 request_id: response_id,
                 ticket,
@@ -60,7 +60,7 @@ pub(super) fn response(
             },
         )
         | (
-            HttpTicketKind::ConnectorInviteCreate(_),
+            LocalControlRequest::IssueConnectorInviteCreateTicket { .. },
             LocalControlResponse::ConnectorInviteCreateOk {
                 request_id: response_id,
                 ticket,
@@ -68,7 +68,7 @@ pub(super) fn response(
             },
         )
         | (
-            HttpTicketKind::HumanInviteCreate(_),
+            LocalControlRequest::IssueHumanInviteCreateTicket { .. },
             LocalControlResponse::HumanInviteCreateOk {
                 request_id: response_id,
                 ticket,
@@ -76,7 +76,7 @@ pub(super) fn response(
             },
         )
         | (
-            HttpTicketKind::HumanInviteRevoke(_),
+            LocalControlRequest::IssueHumanInviteRevokeTicket { .. },
             LocalControlResponse::HumanInviteRevokeOk {
                 request_id: response_id,
                 ticket,
