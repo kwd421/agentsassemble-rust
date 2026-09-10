@@ -157,7 +157,7 @@ async fn start_runtime(
     let adapter = ProviderAdapter::with_guardian_executable(std::path::Path::new(env!(
         "CARGO_BIN_EXE_agentsassemble-server"
     )));
-    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter)?;
+    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter, None)?;
     runtime.start().await?;
     Ok(runtime)
 }

@@ -26,7 +26,13 @@ async fn attendee_client_recovers_lost_admission_leave_and_cleanup_acknowledgmen
     )
     .await?;
     let url = format!("{}/join?token={}", relay.base_url, invite.invite_bearer);
-    let mut client = RoomAttendeeClient::new(&url, "codex", "Local Attendee Client")?;
+    let mut client = RoomAttendeeClient::for_room(
+        &url,
+        "codex",
+        "Local Attendee Client",
+        "general".to_owned(),
+        invite.room_uid,
+    )?;
     let error = client
         .join()
         .await
@@ -75,6 +81,33 @@ async fn attendee_client_recovers_lost_admission_leave_and_cleanup_acknowledgmen
         .is_err()
     );
     relay.stop().await?;
+    server.stop().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn local_handoff_rejects_an_admission_for_another_room_incarnation()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, invite) = attendee::fixture().await?;
+    let server = human_invite::start(store).await;
+    let url = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
+    let mut client = RoomAttendeeClient::for_room(
+        &url,
+        "codex",
+        "Bound local draft",
+        "general".to_owned(),
+        Uuid::new_v4(),
+    )?;
+    assert_eq!(
+        client
+            .join()
+            .await
+            .err()
+            .ok_or("wrong incarnation was accepted")?
+            .code,
+        "invalid_attendee_admission"
+    );
+    assert!(client.connect().await.is_err());
     server.stop().await;
     Ok(())
 }

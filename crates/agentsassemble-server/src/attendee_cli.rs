@@ -123,10 +123,17 @@ async fn run_owned(
         // The attendee owns its Windows worker and all native descendants through its lease Job.
         #[cfg(not(unix))]
         let adapter = ProviderAdapter::new();
-        runtime = Some(AttendeeRuntime::new(&joined, selection.into(), adapter)?);
+        runtime = Some(AttendeeRuntime::new(
+            &joined,
+            selection.into(),
+            adapter,
+            None,
+        )?);
         let owned = runtime.as_mut().context("attendee_runtime_missing")?;
         eprintln!("Room admission confirmed; starting the selected provider.");
-        Ok::<_, anyhow::Error>(run_attendee_session(client, &joined, owned, cancellation).await?)
+        Ok::<_, anyhow::Error>(
+            run_attendee_session(client, &joined, owned, cancellation, None).await?,
+        )
     }
     .await;
     let (stop, failure) = match result {

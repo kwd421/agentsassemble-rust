@@ -37,6 +37,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     export_operational_contracts(&output, &config)?;
     agentsassemble_domain::ProviderRequestResolution::export_all(&config)?;
     agentsassemble_protocol::AttendeeEntryPacket::export_all(&config)?;
+    agentsassemble_domain::LocalAttendeeCreate::export_all(&config)?;
+    agentsassemble_domain::LocalAttendeeStatus::export_all(&config)?;
     agentsassemble_protocol::CreateCompanionAttendeeInvite::export_all(&config)?;
     agentsassemble_protocol::CreateFriendAttendeeInvite::export_all(&config)?;
     agentsassemble_protocol::CreateConnectorInviteRequest::export_all(&config)?;

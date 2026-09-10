@@ -42,7 +42,7 @@ async fn external_client_owns_fixture_process_and_only_reports_exact_confirmed_c
     let adapter = ProviderAdapter::with_guardian_executable(std::path::Path::new(env!(
         "CARGO_BIN_EXE_agentsassemble-server"
     )));
-    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter)?;
+    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter, None)?;
     let ready = runtime.start().await?;
     assert!(ready.retained_interrupt);
     assert!(!ready.runtime_handle_id.is_empty());

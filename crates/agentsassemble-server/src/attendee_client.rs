@@ -9,6 +9,7 @@ use chrono::{DateTime, Utc};
 use reqwest::Client;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use sha2::{Digest, Sha256};
 use std::time::Duration;
 use url::Url;
 use uuid::Uuid;
@@ -80,6 +81,8 @@ pub struct RoomAttendeeClient {
     invite_bearer: String,
     pending: JoinRequest,
     admission: Option<Admission>,
+    expected_room: Option<(String, Uuid)>,
+    invitation_identity: [u8; 32],
 }
 
 impl RoomAttendeeClient {
@@ -113,6 +116,8 @@ impl RoomAttendeeClient {
             .map_err(|_| AttendeeClientError::local("http_client_unavailable"))?;
         Ok(Self {
             http,
+            invitation_identity: Sha256::digest(format!("{server}\n{invite_bearer}").as_bytes())
+                .into(),
             server,
             invite_bearer,
             pending: JoinRequest {
@@ -122,7 +127,33 @@ impl RoomAttendeeClient {
                 display_name: display_name.to_owned(),
             },
             admission: None,
+            expected_room: None,
         })
+    }
+
+    /// Binds a local creation handoff to the browser's exact room incarnation.
+    ///
+    /// # Errors
+    /// Rejects invalid destinations before creating the retained admission identity.
+    pub fn for_room(
+        invite_url: &str,
+        provider: &str,
+        display_name: &str,
+        room_id: String,
+        incarnation: Uuid,
+    ) -> Result<Self, AttendeeClientError> {
+        if room_id.is_empty() || incarnation.is_nil() {
+            return Err(AttendeeClientError::local("attendee_room_mismatch"));
+        }
+        let mut client = Self::new(invite_url, provider, display_name)?;
+        client.expected_room = Some((room_id, incarnation));
+        Ok(client)
+    }
+
+    /// Identifies an invitation for local task deduplication; it conveys no admission authority.
+    #[must_use]
+    pub const fn invitation_identity(&self) -> [u8; 32] {
+        self.invitation_identity
     }
 
     /// Recovers admission with the original client secret and request identity after response loss.
@@ -148,6 +179,9 @@ impl RoomAttendeeClient {
             || admission.joined.room_uid.is_nil()
             || admission.joined.room_id.is_empty()
             || admission.joined.participant_id.is_empty()
+            || self.expected_room.as_ref().is_some_and(|(id, uid)| {
+                admission.joined.room_id != *id || admission.joined.room_uid != *uid
+            })
         {
             return Err(AttendeeClientError::local("invalid_attendee_admission"));
         }

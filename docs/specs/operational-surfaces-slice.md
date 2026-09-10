@@ -157,6 +157,45 @@ discovery authority. The current provider-only help link does not complete that 
 Acceptance distinguishes a cold room host from a ready host whose catalog differs
 from the requesting computer, and preserves the browser creation draft.
 
+The creation destination is explicit. The existing room-host managed-session path
+retains its room authority and stored-session re-add behavior. Own-computer creation
+uses a companion attendee invitation issued by the current room's human-admission
+owner. Its browser draft carries the selected provider and display name into a
+bundled local creation window; it does not carry a host model, executable, workspace,
+API credential or human session bearer. Only the invitation and expected room
+incarnation cross the app handoff. Opening the window has no provider-launch effect.
+The local window selects from its own canonical catalog and persona library, keeps
+the normal authentication/update flow, and requires explicit creation with the
+local workspace. The browser retains its draft until canonical room admission is
+observed or the user dismisses it. A link-opening receipt is never creation success.
+
+Reuse `RoomAttendeeClient`, `AttendeeRuntime` and the existing external socket and
+cleanup protocol. The local server owns each creation task independently of an HTTP
+waiter or window. One invitation retains one admission identity, chosen draft and
+fresh dedicated adapter; repeated requests join that operation. Expected room ID,
+room UID and provider must match admission before any local provider is launched.
+Add without start retains admitted local custody until an explicit local start or
+cancel. Running is reported only after the room acknowledges actual local readiness.
+Remote room events remain authoritative for membership and external controls.
+
+Admission uncertainty retains the same client secret for explicit retry; a read
+does not dispatch another admission or provider start. Cancellation joins admission
+resolution and positive local stop before reporting remote cleanup. Unconfirmed
+cleanup retains the client, runtime and terminal failure, including on repeated
+shutdown; it cannot become a fresh operation. Normal application shutdown joins
+these owners. Process restart never automatically launches a replacement attendee
+or treats an old invitation as an unused draft. Existing provider lease/guardian
+recovery and server expiry remain authoritative after process loss. No new room
+database replica, remote catalog refresh, credential forwarding, polling bridge or
+automatic installation is part of this correction.
+
+Verification covers two independent catalogs, mismatched room incarnation, duplicate
+handoff/create, dropped HTTP waiters, exact admission retry, add-only/start/cancel,
+readiness acknowledgment and retained cleanup failure. Packaged checks exercise the
+browser draft and bundled local creation with controlled providers and actual room
+membership. Any unavailable OS/browser dispatch or real two-machine proof remains
+explicitly unverified rather than inferred from a component test.
+
 An update request losing its HTTP response does not establish terminal completion.
 Retain the selected provider's creation guard through uncertainty and a read-only
 check joining the existing task; release it only on confirmed terminal observation.

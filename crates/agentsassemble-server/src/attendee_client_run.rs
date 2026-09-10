@@ -31,10 +31,12 @@ struct Session<'a> {
     requests: Requests,
     pending: Option<Request>,
     connection_ready: bool,
+    readiness: Option<tokio::sync::oneshot::Sender<()>>,
 }
 
 /// Runs one already-admitted client's provider until cancellation, expiry or remote stop.
 /// The caller must stop the runtime and complete cleanup on every return, including errors.
+/// An optional readiness receipt fires only after the room commits the actual runtime report.
 ///
 /// # Errors
 /// Returns exact custody/protocol/provider failures without exposing private diagnostics.
@@ -43,6 +45,7 @@ pub async fn run_attendee_session(
     joined: &AttendeeJoined,
     runtime: &mut AttendeeRuntime,
     cancellation: &CancellationToken,
+    readiness: Option<tokio::sync::oneshot::Sender<()>>,
 ) -> Result<Option<AttendeeCleanupDelivery>, AttendeeClientError> {
     if joined.expires_at <= chrono::Utc::now() {
         return Err(error("attendee_session_expired"));
@@ -60,6 +63,7 @@ pub async fn run_attendee_session(
         tools: Tools::new(),
         requests: Requests::new(),
         connection_ready: false,
+        readiness,
         pending: Some(Request::Ready {
             request_id: Uuid::new_v4(),
             report: Box::new(ready),
@@ -274,6 +278,9 @@ impl Session<'_> {
             }
             Request::Ready { .. } => {
                 self.connection_ready = true;
+                if let Some(readiness) = self.readiness.take() {
+                    let _receiver_gone = readiness.send(());
+                }
                 self.pending = self.next_report();
             }
         }

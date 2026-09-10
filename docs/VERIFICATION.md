@@ -9901,3 +9901,22 @@ browser action was not bypassed and this run does not claim browser deep-link di
 No real installer or fresh OAuth was exercised. The exact apps and owned children
 exited normally, the run's disposable fixture was removed, and artifact check passes.
 Own-PC setup-to-creation continuity (P13-M1) and completed Pro re-review remain open.
+
+### Own-computer creation integration correction
+
+The attendee client now binds a local handoff to its expected room ID/incarnation
+before exposing admission to a local runtime. Actual Ready acknowledgment supplies
+a one-shot local completion observation. The attendee runtime accepts an explicitly
+resolved local persona and applies the existing bounded renderer without forwarding
+the private card to the room server. Real harness persona eligibility remains
+unchanged; the controlled execution fixture exposes API/local eligibility to verify
+provider-neutral prompt application, reconnection and one exact native turn.
+
+The existing CLI, three client boundary cases, runtime cleanup, interrupt and final
+persona execution case pass. The initial persona test correctly hit the harness
+eligibility rejection and its fixture was corrected. An intermediate run then
+reported `provider_custody_unavailable`; contextual diagnostics and an isolated
+re-run passed in 3.87s, but the earlier transient's cause is unknown. No production
+retry, custody check or gate was relaxed. Local service, native/browser entry-point
+integration and packaged own-computer creation remain active work, not accepted UI
+or two-computer execution proof.

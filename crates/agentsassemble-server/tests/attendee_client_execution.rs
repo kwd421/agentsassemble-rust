@@ -38,15 +38,19 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
             .map(|name| directory.path().join(name));
     let script =
         room_portal_fixture::script(&log, &endpoint, &token, &seen, &first, &second, "completed");
-    let catalog = ProviderCatalogService::fixed(provider_fixture::agent_catalog(
-        directory.path(),
-        Some(script.as_bytes()),
-    ));
+    let mut fixture_catalog =
+        provider_fixture::agent_catalog(directory.path(), Some(script.as_bytes()));
+    // This controlled transport exercises the API/local persona contract. Real harness
+    // registrations retain their separate selection-time persona rejection.
+    fixture_catalog.providers[0].catalog_group = "api".to_owned();
+    let catalog = ProviderCatalogService::fixed(fixture_catalog);
     let (store, invite) = attendee::fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let url = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
     let mut client = RoomAttendeeClient::new(&url, "codex", "External Execution")?;
-    let mut runtime = prepare_runtime(&mut client, &catalog, directory.path()).await?;
+    let mut runtime = prepare_runtime(&mut client, &catalog, directory.path())
+        .await
+        .map_err(|error| format!("initial local runtime: {error}"))?;
     let mut socket = ready_socket(&client, &mut runtime).await?;
     let (mut human, attachment_id) = send_input(&server, &store).await?;
     let Frame::Turn { assignment } =
@@ -58,7 +62,8 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     let (attachments, mut attachments_rx) = ProviderAttachmentReadIngress::channel(4);
     let mut execution = runtime
         .execute(*assignment, tools.clone(), attachments.clone(), None)
-        .await?;
+        .await
+        .map_err(|error| format!("first local execution: {}", error.code))?;
     room_portal_fixture::wait_for_turn(&seen, "1").await;
     let mut replacement = ready_socket(&client, &mut runtime).await?;
     let Frame::Turn { mut assignment } =
@@ -93,6 +98,27 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     tokio::time::timeout(Duration::from_secs(10), execution.complete()).await??;
     assert!(!execution.is_running());
     recover_report(&client, &mut runtime, &execution, &mut replacement, &server).await?;
+    verify_committed_execution(&store, &log).await?;
+    client.leave(Uuid::new_v4()).await?;
+    runtime.stop().await?;
+    let stopped = client.cleanup().await?.ok_or("cleanup missing")?;
+    runtime.verify_cleanup(&stopped)?;
+    client
+        .report_cleanup(&AttendeeCleanupReport {
+            request_id: Uuid::new_v4(),
+            stopped: stopped.clone(),
+        })
+        .await?;
+    runtime.acknowledge_cleanup(&stopped).await?;
+    human.close().await;
+    server.stop().await;
+    Ok(())
+}
+
+async fn verify_committed_execution(
+    store: &agentsassemble_persistence::SqliteStore,
+    log: &std::path::Path,
+) -> TestResult {
     let snapshot = store.snapshot("general", 0, 200).await?;
     assert_eq!(
         snapshot
@@ -114,23 +140,9 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
             .count(),
         1
     );
-    assert_eq!(
-        std::fs::read_to_string(log)?.matches("turn/start").count(),
-        1
-    );
-    client.leave(Uuid::new_v4()).await?;
-    runtime.stop().await?;
-    let stopped = client.cleanup().await?.ok_or("cleanup missing")?;
-    runtime.verify_cleanup(&stopped)?;
-    client
-        .report_cleanup(&AttendeeCleanupReport {
-            request_id: Uuid::new_v4(),
-            stopped: stopped.clone(),
-        })
-        .await?;
-    runtime.acknowledge_cleanup(&stopped).await?;
-    human.close().await;
-    server.stop().await;
+    let provider_input = std::fs::read_to_string(log)?;
+    assert_eq!(provider_input.matches("turn/start").count(), 1);
+    assert!(provider_input.contains("Own-computer persona marker"));
     Ok(())
 }
 
@@ -196,14 +208,14 @@ async fn prepare_runtime(
     workspace: &std::path::Path,
 ) -> Result<AttendeeRuntime, Box<dyn std::error::Error>> {
     let joined = client.join().await?;
-    let draft = catalog
+    let draft: agentsassemble_domain::AgentSessionDraft = catalog
         .validate_creation(
             &joined.room_id,
             &joined.participant_id,
             &Uuid::new_v4().to_string(),
             &json!({
                 "provider":"codex", "catalog_revision":catalog.snapshot().catalog_revision,
-                "display_name":"External Execution", "workspace":workspace
+                "display_name":"External Execution", "workspace":workspace, "persona_card_id":"local-guide"
             }),
         )
         .await?
@@ -211,7 +223,15 @@ async fn prepare_runtime(
     let adapter = ProviderAdapter::with_guardian_executable(std::path::Path::new(env!(
         "CARGO_BIN_EXE_agentsassemble-server"
     )));
-    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter)?;
+    assert!(AttendeeRuntime::new(&joined, draft.clone(), adapter.clone(), None).is_err());
+    let persona = serde_json::from_value(json!({
+        "id":"local-guide", "display_name":"Local Guide", "description":"",
+        "system_prompt":"Own-computer persona marker", "personality":"", "scenario":"",
+        "first_message":"", "example_messages":"", "post_history_instructions":"",
+        "lorebook":[], "lore_settings":{"scan_depth":1,"recursive_scanning":false,"full_word_matching":false},
+        "asset_kind":"card", "source_kind":"fixture", "asset_count":0, "ignored_features":{}, "tag_count":0
+    }))?;
+    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter, Some(persona))?;
     runtime.start().await?;
     Ok(runtime)
 }

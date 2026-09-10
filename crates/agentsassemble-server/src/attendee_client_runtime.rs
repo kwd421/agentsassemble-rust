@@ -20,19 +20,23 @@ pub struct AttendeeRuntime {
     pub(crate) adapter: ProviderAdapter,
     ready: Option<AttendeeRuntimeReady>,
     stopped: bool,
+    pub(super) persona: Option<agentsassemble_domain::PersonaCard>,
 }
 
 impl AttendeeRuntime {
     /// Takes exclusive ownership of a fresh adapter and a locally validated provider selection.
     ///
     /// # Errors
-    /// Rejects provider mismatch and unsupported unresolved persona selections before launch.
+    /// Rejects provider mismatch and a persona that differs from the locally resolved selection.
     pub fn new(
         joined: &AttendeeJoined,
         mut draft: AgentSessionDraft,
         adapter: ProviderAdapter,
+        persona: Option<agentsassemble_domain::PersonaCard>,
     ) -> Result<Self, AttendeeClientError> {
-        if draft.provider_kind != joined.provider_kind || !draft.persona_card_id.is_empty() {
+        if draft.provider_kind != joined.provider_kind
+            || persona.as_ref().map_or("", |card| card.id.as_str()) != draft.persona_card_id
+        {
             return Err(AttendeeClientError::local("attendee_profile_mismatch"));
         }
         draft.agent_id.clone_from(&joined.participant_id);
@@ -46,6 +50,7 @@ impl AttendeeRuntime {
             adapter,
             ready: None,
             stopped: false,
+            persona,
         })
     }
 

@@ -67,12 +67,25 @@ impl AttendeeRuntime {
             tabletop_tools: delivery.input.tabletop_tools,
             room_tool_ingress: Some(tools),
         });
+        let mut input = delivery.input.provider_input.clone();
+        if let Some(persona) = &self.persona {
+            input.push_str("\n\n");
+            input.push_str(&agentsassemble_domain::render_persona_context(
+                persona,
+                &delivery.input.room_view,
+            ));
+            if !agentsassemble_domain::is_provider_input(&input) {
+                return Err(AttendeeClientError::local(
+                    "attendee_persona_input_exceeds_bound",
+                ));
+            }
+        }
         let request = ProviderTurnRequest {
             request_ingress: requests,
             turn_id: start.turn_id.clone(),
             turn_generation: start.turn_generation,
             execution_id: start.execution_id.clone(),
-            input: delivery.input.provider_input.clone(),
+            input,
             room_observation,
         };
         let prepared = self
