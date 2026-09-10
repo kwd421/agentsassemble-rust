@@ -456,6 +456,7 @@ export default function MobileRoomInfoPanel({
             >
             <AgentSessionDetails
               session={selectedAgentSession}
+              localProviderActions={!guestLocked}
               provider={selectedProvider}
               onControl={capabilities["agent.control"] ? onAgentControl : undefined}
               onConfigure={capabilities["agent.control"] ? onAgentConfigure : undefined}

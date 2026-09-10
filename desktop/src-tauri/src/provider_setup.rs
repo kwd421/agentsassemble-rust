@@ -50,6 +50,22 @@ fn show(app: &AppHandle, provider_id: &str, display_name: &str) -> tauri::Result
 }
 
 #[tauri::command(rename_all = "camelCase")]
+pub(crate) async fn runtime_provider_discovery(
+    window: WebviewWindow,
+    app: tauri::AppHandle,
+    provider_id: String,
+    force: bool,
+) -> Result<u64, String> {
+    super::caller_is_bundled_ui(&window)?;
+    tauri::async_runtime::spawn_blocking(move || {
+        app.state::<crate::LocalRuntime>()
+            .discover_provider(&app, &provider_id, force)
+    })
+    .await
+    .map_err(|_| "Local provider discovery worker failed.".to_owned())?
+}
+
+#[tauri::command(rename_all = "camelCase")]
 pub(crate) async fn open_provider_setup_help(
     window: WebviewWindow,
     provider_id: String,

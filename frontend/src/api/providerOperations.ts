@@ -1,15 +1,14 @@
-import { fetchJsonServerOperator, postEmptyServerOperator, postJsonServerOperator } from "./http";
+import { fetchJsonServerOperator, postJsonServerOperator } from "./http";
+import { requestDesktopProviderDiscovery } from "../lib/desktopBridge";
 import { providerCatalogIsValid } from "../lib/providerCatalogContract";
 import type { ProviderCatalog } from "../types/generated/ProviderCatalog";
 
-export async function readProviderCatalog(signal?: AbortSignal): Promise<ProviderCatalog> {
-  const result = await fetchJsonServerOperator<unknown>("/api/provider-catalog", undefined, signal);
-  if (!providerCatalogIsValid(result)) throw new Error("Provider catalog response is invalid.");
-  return result;
-}
-
-export async function refreshProviderCatalog(): Promise<ProviderCatalog> {
-  const result = await postEmptyServerOperator<unknown>("/api/provider-catalog/refresh");
+export async function refreshLocalProviderCatalog(providerId: string, force = true, signal?: AbortSignal): Promise<ProviderCatalog> {
+  const generation = await requestDesktopProviderDiscovery(providerId, force);
+  if (signal?.aborted) throw new DOMException("Provider discovery view closed.", "AbortError");
+  const result = await fetchJsonServerOperator<unknown>(
+    `/api/provider-catalog?provider_id=${encodeURIComponent(providerId)}&generation=${generation}`, undefined, signal
+  );
   if (!providerCatalogIsValid(result)) throw new Error("Provider catalog response is invalid.");
   if (result.status !== "ready") throw new Error("카탈로그를 갱신하지 못했어요. 다시 시도해 주세요.");
   return result;

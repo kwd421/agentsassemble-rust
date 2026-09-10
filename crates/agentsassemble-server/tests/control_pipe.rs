@@ -205,6 +205,78 @@ async fn native_google_return_uses_private_control_before_bootstrap() {
 }
 
 #[tokio::test]
+async fn local_provider_discovery_has_no_http_mutation_and_only_discovers_selection() {
+    let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("fixture: {error}"));
+    let mut server = start_controlled(&directory.path().join("runtime.sqlite3")).await;
+    let request = LocalControlRequest::DiscoverLocalProvider {
+        request_id: "local-provider-discovery".into(),
+        provider_id: "custom_api".into(),
+        force: false,
+    };
+    assert!(matches!(server.send_control(&request).await,
+        LocalControlResponse::Error { code, .. } if code == "bootstrap_required"));
+    assert!(matches!(
+        server.initialize_bootstrap().await,
+        LocalControlResponse::BootstrapOk { .. }
+    ));
+    let LocalControlResponse::ProviderDiscoveryOk {
+        provider_id,
+        generation,
+        ..
+    } = server.send_control(&request).await
+    else {
+        panic!("local provider request was rejected");
+    };
+    assert_eq!(provider_id, "custom_api");
+    let LocalControlResponse::OperatorHttpOk { ticket, .. } = server.issue_operator_ticket().await
+    else {
+        panic!("catalog result ticket was rejected");
+    };
+    let client = reqwest::Client::new();
+    let result = client
+        .get(format!("{}/api/provider-catalog", server.address))
+        .query(&[
+            ("provider_id", provider_id.as_str()),
+            ("generation", &generation.to_string()),
+        ])
+        .bearer_auth(ticket)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("result request: {error}"));
+    assert!(result.status().is_success());
+    let catalog: agentsassemble_domain::ProviderCatalog = result
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("catalog: {error}"));
+    assert_eq!(catalog.status, "ready");
+    assert!(
+        catalog
+            .providers
+            .iter()
+            .any(|provider| provider.id == "custom_api" && provider.discovery_status == "ready")
+    );
+    assert!(
+        catalog
+            .providers
+            .iter()
+            .filter(|provider| provider.id != "custom_api")
+            .all(|provider| provider.discovery_status == "loading" && !provider.startable)
+    );
+    assert!(matches!(server.send_control(&request).await,
+        LocalControlResponse::ProviderDiscoveryOk { generation: cached, .. } if cached == generation));
+    assert_eq!(
+        client
+            .post(format!("{}/api/provider-catalog/refresh", server.address))
+            .send()
+            .await
+            .unwrap_or_else(|error| panic!("removed route: {error}"))
+            .status(),
+        reqwest::StatusCode::NOT_FOUND
+    );
+    server.close_parent_pipe().await;
+}
+
+#[tokio::test]
 async fn owned_control_pipe_issues_room_ticket_without_http_secret() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));

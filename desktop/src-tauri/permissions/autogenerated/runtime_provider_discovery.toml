@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-runtime-provider-discovery"
+description = "Enables the runtime_provider_discovery command without any pre-configured scope."
+commands.allow = ["runtime_provider_discovery"]
+
+[[permission]]
+identifier = "deny-runtime-provider-discovery"
+description = "Denies the runtime_provider_discovery command without any pre-configured scope."
+commands.deny = ["runtime_provider_discovery"]

@@ -27,6 +27,7 @@ mod human_invite;
 mod message_attachments;
 mod message_pins;
 mod message_search;
+mod provider_discovery;
 mod side_chat;
 
 use control::{

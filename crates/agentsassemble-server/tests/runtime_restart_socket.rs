@@ -32,7 +32,7 @@ async fn private_socket_preserves_active_custody_and_serves_status() -> anyhow::
         agentsassemble_server::TicketStore::new(std::time::Duration::from_secs(30), 16),
         agentsassemble_provider::ProviderCatalogService::discovering_selected(
             "custom_api",
-            agentsassemble_provider::ProviderCredentialStore::production(),
+            &agentsassemble_provider::ProviderCredentialStore::production(),
         )?,
         root.path(),
         agentsassemble_provider::ProviderCredentialStore::production(),

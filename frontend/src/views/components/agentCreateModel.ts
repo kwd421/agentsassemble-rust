@@ -22,11 +22,11 @@ export function deriveAgentCreateStatus({
   workspaceRequired: boolean;
 }): string {
   if (status) return status;
-  if (selectedProvider && !selectedProvider.available) {
-    return selectedProvider.discovery_error || "CLI를 찾지 못했습니다";
-  }
   if (selectedProvider?.discovery_status === "loading") {
     return "모델 목록을 불러오는 중입니다";
+  }
+  if (selectedProvider && !selectedProvider.available) {
+    return selectedProvider.discovery_error || "CLI를 찾지 못했습니다";
   }
   if (selectedProvider?.discovery_status === "failed" && selectedProvider.available) {
     return selectedProvider.discovery_error || "모델 목록을 불러오지 못했습니다";

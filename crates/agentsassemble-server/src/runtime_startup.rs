@@ -88,7 +88,7 @@ async fn prepare(
     let mut state = AppState::local_with_provider_state_root(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
-        ProviderCatalogService::discovering(credentials.clone()),
+        ProviderCatalogService::on_demand(&credentials),
         database_state_root(&database_path)?,
         credentials,
     )

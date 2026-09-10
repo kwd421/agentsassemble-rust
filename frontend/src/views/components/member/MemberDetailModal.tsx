@@ -18,6 +18,7 @@ export type MemberDetailModalProps = {
     action: AgentSessionControlAction
   ) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
+  localProviderActions?: boolean;
   onAgentAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
   onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
@@ -33,6 +34,7 @@ export default function MemberDetailModal({
   onClose,
   onAgentControl,
   availableProviders = [],
+  localProviderActions = false,
   onAgentConfigure,
   onAgentProfileUpdate,
   onAgentAvatarUpdate,
@@ -67,6 +69,7 @@ export default function MemberDetailModal({
         >
           <AgentSessionDetails
             session={entry.agentSession}
+            localProviderActions={localProviderActions}
             provider={availableProviders.find(
               (provider) => provider.provider_kind === entry.agentSession?.provider_kind
             )}

@@ -38,6 +38,7 @@ export default function MemberList({
   agentSessions = [],
   onAgentControl,
   availableProviders = [],
+  localProviderActions = false,
   onAgentConfigure,
   onAgentProfileUpdate,
   onAgentAvatarUpdate,
@@ -65,6 +66,7 @@ export default function MemberList({
     action: AgentSessionControlAction
   ) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
+  localProviderActions?: boolean;
   onAgentAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
   onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
@@ -251,6 +253,7 @@ export default function MemberList({
           onClose={() => setDetailEntryId("")}
           onAgentControl={onAgentControl}
           availableProviders={availableProviders}
+          localProviderActions={localProviderActions}
           onAgentConfigure={onAgentConfigure}
           onAgentProfileUpdate={onAgentProfileUpdate}
           onAgentAvatarUpdate={onAgentAvatarUpdate}

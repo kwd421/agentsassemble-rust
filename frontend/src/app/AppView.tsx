@@ -538,6 +538,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               onParticipantRemove={serverProductSurface?.websocket_actions.includes("participant.kick") && serverProductSurface.websocket_actions.includes("participant.export") ? sendParticipantRemove : undefined}
               onAgentControl={sendAgentControl}
               availableProviders={canonicalRoom.availableProviders}
+              localProviderActions={!guestLocked}
               onAgentConfigure={sendAgentConfigure}
               onAgentProfileUpdate={sendAgentProfileUpdate}
               onAgentAvatarUpdate={saveAgentAvatar}

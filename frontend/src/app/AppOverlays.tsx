@@ -138,6 +138,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
           roomLabel={activeRoom.label}
           providers={canonicalRoom.availableProviders}
           catalogRevision={canonicalRoom.providerCatalog.catalog_revision}
+          localProviderActions={!guestLocked}
           existingSessions={canonicalRoom.agentSessions}
           participants={canonicalRoom.participantRecords}
           onClose={() => setAgentCreateOpen(false)}

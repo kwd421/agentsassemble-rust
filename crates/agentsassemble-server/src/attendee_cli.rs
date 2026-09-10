@@ -63,7 +63,7 @@ async fn run_owned(
 ) -> anyhow::Result<()> {
     let catalog = ProviderCatalogService::discovering_selected(
         &args.provider,
-        agentsassemble_provider::ProviderCredentialStore::production(),
+        &agentsassemble_provider::ProviderCredentialStore::production(),
     )?;
     let discovered = discover(&catalog, cancellation).await;
     let shutdown = catalog.shutdown().await;

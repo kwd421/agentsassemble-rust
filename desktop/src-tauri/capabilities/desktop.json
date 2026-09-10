@@ -5,6 +5,7 @@
   "windows": ["main", "provider-setup-*"],
   "local": true,
   "permissions": [
+    "allow-runtime-provider-discovery",
     "allow-open-provider-setup-help",
     "allow-runtime-central-login",
     "allow-open-central-google-login",

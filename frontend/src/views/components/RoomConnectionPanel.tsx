@@ -38,6 +38,7 @@ type RoomConnectionPanelProps = {
   onParticipantRemove?: (participantId: string, action: "kick" | "export") => Promise<void>;
   onParticipantMute?: (participantId: string, muted: boolean) => void | Promise<void>;
   availableProviders?: NativeCliProviderAvailability[];
+  localProviderActions?: boolean;
   onAgentAvatarUpdate?: (session: RoomAgentSession, file: File, displayName: string, signal: AbortSignal) => Promise<void>;
   onAgentProfileUpdate?: (session: RoomAgentSession, settings: Record<string, string>) => void | Promise<void>;
   onAgentConfigure?: (
@@ -70,6 +71,7 @@ export default function RoomConnectionPanel({
   onAgentControl,
   onParticipantMute, onParticipantRemove,
   availableProviders = [],
+  localProviderActions = false,
   onAgentConfigure,
   onAgentProfileUpdate,
   onAgentAvatarUpdate,
@@ -107,6 +109,7 @@ export default function RoomConnectionPanel({
         agentSessions={agentSessions}
         onAgentControl={capabilities["agent.control"] ? onAgentControl : undefined}
         availableProviders={availableProviders}
+        localProviderActions={localProviderActions}
         onAgentConfigure={capabilities["agent.control"] ? onAgentConfigure : undefined}
         onAgentProfileUpdate={capabilities["agent.control"] ? onAgentProfileUpdate : undefined}
         onAgentAvatarUpdate={capabilities["agent.control"] ? onAgentAvatarUpdate : undefined}

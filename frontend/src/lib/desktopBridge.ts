@@ -190,6 +190,17 @@ export async function openProviderSetupHelp(providerId: string): Promise<void> {
   await tauri.invoke("open_provider_setup_help", { providerId });
 }
 
+export async function requestDesktopProviderDiscovery(providerId: string, force: boolean): Promise<number> {
+  const tauri = tauriInternals();
+  if (!tauri) throw new Error("이 PC의 앱에서 모델 목록을 확인해 주세요.");
+  requireDesktopHostCommand("runtime_provider_discovery");
+  const generation = await tauri.invoke<unknown>("runtime_provider_discovery", { providerId, force });
+  if (!Number.isSafeInteger(generation) || Number(generation) < 0) {
+    throw new Error("모델 조회 응답이 올바르지 않아요.");
+  }
+  return generation as number;
+}
+
 function validateDesktopBootstrapGrant(value: unknown): DesktopBootstrapGrant {
   const grant = exactObject(
     value,

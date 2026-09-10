@@ -23,6 +23,11 @@ pub enum LocalControlRequest {
     IssueOperatorHttpTicket {
         request_id: String,
     },
+    DiscoverLocalProvider {
+        request_id: String,
+        provider_id: String,
+        force: bool,
+    },
     IssuePreferencesReadTicket {
         request_id: String,
         meeting_id: String,
@@ -147,6 +152,11 @@ pub struct LocalBootstrapGrant {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "status", rename_all = "snake_case", deny_unknown_fields)]
 pub enum LocalControlResponse {
+    ProviderDiscoveryOk {
+        request_id: String,
+        provider_id: String,
+        generation: u64,
+    },
     CentralLoginOk {
         request_id: String,
         result: CentralLoginResult,

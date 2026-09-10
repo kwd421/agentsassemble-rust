@@ -135,12 +135,50 @@ where
     }
 }
 
+async fn provider_discovery_control_response(
+    state: &AppState,
+    request_id: String,
+    provider_id: String,
+    force: bool,
+) -> LocalControlResponse {
+    if state
+        .store
+        .require_local_bootstrap_complete()
+        .await
+        .is_err()
+    {
+        return LocalControlResponse::Error {
+            request_id,
+            code: "bootstrap_required".to_owned(),
+            message: "Local bootstrap is required.".to_owned(),
+        };
+    }
+    match state
+        .provider_catalog
+        .request_discovery(&provider_id, force)
+    {
+        Ok(generation) => LocalControlResponse::ProviderDiscoveryOk {
+            request_id,
+            provider_id,
+            generation,
+        },
+        Err(error) => LocalControlResponse::Error {
+            request_id,
+            code: "provider_discovery_unavailable".to_owned(),
+            message: error.to_string(),
+        },
+    }
+}
+
 async fn control_response(state: &AppState, line: &[u8]) -> LocalControlResponse {
     let (request_id, request) = match parse_control_request(line) {
         Ok(request) => request,
         Err(error) => return *error,
     };
     match request {
+        LocalControlRequest::DiscoverLocalProvider {
+            provider_id, force, ..
+        } => provider_discovery_control_response(state, request_id, provider_id, force).await,
         LocalControlRequest::CentralLogin {
             action,
             state: login_state,
@@ -461,6 +499,7 @@ fn control_request_id(request: &LocalControlRequest) -> &str {
         | LocalControlRequest::InitializeBootstrap { request_id, .. }
         | LocalControlRequest::IssueTicket { request_id, .. }
         | LocalControlRequest::IssueOperatorHttpTicket { request_id }
+        | LocalControlRequest::DiscoverLocalProvider { request_id, .. }
         | LocalControlRequest::IssuePreferencesReadTicket { request_id, .. }
         | LocalControlRequest::IssuePreferencesWriteTicket { request_id, .. }
         | LocalControlRequest::IssueMessagePinsReadTicket { request_id, .. }

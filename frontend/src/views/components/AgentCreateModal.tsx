@@ -24,7 +24,9 @@ import {
   type ProviderCatalogGroup,
 } from "../../lib/providerCatalogGroups";
 import ProviderLogo from "./ProviderLogo";
-import ProviderCatalogRefresh from "./ProviderCatalogRefresh";
+import ProviderModelRefresh from "./ProviderModelRefresh";
+import { refreshLocalProviderCatalog } from "../../api/providerOperations";
+import { isDesktopWebview } from "../../lib/desktopBridge";
 import ProviderLogin from "./ProviderLogin";
 import ProviderSetupActions from "./ProviderSetupActions";
 import ProviderControlSelect from "./ProviderControlSelect";
@@ -46,6 +48,7 @@ type AgentCreateModalProps = {
   existingSessions?: RoomAgentSession[];
   participants?: RoomMember[];
   catalogRevision?: string;
+  localProviderActions?: boolean;
   onClose: () => void;
   onCreate: (request: FrontendLiveAgentCreateRequest) => Promise<void>;
   onCreated?: () => void;
@@ -59,6 +62,7 @@ export default function AgentCreateModal({
   existingSessions = [],
   participants = [],
   catalogRevision = "",
+  localProviderActions = true,
   onClose,
   onCreate,
   onCreated,
@@ -82,6 +86,7 @@ export default function AgentCreateModal({
   const [credentialStatus, setCredentialStatus] = useState<ProviderCredentialStatus | null>(null);
   const [credentialBusy, setCredentialBusy] = useState(false);
   const wasOpen = useRef(false);
+  const pendingInitialSettings = useRef("");
   const groupedProviders = projectProvidersByCatalogGroup(providers);
   const visibleProviders = providerGroup ? groupedProviders[providerGroup] : [];
   const selectedProvider = visibleProviders.find((provider) => provider.id === providerId);
@@ -121,7 +126,8 @@ export default function AgentCreateModal({
     )
   );
   const statusMessage = deriveAgentCreateStatus({
-    status,
+    status: status || (selectedProvider?.credential_available && credentialStatus?.configured === false
+      ? "API 키를 연결하면 모델 목록을 확인할 수 있어요." : ""),
     workspacePath,
     selectedProvider,
     selectedProviderMissing,
@@ -151,7 +157,12 @@ export default function AgentCreateModal({
       return;
     }
     if (current && !existingSessionId) {
-      setSettings((previous) => reconcileProviderSettings(current, previous));
+      if (pendingInitialSettings.current === current.id && current.discovery_status === "ready") {
+        pendingInitialSettings.current = "";
+        setSettings(initializeProviderSettings(current));
+      } else {
+        setSettings((previous) => reconcileProviderSettings(current, previous));
+      }
     }
     wasOpen.current = true;
   }, [open, providers, providerGroup, providerId, existingSessionId]);
@@ -172,14 +183,17 @@ export default function AgentCreateModal({
       return;
     }
     setCredentialStatus(null);
+    let current = true;
     fetchProviderCredentialStatus(selectedProvider.id)
-      .then(setCredentialStatus)
-      .catch((error) => setStatus(error instanceof Error ? error.message : "키 상태 확인 실패"));
+      .then((result) => { if (current) setCredentialStatus(result); })
+      .catch((error) => { if (current) setStatus(error instanceof Error ? error.message : "키 상태 확인 실패"); });
+    return () => { current = false; };
   }, [open, selectedProvider?.id, selectedProvider?.credential_available]);
 
   function applyProvider(provider: NativeCliProviderAvailability) {
     setExistingSessionId("");
     const initialSettings = initializeProviderSettings(provider);
+    pendingInitialSettings.current = provider.controls.length ? "" : provider.id;
     setProviderGroup(providerCatalogGroup(provider));
     setProviderId(provider.id);
     setDisplayName(defaultAgentDisplayName(provider, initialSettings));
@@ -188,7 +202,7 @@ export default function AgentCreateModal({
     setCustomEndpoint("");
     setCustomModel("");
     setPersonaCardId("");
-    setStartNow(provider.startable);
+    setStartNow(provider.startable || provider.discovery_status === "loading");
   }
 
   function chooseProviderGroup(group: ProviderCatalogGroup) {
@@ -293,7 +307,8 @@ export default function AgentCreateModal({
       );
       setCredentialStatus(credentialStatus);
       setProviderApiKey("");
-      setStatus(`${selectedProvider.display_name} 키를 저장했어요. 모델 목록을 새로고침해 주세요.`);
+      setStatus(`${selectedProvider.display_name} 키를 저장했어요.`);
+      if (localProviderActions && isDesktopWebview()) await refreshLocalProviderCatalog(selectedProvider.id);
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -313,6 +328,7 @@ export default function AgentCreateModal({
       setCredentialStatus(await deleteProviderCredential(selectedProvider.id));
       setProviderApiKey("");
       setStatus(`${selectedProvider.display_name} 저장 키를 삭제했습니다`);
+      if (localProviderActions && isDesktopWebview()) await refreshLocalProviderCatalog(selectedProvider.id);
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -375,7 +391,6 @@ export default function AgentCreateModal({
         </header>
 
         <div className="dc-agent-create-body">
-          <ProviderCatalogRefresh />
           <section className="dc-agent-section">
             <p className="dc-agent-section-title">종류</p>
             <div className="dc-agent-provider-grid" role="list" aria-label="에이전트 종류">
@@ -398,9 +413,14 @@ export default function AgentCreateModal({
 
           {providerGroup && (
             <section className="dc-agent-section">
-              <p className="dc-agent-section-title">
-                {providerGroupLabel(providerGroup)} Providers
-              </p>
+              <ProviderModelRefresh
+                localAvailable={localProviderActions}
+                title={`${providerGroupLabel(providerGroup)} Providers`}
+                providerId={existingSessionId ? "" : selectedProvider?.id || ""}
+                automaticAllowed={Boolean(selectedProvider &&
+                  selectedProvider.discovery_error_code !== "authentication_required" &&
+                  (!selectedProvider.credential_available || credentialStatus?.configured))}
+              />
               <div
                 className="dc-agent-provider-grid"
                 role="list"

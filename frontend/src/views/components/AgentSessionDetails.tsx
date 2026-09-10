@@ -10,6 +10,7 @@ import {
 } from "../../lib/providerControlSettings";
 import AgentSessionPersonaSettings from "./AgentSessionPersonaSettings";
 import AgentActivitySettings from "./AgentActivitySettings";
+import ProviderModelRefresh from "./ProviderModelRefresh";
 import ProviderRuntimeSettingField from "./ProviderRuntimeSettingField";
 
 export type AgentSessionControlAction = "start" | "pause" | "stop" | "resume" | "interrupt";
@@ -78,6 +79,7 @@ function sessionErrorMessage(session: RoomAgentSession) {
 export default function AgentSessionDetails({
   session,
   provider,
+  localProviderActions = false,
   onControl,
   onConfigure,
   activityVisible = false,
@@ -85,6 +87,7 @@ export default function AgentSessionDetails({
 }: {
   session: RoomAgentSession;
   provider?: NativeCliProviderAvailability;
+  localProviderActions?: boolean;
   onControl?: (
     session: RoomAgentSession,
     action: AgentSessionControlAction
@@ -99,6 +102,7 @@ export default function AgentSessionDetails({
   const [pendingAction, setPendingAction] = useState<AgentSessionControlAction | null>(null);
   const [actionStatus, setActionStatus] = useState("");
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [settingsOpen, setSettingsOpen] = useState(false);
   const [settingsBusy, setSettingsBusy] = useState(false);
   const status = session.runtime_status;
   const serverOwned = !session.external_owned && session.process_ownership === "server";
@@ -289,8 +293,13 @@ export default function AgentSessionDetails({
         <p className="preserve-words">외부에서 실행하는 에이전트예요. 시작과 실행 설정은 연결한 앱에서 관리해 주세요.</p>
       )}
       {serverOwned && provider && onConfigure && (
-        <details className="dc-agent-runtime-settings" aria-label={`${session.display_name} 런타임 설정`}>
+        <details aria-label={`${session.display_name} 런타임 설정`}
+          onToggle={(event) => setSettingsOpen(event.currentTarget.open)}>
           <summary>실행 설정</summary>
+          <div className="dc-agent-runtime-settings">
+          {settingsOpen && <div style={{ gridColumn: "1 / -1" }}><ProviderModelRefresh title="모델" providerId={provider.id}
+            localAvailable={localProviderActions}
+            automaticAllowed={provider.discovery_error_code !== "authentication_required"} /></div>}
           {displayProviderControls(provider).map((control) => {
             const providerSupportsControl = provider.controls.some(
               (candidate) => candidate.key === control.key
@@ -336,6 +345,7 @@ export default function AgentSessionDetails({
                   : `${invalidRuntimeControl.label}을(를) 선택하세요.`
                 : `${runtimeSettingLabels}을 함께 저장합니다. 변경은 다음 세션 시작부터 적용됩니다.`}
           </p>
+          </div>
         </details>
       )}
       {serverOwned && provider && onConfigure && (

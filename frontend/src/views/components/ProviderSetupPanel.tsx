@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { readProviderCatalog, refreshProviderCatalog } from "../../api/providerOperations";
+import { refreshLocalProviderCatalog } from "../../api/providerOperations";
 import { requestDesktopHostProductSurface } from "../../lib/desktopBridge";
 import { providerSetupDestination } from "../../lib/providerSetup";
 import type { ProviderAvailability } from "../../types/generated/ProviderAvailability";
@@ -18,7 +18,7 @@ export default function ProviderSetupPanel({ providerId }: { providerId: string 
     setError("");
     try {
       await requestDesktopHostProductSurface();
-      const catalog = refresh ? await refreshProviderCatalog() : await readProviderCatalog(signal);
+      const catalog = await refreshLocalProviderCatalog(providerId, refresh, signal);
       if (signal?.aborted || generation !== readGeneration.current) return;
       const current = catalog.providers.find((item) => item.id === providerId);
       if (!current) throw new Error("이 앱에서 해당 제공자를 사용할 수 없어요.");

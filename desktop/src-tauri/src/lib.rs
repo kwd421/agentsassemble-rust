@@ -1,6 +1,6 @@
 mod central_login;
 mod provider_setup;
-use provider_setup::open_provider_setup_help;
+use provider_setup::{open_provider_setup_help, runtime_provider_discovery};
 mod local_runtime;
 use central_login::{open_central_google_login, runtime_central_login};
 mod message_attachment_save;
@@ -578,7 +578,13 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 29);
+        assert_eq!(surface.commands.len(), 30);
+        assert!(
+            surface
+                .commands
+                .iter()
+                .any(|command| command == "runtime_provider_discovery")
+        );
         assert!(
             surface
                 .commands

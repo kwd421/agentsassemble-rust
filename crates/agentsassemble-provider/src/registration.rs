@@ -422,7 +422,33 @@ pub(crate) fn discover_provider<'a>(
     credentials: &'a crate::ProviderCredentialStore,
     cancellation: &'a CancellationToken,
 ) -> ProviderDiscoveryFuture<'a> {
-    (registration.discover)(loading_provider(registration), credentials, cancellation)
+    Box::pin(async move {
+        let provider = loading_provider(registration);
+        if registration.configuration_authority == ProviderConfigurationAuthority::Catalog
+            && let Some(credential) = registration
+                .remote_spec
+                .and_then(crate::remote_openai_spec::RemoteOpenAiSpec::credential_id)
+        {
+            match credentials.status(credential).await {
+                Ok(status) if status.configured => {}
+                Ok(_) => {
+                    return crate::catalog::failed_provider(
+                        provider,
+                        crate::process::ProbeFailure::Authentication,
+                    );
+                }
+                Err(_) => {
+                    return crate::catalog::unavailable_provider(
+                        provider,
+                        false,
+                        "secure_store_unavailable",
+                        "The provider credential store is unavailable.",
+                    );
+                }
+            }
+        }
+        (registration.discover)(provider, credentials, cancellation).await
+    })
 }
 
 fn discover_codex_registered<'a>(

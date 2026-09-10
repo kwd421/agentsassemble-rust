@@ -2,7 +2,7 @@ use agentsassemble_domain::ProviderCatalog;
 use agentsassemble_provider::{CatalogRefreshError, ProviderLoginError};
 use axum::{
     Json, Router,
-    extract::{Request, State},
+    extract::{Query, Request, State},
     http::{Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
@@ -30,7 +30,6 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn operation_routes<AppState>() {
         private "/api/provider-catalog" => get(read_catalog),
-        private "/api/provider-catalog/refresh" => post(refresh_catalog),
         private "/api/providers/update/check" => post(check_update),
         private "/api/providers/update/start" => post(start_update),
         private "/api/providers/usage" => post(usage),
@@ -44,37 +43,48 @@ async fn read_catalog(
     request: Request,
 ) -> Result<Json<ProviderCatalog>, ProviderOperationHttpError> {
     authorize(&state, request.headers()).await?;
+    let Query(input) = Query::<CatalogReadRequest>::try_from_uri(request.uri()).map_err(|_| {
+        ProviderOperationHttpError {
+            status: StatusCode::BAD_REQUEST,
+            code: "invalid_catalog_read",
+            message: "Catalog result requires a provider and an already requested generation.",
+        }
+    })?;
     ensure_empty_body(request, 4096)
         .await
         .map_err(ProviderOperationHttpError::from_body)?;
-    Ok(Json(state.provider_catalog.snapshot()))
+    match (input.provider_id, input.generation) {
+        (None, None) => Ok(Json(state.provider_catalog.snapshot())),
+        (Some(provider_id), Some(generation)) => state
+            .provider_catalog
+            .wait_for_provider(&provider_id, generation)
+            .await
+            .map(Json)
+            .map_err(|error| match error {
+                CatalogRefreshError::Unsupported => ProviderOperationHttpError {
+                    status: StatusCode::CONFLICT,
+                    code: "catalog_refresh_unsupported",
+                    message: "This runtime does not own catalog discovery.",
+                },
+                CatalogRefreshError::Unavailable => ProviderOperationHttpError {
+                    status: StatusCode::SERVICE_UNAVAILABLE,
+                    code: "catalog_refresh_unavailable",
+                    message: "Provider catalog discovery is unavailable.",
+                },
+            }),
+        _ => Err(ProviderOperationHttpError {
+            status: StatusCode::BAD_REQUEST,
+            code: "invalid_catalog_read",
+            message: "Catalog result requires both provider and generation.",
+        }),
+    }
 }
 
-async fn refresh_catalog(
-    State(state): State<AppState>,
-    request: Request,
-) -> Result<Json<ProviderCatalog>, ProviderOperationHttpError> {
-    authorize(&state, request.headers()).await?;
-    ensure_empty_body(request, 4096)
-        .await
-        .map_err(ProviderOperationHttpError::from_body)?;
-    state
-        .provider_catalog
-        .refresh()
-        .await
-        .map(Json)
-        .map_err(|error| match error {
-            CatalogRefreshError::Unsupported => ProviderOperationHttpError {
-                status: StatusCode::CONFLICT,
-                code: "catalog_refresh_unsupported",
-                message: "This runtime does not own catalog discovery.",
-            },
-            CatalogRefreshError::Unavailable => ProviderOperationHttpError {
-                status: StatusCode::SERVICE_UNAVAILABLE,
-                code: "catalog_refresh_unavailable",
-                message: "Provider catalog discovery is unavailable.",
-            },
-        })
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CatalogReadRequest {
+    provider_id: Option<String>,
+    generation: Option<u64>,
 }
 
 #[derive(Deserialize)]
@@ -156,8 +166,16 @@ async fn login(
             json!({"provider_id":input.provider_id, "status":"started"}),
         ));
     }
-    let refreshed = state.provider_catalog.refresh().await;
-    if !refreshed.is_ok_and(|catalog| catalog.status == "ready") {
+    let refreshed = state
+        .provider_catalog
+        .refresh_provider(&input.provider_id, true)
+        .await;
+    if !refreshed.is_ok_and(|catalog| {
+        catalog.status == "ready"
+            && catalog.providers.iter().any(|provider| {
+                provider.id == input.provider_id && provider.discovery_status == "ready"
+            })
+    }) {
         return Err(ProviderOperationHttpError {
             status: StatusCode::SERVICE_UNAVAILABLE,
             code: "login_completed_catalog_unavailable",

@@ -1,4 +1,5 @@
 desktop_commands! {
+    runtime_provider_discovery => "allow-runtime-provider-discovery",
     open_provider_setup_help => "allow-open-provider-setup-help",
     runtime_central_login => "allow-runtime-central-login",
     open_central_google_login => "allow-open-central-google-login",
