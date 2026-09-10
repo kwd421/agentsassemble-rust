@@ -9978,3 +9978,62 @@ fixture type correction (2.41s). Production frontend build and original CSS chec
 pass. Native URL boundary validation and existing desktop tests pass (30 cases,
 1.11s), with desktop Clippy passing. Browser-to-OS dispatch, integrated packaged
 continuation and real two-machine proof remain unverified at this checkpoint.
+
+### Packaged local creation and final affected gates (2026-09-10)
+
+Signed isolated packages 0.1.23 and 0.1.24 directly exercised the bundled local
+creation window against a separate Rust room runtime using its normal managed
+HTTPS ingress and friend-attendee invitation. This was one Mac with two independent
+runtime stores, not two physical computers. The receiving runtime had no discovered
+provider catalog; the local app discovered only the selected controlled Codex CLI.
+The entry used a bundled-window URL override and did not dispatch an OS deep link.
+
+The actual UI preserved the invitation's provider/name, displayed local `Fixture
+Luna`, and retained an edited name across selected-provider manual refresh. The
+native folder chooser selected the disposable local workspace. Removing that
+workspace before submission produced the canonical existing-directory rejection,
+kept the draft editable and left the remote agent count at zero. Restoring the
+folder and submitting the same invitation added exactly one remote attendee with
+the edited name. Add-only performed zero app-server launches. Explicit local start
+performed exactly one launch and displayed running only after remote Ready; the
+remote stored projection was idle with the selected local model. The UI's exact
+cancel reached confirmed stop/leave and the remote session became stopped with
+`recovery_required=false`. The controlled CLI did not exercise a real provider turn.
+
+Normal quit removed the exact native app and its owned children. The changed signed
+0.1.24 build restored the private restart receipt without prompting for another
+local identity or relaunching the provider. It displayed unresolved prior
+custody and exposed only read-only status observation. Another state read did not
+change the one app-server launch count. The button labels lacked horizontal padding
+in 0.1.23; existing operational-button padding was applied and visibly verified in
+0.1.24. This is desktop proof only; broader mobile UX remains deferred.
+
+The full workspace test run with one test thread passed all 58 reported harness
+results (907 passed, zero failed). An earlier default-thread run stopped progressing
+in the agent-session boundary suite and was interrupted; its cause remains unknown.
+The latest boundary suite passed both serially (17 cases, 126.72s) and in a fresh
+default-thread run (17 cases, 127.19s), without changing a test or production owner.
+The full all-target/all-feature Clippy run initially caught the type export entry's
+103-line function. Moving the three local-operation exports into its existing
+operational-contract export owner corrected it without a lint allowance; full Clippy,
+bindings, architecture/growth, all 19 policy/artifact-owner cases, format and diff
+checks then passed. The padded frontend production build/CSS verification also passed.
+No new security scan, gate exception, fallback or retry was introduced.
+
+Browser-only own-computer selection and cold/ready-host draft retention have the
+component evidence above; direct browser interaction is still unverified. The
+browser URL policy rejected opening the local verification-link file, and the
+earlier browser-to-OS custom-scheme action remains blocked. Neither was bypassed.
+Do not infer either dispatch or two-machine acceptance from the packaged internal
+entry. A code re-review can assess these corrections with those limits disclosed;
+full flow acceptance remains open until the missing real-client evidence exists.
+
+Both isolated managed tunnels were stopped by their normal owner and both room
+runtimes exited normally. The exact verification app, its own data/WebKit/cache
+roots, controlled CLI fixtures, invite-bearing bundle and disposable host stores
+were removed after process exit; existing integration data and unrelated apps were
+preserved. Cargo artifact check measured 27.82 GB against the unchanged 19.33 GB
+limit. With all Cargo/Tauri work idle, the existing artifact owner pruned 25.2 GiB;
+the final artifact check passes. A post-cancel observation measured 134240 KiB RSS
+for the native app and 9184/51088 KiB for its two server/supervisor processes, each
+at 0% sampled CPU; that is an idle sample, not a comparative performance benchmark.

@@ -37,9 +37,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     export_operational_contracts(&output, &config)?;
     agentsassemble_domain::ProviderRequestResolution::export_all(&config)?;
     agentsassemble_protocol::AttendeeEntryPacket::export_all(&config)?;
-    agentsassemble_domain::LocalAttendeeCreate::export_all(&config)?;
-    agentsassemble_domain::LocalAttendeeStatus::export_all(&config)?;
-    agentsassemble_domain::LocalAttendeeCommand::export_all(&config)?;
     agentsassemble_protocol::CreateCompanionAttendeeInvite::export_all(&config)?;
     agentsassemble_protocol::CreateFriendAttendeeInvite::export_all(&config)?;
     agentsassemble_protocol::CreateConnectorInviteRequest::export_all(&config)?;
@@ -155,6 +152,9 @@ fn export_operational_contracts(
     agentsassemble_domain::LocalResourceStatus::export_all(config)?;
     agentsassemble_domain::ProviderUsage::export_all(config)?;
     agentsassemble_domain::ProviderUpdate::export_all(config)?;
+    agentsassemble_domain::LocalAttendeeCreate::export_all(config)?;
+    agentsassemble_domain::LocalAttendeeStatus::export_all(config)?;
+    agentsassemble_domain::LocalAttendeeCommand::export_all(config)?;
     fs::write(
         output.join("PROTOCOL_VERSION.ts"),
         format!(

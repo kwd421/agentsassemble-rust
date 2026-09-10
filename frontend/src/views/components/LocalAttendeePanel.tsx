@@ -106,13 +106,13 @@ function LocalCreation({ packet }: { packet: AttendeeEntryPacket }) {
     {operation?.error_code && <p className="dc-agent-hint preserve-words">{operation.error_code === "local_attendee_process_restarted"
       ? "앱을 다시 시작해 이전 실행 결과를 확인할 수 없어요. 방에서 이전 참가자를 정리한 뒤 새 초대를 만들어 주세요." : operation.error_code}</p>}
     <div style={{ display: "flex", flexWrap: "wrap", gap: 12 }}>
-      <button className="ops-button" style={{ minHeight: 44 }} disabled={busy} onClick={() => void read()}>상태 다시 확인</button>
-      {editable && dismissed && <button className="ops-button" style={{ minHeight: 44 }} onClick={() => setDismissed(false)}>설정 계속하기</button>}
-      {!operation && submitted.current && <button className="ops-button" style={{ minHeight: 44 }} disabled={busy}
+      <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy} onClick={() => void read()}>상태 다시 확인</button>
+      {editable && dismissed && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} onClick={() => setDismissed(false)}>설정 계속하기</button>}
+      {!operation && submitted.current && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy}
         onClick={() => { void create().catch(() => undefined); }}>같은 요청 다시 시도</button>}
-      {operation?.phase === "admitted" && <button className="ops-button" style={{ minHeight: 44 }} disabled={busy} onClick={() => void command("start")}>이 PC에서 실행</button>}
-      {operation?.phase === "admission_unresolved" && <button className="ops-button" style={{ minHeight: 44 }} disabled={busy} onClick={() => void command("retry_admission")}>참가 결과 복구</button>}
-      {operation && !["stopped", "failed", "cleanup_unconfirmed"].includes(operation.phase) && <button className="ops-button" style={{ minHeight: 44 }} disabled={busy}
+      {operation?.phase === "admitted" && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy} onClick={() => void command("start")}>이 PC에서 실행</button>}
+      {operation?.phase === "admission_unresolved" && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy} onClick={() => void command("retry_admission")}>참가 결과 복구</button>}
+      {operation && !["stopped", "failed", "cleanup_unconfirmed"].includes(operation.phase) && <button className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }} disabled={busy}
         onClick={() => void command("cancel")}>에이전트 종료하고 나가기</button>}
     </div>
     {catalog && (editable || submitted.current) && !operation && <div style={{ display: editable && !dismissed ? undefined : "none" }}>

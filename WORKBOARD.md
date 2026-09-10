@@ -31,9 +31,14 @@
   updater contract. Catalog cleanup uncertainty now retains terminal ownership and
   passes controlled lifecycle and affected workspace verification. Update transport
   loss and readiness corrections pass signed packaged 0.1.20/0.1.22 checks, including
-  the held installer, lost response and catalog-only recovery. Complete own-PC
-  setup-to-creation continuity and obtain Pro re-review before continuing the split groups. Real installer/OAuth outcomes
-  remain unverified.
+  the held installer, lost response and catalog-only recovery. Own-PC continuation
+  now passes signed 0.1.23/0.1.24 local selection, rejected-draft preservation, real
+  remote admission, add-only/start/cancel and restart-guard checks with controlled
+  CLI execution. Full workspace tests and affected mandatory gates pass. Direct
+  browser interaction/OS dispatch is blocked by browser policy and remains unverified,
+  as does real two-machine proof. Obtain Pro code re-review with those limits before
+  continuing the split groups; full flow acceptance is still open. Real installer/OAuth
+  outcomes remain unverified.
   [Review disposition](docs/VERIFICATION.md#completed-setup-supplemental-pro-review-2026-09-10).
   [Update evidence](docs/VERIFICATION.md#optional-update-execution-during-creation-2026-09-10).
   [Scoped evidence](docs/VERIFICATION.md#selected-local-provider-discovery-2026-09-10).
