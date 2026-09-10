@@ -60,6 +60,7 @@ fn registered_routes(
         crate::guest_identity_recovery_web::HTTP_ROUTES,
         crate::provider_credentials_web::HTTP_ROUTES,
         crate::provider_operations_web::HTTP_ROUTES,
+        crate::local_attendee_web::HTTP_ROUTES,
         crate::operational_web::HTTP_ROUTES,
         crate::runtime_version::HTTP_ROUTES,
         crate::runtime_restart_web::HTTP_ROUTES,

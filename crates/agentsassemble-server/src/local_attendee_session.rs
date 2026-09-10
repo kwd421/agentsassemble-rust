@@ -1,18 +1,16 @@
 //! One attendee's admission, optional start, execution and positive cleanup lifecycle.
 use super::{Advance, Custody, LocalAttendeeError};
 use agentsassemble_domain::{
-    LocalAttendeeCreate, LocalAttendeePhase as Phase, LocalAttendeeStatus,
+    AgentSessionDraft, LocalAttendeePhase as Phase, LocalAttendeeStatus, PersonaCard,
 };
-use agentsassemble_persistence::SqliteStore;
-use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
+use agentsassemble_provider::ProviderAdapter;
 use tokio::sync::{mpsc, oneshot, watch};
 use tokio_util::sync::CancellationToken;
 
 pub(super) struct Input {
-    pub request: LocalAttendeeCreate,
+    pub draft: AgentSessionDraft,
+    pub persona: Option<PersonaCard>,
     pub start: bool,
-    pub catalog: ProviderCatalogService,
-    pub store: SqliteStore,
     pub adapter: ProviderAdapter,
     pub status: watch::Sender<LocalAttendeeStatus>,
     pub commands: mpsc::Receiver<Advance>,
@@ -27,7 +25,7 @@ pub(super) async fn run(custody: &mut Custody, mut input: Input) -> Result<(), L
         if input.cancellation.is_cancelled() {
             return Ok(None);
         }
-        prepare(custody, &input).await?;
+        prepare(custody, &mut input)?;
         if !input.start {
             publish(&input.status, Phase::Admitted, None);
             loop {
@@ -135,37 +133,16 @@ async fn admit(custody: &mut Custody, input: &mut Input) -> Result<bool, LocalAt
     }
 }
 
-async fn prepare(custody: &mut Custody, input: &Input) -> Result<(), LocalAttendeeError> {
+fn prepare(custody: &mut Custody, input: &mut Input) -> Result<(), LocalAttendeeError> {
     let joined = custody
         .joined
         .as_ref()
         .ok_or_else(|| LocalAttendeeError::new("local_attendee_admission_missing"))?;
-    let selection = input
-        .catalog
-        .validate_creation(
-            &joined.room_id,
-            &joined.participant_id,
-            &input.request.request_id.to_string(),
-            &input.request.creation,
-        )
-        .await
-        .map_err(|error| LocalAttendeeError::new(error.code))?;
-    let persona = if selection.persona_card_id.is_empty() {
-        None
-    } else {
-        Some(
-            input
-                .store
-                .persona_asset(&selection.persona_card_id)
-                .await
-                .map_err(|_| LocalAttendeeError::new("persona_asset_unavailable"))?,
-        )
-    };
     custody.runtime = Some(crate::AttendeeRuntime::new(
         joined,
-        selection.into(),
+        input.draft.clone(),
         input.adapter.clone(),
-        persona,
+        input.persona.take(),
     )?);
     Ok(())
 }

@@ -39,6 +39,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     agentsassemble_protocol::AttendeeEntryPacket::export_all(&config)?;
     agentsassemble_domain::LocalAttendeeCreate::export_all(&config)?;
     agentsassemble_domain::LocalAttendeeStatus::export_all(&config)?;
+    agentsassemble_domain::LocalAttendeeCommand::export_all(&config)?;
     agentsassemble_protocol::CreateCompanionAttendeeInvite::export_all(&config)?;
     agentsassemble_protocol::CreateFriendAttendeeInvite::export_all(&config)?;
     agentsassemble_protocol::CreateConnectorInviteRequest::export_all(&config)?;

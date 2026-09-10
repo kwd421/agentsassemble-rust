@@ -130,6 +130,7 @@ impl SqliteStore {
         let event = crate::attendee_records::insert_membership(
             &mut tx,
             &room_id,
+            row.get("invite_id"),
             row.get("owner_participant_id"),
             request.provider_kind,
             request.display_name,

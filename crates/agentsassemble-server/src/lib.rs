@@ -77,6 +77,7 @@ pub use google_accounts::{GoogleAccountError, GoogleAccountService};
 mod account_web;
 mod attendee_client;
 mod local_attendee;
+mod local_attendee_web;
 pub use local_attendee::{LocalAttendeeError, LocalAttendeeService};
 mod attendee_client_runtime;
 mod attendee_client_socket;

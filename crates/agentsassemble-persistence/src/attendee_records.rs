@@ -11,6 +11,7 @@ use uuid::Uuid;
 pub(crate) async fn insert_membership(
     tx: &mut Transaction<'_, Sqlite>,
     room_id: &str,
+    invite_id: &str,
     owner_id: &str,
     provider_kind: &str,
     display_name: &str,
@@ -71,6 +72,7 @@ pub(crate) async fn insert_membership(
         content: None,
         message_kind: None,
         extra: std::collections::BTreeMap::from([
+            ("attendee_invite_id".to_owned(), json!(invite_id)),
             ("session_id".to_owned(), json!(session.public.session_id)),
             ("provider_kind".to_owned(), json!(provider_kind)),
             ("participant".to_owned(), json!(participant)),

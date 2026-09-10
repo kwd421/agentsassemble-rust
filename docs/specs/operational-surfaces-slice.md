@@ -174,6 +174,11 @@ cleanup protocol. The local server owns each creation task independently of an H
 waiter or window. One invitation retains one admission identity, chosen draft and
 fresh dedicated adapter; repeated requests join that operation. Expected room ID,
 room UID and provider must match admission before any local provider is launched.
+Validate local catalog, workspace and persona selection before consuming the
+invitation, under the authenticated local operator's selection authority. A rejected
+local draft remains editable with its unused invitation. The attendee runtime binds
+the actual server-issued participant ID after admission; the local draft's provisional
+selection identity is never presented as remote membership authority.
 Add without start retains admitted local custody until an explicit local start or
 cancel. Running is reported only after the room acknowledges actual local readiness.
 Remote room events remain authoritative for membership and external controls.

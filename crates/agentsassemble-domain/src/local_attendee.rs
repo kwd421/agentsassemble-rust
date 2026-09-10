@@ -39,3 +39,17 @@ pub struct LocalAttendeeStatus {
     pub phase: LocalAttendeePhase,
     pub error_code: Option<String>,
 }
+
+#[derive(Clone, Copy, Deserialize, Serialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum LocalAttendeeAction {
+    RetryAdmission,
+    Start,
+    Cancel,
+}
+
+#[derive(Deserialize, Serialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct LocalAttendeeCommand {
+    pub action: LocalAttendeeAction,
+}

@@ -48,7 +48,10 @@ pub use runtime_restart::{
 pub use runtime_version::RuntimeVersion;
 mod local_attendee;
 mod local_resources;
-pub use local_attendee::{LocalAttendeeCreate, LocalAttendeePhase, LocalAttendeeStatus};
+pub use local_attendee::{
+    LocalAttendeeAction, LocalAttendeeCommand, LocalAttendeeCreate, LocalAttendeePhase,
+    LocalAttendeeStatus,
+};
 mod provider_turn;
 pub use local_resources::{LocalResourceProcess, LocalResourceStatus};
 mod provider_usage;

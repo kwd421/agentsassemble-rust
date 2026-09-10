@@ -5,7 +5,7 @@ use agentsassemble_domain::{
     LocalAttendeeCreate, LocalAttendeePhase as Phase, LocalAttendeeStatus,
 };
 use agentsassemble_persistence::SqliteStore;
-use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService, creation_start_requested};
+use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService, ProviderSelection};
 use futures_util::{
     FutureExt,
     future::{BoxFuture, Shared},
@@ -98,25 +98,34 @@ impl LocalAttendeeService {
                 }
                 operation.clone()
             } else {
-                let start = creation_start_requested(&request.creation)
-                    .map_err(|error| LocalAttendeeError::new(error.code))?;
                 if request.request_id.is_nil() {
                     return Err(LocalAttendeeError::new("invalid_local_attendee_request"));
                 }
-                let provider = request
-                    .creation
-                    .get("provider_id")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| LocalAttendeeError::new("invalid_local_attendee_request"))?;
-                let name = request
-                    .creation
-                    .get("display_name")
-                    .and_then(serde_json::Value::as_str)
-                    .ok_or_else(|| LocalAttendeeError::new("invalid_local_attendee_request"))?;
+                // Validate local selection before consuming remote admission. This principal is
+                // the authenticated local operator; the attendee owner binds its real ID on join.
+                let selection = catalog
+                    .validate_creation(
+                        &request.room_id,
+                        agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+                        &request.request_id.to_string(),
+                        &request.creation,
+                    )
+                    .await
+                    .map_err(|error| LocalAttendeeError::new(error.code))?;
+                let persona = if selection.persona_card_id.is_empty() {
+                    None
+                } else {
+                    Some(
+                        store
+                            .persona_asset(&selection.persona_card_id)
+                            .await
+                            .map_err(|_| LocalAttendeeError::new("persona_asset_unavailable"))?,
+                    )
+                };
                 let client = RoomAttendeeClient::for_room(
                     &request.invite_url,
-                    provider,
-                    name,
+                    &selection.provider_id,
+                    &selection.display_name,
                     request.room_id.clone(),
                     request.room_uid,
                 )?;
@@ -126,7 +135,7 @@ impl LocalAttendeeService {
                 {
                     return Err(LocalAttendeeError::new("local_attendee_invitation_owned"));
                 }
-                let operation = self.spawn(request, client, start, catalog, store, adapter);
+                let operation = self.spawn(request, client, selection, persona, adapter);
                 operations.insert(operation.request.request_id, operation.clone());
                 operation
             }
@@ -138,9 +147,8 @@ impl LocalAttendeeService {
         &self,
         request: LocalAttendeeCreate,
         client: RoomAttendeeClient,
-        start: bool,
-        catalog: ProviderCatalogService,
-        store: SqliteStore,
+        selection: ProviderSelection,
+        persona: Option<agentsassemble_domain::PersonaCard>,
         adapter: ProviderAdapter,
     ) -> Arc<Operation> {
         let invitation_identity = client.invitation_identity();
@@ -161,10 +169,9 @@ impl LocalAttendeeService {
         }));
         let owned = custody.clone();
         let input = session::Input {
-            request: request.clone(),
-            start,
-            catalog,
-            store,
+            start: selection.start_requested,
+            draft: selection.into(),
+            persona,
             adapter,
             status: status.clone(),
             commands: receiver,

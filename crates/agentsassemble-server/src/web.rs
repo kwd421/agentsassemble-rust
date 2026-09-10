@@ -144,6 +144,8 @@ pub enum ServeError {
     ProviderUsage(#[from] agentsassemble_provider::ProviderUsageError),
     #[error(transparent)]
     ProviderUpdate(#[from] agentsassemble_provider::ProviderUpdateError),
+    #[error("local attendee cleanup failed: {0}")]
+    LocalAttendee(#[from] crate::LocalAttendeeError),
     #[error("runtime reconciliation task failed: {0}")]
     RuntimeReconciliationTask(tokio::task::JoinError),
     #[error("room runtime shutdown failed: {0}")]
@@ -175,6 +177,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::guest_identity_recovery_web::routes())
         .merge(crate::provider_credentials_web::routes())
         .merge(crate::provider_operations_web::routes())
+        .merge(crate::local_attendee_web::routes())
         .merge(crate::operational_web::routes())
         .merge(crate::runtime_version::routes())
         .merge(crate::runtime_restart_web::routes())
@@ -396,6 +399,7 @@ async fn serve_runtime(
     let provider_login = state.provider_login.clone();
     let provider_update = state.provider_update.clone();
     let provider_usage = state.provider_usage.clone();
+    let local_attendees = state.local_attendees.clone();
     let public_ingress = state.public_ingress();
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
@@ -444,11 +448,13 @@ async fn serve_runtime(
         login_shutdown,
         update_shutdown,
         usage_shutdown,
+        attendee_shutdown,
         (reconciliation_shutdown, (room_shutdown, provider_shutdown)),
     ) = tokio::join!(
         provider_login.shutdown(),
         provider_update.shutdown(),
         provider_usage.shutdown(),
+        local_attendees.shutdown(),
         drain_reconciliation_then(reconciliation_owner, async {
             let room_shutdown = rooms.shutdown().await;
             let provider_shutdown = provider_catalog.shutdown().await;
@@ -463,6 +469,7 @@ async fn serve_runtime(
     login_shutdown?;
     update_shutdown?;
     usage_shutdown?;
+    attendee_shutdown?;
     provider_shutdown?;
     reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;
     ingress_shutdown?;

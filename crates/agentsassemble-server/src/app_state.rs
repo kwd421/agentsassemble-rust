@@ -39,6 +39,7 @@ pub struct AppState {
     pub provider_usage: agentsassemble_provider::ProviderUsageService,
     pub provider_update: agentsassemble_provider::ProviderUpdateService,
     pub provider_login: agentsassemble_provider::ProviderLoginService,
+    pub local_attendees: crate::LocalAttendeeService,
     pub provider_adapter: ProviderAdapter,
     pub(crate) provider_credentials: ProviderCredentialStore,
     pub human_invite_credentials: HumanInviteCredentialAuthority,
@@ -162,6 +163,7 @@ impl AppState {
                 provider_catalog,
             ),
             provider_adapter,
+            local_attendees: crate::LocalAttendeeService::new(shutdown.child_token()),
             provider_usage: agentsassemble_provider::ProviderUsageService::new(
                 provider_credentials.clone(),
                 shutdown.child_token(),

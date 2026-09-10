@@ -9931,3 +9931,13 @@ without a second participant; remote cleanup rejection remains identical across
 cancel and concurrent/repeated shutdown. The service does not poll admission or room
 state. Its retained state and bounded command channel live until local-server exit.
 The HTTP/native/browser consumers and packaged acceptance are still being connected.
+
+The private local HTTP consumer is now connected to `AppState` and joined server
+shutdown. A real HTTP case verifies authorization before body validation, one-use
+ticket consumption, private/no-store and exact native CORS, local model rejection
+without consuming admission, successful retry of that same draft and exact cancel.
+The room's committed creation event carries only its non-secret invitation ID so
+the browser can match canonical membership without a timer or name-based guess.
+Local service and client boundary cases pass after this connection; server Clippy,
+bindings, architecture/growth/policy, format and diff checks pass. Native/browser
+integration and packaged acceptance remain pending.
