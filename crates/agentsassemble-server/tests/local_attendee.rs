@@ -1,0 +1,336 @@
+#![cfg(unix)]
+use agentsassemble_domain::{LocalAttendeeCreate, LocalAttendeePhase as Phase};
+use agentsassemble_provider::{ProviderAdapter, ProviderCatalogService};
+use agentsassemble_server::LocalAttendeeService;
+use serde_json::json;
+use std::{
+    path::Path,
+    sync::{
+        Arc,
+        atomic::{AtomicBool, AtomicUsize, Ordering},
+    },
+};
+use tokio::sync::Notify;
+use tokio_util::sync::CancellationToken;
+use uuid::Uuid;
+
+#[path = "support/attendee.rs"]
+mod attendee;
+#[path = "support/human_invite.rs"]
+mod human_invite;
+#[path = "support/provider_fixture.rs"]
+mod provider_fixture;
+#[path = "support/room_socket_peer.rs"]
+mod room_socket_peer;
+
+fn adapter() -> ProviderAdapter {
+    ProviderAdapter::with_guardian_executable(Path::new(env!(
+        "CARGO_BIN_EXE_agentsassemble-server"
+    )))
+}
+
+fn request(
+    base: &str,
+    invite: &agentsassemble_persistence::AttendeeInvite,
+    workspace: &Path,
+) -> LocalAttendeeCreate {
+    LocalAttendeeCreate {
+        request_id: Uuid::new_v4(),
+        invite_url: format!("{base}/join?token={}", invite.invite_bearer),
+        room_id: "general".to_owned(),
+        room_uid: invite.room_uid,
+        creation: json!({"provider_id":"codex", "display_name":"Own computer draft", "workspace":workspace,
+            "catalog_revision":"catalog-boundary-1", "start":false}),
+    }
+}
+
+#[tokio::test]
+async fn own_catalog_add_only_start_and_exact_cleanup_do_not_use_the_room_host_catalog()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let catalog =
+        ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
+    let (store, invite) = attendee::fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let host_catalog = server.state().provider_catalog.snapshot();
+    assert!(host_catalog.providers.is_empty());
+    let service = LocalAttendeeService::new(CancellationToken::new());
+    let request = request(&server.base_url, &invite, directory.path());
+    let admitted = service
+        .create(request.clone(), catalog.clone(), store.clone(), adapter())
+        .await?;
+    assert_eq!(admitted.phase, Phase::Admitted);
+    assert_eq!(
+        service
+            .create(request.clone(), catalog.clone(), store.clone(), adapter())
+            .await?,
+        admitted
+    );
+    assert!(!store.snapshot("general", 0, 200).await?.agent_sessions[0].provider_session_active);
+    let mut changed = request.clone();
+    changed.creation["display_name"] = "Changed retry".into();
+    assert_eq!(
+        service
+            .create(changed, catalog.clone(), store.clone(), adapter())
+            .await
+            .err()
+            .ok_or("expected retained failure")?
+            .code,
+        "local_attendee_request_changed"
+    );
+    let mut duplicate = request.clone();
+    duplicate.request_id = Uuid::new_v4();
+    assert_eq!(
+        service
+            .create(duplicate, catalog, store.clone(), adapter())
+            .await
+            .err()
+            .ok_or("expected retained failure")?
+            .code,
+        "local_attendee_invitation_owned"
+    );
+    let running = service.start(request.request_id).await?;
+    assert_eq!(running.phase, Phase::Running);
+    assert_eq!(running.participant_id, admitted.participant_id);
+    let snapshot = store.snapshot("general", 0, 200).await?;
+    assert_eq!(snapshot.agent_sessions.len(), 1);
+    assert!(snapshot.agent_sessions[0].provider_session_active);
+    assert_eq!(snapshot.agent_sessions[0].model, "gpt-5.6-terra");
+    assert_eq!(
+        server.state().provider_catalog.snapshot().catalog_revision,
+        host_catalog.catalog_revision
+    );
+    assert_eq!(
+        service.cancel(request.request_id).await?.phase,
+        Phase::Stopped
+    );
+    assert_eq!(
+        service.cancel(request.request_id).await?.phase,
+        Phase::Stopped
+    );
+    service.shutdown().await?;
+    service.shutdown().await?;
+    assert!(!store.snapshot("general", 0, 200).await?.agent_sessions[0].provider_session_active);
+    server.stop().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn dropped_waiter_retains_lost_admission_for_read_only_observation_and_exact_retry()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let catalog =
+        ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
+    let (store, invite) = attendee::fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let relay = Relay::start(&server.base_url, true, false).await?;
+    let service = LocalAttendeeService::new(CancellationToken::new());
+    let request = request(&relay.base, &invite, directory.path());
+    let (owner, input, models, library) = (
+        service.clone(),
+        request.clone(),
+        catalog.clone(),
+        store.clone(),
+    );
+    let waiter = tokio::spawn(async move { owner.create(input, models, library, adapter()).await });
+    relay.gate.entered.notified().await;
+    waiter.abort();
+    assert!(
+        waiter
+            .await
+            .err()
+            .ok_or("expected retained failure")?
+            .is_cancelled()
+    );
+    relay.gate.release.notify_one();
+    assert_eq!(
+        service
+            .create(request.clone(), catalog, store.clone(), adapter())
+            .await?
+            .phase,
+        Phase::AdmissionUnresolved
+    );
+    assert_eq!(
+        service.status(request.request_id).await?.phase,
+        Phase::AdmissionUnresolved
+    );
+    assert_eq!(relay.gate.joins.load(Ordering::SeqCst), 1);
+    let recovered = service.retry(request.request_id).await?;
+    assert_eq!(recovered.phase, Phase::Admitted);
+    assert_eq!(relay.gate.joins.load(Ordering::SeqCst), 2);
+    assert_eq!(
+        store
+            .snapshot("general", 0, 200)
+            .await?
+            .agent_sessions
+            .len(),
+        1
+    );
+    assert_eq!(
+        service.cancel(request.request_id).await?.phase,
+        Phase::Stopped
+    );
+    service.shutdown().await?;
+    relay.stop().await?;
+    server.stop().await;
+    Ok(())
+}
+
+#[tokio::test]
+async fn remote_cleanup_failure_is_retained_across_cancel_and_concurrent_shutdown()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let catalog =
+        ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
+    let (store, invite) = attendee::fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let relay = Relay::start(&server.base_url, false, true).await?;
+    let service = LocalAttendeeService::new(CancellationToken::new());
+    let request = request(&relay.base, &invite, directory.path());
+    service
+        .create(request.clone(), catalog, store, adapter())
+        .await?;
+    let failure = service
+        .cancel(request.request_id)
+        .await
+        .err()
+        .ok_or("expected retained failure")?
+        .code;
+    assert_eq!(
+        service.status(request.request_id).await?.phase,
+        Phase::CleanupUnconfirmed
+    );
+    let (first, second) = tokio::join!(service.shutdown(), service.shutdown());
+    assert_eq!(
+        first.err().ok_or("expected retained failure")?.code,
+        failure
+    );
+    assert_eq!(
+        second.err().ok_or("expected retained failure")?.code,
+        failure
+    );
+    assert_eq!(
+        service
+            .cancel(request.request_id)
+            .await
+            .err()
+            .ok_or("expected retained failure")?
+            .code,
+        failure
+    );
+    assert_eq!(relay.gate.cleanups.load(Ordering::SeqCst), 1);
+    relay.stop().await?;
+    server.stop().await;
+    Ok(())
+}
+
+struct Gate {
+    upstream: String,
+    lose_first: AtomicBool,
+    deny_cleanup: bool,
+    joins: AtomicUsize,
+    cleanups: AtomicUsize,
+    entered: Notify,
+    release: Notify,
+}
+
+struct Relay {
+    base: String,
+    gate: Arc<Gate>,
+    cancel: CancellationToken,
+    task: tokio::task::JoinHandle<std::io::Result<()>>,
+}
+
+impl Relay {
+    async fn start(
+        upstream: &str,
+        lose_first: bool,
+        deny_cleanup: bool,
+    ) -> Result<Self, std::io::Error> {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let base = format!("http://{}", listener.local_addr()?);
+        let gate = Arc::new(Gate {
+            upstream: upstream.to_owned(),
+            lose_first: AtomicBool::new(lose_first),
+            deny_cleanup,
+            joins: AtomicUsize::new(0),
+            cleanups: AtomicUsize::new(0),
+            entered: Notify::new(),
+            release: Notify::new(),
+        });
+        let app = axum::Router::new()
+            .fallback(forward)
+            .with_state(gate.clone());
+        let cancel = CancellationToken::new();
+        let stopping = cancel.clone();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(stopping.cancelled_owned())
+                .await
+        });
+        Ok(Self {
+            base,
+            gate,
+            cancel,
+            task,
+        })
+    }
+
+    async fn stop(self) -> Result<(), Box<dyn std::error::Error>> {
+        self.cancel.cancel();
+        self.task.await??;
+        Ok(())
+    }
+}
+
+async fn forward(
+    axum::extract::State(gate): axum::extract::State<Arc<Gate>>,
+    request: axum::extract::Request,
+) -> axum::response::Response {
+    use axum::body::Body;
+    let (mut parts, body) = request.into_parts();
+    let path = parts.uri.path();
+    if path.ends_with("/cleanup") {
+        gate.cleanups.fetch_add(1, Ordering::SeqCst);
+        if gate.deny_cleanup {
+            return axum::response::Response::builder()
+                .status(403)
+                .body(Body::from(
+                    r#"{"error":{"code":"attendee_cleanup_rejected"}}"#,
+                ))
+                .unwrap_or_else(|_| panic!("controlled attendee relay failed"));
+        }
+    }
+    let join = path.ends_with("/join");
+    if join {
+        gate.joins.fetch_add(1, Ordering::SeqCst);
+    }
+    parts.headers.remove("host");
+    let body = axum::body::to_bytes(body, 65536)
+        .await
+        .unwrap_or_else(|_| panic!("controlled attendee relay failed"));
+    let response = reqwest::Client::new()
+        .request(parts.method, format!("{}{}", gate.upstream, parts.uri))
+        .headers(parts.headers)
+        .body(body)
+        .send()
+        .await
+        .unwrap_or_else(|_| panic!("controlled attendee relay failed"));
+    let status = response.status();
+    let bytes = response
+        .bytes()
+        .await
+        .unwrap_or_else(|_| panic!("controlled attendee relay failed"));
+    let body = if join && gate.lose_first.swap(false, Ordering::SeqCst) {
+        gate.entered.notify_one();
+        gate.release.notified().await;
+        Body::from("{")
+    } else {
+        Body::from(bytes)
+    };
+    axum::response::Response::builder()
+        .status(status)
+        .header("content-type", "application/json")
+        .body(body)
+        .unwrap_or_else(|_| panic!("controlled attendee relay failed"))
+}

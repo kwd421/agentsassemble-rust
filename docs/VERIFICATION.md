@@ -9920,3 +9920,14 @@ re-run passed in 3.87s, but the earlier transient's cause is unknown. No product
 retry, custody check or gate was relaxed. Local service, native/browser entry-point
 integration and packaged own-computer creation remain active work, not accepted UI
 or two-computer execution proof.
+
+The local server service now retains each invitation, exact request/draft, dedicated
+adapter and shared terminal task result. It supports add-only admission, explicit
+local start, read-only observation, exact admission retry and joined cancellation.
+Three controlled service cases pass: a cold room host with a separate usable local
+catalog reaches actual acknowledged readiness and positive cleanup; dropping the
+HTTP-facing waiter after committed admission retains the same client for recovery
+without a second participant; remote cleanup rejection remains identical across
+cancel and concurrent/repeated shutdown. The service does not poll admission or room
+state. Its retained state and bounded command channel live until local-server exit.
+The HTTP/native/browser consumers and packaged acceptance are still being connected.
