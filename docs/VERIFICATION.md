@@ -10136,3 +10136,106 @@ now heap-pins its server future, with no production allowance or changed limit.
 Full affected-head workspace/frontend/native checks and packaged M1/M4/M5
 verification continue before re-review. Direct browser/OS dispatch and two-machine
 acceptance remain open with the previous tool-policy blocks preserved.
+
+### Paired local-attendee corrections and packaged cleanup (2026-09-10)
+
+At `550c7b5d`, the complete Rust workspace passes 58 harnesses/911 tests,
+the frontend passes 149 files/859 tests and its production build, and native
+verification passes 30 tests, Clippy and bindings. Final workspace all-target/
+all-feature Clippy, architecture/growth, 19 policy cases, formatting and diff
+checks pass. These results are scoped to that revision, before the two cleanup
+corrections found during the following packaged verification.
+
+Signed packages 0.1.25/26 use an isolated app identity and one actual AppState as
+both the room host and local attendee owner. Real HTTPS paired redemption issues
+normal companion packets through the configured manual ingress; every relayed
+HTTP request uses a fresh upstream connection. Controlled Codex processes provide
+native initialize/thread replies without OAuth, installer changes or real turns.
+Internal bundled-window entry remains the same scoped verification mechanism;
+this is not browser UI/custom-scheme OS dispatch or two-machine proof.
+
+In 0.1.25, direct native selection/admission passes for add-only (zero launches)
+and Running (one launch and actual Ready). Normal Cmd-Q, without prior cancellation,
+commits each participant's leave, cleanup read and exact report (all HTTP 200)
+before the owning listener disappears. Both sessions become Detached/Stopped,
+with no active provider/recovery requirement. The native app and all its owned
+children exit. One idle sample records 132752 KiB RSS and 0% CPU for the app;
+it is not a comparative resource benchmark. This verifies the self-targeted M5
+shutdown ordering. Initial held-start attempts reached the real protocol deadline
+or used a stale AX index; they do not prove cancellation. In 0.1.26, actual create
+and start followed immediately by the enabled cancel control reaches Stopped,
+including leave/read/report; cancellation preceded provider initialization.
+
+The 0.1.26 explicit-start attempt exposed a separate cleanup race: after a
+never-Ready runtime stops, the room host may finish its already-owned removal
+between an empty external cleanup delivery and the report, which then fails 403
+external_cleanup_changed. `530aecba` keeps unassigned-runtime completion with the
+host and does not issue that empty delivery. The actual local process must still
+stop positively, and confirmed leave plus a successful no-delivery read is
+required before releasing its exact local lease. Assigned-runtime cleanup still
+requires its exact report. No rejected-report fallback, new receipt, schema,
+polling or retry is introduced. Regression assertions fail before both the
+unassigned delivery correction and the local lease release correction, then pass.
+Persistence cleanup coverage passes 22 cases; affected attendee/HTTP integration
+passes 19 cases, followed by 11 client/runtime/interrupt/execution/local-owner
+cases for the lease-release update. Workspace Clippy, 19 policy cases, architecture,
+formatting and server build pass. A large composite test future is heap-pinned;
+no gate limit or allowance changes.
+
+Signed 0.1.27 verifies the corrected no-delivery path after a real held initialize
+hits provider_protocol_timeout: the UI reports that original start failure, its
+room session is Detached/Stopped, and leave/read return 200 with no empty stop
+report. Add-only is visibly Admitted before normal Cmd-Q and Detached/Stopped
+afterward; leave/read also complete before listener exit. The app exits normally.
+The same run's very early explicit cancellation exposed a different boundary:
+dropping runtime.start while the provider factory is still handing off custody
+leaves provider_launch_cleanup_unconfirmed and the remote attendee attached.
+It is recorded as failed verification, not a cancelled or cleaned participant.
+
+`144f6050` carries expected cancellation through the existing
+adapter start and attachment owner. It joins an in-flight factory handoff before
+cancelling attachment/readiness and stopping the actual owned runtime. A request
+already cancelled before effects is rejected without launch. Unexpected future
+loss retains the existing unconfirmed-custody contract. No new task, timeout,
+periodic retry, compatibility shim or success-by-absence is introduced. The launch
+lease marker and effect_started transition now have their existing common owner.
+The controlled factory-handoff regression, held-initialize HTTP cancellation in
+both start variants, exact lease release and unchanged unexpected-loss/guardian
+receipt cases pass.
+
+At `144f6050`, the complete workspace passes 58 harnesses/912 tests with zero
+failures using one test thread. Workspace all-target/all-feature Clippy,
+architecture/growth, 19 policy cases, formatting, diff check and the server build
+pass. The unchanged frontend/native checks above remain scoped to their previously
+verified revision; the signed package is rebuilt with this final server. Initial
+Clippy failures included two existing functions crossing 100 lines after the API
+argument change and new test expect calls. The final code keeps the marker/flag
+transition in its existing owner, uses the shorter unambiguous adapter parameter
+name and follows the repository's test error style; all existing limits remain.
+
+Signed 0.1.28 then passes both direct native cancellation paths. The early-start
+case clicks the enabled cancel immediately after the pending start observation;
+it reaches the confirmed stopped/left UI without entering initialize. In the
+second case, the fixture records initialize from a real live process (PID 64067)
+while the native UI still waits. The enabled cancel stops that process and the
+same UI confirms stopped/left. Each room session is Detached/Stopped with no active
+provider/recovery requirement. Both local lease and lifetime files are absent,
+and each leave/read returns 200 without an empty external report. Normal Cmd-Q
+exits the exact app and its children. A post-cancel app sample is 133120 KiB RSS
+and 0.1% CPU; it is an idle observation, not a performance comparison.
+
+All owned seed servers, proxies and temporary tunnels are stopped. The isolated
+app identity's data/WebKit/cache, controlled CLI root, invite-bearing bundle and
+configuration are removed after process exit. Six exact old fixture lease files
+(269 bytes), derived from that fixture room's session identities and verified
+unlocked, are removed while preserving the shared lease directory and unrelated
+entries. Sanitized phase/status/HTTP observations are retained outside the product
+source. Before cleanup the unchanged artifact gate reports 28,158,550,016 bytes
+against 19,327,352,832. After all Cargo/Tauri work is idle and the disposable bundle
+is removed, the existing owner prunes 25.3 GiB; final artifact check passes.
+
+M1/M4/M5 and the two discovered cleanup corrections have scoped local evidence;
+Pro closure/current Phase 1–3 integration re-review remains pending. Direct browser
+UI, OS dispatch, two physical PCs, broader mobile and previously deferred real
+OAuth/installer/provider proof remain unverified. No tool-policy block is bypassed
+and no real provider turn is performed in these corrections.

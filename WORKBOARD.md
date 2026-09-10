@@ -41,8 +41,16 @@
   issuance (M1), cancellation during pending local start (M4), and self-targeted
   local-attendee cleanup before ingress shutdown (M5). The complete answer, separate
   verdict and E01–E51 source evidence have been read. Correct supported findings,
-  verify and re-review before continuing the split groups; full flow acceptance is
-  still open. Real installer/OAuth
+  verify and re-review before continuing the split groups. Paired invitation,
+  pending cancel and self-targeted shutdown corrections now pass affected checks
+  and signed packaged verification. Two further packaged cleanup defects
+  (unassigned external-report race and early factory cancellation) are corrected;
+  final `144f6050` workspace 912 tests and mandatory gates pass, and signed
+  0.1.28 confirms both early and held-initialize cancellation plus exact local
+  lease release. Isolated apps/data are cleaned and artifact check passes.
+  Current Phase 1–3 Pro re-review is next; full flow acceptance remains open.
+  [Latest evidence](docs/VERIFICATION.md#paired-local-attendee-corrections-and-packaged-cleanup-2026-09-10).
+  Real installer/OAuth
   outcomes remain unverified.
   [Review disposition](docs/VERIFICATION.md#completed-setup-supplemental-pro-review-2026-09-10).
   [Update evidence](docs/VERIFICATION.md#optional-update-execution-during-creation-2026-09-10).
