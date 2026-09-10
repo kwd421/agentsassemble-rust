@@ -249,7 +249,13 @@ async fn idle_external_cleanup_preserves_removal_and_unstarted_cleanup_needs_no_
                 )
                 .await?;
         } else {
+            let authority = store
+                .authorize_attendee_cleanup(session.session_fingerprint())
+                .await?;
+            // Host completion must not race a previously delivered empty runtime stop.
+            assert!(store.load_attendee_cleanup(&authority).await?.is_none());
             assert!(store.finish_room_runtime_cleanup(&key).await?.is_some());
+            assert!(store.load_attendee_cleanup(&authority).await?.is_none());
         }
         let snapshot = store.snapshot("general", 0, 200).await?;
         let public = snapshot.agent_sessions.first().ok_or("session missing")?;

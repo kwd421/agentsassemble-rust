@@ -19,6 +19,11 @@ mod room_socket_peer;
 #[tokio::test]
 async fn external_client_owns_fixture_process_and_only_reports_exact_confirmed_cleanup()
 -> Result<(), Box<dyn std::error::Error>> {
+    Box::pin(verify_cleanup(true)).await?;
+    Box::pin(verify_cleanup(false)).await
+}
+
+async fn verify_cleanup(publish_ready: bool) -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;
     let catalog =
         ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
@@ -42,7 +47,7 @@ async fn external_client_owns_fixture_process_and_only_reports_exact_confirmed_c
     let adapter = ProviderAdapter::with_guardian_executable(std::path::Path::new(env!(
         "CARGO_BIN_EXE_agentsassemble-server"
     )));
-    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter, None)?;
+    let mut runtime = AttendeeRuntime::new(&joined, draft, adapter.clone(), None)?;
     let ready = runtime.start().await?;
     assert!(ready.retained_interrupt);
     assert!(!ready.runtime_handle_id.is_empty());
@@ -50,6 +55,16 @@ async fn external_client_owns_fixture_process_and_only_reports_exact_confirmed_c
         runtime.start().await?.runtime_handle_id,
         ready.runtime_handle_id
     );
+    assert!(runtime.acknowledge_cleanup(None).await.is_err());
+    if !publish_ready {
+        runtime.stop().await?;
+        assert_eq!(adapter.shutdown_with_observations().await.gone.len(), 1);
+        agentsassemble_server::shutdown_attendee(&client, Some(&mut runtime), None).await?;
+        assert!(client.cleanup().await?.is_none());
+        assert!(adapter.shutdown_with_observations().await.gone.is_empty());
+        server.stop().await;
+        return Ok(());
+    }
     let mut socket = client.connect().await?;
     socket
         .send(&AttendeeSocketRequest::Ready {
@@ -77,7 +92,7 @@ async fn external_client_owns_fixture_process_and_only_reports_exact_confirmed_c
             stopped: stopped.clone(),
         })
         .await?;
-    runtime.acknowledge_cleanup(&stopped).await?;
+    runtime.acknowledge_cleanup(Some(&stopped)).await?;
     assert!(client.cleanup().await?.is_none());
     let snapshot = store.snapshot("general", 0, 200).await?;
     assert!(!snapshot.agent_sessions[0].provider_session_active);

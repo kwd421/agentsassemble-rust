@@ -212,6 +212,17 @@ Only then does it close ingress/connections and stop room owners. A real remote
 cleanup failure still fails shutdown; no local shortcut or inferred receipt replaces
 that protocol. Verification covers add-only and running self-targets without prior
 cancel, fresh cleanup connections, and retained failure on a real rejected cleanup.
+An attendee that never published a runtime identity already has host-owned canonical
+removal completion. Its cleanup read must not issue an empty external stop delivery
+that can become stale when that same host completes removal. The existing local
+runtime owner still positively stops its actual process before leaving. Only an
+assigned runtime identity requires the exact external stop report; ordinary leave
+receipts and read failures remain authoritative, with no retry-on-rejection or
+new completion receipt. After confirmed leave and a successful cleanup read with no
+stop delivery, the positively stopped local owner releases its own lease artifacts.
+A failed leave/read retains those artifacts. Verify the unassigned read before and
+after host completion and preserve assigned-runtime report replay, rejection and
+unresolved cleanup.
 Process restart never automatically launches a replacement attendee
 or treats an old invitation as an unused draft. Existing provider lease/guardian
 recovery and server expiry remain authoritative after process loss. Before dispatch,

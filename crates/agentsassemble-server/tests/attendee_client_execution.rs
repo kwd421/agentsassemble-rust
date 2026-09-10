@@ -109,7 +109,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
             stopped: stopped.clone(),
         })
         .await?;
-    runtime.acknowledge_cleanup(&stopped).await?;
+    runtime.acknowledge_cleanup(Some(&stopped)).await?;
     human.close().await;
     server.stop().await;
     Ok(())

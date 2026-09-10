@@ -45,11 +45,15 @@ pub async fn shutdown_attendee(
             };
             retry(|| client.report_cleanup(&report)).await?;
             if let Some(runtime) = runtime {
-                runtime.acknowledge_cleanup(&stop).await?;
+                runtime.acknowledge_cleanup(Some(&stop)).await?;
             }
             Ok(())
         } else {
-            leave
+            leave?;
+            if let Some(runtime) = runtime {
+                runtime.acknowledge_cleanup(None).await?;
+            }
+            Ok(())
         }
     })
     .await

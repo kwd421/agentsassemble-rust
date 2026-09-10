@@ -178,8 +178,9 @@ async fn self_targeted_attendees_finish_cleanup_before_their_server_closes_ingre
             "local_attendee_closed"
         );
         if !start {
-            // One cleanup read and its one exact completion report.
-            assert_eq!(relay.gate.cleanups.load(Ordering::SeqCst), 2);
+            // The host owns unassigned-runtime completion; a fresh cleanup read
+            // confirms there is no assigned external stop to report.
+            assert_eq!(relay.gate.cleanups.load(Ordering::SeqCst), 1);
         }
         relay.stop().await?;
     }

@@ -135,15 +135,22 @@ impl AttendeeRuntime {
         Ok(())
     }
 
-    /// Releases local lease artifacts after the caller receives the committed cleanup receipt.
+    /// Releases local leases after a cleanup receipt, or confirmed leave with no stop delivery.
+    /// The caller must finish the remote protocol before acknowledging local cleanup.
     ///
     /// # Errors
     /// Rejects cleanup that has not been positively observed for this runtime.
     pub async fn acknowledge_cleanup(
         &self,
-        delivery: &AttendeeCleanupDelivery,
+        delivery: Option<&AttendeeCleanupDelivery>,
     ) -> Result<(), AttendeeClientError> {
-        self.verify_cleanup(delivery)?;
+        if let Some(delivery) = delivery {
+            self.verify_cleanup(delivery)?;
+        } else if !self.stopped {
+            return Err(AttendeeClientError::local(
+                "attendee_runtime_cleanup_unconfirmed",
+            ));
+        }
         self.adapter
             .release_confirmed_stop(
                 &self.session.public.room_id,

@@ -53,11 +53,7 @@ pub(crate) async fn request_in(
     sqlx::query("INSERT INTO attendee_cleanup_controls(room_id,session_id,cleanup_id) VALUES(?,?,?) ON CONFLICT(room_id,session_id) DO UPDATE SET cleanup_id=excluded.cleanup_id")
         .bind(&session.public.room_id).bind(&session.public.session_id).bind(Uuid::new_v4().to_string()).execute(&mut **tx).await?;
     // No ready report ever transferred a runtime identity to this admitted session.
-    if session.runtime_handle_id.is_empty()
-        && session.runtime_owner_id.is_empty()
-        && session.runtime_lease_token.is_empty()
-        && !session.public.provider_session_active
-    {
+    if runtime_identity_unassigned(session) {
         session.public.runtime_status = AgentRuntimeStatus::Stopped;
     }
     Ok(())
@@ -78,7 +74,7 @@ impl SqliteStore {
         Ok(authority)
     }
 
-    /// Reads the pending exact external stop request without disclosing room context.
+    /// Reads assigned external stop work; unassigned-runtime removal stays with the host.
     ///
     /// # Errors
     /// Rejects changed custody and corrupt cleanup state.
@@ -214,6 +210,13 @@ async fn load_delivery(
     if !cleanup_exists(tx, &key.room_id, &key.session_id).await? {
         return Ok(None);
     }
+    let session = load_session(tx, &key.room_id, &key.session_id).await?;
+    // The canonical host already owns unassigned-runtime removal. Delivering an
+    // empty external stop would race that owner's completion and create a stale
+    // report. The caller still stops its own process before leaving the room.
+    if runtime_identity_unassigned(&session) {
+        return Ok(None);
+    }
     let cleanup_id: String = sqlx::query_scalar(
         "SELECT cleanup_id FROM attendee_cleanup_controls WHERE room_id=? AND session_id=?",
     )
@@ -221,13 +224,19 @@ async fn load_delivery(
     .bind(&key.session_id)
     .fetch_one(&mut **tx)
     .await?;
-    let session = load_session(tx, &key.room_id, &key.session_id).await?;
     Ok(Some(AttendeeCleanupDelivery {
         cleanup_id: parse_uuid(&cleanup_id)?,
         runtime_handle_id: session.runtime_handle_id,
         runtime_owner_id: session.runtime_owner_id,
         runtime_lease_token: session.runtime_lease_token,
     }))
+}
+
+fn runtime_identity_unassigned(session: &DurableAgentSession) -> bool {
+    session.runtime_handle_id.is_empty()
+        && session.runtime_owner_id.is_empty()
+        && session.runtime_lease_token.is_empty()
+        && !session.public.provider_session_active
 }
 
 async fn checkpoint_absence(

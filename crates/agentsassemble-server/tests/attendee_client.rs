@@ -12,17 +12,13 @@ mod lossy_http;
 mod room_socket_peer;
 
 #[tokio::test]
-async fn attendee_client_recovers_lost_admission_leave_and_cleanup_acknowledgments()
+async fn unstarted_attendee_recovers_lost_admission_and_leave_without_external_stop_work()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, invite) = attendee::fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let relay = lossy_http::LossyHttpRelay::start(
         &server.base_url,
-        &[
-            "/api/room-attendee/join",
-            "/api/room-attendee/leave",
-            "/api/room-attendee/cleanup",
-        ],
+        &["/api/room-attendee/join", "/api/room-attendee/leave"],
     )
     .await?;
     let url = format!("{}/join?token={}", relay.base_url, invite.invite_bearer);
@@ -54,14 +50,6 @@ async fn attendee_client_recovers_lost_admission_leave_and_cleanup_acknowledgmen
     let leave_id = Uuid::new_v4();
     assert!(client.leave(leave_id).await.is_err());
     client.leave(leave_id).await?;
-    let stopped = client.cleanup().await?.ok_or("cleanup missing")?;
-    assert!(stopped.runtime_handle_id.is_empty());
-    let report = AttendeeCleanupReport {
-        request_id: Uuid::new_v4(),
-        stopped,
-    };
-    assert!(client.report_cleanup(&report).await.is_err());
-    client.report_cleanup(&report).await?;
     assert!(client.cleanup().await?.is_none());
     let snapshot = store.snapshot("general", 0, 200).await?;
     assert_eq!(
@@ -153,12 +141,12 @@ async fn attendee_native_socket_replaces_custody_and_keeps_runtime_until_exact_c
     let stopped = client.cleanup().await?.ok_or("cleanup missing")?;
     assert_eq!(stopped.runtime_handle_id, "client-runtime");
     assert_eq!(stopped.runtime_lease_token, "client-lease");
-    client
-        .report_cleanup(&AttendeeCleanupReport {
-            request_id: Uuid::new_v4(),
-            stopped,
-        })
-        .await?;
+    let report = AttendeeCleanupReport {
+        request_id: Uuid::new_v4(),
+        stopped,
+    };
+    client.report_cleanup(&report).await?;
+    client.report_cleanup(&report).await?;
     assert!(client.cleanup().await?.is_none());
     server.stop().await;
     Ok(())

@@ -190,7 +190,7 @@ async fn cleanup(client: &RoomAttendeeClient, runtime: &mut AttendeeRuntime) -> 
             stopped: stopped.clone(),
         })
         .await?;
-    runtime.acknowledge_cleanup(&stopped).await?;
+    runtime.acknowledge_cleanup(Some(&stopped)).await?;
     assert!(client.cleanup().await?.is_none());
     Ok(())
 }
