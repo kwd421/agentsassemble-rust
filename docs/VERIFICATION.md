@@ -10239,3 +10239,71 @@ Pro closure/current Phase 1–3 integration re-review remains pending. Direct br
 UI, OS dispatch, two physical PCs, broader mobile and previously deferred real
 OAuth/installer/provider proof remain unverified. No tool-policy block is bypassed
 and no real provider turn is performed in these corrections.
+
+### Outer shutdown lifetime correction (2026-09-10)
+
+The completed Pro `10308cae` answer, separate verdict and complete E01–E45 source
+evidence close M1/M4/M5 and approve both additional packaged cleanup corrections
+and all six new changes. Current Phase 1–3 integration remains REVISE C0/H0/M1/L0:
+P13-M6 identifies the desktop's three-second supervisor kill before the existing
+sixteen-second server grace and thirty-second attendee remote-cleanup deadline.
+The independent later split groups and historical Phase 7–9 patch coverage remain
+pending; this completed supplemental review does not replace them.
+
+The native normal-quit and startup-failure paths now share the owned supervisor
+join. Existing leaf deadlines have one shared runtime-shutdown owner, and the
+outer process envelope is composed from those deadlines as specified in the
+operational slice. Independent provider slots begin shutdown concurrently while
+retaining their exact mutex, driver and lease ownership. Actual process completion
+ends the join immediately. Emergency expiry signals the still-owned Unix group
+or Windows Job owner before reaping, and reports uncertainty. The 680-second
+server/683-second desktop emergency limits do not extend inner HTTP cleanup or
+turn a timeout into a positive cleanup receipt. OS/storage stalls can still exhaust
+that envelope.
+
+Affected provider runtime tests pass 58 cases and local-attendee HTTP integration
+passes six. The new concurrency case requires both owned runtimes to receive
+cancellation before either borrowed driver is returned. A real HTTP cleanup gate
+then fake-clock advancement proves the existing thirty-second timeout remains
+attendee_cleanup_unresolved and CleanupUnconfirmed across repeated shutdown.
+Native Clippy and all 32 tests pass. Real private-pipe EOF starts a controlled
+sidecar cleanup; the actual supervisor remains alive beyond both former deadlines
+for seventeen seconds, then exits after the completion barrier. A separate stopped
+supervisor case forces the emergency branch and proves its sidecar also exits.
+An initial fixture compile error and inherited nonblocking macOS socket mode were
+corrected before the passing native run; no production deadline or gate was changed
+to hide those test failures. This is Unix execution evidence, not a Windows run.
+
+Signed package 0.1.29 uses a fresh isolated identity and the real server as both
+room host and local attendee owner. Normal paired redemption and companion invite
+issuance cross actual HTTPS configured manual ingress with fresh upstream HTTP
+connections. Controlled Codex initialize/thread responses establish Running
+without OAuth, installation or a real turn. Direct native folder selection,
+Add and Run, and add-only selection visibly establish Running and Admitted.
+
+Cmd-Q, without prior participant cancellation, reaches both leave responses (200)
+and cleanup reads. The relay holds each cleanup response for eighteen seconds.
+At 17.013 seconds after the cleanup barrier, the app, supervisor and server are
+all alive. Both reads return 200 after the hold; the Running participant's exact
+cleanup report also returns 200 before listener exit. All three processes are gone
+at 18.629 seconds. Both durable room sessions are Detached/Stopped with inactive
+providers and no recovery requirement. The Running participant's local lease and
+lifetime files exist before quit and are absent afterward; add-only creates neither.
+No local receipt or database shortcut replaces the actual remote protocol.
+
+The exact app/worker, seed, relay and tunnel are stopped. Computer Use is reset;
+the isolated app identity's data/cache/WebKit/preferences, controlled CLI root,
+invite-bearing bundle and configuration are removed. Sanitized timing, HTTP,
+minimal durable status and lease-presence observations remain outside the source.
+The final workspace passes 58 harnesses/914 tests with zero failures using one
+test thread. Frontend production build and 149 files/859 tests, exported bindings
+with no generated diff, workspace all-target checks and all-feature/all-target
+Clippy, root/native formatting, architecture/growth, 19 policy cases and diff
+checks pass. These commands were run separately; no single clean make verify run
+is claimed. The artifact check initially requires removal of the obsolete desktop
+target (2,218,762,240 bytes) and the active target (27,435,831,296 bytes against the
+unchanged 19,327,352,832 limit). After all builds/tests and packaged processes exit,
+the existing maintenance owner removes 2.0 GiB and 24.9 GiB respectively; final
+artifact check passes. No gate limit, allowance or policy is weakened.
+Packaged browser/custom-scheme OS dispatch, two physical machines, broader mobile
+and the previously deferred real-provider/OAuth/installer flows remain unverified.

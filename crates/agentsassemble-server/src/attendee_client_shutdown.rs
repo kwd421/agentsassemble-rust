@@ -1,5 +1,6 @@
 //! Positive local shutdown precedes exact remote cleanup receipts.
 use crate::{AttendeeClientError, AttendeeRuntime, RoomAttendeeClient};
+use agentsassemble_domain::runtime_shutdown::ATTENDEE_REMOTE_CLEANUP_TIMEOUT as REMOTE_CLEANUP_TIMEOUT;
 use agentsassemble_persistence::{AttendeeCleanupDelivery, AttendeeCleanupReport};
 use std::{future::Future, time::Duration};
 use uuid::Uuid;
@@ -17,7 +18,7 @@ pub async fn shutdown_attendee(
     if let Some(runtime) = runtime.as_deref_mut() {
         runtime.stop().await?;
     }
-    tokio::time::timeout(Duration::from_secs(30), async {
+    tokio::time::timeout(REMOTE_CLEANUP_TIMEOUT, async {
         let leave_id = Uuid::new_v4();
         let leave = if remote_stop.is_none() {
             retry(|| client.leave(leave_id)).await

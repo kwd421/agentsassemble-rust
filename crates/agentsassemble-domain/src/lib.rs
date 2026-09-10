@@ -38,6 +38,7 @@ pub use provider_setup::{
 };
 mod release_health;
 mod runtime_restart;
+pub mod runtime_shutdown;
 mod runtime_version;
 pub use release_health::{
     ReleaseHealthCheck, ReleaseHealthReport, ReleaseHealthResult, ReleaseHealthStatus,

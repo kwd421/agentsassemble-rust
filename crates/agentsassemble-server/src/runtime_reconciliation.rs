@@ -21,9 +21,11 @@ use crate::{
     },
 };
 
-pub(crate) const LIVE_OBSERVATION_TIMEOUT: Duration = Duration::from_secs(2);
+pub(crate) use agentsassemble_domain::runtime_shutdown::{
+    RECONCILIATION_OBSERVATION_CONCURRENCY as RECOVERY_OBSERVATION_CONCURRENCY,
+    RECONCILIATION_OBSERVATION_TIMEOUT as LIVE_OBSERVATION_TIMEOUT,
+};
 const RECOVERY_SCAN_INTERVAL: Duration = Duration::from_secs(1);
-pub(crate) const RECOVERY_OBSERVATION_CONCURRENCY: usize = 8;
 
 #[cfg(test)]
 pub(crate) static RUNTIME_RECONCILIATION_TEST_LOCK: tokio::sync::Mutex<()> =

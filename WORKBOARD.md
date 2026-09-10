@@ -48,8 +48,20 @@
   final `144f6050` workspace 912 tests and mandatory gates pass, and signed
   0.1.28 confirms both early and held-initialize cancellation plus exact local
   lease release. Isolated apps/data are cleaned and artifact check passes.
-  Current Phase 1–3 Pro re-review is next; full flow acceptance remains open.
-  [Latest evidence](docs/VERIFICATION.md#paired-local-attendee-corrections-and-packaged-cleanup-2026-09-10).
+  Pro's completed `10308cae` re-review closes M1/M4/M5 and approves both additional
+  cleanup corrections and all six new changes, but returns REVISE C0/H0/M1/L0 for
+  new P13-M6: desktop's three-second stop kills the runtime supervisor before its
+  own sixteen-second grace and the attendee's thirty-second remote cleanup finish.
+  The complete answer, separate verdict and E01–E45 source evidence have been read.
+  The outer shutdown lifetime correction passes affected provider/HTTP checks and
+  32 native tests, including delayed EOF cleanup and emergency process-tree stop.
+  Signed 0.1.29 normal quit keeps app/supervisor/server alive beyond seventeen
+  seconds while real remote cleanup responses are held, then finishes both add-only
+  and Running cleanup with exact lease release before exit. Full workspace 914,
+  frontend 859 and native 32 tests plus mandatory gates pass; isolated artifacts
+  are cleaned. Obtain current Phase 1–3 re-review before the remaining split groups.
+  Full flow acceptance remains open.
+  [Latest evidence](docs/VERIFICATION.md#outer-shutdown-lifetime-correction-2026-09-10).
   Real installer/OAuth
   outcomes remain unverified.
   [Review disposition](docs/VERIFICATION.md#completed-setup-supplemental-pro-review-2026-09-10).

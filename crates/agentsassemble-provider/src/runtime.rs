@@ -1,4 +1,4 @@
-use std::{collections::HashMap, path::Path, sync::Arc, time::Duration};
+use std::{collections::HashMap, path::Path, sync::Arc};
 
 use agentsassemble_domain::DurableAgentSession;
 use thiserror::Error;
@@ -17,7 +17,7 @@ use crate::{
     runtime_lease::HeldRuntimeLease,
 };
 
-const DRIVER_STOP_TIMEOUT: Duration = Duration::from_secs(5);
+use agentsassemble_domain::runtime_shutdown::PROVIDER_DRIVER_STOP_TIMEOUT as DRIVER_STOP_TIMEOUT;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderRuntimeStarted {
     pub runtime_handle_id: String,
@@ -381,94 +381,23 @@ impl ProviderAdapter {
     /// caller can checkpoint proven absence even when another runtime remains uncertain.
     pub async fn shutdown_with_observations(&self) -> ProviderShutdownOutcome {
         let slots = self.owned_runtime_slots().await;
+        // Independent runtime stops must begin together. Serial waits otherwise
+        // multiply the driver's shutdown bounds before the outer process can exit.
+        let outcomes = futures_util::future::join_all(
+            slots
+                .into_iter()
+                .map(|(key, slot)| shutdown_slot(key, slot)),
+        )
+        .await;
         let mut failure = None;
         let mut gone = Vec::new();
-        for (key, slot) in slots {
-            let mut slot = slot.lock().await;
-            if let Some(result) = observation::shutdown_launching_runtime(&key, &mut slot) {
-                match result {
-                    Ok(stopped) => gone.push(stopped),
-                    Err(error) => {
-                        failure.get_or_insert(error);
-                    }
+        for outcome in outcomes {
+            match outcome {
+                Ok(Some(stopped)) => gone.push(stopped),
+                Ok(None) => {}
+                Err(error) => {
+                    failure.get_or_insert(error);
                 }
-                continue;
-            }
-            if let RuntimeState::Running(runtime) = &mut slot.state {
-                runtime.turn_cancellation.cancel();
-                let stopped = match runtime.driver.wait_take(DRIVER_STOP_TIMEOUT).await {
-                    Ok(mut driver) => match driver.stop().await {
-                        Ok(()) => Ok(Ok(())),
-                        Err(error) => {
-                            runtime.driver.put(driver).await;
-                            Ok(Err(error))
-                        }
-                    },
-                    Err(error) => Err(error),
-                };
-                match stopped {
-                    Ok(Ok(())) => {
-                        let Some(runtime_lease) = runtime.runtime_lease.take() else {
-                            failure.get_or_insert_with(|| {
-                                ProviderAdapterError::uncertain(
-                                    DriverError::new(
-                                        "provider_custody_unavailable",
-                                        "The provider runtime lease is unavailable.",
-                                    ),
-                                    &runtime.handle_id,
-                                    &runtime.owner_id,
-                                )
-                            });
-                            continue;
-                        };
-                        gone.push(ProviderRuntimeGone {
-                            room_id: key.room_id,
-                            session_id: key.session_id,
-                            runtime_handle_id: runtime.handle_id.clone(),
-                            runtime_owner_id: runtime.owner_id.clone(),
-                            runtime_lease_token: runtime_lease.token().to_owned(),
-                        });
-                        slot.state = RuntimeState::StopConfirmed {
-                            handle_id: runtime.handle_id.clone(),
-                            owner_id: runtime.owner_id.clone(),
-                            runtime_lease,
-                        };
-                    }
-                    Ok(Err(error)) => {
-                        failure.get_or_insert_with(|| {
-                            ProviderAdapterError::uncertain(
-                                error,
-                                &runtime.handle_id,
-                                &runtime.owner_id,
-                            )
-                        });
-                    }
-                    Err(_) => {
-                        failure.get_or_insert_with(|| {
-                            ProviderAdapterError::uncertain(
-                                DriverError::new(
-                                    "provider_stop_unconfirmed",
-                                    "The owned provider runtime could not be confirmed stopped.",
-                                ),
-                                &runtime.handle_id,
-                                &runtime.owner_id,
-                            )
-                        });
-                    }
-                }
-            } else if let RuntimeState::StopConfirmed {
-                handle_id,
-                owner_id,
-                runtime_lease,
-            } = &slot.state
-            {
-                gone.push(ProviderRuntimeGone {
-                    room_id: key.room_id,
-                    session_id: key.session_id,
-                    runtime_handle_id: handle_id.clone(),
-                    runtime_owner_id: owner_id.clone(),
-                    runtime_lease_token: runtime_lease.token().to_owned(),
-                });
             }
         }
         ProviderShutdownOutcome { gone, failure }
@@ -548,6 +477,66 @@ impl ProviderAdapter {
 impl Default for ProviderAdapter {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+async fn shutdown_slot(
+    key: RuntimeKey,
+    slot: Arc<Mutex<RuntimeSlot>>,
+) -> Result<Option<ProviderRuntimeGone>, ProviderAdapterError> {
+    let mut slot = slot.lock().await;
+    if let Some(result) = observation::shutdown_launching_runtime(&key, &mut slot) {
+        return result.map(Some);
+    }
+    if let RuntimeState::Running(runtime) = &mut slot.state {
+        runtime.turn_cancellation.cancel();
+        let stopped = match runtime.driver.wait_take(DRIVER_STOP_TIMEOUT).await {
+            Ok(mut driver) => match driver.stop().await {
+                Ok(()) => Ok(()),
+                Err(error) => {
+                    runtime.driver.put(driver).await;
+                    Err(error)
+                }
+            },
+            Err(_) => Err(DriverError::new(
+                "provider_stop_unconfirmed",
+                "The owned provider runtime could not be confirmed stopped.",
+            )),
+        };
+        stopped.map_err(|error| {
+            ProviderAdapterError::uncertain(error, &runtime.handle_id, &runtime.owner_id)
+        })?;
+        let runtime_lease = runtime.runtime_lease.take().ok_or_else(|| {
+            ProviderAdapterError::uncertain(
+                DriverError::new(
+                    "provider_custody_unavailable",
+                    "The provider runtime lease is unavailable.",
+                ),
+                &runtime.handle_id,
+                &runtime.owner_id,
+            )
+        })?;
+        slot.state = RuntimeState::StopConfirmed {
+            handle_id: runtime.handle_id.clone(),
+            owner_id: runtime.owner_id.clone(),
+            runtime_lease,
+        };
+    }
+    if let RuntimeState::StopConfirmed {
+        handle_id,
+        owner_id,
+        runtime_lease,
+    } = &slot.state
+    {
+        Ok(Some(ProviderRuntimeGone {
+            room_id: key.room_id,
+            session_id: key.session_id,
+            runtime_handle_id: handle_id.clone(),
+            runtime_owner_id: owner_id.clone(),
+            runtime_lease_token: runtime_lease.token().to_owned(),
+        }))
+    } else {
+        Ok(None)
     }
 }
 

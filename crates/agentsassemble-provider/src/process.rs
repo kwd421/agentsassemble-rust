@@ -10,7 +10,7 @@ use process_wrap::tokio::{CommandWrap, KillOnDrop};
 use tokio::io::{AsyncRead, AsyncReadExt};
 use tokio_util::sync::CancellationToken;
 
-const PROBE_TIMEOUT: Duration = Duration::from_secs(10);
+use agentsassemble_domain::runtime_shutdown::PROVIDER_PROBE_TIMEOUT as PROBE_TIMEOUT;
 #[cfg(not(unix))]
 const CHILD_STOP_TIMEOUT: Duration = Duration::from_secs(5);
 const MAX_PROBE_STREAM_BYTES: usize = 2 * 1024 * 1024;

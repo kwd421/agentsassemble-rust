@@ -1,7 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
     sync::Arc,
-    time::Duration,
 };
 
 use agentsassemble_domain::RoomEvent;
@@ -64,7 +63,7 @@ const ROOM_QUEUE_CAPACITY: usize = 128;
 const ROOM_TOOL_QUEUE_CAPACITY: usize = 64;
 const EVENT_RECEIVER_CAPACITY: usize = 256;
 const PUBLICATION_WAKE_CAPACITY: usize = 128;
-const ROOM_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(3);
+use agentsassemble_domain::runtime_shutdown::ROOM_DRAIN_TIMEOUT as ROOM_SHUTDOWN_TIMEOUT;
 
 #[derive(Clone)]
 struct RoomHandle {

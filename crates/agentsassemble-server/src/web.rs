@@ -31,7 +31,7 @@ use crate::{
 };
 
 const HTTP_BODY_DEADLINE: Duration = Duration::from_secs(10);
-const TRACKED_SHUTDOWN_TIMEOUT: Duration = Duration::from_secs(6);
+use agentsassemble_domain::runtime_shutdown::CONNECTION_DRAIN_TIMEOUT as TRACKED_SHUTDOWN_TIMEOUT;
 const ROOT_PATH: &str = "/";
 const APP_PREFIX: &str = "/app";
 const APP_ENTRY_PATH: &str = "/app/";

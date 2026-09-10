@@ -212,6 +212,42 @@ Only then does it close ingress/connections and stop room owners. A real remote
 cleanup failure still fails shutdown; no local shortcut or inferred receipt replaces
 that protocol. Verification covers add-only and running self-targets without prior
 cancel, fresh cleanup connections, and retained failure on a real rejected cleanup.
+The native desktop must join this complete server lifetime through its standalone
+supervisor. Its stop deadline cannot expire before the supervisor's server grace,
+and that grace must account for pending admission resolution, factory custody
+handoff, positive provider stop, remote cleanup and subsequent server drain. The
+existing inner operation deadlines retain their owners; the outer deadline is an
+emergency process-lifetime boundary, never a successful cleanup receipt. When it
+expires, terminate the exact supervised process tree while its stable group or Job
+still owns that tree, then reap the owned child. Do not kill only the supervisor
+and discard its cleanup responsibility. Normal and startup-failure termination
+share this native owner. This correction adds no credential, storage migration,
+compatibility path, automatic retry or periodic progress protocol. Verification
+must hold normal cleanup beyond the former three- and sixteen-second deadlines,
+observe desktop/supervisor survival until completion, and exercise independent
+emergency termination with a controlled stalled child. Native tests and packaged
+same-AppState add-only/Running checks are distinct evidence; Windows Job execution
+is claimed only when actually exercised.
+The shared runtime-shutdown contract keeps the existing leaf limits unchanged:
+filesystem validation 10 seconds per operation, managed control/worker join one
+minute, driver return five seconds, attendee HTTP/remote cleanup thirty seconds,
+connections six seconds, room tasks three seconds, and native probes ten seconds.
+The conservative per-runtime allowance is 205 seconds (two filesystem checks,
+factory handshake, driver return, Stop acknowledgment and worker exit). Local
+attendees join concurrently and reserve the greater of that allowance or two exact
+admission requests, then thirty seconds for remote cleanup: 235 seconds. After
+that, the server allows connection drain, an in-flight reconciliation effect and
+its 64-item/eight-way/two-second observation batch, room tasks, concurrent runtime
+stop and catalog cleanup. The resulting server emergency envelope is 680 seconds;
+the desktop grants its supervisor another three seconds to terminate/reap before
+escalating the exact group/Job itself. These are maximum emergency allowances,
+not fixed quit delays: actual process completion ends the wait immediately.
+Independent runtime slots must therefore begin shutdown together, using the
+existing futures composition and exact per-slot mutex/driver/lease ownership;
+serially multiplying their waits by runtime count violates this composition.
+Storage or OS stalls can still exhaust the outer envelope and remain unconfirmed.
+No inner failure is converted to success, and no unfinished runtime lease is
+released by a deadline or a kill request.
 An attendee that never published a runtime identity already has host-owned canonical
 removal completion. Its cleanup read must not issue an empty external stop delivery
 that can become stale when that same host completes removal. The existing local

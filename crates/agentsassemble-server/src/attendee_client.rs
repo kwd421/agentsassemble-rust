@@ -111,7 +111,7 @@ impl RoomAttendeeClient {
         let http = Client::builder()
             .redirect(reqwest::redirect::Policy::none())
             .connect_timeout(Duration::from_secs(10))
-            .timeout(Duration::from_secs(30))
+            .timeout(agentsassemble_domain::runtime_shutdown::ATTENDEE_HTTP_TIMEOUT)
             .build()
             .map_err(|_| AttendeeClientError::local("http_client_unavailable"))?;
         Ok(Self {

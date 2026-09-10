@@ -6,7 +6,7 @@ use crate::{
     agent_reconciliation::load_candidate,
 };
 
-const RECONCILIATION_SCAN_LIMIT: u8 = 64;
+use agentsassemble_domain::runtime_shutdown::RECONCILIATION_PAGE_SIZE as RECONCILIATION_SCAN_LIMIT;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RuntimeReconciliationCursor {

@@ -361,10 +361,49 @@ async fn remote_cleanup_failure_is_retained_across_cancel_and_concurrent_shutdow
     Ok(())
 }
 
+#[tokio::test]
+async fn remote_cleanup_timeout_remains_a_failure_after_the_outer_grace_is_extended()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let catalog =
+        ProviderCatalogService::fixed(provider_fixture::agent_catalog(directory.path(), None));
+    let (store, invite) = attendee::fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let relay = Relay::start(&server.base_url, false, false).await?;
+    relay.gate.hold_cleanup.store(true, Ordering::SeqCst);
+    let service = LocalAttendeeService::new(store, CancellationToken::new());
+    let input = request(&relay.base, &invite, directory.path());
+    let id = input.request_id;
+    service.create(input, catalog, adapter()).await?;
+    let owner = service.clone();
+    let cancel = tokio::spawn(async move { owner.cancel(id).await });
+    relay.gate.entered.notified().await;
+    // HTTP reached the real cleanup endpoint; advance only its existing clock.
+    // The increased process lifetime must not extend or erase this inner deadline.
+    tokio::time::pause();
+    tokio::time::advance(agentsassemble_domain::runtime_shutdown::ATTENDEE_REMOTE_CLEANUP_TIMEOUT)
+        .await;
+    tokio::time::resume();
+    let failure = cancel.await?.err().ok_or("expected cleanup timeout")?;
+    relay.gate.release.notify_one();
+    assert_eq!(failure.code, "attendee_cleanup_unresolved");
+    assert_eq!(service.status(id).await?.phase, Phase::CleanupUnconfirmed);
+    for result in [service.shutdown().await, service.shutdown().await] {
+        assert_eq!(
+            result.err().ok_or("expected retained timeout")?.code,
+            failure.code
+        );
+    }
+    relay.stop().await?;
+    server.stop().await;
+    Ok(())
+}
+
 struct Gate {
     upstream: String,
     lose_first: AtomicBool,
     deny_cleanup: bool,
+    hold_cleanup: AtomicBool,
     joins: AtomicUsize,
     cleanups: AtomicUsize,
     entered: Notify,
@@ -390,6 +429,7 @@ impl Relay {
             upstream: upstream.to_owned(),
             lose_first: AtomicBool::new(lose_first),
             deny_cleanup,
+            hold_cleanup: AtomicBool::new(false),
             joins: AtomicUsize::new(0),
             cleanups: AtomicUsize::new(0),
             entered: Notify::new(),
@@ -436,6 +476,10 @@ async fn forward(
                     r#"{"error":{"code":"attendee_cleanup_rejected"}}"#,
                 ))
                 .unwrap_or_else(|_| panic!("controlled attendee relay failed"));
+        }
+        if gate.hold_cleanup.load(Ordering::SeqCst) {
+            gate.entered.notify_one();
+            gate.release.notified().await;
         }
     }
     let join = path.ends_with("/join");

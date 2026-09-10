@@ -29,7 +29,7 @@ use executable_staging::ExecutableStaging;
 
 pub(crate) use cursor_executable::{bind_cursor_executable, cursor_executable_identity};
 
-const FILESYSTEM_TIMEOUT: Duration = Duration::from_secs(10);
+use agentsassemble_domain::runtime_shutdown::PROVIDER_FILESYSTEM_TIMEOUT as FILESYSTEM_TIMEOUT;
 const FILESYSTEM_WORKERS: usize = 4;
 static WORKERS: OnceLock<Arc<Semaphore>> = OnceLock::new();
 

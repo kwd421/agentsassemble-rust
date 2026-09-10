@@ -18,13 +18,11 @@ use executable_staging::RuntimeExecutableStaging;
 
 #[cfg(unix)]
 use std::os::unix::process::CommandExt;
-#[cfg(unix)]
-use std::time::Instant;
 
 const SUPERVISOR_FLAG: &str = "--agentsassemble-runtime-supervisor";
 #[cfg(target_os = "macos")]
 const STAGED_SERVER_ENV: &str = "AGENTSASSEMBLE_INTERNAL_SERVER_STAGED";
-const SIDECAR_SHUTDOWN_GRACE: Duration = Duration::from_secs(16);
+use agentsassemble_domain::runtime_shutdown::{DESKTOP_SHUTDOWN_GRACE, SERVER_SHUTDOWN_GRACE};
 
 pub(crate) struct RuntimeSupervisorCommand {
     command: Command,
@@ -313,12 +311,8 @@ fn terminate_sidecar(child: &mut Child) {
         unistd::{Pid, getpid},
     };
 
-    let deadline = Instant::now() + SIDECAR_SHUTDOWN_GRACE;
-    while Instant::now() < deadline {
-        if child.try_wait().ok().flatten().is_some() {
-            break;
-        }
-        thread::sleep(Duration::from_millis(25));
+    if !matches!(wait_for_exit(child, SERVER_SHUTDOWN_GRACE), Ok(true)) {
+        eprintln!("runtime sidecar did not finish within its owned shutdown grace");
     }
     let stable_group = Pid::from_raw(-getpid().as_raw());
     let _ = kill(stable_group, Signal::SIGKILL);
@@ -328,16 +322,69 @@ fn terminate_sidecar(child: &mut Child) {
 
 #[cfg(windows)]
 fn terminate_sidecar(child: &mut Child) {
-    let deadline = std::time::Instant::now() + SIDECAR_SHUTDOWN_GRACE;
-    while std::time::Instant::now() < deadline {
-        if child.try_wait().ok().flatten().is_some() {
-            return;
-        }
-        thread::sleep(Duration::from_millis(25));
+    if matches!(wait_for_exit(child, SERVER_SHUTDOWN_GRACE), Ok(true)) {
+        return;
     }
+    eprintln!("runtime sidecar did not finish within its owned shutdown grace");
     let _ = child.kill();
     let _ = child.wait();
 }
+
+// Both normal quit and failed startup close the private pipe before joining here.
+// The child is the still-owned stable group leader / Windows Job owner, never a
+// server PID recovered from an output record or persisted process identifier.
+pub(crate) fn terminate_owned_supervisor(child: &mut Child) {
+    if let Err(error) = join_supervisor(child, DESKTOP_SHUTDOWN_GRACE) {
+        eprintln!("owned runtime shutdown was not confirmed: {error}");
+    }
+}
+
+fn join_supervisor(child: &mut Child, grace: Duration) -> io::Result<()> {
+    let observed = wait_for_exit(child, grace);
+    if matches!(observed, Ok(true)) {
+        return Ok(());
+    }
+    // Do not reap a live leader before signaling its group: the Child handle
+    // retains its PID until wait, so this cannot target a reused group identity.
+    #[cfg(unix)]
+    let killed = i32::try_from(child.id())
+        .map_err(io::Error::other)
+        .and_then(|pid| {
+            nix::sys::signal::kill(
+                nix::unistd::Pid::from_raw(-pid),
+                nix::sys::signal::Signal::SIGKILL,
+            )
+            .map_err(io::Error::other)
+        });
+    // Closing the killed supervisor's Job terminates its contained server/workers.
+    #[cfg(windows)]
+    let killed = child.kill();
+    let reaped = child.wait();
+    killed?;
+    reaped?;
+    observed?;
+    Err(io::Error::new(
+        io::ErrorKind::TimedOut,
+        "runtime supervisor exceeded graceful shutdown; its owned tree was terminated",
+    ))
+}
+
+fn wait_for_exit(child: &mut Child, grace: Duration) -> io::Result<bool> {
+    let deadline = std::time::Instant::now() + grace;
+    loop {
+        if child.try_wait()?.is_some() {
+            return Ok(true);
+        }
+        if std::time::Instant::now() >= deadline {
+            return Ok(false);
+        }
+        thread::sleep(Duration::from_millis(25));
+    }
+}
+
+#[cfg(all(test, unix))]
+#[path = "runtime_shutdown_tests.rs"]
+mod shutdown_tests;
 
 #[cfg(test)]
 mod tests {
@@ -347,7 +394,7 @@ mod tests {
 
     #[cfg(target_os = "macos")]
     use super::{BoundSidecar, command_for_desktop};
-    use super::{SIDECAR_SHUTDOWN_GRACE, forward_owned_output, run_if_requested};
+    use super::{forward_owned_output, run_if_requested};
 
     #[test]
     fn ordinary_desktop_invocation_does_not_enter_supervisor_mode() {
@@ -377,11 +424,6 @@ mod tests {
             let input = [valid.as_slice(), replacement.as_bytes()].concat();
             assert!(forward_owned_output(&mut Cursor::new(input), &mut Vec::new(), 42).is_err());
         }
-    }
-
-    #[test]
-    fn outer_shutdown_budget_covers_server_and_provider_cleanup() {
-        assert!(SIDECAR_SHUTDOWN_GRACE >= std::time::Duration::from_secs(14));
     }
 
     #[cfg(target_os = "macos")]

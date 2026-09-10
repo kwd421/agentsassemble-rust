@@ -38,7 +38,6 @@ use control::{
 };
 
 const STARTUP_TIMEOUT: Duration = Duration::from_secs(20);
-const SHUTDOWN_GRACE: Duration = Duration::from_secs(3);
 const RUNTIME_LOG_LIMIT_BYTES: u64 = 1024 * 1024;
 
 #[derive(Debug, Clone, Serialize)]
@@ -612,32 +611,12 @@ fn prove_listening(address: &Url) -> Result<(), String> {
 
 fn terminate_owned_runtime(runtime: &mut RuntimeProcess) {
     runtime.control.take();
-    let deadline = Instant::now() + SHUTDOWN_GRACE;
-    let mut exited = false;
-    while Instant::now() < deadline {
-        if runtime.child.try_wait().ok().flatten().is_some() {
-            exited = true;
-            break;
-        }
-        thread::sleep(Duration::from_millis(50));
-    }
-    if !exited {
-        let _ = runtime.child.kill();
-        let _ = runtime.child.wait();
-    }
+    runtime_supervisor::terminate_owned_supervisor(&mut runtime.child);
 }
 
 fn abort_startup(child: &mut Child, control: Option<ChildStdin>) {
     drop(control);
-    let deadline = Instant::now() + SHUTDOWN_GRACE;
-    while Instant::now() < deadline {
-        if child.try_wait().ok().flatten().is_some() {
-            return;
-        }
-        thread::sleep(Duration::from_millis(25));
-    }
-    let _ = child.kill();
-    let _ = child.wait();
+    runtime_supervisor::terminate_owned_supervisor(child);
 }
 
 fn sidecar_executable(desktop: &Path) -> Result<PathBuf, String> {

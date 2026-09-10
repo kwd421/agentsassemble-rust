@@ -35,7 +35,7 @@ mod wire;
 mod worker;
 use wire::{Command, Event, Launch, Reader, Writer, protocol_error, read, write};
 
-const CONTROL_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(1);
+use agentsassemble_domain::runtime_shutdown::PROVIDER_CONTROL_TIMEOUT as CONTROL_TIMEOUT;
 
 const WORKER_FLAG: &str = "--agentsassemble-managed-provider";
 
