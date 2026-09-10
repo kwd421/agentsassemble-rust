@@ -50,6 +50,8 @@ pub enum ProviderLoginError {
     Failed,
     #[error("Provider login process cleanup could not be confirmed.")]
     CleanupUnconfirmed,
+    #[error("Login completed, but catalog refresh failed. Refresh the catalog again.")]
+    CatalogUnavailable,
 }
 
 type LoginResult = Shared<BoxFuture<'static, Result<ProviderLoginOutcome, ProviderLoginError>>>;
@@ -70,6 +72,7 @@ impl LoginRun {
 
 struct LoginOwner {
     cancellation: CancellationToken,
+    catalog: crate::ProviderCatalogService,
     runs: Mutex<BTreeMap<&'static str, LoginRun>>,
 }
 
@@ -84,9 +87,10 @@ pub struct ProviderLoginService(Arc<LoginOwner>);
 
 impl ProviderLoginService {
     #[must_use]
-    pub fn new(cancellation: CancellationToken) -> Self {
+    pub fn new(cancellation: CancellationToken, catalog: crate::ProviderCatalogService) -> Self {
         Self(Arc::new(LoginOwner {
             cancellation,
+            catalog,
             runs: Mutex::new(BTreeMap::new()),
         }))
     }
@@ -122,10 +126,23 @@ impl ProviderLoginService {
             } else {
                 let cancellation = self.0.cancellation.child_token();
                 let operation_cancellation = cancellation.clone();
-                let task =
-                    tokio::spawn(
-                        async move { run_login(registration, &operation_cancellation).await },
-                    );
+                let catalog = self.0.catalog.clone();
+                let task = tokio::spawn(async move {
+                    let outcome = run_login(registration, &operation_cancellation).await?;
+                    if outcome == ProviderLoginOutcome::Authenticated {
+                        let refreshed = catalog.refresh_provider(registration.id, true).await;
+                        if !refreshed.is_ok_and(|catalog| {
+                            catalog.status == "ready"
+                                && catalog.providers.iter().any(|provider| {
+                                    provider.id == registration.id
+                                        && provider.discovery_status == "ready"
+                                })
+                        }) {
+                            return Err(ProviderLoginError::CatalogUnavailable);
+                        }
+                    }
+                    Ok(outcome)
+                });
                 let result = async move {
                     task.await
                         .map_err(|_| ProviderLoginError::CleanupUnconfirmed)?
@@ -237,7 +254,29 @@ pub(crate) fn login_failure(error: ProbeFailure) -> ProviderLoginError {
 mod tests {
     use super::*;
 
+    fn ready_discovery<'a>(
+        mut provider: agentsassemble_domain::ProviderAvailability,
+        _: &'a crate::ProviderCredentialStore,
+        _: &'a CancellationToken,
+    ) -> crate::registration::ProviderDiscoveryFuture<'a> {
+        Box::pin(async move {
+            provider.discovery_status = "ready".into();
+            provider.available = true;
+            provider.startable = true;
+            provider
+        })
+    }
+
+    fn ready_catalog() -> crate::ProviderCatalogService {
+        crate::ProviderCatalogService::discovering_registrations(
+            vec![&SUCCESS],
+            &crate::ProviderCredentialStore::isolated_test_store(),
+            false,
+        )
+    }
+
     static SUCCESS: ProviderRegistration = ProviderRegistration {
+        discover: ready_discovery,
         probe_executable: "/usr/bin/true",
         login: Some(ProviderLoginSpec {
             flow: ProviderLoginFlow::BrowserOauth,
@@ -258,7 +297,7 @@ mod tests {
 
     #[tokio::test]
     async fn login_reports_native_exit_without_private_output_and_shutdown_rejects_new_work() {
-        let service = ProviderLoginService::new(CancellationToken::new());
+        let service = ProviderLoginService::new(CancellationToken::new(), ready_catalog());
         let (first, retry) = tokio::join!(
             service.login_registered(&SUCCESS),
             service.login_registered(&SUCCESS)
@@ -293,6 +332,80 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn dropped_login_request_keeps_catalog_completion_owned_and_reports_discovery_failure() {
+        static ENTERED: tokio::sync::Notify = tokio::sync::Notify::const_new();
+        static RELEASE: tokio::sync::Notify = tokio::sync::Notify::const_new();
+        fn gated<'a>(
+            provider: agentsassemble_domain::ProviderAvailability,
+            credentials: &'a crate::ProviderCredentialStore,
+            cancellation: &'a CancellationToken,
+        ) -> crate::registration::ProviderDiscoveryFuture<'a> {
+            Box::pin(async move {
+                ENTERED.notify_one();
+                RELEASE.notified().await;
+                ready_discovery(provider, credentials, cancellation).await
+            })
+        }
+        fn failed<'a>(
+            provider: agentsassemble_domain::ProviderAvailability,
+            _: &'a crate::ProviderCredentialStore,
+            _: &'a CancellationToken,
+        ) -> crate::registration::ProviderDiscoveryFuture<'a> {
+            Box::pin(async move { crate::catalog::failed_provider(provider, ProbeFailure::Failed) })
+        }
+        static GATED: ProviderRegistration = ProviderRegistration {
+            discover: gated,
+            login: Some(ProviderLoginSpec {
+                flow: ProviderLoginFlow::BrowserOauth,
+                arguments: &[],
+                environment: None,
+            }),
+            ..SUCCESS
+        };
+        static FAILED: ProviderRegistration = ProviderRegistration {
+            discover: failed,
+            login: Some(ProviderLoginSpec {
+                flow: ProviderLoginFlow::BrowserOauth,
+                arguments: &[],
+                environment: None,
+            }),
+            ..SUCCESS
+        };
+        let catalog = crate::ProviderCatalogService::discovering_registrations(
+            vec![&GATED],
+            &crate::ProviderCredentialStore::isolated_test_store(),
+            false,
+        );
+        let service = ProviderLoginService::new(CancellationToken::new(), catalog.clone());
+        let requester = service.clone();
+        let request = tokio::spawn(async move { requester.login_registered(&GATED).await });
+        ENTERED.notified().await;
+        request.abort();
+        assert!(request.await.is_err());
+        let joined = service.login_registered(&GATED);
+        tokio::pin!(joined);
+        assert!(futures_util::poll!(&mut joined).is_pending());
+        RELEASE.notify_one();
+        assert_eq!(joined.await, Ok(ProviderLoginOutcome::Authenticated));
+        assert_eq!(catalog.snapshot().providers[0].discovery_status, "ready");
+        assert_eq!(service.shutdown().await, Ok(()));
+        assert!(catalog.shutdown().await.is_ok());
+
+        let catalog = crate::ProviderCatalogService::discovering_registrations(
+            vec![&FAILED],
+            &crate::ProviderCredentialStore::isolated_test_store(),
+            false,
+        );
+        let service = ProviderLoginService::new(CancellationToken::new(), catalog.clone());
+        assert_eq!(
+            service.login_registered(&FAILED).await,
+            Err(ProviderLoginError::CatalogUnavailable)
+        );
+        assert_eq!(service.shutdown().await, Ok(()));
+        assert!(catalog.shutdown().await.is_ok());
+    }
+
+    #[tokio::test]
     async fn observed_cleanup_failure_blocks_replacement_and_survives_cancel_and_shutdown() {
         use std::sync::atomic::{AtomicUsize, Ordering};
         static LAUNCHES: AtomicUsize = AtomicUsize::new(0);
@@ -309,7 +422,7 @@ mod tests {
             }),
             ..crate::registration::CODEX_PROVIDER
         };
-        let service = ProviderLoginService::new(CancellationToken::new());
+        let service = ProviderLoginService::new(CancellationToken::new(), ready_catalog());
         let expected = Err(ProviderLoginError::CleanupUnconfirmed);
         assert_eq!(service.login_registered(&UNCONFIRMED).await, expected);
         assert_eq!(LAUNCHES.load(Ordering::SeqCst), 1);

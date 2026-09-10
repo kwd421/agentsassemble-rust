@@ -155,10 +155,11 @@ impl AppState {
             local_resources: crate::local_resources::LocalResources::default(),
             provider_update: agentsassemble_provider::ProviderUpdateService::new(
                 shutdown.child_token(),
-                provider_catalog,
+                provider_catalog.clone(),
             ),
             provider_login: agentsassemble_provider::ProviderLoginService::new(
                 shutdown.child_token(),
+                provider_catalog,
             ),
             provider_adapter,
             provider_usage: agentsassemble_provider::ProviderUsageService::new(

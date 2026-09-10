@@ -110,6 +110,14 @@ Cursor's installed `2026.08.11-e8db854` `src/commands/status.ts` implementation 
 `status --help` establish its JSON field and exit semantics. Claude is verified with
 controlled fixtures only under the approved real-provider scope.
 
+A confirmed login's provider-specific catalog refresh belongs to the login service's
+owned task, not its HTTP caller. Dropping the request cannot drop the completion
+refresh. Native success followed by failed catalog discovery keeps the existing
+`login_completed_catalog_unavailable` result; it must not be reported as a usable
+login/catalog state. Cancellation still joins the owned operation and preserves
+unconfirmed process custody. Interactive terminal launch remains Started, not
+Authenticated, and cannot substitute for a completed authentication result.
+
 Optional updates use the existing local update service. Selection reads versions
 automatically for a registered update-capable installed provider, after discovery
 and required login. No-newer-version results leave no permanent control. A newer

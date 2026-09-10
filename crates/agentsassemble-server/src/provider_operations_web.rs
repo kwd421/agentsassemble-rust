@@ -166,22 +166,6 @@ async fn login(
             json!({"provider_id":input.provider_id, "status":"started"}),
         ));
     }
-    let refreshed = state
-        .provider_catalog
-        .refresh_provider(&input.provider_id, true)
-        .await;
-    if !refreshed.is_ok_and(|catalog| {
-        catalog.status == "ready"
-            && catalog.providers.iter().any(|provider| {
-                provider.id == input.provider_id && provider.discovery_status == "ready"
-            })
-    }) {
-        return Err(ProviderOperationHttpError {
-            status: StatusCode::SERVICE_UNAVAILABLE,
-            code: "login_completed_catalog_unavailable",
-            message: "Login completed, but catalog refresh failed. Refresh the catalog again.",
-        });
-    }
     Ok(Json(
         json!({"provider_id": input.provider_id, "status": "authenticated"}),
     ))
@@ -344,6 +328,11 @@ impl ProviderOperationHttpError {
     }
     const fn from_login(error: ProviderLoginError) -> Self {
         let (status, code, message) = match error {
+            ProviderLoginError::CatalogUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "login_completed_catalog_unavailable",
+                "Login completed, but catalog refresh failed. Refresh the catalog again.",
+            ),
             ProviderLoginError::Unsupported => (
                 StatusCode::BAD_REQUEST,
                 "provider_login_unsupported",

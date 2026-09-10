@@ -9724,3 +9724,19 @@ and independent final reviews remain incomplete.
 The app was normally quit and its exact app/supervisor/server PIDs were confirmed
 absent. Computer Use was reset. The active isolated Phase 9 dataset and build
 artifacts remain available for continuing verification; artifact-check passes.
+
+### Login completion ownership follow-up (2026-09-10)
+
+The login service now owns the selected provider's catalog refresh after native
+login success. The HTTP handler only projects the final outcome. A cancelled or
+lost request cannot discard the refresh, and failed discovery preserves the existing
+`login_completed_catalog_unavailable` response. Interactive terminal launch remains
+Started rather than Authenticated. The existing cleanup retention is unchanged.
+
+A controlled catalog gate verifies request loss while completion is pending, a
+second request joining the same completion, final ready projection and discovery
+failure. All three login-owner tests pass (0.02 s); the real server operator-ticket
+boundary test passes (0.07 s), as do workspace all-target/all-feature Clippy and
+architecture/source-growth/19 policy checks. This verifies controlled completion
+ownership, not a fresh real OAuth round trip. Codex's personal configuration blocker
+and the previously recorded packaged verification limits remain open.
