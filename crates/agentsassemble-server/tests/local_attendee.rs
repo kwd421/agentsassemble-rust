@@ -54,15 +54,15 @@ async fn own_catalog_add_only_start_and_exact_cleanup_do_not_use_the_room_host_c
     let server = human_invite::start(store.clone()).await;
     let host_catalog = server.state().provider_catalog.snapshot();
     assert!(host_catalog.providers.is_empty());
-    let service = LocalAttendeeService::new(CancellationToken::new());
+    let service = LocalAttendeeService::new(store.clone(), CancellationToken::new());
     let request = request(&server.base_url, &invite, directory.path());
     let admitted = service
-        .create(request.clone(), catalog.clone(), store.clone(), adapter())
+        .create(request.clone(), catalog.clone(), adapter())
         .await?;
     assert_eq!(admitted.phase, Phase::Admitted);
     assert_eq!(
         service
-            .create(request.clone(), catalog.clone(), store.clone(), adapter())
+            .create(request.clone(), catalog.clone(), adapter())
             .await?,
         admitted
     );
@@ -71,7 +71,7 @@ async fn own_catalog_add_only_start_and_exact_cleanup_do_not_use_the_room_host_c
     changed.creation["display_name"] = "Changed retry".into();
     assert_eq!(
         service
-            .create(changed, catalog.clone(), store.clone(), adapter())
+            .create(changed, catalog.clone(), adapter())
             .await
             .err()
             .ok_or("expected retained failure")?
@@ -82,7 +82,7 @@ async fn own_catalog_add_only_start_and_exact_cleanup_do_not_use_the_room_host_c
     duplicate.request_id = Uuid::new_v4();
     assert_eq!(
         service
-            .create(duplicate, catalog, store.clone(), adapter())
+            .create(duplicate, catalog.clone(), adapter())
             .await
             .err()
             .ok_or("expected retained failure")?
@@ -110,6 +110,22 @@ async fn own_catalog_add_only_start_and_exact_cleanup_do_not_use_the_room_host_c
     );
     service.shutdown().await?;
     service.shutdown().await?;
+    let restarted = LocalAttendeeService::new(store.clone(), CancellationToken::new());
+    let restored = restarted.status(request.request_id).await?;
+    assert_eq!(restored.phase, Phase::CleanupUnconfirmed);
+    assert_eq!(
+        restored.error_code.as_deref(),
+        Some("local_attendee_process_restarted")
+    );
+    assert_eq!(
+        restarted
+            .create(request, catalog, adapter())
+            .await
+            .err()
+            .ok_or("expected receipt conflict")?
+            .code,
+        "local_attendee_receipt_unavailable"
+    );
     assert!(!store.snapshot("general", 0, 200).await?.agent_sessions[0].provider_session_active);
     server.stop().await;
     Ok(())
@@ -124,15 +140,10 @@ async fn dropped_waiter_retains_lost_admission_for_read_only_observation_and_exa
     let (store, invite) = attendee::fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let relay = Relay::start(&server.base_url, true, false).await?;
-    let service = LocalAttendeeService::new(CancellationToken::new());
+    let service = LocalAttendeeService::new(store.clone(), CancellationToken::new());
     let request = request(&relay.base, &invite, directory.path());
-    let (owner, input, models, library) = (
-        service.clone(),
-        request.clone(),
-        catalog.clone(),
-        store.clone(),
-    );
-    let waiter = tokio::spawn(async move { owner.create(input, models, library, adapter()).await });
+    let (owner, input, models) = (service.clone(), request.clone(), catalog.clone());
+    let waiter = tokio::spawn(async move { owner.create(input, models, adapter()).await });
     relay.gate.entered.notified().await;
     waiter.abort();
     assert!(
@@ -145,7 +156,7 @@ async fn dropped_waiter_retains_lost_admission_for_read_only_observation_and_exa
     relay.gate.release.notify_one();
     assert_eq!(
         service
-            .create(request.clone(), catalog, store.clone(), adapter())
+            .create(request.clone(), catalog, adapter())
             .await?
             .phase,
         Phase::AdmissionUnresolved
@@ -185,11 +196,9 @@ async fn remote_cleanup_failure_is_retained_across_cancel_and_concurrent_shutdow
     let (store, invite) = attendee::fixture().await?;
     let server = human_invite::start(store.clone()).await;
     let relay = Relay::start(&server.base_url, false, true).await?;
-    let service = LocalAttendeeService::new(CancellationToken::new());
+    let service = LocalAttendeeService::new(store.clone(), CancellationToken::new());
     let request = request(&relay.base, &invite, directory.path());
-    service
-        .create(request.clone(), catalog, store, adapter())
-        .await?;
+    service.create(request.clone(), catalog, adapter()).await?;
     let failure = service
         .cancel(request.request_id)
         .await

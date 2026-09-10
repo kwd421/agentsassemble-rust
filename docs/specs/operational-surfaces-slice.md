@@ -190,7 +190,16 @@ cleanup retains the client, runtime and terminal failure, including on repeated
 shutdown; it cannot become a fresh operation. Normal application shutdown joins
 these owners. Process restart never automatically launches a replacement attendee
 or treats an old invitation as an unused draft. Existing provider lease/guardian
-recovery and server expiry remain authoritative after process loss. No new room
+recovery and server expiry remain authoritative after process loss. Before dispatch,
+reserve the request ID and invitation fingerprint atomically in the local runtime's
+existing metadata store, using the same store as local persona selection. The
+receipt holds only room/request identity and an unresolved process-loss state; it
+contains no bearer, client secret, credentials, paths or executable selection. A
+new process reads this receipt as unresolved and cannot reserve the old request or
+invitation again. This is a restart guard, not reconstructed live custody. Even a
+previously completed operation remains unknown after losing its live owner; users
+check the room and use a new invitation. Keep receipts with the runtime's data;
+there is no polling, automatic deletion or schema conversion. No new room
 database replica, remote catalog refresh, credential forwarding, polling bridge or
 automatic installation is part of this correction.
 

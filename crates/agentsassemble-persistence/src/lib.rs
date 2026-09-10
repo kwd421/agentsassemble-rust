@@ -7,6 +7,7 @@ mod attendee_random;
 mod attendee_random_tests;
 mod attendee_tool_authority;
 mod attendee_tool_read;
+mod local_attendee_receipt;
 pub use attendee_random::{AttendeeRandomMutation, AttendeeRandomRequest};
 #[cfg(test)]
 mod attendee_tool_read_tests;

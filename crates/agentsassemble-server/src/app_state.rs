@@ -142,6 +142,8 @@ impl AppState {
         let central_host_identity =
             CentralHostIdentity::from_persistent(&persistent_host_identity)?;
         let shutdown = CancellationToken::new();
+        let local_attendees =
+            crate::LocalAttendeeService::new(store.clone(), shutdown.child_token());
         Ok(Self {
             rooms: RoomRuntime::with_provider_adapter(
                 store.clone(),
@@ -163,7 +165,7 @@ impl AppState {
                 provider_catalog,
             ),
             provider_adapter,
-            local_attendees: crate::LocalAttendeeService::new(shutdown.child_token()),
+            local_attendees,
             provider_usage: agentsassemble_provider::ProviderUsageService::new(
                 provider_credentials.clone(),
                 shutdown.child_token(),

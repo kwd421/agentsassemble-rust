@@ -9941,3 +9941,20 @@ the browser can match canonical membership without a timer or name-based guess.
 Local service and client boundary cases pass after this connection; server Clippy,
 bindings, architecture/growth/policy, format and diff checks pass. Native/browser
 integration and packaged acceptance remain pending.
+
+### Local attendee restart guard (2026-09-10)
+
+The local server reserves request and invitation identities in one transaction in
+its existing runtime metadata store before remote admission. The receipt excludes
+invitation/client secrets, credentials, paths and creation inputs. A replacement
+service reads an unresolved receipt and cannot launch again; current in-memory
+operations continue to own live readiness and cleanup. This intentionally does not
+reconstruct process custody or assert that an old operation is still running.
+
+A disk reopen retains the receipt; both identity conflicts fail, an invitation
+conflict rolls back its new request key, and corrupt stored JSON fails rather than
+becoming missing (1 case, 0.03s). The existing real-server lifecycle case now restores
+a new local service, reads the unresolved state and rejects old-request creation;
+all 3 service cases pass (9.02s), and authenticated HTTP creation passes (0.09s).
+Native/browser continuation and full affected-head packaged verification remain
+pending.

@@ -23,25 +23,31 @@ mod session;
 #[error("{code}")]
 pub struct LocalAttendeeError {
     pub code: String,
+    pub message: Option<String>,
 }
 
 impl LocalAttendeeError {
     fn new(code: &str) -> Self {
         Self {
             code: code.to_owned(),
+            message: None,
         }
     }
 }
 
 impl From<AttendeeClientError> for LocalAttendeeError {
     fn from(error: AttendeeClientError) -> Self {
-        Self { code: error.code }
+        Self {
+            code: error.code,
+            message: None,
+        }
     }
 }
 
 #[derive(Clone)]
 pub struct LocalAttendeeService {
     operations: Arc<Mutex<HashMap<Uuid, Arc<Operation>>>>,
+    store: SqliteStore,
     shutdown: CancellationToken,
 }
 
@@ -69,9 +75,10 @@ struct Custody {
 
 impl LocalAttendeeService {
     #[must_use]
-    pub fn new(shutdown: CancellationToken) -> Self {
+    pub fn new(store: SqliteStore, shutdown: CancellationToken) -> Self {
         Self {
             operations: Arc::default(),
+            store,
             shutdown,
         }
     }
@@ -84,7 +91,6 @@ impl LocalAttendeeService {
         &self,
         request: LocalAttendeeCreate,
         catalog: ProviderCatalogService,
-        store: SqliteStore,
         adapter: ProviderAdapter,
     ) -> Result<LocalAttendeeStatus, LocalAttendeeError> {
         let operation = {
@@ -111,12 +117,15 @@ impl LocalAttendeeService {
                         &request.creation,
                     )
                     .await
-                    .map_err(|error| LocalAttendeeError::new(error.code))?;
+                    .map_err(|error| LocalAttendeeError {
+                        code: error.code.to_owned(),
+                        message: Some(error.message),
+                    })?;
                 let persona = if selection.persona_card_id.is_empty() {
                     None
                 } else {
                     Some(
-                        store
+                        self.store
                             .persona_asset(&selection.persona_card_id)
                             .await
                             .map_err(|_| LocalAttendeeError::new("persona_asset_unavailable"))?,
@@ -135,6 +144,20 @@ impl LocalAttendeeService {
                 {
                     return Err(LocalAttendeeError::new("local_attendee_invitation_owned"));
                 }
+                self.store
+                    .reserve_local_attendee(
+                        &LocalAttendeeStatus {
+                            request_id: request.request_id,
+                            room_id: request.room_id.clone(),
+                            room_uid: request.room_uid,
+                            participant_id: None,
+                            phase: Phase::CleanupUnconfirmed,
+                            error_code: Some("local_attendee_process_restarted".to_owned()),
+                        },
+                        &client.invitation_identity(),
+                    )
+                    .await
+                    .map_err(|_| LocalAttendeeError::new("local_attendee_receipt_unavailable"))?;
                 let operation = self.spawn(request, client, selection, persona, adapter);
                 operations.insert(operation.request.request_id, operation.clone());
                 operation
@@ -212,7 +235,15 @@ impl LocalAttendeeService {
         &self,
         request_id: Uuid,
     ) -> Result<LocalAttendeeStatus, LocalAttendeeError> {
-        Operation::snapshot(&self.operation(request_id).await?.status)
+        let operations = self.operations.lock().await;
+        if let Some(operation) = operations.get(&request_id) {
+            return Operation::snapshot(&operation.status);
+        }
+        self.store
+            .local_attendee_receipt(request_id)
+            .await
+            .map_err(|_| LocalAttendeeError::new("local_attendee_receipt_unavailable"))?
+            .ok_or_else(|| LocalAttendeeError::new("local_attendee_missing"))
     }
 
     /// Retries only an uncertain admission, using its original secret and request identity.

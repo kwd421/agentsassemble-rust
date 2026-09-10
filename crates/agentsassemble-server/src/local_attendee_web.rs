@@ -52,12 +52,7 @@ async fn create(
     };
     state
         .local_attendees
-        .create(
-            input,
-            state.provider_catalog.clone(),
-            state.store.clone(),
-            adapter,
-        )
+        .create(input, state.provider_catalog.clone(), adapter)
         .await
         .map(Json)
         .map_err(HttpError::from)
@@ -98,6 +93,7 @@ fn request_id(value: &str) -> Result<Uuid, HttpError> {
     Uuid::parse_str(value).map_err(|_| HttpError {
         status: StatusCode::BAD_REQUEST,
         code: "invalid_local_attendee_request".to_owned(),
+        message: None,
     })
 }
 
@@ -107,6 +103,7 @@ async fn authorize(state: &AppState, headers: &axum::http::HeaderMap) -> Result<
         .ok_or_else(|| HttpError {
             status: StatusCode::UNAUTHORIZED,
             code: "unauthorized".to_owned(),
+            message: None,
         })?;
     Ok(())
 }
@@ -114,6 +111,7 @@ async fn authorize(state: &AppState, headers: &axum::http::HeaderMap) -> Result<
 struct HttpError {
     status: StatusCode,
     code: String,
+    message: Option<String>,
 }
 
 impl From<BodyDecodeError> for HttpError {
@@ -126,6 +124,7 @@ impl From<BodyDecodeError> for HttpError {
         Self {
             status,
             code: "invalid_local_attendee_request".to_owned(),
+            message: None,
         }
     }
 }
@@ -140,12 +139,13 @@ impl From<LocalAttendeeError> for HttpError {
         Self {
             status,
             code: error.code,
+            message: error.message,
         }
     }
 }
 
 impl IntoResponse for HttpError {
     fn into_response(self) -> Response {
-        (self.status, Json(json!({"error":{"code":self.code,"message":"이 PC의 참가 작업 결과를 확인하지 못했어요. 상태를 다시 확인해 주세요."}}))).into_response()
+        (self.status, Json(json!({"error":{"code":self.code,"message":self.message.as_deref().unwrap_or("이 PC의 참가 작업 결과를 확인하지 못했어요. 상태를 다시 확인해 주세요.")}}))).into_response()
     }
 }
