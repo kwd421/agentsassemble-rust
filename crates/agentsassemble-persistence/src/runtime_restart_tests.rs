@@ -342,12 +342,52 @@ async fn interrupted_reconstruction_uses_existing_custody_cleanup_before_failure
             "lease",
         )
         .await?;
-    assert!(
-        store
-            .fail_runtime_restart_after_cleanup(OPERATION)
-            .await
-            .is_err()
-    );
+    let captured = store
+        .load_runtime_reconciliation_candidate("general", AGENT_ID)
+        .await?
+        .ok_or("reconstruction custody missing")?;
+    store
+        .apply_runtime_shutdown_reconciliation(
+            &captured,
+            &crate::RuntimeReconciliationObservation::LeaseUncertain {
+                handle_id: captured.session.runtime_handle_id.clone(),
+                owner_id: captured.session.runtime_owner_id.clone(),
+                reason_code: "provider_stop_unconfirmed".to_owned(),
+            },
+        )
+        .await?;
+    for _ in 0..2 {
+        assert!(
+            store
+                .fail_runtime_restart_after_cleanup(OPERATION)
+                .await
+                .is_err()
+        );
+        let retained = store
+            .load_runtime_reconciliation_candidate("general", AGENT_ID)
+            .await?
+            .ok_or("unconfirmed custody was erased")?;
+        assert_eq!(
+            retained.session.runtime_handle_id,
+            captured.session.runtime_handle_id
+        );
+        assert_eq!(
+            retained.session.runtime_owner_id,
+            captured.session.runtime_owner_id
+        );
+        assert_eq!(
+            retained.session.runtime_lease_token,
+            captured.session.runtime_lease_token
+        );
+        assert!(retained.session.public.recovery_required);
+        assert_eq!(
+            store
+                .runtime_restart_status()
+                .await?
+                .map(|record| record.phase),
+            Some(RuntimeRestartPhase::Recovering)
+        );
+    }
     stop_restart_fixture(&store).await?;
     assert_eq!(
         store

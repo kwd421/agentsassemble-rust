@@ -62,6 +62,10 @@ mod managed_tools;
 #[path = "agent_session_boundary/managed_failure.rs"]
 mod managed_failure;
 
+#[cfg(unix)]
+#[path = "agent_session_boundary/runtime_recovery.rs"]
+mod runtime_recovery;
+
 static AGENT_BOUNDARY_LOCK: tokio::sync::Mutex<()> = tokio::sync::Mutex::const_new(());
 
 struct RunningServer {

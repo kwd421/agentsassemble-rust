@@ -161,16 +161,19 @@ pub async fn recover(
     state: &AppState,
     operation_id: &str,
     candidate_identity: &str,
+    cancellation: &CancellationToken,
 ) -> anyhow::Result<()> {
     let record = state
         .store
         .begin_runtime_restart_recovery(operation_id, candidate_identity)
         .await?;
     for target in record.targets {
+        require_recovery_active(cancellation)?;
         let session = state
             .store
             .runtime_restart_target(operation_id, &target.room_id, &target.session_id)
             .await?;
+        require_recovery_active(cancellation)?;
         let reservation = state.provider_adapter.reserve_start(&session).await?;
         let authorized = state
             .store
@@ -194,7 +197,7 @@ pub async fn recover(
         };
         let started = state
             .provider_adapter
-            .start_reserved(&authorized, None)
+            .start_reserved(&authorized, Some(cancellation))
             .await?;
         state
             .store
@@ -214,8 +217,17 @@ pub async fn recover(
             )
             .await?;
     }
+    require_recovery_active(cancellation)?;
     state.store.complete_runtime_restart(operation_id).await?;
-    wake_floor(state).await?;
+    wake_floor(state, cancellation).await?;
+    Ok(())
+}
+
+fn require_recovery_active(cancellation: &CancellationToken) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        !cancellation.is_cancelled(),
+        "runtime recovery was cancelled"
+    );
     Ok(())
 }
 
@@ -223,19 +235,24 @@ pub async fn recover(
 ///
 /// # Errors
 /// Refuses uncertain cleanup or failed floor recovery.
-pub async fn recover_abandoned(state: &AppState) -> anyhow::Result<()> {
+pub async fn recover_abandoned(
+    state: &AppState,
+    cancellation: &CancellationToken,
+) -> anyhow::Result<()> {
     if state
         .store
         .fail_abandoned_runtime_restart_after_cleanup()
         .await?
     {
-        wake_floor(state).await?;
+        wake_floor(state, cancellation).await?;
     }
     Ok(())
 }
 
-async fn wake_floor(state: &AppState) -> Result<(), PersistenceError> {
+async fn wake_floor(state: &AppState, cancellation: &CancellationToken) -> anyhow::Result<()> {
+    require_recovery_active(cancellation)?;
     for summary in state.store.list_room_directory(false).await? {
+        require_recovery_active(cancellation)?;
         let room = summary.room;
         if room.status != agentsassemble_domain::RoomStatus::Active
             || summary.cleanup_pending

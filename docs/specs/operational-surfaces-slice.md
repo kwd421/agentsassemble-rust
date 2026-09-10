@@ -248,6 +248,29 @@ serially multiplying their waits by runtime count violates this composition.
 Storage or OS stalls can still exhaust the outer envelope and remain unconfirmed.
 No inner failure is converted to success, and no unfinished runtime lease is
 released by a deadline or a kill request.
+Pre-Ready replacement recovery must observe parent-pipe loss before launching
+captured Sessions. The existing private descriptor remains the sole byte stream;
+observing its hangup must not consume queued requests or disturb handoff flags.
+Recovery receives the expected shutdown cancellation, stops admitting subsequent
+targets and joins any already-dispatched factory through the existing custody
+owner. Ordinary shutdown positively stops recovered runtimes before a failed
+restart barrier can be released. Unconfirmed cleanup retains its lease/barrier.
+Verification closes the parent pipe while the first of two eligible targets is
+held, proves no second launch, and observes actual cleanup/checkpoint before exit;
+queued control bytes and normal replacement readiness must also remain intact.
+The pre-Ready recovery join uses the existing 205-second per-runtime allowance;
+local attendees have not been admitted at that point. It therefore occupies the
+alternative to the 235-second attendee phase in the same 680-second envelope,
+followed by reconciliation and concurrent runtime cleanup. No deadline increases.
+The pipe owner uses Mio's read-closed event while recovery runs. A hangup-only
+`poll` wait failed with queued bytes in the actual macOS replacement pipe even
+after its last writer closed; the live queued-control reproduction requires the
+event-queue implementation. It consumes no stdin bytes and does not clear Tokio
+read readiness. Mio's Waker ends the wait and the startup owner joins it before
+normal control reading or executable handoff. Cost is one temporary blocking wait,
+one duplicated input descriptor and Mio's event queue/waker resources per startup,
+with no periodic wakeup or permanent task. Ordinary files/terminals retain their
+existing reader. Native attachment deadlines remain unchanged.
 An attendee that never published a runtime identity already has host-owned canonical
 removal completion. Its cleanup read must not issue an empty external stop delivery
 that can become stale when that same host completes removal. The existing local

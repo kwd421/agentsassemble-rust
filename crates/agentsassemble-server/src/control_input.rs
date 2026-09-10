@@ -1,8 +1,11 @@
-//! Unix control input has no blocking worker or read-ahead to survive an executable handoff.
+//! Unix control input has no blocking reader or read-ahead to survive executable handoff.
 use std::{
     fs::File,
     io::{self, IsTerminal, Read},
-    os::{fd::AsFd, unix::fs::FileTypeExt},
+    os::{
+        fd::{AsFd, AsRawFd},
+        unix::fs::FileTypeExt,
+    },
     pin::Pin,
     task::{Context, Poll},
 };
@@ -61,6 +64,64 @@ impl ControlInput {
         Ok(())
     }
 
+    /// Observe pipe loss while recovery owns startup, without consuming control bytes.
+    pub(crate) async fn during_recovery(
+        &self,
+        cancellation: &tokio_util::sync::CancellationToken,
+        recovery: impl std::future::Future<Output = io::Result<()>>,
+    ) -> io::Result<()> {
+        let kind = self.file().metadata()?.file_type();
+        if !kind.is_fifo() && !kind.is_socket() {
+            // Redirected files and terminals have no supervised parent-pipe lifetime.
+            return recovery.await;
+        }
+        let parent = self.file().try_clone()?;
+        let mut poll = mio::Poll::new()?;
+        poll.registry().register(
+            &mut mio::unix::SourceFd(&parent.as_raw_fd()),
+            mio::Token(0),
+            mio::Interest::READABLE,
+        )?;
+        let finished = mio::Waker::new(poll.registry(), mio::Token(1))?;
+        let signal = cancellation.clone();
+        let observer = tokio::task::spawn_blocking(move || {
+            // Keep the separately registered descriptor alive. Ordinary readable
+            // events leave bytes for the sole control reader; EOF is a distinct
+            // edge even when requests were queued before replacement startup.
+            let _parent = parent;
+            let mut events = mio::Events::with_capacity(2);
+            loop {
+                match poll.poll(&mut events, None) {
+                    Err(error) if error.kind() == io::ErrorKind::Interrupted => {}
+                    Err(error) => {
+                        signal.cancel();
+                        return Err(error);
+                    }
+                    Ok(()) => {
+                        if events.iter().any(|event| {
+                            event.token() == mio::Token(0)
+                                && (event.is_read_closed() || event.is_error())
+                        }) {
+                            signal.cancel();
+                            tracing::debug!("parent control ended during runtime recovery");
+                            return Ok(());
+                        }
+                        if events.iter().any(|event| event.token() == mio::Token(1)) {
+                            return Ok(());
+                        }
+                    }
+                }
+            }
+        });
+        let result = recovery.await;
+        // The startup owner wakes and joins its event wait before
+        // handing stdin to its sole reader or restoring descriptors for another image.
+        let wake_result = finished.wake();
+        observer.await.map_err(io::Error::other)??;
+        wake_result?;
+        result
+    }
+
     fn file(&self) -> &File {
         match &self.input {
             Input::Readiness(input) => input.get_ref(),
@@ -111,6 +172,57 @@ mod tests {
     use super::*;
     use std::os::unix::net::UnixStream;
     use tokio::io::AsyncReadExt;
+
+    #[tokio::test]
+    async fn recovery_observes_pipe_loss_without_consuming_queued_control_bytes() -> io::Result<()>
+    {
+        use tokio_util::sync::CancellationToken;
+        let (reader, writer) = rustix::pipe::pipe()?;
+        let mut writer = File::from(writer);
+        let cancellation = CancellationToken::new();
+        std::io::Write::write_all(&mut writer, b"queued\n")?;
+        let mut input = ControlInput::from_file(File::from(reader))?;
+        let (entered, entry) = tokio::sync::oneshot::channel();
+        let close = tokio::spawn(async move {
+            entry.await.map_err(io::Error::other)?;
+            drop(writer);
+            Ok::<_, io::Error>(())
+        });
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            input.during_recovery(&cancellation, async {
+                entered
+                    .send(())
+                    .map_err(|()| io::Error::other("entry receiver closed"))?;
+                cancellation.cancelled().await;
+                Ok(())
+            }),
+        )
+        .await??;
+        close.await.map_err(io::Error::other)??;
+        let mut remaining = Vec::new();
+        input.read_to_end(&mut remaining).await?;
+        assert_eq!(remaining, b"queued\n");
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn completed_recovery_joins_observer_and_preserves_live_input() -> io::Result<()> {
+        let (reader, mut writer) = UnixStream::pair()?;
+        let mut input = ControlInput::from_file(File::from(std::os::fd::OwnedFd::from(reader)))?;
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        std::io::Write::write_all(&mut writer, b"next\n")?;
+        tokio::time::timeout(
+            std::time::Duration::from_secs(5),
+            input.during_recovery(&cancellation, async { Ok(()) }),
+        )
+        .await??;
+        assert!(!cancellation.is_cancelled());
+        let mut remaining = [0; 5];
+        input.read_exact(&mut remaining).await?;
+        assert_eq!(&remaining, b"next\n");
+        Ok(())
+    }
 
     #[tokio::test]
     async fn cancellation_does_not_read_ahead_or_leave_descriptor_flags_changed() -> io::Result<()>

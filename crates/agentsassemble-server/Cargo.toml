@@ -49,7 +49,8 @@ which.workspace = true
 lol_html = "3.0.0"
 
 [target.'cfg(unix)'.dependencies]
-rustix = { workspace = true, features = ["net"] }
+rustix = { workspace = true, features = ["net", "pipe"] }
+mio = { version = "1.2.2", features = ["os-poll", "os-ext"] }
 command-fds.workspace = true
 listenfd = "1.0.2"
 

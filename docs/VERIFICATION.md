@@ -10307,3 +10307,73 @@ the existing maintenance owner removes 2.0 GiB and 24.9 GiB respectively; final
 artifact check passes. No gate limit, allowance or policy is weakened.
 Packaged browser/custom-scheme OS dispatch, two physical machines, broader mobile
 and the previously deferred real-provider/OAuth/installer flows remain unverified.
+
+### Parent loss during replacement recovery (2026-09-11)
+
+Pro's completed `a41b4f0c` answer, separate full verdict and N01–N31/R01–R04
+source evidence have been read. The ordinary shutdown correction is approved,
+but P13-M6 remains partially open as M6-R1 at C0/H0/M1/L0: before Ready, recovery
+does not observe parent EOF and may serially launch further captured sessions.
+Earlier M1–M5/L1/L2 and the two cleanup corrections remain closed. Phase 3 source
+approval does not close the current Phase 1–3 integration or independent later groups.
+
+The existing control input now observes read-closed events through Mio during
+startup recovery without consuming queued bytes or changing Tokio's readiness.
+Its startup owner wakes and joins that temporary wait before normal reading or
+executable handoff. Recovery passes its expected cancellation to the existing
+factory custody owner, joins an admitted start, stops before the next target and
+refuses Ready after cancellation. Positive ordinary cleanup remains necessary
+before releasing the failed restart barrier. Existing inner and outer deadlines
+are unchanged; the bounded pre-Ready start occupies the alternative to attendee
+drain in the existing envelope.
+
+The initial hangup-only poll implementation passed its pipe unit test but failed
+the actual macOS replacement with queued control requests: the supervisor's writer
+was already closed while the server's observer remained in poll. This version was
+rejected. Mio's queued-control reproduction passes through the actual supervisor
+and server executables, normal control/HTTP/WebSocket commands, two started native
+fixtures and executable replacement. The first recovery companion is held before
+native initialization completes; closing the parent's pipe is observed before
+release. Both sessions finish Stopped/inactive with no recovery requirement,
+lease or lifetime file; all fixture processes exit. Exactly one recovery companion
+starts, no second target launches, no extra Ready appears, and the restart barrier
+finishes Failed. Controlled provider responses are used, not real provider calls.
+
+The native integration case separately holds thread resume, cancels recovery,
+proves early barrier release is rejected and then observes native EOF, exact
+cleanup and no second launch. The existing persistence case now checks repeated
+unconfirmed cleanup retains the exact runtime identity, lease token and Recovering
+barrier. Pipe tests cover queued-byte preservation and joining the observer before
+return to live control input. The final workspace passes all 58 harnesses/917 tests,
+all-target/all-feature Clippy, formatting, architecture/growth, 19 policy cases and
+diff checks. Unchanged frontend 859/native 32 results remain scoped prior evidence.
+
+Signed 0.1.30 direct Add and Run creates two visible Idle sessions. Natural UI
+restart reaches Recovering, but the existing native five-second ticket timeout
+closes the parent pipe during slow factory preparation. Live capture before the
+desktop rotates logs proves EOF cancellation, joined attachment cleanup, Failed
+and subsequent fresh-runtime startup. This is successful early cancellation,
+not successful restart or held-companion verification. Both Python and small native
+fixtures show that outcome; it is not attributed solely to interpreter overhead.
+
+For the deeper held-factory case, the same signed app is temporarily SIGSTOP'd
+after both sessions are Idle. A normal Cmd-Q input is queued through Computer Use;
+the supported local `assemble rolling-restart` command starts replacement. The
+first native companion's startup socket supplies the causal barrier. The observer
+resumes only that test app immediately at the barrier, allowing the queued Quit to
+run without a tool round-trip exceeding the unchanged native initialization limit.
+This controlled scheduling is disclosed; it is not an unmodified timing run of
+the restart button. At parent EOF, 5.030 seconds after the barrier, app/supervisor/
+server remain alive. Only then is the companion released. All owned processes are
+gone 0.149 seconds later; both sessions are Stopped/inactive/recovery false with
+no lease/lifetime files. Exactly one recovery companion starts, the next target is
+not launched, only the initial Ready exists and the barrier becomes Failed.
+Earlier attempts that missed the native barrier or resumed after its deadline are
+not passing evidence. No production timeout, permission, receipt or test gate is
+weakened. Workspace all-target check also passes. The exact app and fixture processes
+are gone; Computer Use is reset and the isolated app identity, controlled CLI roots,
+temporary bundle/configuration and copied runtime images are removed. Sanitized
+observations remain. Artifact check reports 48,930,889,728 bytes against the unchanged
+19,327,352,832-byte limit. After all builds and app runs finish, the existing
+maintenance owner removes 44.3 GiB; final artifact check passes. Affected-head Pro
+re-review and independent later split groups remain pending.

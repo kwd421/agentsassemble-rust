@@ -27,16 +27,31 @@ impl ControlOwners {
         #[cfg(not(unix))]
         let mut stdin = tokio::io::stdin();
         #[cfg(unix)]
-        match (
-            args.reexec_operation.as_deref(),
-            args.reexec_image.as_deref(),
-        ) {
-            (Some(operation), Some(image)) => {
-                agentsassemble_server::runtime_restart::recover(state, operation, image).await
+        Box::pin(stdin.during_recovery(cancellation, async {
+            match (
+                args.reexec_operation.as_deref(),
+                args.reexec_image.as_deref(),
+            ) {
+                (Some(operation), Some(image)) => {
+                    agentsassemble_server::runtime_restart::recover(
+                        state,
+                        operation,
+                        image,
+                        cancellation,
+                    )
+                    .await
+                }
+                _ => {
+                    agentsassemble_server::runtime_restart::recover_abandoned(state, cancellation)
+                        .await
+                }
             }
-            _ => agentsassemble_server::runtime_restart::recover_abandoned(state).await,
+            .map_err(std::io::Error::other)
+        }))
+        .await?;
+        if cancellation.is_cancelled() {
+            return Err(std::io::Error::other("runtime startup was cancelled"));
         }
-        .map_err(std::io::Error::other)?;
         let mut stdout = tokio::io::stdout();
         write_json_line(
             &mut stdout,

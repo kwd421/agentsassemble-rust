@@ -59,7 +59,16 @@
   seconds while real remote cleanup responses are held, then finishes both add-only
   and Running cleanup with exact lease release before exit. Full workspace 914,
   frontend 859 and native 32 tests plus mandatory gates pass; isolated artifacts
-  are cleaned. Obtain current Phase 1–3 re-review before the remaining split groups.
+  are cleaned. Pro's completed `a41b4f0c` review leaves P13-M6 partially open as
+  M6-R1: pre-Ready recovery misses parent EOF and can start further targets.
+  Full verdict and N01–N31/R01–R04 evidence are read. Recovery cancellation and
+  joined cleanup now pass 917 workspace tests, mandatory source gates, actual
+  queued-control replacement and signed 0.1.30 early cancellation plus controlled
+  held-factory normal Quit. The app scheduling control and existing five-second
+  ticket-timeout behavior are disclosed in the evidence. Isolated artifacts are
+  cleaned and artifact check passes. Obtain current Phase 1–3 re-review before
+  the remaining split groups.
+  [Recovery evidence](docs/VERIFICATION.md#parent-loss-during-replacement-recovery-2026-09-11).
   Full flow acceptance remains open.
   [Latest evidence](docs/VERIFICATION.md#outer-shutdown-lifetime-correction-2026-09-10).
   Real installer/OAuth

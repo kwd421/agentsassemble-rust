@@ -30,7 +30,10 @@ pub const ATTENDEE_DRAIN_GRACE: Duration = Duration::from_secs(
     ) + ATTENDEE_REMOTE_CLEANUP_TIMEOUT.as_secs(),
 );
 
-// After attendees: connections, the current reconciliation effect (including its
+// Before Ready, parent loss joins only the already-admitted recovery start;
+// no local attendees can have been admitted yet. Its 205s allowance fits inside
+// the alternative 235s attendee phase below, rather than multiplying by targets.
+// After that: connections, the current reconciliation effect (including its
 // observation batch), room owners, concurrent managed runtimes, and catalog probes.
 // Login/update/usage and ingress drain alongside this last chain. OS/filesystem or
 // storage stalls are not completion proofs: this remains a finite emergency
