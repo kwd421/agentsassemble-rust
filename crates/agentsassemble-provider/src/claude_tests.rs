@@ -29,3 +29,27 @@ async fn catalog_without_fast_models_remains_selectable() {
     )
     .await;
 }
+#[test]
+fn authentication_requires_a_consistent_native_result() {
+    use crate::process::ProbeFailure;
+    for (code, body, expected) in [
+        (Some(0), r#"{"loggedIn":true}"#, Ok(())),
+        (
+            Some(1),
+            r#"{"loggedIn":false}"#,
+            Err(ProbeFailure::Authentication),
+        ),
+        (Some(1), r#"{"loggedIn":true}"#, Err(ProbeFailure::Failed)),
+        (None, r#"{"loggedIn":false}"#, Err(ProbeFailure::Failed)),
+        (
+            Some(1),
+            r#"{"error":"authentication store unavailable"}"#,
+            Err(ProbeFailure::Malformed),
+        ),
+    ] {
+        assert_eq!(
+            super::authentication_status(code, body.as_bytes()),
+            expected
+        );
+    }
+}

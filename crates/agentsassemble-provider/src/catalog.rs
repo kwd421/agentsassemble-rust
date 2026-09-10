@@ -76,14 +76,7 @@ pub(crate) async fn discover_codex(
     let Ok(home) = crate::codex::config::home() else {
         return failed_provider(provider, ProbeFailure::Failed);
     };
-    let output = match Box::pin(probe(
-        &executable,
-        &["debug", "models"],
-        cancellation,
-        &[("CODEX_HOME".to_owned(), home)],
-    ))
-    .await
-    {
+    let output = match codex_models(&executable, home, cancellation).await {
         Ok(output) => output,
         Err(error) => return failed_provider(provider, error),
     };
@@ -137,6 +130,37 @@ pub(crate) async fn discover_codex(
             permission_control(true),
         ],
     )
+}
+
+async fn codex_models(
+    executable: &str,
+    home: String,
+    cancellation: &CancellationToken,
+) -> Result<String, ProbeFailure> {
+    let environment = [("CODEX_HOME".to_owned(), home)];
+    let status = crate::process::probe_output(
+        executable,
+        &["login", "status"],
+        std::time::Duration::from_secs(10),
+        cancellation,
+        &environment,
+    )
+    .await?;
+    if !status.status.success() {
+        // Codex emits this exact result for absent credentials. Its other exit-1
+        // results include configuration/keyring errors and do not warrant login.
+        return Err(
+            if status.status.code() == Some(1)
+                && status.stdout.is_empty()
+                && status.stderr == b"Not logged in\n"
+            {
+                ProbeFailure::Authentication
+            } else {
+                ProbeFailure::Failed
+            },
+        );
+    }
+    probe(executable, &["debug", "models"], cancellation, &environment).await
 }
 
 pub(crate) async fn discover_opencode(

@@ -42,6 +42,7 @@ pub(crate) fn read<'a>(
         let payload = inspect(
             &executable,
             &["agent", "stdio"],
+            std::time::Duration::from_secs(10),
             cancellation,
             &environment,
             exchange,

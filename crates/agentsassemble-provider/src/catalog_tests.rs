@@ -6,6 +6,50 @@ use super::{
     discover_custom_api, failed_provider, opencode_models, ready_provider,
 };
 
+#[cfg(unix)]
+#[tokio::test]
+async fn codex_checks_credentials_before_models_and_keeps_failures_distinct()
+-> Result<(), Box<dyn std::error::Error>> {
+    use std::os::unix::fs::PermissionsExt;
+    let root = tempfile::tempdir()?;
+    let executable = root.path().join("codex");
+    let executable_text = executable.to_str().ok_or("fixture path")?;
+    let home = root.path().to_str().ok_or("fixture home")?.to_owned();
+    for (diagnostic, code, expected) in [
+        ("Not logged in", 1, Err(ProbeFailure::Authentication)),
+        (
+            "Error checking login status: unavailable",
+            1,
+            Err(ProbeFailure::Failed),
+        ),
+        ("Not logged in", 2, Err(ProbeFailure::Failed)),
+        ("Logged in using ChatGPT", 0, Ok("models".to_owned())),
+    ] {
+        std::fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$CODEX_HOME/calls\"\nif [ \"$1\" = login ]; then printf '%s\\n' '{diagnostic}' >&2; exit {code}; fi\nprintf models\n"
+            ),
+        )?;
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o700))?;
+        let success = expected.is_ok();
+        assert_eq!(
+            super::codex_models(executable_text, home.clone(), &CancellationToken::new()).await,
+            expected
+        );
+        assert_eq!(
+            std::fs::read_to_string(root.path().join("calls"))?,
+            if success {
+                "login status\ndebug models\n"
+            } else {
+                "login status\n"
+            }
+        );
+        std::fs::remove_file(root.path().join("calls"))?;
+    }
+    Ok(())
+}
+
 #[tokio::test]
 async fn cancelled_catalog_does_not_wait_for_stalled_filesystem_work() {
     let cancellation = CancellationToken::new();

@@ -9627,3 +9627,52 @@ The creation form's previously rejected permanent login/version/help controls st
 require the separately active flow correction. Authentication-required/completed/
 cancelled/failed flows, Update/Later and actual updater completion remain pending,
 as do independent final reviews and the separately deferred mobile UX acceptance.
+
+## Authentication need during creation (2026-09-10)
+
+Native probe errors no longer infer authentication from the words `auth` or `login`.
+Codex checks the explicit `login status` result before model discovery. Cursor checks
+its structured native credential state before ACP inspection, and Claude checks its
+structured status plus exit code before SDK inspection. Private status streams are
+not serialized, logged or included in public failures. Creation starts the existing
+login operation once when the selected local new-session provider explicitly needs
+authentication. Ready providers and remote-host provider selections have no local
+login action. Cancellation/failure retain the existing retry and draft behavior.
+
+The provider suite passes 243 tests before the additional Cursor/Claude status checks;
+those checks pass separately, as do the final five process-owner tests. The controlled
+Codex executable verifies that absent credentials and configuration/status errors issue
+zero model requests, while authenticated discovery uses the same configured home.
+The final frontend suite passes 145 files / 837 tests. Checks cover Strict Mode
+effect replay without duplicate login, cancellation
+reply ordering, successful completion with the edited draft intact, and no login for
+ready, generic-failure or remote-host selections. Workspace all-target/all-feature
+Clippy, TypeScript/build, CSS, architecture/source growth, nineteen policy tests,
+formatting, diff and artifact checks pass.
+
+Signed isolated 0.1.16 directly verified OpenCode selection and manual refresh with
+its model and edited name preserved and no login control. It also reproduced two
+limits: the installed Codex CLI rejects the current personal configuration with
+`invalid type: map, expected a boolean`, before both status and model commands;
+the configuration was not changed and this was not reclassified as missing login.
+Cursor's package model exchange exceeded the existing ten-second bound. A direct
+native check completed authentication status in 0.97 seconds, ACP initialization in
+0.325 seconds and its model response in 8.885 seconds. Only Cursor's model exchange
+budget is now twenty seconds; other inspection deadlines, cleanup and cancellation
+remain unchanged, without retries. This permits a longer bounded wait, not extra
+parallel work or background polling.
+
+Final signed 0.1.17 completes actual Cursor discovery, retains an edited name and
+the disabled start preference entered while discovery is pending, and creates the
+stopped `Cursor Authentication Verification` profile in the isolated workspace.
+The UI-selected Auto is the native `default` catalog value shown in the saved
+profile. No model inference or account changes were performed. Normal app exit and
+absence of its owned supervisor/server are confirmed; Computer Use was reset.
+Post-flow resident snapshots were approximately 124 MiB app / 9 MiB supervisor /
+54 MiB server, not peak-memory measurements. Active build artifacts are retained.
+
+Real unauthenticated OAuth completion/cancellation and the external interactive
+OpenCode handoff are not established by these packaged authenticated-provider checks.
+Codex's current CLI/configuration compatibility remains an external verification
+blocker. Optional-update presentation/execution, independent Pro review and deferred
+mobile acceptance remain active; this is not completion of the combined setup flow.

@@ -89,6 +89,27 @@ preserve the selected provider and creation inputs. Providers supporting unauthe
 local discovery remain usable without login. A generic discovery failure is not proof
 that authentication is required.
 
+Native process failure messages do not establish authentication state. The process
+owner bounds and privately returns exit status and streams; the provider owner
+interprets its documented authentication command. Codex checks `login status` with
+the same executable and CODEX_HOME used for discovery before `debug models`.
+Only its explicit no-login result requests authentication. Configuration, credential
+store and transport failures remain failures and must not trigger a replacement login.
+Cursor's `status --format json` must consistently report its credential state before
+ACP model discovery; Claude's `auth status` JSON and exit code must agree before SDK
+model inspection. These checks do not claim token freshness beyond the provider's
+own status contract. OpenCode's public unauthenticated model discovery stays usable.
+Creation starts login only for a local, new session with an explicit authentication
+requirement; an unchanged requirement does not repeatedly open authentication.
+Failure/cancellation leave a retry action and the draft in place. The existing local
+login service owns the operation, and its successful refresh remains provider-scoped.
+
+Native contract references: [Codex login implementation](https://github.com/openai/codex/blob/main/codex-rs/cli/src/login.rs),
+[Claude CLI reference](https://code.claude.com/docs/en/cli-reference).
+Cursor's installed `2026.08.11-e8db854` `src/commands/status.ts` implementation and
+`status --help` establish its JSON field and exit semantics. Claude is verified with
+controlled fixtures only under the approved real-provider scope.
+
 Acceptance must exercise the complete packaged creation flow: already authenticated,
 authentication required/completed/cancelled/failed, no update, Update/Later, updater
 completion/failure, and draft preservation. Confirm desktop rendering and disclose

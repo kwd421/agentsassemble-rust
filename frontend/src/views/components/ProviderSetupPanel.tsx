@@ -52,7 +52,7 @@ export default function ProviderSetupPanel({ providerId }: { providerId: string 
       </button>
       {error && <p role="alert" className="dc-agent-hint preserve-words">{error}</p>}
     </section>
-    {provider?.login_supported && <ProviderLogin providerId={provider.id} displayName={provider.display_name}
+    {provider?.login_supported && <ProviderLogin key={provider.id} providerId={provider.id} displayName={provider.display_name}
       onAuthenticated={() => void read(false)} />}
     <ProviderSetupActions providerId={providerId} />
     <p className="dc-agent-hint preserve-words">작업을 마치면 브라우저의 에이전트 추가 화면으로 돌아가 주세요.

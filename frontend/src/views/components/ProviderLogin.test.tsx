@@ -3,11 +3,23 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { postJsonServerOperator } from "../../api/http";
 import ProviderLogin from "./ProviderLogin";
 import { ApiError } from "../../lib/apiErrors";
+import { StrictMode } from "react";
 
 vi.mock("../../api/http", () => ({ postJsonServerOperator: vi.fn() }));
 vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: () => true }));
 afterEach(cleanup);
 beforeEach(() => vi.resetAllMocks());
+
+it("starts confirmed required login once across effect replay and rerenders", async () => {
+  let finish!: (value: unknown) => void;
+  vi.mocked(postJsonServerOperator).mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const view = render(<StrictMode><ProviderLogin providerId="codex" displayName="Codex" automatic /></StrictMode>);
+  await screen.findByText("로그인 창에서 안내를 따라 주세요.");
+  view.rerender(<StrictMode><ProviderLogin providerId="codex" displayName="Codex" automatic /></StrictMode>);
+  expect(postJsonServerOperator).toHaveBeenCalledExactlyOnceWith("/api/providers/login", { provider_id: "codex" });
+  await act(async () => finish({ provider_id: "codex", status: "authenticated" }));
+  expect(screen.getByText("로그인을 완료했어요.")).toBeTruthy();
+});
 
 it.each([
   ["started", "터미널에서 로그인을 마친 뒤 카탈로그를 갱신해 주세요."],

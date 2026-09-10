@@ -435,7 +435,10 @@ export default function AgentCreateModal({
             </section>
           )}
 
-          {selectedProvider?.login_supported && <ProviderLogin key={selectedProvider.id} providerId={selectedProvider.id} displayName={selectedProvider.display_name} />}
+          {localProviderActions && !existingSessionId && selectedProvider?.login_supported &&
+            selectedProvider.discovery_error_code === "authentication_required" &&
+            <ProviderLogin key={selectedProvider.id} providerId={selectedProvider.id}
+              displayName={selectedProvider.display_name} automatic />}
           {selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id} />}
           {selectedProvider && (
             <section className="dc-agent-section">

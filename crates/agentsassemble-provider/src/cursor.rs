@@ -28,6 +28,10 @@ pub(crate) async fn discover(
         Ok(authority) => authority,
         Err(failure) => return failed_provider(provider, failure),
     };
+    provider.executable.clone_from(&executable);
+    if let Err(failure) = check_authentication(&executable, cancellation).await {
+        return failed_provider(provider, failure);
+    }
     let identity = match await_filesystem(
         cancellation,
         crate::filesystem::cursor_executable_identity(executable.clone()),
@@ -47,6 +51,10 @@ pub(crate) async fn discover(
     let catalog = inspect(
         bound.launch_path(),
         &["acp"],
+        // Native initialization + model response measured 9.21 s; the old 10 s
+        // exchange deadline also expired in the package. Keep a bounded 20 s
+        // provider budget without changing other probes or adding retries.
+        std::time::Duration::from_secs(20),
         cancellation,
         &[],
         |stdin, stdout| async move {
@@ -64,5 +72,81 @@ pub(crate) async fn discover(
     match catalog {
         Ok(catalog) => ready_provider(provider, catalog.default_model.clone(), catalog.controls()),
         Err(failure) => failed_provider(provider, failure),
+    }
+}
+
+async fn check_authentication(
+    executable: &str,
+    cancellation: &CancellationToken,
+) -> Result<(), ProbeFailure> {
+    let output = crate::process::probe(
+        executable,
+        &["status", "--format", "json"],
+        cancellation,
+        &[],
+    )
+    .await?;
+    authentication_status(&output)
+}
+
+fn authentication_status(output: &str) -> Result<(), ProbeFailure> {
+    #[derive(serde::Deserialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Credentials {
+        status: String,
+        is_authenticated: bool,
+        has_access_token: bool,
+        has_refresh_token: bool,
+    }
+    let status: Credentials = serde_json::from_str(output).map_err(|_| ProbeFailure::Malformed)?;
+    match (
+        status.status.as_str(),
+        status.is_authenticated,
+        status.has_access_token,
+        status.has_refresh_token,
+    ) {
+        ("authenticated", true, true, true) => Ok(()),
+        ("unauthenticated", false, false, false)
+        | ("partially-authenticated", false, true, false) => Err(ProbeFailure::Authentication),
+        _ => Err(ProbeFailure::Malformed),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn only_explicit_cursor_credential_state_requests_login() {
+        for (status, authenticated, access, refresh, expected) in [
+            ("authenticated", true, true, true, Ok(())),
+            (
+                "unauthenticated",
+                false,
+                false,
+                false,
+                Err(ProbeFailure::Authentication),
+            ),
+            (
+                "partially-authenticated",
+                false,
+                true,
+                false,
+                Err(ProbeFailure::Authentication),
+            ),
+            (
+                "authenticated",
+                false,
+                false,
+                false,
+                Err(ProbeFailure::Malformed),
+            ),
+            ("error", false, false, false, Err(ProbeFailure::Malformed)),
+        ] {
+            let output = serde_json::json!({ "status":status, "isAuthenticated":authenticated,
+                "hasAccessToken":access, "hasRefreshToken":refresh })
+            .to_string();
+            assert_eq!(authentication_status(&output), expected);
+        }
     }
 }

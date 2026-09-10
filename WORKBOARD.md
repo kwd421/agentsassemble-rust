@@ -20,8 +20,12 @@
   [Corrected acceptance](docs/specs/operational-surfaces-slice.md#agent-creation-setup-flow-correction-2026-09-10).
   Selected local discovery is implemented at `e980eef7`; cache/authentication boundary
   tests and signed packaged creation, refresh, existing settings and restart pass.
-  Login/update flow correction and independent review remain active.
+  Confirmed authentication-need handling now passes scoped tests and packaged
+  OpenCode/Cursor creation checks; Codex's installed CLI rejects the current personal
+  configuration, which remains unchanged. Optional update flow correction,
+  unverified authentication outcomes and independent review remain active.
   [Scoped evidence](docs/VERIFICATION.md#selected-local-provider-discovery-2026-09-10).
+  [Authentication evidence](docs/VERIFICATION.md#authentication-need-during-creation-2026-09-10).
 
 - Active: complete the final split Pro reviews without pausing between results,
   correct supported findings, and verify/re-review the final changes, as requested

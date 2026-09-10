@@ -41,6 +41,25 @@ fn probe_environment_has_no_credential_names() {
 }
 
 #[tokio::test]
+async fn diagnostic_words_do_not_establish_authentication_need() {
+    for diagnostic in [
+        "login transport unavailable",
+        "authentication store unreadable",
+    ] {
+        assert_eq!(
+            probe(
+                "/bin/sh",
+                &["-c", "printf '%s' \"$1\" >&2; exit 1", "sh", diagnostic],
+                &CancellationToken::new(),
+                &[],
+            )
+            .await,
+            Err(ProbeFailure::Failed)
+        );
+    }
+}
+
+#[tokio::test]
 async fn unconfirmed_probe_cleanup_is_a_distinct_failure() {
     assert_eq!(
         terminate_probe_tree(&mut UnconfirmedCleanup).await,
@@ -114,6 +133,7 @@ async fn inspection_closes_its_exact_process_after_success_and_cancellation() {
         let operation = super::inspect(
             "/bin/sh",
             &["-c", "echo $$; exec sleep 30"],
+            Duration::from_secs(10),
             &cancellation,
             &[],
             |_, stdout| async move {

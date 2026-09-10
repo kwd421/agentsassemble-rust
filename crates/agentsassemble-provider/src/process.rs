@@ -83,6 +83,27 @@ pub(crate) async fn probe_with_timeout(
     cancellation: &CancellationToken,
     environment: &[(String, String)],
 ) -> Result<String, ProbeFailure> {
+    let output = probe_output(program, args, timeout, cancellation, environment).await?;
+    if !output.status.success() {
+        return Err(ProbeFailure::Failed);
+    }
+    String::from_utf8(output.stdout).map_err(|_| ProbeFailure::Malformed)
+}
+
+// Private streams can include account data. Do not derive Debug or publish them.
+pub(crate) struct ProbeOutput {
+    pub(crate) status: std::process::ExitStatus,
+    pub(crate) stdout: Vec<u8>,
+    pub(crate) stderr: Vec<u8>,
+}
+
+pub(crate) async fn probe_output(
+    program: &str,
+    args: &[&str],
+    timeout: Duration,
+    cancellation: &CancellationToken,
+    environment: &[(String, String)],
+) -> Result<ProbeOutput, ProbeFailure> {
     if cancellation.is_cancelled() {
         return Err(ProbeFailure::Cancelled);
     }
@@ -116,17 +137,11 @@ pub(crate) async fn probe_with_timeout(
         }
     };
     let (stdout, stderr, status) = output;
-    if !status.success() {
-        let diagnostic = String::from_utf8_lossy(&stderr).to_lowercase();
-        return Err(
-            if diagnostic.contains("login") || diagnostic.contains("auth") {
-                ProbeFailure::Authentication
-            } else {
-                ProbeFailure::Failed
-            },
-        );
-    }
-    String::from_utf8(stdout).map_err(|_| ProbeFailure::Malformed)
+    Ok(ProbeOutput {
+        status,
+        stdout,
+        stderr,
+    })
 }
 
 fn spawn_probe(
@@ -163,6 +178,7 @@ fn spawn_probe(
 pub(crate) async fn inspect<T, F, Fut>(
     program: &str,
     args: &[&str],
+    timeout: Duration,
     cancellation: &CancellationToken,
     environment: &[(String, String)],
     exchange: F,
@@ -194,7 +210,7 @@ where
     let outcome = tokio::select! {
         biased;
         () = cancellation.cancelled() => Err(ProbeFailure::Cancelled),
-        result = tokio::time::timeout(PROBE_TIMEOUT, exchange(stdin, stdout)) =>
+        result = tokio::time::timeout(timeout, exchange(stdin, stdout)) =>
             result.map_err(|_| ProbeFailure::Timeout).and_then(std::convert::identity),
         result = drain_errors => result,
     };

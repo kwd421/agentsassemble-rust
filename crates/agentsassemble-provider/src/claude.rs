@@ -41,6 +41,9 @@ pub(crate) async fn discover(
     };
     provider.executable.clone_from(&claude);
     provider.executable_identity = claude_identity;
+    if let Err(failure) = check_authentication(&claude, cancellation).await {
+        return failed_provider(provider, failure);
+    }
     let output = match inspect(&claude, Inspection::Catalog, cancellation).await {
         Ok(output) => output,
         Err(failure) => return failed_provider(provider, failure),
@@ -54,6 +57,35 @@ pub(crate) async fn discover(
 pub(crate) enum Inspection {
     Catalog,
     Usage,
+}
+
+async fn check_authentication(
+    executable: &str,
+    cancellation: &CancellationToken,
+) -> Result<(), ProbeFailure> {
+    let output = crate::process::probe_output(
+        executable,
+        &["auth", "status"],
+        std::time::Duration::from_secs(10),
+        cancellation,
+        &[],
+    )
+    .await?;
+    authentication_status(output.status.code(), &output.stdout)
+}
+
+fn authentication_status(code: Option<i32>, output: &[u8]) -> Result<(), ProbeFailure> {
+    #[derive(Deserialize)]
+    struct Status {
+        #[serde(rename = "loggedIn")]
+        logged_in: bool,
+    }
+    let status: Status = serde_json::from_slice(output).map_err(|_| ProbeFailure::Malformed)?;
+    match (code, status.logged_in) {
+        (Some(0), true) => Ok(()),
+        (Some(1), false) => Err(ProbeFailure::Authentication),
+        _ => Err(ProbeFailure::Failed),
+    }
 }
 
 pub(crate) async fn inspect(

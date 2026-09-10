@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { cancelProviderLogin, loginProvider } from "../../api/providerOperations";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 import { ApiError } from "../../lib/apiErrors";
@@ -18,27 +18,46 @@ function errorMessage(error: unknown, message: string): string {
   return error instanceof Error ? error.message : message;
 }
 
-export default function ProviderLogin({ providerId, displayName, onAuthenticated }: {
-  providerId: string; displayName: string; onAuthenticated?: () => void;
+export default function ProviderLogin({ providerId, displayName, onAuthenticated, automatic = false }: {
+  providerId: string; displayName: string; onAuthenticated?: () => void; automatic?: boolean;
 }) {
   const [busy, setBusy] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const [status, setStatus] = useState("");
-  if (!isDesktopWebview()) return null;
+  const inflight = useRef(false);
+  const authenticated = useRef(onAuthenticated);
+  authenticated.current = onAuthenticated;
+  const currentProvider = useRef(providerId);
+  currentProvider.current = providerId;
+  const desktop = isDesktopWebview();
 
-  async function login() {
+  const login = useCallback(async () => {
+    if (inflight.current) return;
+    inflight.current = true;
+    const onComplete = authenticated.current;
     setBusy(true);
     setStatus("로그인 창에서 안내를 따라 주세요.");
     try {
       const outcome = await loginProvider(providerId);
       setStatus(outcome === "started" ? "터미널에서 로그인을 마친 뒤 카탈로그를 갱신해 주세요." : "로그인을 완료했어요.");
-      if (outcome === "authenticated") onAuthenticated?.();
+      if (outcome === "authenticated" && currentProvider.current === providerId) onComplete?.();
     } catch (error) {
       setStatus(errorMessage(error, "로그인하지 못했어요."));
     } finally {
+      inflight.current = false;
       setBusy(false);
     }
-  }
+  }, [providerId]);
+
+  useEffect(() => {
+    let active = true;
+    if (desktop && automatic) {
+      void Promise.resolve().then(() => { if (active) void login(); });
+    }
+    return () => { active = false; };
+  }, [automatic, desktop, login]);
+
+  if (!desktop) return null;
 
   async function cancel() {
     setCancelling(true);

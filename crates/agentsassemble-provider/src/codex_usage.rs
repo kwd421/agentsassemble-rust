@@ -32,6 +32,7 @@ pub(crate) fn read<'a>(
         let payload = inspect(
             &executable,
             &arguments,
+            std::time::Duration::from_secs(10),
             cancellation,
             &[("CODEX_HOME".to_owned(), configuration.home)],
             exchange,
