@@ -2,10 +2,12 @@ import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
 import StartupIdentityBoundary from "./views/components/StartupIdentityBoundary";
+import LocalAttendeePanel from "./views/components/LocalAttendeePanel";
 import ProviderSetupPanel from "./views/components/ProviderSetupPanel";
 import { isDesktopWebview } from "./lib/desktopBridge";
 import "./index.css";
 
+const localAttendee = isDesktopWebview() && new URL(window.location.href).searchParams.has("attendee-create");
 const setupProvider = isDesktopWebview()
   ? new URL(window.location.href).searchParams.get("provider-setup") : null;
 
@@ -13,7 +15,7 @@ ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>
     <StartupIdentityBoundary>
       {({ deviceToken, clientId }) => (
-        setupProvider ? <ProviderSetupPanel providerId={setupProvider} />
+        localAttendee ? <LocalAttendeePanel /> : setupProvider ? <ProviderSetupPanel providerId={setupProvider} />
           : <App deviceToken={deviceToken} clientId={clientId} />
       )}
     </StartupIdentityBoundary>

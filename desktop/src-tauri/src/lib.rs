@@ -1,3 +1,4 @@
+mod attendee_handoff;
 mod central_login;
 mod provider_setup;
 use provider_setup::{open_provider_setup_help, runtime_provider_discovery};

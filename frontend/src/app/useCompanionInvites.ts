@@ -1,9 +1,11 @@
+import type { RoomEvent } from "../api";
+import { localAttendeeLink } from "../lib/localAttendee";
 import { useEffect, useRef, useState } from "react";
 import { attendeePacketText, createCompanionAttendeeInvite, type AttendeePacketCustody } from "../api/attendeeInvite";
 import { copyText } from "../lib/copyInviteText";
 import { roomGuestSessionExpired, type RoomGuestSession } from "../lib/roomGuestSession";
 
-export function useCompanionInvites(session: RoomGuestSession | null) {
+export function useCompanionInvites(session: RoomGuestSession | null, events: RoomEvent[] = []) {
   const current = useRef(session); current.current = session;
   const active = useRef(true);
   const busy = useRef(false);
@@ -67,6 +69,9 @@ export function useCompanionInvites(session: RoomGuestSession | null) {
     available: session !== null, provider, setProvider, displayName, setDisplayName, creating, status: notice.token === session?.sessionToken ? notice.text : "", create, copy,
     invites: records.filter((record) => record.sessionToken === session?.sessionToken && record.result.room_uid === session?.roomUid)
       .map((record) => ({ key: record.result.invite_id, displayName: record.result.display_name, provider: record.result.provider,
+        nativeLink: localAttendeeLink(record.result),
+        joined: events.some((event) => event.room_id === record.result.room_id && event.type === "agent_session_created" &&
+          event.attendee_invite_id === record.result.invite_id),
         expiresAt: record.result.expires_at, copyable: record.expiresAtMs > now && record.origin === window.location.origin })).reverse(),
   };
 }

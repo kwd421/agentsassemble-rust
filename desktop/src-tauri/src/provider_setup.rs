@@ -18,6 +18,12 @@ pub(crate) fn install(app: &AppHandle) -> Result<(), Box<dyn std::error::Error>>
 
 fn open_requested(app: &AppHandle, urls: Vec<url::Url>) {
     for url in urls {
+        if url.host_str() == Some("attend") {
+            if crate::attendee_handoff::open(app, &url).is_err() {
+                eprintln!("local_attendee_handoff_rejected");
+            }
+            continue;
+        }
         let Some(destination) = provider_setup_from_url(&url) else {
             // Do not print an external URL: it may contain credentials even when rejected.
             eprintln!("provider_setup_link_rejected");

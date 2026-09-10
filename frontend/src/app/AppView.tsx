@@ -87,10 +87,10 @@ export default function AppView({ controller }: { controller: AppController }) {
     canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
       participant.participant_type === "human" && participant.status === "joined" && !participant.muted);
   const companionInvites = useCompanionInvites(canPostHumanMessage && canonicalRoom.connectionState === "connected" &&
-    guestSession && !guestSession.operator && guestSession.meetingId === activeRoom.meetingId &&
+    guestSession && guestSession.meetingId === activeRoom.meetingId &&
     canonicalRoom.room?.room_id === guestSession.meetingId
     // Ordinary admission has no room UID; the accepted authenticated snapshot owns it.
-    ? { ...guestSession, roomUid: canonicalRoom.room.room_uid } : null);
+    ? { ...guestSession, roomUid: canonicalRoom.room.room_uid } : null, canonicalRoom.events);
   useLayoutEffect(() => { setCreateChannelScope(""); setSideChatScope(""); }, [channelScope]);
   // Recovery owns the entrance until its current session surface is accepted.
   // Do not mount native directory/profile controls beneath that entrance.
@@ -149,7 +149,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         }}
       />
 
-      <AppOverlays controller={controller} />
+      <AppOverlays controller={controller} companionInvites={companionInvites} />
       {/* Channel sidebar */}
       <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록" inert={mobileViewport && !mobileSidebarOpen}
         style={mobileViewport ? { left: MOBILE_ROOM_RAIL_WIDTH, width: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, minWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, maxWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)` } : undefined}>
@@ -449,7 +449,7 @@ export default function AppView({ controller }: { controller: AppController }) {
 
       {hasRoom && mobileRoomInfoOpen && (
         <MobileRoomInfoPanel
-          companionInvites={companionInvites.available ? companionInvites : undefined}
+          companionInvites={companionInvites.available && !guestSession?.operator ? companionInvites : undefined}
           room={activeRoom}
           appearance={activeAppearance}
           channelLabel={activeChannelDisplay.label}
@@ -524,7 +524,7 @@ export default function AppView({ controller }: { controller: AppController }) {
             data-testid="room-info-panel"
           >
             <RoomConnectionPanel
-              companionInvites={companionInvites.available ? companionInvites : undefined}
+              companionInvites={companionInvites.available && !guestSession?.operator ? companionInvites : undefined}
               room={activeRoom}
               agents={scopedAgents}
               members={activeRoomMembers}

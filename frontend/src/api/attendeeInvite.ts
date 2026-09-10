@@ -43,7 +43,11 @@ async function readPacket(response: Response, expected: Expected): Promise<Atten
       : "AI 참가 초대 결과를 확인하지 못했어요. 현재 권한을 확인하고 다시 시도해 주세요.";
     throw new Error(message);
   }
-  const value = strictRecord(await response.json(), "AI 참가 초대");
+  return parseAttendeeEntryPacket(await response.json(), expected);
+}
+
+export function parseAttendeeEntryPacket(input: unknown, expected: Expected): AttendeePacketCustody {
+  const value = strictRecord(input, "AI 참가 초대");
   const keys = ["request_id", "room_id", "room_uid", "invite_id", "expires_at", "display_name", "provider", "attend_command", "join_url"] as const;
   assertExactKeys(value, keys, "AI 참가 초대");
   const result = Object.fromEntries(keys.map((key) => [key, requiredString(value, key, "AI 참가 초대")])) as AttendeeEntryPacket;

@@ -1,4 +1,9 @@
+import { useState } from "react";
+import { isDesktopWebview } from "../lib/desktopBridge";
+import type { CompanionInviteControls } from "./useCompanionInvites";
+import OwnComputerCreateModal from "../views/components/OwnComputerCreateModal";
 import { createPortal } from "react-dom";
+import { agentCreationPayload } from "../api/agentSessions";
 
 import type { AppController } from "./useAppController";
 import AgentCreateModal from "../views/components/AgentCreateModal";
@@ -7,7 +12,10 @@ import LeaveRoomDialog from "../views/components/LeaveRoomDialog";
 import RoomInviteModal from "../views/components/RoomInviteModal";
 import RoomSettingsModal from "../views/components/RoomSettingsModal";
 
-export default function AppOverlays({ controller }: { controller: AppController }) {
+export default function AppOverlays({ controller, companionInvites }: { controller: AppController; companionInvites: CompanionInviteControls }) {
+  const [hostCreation, setHostCreation] = useState(false);
+  const ownComputer = !isDesktopWebview() && companionInvites.available && !hostCreation;
+  const closeCreation = () => { setHostCreation(false); controller.setAgentCreateOpen(false); };
   const {
     activeRoom, agentCreateOpen,
     canonicalRoom, canControlActiveAgents, closeInviteModal,
@@ -22,7 +30,6 @@ export default function AppOverlays({ controller }: { controller: AppController 
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
     roomSettings, roomSocket,
-    setAgentCreateOpen,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
     stopInviteTunnel, updateRoom,
@@ -132,16 +139,19 @@ export default function AppOverlays({ controller }: { controller: AppController 
           />
         )}
 
+        {agentCreateOpen && canControlActiveAgents && ownComputer && <OwnComputerCreateModal
+          roomLabel={activeRoom.label} providers={canonicalRoom.availableProviders} controls={companionInvites}
+          onClose={closeCreation} onHost={() => setHostCreation(true)} />}
         <AgentCreateModal
-          open={agentCreateOpen && canControlActiveAgents}
+          open={agentCreateOpen && canControlActiveAgents && !ownComputer}
           meetingId={activeRoom.meetingId}
           roomLabel={activeRoom.label}
           providers={canonicalRoom.availableProviders}
           catalogRevision={canonicalRoom.providerCatalog.catalog_revision}
-          localProviderActions={!guestLocked}
+          localProviderActions={isDesktopWebview() && !guestLocked}
           existingSessions={canonicalRoom.agentSessions}
           participants={canonicalRoom.participantRecords}
-          onClose={() => setAgentCreateOpen(false)}
+          onClose={closeCreation}
           onCreate={async (request) => {
             if (!roomSocket?.ready()) {
               throw new Error("방 연결이 아직 준비되지 않았습니다");
@@ -153,21 +163,7 @@ export default function AppOverlays({ controller }: { controller: AppController 
               });
               return;
             }
-            await roomSocket.command("agent.create", {
-              provider_id: request.providerId,
-              catalog_revision: request.catalogRevision || "",
-              display_name: request.displayName,
-              workspace: request.workspacePath,
-              provider_endpoint: request.providerEndpoint || "",
-              model: request.modelId || "",
-              reasoning_effort: request.reasoningEffort || "",
-              service_tier: request.serviceTier || "",
-              variant: request.variant || "",
-              permission_mode: request.permissionMode || "meeting_read_only",
-              max_output_tokens: request.maxOutputTokens || 0,
-              persona_card_id: request.personaCardId || "",
-              start: Boolean(request.startNow),
-            });
+            await roomSocket.command("agent.create", agentCreationPayload(request));
           }}
         />
 

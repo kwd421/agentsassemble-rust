@@ -9958,3 +9958,23 @@ a new local service, reads the unresolved state and rejects old-request creation
 all 3 service cases pass (9.02s), and authenticated HTTP creation passes (0.09s).
 Native/browser continuation and full affected-head packaged verification remain
 pending.
+
+### Own-computer creation continuation (2026-09-10)
+
+The browser's own-computer destination uses its existing companion invitation
+owner. It retains provider/name inputs across host catalog changes and distinguishes
+the matching committed admission event from merely opening an app link. Ordinary
+human invite cards retain CLI copying and add local creation/status links. Paired
+browser operators can explicitly retain the room-host creation path. The local
+bundled window selects only its own catalog, credentials, models, folders and
+personas, reusing normal login/update controls. Local catalog results update this
+standalone consumer without introducing a room socket or poller.
+
+Frontend tests cover rejected-draft preservation, exact-input transport-loss retry,
+add/start/cancel, restoring a running owner without probing or launching, cold/ready
+host catalogs and exact admission-event matching. All 856 frontend tests pass
+(149 files, 25.50s); the final affected 7 cases pass after the restart message and
+fixture type correction (2.41s). Production frontend build and original CSS check
+pass. Native URL boundary validation and existing desktop tests pass (30 cases,
+1.11s), with desktop Clippy passing. Browser-to-OS dispatch, integrated packaged
+continuation and real two-machine proof remain unverified at this checkpoint.

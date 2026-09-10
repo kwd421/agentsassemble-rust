@@ -25,7 +25,8 @@ import {
 } from "../../lib/providerCatalogGroups";
 import ProviderLogo from "./ProviderLogo";
 import ProviderModelRefresh from "./ProviderModelRefresh";
-import { refreshLocalProviderCatalog } from "../../api/providerOperations";
+import type { ProviderCatalog } from "../../types/generated/ProviderCatalog";
+import { fetchLocalProviderCatalog, refreshLocalProviderCatalog } from "../../api/providerOperations";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 import ProviderLogin from "./ProviderLogin";
 import ProviderSetupActions from "./ProviderSetupActions";
@@ -49,6 +50,8 @@ type AgentCreateModalProps = {
   participants?: RoomMember[];
   catalogRevision?: string;
   localProviderActions?: boolean;
+  initialSelection?: { providerId: string; displayName: string };
+  onCatalogChange?: (catalog: ProviderCatalog) => void;
   onClose: () => void;
   onCreate: (request: FrontendLiveAgentCreateRequest) => Promise<void>;
   onCreated?: () => void;
@@ -63,6 +66,8 @@ export default function AgentCreateModal({
   participants = [],
   catalogRevision = "",
   localProviderActions = true,
+  initialSelection,
+  onCatalogChange,
   onClose,
   onCreate,
   onCreated,
@@ -152,7 +157,12 @@ export default function AgentCreateModal({
     if (!providers.length) return;
     const current = visibleProviders.find((provider) => provider.id === providerId);
     if (!wasOpen.current) {
-      if (current) applyProvider(current);
+      const initial = initialSelection && providers.find((item) => item.id === initialSelection.providerId);
+      if (initial) {
+        applyProvider(initial);
+        setDisplayName(initialSelection!.displayName);
+        setDisplayNameEdited(true);
+      } else if (current) applyProvider(current);
       setStatus("");
       wasOpen.current = true;
       return;
@@ -176,6 +186,7 @@ export default function AgentCreateModal({
   useEffect(() => {
     if (
       !open ||
+      !localProviderActions ||
       !selectedProvider ||
       !selectedProvider.credential_available
     ) {
@@ -189,7 +200,7 @@ export default function AgentCreateModal({
       .then((result) => { if (current) setCredentialStatus(result); })
       .catch((error) => { if (current) setStatus(error instanceof Error ? error.message : "키 상태 확인 실패"); });
     return () => { current = false; };
-  }, [open, selectedProvider?.id, selectedProvider?.credential_available]);
+  }, [open, localProviderActions, selectedProvider?.id, selectedProvider?.credential_available]);
 
   function applyProvider(provider: NativeCliProviderAvailability) {
     setExistingSessionId("");
@@ -309,7 +320,10 @@ export default function AgentCreateModal({
       setCredentialStatus(credentialStatus);
       setProviderApiKey("");
       setStatus(`${selectedProvider.display_name} 키를 저장했어요.`);
-      if (localProviderActions && isDesktopWebview()) await refreshLocalProviderCatalog(selectedProvider.id);
+      if (localProviderActions && isDesktopWebview()) {
+        const catalog = await refreshLocalProviderCatalog(selectedProvider.id);
+        onCatalogChange?.(catalog);
+      }
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -329,7 +343,10 @@ export default function AgentCreateModal({
       setCredentialStatus(await deleteProviderCredential(selectedProvider.id));
       setProviderApiKey("");
       setStatus(`${selectedProvider.display_name} 저장 키를 삭제했습니다`);
-      if (localProviderActions && isDesktopWebview()) await refreshLocalProviderCatalog(selectedProvider.id);
+      if (localProviderActions && isDesktopWebview()) {
+        const catalog = await refreshLocalProviderCatalog(selectedProvider.id);
+        onCatalogChange?.(catalog);
+      }
     } catch (error) {
       setStatus(
         error instanceof Error
@@ -339,6 +356,12 @@ export default function AgentCreateModal({
     } finally {
       setCredentialBusy(false);
     }
+  }
+
+  async function readUpdatedCatalog() {
+    if (!onCatalogChange) return;
+    try { onCatalogChange(await fetchLocalProviderCatalog()); }
+    catch (error) { setStatus(error instanceof Error ? error.message : "제공자 상태를 확인하지 못했어요."); }
   }
 
   function renderProviderChoice(provider: NativeCliProviderAvailability) {
@@ -415,6 +438,7 @@ export default function AgentCreateModal({
           {providerGroup && (
             <section className="dc-agent-section">
               <ProviderModelRefresh
+                onCatalogChange={onCatalogChange}
                 localAvailable={localProviderActions}
                 title={`${providerGroupLabel(providerGroup)} Providers`}
                 providerId={existingSessionId ? "" : selectedProvider?.id || ""}
@@ -439,9 +463,9 @@ export default function AgentCreateModal({
           {localProviderActions && !existingSessionId && selectedProvider?.login_supported &&
             selectedProvider.discovery_error_code === "authentication_required" &&
             <ProviderLogin key={selectedProvider.id} providerId={selectedProvider.id}
-              displayName={selectedProvider.display_name} automatic />}
-          {selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id}
-            provider={selectedProvider} localAvailable={localProviderActions}
+              displayName={selectedProvider.display_name} automatic onAuthenticated={() => void readUpdatedCatalog()} />}
+          {localProviderActions && selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id}
+            provider={selectedProvider} localAvailable={localProviderActions} onUpdated={() => void readUpdatedCatalog()}
             onUpdating={(updating) => setUpdatingProviders((current) => {
               const next = new Set(current);
               if (updating) next.add(selectedProvider.id);
@@ -567,7 +591,7 @@ export default function AgentCreateModal({
             </section>
           )}
 
-          {selectedProvider?.credential_available && (
+          {localProviderActions && selectedProvider?.credential_available && (
             <ProviderCredentialField
               provider={selectedProvider}
               status={credentialStatus}

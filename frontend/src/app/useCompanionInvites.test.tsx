@@ -49,3 +49,24 @@ it("does not publish a response into a replacement human session", async () => {
   expect(hook.result.current.invites).toEqual([]);
   expect(hook.result.current.status).toBe("");
 });
+
+it("hands off only invitation identity and marks admission only from the matching committed event", async () => {
+  const { result, rerender } = renderHook(({ events }) => useCompanionInvites(session, events),
+    { initialProps: { events: [] as import("../api").RoomEvent[] } });
+  act(() => { result.current.setProvider("codex"); result.current.setDisplayName("Companion"); });
+  const issued = packet();
+  api.create.mockResolvedValueOnce(issued);
+  await act(() => result.current.create());
+  const link = new URL(result.current.invites[0].nativeLink);
+  expect(link.protocol).toBe("agentsassemble:");
+  expect(link.hostname).toBe("attend");
+  const handoff = JSON.parse(new URLSearchParams(link.hash.slice(1)).get("packet")!);
+  expect(handoff).toEqual(issued.result);
+  expect(result.current.invites[0].nativeLink).not.toContain(session.sessionToken);
+  expect(result.current.invites[0].joined).toBe(false);
+  const created = { v: 1, id: "event", seq: 1, created_at: "2026-09-10T00:00:00Z", actor: { participant_id: "server", participant_type: "system" }, room_id: "general", type: "agent_session_created", attendee_invite_id: "another-invite", display_name: "Companion" } as import("../api").RoomEvent;
+  rerender({ events: [created] });
+  expect(result.current.invites[0].joined).toBe(false);
+  rerender({ events: [{ ...created, attendee_invite_id: "invite" }] });
+  expect(result.current.invites[0].joined).toBe(true);
+});

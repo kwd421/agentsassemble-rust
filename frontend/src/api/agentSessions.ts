@@ -20,3 +20,21 @@ export interface FrontendLiveAgentCreateRequest {
   personaCardId?: string;
   startNow?: boolean;
 }
+
+export function agentCreationPayload(request: FrontendLiveAgentCreateRequest) {
+  return {
+    provider_id: request.providerId,
+    catalog_revision: request.catalogRevision || "",
+    display_name: request.displayName,
+    workspace: request.workspacePath,
+    provider_endpoint: request.providerEndpoint || "",
+    model: request.modelId || "",
+    reasoning_effort: request.reasoningEffort || "",
+    service_tier: request.serviceTier || "",
+    variant: request.variant || "",
+    permission_mode: request.permissionMode || "meeting_read_only",
+    max_output_tokens: request.maxOutputTokens || 0,
+    persona_card_id: request.personaCardId || "",
+    start: Boolean(request.startNow),
+  };
+}

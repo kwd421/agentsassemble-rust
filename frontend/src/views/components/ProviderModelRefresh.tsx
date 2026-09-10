@@ -1,15 +1,18 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { refreshLocalProviderCatalog } from "../../api/providerOperations";
+import type { ProviderCatalog } from "../../types/generated/ProviderCatalog";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 
-export default function ProviderModelRefresh({ title, providerId, automaticAllowed, localAvailable = true }: {
-  title: string; providerId: string; automaticAllowed: boolean; localAvailable?: boolean;
+export default function ProviderModelRefresh({ title, providerId, automaticAllowed, localAvailable = true, onCatalogChange }: {
+  title: string; providerId: string; automaticAllowed: boolean; localAvailable?: boolean; onCatalogChange?: (catalog: ProviderCatalog) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
   const desktop = localAvailable && isDesktopWebview();
   const generation = useRef(0);
+  const catalogChanged = useRef(onCatalogChange);
+  catalogChanged.current = onCatalogChange;
 
   const refresh = useCallback(async (force: boolean, signal?: AbortSignal) => {
     if (!providerId) return;
@@ -19,6 +22,7 @@ export default function ProviderModelRefresh({ title, providerId, automaticAllow
     try {
       const catalog = await refreshLocalProviderCatalog(providerId, force, signal);
       if (signal?.aborted || current !== generation.current) return;
+      catalogChanged.current?.(catalog);
       const provider = catalog.providers.find((entry) => entry.id === providerId);
       if (!provider || provider.discovery_status !== "ready") {
         throw new Error(provider?.discovery_error || "이 제공자의 모델 목록을 확인하지 못했어요.");
