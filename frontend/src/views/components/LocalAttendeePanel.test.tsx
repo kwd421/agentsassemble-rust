@@ -7,6 +7,7 @@ import { ApiError } from "../../lib/apiErrors";
 import { localAttendeeLink } from "../../lib/localAttendee";
 import { codexProvider } from "./AgentCreateModal.testProviders";
 import LocalAttendeePanel from "./LocalAttendeePanel";
+import type { LocalAttendeeStatus } from "../../types/generated/LocalAttendeeStatus";
 
 vi.mock("../../api/localAttendee", async (original) => ({ ...await original<typeof import("../../api/localAttendee")>(),
   createLocalAttendee: vi.fn(), fetchLocalAttendee: vi.fn(), commandLocalAttendee: vi.fn() }));
@@ -82,4 +83,50 @@ it("restores an existing operation without mounting setup or submitting again", 
   expect(screen.queryByRole("dialog")).toBeNull();
   expect(refreshLocalProviderCatalog).not.toHaveBeenCalled();
   expect(createLocalAttendee).not.toHaveBeenCalled();
+});
+
+it.each([false, true])("cancels while %s create-and-start is held and ignores its late running result", async (createAndStart) => {
+  let finish!: (value: LocalAttendeeStatus) => void;
+  const held = new Promise<LocalAttendeeStatus>((resolve) => { finish = resolve; });
+  const stopped: LocalAttendeeStatus = { ...admitted, phase: "stopped" };
+  vi.mocked(createLocalAttendee).mockReturnValue(createAndStart ? held : Promise.resolve(admitted));
+  vi.mocked(commandLocalAttendee).mockImplementation(async (_packet, action) => action === "cancel" ? stopped : held);
+  render(<LocalAttendeePanel />);
+  await chooseDraft();
+  if (createAndStart) fireEvent.click(screen.getByRole("button", { name: "추가하고 실행" }));
+  else {
+    fireEvent.click(screen.getByRole("switch", { name: "추가하자마자 실행" }));
+    fireEvent.click(screen.getByRole("button", { name: "추가" }));
+    fireEvent.click(await screen.findByRole("button", { name: "이 PC에서 실행" }));
+  }
+  const cancel = await screen.findByRole("button", { name: "에이전트 종료하고 나가기" });
+  expect((cancel as HTMLButtonElement).disabled).toBe(false);
+  fireEvent.click(cancel);
+  await screen.findByText("에이전트 종료와 방 나가기를 확인했어요.");
+  expect(commandLocalAttendee).toHaveBeenLastCalledWith(packet, "cancel");
+  await act(async () => finish({ ...admitted, phase: "running" }));
+  expect(screen.queryByText("이 PC에서 실행 중이에요.")).toBeNull();
+  expect(screen.getByText("에이전트 종료와 방 나가기를 확인했어요.")).toBeTruthy();
+  expect(createLocalAttendee).toHaveBeenCalledTimes(1);
+});
+
+it("retains a failed cancel and exact status access instead of allowing a replacement creation", async () => {
+  let finish!: (value: LocalAttendeeStatus) => void;
+  vi.mocked(createLocalAttendee).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  vi.mocked(commandLocalAttendee).mockRejectedValueOnce(missing()).mockResolvedValueOnce({ ...admitted, phase: "stopped" });
+  render(<LocalAttendeePanel />);
+  await chooseDraft();
+  fireEvent.click(screen.getByRole("button", { name: "추가하고 실행" }));
+  fireEvent.click(await screen.findByRole("button", { name: "에이전트 종료하고 나가기" }));
+  await screen.findByRole("alert");
+  await act(async () => finish({ ...admitted, phase: "running" }));
+  expect(screen.queryByRole("button", { name: "같은 요청 다시 시도" })).toBeNull();
+  expect(screen.queryByText("에이전트 종료와 방 나가기를 확인했어요.")).toBeNull();
+  vi.mocked(fetchLocalAttendee).mockResolvedValue({ ...admitted, phase: "running" });
+  fireEvent.click(screen.getByRole("button", { name: "상태 다시 확인" }));
+  await screen.findByText("이 PC에서 실행 중이에요.");
+  fireEvent.click(screen.getByRole("button", { name: "에이전트 종료하고 나가기" }));
+  await screen.findByText("에이전트 종료와 방 나가기를 확인했어요.");
+  expect(commandLocalAttendee).toHaveBeenCalledTimes(2);
+  expect(createLocalAttendee).toHaveBeenCalledTimes(1);
 });

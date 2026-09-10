@@ -187,6 +187,78 @@ async fn self_targeted_attendees_finish_cleanup_before_their_server_closes_ingre
 }
 
 #[tokio::test]
+async fn held_native_start_can_be_cancelled_through_private_http_without_waiting_for_readiness()
+-> Result<(), Box<dyn std::error::Error>> {
+    use tokio::io::AsyncReadExt;
+    for create_and_start in [false, true] {
+        let directory = tempfile::tempdir()?;
+        let barrier = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let fixture = format!(
+            "#!/usr/bin/env python3\nimport socket,sys\nsys.stdin.readline()\ns=socket.create_connection(('127.0.0.1',{}))\ns.sendall(b'1')\ns.recv(1)\n",
+            barrier.local_addr()?.port()
+        );
+        let catalog = ProviderCatalogService::fixed(provider_fixture::agent_catalog(
+            directory.path(),
+            Some(fixture.as_bytes()),
+        ));
+        let (store, invite) = attendee::fixture().await?;
+        let server = human_invite::start(store.clone()).await;
+        let service = server.state().local_attendees.clone();
+        let mut input = request(&server.base_url, &invite, directory.path());
+        input.creation["start"] = create_and_start.into();
+        let id = input.request_id;
+        if !create_and_start {
+            assert_eq!(
+                service
+                    .create(input.clone(), catalog.clone(), adapter())
+                    .await?
+                    .phase,
+                Phase::Admitted
+            );
+        }
+        let owner = service.clone();
+        let pending = tokio::spawn(async move {
+            if create_and_start {
+                owner.create(input, catalog, adapter()).await
+            } else {
+                owner.start(id).await
+            }
+        });
+        let (mut gate, _) =
+            tokio::time::timeout(std::time::Duration::from_secs(10), barrier.accept()).await??;
+        assert_eq!(gate.read_u8().await?, b'1');
+        assert!(!pending.is_finished());
+        let ticket = server
+            .state()
+            .tickets
+            .issue_server_operator(agentsassemble_domain::LOCAL_OPERATOR_USER_ID.to_owned())
+            .await?
+            .ticket;
+        let response = reqwest::Client::new()
+            .post(format!("{}/api/local-attendees/{id}", server.base_url))
+            .bearer_auth(ticket)
+            .json(&json!({"action":"cancel"}))
+            .send()
+            .await?;
+        assert_eq!(response.status(), reqwest::StatusCode::OK);
+        let stopped: agentsassemble_domain::LocalAttendeeStatus = response.json().await?;
+        assert_eq!(stopped.phase, Phase::Stopped);
+        assert_eq!(pending.await??.phase, Phase::Stopped);
+        assert_eq!(
+            gate.read(&mut [0]).await?,
+            0,
+            "the held native process must be gone"
+        );
+        let snapshot = store.snapshot("general", 0, 200).await?;
+        assert_eq!(snapshot.agent_sessions.len(), 1);
+        assert!(!snapshot.agent_sessions[0].provider_session_active);
+        assert!(!snapshot.agent_sessions[0].recovery_required);
+        server.stop().await;
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn dropped_waiter_retains_lost_admission_for_read_only_observation_and_exact_retry()
 -> Result<(), Box<dyn std::error::Error>> {
     let directory = tempfile::tempdir()?;

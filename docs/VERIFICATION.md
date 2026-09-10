@@ -10076,3 +10076,22 @@ cases, formatting and diff checks pass. Clippy initially rejected the 104-line
 server function; eliminating four unnecessary clone aliases kept the same owner
 and behavior at the existing limit without an allowance. Packaged verification and
 Pro re-review of this correction remain pending alongside M1/M4.
+
+P13-M4's panel separates cancellation from the pending create/start observation.
+The same request ID remains available to cancel before the original HTTP response;
+an observation generation prevents late Running/error responses from replacing the
+cancel result. Failed or missing cancellation retains exact status/cancel access
+and does not reopen replacement creation. Six panel cases pass, including held
+create-and-start, held add-only-then-start, late Running after confirmed Stopped,
+and an explicitly unconfirmed missing cancel followed by read and exact cancel.
+These component responses are controlled observations, not native runtime proof.
+
+The actual AppState/private HTTP test separately holds a controlled Codex process
+after its initialize input using a socket barrier. In both creation/start variants,
+the original waiter stays pending while a fresh local-operator HTTP cancel confirms
+Stopped, the held process's socket closes, and the remote session has no active
+provider or recovery requirement. The same pending waiter settles Stopped with one
+remote participant. This case passes without sleeps or real provider execution.
+Frontend TypeScript/Vite/CSS build, server all-target/all-feature Clippy,
+architecture/growth, 19 policy cases and formatting pass. Packaged UI verification
+and final Pro re-review remain pending; no OS dispatch proof is inferred.
