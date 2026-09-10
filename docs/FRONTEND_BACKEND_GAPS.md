@@ -43,7 +43,7 @@ existence alone does not establish a frontend entry or authorize its caller.
 | External AgentBridge attendee and companion | attendee invite/admission, WebSocket/report/tool and cleanup owners | AI-friend/companion packet UI plus `assemble room attend`; no human credential alias |
 | Server-managed AgentBridge runtime | managed provider process custody and report/turn owner | server-managed Agent Sessions through the provider chooser; distinct from both external admission paths |
 | Fourteen-provider catalog, credentials and runtime availability | provider registration, credential store, catalog worker and native/API/local drivers | Harness/API/Local chooser, exact model controls and credential settings; availability follows actual dependencies, not permission to collect real-run evidence |
-| Provider login/usage/refresh | `provider_operations_web`, registration-owned login/usage and catalog refresh | desktop Agent Add login/cancel/refresh and member account usage; admitted browsers get no host account operation |
+| Provider login/usage/refresh | registration-owned login/usage; selected-provider discovery through native private control, HTTP catalog result reads only | local Agent Add automatically checks the selected provider and exposes one selected-provider refresh; admitted browsers cannot refresh the host catalog. Final packaged correction verification remains pending. |
 | Public ingress | manual, managed tunnel and stable-entry owners | invite connection panel and external-open controls; errors remain visible and temporary tunnel continuity is not promised across restart |
 | Runtime version/update/restart | immutable frontend release, durable restart receipt, POSIX executor and desktop supervisor | update notice, local Server Status restart and CLI; exact build identity and cleanup failure are exposed |
 | Resources/release health | local sampler, persisted report reader and explicit release-health command | reachable Server Status/AdminPanel and CLI report workflow; no hidden background health run |
@@ -179,7 +179,7 @@ them unless a separately verified current user or service flow depends on them.
 | Backend surface | Why it is not a direct React call |
 | --- | --- |
 | `POST /api/agent-sessions` | Alternate HTTP creation; the canonical room UI uses the atomic `agent.create` WebSocket command. |
-| `GET /api/providers`, `GET /api/model-catalog`, `GET /api/provider-sessions/local` | Alternate discovery reads; the canonical catalog and local sessions arrive in the room snapshot, while login and forced refresh use dedicated HTTP routes. |
+| `GET /api/providers`, `GET /api/model-catalog`, `GET /api/provider-sessions/local` | Alternate discovery reads; the canonical catalog and local sessions arrive in the room snapshot. Login has its local-operator HTTP route; selected-provider discovery is initiated through native private control, not an HTTP refresh route. |
 | `GET /api/room-events/stream`, `GET /api/rooms/state` | Alternate SSE/state reads; the canonical room projection uses the WebSocket snapshot/event stream. |
 | `POST /api/room-members/mute`, `POST /api/room-participants/kick`, `POST /api/room-participants/leave` | Alternate HTTP controls; React uses `participant.mute`, `participant.kick`, and `participant.leave` WebSocket commands. |
 | `GET /api/central-login/callback`, `GET /central-login-complete` | OAuth return pages reached by browser navigation after the frontend starts the handoff, not by `fetch`. |

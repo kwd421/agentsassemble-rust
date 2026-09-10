@@ -185,6 +185,21 @@ describe("AgentCreateModal", () => {
     );
   });
 
+  it("initializes the first selected catalog without losing a name entered during discovery", async () => {
+    const onCreate = vi.fn();
+    const common = { open: true, meetingId: "room-a", roomLabel: "Room A", onClose: vi.fn(), onCreate };
+    const ready = codexProvider();
+    const loading = { ...ready, available: false, startable: false, discovery_status: "loading", controls: [], default_model: "" };
+    const { rerender } = render(<AgentCreateModal {...common} providers={[loading]} catalogRevision="cold" />);
+    await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+    await userEvent.clear(screen.getByRole("textbox", { name: "표시 이름" }));
+    await userEvent.type(screen.getByRole("textbox", { name: "표시 이름" }), "My draft");
+    rerender(<AgentCreateModal {...common} providers={[ready]} catalogRevision="first" />);
+    expectProviderControlValue("모델", ready.controls.find((control) => control.key === "model")!.options[0].label);
+    expect((screen.getByRole("textbox", { name: "표시 이름" }) as HTMLInputElement).value).toBe("My draft");
+    expect(screen.getByRole("switch", { name: "추가하자마자 실행" }).getAttribute("aria-checked")).toBe("true");
+  });
+
   it("preserves provider and model selection when the catalog refreshes", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     const { rerender } = render(

@@ -2,6 +2,27 @@
 
 ## Active work
 
+- Active: correct the user-rejected agent-creation login/update flow and catalog
+  refresh presentation (2026-09-10). Login must follow confirmed authentication need
+  during creation and return to the preserved draft; version inspection must offer
+  Update/Later only when a newer version exists, with an actual supported update
+  action. Remove permanent login/version/help controls from the creation form and
+  Automatically inspect only the selected provider, using its own 24-hour cache;
+  one manual refresh requests that provider regardless of cache age. Remove the
+  whole-catalog refresh endpoint and its replaced callers and tests. Do not query
+  authenticated model APIs before required authentication is available; successful
+  login refreshes only that provider and preserves the creation draft.
+  Automatic and manual refresh target only the requesting user's own computer's
+  CLI installations and connected API accounts, never another user's or the remote
+  room host's catalog merely because the user is connected to that room.
+  The previous setup
+  implementation and passing checks do not meet this user-flow acceptance.
+  [Corrected acceptance](docs/specs/operational-surfaces-slice.md#agent-creation-setup-flow-correction-2026-09-10).
+  Selected local discovery is implemented at `e980eef7`; cache/authentication boundary
+  tests and signed packaged creation, refresh, existing settings and restart pass.
+  Login/update flow correction and independent review remain active.
+  [Scoped evidence](docs/VERIFICATION.md#selected-local-provider-discovery-2026-09-10).
+
 - Active: complete the final split Pro reviews without pausing between results,
   correct supported findings, and verify/re-review the final changes, as requested
   by the user. The immutable `a41b12a` review snapshot remains available while
@@ -51,7 +72,7 @@
   7–9; brief each completed result and continue through corrections and re-review.
   [Owner](docs/PRODUCT_REIMPLEMENTATION_PLAN.md#per-slice-execution-gate).
 
-- User-requested browser-to-local provider setup is locally complete:
+- Earlier browser-to-local provider setup mechanics were locally verified:
   login/installation guidance, local setup links and optional version updates
   preserve provider/device authority. Daybreak approved all three commits,
   cumulative changes and exact `9bfc3a9` integration at C0/H0/M0/L0.

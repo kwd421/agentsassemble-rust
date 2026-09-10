@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { PRODUCT_SURFACE_REVISION } from "../types/generated/PRODUCT_SURFACE_REVISION";
 import { chooseLocalWorkspace } from "../api";
+import { refreshLocalProviderCatalog } from "../api/providerOperations";
 import {
   fetchDesktopCentralRegistration,
   fetchDesktopHumanInviteCreate,
@@ -38,6 +39,7 @@ const hostCommands = [
   "runtime_message_pins_write_ticket",
   "runtime_message_search_read_ticket",
   "runtime_operator_ticket",
+  "runtime_provider_discovery",
   "runtime_side_chat_read_ticket",
   "save_message_attachment",
 ];
@@ -53,6 +55,25 @@ describe("desktop exact-purpose HTTP bridge", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
+
+  it("starts selected model discovery through local IPC and only reads its result over loopback", async () => {
+    const catalog = { status: "ready", catalog_revision: "fixture", providers: [] };
+    const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify(catalog), { status: 200 }));
+    vi.stubGlobal("fetch", fetchMock);
+    await expect(refreshLocalProviderCatalog("codex", false)).rejects.toThrow("이 PC의 앱");
+    expect(fetchMock).not.toHaveBeenCalled();
+    const invoke = vi.fn()
+      .mockResolvedValueOnce({ revision: PRODUCT_SURFACE_REVISION, digest: "2".repeat(64), commands: hostCommands })
+      .mockResolvedValueOnce(7)
+      .mockResolvedValueOnce({ ticket: "b".repeat(64), ttl_seconds: 30, http_base_url: "http://127.0.0.1:49154" });
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    await requestDesktopHostProductSurface();
+    await expect(refreshLocalProviderCatalog("codex", false)).resolves.toEqual(catalog);
+    expect(invoke).toHaveBeenNthCalledWith(2, "runtime_provider_discovery", { providerId: "codex", force: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock.mock.calls[0][0]).toBe("http://127.0.0.1:49154/api/provider-catalog?provider_id=codex&generation=7");
+    expect(fetchMock.mock.calls[0][1].method || "GET").toBe("GET");
   });
 
   it("selects a workspace only through the native owner without a browser HTTP substitute", async () => {

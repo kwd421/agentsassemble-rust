@@ -9579,3 +9579,51 @@ a live GUI cleanup failure. Its failure is observed before native authentication
 launch; the lower process owner separately exercises its unconfirmed-cleanup result.
 The existing UI continues rendering the server's explicit failure. Final packaged
 integration and completed Pro coverage/re-review remain pending.
+
+
+## Selected local provider discovery (2026-09-10)
+
+Implementation: `e980eef7`. The requesting user's native control pipe starts only
+one selected provider's discovery; HTTP only reads an existing result. The removed
+whole-catalog POST route returns 404. Registration metadata requires no initial
+provider execution. Process-local 24-hour cache age, forced refresh and same-provider
+coalescing are owned by the catalog service, without a periodic refresh task.
+
+Controlled tests verify zero unselected discovery callbacks, no model callback when
+a required API key is absent, reuse before expiry, discovery at expiry, forced refresh,
+coalescing, rejected future result generations and replacement after key changes.
+The real private-control/HTTP integration verifies bootstrap authority, selected-only
+publication, cached generation reuse and the removed POST route. Operator ticket
+scope, one-use consumption, CORS and body handling retain their boundary coverage.
+
+The complete Rust workspace tests passed. The initial full verification then found
+Clippy issues in the new duration/reference expressions and control dispatcher size;
+these were corrected. The final workspace all-target/all-feature Clippy and the
+three catalog-owner tests plus private-control integration pass. Native checks pass
+29 tests. Final frontend verification passes 144 files / 832 tests, TypeScript,
+production build and the existing CSS hash check. Architecture, source-growth,
+policy checks and diff checks pass. Artifact maintenance used the existing owner
+only after Cargo and the isolated app stopped; the final artifact check passes.
+
+Signed isolated packaged builds 0.1.13–0.1.15 were directly exercised. The first
+package exposed missing first-discovery defaults; that defect is corrected and
+covered by a draft-preservation test. OpenCode now initializes its actual default
+model and permission after automatic discovery, and manual refresh preserves the
+edited name and model. DeepSeek's returned model was explicitly selected and used
+to create the stopped `Selected Catalog Verification` profile, which restored after
+restart. Existing Grok execution settings load on expansion; manual refresh retains
+the stored model, effort and permission. The native details layout was corrected and
+visually rechecked at 0.1.15. The app and its exact owned supervisor/server exited
+normally, and Computer Use was reset. The isolated fixture remains for active work.
+
+Verification scope incident: Cerebras was inadvertently selected while attempting
+to inspect a missing-key state. It already had a stored key, so public model discovery
+ran outside the authorized real-provider list. No login, update, credential edit or
+inference was initiated. Missing-key behavior is established by isolated tests, not
+by that selection. Subsequent packaged provider checks used OpenCode, DeepSeek and
+Grok only. This incident is not counted as authorized provider acceptance.
+
+The creation form's previously rejected permanent login/version/help controls still
+require the separately active flow correction. Authentication-required/completed/
+cancelled/failed flows, Update/Later and actual updater completion remain pending,
+as do independent final reviews and the separately deferred mobile UX acceptance.

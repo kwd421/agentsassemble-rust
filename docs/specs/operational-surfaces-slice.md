@@ -47,6 +47,54 @@ credential import, browser-cookie extraction or provider simulation is introduce
 
 ## Authority, state and lifecycle
 
+### Agent-creation setup flow correction (2026-09-10)
+
+The user rejects the permanent login, manual version inspection and duplicate help
+controls added to agent creation. The requested flow identifies a login requirement
+during creation, opens the provider-owned authentication flow and resumes the same
+draft after confirmed completion. Version inspection belongs to that flow; a newer
+release offers Update/Later without forcing an update. Update must reach the actual
+supported updater, not an instruction link presented as an update action.
+
+Keep the existing native provider, process custody and local-operator owners. A
+browser user's setup must act on that user's computer; remote room authority must
+not become authority to log in or update another computer. Provider selection,
+creation input and pending operations remain scoped to the same draft. Cancellation,
+failure and unconfirmed completion preserve the draft and cannot become success or
+launch a different selected provider. No background update polling is required.
+
+Latest user decision (2026-09-10) narrows discovery to the selected provider only.
+Opening creation without a selection must not execute all provider probes or model
+requests. Selection automatically reuses that provider's 24-hour cache or discovers
+it when absent or expired. Retain one manual refresh action beside the provider
+selection heading; it refreshes only the selected provider regardless of cache age.
+Concurrent requests for the same provider share the in-progress discovery.
+It does not replace automatic inspection. Reuse the surrounding visual style and
+a compact icon with the existing 44px interaction area. Remove the wide button and
+permanent explanatory paragraph. Display concise pending, success and failure
+results in the existing small status style. Latest user scope decision (2026-09-10):
+automatic and manual refresh target only the requesting user's own computer's CLI
+installations and that user's connected API accounts. Joining a room must not route
+refresh to the remote room host's or another user's catalog. The user's local runtime
+owns discovery and cache freshness for those providers; room membership grants no
+authority to refresh someone else's providers. Preserve the existing local-operator
+authorization boundary.
+
+Remove the whole-catalog HTTP refresh endpoint and its replaced callers, unused
+helpers and obsolete tests, rather than leaving disabled or compatibility paths.
+Authentication-required providers must not issue authenticated model requests before
+authentication is available. Confirmed authentication need offers the provider-owned
+login action; successful login refreshes only that provider. Cancellation and failure
+preserve the selected provider and creation inputs. Providers supporting unauthenticated
+local discovery remain usable without login. A generic discovery failure is not proof
+that authentication is required.
+
+Acceptance must exercise the complete packaged creation flow: already authenticated,
+authentication required/completed/cancelled/failed, no update, Update/Later, updater
+completion/failure, and draft preservation. Confirm desktop rendering and disclose
+the separate deferred mobile acceptance. The earlier setup tests and manual review
+cover their recorded mechanics only and do not establish this corrected acceptance.
+
 ### Browser-to-local provider setup (user request, 2026-09-09)
 
 The agent creation dialog must keep unavailable providers selectable for diagnosis
@@ -163,7 +211,23 @@ Grok and Cursor `auto` only. Claude and other providers receive static/native
 contract and local fixture verification without actual account/provider execution.
 Local Phase 8 acceptance does not claim the final authorized real-client matrix.
 
-## Explicit catalog refresh implementation
+## Historical whole-catalog refresh implementation (superseded 2026-09-10)
+
+The following records the earlier implementation and its limited verification.
+The agent-creation correction above replaces this whole-catalog HTTP mutation with
+selected-provider discovery requested through the user's native private control pipe.
+Its HTTP catalog endpoint only reads a snapshot or waits for an already requested
+provider generation; it cannot initiate discovery. The private control response is
+immediate so model discovery does not block other native control requests.
+The selected-provider implementation at `e980eef7` passes the scoped packaged checks
+recorded in VERIFICATION.md. Independent review and the remaining login/update flow
+acceptance are pending. Its cache is process-local and uses a monotonic 24-hour age;
+opening the selected provider's creation or execution settings requests that provider.
+A forced request bypasses age and joins existing work for the same provider. There is
+no periodic refresh task. Registration metadata is published without startup probes.
+API catalog discovery checks required credential availability before external requests.
+The first completed catalog initializes defaults; subsequent updates reconcile the
+existing draft. Remote-room views cannot invoke discovery for the host's catalog.
 
 Catalog discovery now retains one cancellable worker. A watch request/completion
 generation coalesces simultaneous refreshes and publishes the actual new catalog
