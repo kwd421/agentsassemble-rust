@@ -38,7 +38,7 @@ it("requires explicit discard confirmation and preserves connected state on disc
   fireEvent.click(screen.getByRole("button", { name: "연결" }));
   await screen.findByText("Google 계정이 연결됐어요.");
   expect(mocks.connect).toHaveBeenCalledExactlyOnceWith(identity, "fixture-proof", "nonce");
-  expect(mocks.cancel).toHaveBeenCalled();
+  await waitFor(() => expect(mocks.cancel).toHaveBeenCalled());
   mocks.disconnect.mockRejectedValueOnce(new Error("저장 실패"));
   fireEvent.click(screen.getByRole("button", { name: "연결 해제" }));
   await screen.findByText("저장 실패");

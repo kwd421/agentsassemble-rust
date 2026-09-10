@@ -81,7 +81,7 @@ export default function AgentCreateModal({
   const [startNow, setStartNow] = useState(false);
   const [status, setStatus] = useState("");
   const [busy, setBusy] = useState(false);
-  const [updatingProviderId, setUpdatingProviderId] = useState<string | null>(null);
+  const [updatingProviders, setUpdatingProviders] = useState<Set<string>>(() => new Set());
   const [providerApiKey, setProviderApiKey] = useState("");
   const [personaCardId, setPersonaCardId] = useState("");
   const [credentialStatus, setCredentialStatus] = useState<ProviderCredentialStatus | null>(null);
@@ -117,7 +117,7 @@ export default function AgentCreateModal({
         )
       );
   const canCreate = Boolean(
-    meetingId && selectedProvider && updatingProviderId !== selectedProvider.id && (
+    meetingId && selectedProvider && !updatingProviders.has(selectedProvider.id) && (
       existingSessionId
         ? existingSession && (!startNow || selectedProvider.startable)
         : catalogRevision && selectedProvider.startable && !invalidControl && displayName.trim() &&
@@ -442,8 +442,12 @@ export default function AgentCreateModal({
               displayName={selectedProvider.display_name} automatic />}
           {selectedProvider && <ProviderSetupActions key={`setup-${selectedProvider.id}`} providerId={selectedProvider.id}
             provider={selectedProvider} localAvailable={localProviderActions}
-            onUpdating={(updating) => setUpdatingProviderId((current) => updating ? selectedProvider.id
-              : current === selectedProvider.id ? null : current)} />}
+            onUpdating={(updating) => setUpdatingProviders((current) => {
+              const next = new Set(current);
+              if (updating) next.add(selectedProvider.id);
+              else next.delete(selectedProvider.id);
+              return next;
+            })} />}
           {selectedProvider && (
             <section className="dc-agent-section">
               <p className="dc-agent-section-title">기본 정보</p>

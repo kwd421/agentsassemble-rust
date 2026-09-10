@@ -9740,3 +9740,66 @@ boundary test passes (0.07 s), as do workspace all-target/all-feature Clippy and
 architecture/source-growth/19 policy checks. This verifies controlled completion
 ownership, not a fresh real OAuth round trip. Codex's personal configuration blocker
 and the previously recorded packaged verification limits remain open.
+
+### Final setup verification follow-up (2026-09-10)
+
+The creation form now retains pending updater state for each selected provider.
+A controlled two-provider completion-order test proves that finishing provider B
+cannot unblock creation for provider A while A is still updating. The single-provider
+case starts from an enabled Create action, observes it disabled during installation,
+and enabled after confirmed completion, with the edited draft preserved.
+
+Full verification exposed two test-fixture issues: the native attendee CLI fixture
+needed Codex's explicit authenticated `login status` response before model discovery;
+the Google account test needed to await the existing passive-effect cancellation.
+Neither fix changes the production boundary or weakens the assertion/timeout.
+
+The full run in `/tmp/aa-setup-final-verify-4.log` passes 845 frontend tests, 897
+workspace Rust tests and 29 native tests, with zero failed or ignored cases. Bindings,
+TypeScript/Vite/CSS, desktop checks, architecture/growth and 19 policy tests, format,
+all-target/all-feature Clippy and diff checks pass. `make verify` exits 2 only at its
+final artifact check: the completed mixed-profile cache occupies 25,216,225,280 bytes,
+above the unchanged 18 GiB limit. After confirming Cargo/Tauri were stopped, the
+existing `make artifact-prune` owner removed 15,869 regenerable files (23.0 GiB),
+and the subsequent artifact check passed. The original invocation is not recorded
+as exit-zero, and passing code tests were not repeated after cache-only maintenance.
+
+The installed Grok CLI's `login --help` and official
+[CLI reference](https://docs.x.ai/build/cli/reference) identify `login --oauth` as its
+browser OAuth invocation. Its existing BrowserOauth registration now supplies that
+flag. No Grok login was executed to establish this command metadata.
+
+Signed packaged `0.1.19` passes strict/deep code-signature verification and direct
+creation-flow manipulation using controlled Codex/OpenCode CLI executables in a
+test-only PATH and CODEX_HOME. No production test bypass was added. Codex selection
+executes `login status`, automatically starts login after its explicit no-login
+result, and does not execute `debug models` before fixture authentication succeeds.
+The first held login's HTTP request displayed `Load failed` while the native task
+remained owned. UI retry joined it without a second login invocation; UI cancellation
+completed. A later controlled nonzero exit displayed failure with a retry action.
+The next success refreshed only Codex, removed the login controls and retained
+`Login preserved draft` and the selected disposable workspace. The fixture's
+`999.0.0` version produced no permanent version/update control. This is native-service
+and UI state-transition proof, not a real browser OAuth authorization.
+
+OpenCode selection discovered only the fixture provider and offered Update/Later for
+`0.0.1` to `1.18.30`. Single-click Update invoked the controlled `upgrade 1.18.30`
+process and disabled the previously enabled Create action. Controlled failure left
+version `0.0.1`, displayed failure and offered a read-only version recheck. The next
+explicit Update allowed editing the name during the held operation. Controlled success
+changed the fixture version to `1.18.30`; the app read that version, refreshed only
+OpenCode, displayed confirmed completion and reenabled Create while retaining
+`Edited during update`. A fresh offer's single-click Later removed the offer without
+another upgrade invocation. These single-click results supplement the earlier 0.1.18
+pointer uncertainty; they do not establish the cause of that earlier observation.
+
+The first rapid batched typing/folder-navigation attempt did not populate the intended
+name/path; subsequent separately observed input succeeded. The selected workspace
+remained the existing disposable Phase 9 workspace. No agent was created or started.
+Real installer effects, fresh OAuth completion, personal Codex configuration recovery,
+remote-browser-to-own-PC creation and wider mobile acceptance remain unverified.
+Cancel closed the creation draft, and normal Quit ended exact app/supervisor/server
+PIDs 63643/63702/64001. Computer Use was reset. Controlled invocation/version evidence
+is retained at `/tmp/aa-setup-ui-019-evidence`; only that run's fixture directory was
+removed. Existing isolated room data and the next-needed signed build were retained;
+the final artifact check passes.

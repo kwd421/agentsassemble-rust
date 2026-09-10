@@ -1,9 +1,13 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import AgentCreateModal from "./AgentCreateModal";
-import { codexProvider } from "./AgentCreateModal.testProviders";
+import { chooseLocalWorkspace } from "../../api";
+import { codexProvider, claudeProvider } from "./AgentCreateModal.testProviders";
 import { providerUpdateOperation } from "../../api/providerOperations";
 
+vi.mock("../../api", async (original) => ({
+  ...await original<typeof import("../../api")>(), chooseLocalWorkspace: vi.fn(),
+}));
 vi.mock("../../api/providerOperations", async (original) => ({
   ...await original<typeof import("../../api/providerOperations")>(), providerUpdateOperation: vi.fn(),
 }));
@@ -24,12 +28,16 @@ it("preserves the creation draft and prevents creation during the selected CLI u
   fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "Update draft" } });
   let complete!: (value: typeof offer) => void;
   vi.mocked(providerUpdateOperation).mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+  vi.mocked(chooseLocalWorkspace).mockResolvedValue({ selected: true, path: "/tmp/agentsassemble-workspace" });
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "폴더 선택" })));
+  expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(false);
   fireEvent.click(update);
   expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(screen.getByLabelText("표시 이름"), { target: { value: "Edited during update" } });
   await act(async () => complete({ ...offer, current_version: "2.0.0", update_available: false, completed: true }));
   expect((screen.getByLabelText("표시 이름") as HTMLInputElement).value).toBe("Edited during update");
   expect(providerUpdateOperation).toHaveBeenLastCalledWith("codex", "2.0.0");
+  expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(false);
 });
 
 it.each(["remote", "authentication_required", "command_missing", "loading"])(
@@ -42,3 +50,27 @@ it.each(["remote", "authentication_required", "command_missing", "loading"])(
     expect(providerUpdateOperation).not.toHaveBeenCalled();
   }
 );
+
+
+it("retains each pending installation when selections and completion order differ", async () => {
+  const finishes = new Map<string, (value: typeof offer) => void>();
+  vi.mocked(providerUpdateOperation).mockImplementation(async (id, version) => {
+    if (!version) return { ...offer, provider_id: id };
+    return new Promise((resolve) => finishes.set(id, resolve));
+  });
+  vi.mocked(chooseLocalWorkspace).mockResolvedValue({ selected: true, path: "/tmp/agentsassemble-workspace" });
+  render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A" catalogRevision="revision"
+    onClose={vi.fn()} onCreate={vi.fn()} providers={[codexProvider(), claudeProvider()].map((p) => ({ ...p, update_supported: true }))} />);
+  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  await act(async () => fireEvent.click(screen.getByRole("button", { name: "폴더 선택" })));
+  fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
+  fireEvent.click(screen.getByRole("listitem", { name: "Claude Code" }));
+  fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
+  fireEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  await screen.findByRole("button", { name: "업데이트" });
+  expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => finishes.get("claude")?.({ ...offer, provider_id: "claude", current_version: "2.0.0", completed: true, update_available: false }));
+  expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(true);
+  await act(async () => finishes.get("codex")?.({ ...offer, current_version: "2.0.0", completed: true, update_available: false }));
+  expect((screen.getByRole("button", { name: "추가하고 실행" }) as HTMLButtonElement).disabled).toBe(false);
+});
