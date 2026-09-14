@@ -175,10 +175,36 @@ async fn portal_completion_preserves_read_and_publication_failure_codes() {
 // Only the external HTTP peer and credential store are isolated fixtures. The actual
 // request builder, SSE decoder, driver, authenticated MCP portal, and read/publication
 // receipt owners run unchanged. This does not exercise public HTTPS/DNS discovery.
+async fn workspace_session(
+    spec: &RemoteOpenAiSpec,
+    requested_model: &str,
+    workspace: Option<&std::path::Path>,
+) -> agentsassemble_domain::DurableAgentSession {
+    let mut session = durable_session(
+        "room",
+        "session",
+        "API",
+        spec.provider_kind,
+        requested_model,
+        "https",
+    );
+    session.public.runtime_kind = "api".to_owned();
+    session.public.max_output_tokens = 4096;
+    if let Some(workspace) = workspace {
+        session.public.permission_mode = "workspace_write".to_owned();
+        (session.workspace, session.workspace_identity) =
+            crate::filesystem::canonical_workspace(workspace.to_string_lossy().into_owned())
+                .await
+                .unwrap_or_else(|error| panic!("workspace fixture: {error:?}"));
+    }
+    session
+}
+
 async fn room_turn(
     spec: &'static RemoteOpenAiSpec,
     requested_model: &str,
     responses: Vec<String>,
+    workspace: Option<&std::path::Path>,
 ) -> (Result<ProviderTurnOutcome, DriverError>, Vec<Value>) {
     let (endpoint, mut captured, server) = api_fixture(responses).await;
     let credentials = ProviderCredentialStore::isolated_test_store();
@@ -190,16 +216,7 @@ async fn room_turn(
         )
         .await
         .unwrap_or_else(|error| panic!("set isolated credential: {error}"));
-    let mut session = durable_session(
-        "room",
-        "session",
-        "API",
-        spec.provider_kind,
-        requested_model,
-        "https",
-    );
-    session.public.runtime_kind = "api".to_owned();
-    session.public.max_output_tokens = 4096;
+    let mut session = workspace_session(spec, requested_model, workspace).await;
     let authority = if spec.endpoint == RemoteOpenAiEndpoint::AgentSession {
         session.provider_endpoint = "https://openrouter.ai/api/v1".to_owned();
         Some(session.provider_endpoint.clone())
@@ -304,6 +321,7 @@ async fn routed_custom_response_preserves_selection_and_reaches_room_publication
                 tool_stream(resolved[0], "read_discussion", "tool_calls"),
                 tool_stream(resolved[1], "publish_message", "tool_calls"),
             ],
+            None,
         )
         .await;
         assert_eq!(
@@ -365,10 +383,44 @@ async fn invalid_completion_and_unpermitted_tools_never_publish() {
             "provider_tool_call_invalid",
         ),
     ] {
-        let (outcome, _) = room_turn(spec, model, responses).await;
+        let (outcome, _) = room_turn(spec, model, responses, None).await;
         let Err(error) = outcome else {
             panic!("accepted rejected turn");
         };
         assert_eq!(error.code, code);
     }
+}
+
+#[tokio::test]
+async fn builtin_workspace_tool_reaches_api_and_preserves_room_terminal_flow() {
+    let workspace =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("workspace fixture: {error}"));
+    std::fs::write(workspace.path().join("visible.txt"), "workspace content")
+        .unwrap_or_else(|error| panic!("fixture file: {error}"));
+    let model = "deepseek-v4-flash";
+    let (outcome, requests) = room_turn(
+        &DEEPSEEK_SPEC,
+        model,
+        vec![
+            tool_stream(model, "read_discussion", "tool_calls"),
+            tool_stream(model, "list_workspace_files", "tool_calls"),
+            tool_stream(model, "publish_message", "tool_calls"),
+        ],
+        Some(workspace.path()),
+    )
+    .await;
+    assert!(outcome.is_ok(), "workspace turn failed: {outcome:?}");
+    assert_eq!(requests.len(), 3);
+    let tools = requests[0]["tools"]
+        .as_array()
+        .unwrap_or_else(|| panic!("API tool catalog missing"));
+    for name in crate::workspace_tools::names() {
+        assert!(tools.iter().any(|tool| tool["function"]["name"] == name));
+    }
+    assert!(
+        !tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == "run_workspace_command")
+    );
+    assert!(requests[2]["messages"].to_string().contains("visible.txt"));
 }
