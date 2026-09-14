@@ -19,7 +19,10 @@ Builtin workspace tools correction (whole-repository R4): API and Local catalogs
 now offer the existing workspace-write permission option. `AgentCreateModal`
 already derives its native folder picker from that permission; the existing
 execution-bound owner request panel receives per-file write/replace approvals.
-No new control, layout, shell execution or alternate harness is introduced.
+The packaged check exposed obsolete command-execution wording in the folder hint.
+The API/Local hint now describes file reading and per-change approval only; it is
+not applied to native harness permission semantics. No new control, layout, shell
+execution or alternate harness is introduced.
 Read-only selection remains workspace-free. Controlled file and approval/custody
 checks plus an actual driver/HTTP/SSE/Room Portal tool round pass; signed packaged
 selection/approval and current-source whole-repository review remain pending.

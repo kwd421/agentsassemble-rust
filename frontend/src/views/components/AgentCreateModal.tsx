@@ -509,8 +509,8 @@ export default function AgentCreateModal({
                 <WorkspacePickerField
                   value={workspacePath}
                   description={
-                    settings.permission_mode === "workspace_write"
-                      ? "API 모델이 이 폴더의 텍스트를 읽을 수 있습니다. 파일 변경과 명령 실행은 매번 승인을 요청합니다."
+                    settings.permission_mode === "workspace_write" && providerGroup !== "harness"
+                      ? "모델이 이 폴더의 텍스트를 읽을 수 있어요. 파일 변경은 매번 승인을 요청해요."
                       : ""
                   }
                   onChange={setWorkspacePath}
