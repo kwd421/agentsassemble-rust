@@ -301,7 +301,8 @@ export default function AgentCreateModal({
       personaCardId,
       startNow,
     };
-    const key = JSON.stringify(request);
+    // Discovery freshness is not a new user intent; retry keeps its original payload.
+    const key = JSON.stringify({ ...request, catalogRevision: undefined });
     if (createRetry.current?.key !== key) createRetry.current = null;
     try {
       if (createRetry.current) await createRetry.current.retry();

@@ -749,3 +749,15 @@ uncertain request for both add-only and add-and-start; each retains one session 
 one stored receipt. Normal start/Stop, initial split catalog/snapshot and model
 refresh pass. Existing layout and upper button rail are unchanged. Final review
 and latest runtime correction verification remain pending; see VERIFICATION.md.
+
+### Agent creation retry and catalog refresh (2026-09-15)
+
+The retained creation key included catalogRevision, so a catalog-only refresh
+turned an unchanged form into a new command after an uncertain outcome. The
+controlled React regression reproduces this (3 existing passes, new case fails).
+Exclude only discovery freshness from the form-intent comparison; the exact
+retry closure still sends its original ID and full original payload, while user
+form changes continue to create a new request. Existing layout and controls remain.
+Correction passes29 creation tests and the production build. Signed0.1.51
+proves uncertain creation, real catalog refresh, unchanged-form retry, and exactly
+one session plus one creation receipt; see VERIFICATION.md.

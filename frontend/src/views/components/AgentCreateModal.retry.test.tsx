@@ -48,3 +48,21 @@ it("uses a new creation intent after the user changes the retained form", async 
   await waitFor(() => expect(onCreate).toHaveBeenCalledTimes(2));
   expect(retry).not.toHaveBeenCalled();
 });
+
+it("retains the exact creation retry when only the catalog revision refreshes", async () => {
+  const retry = vi.fn().mockResolvedValue(undefined);
+  const onCreate = vi.fn().mockRejectedValue(new RoomSocketSayError("uncertain", "outcome_unknown", retry));
+  const onClose = vi.fn();
+  const providers = [codexProvider()];
+  const props = { open: true, meetingId: "room-a", roomLabel: "Room A", providers, onClose, onCreate };
+  const view = render(<AgentCreateModal {...props} catalogRevision="cat-before" />);
+  await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
+  await chooseWorkspace();
+  await userEvent.click(primaryActionButton());
+  await screen.findByText("uncertain");
+  view.rerender(<AgentCreateModal {...props} catalogRevision="cat-after" />);
+  await userEvent.click(primaryActionButton());
+  await waitFor(() => expect(retry).toHaveBeenCalledOnce());
+  expect(onCreate).toHaveBeenCalledOnce();
+  expect(onClose).toHaveBeenCalledOnce();
+});
