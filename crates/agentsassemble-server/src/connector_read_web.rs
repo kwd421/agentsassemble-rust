@@ -127,6 +127,10 @@ pub(super) async fn wait(
     Query(cursor): Query<Cursor>,
     request: Request,
 ) -> Result<Json<Value>, ConnectorHttpError> {
+    let transport = request
+        .extensions()
+        .get::<crate::http_admission::HttpConnectionAdmission>()
+        .cloned();
     let authorization = authorize_read(&state, request, SNAPSHOT_EVENTS).await?;
     let principal = authorization.principal();
     let _lease = state
@@ -162,6 +166,13 @@ pub(super) async fn wait(
         .map_err(|_| rejected(StatusCode::FORBIDDEN, "session_revoked"))?;
     let expiry = tokio::time::sleep(duration);
     tokio::pin!(expiry);
+    let transport = transport.ok_or_else(|| {
+        rejected(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "http_connection_unavailable",
+        )
+    })?;
+    let _transport_wait = transport.retain_authenticated_wait();
     loop {
         tokio::select! {
             () = state.shutdown.cancelled() => return Err(rejected(StatusCode::SERVICE_UNAVAILABLE,"server_stopping")),

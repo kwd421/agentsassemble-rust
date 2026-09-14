@@ -4,7 +4,7 @@ use std::sync::{
 };
 
 use parking_lot::Mutex;
-use tokio::sync::{OwnedSemaphorePermit, Semaphore};
+use tokio::sync::{OwnedSemaphorePermit, Semaphore, watch};
 
 const MAX_HTTP_CONNECTIONS: usize = 128;
 const MAX_PUBLIC_HTTP_CONNECTIONS: usize = MAX_HTTP_CONNECTIONS - 1;
@@ -26,6 +26,15 @@ struct HttpConnectionAdmissionInner {
     _total_permit: OwnedSemaphorePermit,
     owner: HttpAdmission,
     public_permit: Mutex<Option<OwnedSemaphorePermit>>,
+    authenticated_wait: watch::Sender<bool>,
+}
+
+pub(crate) struct AuthenticatedHttpWait(watch::Sender<bool>);
+
+impl Drop for AuthenticatedHttpWait {
+    fn drop(&mut self) {
+        self.0.send_replace(false);
+    }
 }
 
 impl Default for HttpAdmission {
@@ -50,6 +59,7 @@ impl HttpAdmission {
                 _total_permit: permit,
                 owner: self.clone(),
                 public_permit: Mutex::new(None),
+                authenticated_wait: watch::channel(false).0,
             },
         )))
     }
@@ -64,6 +74,21 @@ impl HttpAdmission {
 }
 
 impl HttpConnectionAdmission {
+    /// HTTP/1 admits one active handler; only its authorized room wait retains this lease.
+    pub(crate) fn retain_authenticated_wait(&self) -> AuthenticatedHttpWait {
+        self.0.authenticated_wait.send_replace(true);
+        AuthenticatedHttpWait(self.0.authenticated_wait.clone())
+    }
+
+    pub(crate) fn has_authenticated_wait(&self) -> bool {
+        *self.0.authenticated_wait.borrow()
+    }
+
+    pub(crate) async fn authenticated_wait_finished(&self) {
+        let mut state = self.0.authenticated_wait.subscribe();
+        let _ = state.wait_for(|active| !*active).await;
+    }
+
     pub(crate) fn admit_public(&self) -> bool {
         let mut permit = self.0.public_permit.lock();
         if permit.is_some() {

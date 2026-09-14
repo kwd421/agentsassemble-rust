@@ -279,3 +279,21 @@ This is an authoritative public projection, not a schema migration or a new
 compatibility path. It covers already-stored deletions as well as new ones. Exact
 private command receipts retain their established replay contract; this does not
 claim erasure of a previously delivered copy or physical database purging.
+
+## Authenticated Connector wait transport lifetime (2026-09-14)
+
+Whole-repository R7 connects an unbounded-until-message authenticated wait to the
+outer absolute 30-second HTTP connection lifetime. The wait handler already owns
+its session expiry, revocation, cancellation, room cursor and connection lease.
+Only after authentication, read-budget and room-connection admission may it retain
+an authenticated-wait lease on its exact HTTP connection. No anonymous or unrelated
+request obtains this lease. At the existing absolute deadline, the transport closes
+keep-alive to new requests but drains this admitted wait; its existing expiry,
+revocation and shutdown paths terminate it. Once the handler releases the lease,
+response flushing is bounded by the existing 30-second transport duration.
+
+Ordinary/unauthenticated connections retain their header, capacity and absolute
+lifetime limits. No automatic retry loop, empty successful heartbeat, larger public
+limit or swallowed transport failure is introduced. Verify a real Connector wait
+across 30 seconds of silence, then one delivered message; also verify that an
+unleased handler still loses its connection at the original boundary.

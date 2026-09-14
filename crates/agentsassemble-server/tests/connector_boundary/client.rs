@@ -71,3 +71,58 @@ async fn current_conversation_client_keeps_wait_and_command_custody_separate()
     server.stop().await;
     Ok(())
 }
+
+#[tokio::test]
+async fn normal_connector_silence_outlives_the_http_connection_deadline()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, manager) = fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let mut clients = Vec::new();
+    for name in ["Waiting reader", "Delayed writer"] {
+        let invite = store
+            .create_connector_invite(
+                &manager,
+                Uuid::new_v4(),
+                InviteScope::ReadWrite,
+                chrono::Utc::now(),
+            )
+            .await?;
+        let client = RoomConnectorClient::new(
+            &format!("{}/join?token={}", server.base_url, invite.invite_bearer),
+            name,
+            None,
+        )?;
+        client.join().await?;
+        clients.push(client);
+    }
+    let pending = clients[0].wait_next();
+    tokio::pin!(pending);
+    // This duration crosses the production 30-second connection deadline itself;
+    // it is not a sleep used to guess whether a concurrency interleaving occurred.
+    tokio::select! {
+        result = &mut pending => panic!("normal silence ended the wait: {result:?}"),
+        () = tokio::time::sleep(std::time::Duration::from_secs(31)) => {},
+    }
+    let (received, sent) = tokio::time::timeout(std::time::Duration::from_secs(3), async {
+        tokio::try_join!(
+            pending,
+            clients[1].command(
+                RoomAction::MessageSend,
+                json!({"content":"After the old HTTP deadline"}),
+            )
+        )
+    })
+    .await??;
+    assert_eq!(
+        received["messages"][0]["content"],
+        "After the old HTTP deadline"
+    );
+    assert_eq!(received["last_seq"], sent["result"]["event_seq"]);
+    for client in &clients {
+        client
+            .command(RoomAction::ParticipantLeave, json!({}))
+            .await?;
+    }
+    server.stop().await;
+    Ok(())
+}

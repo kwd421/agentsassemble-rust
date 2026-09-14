@@ -47,7 +47,7 @@ pub(crate) async fn serve_connection(
         tokio::select! {
             () = shutdown.cancelled() => {
                 connection.as_mut().graceful_shutdown();
-                connection.await
+                (&mut connection).await
             }
             result = &mut connection => result,
         }
@@ -55,6 +55,25 @@ pub(crate) async fn serve_connection(
     match tokio::time::timeout(HTTP_CONNECTION_LIFETIME, serving).await {
         Ok(Ok(())) => {}
         Ok(Err(error)) => tracing::debug!(error = ?error, "HTTP connection closed"),
+        Err(_) if admission_guard.has_authenticated_wait() => {
+            // Stop accepting another request on this connection. The admitted wait
+            // retains its own session expiry/revocation/shutdown lifetime.
+            connection.as_mut().graceful_shutdown();
+            tokio::select! {
+                result = &mut connection => {
+                    if let Err(error) = result {
+                        tracing::debug!(error = ?error, "Authenticated HTTP wait closed");
+                    }
+                }
+                () = admission_guard.authenticated_wait_finished() => {
+                    match tokio::time::timeout(HTTP_CONNECTION_LIFETIME, &mut connection).await {
+                        Ok(Ok(())) => {}
+                        Ok(Err(error)) => tracing::debug!(error = ?error, "Authenticated HTTP response closed"),
+                        Err(_) => tracing::debug!("Authenticated HTTP response exceeded its flush lifetime"),
+                    }
+                }
+            }
+        }
         Err(_) => tracing::debug!("HTTP connection exceeded its absolute lifetime"),
     }
     drop(admission_guard);
@@ -66,6 +85,76 @@ mod tests {
     use axum::routing::get;
     use std::sync::Arc;
     use tokio::{net::TcpListener, sync::Notify};
+
+    #[tokio::test]
+    async fn only_the_active_authenticated_wait_outlives_the_absolute_deadline()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for authenticated in [false, true] {
+            let entered = Arc::new(Notify::new());
+            let released = Arc::new(Notify::new());
+            let handler_entered = entered.clone();
+            let handler_released = released.clone();
+            let app = Router::new().route(
+                "/waiting",
+                get(
+                    move |axum::Extension(admission): axum::Extension<HttpConnectionAdmission>| {
+                        let entered = handler_entered.clone();
+                        let released = handler_released.clone();
+                        async move {
+                            let _lease =
+                                authenticated.then(|| admission.retain_authenticated_wait());
+                            entered.notify_one();
+                            released.notified().await;
+                            "wait response"
+                        }
+                    },
+                ),
+            );
+            let listener = TcpListener::bind("127.0.0.1:0").await?;
+            let address = listener.local_addr()?;
+            let client = tokio::spawn(async move {
+                reqwest::Client::new()
+                    .get(format!("http://{address}/waiting"))
+                    .timeout(Duration::from_secs(90))
+                    .send()
+                    .await?
+                    .text()
+                    .await
+            });
+            let (stream, peer) = listener.accept().await?;
+            let admission = crate::http_admission::HttpAdmission::default()
+                .admit()
+                .ok_or("fixture admission rejected")?;
+            let observation = admission.clone();
+            let mut serving = Box::pin(serve_connection(
+                stream,
+                peer,
+                LocalIngress::from_listener(address).ok_or("listener")?,
+                PublicIngress::disabled(),
+                app,
+                admission,
+                CancellationToken::new(),
+            ));
+            tokio::select! {
+                () = entered.notified() => {},
+                () = &mut serving => panic!("ended before admitted handler"),
+            }
+            tokio::time::pause();
+            tokio::time::advance(HTTP_CONNECTION_LIFETIME + Duration::from_secs(1)).await;
+            if authenticated {
+                assert!(futures_util::poll!(&mut serving).is_pending());
+                released.notify_one();
+                let ((), response) = tokio::join!(serving, client);
+                assert_eq!(response??, "wait response");
+                assert!(!observation.has_authenticated_wait());
+            } else {
+                serving.await;
+                assert!(client.await?.is_err());
+            }
+            tokio::time::resume();
+        }
+        Ok(())
+    }
 
     #[tokio::test]
     async fn shutdown_finishes_the_admitted_http_response() -> Result<(), Box<dyn std::error::Error>>

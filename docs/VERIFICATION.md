@@ -18,7 +18,7 @@ the retained text is not represented as those separate artifacts.
 | R4 | Medium | Original builtin API/Local workspace file tools omitted | Open, reconcile actual original path and approved scope |
 | R5 | Medium | Initial resync repeats ahead-of-history cursor | Locally corrected at `50aaa0bc`; latest-source review pending |
 | R6 | Medium | Admitted Connector cannot leave after initial read failure | Locally corrected; actual Connector13 and workspace Clippy pass; re-review pending |
-| R7 | Medium | Connection-wide 30-second timeout aborts normal wait-next | Open, actual transport verification pending |
+| R7 | Medium | Connection-wide 30-second timeout aborts normal wait-next | Locally corrected; real 31-second wait, Connector14, transport2 and workspace Clippy pass; re-review pending |
 | R8 | Low | Failed stdout cleanup skips stderr join | Locally corrected; controlled reader cleanup3, workspace Clippy and gates pass; re-review pending |
 
 R1 is reproduced by canonical message assignment, deletion and retained-interrupt
@@ -82,6 +82,22 @@ a successful initial read. All Connector13 actual HTTP/MCP/stdio tests pass (11.
 as does all-target/all-feature workspace Clippy. Logs:
 `/tmp/aa-review-r6-baseline.log`, `/tmp/aa-review-r6-connector.log`,
 `/tmp/aa-review-r6-clippy.log`, `/tmp/aa-review-r6-gates.log`.
+
+R7 is reproduced by the actual Connector client and HTTP server: one pending call
+fails with connector_transport_unresolved after 30.06s of normal silence. Only the
+authenticated, budget-admitted room wait now retains an exact HTTP connection lease.
+At the existing absolute deadline the transport disables further keep-alive requests
+and drains that wait under its existing expiry/revocation/shutdown owner. On handler
+completion, the existing 30-second duration bounds response flushing. Anonymous and
+ordinary handlers retain their previous absolute deadline, header and capacity limits.
+No retries, empty heartbeat successes or public-limit increases are introduced.
+The real wait survives 31s and receives the next message with its committed cursor.
+Connector14 tests pass in 31.16s; transport2 tests pass, including a controlled clock
+and entered-handler barrier proving an unleased connection still expires while a
+leased response completes and releases ownership. Workspace Clippy passes.
+Logs: `/tmp/aa-review-r7-baseline.log`, `/tmp/aa-review-r7-connector.log`,
+`/tmp/aa-review-r7-transport.log`, `/tmp/aa-review-r7-clippy.log`,
+`/tmp/aa-review-r7-gates.log`. No real provider or public tunnel was used.
 
 R8 uses concurrent joined cleanup for both existing reader owners, retaining each
 existing five-second abort/join bound and exposing failure. A paused-clock test
