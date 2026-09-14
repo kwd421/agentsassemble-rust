@@ -11,21 +11,8 @@ async fn lost_connector_leave_recovers_exact_receipt_and_releases_stdio_slot()
         lossy_http::LossyHttpRelay::start(&server.base_url, &["/api/room-connector/command"])
             .await?;
     let (mut child, client) = mcp::start_cli().await?;
-    let mut invitations = Vec::new();
-    for _ in 0..2 {
-        let invite = store
-            .create_connector_invite(
-                &manager,
-                Uuid::new_v4(),
-                InviteScope::ReadWrite,
-                chrono::Utc::now(),
-            )
-            .await?;
-        invitations.push(
-            json!({"invite_url":format!("{}/join?token={}",relay.base_url,invite.invite_bearer)}),
-        );
-    }
-    let joined = mcp::call(&client, "room_join", invitations[0].clone()).await;
+    let invitation = invite(&store, &manager, &relay.base_url).await?;
+    let joined = mcp::call(&client, "room_join", invitation).await;
     let failed = client
         .call_tool(CallToolRequestParams::new("room_leave"))
         .await?;
@@ -40,6 +27,7 @@ async fn lost_connector_leave_recovers_exact_receipt_and_releases_stdio_slot()
         committed.participant_id.as_deref(),
         joined["participant_id"].as_str()
     );
+    archive(&store, &server, true).await?;
     let recovered = mcp::call(&client, "room_leave", json!({})).await;
     assert_eq!(recovered["resolution"], "committed");
     assert_eq!(recovered["deduplicated"], true);
@@ -65,7 +53,9 @@ async fn lost_connector_leave_recovers_exact_receipt_and_releases_stdio_slot()
         )
         .await?;
     assert_eq!(denied.is_error, Some(true));
-    let next = mcp::call(&client, "room_join", invitations[1].clone()).await;
+    archive(&store, &server, false).await?;
+    let invitation = invite(&store, &manager, &relay.base_url).await?;
+    let next = mcp::call(&client, "room_join", invitation).await;
     assert_ne!(next["participant_id"], joined["participant_id"]);
     assert_ne!(next["connection_id"], joined["connection_id"]);
     mcp::call(&client, "room_read", json!({})).await;
@@ -78,5 +68,50 @@ async fn lost_connector_leave_recovers_exact_receipt_and_releases_stdio_slot()
     );
     relay.stop().await?;
     server.stop().await;
+    Ok(())
+}
+
+async fn invite(
+    store: &agentsassemble_persistence::SqliteStore,
+    manager: &agentsassemble_persistence::RoomManagerAuthority,
+    base_url: &str,
+) -> Result<serde_json::Value, Box<dyn std::error::Error>> {
+    let invite = store
+        .create_connector_invite(
+            manager,
+            Uuid::new_v4(),
+            InviteScope::ReadWrite,
+            chrono::Utc::now(),
+        )
+        .await?;
+    Ok(json!({"invite_url":format!("{base_url}/join?token={}",invite.invite_bearer)}))
+}
+
+async fn archive(
+    store: &agentsassemble_persistence::SqliteStore,
+    server: &human_invite::RunningServer,
+    archived: bool,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let authority = store.local_bootstrap_status().await?;
+    let room_uid = store.snapshot("general", 0, 20).await?.room.room_uid;
+    let ticket = server
+        .state()
+        .tickets
+        .issue_server_operator(agentsassemble_domain::LOCAL_OPERATOR_USER_ID.to_owned())
+        .await?
+        .ticket;
+    let result: serde_json::Value = reqwest::Client::new()
+        .post(format!("{}/api/rooms/lifecycle", server.base_url))
+        .bearer_auth(ticket)
+        .json(&json!({"server_id":authority.server_id,
+            "authority_lineage_id":authority.authority_lineage_id,"room_id":"general",
+            "request_id":Uuid::new_v4().to_string(),"action":"room.archive",
+            "payload":{"room_uid":room_uid,"archived":archived}}))
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(result["resolution"], "committed");
     Ok(())
 }

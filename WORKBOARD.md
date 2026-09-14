@@ -2,6 +2,36 @@
 
 ## Active work
 
+- Current closeout handoff (2026-09-14): review source is GitHub repository
+  `kwd421/agentsassemble-rust` at frozen `2135d5112d00f80996a5f6ce98762515049cfcb8`.
+  Completed Pro Phase 1–3 and Phase 4–6 source verdicts are APPROVE
+  C0/H0/M0/L0 in their respective scopes; P13-M7 and G2-M1–M6 are closed.
+  Independent Phase 7–9 review remains incomplete in
+  [the current Pro conversation](https://chatgpt.com/c/6aa7434d-c86c-83e8-b01d-c4a118677623).
+  Use the Codex in-app browser only for this review; the user explicitly rejected
+  Chrome. The reviewer returned an incomplete answer, then retracted its claim
+  that no source had been returned. Resume the same full request at the frozen
+  revision with GPT-6 Pro; the retraction is not a completed review or approval.
+  While that immutable review runs, a local correction is being verified for
+  committed Connector leave receipt recovery after room archive/close. Its regression
+  failed with `room_inactive` before the correction, then passed; persistence333
+  and Connector HTTP/MCP8 pass. Full workspace Clippy and affected gates pass;
+  corrected-source re-review and remaining real-flow acceptance remain.
+  This correction is not part of the frozen Pro review revision.
+  User correction: implementer-selected findings, files and paths must not limit
+  or steer the independent review. Derive coverage from user requirements and
+  actual source, including omissions and new problems outside those examples.
+  Review the implementer's claims, documents and tests critically as well.
+  Continue through completed evidence, supported corrections, affected checks and
+  re-review. The user deleted the recurring review schedule and requires this
+  active session to continue until the reviews are received; do not recreate the
+  schedule or end the turn merely because a review is still running.
+  A displayed outgoing message is not proof of saved delivery; the
+  corrected request was verified to persist after reload. Do not treat progress
+  labels as finished source review. Preserve the frozen review revision and the
+  user-owned untracked `.agents/` and `scripts/__pycache__/` directories.
+  [Completed verdicts and remaining boundaries](docs/VERIFICATION.md#completed-phase-1-6-source-review-disposition-2026-09-14).
+
 - Active: correct the user-rejected agent-creation login/update flow and catalog
   refresh presentation (2026-09-10). Login must follow confirmed authentication need
   during creation and return to the preserved draft; version inspection must offer
@@ -75,7 +105,9 @@
   signed 0.1.31 natural restart survives delayed thread resume, visibly completes,
   restores both Idle sessions and permits fresh result/status queries. Normal Quit
   cleans all owned processes and exact leases. Isolated artifacts are removed and
-  artifact check passes. Affected-head Pro re-review remains before later groups.
+  artifact check passes. The affected-head Pro review now closes M7 and approves
+  current Phase 1–3; the later Phase 4–6 source review also approves its scope.
+  Independent Phase 7–9 and final real-flow acceptance remain open.
   [Recovery evidence](docs/VERIFICATION.md#parent-loss-during-replacement-recovery-2026-09-11).
   Full flow acceptance remains open.
   [Latest evidence](docs/VERIFICATION.md#outer-shutdown-lifetime-correction-2026-09-10).

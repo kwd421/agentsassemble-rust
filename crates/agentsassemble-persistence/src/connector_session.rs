@@ -1,5 +1,5 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, ParticipantStatus,
+    AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, ParticipantStatus, Room,
 };
 use chrono::{DateTime, Utc};
 use serde_json::{Value, json};
@@ -179,7 +179,7 @@ pub(super) async fn authorize_in(
 // Stored identity can identify a terminal receipt without granting active session authority.
 struct ConnectorSessionRecord {
     principal: AuthenticatedPrincipal,
-    room_uid: Uuid,
+    room: Room,
     expires_at: DateTime<Utc>,
     revoked: bool,
     status: ParticipantStatus,
@@ -190,7 +190,7 @@ impl ConnectorSessionRecord {
         &self,
         expected: &ConnectorSessionAuthorization,
     ) -> Result<(), PersistenceError> {
-        if self.room_uid != expected.room_uid
+        if self.room.room_uid != expected.room_uid
             || self.principal.room_id != expected.principal.room_id
             || self.principal.participant_id != expected.principal.participant_id
             || self.expires_at != expected.expires_at
@@ -208,6 +208,7 @@ impl ConnectorSessionRecord {
         fingerprint: &[u8; 32],
         now: DateTime<Utc>,
     ) -> Result<ConnectorSessionAuthorization, PersistenceError> {
+        crate::authority::require_active_room(&self.room)?;
         if self.revoked || self.expires_at <= now || self.status != ParticipantStatus::Joined {
             return Err(rejected(
                 "session_revoked",
@@ -217,7 +218,7 @@ impl ConnectorSessionRecord {
         Ok(ConnectorSessionAuthorization {
             principal: self.principal,
             fingerprint: *fingerprint,
-            room_uid: self.room_uid,
+            room_uid: self.room.room_uid,
             expires_at: self.expires_at,
         })
     }
@@ -232,7 +233,7 @@ async fn load_record_in(
     let expires_at = timestamp(row.get("session_expires_at"))?;
     let room_id: String = row.get("room_id");
     let participant_id: String = row.get("participant_id");
-    let room = crate::authority::load_active_room(tx, &room_id).await?;
+    let room = crate::authority::load_room(tx, &room_id).await?;
     let participant =
         crate::room_turns::support::load_participant(tx, &room_id, &participant_id).await?;
     let incarnation = parse_uuid(row.get("room_uid"))?;
@@ -268,7 +269,7 @@ async fn load_record_in(
     };
     Ok(ConnectorSessionRecord {
         principal,
-        room_uid: incarnation,
+        room,
         expires_at,
         revoked: row.get::<i64, _>("revoked") != 0,
         status: participant.status,

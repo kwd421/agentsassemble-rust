@@ -604,6 +604,16 @@ after commit, exact public result and event count, released MCP capacity, and de
 for another request ID, payload, action, credential or room incarnation. Existing
 message retry and attendee terminal acknowledgments remain independently applicable.
 
+The exact committed leave must also remain recoverable if its room is archived or
+closed after the reply is lost. Room status is required for new session authority,
+not for reading that existing result. Reuse the authority owner's room loading and
+active-status validation separately: stored connector identity still checks the
+current room incarnation, while authorization checks active status before issuing
+provenance. Do not restore membership, accept a new leave, or revive any credential.
+The same command receipt and database reads suffice; no new storage, retry loop or
+transport fallback is needed. Verify terminal-room replay against the original
+result and continued rejection of active authority and changed incarnation.
+
 Dedicated `/api/room-connector/join` and `/command` routes retain connector
 credential purposes and return explicit committed/rejected/unresolved outcomes.
 Admission and writes use the existing bounded room queue and durable publication.

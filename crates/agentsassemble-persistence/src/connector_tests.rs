@@ -253,6 +253,54 @@ async fn connector_terminal_leave_receipt_requires_exact_credential_and_incarnat
         1
     );
 
+    assert_terminal_room_leave_receipt(&store, authority, &first.outcome).await?;
+
+    Ok(())
+}
+
+async fn assert_terminal_room_leave_receipt(
+    store: &crate::SqliteStore,
+    authority: &crate::ConnectorSessionAuthorization,
+    original: &crate::CommandOutcome,
+) -> TestResult {
+    // Losing the leave reply does not make its committed receipt an active-room operation.
+    let local = crate::room_user_identity::test_authority(store).await;
+    let mut tx = store.pool.begin().await?;
+    let principal = local.resolve(&mut tx).await?;
+    tx.commit().await?;
+    for (action, payload) in [
+        (
+            "room.archive",
+            serde_json::json!({"room_uid":local.room_uid,"archived":true}),
+        ),
+        ("room.close", serde_json::json!({"room_uid":local.room_uid})),
+    ] {
+        store
+            .execute_room_lifecycle(
+                crate::RoomMutationAuthority::TrustedPrincipal(&principal),
+                action,
+                action,
+                &payload,
+            )
+            .await?;
+        let recovered = store
+            .completed_connector_leave(
+                authority.session_fingerprint(),
+                "same-leave",
+                &serde_json::json!({}),
+            )
+            .await?
+            .ok_or("terminal room lost its committed leave receipt")?;
+        assert_eq!(recovered.1.result, original.result);
+        assert!(recovered.1.deduplicated);
+        assert!(
+            store
+                .authorize_connector_session(authority.session_fingerprint(), Utc::now())
+                .await
+                .is_err()
+        );
+    }
+
     // Retain the original credential and receipt while replacing the room incarnation.
     sqlx::query(
         "UPDATE rooms SET room_json=json_set(room_json,'$.room_uid',?) WHERE room_id='general'",

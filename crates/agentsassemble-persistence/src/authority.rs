@@ -114,6 +114,15 @@ pub(crate) async fn load_active_room(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<Room, PersistenceError> {
+    let room = load_room(transaction, room_id).await?;
+    require_active_room(&room)?;
+    Ok(room)
+}
+
+pub(crate) async fn load_room(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+) -> Result<Room, PersistenceError> {
     let room_json =
         sqlx::query_scalar::<_, String>("SELECT room_json FROM rooms WHERE room_id = ?")
             .bind(room_id)
@@ -121,13 +130,24 @@ pub(crate) async fn load_active_room(
             .await?
             .ok_or(PersistenceError::RoomMissing)?;
     let room: Room = serde_json::from_str(&room_json)?;
-    if room.room_id != room_id || room.status != RoomStatus::Active {
-        return Err(PersistenceError::CommandRejected {
-            code: "room_inactive".into(),
-            message: "Closed or archived rooms do not accept active sessions.".to_owned(),
-        });
+    if room.room_id != room_id {
+        return Err(room_inactive());
     }
     Ok(room)
+}
+
+pub(crate) fn require_active_room(room: &Room) -> Result<(), PersistenceError> {
+    if room.status != RoomStatus::Active {
+        return Err(room_inactive());
+    }
+    Ok(())
+}
+
+fn room_inactive() -> PersistenceError {
+    PersistenceError::CommandRejected {
+        code: "room_inactive".into(),
+        message: "Closed or archived rooms do not accept active sessions.".to_owned(),
+    }
 }
 
 fn session_revoked() -> PersistenceError {

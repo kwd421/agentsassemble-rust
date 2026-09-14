@@ -10435,3 +10435,77 @@ app data, fixture root, bundle and build configuration are removed. Artifact che
 passes and keeps useful build output. Pro re-review and independent later groups,
 real browser/OS dispatch, two-machine proof, broader mobile and the previously
 deferred real-provider/OAuth/installer outcomes remain open.
+
+### Completed Phase 1–6 source review disposition (2026-09-14)
+
+At frozen `2135d5112d00f80996a5f6ce98762515049cfcb8`, the completed Pro
+Phase 1–3 verdict is APPROVE, unique C0/H0/M0/L0, with P13-M7 CLOSED.
+The completed separate Phase 4–6 verdict is also APPROVE, unique C0/H0/M0/L0,
+with G2-M1–M6 CLOSED. Both complete verdicts were read; the P13 source evidence
+was read in full, and G2's new G/N judgments and exact-reuse boundaries were read.
+G2's entire raw-source appendix has not been newly reread by the implementer.
+Mechanical source/hash correspondence checks are not additional semantic review.
+Local retained verdicts are `aa-p13-2135d511-review.md` and
+`aa-g2-2135d511-review.md`; companion source-evidence files retain the detailed
+reviewer coverage. The completed reviews are in
+https://chatgpt.com/c/6aa2d14f-7144-83e8-9b0e-a36fd8dbdbf6 .
+
+These dispositions supersede the earlier pending P13/G2 status only in their
+exact scopes. They do not approve historical intermediate trees retroactively,
+complete independent Phase 7–9, or establish real-provider/UI execution.
+The historical G3 REVISE C0/H1/M2/L0 remains recorded; its corrections still need
+the independent current G3 disposition. Historical 137+18 individual patches,
+the later 27 contributions, cumulative changes and final G3 integration remain
+subject to completed coverage rather than progress titles or commit statistics.
+
+The current independent review is
+https://chatgpt.com/c/6aa7434d-c86c-83e8-b01d-c4a118677623 . The user's correction
+requires deriving the complete review from requirements and actual source, without
+limiting exploration to the implementer's examples or treating its claims as
+accepted conclusions. The corrected request persisted after reload. The reviewer
+subsequently returned an incomplete response claiming no source had been returned,
+then retracted that claim in response to the user's question: it reported that
+source and patches had been returned but it had misinterpreted tool output.
+Neither response completes G3 or provides approval. The same full review was
+requested to resume with GPT-6 Pro in the Codex in-app browser, as the user requires;
+the resume message persisted after reload and the in-app page showed `6 Pro`
+thinking. A transient request-limit notice did not require duplicate submission.
+No new completion evidence is recorded.
+
+No new test or packaged execution is claimed by this documentation update.
+Native36 and affected gates retain their current scoped PASS; Rust917/frontend859
+retain prior unchanged-source evidence. The second Quit attempt remains cleanup
+proof only, with its recovery-cancellation assertion FAIL. Real OAuth/installer,
+browser-to-OS dispatch, two physical PCs, broader mobile and deferred platform and
+provider acceptance remain unverified as recorded above. Final product completion
+is not declared.
+
+### Connector leave receipt after room inactivity (2026-09-14)
+
+The reviewer mentioned room status as an unresolved source question. Independent
+local tracing found `completed_connector_leave` loaded an active room before
+looking up the committed result; the client then treated `room_inactive` as a
+rejection and the MCP hub retained its connection slot. Extending the existing
+exact-credential/incarnation test through real room archive and close reproduced
+the failure on the initial archive with `room_inactive` at the reviewed source.
+
+The correction separates room loading from active-status validation at the existing
+authority owner. Connector stored identity retains the loaded room and checks its
+incarnation; only issuing new session authority requires active status. Exact
+terminal replay uses the existing command result and never revives authority.
+No new query, durable state, polling, fallback or provider process is introduced.
+
+The modified regression and all four Connector persistence tests pass, followed
+by all 333 persistence tests and eight Connector HTTP/MCP integration tests.
+The archive/close interleaving is tested at the transaction boundary. The existing
+real HTTP/MCP lost-reply test is also extended: archive through the authenticated
+HTTP lifecycle route after leave commits but its response is lost, recover the exact
+leave event through the real stdio client, restore the room and admit/leave a fresh
+invitation in the released slot. That extended case passes in 1.20 seconds.
+Architecture, source growth, 19 policy tests, workspace format and diff checks
+pass, as do full workspace all-target/all-feature Clippy and artifact maintenance.
+The extended regression passes again after splitting its terminal-room assertions
+to meet the unchanged function-length lint. Full Clippy passes again after the
+HTTP/MCP extension. This correction is outside Pro's frozen `2135d511` review.
+No new packaged UI or real-provider run
+is claimed; final corrected-source review and remaining real-flow acceptance stay open.
