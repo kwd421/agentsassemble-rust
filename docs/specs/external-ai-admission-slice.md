@@ -681,6 +681,10 @@ errors. No timer, eviction, new admission or fabricated success replaces custody
 The stdio transport still permits only one active connection; completed receipts
 do not occupy that active slot, but callers must keep the exact returned handle
 for replay across a later join. Normal service shutdown releases the whole registry.
+When more than one mapping exists, stdio leave/release without an explicit ID is
+ambiguous and must fail before selecting a client. It must not reinterpret a lost
+old leave retry as leaving the newly active connection. Ordinary current-room reads
+and contributions retain their existing implicit active-connection selection.
 Acceptance loses only the MCP response after room HTTP success, recovers the exact
 terminal result with the same handle, denies renewed authority, and confirms
 explicit acknowledgment releases capacity. Concurrent retries must share that

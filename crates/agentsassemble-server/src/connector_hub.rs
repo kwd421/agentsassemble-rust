@@ -118,19 +118,22 @@ impl ConnectorHub {
     }
 
     pub(super) fn client(&self, id: &str) -> Result<Arc<RoomConnectorClient>, String> {
-        let client = self.connection(id)?;
+        let client = self.connection(id, false)?;
         if client.has_completed_leave() {
             return Err("invalid_connection_id".to_owned());
         }
         Ok(client)
     }
 
-    fn connection(&self, id: &str) -> Result<Arc<RoomConnectorClient>, String> {
+    fn connection(&self, id: &str, for_leave: bool) -> Result<Arc<RoomConnectorClient>, String> {
         let state = self.state.lock();
         if state.closed {
             return Err("connector_closed".to_owned());
         }
         if id.is_empty() && self.allowed_servers.is_none() {
+            if for_leave && state.clients.len() > 1 {
+                return Err("connection_id_required".to_owned());
+            }
             if let Some(client) = state
                 .clients
                 .values()
@@ -157,7 +160,7 @@ impl ConnectorHub {
     }
 
     pub(super) async fn leave(&self, id: &str, release_receipt: bool) -> Result<Value, String> {
-        let client = self.connection(id)?;
+        let client = self.connection(id, true)?;
         if release_receipt {
             if !client.has_completed_leave() {
                 return Err("connector_leave_receipt_not_completed".to_owned());

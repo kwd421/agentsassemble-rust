@@ -58,8 +58,21 @@ async fn lost_connector_leave_recovers_exact_receipt_and_releases_stdio_slot()
     let next = mcp::call(&client, "room_join", invitation).await;
     assert_ne!(next["participant_id"], joined["participant_id"]);
     assert_ne!(next["connection_id"], joined["connection_id"]);
+    super::mcp_remote::rejected(&client, "room_leave", json!({}), "connection_id_required").await;
+    let original = mcp::call(
+        &client,
+        "room_leave",
+        json!({"connection_id":joined["connection_id"]}),
+    )
+    .await;
+    assert_eq!(original, recovered);
     mcp::call(&client, "room_read", json!({})).await;
-    mcp::call(&client, "room_leave", json!({})).await;
+    mcp::call(
+        &client,
+        "room_leave",
+        json!({"connection_id":next["connection_id"]}),
+    )
+    .await;
     client.cancel().await?;
     assert!(
         tokio::time::timeout(Duration::from_secs(5), child.wait())

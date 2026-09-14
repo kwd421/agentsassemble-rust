@@ -39,6 +39,11 @@
   owner; exact replay, conflicting reuse and intentional distinct-ID publication
   pass in actual HTTP/MCP. Connector11 and workspace Clippy pass; no approval is
   inferred for this later source from the frozen review.
+  Follow-up correction: retained receipts made implicit stdio leave ambiguous
+  after a new join. The actual regression incorrectly left the new participant;
+  leave/release now requires an explicit ID when multiple mappings exist.
+  Exact old replay and current-room read/new explicit leave pass, alongside
+  workspace Clippy and unchanged gates. This later fix also requires re-review.
   User correction: implementer-selected findings, files and paths must not limit
   or steer the independent review. Derive coverage from user requirements and
   actual source, including omissions and new problems outside those examples.

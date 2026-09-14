@@ -2,6 +2,30 @@
 
 Status: current real-client verification owner
 
+## Stdio leave identity after retained receipts (2026-09-14)
+
+A follow-up check of the new terminal retention reproduces an ambiguity at
+`4a5a06ab`: after retaining the old leave result and joining again, `room_leave`
+without an ID selects and leaves the new participant. The extended actual stdio
+regression fails with an unexpected committed leave. Lookup now rejects implicit
+leave/release when multiple mappings exist, under the same registry lock that
+selects the client. Exact old-ID replay still returns the old canonical result;
+ordinary current-room read and explicit new-ID leave both succeed. One-mapping
+implicit behavior and ordinary active reads/contributions remain unchanged.
+
+The corrected regression PASS (1.23s), workspace all-target/all-feature Clippy
+PASS, architecture/format/diff and 19 policy/artifact-owner checks PASS. Earlier
+Connector11 evidence is retained with its preceding revision; it is not relabeled
+as a fresh full-suite run after this lookup guard. Affected-source review remains.
+
+The preceding terminal-loss/capacity regression was also measured separately:
+one retained receipt plus 127 prepared mappings, rejection at 128, receipt release
+and replacement preparation. `/usr/bin/time -l` observes 0.19s wall, 0.06s user,
+0.04s system, 46,317,568 bytes (44.17 MiB) maximum RSS and 11,370,976 bytes peak
+memory footprint. This includes the test harness, room HTTP server, relay, MCP
+service and client in one process. It is not incremental receipt cost, the worst
+case for 128 terminal receipts, packaged-app memory or real-provider measurement.
+
 ## MCP mutation identity across response loss (2026-09-14)
 
 The review's unconfirmed general-mutation candidate was independently reproduced
