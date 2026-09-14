@@ -28,6 +28,16 @@ async fn listing_readd_preserves_room_authority_and_replays_after_reopen()
     )
     .await?;
     transaction.commit().await?;
+    let snapshot = store
+        .snapshot_for(TrustedPrincipal(&principal), 0, 200)
+        .await?;
+    assert!(
+        snapshot
+            .participants
+            .iter()
+            .any(|participant| participant.participant_id == AGENT_ID
+                && participant.status == ParticipantStatus::Kicked)
+    );
     let mut transaction = store.pool.begin().await?;
     let before = load_session(&mut transaction, "general", AGENT_ID).await?;
     transaction.commit().await?;

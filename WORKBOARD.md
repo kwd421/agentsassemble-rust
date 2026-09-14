@@ -2,6 +2,16 @@
 
 ## Active work
 
+- Whole-source Pro at `7df6bb09` completed (43m1s): REVISE H1/M2; full answer read.
+  The other seven prior corrections are confirmed. Current H1 covers terminal and
+  expired participant accumulation; M1 covers manual retry identity loss; M2 is the
+  post-send recovery stall already corrected and packaged-verified at `12f556b4`.
+  H1 now passes canonical 1000-departure/expiry actual WebSocket4, persistence336
+  and workspace Clippy. Correct M1, finish affected verification, then submit the
+  latest whole repository without restrictions.
+  The prepared `12f556b4` archive is superseded by these active corrections and has
+  not been sent. [Current evidence](docs/VERIFICATION.md#completed-whole-repository-pro-review-2026-09-14).
+
 - Latest user instruction (2026-09-14) supersedes the split review and continuation
   directions below: obtain one independent whole-repository review, without phase,
   file, known-finding or implementer-prescribed review-method restrictions.

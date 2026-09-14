@@ -2,6 +2,41 @@
 
 ## Completed whole-repository Pro review (2026-09-14)
 
+H1 follow-up now passes: canonical Connector admission/leave, kick and export
+(1,000 each) and 1,000 controlled-expired admissions over actual WebSockets. Before
+the correction, kick/export and expired Joined metadata return snapshot_too_large;
+now each subscription fits the unchanged frame limit, including resumed empty
+events. Historical author text and all durable participants remain intact. The
+same public query excludes ended/expired human membership using its session owner,
+while preserving any current replacement session and managed-session records needed
+for re-add/export eligibility. Persistence336 and all-target/all-feature workspace
+Clippy pass. A new human-expiry fixture initially violated the existing admission
+CHECK constraint; corrected controlled timestamps preserve it and the final suite
+passes. No gate, frame limit, storage schema, cleanup loop or UI layout changes.
+Logs: `/tmp/aa-terminal-roster-baseline.log`, `/tmp/aa-expired-roster-baseline.log`,
+`/tmp/aa-terminal-roster-fixed.log`, `/tmp/aa-terminal-roster-persistence.log`,
+`/tmp/aa-terminal-roster-clippy.log`, `/tmp/aa-terminal-roster-gates.log`.
+Latest packaged verification and whole-source re-review remain pending.
+
+The complete 43m1s whole-repository answer at frozen `7df6bb09` has now been
+read in the same in-app conversation: **REVISE H1/M2**. H1 retains terminal and
+expired membership in required snapshot metadata. M1 loses the exact command ID
+when automatic replay settles unknown and the user resends the restored draft.
+M2 leaves sent commands pending if later connections never finish subscription.
+The reviewer confirms the other seven prior correction paths and executes the
+small-cursor recovery successfully. M2 is locally corrected after this frozen
+revision; its re-review remains. H1 and M1 corrections are active, not approved.
+
+Reviewer execution is separate: manifest2683 unchanged, Python script tests19
+PASS, provider JavaScript7 PASS/1 module-load FAIL (missing Claude SDK), controlled
+current-TypeScript probes and extracted-SQL serialization. Rust/build/Clippy,
+full frontend, packaged app and real-provider execution were not performed there.
+The final answer gives a whole-source verdict, not incomplete review. It records
+private API checkpoint continuity as a disclosed contract difference, without
+claiming user acceptance or identical original behavior. The full visible answer
+is retained in this turn's browser tool output; content export is unsupported, so
+no separate downloaded report is claimed.
+
 Independent follow-up from the running review's progress: an abrupt post-send
 disconnect clears the command timer; ticket failure/hang or unfinished subscription
 can then leave its Promise pending indefinitely. All three controlled regressions

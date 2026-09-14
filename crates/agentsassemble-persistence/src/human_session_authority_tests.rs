@@ -18,6 +18,38 @@ const JOIN: [u8; 32] = [0x42; 32];
 const BROWSER: [u8; 32] = [0x43; 32];
 
 #[tokio::test]
+async fn expired_human_membership_leaves_public_roster_without_destroying_history()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, now) = admitted_fixture(InviteScope::ReadWrite).await;
+    let principal = local_operator_principal();
+    let authority = TrustedPrincipal(&principal);
+    let before = store.snapshot_for(authority, 0, 200).await?;
+    assert_eq!(before.participants.len(), 2);
+    sqlx::query("UPDATE human_room_sessions SET admitted_at = ?")
+        .bind((now - Duration::seconds(2)).timestamp_micros())
+        .execute(&store.pool)
+        .await?;
+    set_session_expiry(&store, now - Duration::seconds(1)).await;
+    let expired = store.snapshot_for(authority, 0, 200).await?;
+    assert_eq!(expired.participants.len(), 1);
+    assert_eq!(
+        expired.participants[0].participant_id,
+        LOCAL_OPERATOR_PARTICIPANT_ID
+    );
+    assert_eq!(expired.events, before.events);
+    assert_eq!(
+        store.snapshot("general", 0, 200).await?.participants.len(),
+        2
+    );
+    set_session_expiry(&store, now + Duration::hours(1)).await;
+    assert_eq!(
+        store.snapshot_for(authority, 0, 200).await?.participants,
+        before.participants
+    );
+    Ok(())
+}
+
+#[tokio::test]
 async fn lifecycle_preparation_and_effect_dispatch_revalidate_the_request_session() {
     let (store, _) = admitted_fixture(InviteScope::ReadWrite).await;
     let authorization = store

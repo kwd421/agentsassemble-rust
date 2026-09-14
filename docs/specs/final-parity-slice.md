@@ -263,6 +263,25 @@ No pagination, frame limit increase, row deletion or UI layout change is require
 for this lifetime correction. This does not establish bounds for every other kind
 of snapshot metadata or certify expired-but-still-Joined participant handling.
 
+Follow-up: the same canonical 1,000-admission regression now reproduces
+snapshot_too_large for both moderator kick and export, while leave passes. Terminal
+external membership is historical regardless of which departure transition ended
+it. Extend the same public query to omit Left/Kicked/Exported rows unless an actual
+room Agent Session references the participant. Retain that bounded session roster
+for re-add eligibility and exported-session exclusion; retain every durable row and
+embedded message author. The existing session capacity remains unchanged. Verify
+all three canonical departure paths over real WebSockets and public snapshots of
+removed managed sessions. No new storage, cursor, fallback or frame budget is added.
+
+The completed review also includes expired Joined records. Canonical Connector
+admissions at controlled past timestamps reproduce the same rejection with no new
+message events requested. The public roster additionally follows the existing human
+and Connector session expiry/revocation owners. Any current human session retains
+the participant; an expired prior session cannot hide a replacement. Internal reads
+and history remain unchanged, and a removed managed-session participant remains
+available for creation eligibility. Verify actual expired Connector reconnect and
+human expiry/current-session snapshot behavior without sleeps or a new cleanup loop.
+
 ## Uncertain command recovery deadline (2026-09-14)
 
 Review progress identifies a sent command left pending when every later ticket or

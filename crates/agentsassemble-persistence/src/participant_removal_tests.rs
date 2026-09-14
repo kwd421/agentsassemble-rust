@@ -174,6 +174,17 @@ async fn exported_session_cannot_resume_after_successful_cleanup() {
         )
         .await
         .unwrap_or_else(|error| panic!("export stopped session: {error}"));
+    let snapshot = store
+        .snapshot_for(TrustedPrincipal(&principal), 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("read managed export snapshot: {error}"));
+    assert!(
+        snapshot
+            .participants
+            .iter()
+            .any(|participant| participant.participant_id == AGENT_ID
+                && participant.status == ParticipantStatus::Exported)
+    );
     let payload = json!({"participant_id": AGENT_ID});
     for (request_id, action) in [
         ("late-kick", "participant.kick"),

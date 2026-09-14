@@ -363,16 +363,24 @@ async fn load_snapshot_participants(
     room_id: &str,
     include_departed: bool,
 ) -> Result<Vec<Participant>, PersistenceError> {
-    // A public participant_left transition removes this record from the live roster.
-    // Preserve historical rows for authority/history, without reintroducing all of them
-    // into every new connection's mandatory metadata. Exported records remain available
-    // to the agent-creation reactivation policy.
+    let now = chrono::Utc::now().timestamp_micros();
+    // Terminal external memberships belong to history, not the live roster. Keep
+    // managed session participants for re-add eligibility and exported exclusions;
+    // their count is bounded by the existing Agent Session capacity owner.
     let participant_rows = sqlx::query(
-        "SELECT participant_json FROM participants WHERE room_id = ? \
-         AND (? OR json_extract(participant_json, '$.status') IS NOT 'left') ORDER BY participant_id",
+        "SELECT participant_json FROM participants AS p WHERE p.room_id = ? \
+         AND (? OR (coalesce(json_extract(p.participant_json, '$.status'), '') NOT IN ('left', 'kicked', 'exported') \
+         AND (NOT EXISTS (SELECT 1 FROM human_room_sessions AS h WHERE h.room_id = p.room_id AND h.participant_id = p.participant_id) \
+         OR EXISTS (SELECT 1 FROM human_room_sessions AS h WHERE h.room_id = p.room_id AND h.participant_id = p.participant_id AND h.state = 'active' AND h.expires_at > ?)) \
+         AND NOT EXISTS (SELECT 1 FROM room_connector_invites AS c WHERE c.room_id = p.room_id AND c.participant_id = p.participant_id AND (c.revoked = 1 OR c.session_expires_at <= ?))) \
+         OR EXISTS (SELECT 1 FROM agent_sessions AS s WHERE s.room_id = p.room_id \
+         AND json_extract(s.session_json, '$.participant_id') = p.participant_id)) \
+         ORDER BY p.participant_id",
     )
     .bind(room_id)
     .bind(include_departed)
+    .bind(now)
+    .bind(now)
     .fetch_all(&mut **transaction)
     .await?;
     Ok(participant_rows
