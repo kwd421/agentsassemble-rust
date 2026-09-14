@@ -15,8 +15,11 @@
   exclude discovery revision from the comparison while preserving the exact payload.
   Signed0.1.51 now proves catalog-refresh exact retry and idle Stop/Quit/restart/Resume
   with the identical native ID and zero turns. Provider261 covered, server20,
-  native36, creation29/build and unchanged gates pass. Commit and send the next
-  unrestricted whole-source review. Current old archives are superseded.
+  native36, creation29/build and unchanged gates pass. At02:36 KST2026-09-15,
+  sent the unrestricted whole-source Pro review at6b5b19dd with both repositories'
+  full source. Attachment, complete request and active generation are visible in
+  the existing in-app conversation. Await/read its final answer and continue
+  supported corrections; current old archives are superseded.
 
 - Cursor Auto native calls were rejected because runtime spawn reused the catalog's
   default Reject policy. Exact qualified tool identity was present. Pass RoomTools

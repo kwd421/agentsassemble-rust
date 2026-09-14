@@ -1,5 +1,18 @@
 # Verification Contract
 
+## Whole-source 6b5b19dd review submission (2026-09-15)
+
+At02:36 KST, the in-app Pro conversation visibly contains the complete unrestricted
+whole-repository request, repository URLs, exact Rust commit
+6b5b19dd9df82a9a065634a8e6062d42f93d7c87 and original commit
+d5046473010d1353a81ee38337360e6d98f7bd6f. The posted attachment is
+`/tmp/aa-whole-repository-6b5b19dd.zip`:2,686 files,7,521,295 bytes,SHA-256
+75589a4a66eaa6d6b6c4079e1234c4e9ac0483a753b04bc285719af3a8c37b9d.
+Both tracked snapshots and their manifest were verified before upload. Pro shows
+active generation; this is submission evidence, not approval or completion.
+Conversation:https://chatgpt.com/c/6aa7aa6c-8608-83ee-b6b9-0e7833fcaf68 .
+Await and read the completed answer, then correct and re-review supported findings.
+
 ## Whole-source b09d3de4 final review (2026-09-15)
 
 Corrections now separate the initial complete catalog frame from room metadata at
