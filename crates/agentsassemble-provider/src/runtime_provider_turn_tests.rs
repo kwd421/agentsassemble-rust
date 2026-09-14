@@ -549,12 +549,25 @@ async fn assert_turn_error(
         input: "This must not be sent twice.".to_owned(),
         room_observation: None,
     };
-    let Err(error) = adapter.send_turn(&active, &request).await else {
+    let prepared = adapter
+        .prepare_turn(&active, &request)
+        .await
+        .unwrap_or_else(|error| panic!("prepare failed turn: {error}"));
+    let authority = prepared.exact_authority();
+    let Err(error) = adapter
+        .send_prepared_turn(prepared, &active, &request)
+        .await
+    else {
         panic!("unconfirmed provider turn must fail closed");
     };
     assert_eq!(error.code, expected_code);
     assert!(!error.effect_uncertain);
     assert!(error.runtime_stopped);
+    assert!(adapter.owns_exact_turn(&authority).await);
+    assert_eq!(
+        adapter.retained_turn_result(&authority).await,
+        Some(Err(error.clone()))
+    );
     let requests = requests(&transcript);
     assert_eq!(
         request_methods(&requests),
@@ -569,6 +582,8 @@ async fn assert_turn_error(
             &started.runtime_lease_token,
         )
         .await;
+    assert!(!adapter.owns_exact_turn(&authority).await);
+    assert_eq!(adapter.retained_turn_result(&authority).await, None);
     let Err(replay_error) = adapter.send_turn(&active, &request).await else {
         panic!("stopped poisoned runtime must not accept another turn");
     };

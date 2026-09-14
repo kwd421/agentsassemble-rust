@@ -170,6 +170,7 @@ enum RuntimeState {
         handle_id: String,
         owner_id: String,
         runtime_lease: HeldRuntimeLease,
+        active_turn: Option<Box<runtime_exact_turn::ActiveProviderTurnSlot>>,
     },
 }
 
@@ -310,6 +311,7 @@ impl ProviderAdapter {
                     handle_id: handle_id.to_owned(),
                     owner_id: owner_id.to_owned(),
                     runtime_lease,
+                    active_turn: runtime.active_turn.take(),
                 };
                 Ok(())
             }
@@ -317,6 +319,7 @@ impl ProviderAdapter {
                 handle_id: confirmed_handle,
                 owner_id: confirmed_owner,
                 runtime_lease,
+                ..
             } if confirmed_handle == handle_id
                 && confirmed_owner == owner_id
                 && runtime_lease.token() == lease_token =>
@@ -352,6 +355,7 @@ impl ProviderAdapter {
                 handle_id: confirmed_handle,
                 owner_id: confirmed_owner,
                 runtime_lease,
+                ..
             } if confirmed_handle == handle_id
                 && confirmed_owner == owner_id
                 && runtime_lease.token() == lease_token
@@ -426,6 +430,7 @@ impl ProviderAdapter {
                 handle_id,
                 owner_id,
                 runtime_lease,
+                ..
             } = &mut slot.state
             else {
                 continue;
@@ -520,12 +525,14 @@ async fn shutdown_slot(
             handle_id: runtime.handle_id.clone(),
             owner_id: runtime.owner_id.clone(),
             runtime_lease,
+            active_turn: runtime.active_turn.take(),
         };
     }
     if let RuntimeState::StopConfirmed {
         handle_id,
         owner_id,
         runtime_lease,
+        ..
     } = &slot.state
     {
         Ok(Some(ProviderRuntimeGone {

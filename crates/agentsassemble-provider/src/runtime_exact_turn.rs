@@ -361,11 +361,12 @@ impl ProviderAdapter {
             return;
         };
         let mut slot = slot.lock().await;
-        let RuntimeState::Running(runtime) = &mut slot.state else {
-            return;
+        let active_turn = match &mut slot.state {
+            RuntimeState::Running(runtime) => &mut runtime.active_turn,
+            RuntimeState::StopConfirmed { active_turn, .. } => active_turn,
+            _ => return,
         };
-        if let Some(active) = runtime
-            .active_turn
+        if let Some(active) = active_turn
             .as_mut()
             .filter(|active| active.preparation_id == prepared.preparation_id)
         {
@@ -389,25 +390,13 @@ impl ProviderAdapter {
             .existing_slot(&authority.room_id, &authority.session_id)
             .await?;
         let slot = slot.lock().await;
-        let RuntimeState::Running(runtime) = &slot.state else {
-            return None;
-        };
-        if runtime.handle_id != authority.runtime_handle_id
-            || runtime.owner_id != authority.runtime_owner_id
-            || runtime.lease_token != authority.runtime_lease_token
-        {
-            return None;
-        }
-        runtime
-            .active_turn
-            .as_ref()
+        exact_active_turn(&slot.state, authority)
             .filter(|active| {
-                exact_authority_matches(active, authority)
-                    && matches!(
-                        active.phase,
-                        ActiveProviderTurnPhase::ResultReadyRetained
-                            | ActiveProviderTurnPhase::ResultReadyUncertain
-                    )
+                matches!(
+                    active.phase,
+                    ActiveProviderTurnPhase::ResultReadyRetained
+                        | ActiveProviderTurnPhase::ResultReadyUncertain
+                )
             })
             .and_then(|active| active.result.clone())
     }
@@ -448,16 +437,7 @@ impl ProviderAdapter {
             return false;
         };
         let slot = slot.lock().await;
-        let RuntimeState::Running(runtime) = &slot.state else {
-            return false;
-        };
-        runtime.handle_id == authority.runtime_handle_id
-            && runtime.owner_id == authority.runtime_owner_id
-            && runtime.lease_token == authority.runtime_lease_token
-            && runtime
-                .active_turn
-                .as_ref()
-                .is_some_and(|active| exact_authority_matches(active, authority))
+        exact_active_turn(&slot.state, authority).is_some()
     }
 
     /// Releases a quiesced exact turn only after its durable terminal commit.
@@ -644,4 +624,38 @@ const fn operation_in_progress() -> DriverError {
         "operation_in_progress",
         "Another exact provider operation is already active.",
     )
+}
+
+// A confirmed process exit does not release the uncommitted exact turn result.
+fn exact_active_turn<'a>(
+    state: &'a RuntimeState,
+    authority: &ProviderExactTurnAuthority,
+) -> Option<&'a ActiveProviderTurnSlot> {
+    let (handle, owner, lease, active) = match state {
+        RuntimeState::Running(runtime) => (
+            runtime.handle_id.as_str(),
+            runtime.owner_id.as_str(),
+            runtime.lease_token.as_str(),
+            runtime.active_turn.as_deref(),
+        ),
+        RuntimeState::StopConfirmed {
+            handle_id,
+            owner_id,
+            runtime_lease,
+            active_turn,
+        } => (
+            handle_id.as_str(),
+            owner_id.as_str(),
+            runtime_lease.token(),
+            active_turn.as_deref(),
+        ),
+        _ => return None,
+    };
+    if handle != authority.runtime_handle_id
+        || owner != authority.runtime_owner_id
+        || lease != authority.runtime_lease_token
+    {
+        return None;
+    }
+    active.filter(|active| exact_authority_matches(active, authority))
 }

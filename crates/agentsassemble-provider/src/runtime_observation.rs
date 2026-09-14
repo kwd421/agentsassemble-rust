@@ -27,6 +27,7 @@ impl ProviderAdapter {
             handle_id,
             owner_id,
             runtime_lease,
+            ..
         } = &slot.state
         {
             return if handle_id == &session.runtime_handle_id
@@ -164,6 +165,7 @@ pub(super) fn shutdown_launching_runtime(
             handle_id: runtime.handle_id,
             owner_id: runtime.owner_id,
             runtime_lease: runtime.runtime_lease,
+            active_turn: None,
         };
         return Some(Ok(stopped));
     }
@@ -200,6 +202,7 @@ pub(super) fn shutdown_launching_runtime(
         handle_id: runtime.handle_id,
         owner_id: runtime.owner_id,
         runtime_lease: runtime.runtime_lease,
+        active_turn: None,
     };
     Some(Ok(stopped))
 }

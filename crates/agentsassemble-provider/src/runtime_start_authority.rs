@@ -165,6 +165,7 @@ impl ProviderAdapter {
                 handle_id,
                 owner_id,
                 runtime_lease,
+                ..
             } if handle_id == &session.runtime_handle_id
                 && owner_id == &session.runtime_owner_id
                 && runtime_lease.token() == session.runtime_lease_token
@@ -248,6 +249,7 @@ impl ProviderAdapter {
                             handle_id: runtime.handle_id,
                             owner_id: runtime.owner_id,
                             runtime_lease: runtime.runtime_lease,
+                            active_turn: None,
                         };
                         return Err(error);
                     }
