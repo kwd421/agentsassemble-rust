@@ -26,6 +26,19 @@ parity, ownership, failure, cost and UI requirements and the no-execution/no-sca
 review boundary. No new confirmed product finding or approval is inferred.
 
 
+The 15:24 continuation subsequently left progress text without a final verdict;
+a fresh saved-page check exposed no answer-stop control. A further full-scope
+checkpoint continuation was sent and verified saved after reload. It is active,
+not a completed answer. The initial local retention contains five exact observed
+web-tool output captures and eight complete per-SHA reviewer records, alongside
+the observed counts 4/5/6/9/22. SHA-256 verifies each captured file against its
+manifest at `/tmp/aa-pro-review-evidence-2135d511-20260914/manifest.json`. This
+retains what was actually received outside the web review's ephemeral state. The
+initial eight extracted records are not asserted to be all 22. Later observations
+append with their original ordinal and hash without replacing earlier captures;
+missing record bodies and whole coverage still need reconciliation. No private app data or credentials are
+included; these captures contain the already-observed source review output.
+
 ## Admitted rejoin read failure preserves leave custody (2026-09-14)
 
 At `b2acf04d`, an actual remote MCP regression exhausts the existing room event-read

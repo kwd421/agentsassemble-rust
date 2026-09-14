@@ -2,6 +2,17 @@
 
 ## Active work
 
+- Review evidence retention correction (2026-09-14): the 15:24 continuation later
+  left only progress text and no final verdict; after reload the stop control was
+  absent. Continued from the checkpoint and verified the new full-scope request
+  survived reload. Preserve locally observed reviewer outputs in
+  `/tmp/aa-pro-review-evidence-2135d511-20260914/manifest.json`: initially five raw output
+  captures, eight explicit per-SHA records, and observed saved counts through 22.
+  Subsequent captures append without replacing prior observations.
+  File hashes were checked. These are reviewer evidence claims, not whole coverage
+  or implementation approval. Supply this retained record with the next review
+  continuation rather than relying only on the web conversation's memory.
+
 - Latest completed Pro continuation (2026-09-14, 72m41s) is still partial.
   M3 is formally withdrawn; whole Phase 7–9 is not approved. Final prose reports
   9/182 full patches, but the same run's actual `save_116.py` output shows
