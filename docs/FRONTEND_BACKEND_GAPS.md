@@ -15,6 +15,17 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ### Frontend corrections and acceptance boundaries (2026-09-14)
 
+Reconnect correction: the server may reject an ahead-of-history cursor
+before sending a subscription receipt. The client now recognizes that explicit
+response and requests an initial snapshot while retaining its verified cursor,
+room lifetime and pending intent until the normal bound-snapshot checks run.
+The recreated-room regression failed before this correction (cursor 3 repeated
+after durable cursor 1). Frontend861, real WebSocket2 and required gates pass.
+Signed 0.1.36 confirms ordinary room connection, native restart, history retention
+and subsequent message delivery; same-name recreation was not exercised in the
+packaged UI. Corrected-source review remains pending. No layout or new UI entry
+point is introduced.
+
 The user requires preservation of the existing frontend wherever possible. Change
 it only to add a required behavior or correct poor usability; implementation
 convenience is not authorization to rearrange existing controls. The top button

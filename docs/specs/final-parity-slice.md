@@ -86,6 +86,17 @@ Cursor Auto turn and stop; other real model turns remain outside authorization.
 
 ## Acceptance and verification
 
+Reconnect recovery (2026-09-14): an ahead-of-history subscription can receive the
+server's `resync_required` before its receipt. Recognize this exact room-events
+frame and request an initial snapshot using the existing reconnect owner. Keep the
+last verified cursor, accepted room UID and pending commands until the ordinary
+receipt/snapshot checks resolve the room lifetime. A changed room UID rejects old
+pending intent before new-room readiness; a resync hint alone cannot authorize
+regressed same-room history or replay pending commands. Malformed responses retain
+the existing failure path. No layout, authority, timer or alternate transport is
+added. The transport regression must cover both lower and higher recreated-room
+cursors and must not claim packaged recreation from synthetic frames alone.
+
 The real 390px admitted-browser flow exposes an inherited presentation gap:
 `MobileRoomInfoPanel` reports no items in its media/pins/links/files tabs even when
 the room contains an attachment. Original `d504647` has the same unconditional

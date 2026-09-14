@@ -16,6 +16,57 @@ use support::human_invite::{fixture, start};
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;
 
 #[tokio::test]
+async fn recreated_room_rejects_old_cursor_before_receipt_then_serves_initial_snapshot()
+-> TestResult {
+    let (store, _) = fixture(InviteScope::ReadOnly).await;
+    let server = start(store.clone()).await;
+    let ticket = issue_local_ticket(server.state(), "general").await?;
+    let principal = server
+        .state()
+        .tickets
+        .consume(&ticket.ticket)
+        .await?
+        .principal;
+    for index in 0..5 {
+        store
+            .execute_message(
+                &principal,
+                &format!("old-{index}"),
+                "message.send",
+                &json!({"content":"old room"}),
+            )
+            .await?;
+    }
+    let old_cursor = store.snapshot("general", 0, 20).await?.last_seq;
+    let (room_uid, _) = replace_room(&store, &principal).await?;
+    let new_cursor = store.snapshot("general", 0, 20).await?.last_seq;
+    assert!(new_cursor < old_cursor);
+    for cursor in [old_cursor, 0] {
+        let ticket = issue_local_ticket(server.state(), "general").await?;
+        let (socket, _) = tokio_tungstenite::connect_async(format!(
+            "{}/ws?ticket={}",
+            server.base_url.replacen("http://", "ws://", 1),
+            ticket.ticket
+        ))
+        .await?;
+        let mut socket = support::room_socket_peer::RoomSocketPeer::new(socket);
+        let first = socket.subscribe(cursor).await;
+        if cursor == old_cursor {
+            assert_eq!(first["op"], "resync_required");
+            assert_eq!(first["latest_seq"], new_cursor);
+        } else {
+            assert_eq!(first["op"], "subscribed");
+            let snapshot = socket.receive_json().await;
+            assert_eq!(snapshot["room"]["room_uid"], room_uid.to_string());
+            assert_eq!(snapshot["last_seq"], new_cursor);
+        }
+        socket.close().await;
+    }
+    server.stop().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn native_channel_http_tickets_cannot_cross_room_recreation() -> TestResult {
     let (store, _) = fixture(InviteScope::ReadOnly).await;
     let server = start(store.clone()).await;

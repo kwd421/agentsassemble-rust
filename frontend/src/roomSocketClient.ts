@@ -113,6 +113,7 @@ export function openRoomSocket(
   let reconnectTimer = 0;
   let reconnectAttempt = 0;
   let lastSeq = 0;
+  let freshSnapshotRequested = false;
   let acceptedRoomUid: string | null = null;
   let transportReady = false;
   let sendPendingForConnection: (() => void) | null = null;
@@ -392,6 +393,20 @@ export function openRoomSocket(
         }
         if (!receipt) {
           const msg = JSON.parse(raw) as unknown;
+          if (isRecord(msg) && msg.op === "resync_required") {
+            assertExactKeys(msg, ["op", "stream", "reason", "latest_seq"], "room resync");
+            if (
+              msg.stream !== "room_events" ||
+              typeof msg.reason !== "string" || !msg.reason ||
+              !isSequence(msg.latest_seq) || msg.latest_seq >= lastSeq
+            ) {
+              throw new RoomSocketSayError("Room resync frame was invalid.", "frame_schema_invalid");
+            }
+            // Ask for a bound snapshot without moving the verified cursor or
+            // pending intent. The snapshot's room lifetime still owns recovery.
+            freshSnapshotRequested = true;
+            throw new RoomSocketSayError(msg.reason, "resync_required");
+          }
           const verifiedReceipt = verifySubscriptionReceipt(msg, {
             roomId: dependencies.expectedRoomId,
             participantId: dependencies.expectedParticipantId,
@@ -435,6 +450,7 @@ export function openRoomSocket(
           }
           acceptedRoomUid = snapshot.room.room_uid;
           lastSeq = snapshot.last_seq;
+          freshSnapshotRequested = false;
           snapshotAccepted = true;
           markReady();
           return;
@@ -572,7 +588,7 @@ export function openRoomSocket(
         currentSocket.send(JSON.stringify({
           op: "subscribe",
           streams,
-          resume_from_seq: lastSeq,
+          resume_from_seq: freshSnapshotRequested ? 0 : lastSeq,
         }));
       };
       currentSocket.onmessage = (event) => {

@@ -1,5 +1,66 @@
 # Verification Contract
 
+## Whole-repository Pro continuation (2026-09-14)
+
+The new whole-repository request at `0ee154c8423beb1283e13c649685738064da35c8`
+returned after 76m22s with an explicit incomplete verdict. The complete answer was
+read. It reports source-tool failure and an unconfirmed reconnect-cursor candidate;
+it does not report failed builds/tests or approve the remaining repository.
+The candidate concerns an initial `resync_required` before the subscription receipt
+when the client's cursor exceeds durable history. The follow-up evidence below
+confirms the protocol defect without claiming packaged same-name recreation.
+
+At 18:24 KST the same conversation received exact `git archive` snapshots of the
+Rust revision and original `d5046473010d1353a81ee38337360e6d98f7bd6f`, with 2,679
+tracked files and per-file SHA-256 verification. The source-only archive
+`/tmp/aa-whole-repository-0ee154c8.zip` is 7,455,529 bytes, SHA-256
+`4841d4436da5341d29ebb4811f4e2cf60470c112747f0f6e36e66a21609f10b6`.
+No old phase/patch inventory, prior approval packet, untracked work or user data
+was included. The request asks completion of the whole-repository code review and
+distinguishes unperformed execution from code-review coverage. The attachment and
+request were verified after reload; the reviewer reports inspecting the archive.
+Conversation: https://chatgpt.com/c/6aa7aa6c-8608-83ee-b6b9-0e7833fcaf68 .
+
+### Ahead-of-history room reconnect correction
+
+The supported directory API permits a fresh local-operator creation after deletion
+using the same room ID. Native socket tickets resolve that ID; the host React
+connection is keyed by room ID, host auth and participant, not room UID. Ordinary
+UI creation generates a new timestamp-based ID, so a same-label UI creation alone
+does not demonstrate this condition. The existing recreated-room transport test
+only covered a larger new-room cursor and therefore reached the snapshot check.
+Extending it with the actual pre-receipt resync frame reproduces the lower-cursor
+failure: next subscription repeats cursor 3 after the server reports durable 1.
+Baseline: `/tmp/aa-room-cursor-baseline.log`.
+
+The existing connection owner now recognizes the exact initial room-events resync
+response and requests a fresh snapshot, retaining its verified cursor, accepted
+room UID and pending commands. Only the ordinary bound snapshot can resolve the
+lifetime. A changed UID still rejects prior intent before readiness; same-room
+regressed history remains rejected, and a hint alone cannot replay pending work.
+No new timer, authority, fallback transport or layout is introduced.
+
+Frontend 149 files / 861 tests pass (17.61s), including lower/higher recreated-room
+history and same-room regression rejection. Production TypeScript/build and
+unchanged CSS byte/cascade verification pass. Actual WebSocket2 passes (0.08s):
+after canonical deletion/recreation the old cursor receives resync as the first
+frame, and cursor zero receives a receipt and the exact replacement room snapshot.
+All-target/all-feature workspace Clippy, architecture/source growth, 19 policy
+tests, formatting, diff and artifact checks pass without changed gates.
+Logs: `/tmp/aa-room-cursor-frontend.log`, `/tmp/aa-room-cursor-wire.log`,
+`/tmp/aa-room-cursor-clippy.log`, `/tmp/aa-room-cursor-final-gates.log`.
+
+Signed package 0.1.36 passes strict signature verification. Direct manipulation
+opens both existing rooms and restores history; a new disposable-room message,
+normal native server restart (operation `befc084a-acdd-477b-a9e5-3f4566051078`) and
+post-restart message all complete. Read-only SQLite confirms those two messages
+once at sequences 5 and 6 in `room-20260914T133118`. Top actions and right panel
+remain visible. This is ordinary packaged reconnect evidence, not packaged
+same-name recreation or new provider execution. Normal Quit leaves exact owned
+PIDs 25151/25206/25234 absent. Computer Use is reset; existing verification data,
+review tabs and active build artifacts are retained. Corrected-source review is
+pending and this change is outside frozen `0ee154c8`.
+
 ## Completed partial Pro continuation and coverage discrepancy (2026-09-14)
 
 The 72m41s continuation at frozen `2135d511` was read in full. It formally withdraws

@@ -12,6 +12,17 @@
   bundle or phase-specific review request was sent to the new conversation.
   Await and read the completed answer, then correct, verify and re-review supported
   findings. An in-progress request does not constitute review or phase completion.
+  The first whole-repository answer (76m22s) is explicitly incomplete, with one
+  unconfirmed ahead-of-history reconnect-cursor candidate, not a confirmed severity
+  count or failed build/test result. Its full answer has been read. At 18:24 KST,
+  supplied both exact Git snapshots in `aa-whole-repository-0ee154c8.zip` and requested
+  completion of the same whole-repository review. Attachment and request persist
+  after reload; Pro reports reading the archive. Code review and unperformed runtime
+  execution must remain separate. The client's repeated rejected cursor is now
+  reproduced and corrected. Frontend861, production build/CSS, actual WebSocket2,
+  workspace Clippy and mandatory gates pass. Signed 0.1.36 confirms ordinary
+  reconnect, history and post-restart delivery; packaged same-name recreation is
+  not claimed. The corrected source requires review after the frozen review.
 
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was
