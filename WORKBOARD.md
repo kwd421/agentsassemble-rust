@@ -9,8 +9,11 @@
   waiting. Code and packaged corrections are complete locally, not yet approved.
   A later measured query correction computes inactive human membership once per room:
   identical 10,000-row query results improve from1.6883s to6.7ms; actual socket4,
-  persistence336 and Clippy pass. Package and review this later source after the
-  current frozen answer.
+  persistence336 and Clippy pass. Signed0.1.43 loads retained rooms and exits with
+  all exact owned processes absent; review this later source after the frozen answer.
+  User-approved temporary external access and current-AI invitation creation/copy
+  pass. Terminal UI access is denied by Computer Use, so Antigravity participation
+  is not verified. External access is visibly closed and the temporary MCP removed.
 
 - Whole-source Pro at `7df6bb09` completed (43m1s): REVISE H1/M2; full answer read.
   The other seven prior corrections are confirmed. Current H1 covers terminal and

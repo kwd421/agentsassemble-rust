@@ -14,7 +14,24 @@ No new index/schema, cache, cleanup loop or UI behavior is introduced. Evidence:
 `/tmp/aa-roster-query-cost-probe.py`, `/tmp/aa-roster-query-cost-comparison.json`,
 `/tmp/aa-roster-cost-socket.log`, `/tmp/aa-roster-cost-persistence.log`,
 `/tmp/aa-roster-cost-clippy.log`, `/tmp/aa-roster-cost-gates.log`.
-This later source requires packaged follow-up and review after the frozen answer.
+Signed 0.1.43 includes the rebuilt query owner and loads the existing main room's
+12 managed sessions and the Antigravity verification room. Normal Quit removes
+app62729, supervisor62761 and server62773; codesign deep/strict and artifact check
+pass. This later source still requires review after the frozen answer.
+
+The user explicitly approved temporary public access for external Antigravity
+verification, with closure afterward. The signed app visibly opens external access,
+creates and copies a current-AI one-use invitation. A temporary `aa-final-verification`
+stdio MCP registration uses the current release `assemble room connector-mcp`.
+Computer Use then refuses Terminal application access for safety reasons, so this
+attempt does not launch Antigravity or establish join/publication/leave evidence.
+No approval bypass or alternate UI automation is used. The app visibly closes
+external access and disables the old invitation as unusable at the current address.
+The temporary MCP registration is removed; `agy mcp list` again reports none.
+Normal app Quit and the exact owned-process check pass. Existing verification data
+is retained. Build/artifact evidence: `/tmp/aa-antigravity-connector-build.log`,
+`/tmp/aa-roster-cost-sidecar.log`, `/tmp/aa-roster-cost-package.log`,
+`/tmp/aa-roster-cost-artifacts.log`. Antigravity real participation remains unverified.
 
 At 21:50 KST, submitted another independent whole-source review at frozen
 `6935beb11317d0586285928dea15fbafb0d0066f` in the same Pro conversation. The
