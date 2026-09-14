@@ -17,6 +17,9 @@
   failed with `room_inactive` before the correction, then passed; persistence333
   and Connector HTTP/MCP8 pass. Full workspace Clippy and affected gates pass;
   corrected-source re-review and remaining real-flow acceptance remain.
+  Signed 0.1.32 now confirms desktop archive/restore, narrow-layout restart/message
+  restoration and room close, plus normal owned-process cleanup. Packaged Connector
+  admission/recovery was not completed; retain the separate HTTP/MCP evidence.
   This correction is not part of the frozen Pro review revision.
   User correction: implementer-selected findings, files and paths must not limit
   or steer the independent review. Derive coverage from user requirements and

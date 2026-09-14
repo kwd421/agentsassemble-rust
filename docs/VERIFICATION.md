@@ -10507,5 +10507,35 @@ pass, as do full workspace all-target/all-feature Clippy and artifact maintenanc
 The extended regression passes again after splitting its terminal-room assertions
 to meet the unchanged function-length lint. Full Clippy passes again after the
 HTTP/MCP extension. This correction is outside Pro's frozen `2135d511` review.
-No new packaged UI or real-provider run
-is claimed; final corrected-source review and remaining real-flow acceptance stay open.
+At that source-test checkpoint no new packaged UI or real-provider run was claimed;
+final corrected-source review and remaining real-flow acceptance stayed open.
+
+Signed packaged follow-up at `b58b2836` uses version 0.1.32 and isolated identifier
+`app.agentsassemble.verify.connector032`. The initial packaging attempt used an
+ambiguous certificate name and did not apply the intended CLI configuration;
+explicit `--config` and the existing Developer ID certificate fingerprint corrected
+packaging. The successful bundle's identifier/version and deep strict signature
+verification were checked before launch. Production frontend and CSS builds pass.
+
+Actual native app manipulation creates a disposable guest, a room and one message.
+At configured 1200×800, Room Management archives and restores the room; the same
+message remains in the restored conversation. Normal Quit removes the exact app,
+supervisor and server PIDs 94080/94185/94284. Repackaging with configured 390×420
+and reopening the same isolated data restores the user, room and message, exposes
+the narrow-layout navigation and permits Room Management to close the room with
+visible `종료됨` state. Normal Quit removes exact PIDs 3493/3555/3567. Native AX
+interaction and rendered text establish these flows; screenshot capture was
+unavailable, so no pixel-level layout approval is inferred.
+
+Connector invitation creation was disabled while external ingress was off. The
+external-open button started tunnel preparation directly; it was immediately
+stopped through the UI, which confirmed ingress off. No tunnel process remained
+in the later process inventories. No invitation or Connector admission was
+completed in this packaged run. Therefore packaged lifecycle evidence does not
+replace the separate real HTTP/stdio lost-response test or establish an end-to-end
+packaged Connector recovery flow. Real providers and external admission remain open.
+
+After both normal quits, Computer Use was reset and only this run's bundle,
+configuration directory, Application Support, Caches and WebKit directories were
+removed. The in-app Pro review tab was preserved and reacquired. Artifact maintenance
+passes and retains useful Cargo output. No broader mobile acceptance is claimed.
