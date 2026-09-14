@@ -29,7 +29,12 @@ async fn codex_thread_starts_once_then_resumes_its_durable_identity() {
     assert!(!cached.provider_session_reused);
     assert_eq!(
         request_methods(&transcript),
-        ["initialize", "initialized", "thread/start"]
+        [
+            "initialize",
+            "initialized",
+            "thread/start",
+            "thread/name/set"
+        ]
     );
 
     stop_and_release(&first_adapter, &session, &first).await;
@@ -48,8 +53,11 @@ async fn codex_thread_starts_once_then_resumes_its_durable_identity() {
     assert_eq!(requests[2]["params"]["model"], "gpt-5.6-terra");
     assert_eq!(requests[2]["params"]["approvalPolicy"], "never");
     assert_eq!(requests[2]["params"]["sandbox"], "read-only");
-    assert_eq!(requests[5]["method"], "thread/resume");
-    assert_eq!(requests[5]["params"]["threadId"], "thread-1");
+    assert_eq!(requests[2]["params"]["historyMode"], "legacy");
+    assert_eq!(requests[3]["params"]["name"], session.public.display_name);
+    assert_eq!(requests[3]["params"]["threadId"], "thread-1");
+    assert_eq!(requests[6]["method"], "thread/resume");
+    assert_eq!(requests[6]["params"]["threadId"], "thread-1");
     stop_and_release(&resumed_adapter, &durable, &resumed).await;
 }
 
@@ -87,7 +95,56 @@ async fn cancelled_thread_start_is_read_on_retry_without_retransmission() {
     assert_eq!(recovered.provider_session_id, "thread-1");
     assert_eq!(
         request_methods(&transcript),
-        ["initialize", "initialized", "thread/start"]
+        [
+            "initialize",
+            "initialized",
+            "thread/start",
+            "thread/name/set"
+        ]
+    );
+    stop_and_release(&adapter, &session, &recovered).await;
+}
+
+#[tokio::test]
+async fn cancelled_name_checkpoint_retains_identity_and_request_without_retransmission() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create cancelled-thread fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let seen = directory.path().join("thread-start-seen");
+    let release = directory.path().join("thread-start-release");
+    let script = transcript_fixture(&transcript, "").replace(
+        "IFS= read -r name || exit 0\n",
+        &format!(
+            "IFS= read -r name || exit 0\nprintf seen > {}\nwhile [ ! -f {} ]; do :; done\n",
+            shell_quote(&seen),
+            shell_quote(&release),
+        ),
+    );
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let pending_adapter = adapter.clone();
+    let pending_session = session.clone();
+    let pending = tokio::spawn(async move { pending_adapter.start(&pending_session).await });
+    super::fixture::wait_for_path(&seen).await;
+    pending.abort();
+    let _ = pending.await;
+    std::fs::write(&release, b"release")
+        .unwrap_or_else(|error| panic!("release provider response: {error}"));
+
+    let recovered = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("recover pending thread/start response: {error}"));
+    assert_eq!(recovered.provider_session_id, "thread-1");
+    assert_eq!(
+        request_methods(&transcript),
+        [
+            "initialize",
+            "initialized",
+            "thread/start",
+            "thread/name/set"
+        ]
     );
     stop_and_release(&adapter, &session, &recovered).await;
 }
@@ -225,7 +282,7 @@ fn transcript_fixture_with_response(
     response: &str,
 ) -> String {
     format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\n{before}printf '%s\\n' {response}\nIFS= read -r forever\n",
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' \"$initialize\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nprintf '%s\\n' \"$initialized\" >> {log}\nIFS= read -r thread\nprintf '%s\\n' \"$thread\" >> {log}\n{before}printf '%s\\n' {response}\nIFS= read -r name || exit 0\nprintf '%s\\n' \"$name\" >> {log}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{}}}}'\nIFS= read -r forever\n",
         log = shell_quote(transcript),
         before = before_response,
         response = shell_quote_text(response),
@@ -304,7 +361,12 @@ async fn assert_new_attachment_error(response: &str, expected_code: &str) {
     }
     assert_eq!(
         request_methods(&transcript),
-        ["initialize", "initialized", "thread/start"]
+        [
+            "initialize",
+            "initialized",
+            "thread/start",
+            "thread/name/set"
+        ]
     );
     adapter
         .shutdown()
@@ -331,6 +393,7 @@ fn request_methods(path: &Path) -> Vec<&'static str> {
             Some("initialized") => "initialized",
             Some("thread/start") => "thread/start",
             Some("thread/resume") => "thread/resume",
+            Some("thread/name/set") => "thread/name/set",
             other => panic!("unexpected provider method: {other:?}"),
         })
         .collect()
@@ -368,4 +431,39 @@ fn shell_quote(path: &Path) -> String {
 
 fn shell_quote_text(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+#[tokio::test]
+async fn rejected_name_checkpoint_does_not_report_attached_or_start_another_thread() {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create name fixture: {error}"));
+    let transcript = directory.path().join("requests.jsonl");
+    let script = transcript_fixture(&transcript, "").replace(
+        r#"{"jsonrpc":"2.0","id":3,"result":{}}"#,
+        r#"{"jsonrpc":"2.0","id":3,"error":{"code":-1,"message":"name not persisted"}}"#,
+    );
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let Err(error) = adapter.start(&session).await else {
+        panic!("checkpoint rejection must fail attachment");
+    };
+    assert_eq!(error.code, "provider_request_rejected");
+    let Err(error) = adapter.start(&session).await else {
+        panic!("rejected checkpoint cannot retry a fresh thread");
+    };
+    assert_eq!(error.code, "provider_runtime_restart_required");
+    assert_eq!(
+        request_methods(&transcript),
+        [
+            "initialize",
+            "initialized",
+            "thread/start",
+            "thread/name/set"
+        ]
+    );
+    adapter
+        .shutdown()
+        .await
+        .unwrap_or_else(|error| panic!("stop rejected name fixture: {error}"));
 }

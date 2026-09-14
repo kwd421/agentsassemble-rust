@@ -87,7 +87,7 @@ async fn verify_child_home(root: &Path) {
         "printf '%s\\n' \"$@\" > observed-arguments\n",
         "IFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\n",
         "IFS= read -r initialized\nIFS= read -r thread\n",
-        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\n",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r name\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}'\n",
         "IFS= read -r forever\n",
     )).await;
     session.public.room_id = format!("codex-home-{}", uuid::Uuid::new_v4());

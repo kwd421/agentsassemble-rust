@@ -74,12 +74,12 @@ async fn run_request(interrupt: bool) -> Result<(), Box<dyn std::error::Error>> 
         turn.await??;
     }
     let recorded = requests(&transcript);
-    assert_eq!(recorded.len(), 5);
+    assert_eq!(recorded.len(), 6);
     if interrupt {
-        assert_eq!(recorded[4]["method"], "turn/interrupt");
+        assert_eq!(recorded[5]["method"], "turn/interrupt");
     } else {
         assert_eq!(
-            recorded[4],
+            recorded[5],
             json!({"jsonrpc": "2.0", "id": "native-request-1", "result": {"answers": {"answer": {"answers": ["fixture-value"]}}}})
         );
     }
@@ -104,7 +104,7 @@ pub(crate) fn request_fixture(transcript: &std::path::Path, interrupt: bool) -> 
         "IFS= read -r response\nprintf '%s\\n' \"$response\" >> '{}'\n{}printf '%s\\n' '{{\"method\":\"item/completed\",\"params\":{{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"item\":{{\"type\":\"agentMessage\",\"text\":\"done\"}}}}}}'\nprintf '%s\\n' '{}'\n",
         transcript.display(),
         if interrupt {
-            "printf '%s\\n' '{\"id\":4,\"result\":{}}'\n"
+            "printf '%s\\n' '{\"id\":5,\"result\":{}}'\n"
         } else {
             ""
         },
@@ -113,7 +113,7 @@ pub(crate) fn request_fixture(transcript: &std::path::Path, interrupt: bool) -> 
     turn_fixture(
         transcript,
         &before,
-        "{\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
+        "{\"id\":4,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
         &notifications,
     )
 }

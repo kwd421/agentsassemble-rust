@@ -30,6 +30,9 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     std::fs::write("native-pids", format!("{} {}", std::process::id(), child.id()))?;
     println!("{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}");
     io::stdout().flush()?;
+    input.next().ok_or("name checkpoint missing")??;
+    println!("{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{}}}}");
+    io::stdout().flush()?;
     for line in input { line?; }
     Ok(())
 }

@@ -255,7 +255,7 @@ async fn codex_runtime_is_initialized_reused_and_stopped_by_exact_owner() {
     let executable = directory.path().join("codex-fixture");
     std::fs::write(
         &executable,
-        b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n",
+        b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r name\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}'\nIFS= read -r forever\n",
     )
     .unwrap_or_else(|error| panic!("write runtime fixture: {error}"));
     let mut permissions = std::fs::metadata(&executable)
@@ -540,7 +540,7 @@ pub(super) async fn code_mode_host_fixture(root: &Path) -> (DurableAgentSession,
     let arguments_report = root.join("provider-arguments");
     let host_pid_report = root.join("code-mode-host-pid");
     let provider_script = format!(
-        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r forever\n",
+        "#!/bin/sh\nprintf '%s\\n' \"$@\" > '{}'\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r name\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{}}}}'\nIFS= read -r forever\n",
         arguments_report.display()
     );
     let host_script = format!(
@@ -619,7 +619,7 @@ async fn fresh_supervisor_uses_the_guardian_lease_before_reporting_gone() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create guardian fixture: {error}"));
-    let script = "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n";
+    let script = "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r name\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}'\nIFS= read -r forever\n";
     let mut session = fixture_session(directory.path(), script).await;
     let adapter = ProviderAdapter::new();
     let started = adapter

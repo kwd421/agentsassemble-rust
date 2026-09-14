@@ -11,18 +11,21 @@ printf '%s\n' "$initialized" >> {log}
 IFS= read -r thread
 printf '%s\n' "$thread" >> {log}
 printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{"thread":{{"id":"thread-1"}}}}}}'
+IFS= read -r name
+printf '%s\n' "$name" >> {log}
+printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{}}}}'
 IFS= read -r turn
 printf '%s\n' "$turn" >> {log}
-printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","id":4,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}'
 printf seen > {seen}
 IFS= read -r interrupt
 printf '%s\n' "$interrupt" >> {log}
 if [ {reject} = 1 ]; then
-    printf '%s\n' '{{"jsonrpc":"2.0","id":4,"error":{{"code":-32000,"message":"fixture rejected interrupt"}}}}'
+    printf '%s\n' '{{"jsonrpc":"2.0","id":5,"error":{{"code":-32000,"message":"fixture rejected interrupt"}}}}'
     IFS= read -r forever
     exit 0
 fi
-printf '%s\n' '{{"jsonrpc":"2.0","id":4,"result":{{}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","id":5,"result":{{}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-1","status":"interrupted","items":[]}}}}}}'
 IFS= read -r forever
 "#,

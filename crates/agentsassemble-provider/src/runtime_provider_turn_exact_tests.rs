@@ -175,7 +175,7 @@ async fn completed_turn_remains_exactly_owned_until_durable_terminal_release() {
     let script = turn_fixture(
         &transcript,
         "",
-        "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
         concat!(
             "printf '%s\n' '{\"jsonrpc\":\"2.0\",\"method\":\"agent_message/completed\",\"params\":{\"threadId\":\"thread-1\",\"turnId\":\"provider-turn-1\",\"text\":\"retained answer\"}}'\n",
             "printf '%s\n' '{\"jsonrpc\":\"2.0\",\"method\":\"turn/completed\",\"params\":{\"threadId\":\"thread-1\",\"turn\":{\"id\":\"provider-turn-1\",\"status\":\"completed\",\"items\":[]}}}'\n",
@@ -450,7 +450,7 @@ async fn exact_control_freezes_provider_entry_before_durable_interrupt_wait() {
     let script = turn_fixture(
         &transcript,
         "",
-        "{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
+        "{\"jsonrpc\":\"2.0\",\"id\":4,\"result\":{\"turn\":{\"id\":\"provider-turn-1\"}}}",
         "",
     );
     let session = fixture_session(directory.path(), &script).await;

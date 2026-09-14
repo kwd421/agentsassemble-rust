@@ -116,7 +116,7 @@ async fn stop_kills_descendants_after_the_codex_leader_exits() {
     let pid_barrier = ProcessPidBarrier::bind(&descendant_socket);
     let descendant = parked_descendant_shell(&descendant_socket);
     let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\n{descendant}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nsleep 1\nexit 0\n"
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\n{descendant}\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r name\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{}}}}'\nsleep 1\nexit 0\n"
     );
     let session = fixture_session(directory.path(), &script).await;
     let adapter = ProviderAdapter::new();
@@ -196,7 +196,7 @@ async fn stop_captures_a_reparented_descendant_from_a_new_session() {
     let test_binary = std::env::current_exe()
         .unwrap_or_else(|error| panic!("resolve provider test binary: {error}"));
     let script = format!(
-        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\n{TEST_PID_SOCKET_ENV}={} {} --exact runtime::tests::process_tree_tests::escaped_descendant_entry --nocapture </dev/null >/dev/null 2>&1 &\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r forever\n",
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\n{TEST_PID_SOCKET_ENV}={} {} --exact runtime::tests::process_tree_tests::escaped_descendant_entry --nocapture </dev/null >/dev/null 2>&1 &\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r name\nprintf '%s\\n' '{{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{{}}}}'\nIFS= read -r forever\n",
         shell_quote(&descendant_socket),
         shell_quote(&test_binary),
     );

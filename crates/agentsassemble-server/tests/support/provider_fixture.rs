@@ -59,7 +59,7 @@ fn executable_identity(path: &Path) -> String {
 }
 
 #[cfg(unix)]
-pub const CODEX_FIXTURE: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r forever\n";
+pub const CODEX_FIXTURE: &[u8] = b"#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\nIFS= read -r name\nprintf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}'\nIFS= read -r forever\n";
 
 pub fn agent_catalog(root: &Path, fixture_override: Option<&[u8]>) -> ProviderCatalog {
     #[cfg(unix)]

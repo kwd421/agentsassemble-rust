@@ -57,6 +57,7 @@ pub(crate) struct CodexDriver {
     initialized: bool,
     attached_thread_id: Option<String>,
     attached_observed_model_id: Option<String>,
+    pending_thread_name: Option<String>,
     attachment_error: Option<DriverError>,
     turn_state: turn::CodexTurnState,
     room_portal: RoomPortal,
@@ -152,6 +153,7 @@ impl CodexDriver {
                 initialized: false,
                 attached_thread_id: None,
                 attached_observed_model_id: None,
+                pending_thread_name: None,
                 attachment_error: None,
                 turn_state: turn::CodexTurnState::default(),
                 room_portal,
@@ -208,6 +210,7 @@ impl CodexDriver {
             initialized: false,
             attached_thread_id: None,
             attached_observed_model_id: None,
+            pending_thread_name: None,
             attachment_error: None,
             turn_state: turn::CodexTurnState::default(),
             room_portal,
@@ -225,7 +228,8 @@ impl CodexDriver {
             let initialized = self
                 .request(
                     "initialize",
-                    json!({"clientInfo": {"name": "AgentsAssemble", "version": "0"}}),
+                    json!({"clientInfo": {"name": "AgentsAssemble", "version": "0"},
+                        "capabilities": {"experimentalApi": true}}),
                 )
                 .await;
             if let Err(error) = initialized {
@@ -252,6 +256,24 @@ impl CodexDriver {
     }
 
     async fn attach(
+        &mut self,
+        session: &DurableAgentSession,
+    ) -> Result<ProviderSessionAttachment, DriverError> {
+        let attachment = self.attach_thread(session).await?;
+        if let Some(name) = self.pending_thread_name.clone() {
+            let params = json!({"threadId": attachment.provider_session_id, "name": name});
+            if let Err(error) = self.request("thread/name/set", params).await {
+                if self.pending_request.is_none() {
+                    return self.poison_attachment(error);
+                }
+                return Err(error);
+            }
+            self.pending_thread_name = None;
+        }
+        Ok(attachment)
+    }
+
+    async fn attach_thread(
         &mut self,
         session: &DurableAgentSession,
     ) -> Result<ProviderSessionAttachment, DriverError> {
@@ -301,6 +323,11 @@ impl CodexDriver {
                 return self.poison_attachment(provider_session_unconfirmed());
             }
         };
+        // A fresh empty native thread has no rollout until its name is checkpointed.
+        // Retain both identity and exact name while that request is unconfirmed.
+        self.pending_thread_name = durable_id
+            .is_none()
+            .then(|| session.public.display_name.clone());
         self.attached_thread_id = Some(thread_id.clone());
         self.attached_observed_model_id
             .clone_from(&observed_model_id);
@@ -584,6 +611,8 @@ fn thread_start_params(session: &DurableAgentSession) -> Result<Value, DriverErr
         "model": session.public.model,
         "approvalPolicy": approval,
         "sandbox": sandbox,
+        "historyMode": "legacy",
+        "ephemeral": false,
     }))
 }
 

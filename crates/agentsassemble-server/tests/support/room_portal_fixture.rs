@@ -69,6 +69,9 @@ printf '%s\n' "$initialized" >> {log}
 IFS= read -r thread
 printf '%s\n' "$thread" >> {log}
 printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{"thread":{{"id":"thread-1"}}}}}}'
+IFS= read -r name
+printf '%s\n' "$name" >> {log}
+printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{}}}}'
 IFS= read -r turn_one
 printf '%s\n' "$turn_one" >> {log}
 printf '%s\n' '{{"jsonrpc":"2.0","id":"room-approval-1","method":"mcpServer/elicitation/request","params":{{"serverName":"agentsassemble_room","mode":"form","_meta":{{"codex_approval_kind":"mcp_tool_call"}}}}}}'
@@ -80,14 +83,14 @@ case "$approval_one" in
 esac
 printf '1' > {seen}
 while [ ! -f {release_first} ]; do :; done
-printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","id":4,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"agent_message/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-1","text":"ignored first assistant final"}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-1","status":"{first_status}","items":[]}}}}}}'
 IFS= read -r turn_two
 printf '%s\n' "$turn_two" >> {log}
 printf '2' > {seen}
 while [ ! -f {release_second} ]; do :; done
-printf '%s\n' '{{"jsonrpc":"2.0","id":4,"result":{{"turn":{{"id":"provider-turn-2"}}}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","id":5,"result":{{"turn":{{"id":"provider-turn-2"}}}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"agent_message/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-2","text":"ignored second assistant final"}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-2","status":"completed","items":[]}}}}}}'
 IFS= read -r forever

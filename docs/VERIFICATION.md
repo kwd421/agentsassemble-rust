@@ -11419,3 +11419,40 @@ needs an attachment-owner correction and its packaged regression before review.
 The old gRPC verification's removed temporary workspace correctly rejects resume;
 that separate rejected attempt is not a provider-persistence failure. Both failed
 app attempts are normally stopped; app75069/supervisor75221/server75231 are absent.
+
+Codex empty-thread follow-up: CLI0.154.0 defaults new threads to paginated history.
+A successful name response alone in that mode still reproduces no-rollout resume.
+The explicit native legacy mode (experimental capability) plus name checkpoint
+resumes the exact ID in a fresh process without a user turn. A queue-based native
+probe removes a Python text-buffer/select diagnostic timeout; no product timeout
+was inferred from that probe. The adapter now binds this history mode and retains
+the exact pending name and identity through cancellation; the12 attachment regressions pass, including cancellation and definite rejection.
+Full provider/server and packaged regressions are running. Existing durable IDs are never replaced on failure.
+
+The full provider run passes260/261; the managed bridge fixture still expected
+five recorded native frames. Its explicit name acknowledgement and shifted
+turn/answer assertions are corrected, and its complete managed lifecycle test
+passes42.09s (261 covered). Native desktop checks36 and signed0.1.51 build pass.
+The first server batch used a recovery fixture without the new name RPC. A
+concurrent isolated attempt also timed out and is not accepted as product evidence.
+The superseded batch and exact children are absent; rerun the corrected server
+targets serially before interpreting remaining failures.
+
+Signed0.1.51 actual verification passes: after bounded server-response loss,
+Disposable Empty Resume0.1.51 remains in the creation form. Restore the exact
+server, refresh the real Codex catalog, then retry the unchanged form: it closes
+with one session (codex-abec87e2-31ac-5226-adbe-00155e02d5e3) and one creation
+receipt (7ebbc525-1474-493f-87ed-5e059638c552). Native ID
+01a0a0f5-9aef-7c53-be64-38ea68f6844e is idle with zero turns. Normal Stop,
+normal app Quit, relaunch, then Resume returns idle/reused with that identical ID
+and still zero turns. Final Stop/Quit leave no exact app/provider children.
+The selected workspace is /private/tmp/aa-codex-create-retry-workspace.
+A temporary disposable-session mute selection was restored before Stop; no
+conversation was fabricated. The75-second server-resume guard completed.
+
+Corrected serial server targets pass18 agent boundaries (140.95s),1 actual
+attendee CLI and1 attendee execution. Native36, current workspace Clippy,
+architecture/policy19/format/diff and unchanged artifact gate pass. Frontend
+creation coverage29 and production TypeScript/Vite/approved-CSS build pass.
+The earlier failed isolated recovery attempt was not reproduced in this complete
+serial run and is not presented as a product failure or a timeout-policy fix.

@@ -203,14 +203,15 @@ fn assert_native_proof(
             .collect::<Result<Vec<_>, _>>()?;
         assert_eq!(
             frames.len(),
-            5,
-            "exactly one native send and one answer or interrupt"
+            6,
+            "one attachment checkpoint, native send and answer or interrupt"
         );
-        assert_eq!(frames[3]["method"], "turn/start");
+        assert_eq!(frames[3]["method"], "thread/name/set");
+        assert_eq!(frames[4]["method"], "turn/start");
         if termination == "interrupt" {
-            assert_eq!(frames[4]["method"], "turn/interrupt");
+            assert_eq!(frames[5]["method"], "turn/interrupt");
         } else {
-            assert_eq!(frames[4]["id"], "native-request-1");
+            assert_eq!(frames[5]["id"], "native-request-1");
         }
     }
     assert!(
@@ -449,6 +450,8 @@ fn idle_script() -> &'static str {
         "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":1,\"result\":{}}'\n",
         "IFS= read -r initialized\nIFS= read -r thread\n",
         "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":2,\"result\":{\"thread\":{\"id\":\"thread-1\"}}}'\n",
+        "IFS= read -r name\n",
+        "printf '%s\\n' '{\"jsonrpc\":\"2.0\",\"id\":3,\"result\":{}}'\n",
         "IFS= read -r forever\n",
     )
 }

@@ -532,8 +532,11 @@ active-turn ownership; retaining their empty result would block reconciliation.
 
 The native CLI0.154.0 returns an ID from thread/start but does not persist an empty
 thread under either history mode. Normal Stop followed by Resume then fails with
-no rollout found. Native thread/name/set checkpoints the same ID and allows exact
-resume without a user turn. Complete that checkpoint before reporting attachment,
+no rollout found. Native thread/name/set with explicitly selected legacy history checkpoints the
+same ID and allows exact resume without a user turn. The0.154.0 default is
+paginated; its name acknowledgement alone still leaves native resume returning
+no rollout found. Select the native legacy mode at creation with the required
+experimental capability; preserve existing durable IDs on resume. Complete that checkpoint before reporting attachment,
 retain its pending identity across cancellation/retry, and fail explicitly if it
 cannot be confirmed. Apply the selected display name at that native owner. Never
 replace a missing durable thread with a new thread or fabricate user conversation.

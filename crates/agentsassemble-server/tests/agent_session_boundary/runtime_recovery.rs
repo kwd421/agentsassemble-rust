@@ -1,5 +1,6 @@
 use super::*;
 use agentsassemble_domain::{AgentRuntimeStatus, RuntimeRestartPhase};
+use anyhow::Context;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
@@ -56,7 +57,9 @@ async fn cancelled_recovery_joins_native_attachment_and_stops_before_the_next_ta
         .await
         .map_err(std::io::Error::other)
     }));
-    let (mut held, _) = tokio::time::timeout(Duration::from_secs(10), gate.accept()).await??;
+    let (mut held, _) = tokio::time::timeout(Duration::from_secs(10), gate.accept())
+        .await
+        .context("native recovery did not reach the attachment barrier")??;
     let mut marker = [0];
     held.read_exact(&mut marker).await?;
     assert_eq!(&marker, b"R");
@@ -133,6 +136,7 @@ for line in sys.stdin:
     method=request['method']
     if method=='initialize': result={{}}
     elif method=='thread/start': result={{'thread':{{'id':'thread-'+str(os.getpid())}}}}
+    elif method=='thread/name/set': result={{}}
     elif method=='thread/resume':
         s=socket.create_connection(('127.0.0.1',{port}))
         s.sendall(b'R')
@@ -166,7 +170,9 @@ async fn create_recovery_targets(
         )
         .await;
         let created =
-            tokio::time::timeout(Duration::from_secs(10), receive_command_ack(&mut socket)).await?;
+            tokio::time::timeout(Duration::from_secs(10), receive_command_ack(&mut socket))
+                .await
+                .context("initial fixture creation did not acknowledge")?;
         assert_eq!(
             created["result"]["start"]["agent_session"]["runtime_status"],
             "idle"
