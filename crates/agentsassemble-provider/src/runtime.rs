@@ -266,6 +266,19 @@ impl ProviderAdapter {
         owner_id: &str,
         lease_token: &str,
     ) -> Result<(), ProviderAdapterError> {
+        self.stop_inner(room_id, session_id, handle_id, owner_id, lease_token, None)
+            .await
+    }
+
+    pub(super) async fn stop_inner(
+        &self,
+        room_id: &str,
+        session_id: &str,
+        handle_id: &str,
+        owner_id: &str,
+        lease_token: &str,
+        turn_failure: Option<DriverError>,
+    ) -> Result<(), ProviderAdapterError> {
         let slot = self
             .existing_slot(room_id, session_id)
             .await
@@ -307,11 +320,15 @@ impl ProviderAdapter {
                     ));
                 };
                 runtime.signal_runtime_gone();
+                let active_turn = turn_failure.and_then(|error| {
+                    runtime.retain_confirmed_failure(error);
+                    runtime.active_turn.take()
+                });
                 slot.state = RuntimeState::StopConfirmed {
                     handle_id: handle_id.to_owned(),
                     owner_id: owner_id.to_owned(),
                     runtime_lease,
-                    active_turn: runtime.active_turn.take(),
+                    active_turn,
                 };
                 Ok(())
             }
@@ -525,7 +542,7 @@ async fn shutdown_slot(
             handle_id: runtime.handle_id.clone(),
             owner_id: runtime.owner_id.clone(),
             runtime_lease,
-            active_turn: runtime.active_turn.take(),
+            active_turn: None,
         };
     }
     if let RuntimeState::StopConfirmed {

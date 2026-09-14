@@ -161,12 +161,13 @@ async fn run_owned_turn_task(
             message: error.message.to_string().into(),
         };
         outcome.result = match adapter
-            .stop(
+            .stop_inner(
                 &session.public.room_id,
                 &session.public.session_id,
                 &authority.handle_id,
                 &authority.owner_id,
                 &authority.lease_token,
+                Some(driver_error.clone()),
             )
             .await
         {

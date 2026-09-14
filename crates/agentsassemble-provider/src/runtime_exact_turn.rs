@@ -527,6 +527,19 @@ impl ProviderAdapter {
 }
 
 impl super::OwnedRuntime {
+    pub(super) fn retain_confirmed_failure(&mut self, error: DriverError) {
+        if let Some(active) = self.active_turn.as_mut() {
+            active.result = Some(Err(ProviderAdapterError::confirmed_stopped(
+                error,
+                &self.handle_id,
+                &self.owner_id,
+                &self.lease_token,
+            )));
+            active.phase = ActiveProviderTurnPhase::ResultReadyUncertain;
+            active.completion.send_replace(active.phase);
+        }
+    }
+
     pub(super) fn signal_runtime_gone(&mut self) {
         if let Some(active) = self.active_turn.as_mut() {
             active.phase = ActiveProviderTurnPhase::RuntimeGone;
