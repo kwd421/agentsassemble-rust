@@ -78,6 +78,7 @@ pub struct RoomConnectorClient {
     pub(crate) display_name: String,
     state: Mutex<JoinState>,
     pending_command: Mutex<Option<PendingCommand>>,
+    terminal_leave: parking_lot::Mutex<Option<(String, Value)>>,
     cancellation: CancellationToken,
 }
 
@@ -118,6 +119,7 @@ impl RoomConnectorClient {
                 attempted: false,
             })),
             pending_command: Mutex::new(None),
+            terminal_leave: parking_lot::Mutex::new(None),
             cancellation: CancellationToken::new(),
         })
     }
@@ -291,9 +293,20 @@ impl RoomConnectorClient {
         action: RoomAction,
         payload: Value,
     ) -> Result<Value, ConnectorClientError> {
-        let session = self.session().await?;
         let hash = agentsassemble_domain::canonical_payload_hash(&payload);
         let mut pending = self.pending_command.lock().await;
+        if action == RoomAction::ParticipantLeave
+            && let Some((completed_hash, response)) = &*self.terminal_leave.lock()
+        {
+            return if completed_hash == &hash {
+                Ok(response.clone())
+            } else {
+                Err(ConnectorClientError::local(
+                    "connector_leave_payload_conflict",
+                ))
+            };
+        }
+        let session = self.session().await?;
         if let Some(current) = &*pending {
             if current.action != action || current.hash != hash {
                 return Err(ConnectorClientError::local(
@@ -316,6 +329,10 @@ impl RoomConnectorClient {
             Ok(response)
                 if response.get("resolution").and_then(Value::as_str) == Some("committed") =>
             {
+                if action == RoomAction::ParticipantLeave {
+                    *self.terminal_leave.lock() = Some((current.hash.clone(), response.clone()));
+                    self.close();
+                }
                 *pending = None;
             }
             Ok(_) => {
@@ -334,6 +351,10 @@ impl RoomConnectorClient {
     /// Closes this process's transport custody; it does not claim a room leave or provider stop.
     pub fn close(&self) {
         self.cancellation.cancel();
+    }
+
+    pub(crate) fn has_completed_leave(&self) -> bool {
+        self.terminal_leave.lock().is_some()
     }
 
     async fn session(&self) -> Result<Arc<Session>, ConnectorClientError> {

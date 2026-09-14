@@ -31,6 +31,16 @@ pub(super) struct Read {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct Leave {
+    #[serde(default)]
+    pub(super) connection_id: String,
+    /// Release only after receiving the successful leave receipt.
+    #[serde(default)]
+    pub(super) release_receipt: bool,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Search {
     pub(super) query: String,
     #[serde(default = "all_channels")]

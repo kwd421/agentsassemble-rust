@@ -17,7 +17,8 @@ mod hub;
 #[path = "connector_mcp_transport.rs"]
 pub mod transport;
 use contract::{
-    Choose, Connection, Context, Join, Read, Roll, Say, Search, VoteCast, VoteCreate, VoteTarget,
+    Choose, Connection, Context, Join, Leave, Read, Roll, Say, Search, VoteCast, VoteCreate,
+    VoteTarget,
 };
 use hub::ConnectorHub;
 
@@ -237,13 +238,15 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Leave this room and close its connection after the server confirms leave."
+        description = "Leave this room and close active access after server confirmation. Keep connection_id for retries if the response is lost. After receiving the successful result, call again with that exact connection_id and release_receipt true to release retained receipt capacity."
     )]
-    async fn room_leave(
-        &self,
-        Parameters(input): Parameters<Connection>,
-    ) -> Result<String, String> {
-        encode(&self.hub.leave(&input.connection_id).await?)
+    async fn room_leave(&self, Parameters(input): Parameters<Leave>) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .leave(&input.connection_id, input.release_receipt)
+                .await?,
+        )
     }
 }
 

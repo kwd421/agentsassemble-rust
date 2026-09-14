@@ -85,22 +85,25 @@ impl ConnectorHub {
             return Err("connector_closed".to_owned());
         }
         if self.allowed_servers.is_none()
-            && let Some((id, client)) = state
-                .clients
-                .iter()
-                .find(|(_, client)| client.invitation_identity() == candidate.invitation_identity())
+            && let Some((id, client)) = state.clients.iter().find(|(_, client)| {
+                !client.has_completed_leave()
+                    && client.invitation_identity() == candidate.invitation_identity()
+            })
         {
             if client.display_name != candidate.display_name {
                 return Err("connector_join_name_conflict".to_owned());
             }
             return Ok((id.clone(), client.clone()));
         }
-        let capacity = if self.allowed_servers.is_some() {
-            128
-        } else {
-            1
-        };
-        if state.clients.len() >= capacity {
+        if state.clients.len() >= 128 {
+            return Err("connector_capacity_release_receipt_required".to_owned());
+        }
+        if self.allowed_servers.is_none()
+            && state
+                .clients
+                .values()
+                .any(|client| !client.has_completed_leave())
+        {
             return Err("connector_capacity_leave_required".to_owned());
         }
         let id = loop {
@@ -115,17 +118,36 @@ impl ConnectorHub {
     }
 
     pub(super) fn client(&self, id: &str) -> Result<Arc<RoomConnectorClient>, String> {
+        let client = self.connection(id)?;
+        if client.has_completed_leave() {
+            return Err("invalid_connection_id".to_owned());
+        }
+        Ok(client)
+    }
+
+    fn connection(&self, id: &str) -> Result<Arc<RoomConnectorClient>, String> {
         let state = self.state.lock();
         if state.closed {
             return Err("connector_closed".to_owned());
         }
         if id.is_empty() && self.allowed_servers.is_none() {
-            return state
+            if let Some(client) = state
                 .clients
                 .values()
-                .next()
-                .cloned()
-                .ok_or_else(|| "connector_not_joined".to_owned());
+                .find(|client| !client.has_completed_leave())
+            {
+                return Ok(client.clone());
+            }
+            return match state.clients.len() {
+                0 => Err("connector_not_joined".to_owned()),
+                1 => state
+                    .clients
+                    .values()
+                    .next()
+                    .cloned()
+                    .ok_or_else(|| "connector_not_joined".to_owned()),
+                _ => Err("connection_id_required".to_owned()),
+            };
         }
         state
             .clients
@@ -134,8 +156,15 @@ impl ConnectorHub {
             .ok_or_else(|| "invalid_connection_id".to_owned())
     }
 
-    pub(super) async fn leave(&self, id: &str) -> Result<Value, String> {
-        let client = self.client(id)?;
+    pub(super) async fn leave(&self, id: &str, release_receipt: bool) -> Result<Value, String> {
+        let client = self.connection(id)?;
+        if release_receipt {
+            if !client.has_completed_leave() {
+                return Err("connector_leave_receipt_not_completed".to_owned());
+            }
+            self.remove(id, &client);
+            return Ok(json!({"status":"receipt_released"}));
+        }
         if client.cancel_prepared().await {
             self.remove(id, &client);
             return Ok(json!({"status":"connection_cancelled"}));
@@ -144,14 +173,17 @@ impl ConnectorHub {
             .command(RoomAction::ParticipantLeave, json!({}))
             .await
             .map_err(|error| error.code)?;
-        self.remove(id, &client);
         Ok(result)
     }
 
     fn remove(&self, id: &str, client: &Arc<RoomConnectorClient>) {
         let mut state = self.state.lock();
         let key = if id.is_empty() && self.allowed_servers.is_none() {
-            state.clients.keys().next().cloned()
+            state
+                .clients
+                .iter()
+                .find(|(_, current)| Arc::ptr_eq(current, client))
+                .map(|(key, _)| key.clone())
         } else {
             Some(id.to_owned())
         };

@@ -23,26 +23,8 @@ async fn remote_http_requires_private_custody_before_admission_and_retains_uncer
     let relay =
         super::lossy_http::LossyHttpRelay::start(&server.base_url, &["/api/room-connector/join"])
             .await?;
-    let connector = ConnectorMcp::new(Some(vec![relay.base_url.clone()]))?;
-    let factory = connector.clone();
-    let cancellation = CancellationToken::new();
-    let service = StreamableHttpService::new(
-        move || Ok(factory.clone()),
-        Arc::<LocalSessionManager>::default(),
-        StreamableHttpServerConfig::default()
-            .with_legacy_session_mode(false)
-            .with_json_response(true)
-            .with_sse_keep_alive(None)
-            .with_cancellation_token(cancellation.child_token()),
-    );
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
-    let endpoint = format!("http://{}/mcp", listener.local_addr()?);
-    let stopping = cancellation.clone();
-    let task = tokio::spawn(async move {
-        axum::serve(listener, axum::Router::new().nest_service("/mcp", service))
-            .with_graceful_shutdown(stopping.cancelled_owned())
-            .await
-    });
+    let remote = RemoteMcp::start(&relay.base_url).await?;
+    let endpoint = remote.endpoint.clone();
     let first = ().serve(StreamableHttpClientTransport::from_uri(endpoint.clone())).await?;
     let second = ().serve(StreamableHttpClientTransport::from_uri(endpoint)).await?;
     let tools = first.list_all_tools().await?;
@@ -90,9 +72,7 @@ async fn remote_http_requires_private_custody_before_admission_and_retains_uncer
     }
     first.cancel().await?;
     second.cancel().await?;
-    connector.close();
-    cancellation.cancel();
-    task.await??;
+    remote.stop().await?;
     relay.stop().await?;
     server.stop().await;
     Ok(())
@@ -246,4 +226,49 @@ async fn rejected(
             .any(|text| text.text.contains(code)),
         "{name}: {response:?}"
     );
+}
+
+pub(super) struct RemoteMcp {
+    pub(super) endpoint: String,
+    connector: ConnectorMcp,
+    cancellation: CancellationToken,
+    task: tokio::task::JoinHandle<std::io::Result<()>>,
+}
+
+impl RemoteMcp {
+    pub(super) async fn start(room_base: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let connector = ConnectorMcp::new(Some(vec![room_base.to_owned()]))?;
+        let factory = connector.clone();
+        let cancellation = CancellationToken::new();
+        let service = StreamableHttpService::new(
+            move || Ok(factory.clone()),
+            Arc::<LocalSessionManager>::default(),
+            StreamableHttpServerConfig::default()
+                .with_legacy_session_mode(false)
+                .with_json_response(true)
+                .with_sse_keep_alive(None)
+                .with_cancellation_token(cancellation.child_token()),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let endpoint = format!("http://{}/mcp", listener.local_addr()?);
+        let stopping = cancellation.clone();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, axum::Router::new().nest_service("/mcp", service))
+                .with_graceful_shutdown(stopping.cancelled_owned())
+                .await
+        });
+        Ok(Self {
+            endpoint,
+            connector,
+            cancellation,
+            task,
+        })
+    }
+
+    pub(super) async fn stop(self) -> Result<(), Box<dyn std::error::Error>> {
+        self.connector.close();
+        self.cancellation.cancel();
+        self.task.await??;
+        Ok(())
+    }
 }

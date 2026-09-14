@@ -656,6 +656,24 @@ pass. Actual MCP/current-conversation and packaged invitation flows remain pendi
 
 ## Current-conversation transport client
 
+### MCP terminal receipt custody correction
+
+The relay must retain the canonical successful leave response until the external
+caller explicitly acknowledges it, because room HTTP success precedes MCP delivery.
+The existing private connection registry remains bounded at 128 entries, including
+terminal receipts. Terminal entries cannot read, join or mutate; they only repeat
+their exact leave result. `room_leave` with `release_receipt: true` releases a
+known completed receipt after the caller has received it. Unknown handles remain
+errors. No timer, eviction, new admission or fabricated success replaces custody.
+The stdio transport still permits only one active connection; completed receipts
+do not occupy that active slot, but callers must keep the exact returned handle
+for replay across a later join. Normal service shutdown releases the whole registry.
+Acceptance loses only the MCP response after room HTTP success, recovers the exact
+terminal result with the same handle, denies renewed authority, and confirms
+explicit acknowledgment releases capacity. Concurrent retries must share that
+same terminal result. This adds bounded response retention and an explicit
+acknowledgment call; the room server remains the leave/receipt authority.
+
 The external client owns HTTP transport, private admission/session state and one
 pending command receipt; it never opens the room store or launches a provider.
 URL parsing and bounded response decoding are separate from connection lifecycle.

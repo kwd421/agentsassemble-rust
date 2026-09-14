@@ -24,11 +24,15 @@
   The saved resumed Pro answer is still partial: it identifies G3-M1-R1 at the
   MCP caller response boundary (Hub removes the private leave handle before result
   delivery), with only 2 full patches and 1 partial patch read out of 182. That
-  finding requires correction; it is not whole-group coverage. The complete answer
+  finding now has a local correction; it is not whole-group coverage. The complete answer
   was read and a continuation retaining the full independent scope was submitted.
   Explicit Connector wait resynchronization now passes actual HTTP/MCP9 and
   all-target/all-feature Clippy plus unchanged architecture/format/diff gates.
-  Both new corrections require affected-source re-review.
+  The MCP terminal response now remains replayable until explicit caller receipt
+  release, within the existing 128-entry registry; actual MCP-response-loss,
+  concurrent replay, authority denial and capacity recovery pass. Connector10,
+  workspace Clippy and unchanged architecture/format/diff gates pass.
+  All new corrections require affected-source re-review.
   User correction: implementer-selected findings, files and paths must not limit
   or steer the independent review. Derive coverage from user requirements and
   actual source, including omissions and new problems outside those examples.

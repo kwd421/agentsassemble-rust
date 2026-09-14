@@ -2,6 +2,34 @@
 
 Status: current real-client verification owner
 
+## MCP caller terminal response recovery (2026-09-14)
+
+G3-M1-R1 is supported by the actual Hub removal/handler return order. The
+correction retains the exact successful room response in the existing private
+client under the serialized command owner. Active transport is cancelled on
+committed leave; only the same leave payload can recover the retained result.
+The Hub retains that mapping until `room_leave` with `release_receipt: true`.
+Normal reads/joins/mutations cannot use the terminal handle. Stdio still admits
+one active connection; callers retain the exact ID across later joins. All
+prepared, active and terminal mappings share the existing 128-entry bound.
+No timer or eviction drops an unacknowledged result. Retained clients/results cost
+memory until explicit release or service shutdown; this is bounded custody,
+not a measurement of production capacity or restart-durable MCP custody.
+
+Actual local Streamable HTTP MCP verification uses the existing lossy relay only
+between the MCP server and its external caller, after a real room HTTP leave
+has committed. The caller gets an invalid response; two concurrent retries with
+the original private handle return identical canonical results and the same event
+ID. Read is denied and the durable room sequence does not advance. The retained
+receipt plus 127 prepared connections fills capacity; explicit receipt release
+makes exactly that slot available, and replay after release is rejected.
+Existing stdio lost-room-HTTP-response recovery and next-room admission still pass.
+
+Connector boundary10 PASS (12.69s), all-target/all-feature workspace Clippy PASS,
+architecture/format/diff and 19 existing policy/artifact-owner checks PASS. No
+packaged external provider execution is claimed by this protocol regression.
+The frozen Pro review is still at `2135d511`; this correction needs re-review.
+
 ## Connector explicit wait resynchronization (2026-09-14)
 
 An actual local HTTP server and the built `assemble room connector-mcp` stdio
