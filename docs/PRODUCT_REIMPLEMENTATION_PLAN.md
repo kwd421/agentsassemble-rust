@@ -727,7 +727,7 @@ continue through the remaining reviews, supported corrections, verification, and
 final re-review without pausing for another instruction after each Pro answer.
 Briefly report completed results while continuing the authorized work. Stop only
 for an actual unresolved authorization or external dependency.
-Latest user review sequencing (2026-09-09): Pro review is split into Phase 1–3,
+Superseded user review sequencing (2026-09-09): Pro review was split into Phase 1–3,
 then Phase 4–6, then Phase 7–9; do not replace this with one whole-repository
 request or an isolated recent-diff approval. Phase 1–3 was reviewed at `9a8d39d`.
 Changes since that snapshot that affect an already-reviewed group require a scoped
@@ -735,6 +735,15 @@ supplemental review of that group at the new frozen HEAD. Include current change
 in their owning groups and preserve coverage across all groups; reuse prior exact
 evidence only for unchanged reviewed scope. Immutable review snapshots remain
 available while corrections are prepared; affected final code requires re-review.
+Latest user review decision (2026-09-14): request one independent review of the
+entire repository at the current frozen commit. This supersedes the split-group
+sequence and group-specific supplemental requests above. Do not constrain the
+review to phases, implementer-selected files or known findings, and do not prescribe
+review mechanics such as a "manual scan". Provide the repository and commit; obtain
+and read the completed whole-repository answer, correct supported findings, verify,
+and obtain review of the resulting code. Existing approvals remain historical
+evidence, not substitutes for this whole-repository review.
+
 The user explicitly deferred broader mobile UX implementation; mobile acceptance
 remains incomplete and must be disclosed to both reviewers.
 

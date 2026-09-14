@@ -2,6 +2,17 @@
 
 ## Active work
 
+- Latest user instruction (2026-09-14) supersedes the split review and continuation
+  directions below: obtain one independent whole-repository review, without phase,
+  file, known-finding or implementer-prescribed review-method restrictions.
+  Sent GitHub repository and current frozen commit
+  `0ee154c8423beb1283e13c649685738064da35c8` to GPT-6 Pro in a new in-app conversation:
+  https://chatgpt.com/c/6aa7aa6c-8608-83ee-b6b9-0e7833fcaf68 .
+  The prior conversation and observed evidence remain preserved. No old 182-patch
+  bundle or phase-specific review request was sent to the new conversation.
+  Await and read the completed answer, then correct, verify and re-review supported
+  findings. An in-progress request does not constitute review or phase completion.
+
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was
   absent. Continued from the checkpoint and verified the new full-scope request
