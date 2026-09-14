@@ -1,5 +1,31 @@
 # Verification Contract
 
+## Completed partial Pro continuation and coverage discrepancy (2026-09-14)
+
+The 72m41s continuation at frozen `2135d511` was read in full. It formally withdraws
+G3-M3 as a false positive and retains scoped H1 approval, M1-R1 partial REVISE,
+and unfinished M2/whole Phase 7–9 coverage. It reports recovery of the existing
+`aa-final-setup-2135d511-source-review.zip` and Git-tree matching of original and
+Rust snapshots; archive presence is not whole-source semantic review.
+
+The final prose reports 9/182 full patches and a partially read tenth patch. This
+conflicts with directly observed output in the same run: `save_072_074.py` reaches
+six stored patches, `save_078.py` reaches nine, and `save_116.py` reaches 22 with
+`78851aff4f515b18ec1e51dcd865e091dd1b4490`, the actual saved patch tail, file list,
+source references and per-patch judgment. Those records concern different patches
+from the final prose's nine. The counts must be reconciled by SHA and actual file
+contents; they are not silently added together or used as whole coverage.
+
+The answer exposes `review_state.json` and `patch_inventory.json` file controls.
+A download click produced no confirmed local file; the preview remained preparing,
+so no downloaded-artifact claim is made. A full-scope continuation was sent at
+15:24 KST and verified saved after reload, requesting actual ledger/patch/evidence
+reconciliation and continued
+independent reading from the recovered archive. It preserves all original range,
+parity, ownership, failure, cost and UI requirements and the no-execution/no-scanner
+review boundary. No new confirmed product finding or approval is inferred.
+
+
 ## Admitted rejoin read failure preserves leave custody (2026-09-14)
 
 At `b2acf04d`, an actual remote MCP regression exhausts the existing room event-read

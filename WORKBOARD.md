@@ -2,6 +2,16 @@
 
 ## Active work
 
+- Latest completed Pro continuation (2026-09-14, 72m41s) is still partial.
+  M3 is formally withdrawn; whole Phase 7–9 is not approved. Final prose reports
+  9/182 full patches, but the same run's actual `save_116.py` output shows
+  `FULL_PATCHES_SAVED 22` with per-SHA source, judgment and saved-tail evidence.
+  Preserve both facts until the reviewer reconciles its actual files; neither
+  count establishes complete coverage. The full-scope continuation at 15:24 KST
+  requests SHA-level reconciliation and remaining review from the already-recovered
+  immutable source/182-patch archive. Do not reset actual reading to the smaller
+  prose count, discard prior evidence, or treat this as phase closure.
+
 - Connector admission/read custody correction (2026-09-14): actual remote MCP at
   `b2acf04d` reproduced a read-budget rejection during an admitted rejoin deleting
   its private handle and preventing leave. Removal now requires Pending admission,
