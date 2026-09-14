@@ -263,6 +263,21 @@ No pagination, frame limit increase, row deletion or UI layout change is require
 for this lifetime correction. This does not establish bounds for every other kind
 of snapshot metadata or certify expired-but-still-Joined participant handling.
 
+## Uncertain command recovery deadline (2026-09-14)
+
+Review progress identifies a sent command left pending when every later ticket or
+subscription fails. The current close handler clears the command deadline, while
+only a successful retransmission arms it again. Keep the same exact serialized
+request and eight-attempt retry owner. After a sent connection closes, the existing
+command timer must also bound preparation for its next replay: retain the scheduled
+backoff plus the existing 20-second command wait. Failed tickets or incomplete
+handshakes cannot reset this waiting deadline. Expiry reports outcome_unknown and
+stops replay of that intent; it does not claim rejection, roll back a server commit,
+change room identity rules or stop ordinary connection recovery. A later confirmed
+replay within the bound still settles normally. Verify failed and hanging ticket
+issuance, unfinished handshake, bounded exact replay, and no retransmission after
+unknown settlement with controlled timers.
+
 ## Shared panel search stacking correction (2026-09-14)
 
 Packaged follow-up: at the current desktop width, the old compact member panel's

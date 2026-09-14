@@ -18,6 +18,27 @@ afterEach(() => {
 });
 
 describe("room socket exact-command retry", () => {
+  it.each(["ticket_failure", "ticket_hang", "handshake_hang"])("settles sent uncertainty when recovery stalls at %s", async (failure) => {
+    vi.useFakeTimers();
+    const { handle, sockets, getTicket } = openHarness();
+    try {
+      await flushPromises();
+      await openReadyConnection(0, handle, sockets);
+      const outcome = vi.fn();
+      void handle.command("message.send", { content: "uncertain delivery" }).then(outcome, outcome);
+      expect(sockets[0].sent).toHaveLength(2);
+      if (failure === "ticket_failure") getTicket.mockRejectedValue(new Error("offline"));
+      if (failure === "ticket_hang") getTicket.mockImplementation(() => new Promise(() => {}));
+      sockets[0].close();
+      await vi.advanceTimersByTimeAsync(60_000);
+      expect(outcome).toHaveBeenCalledExactlyOnceWith(expect.objectContaining({ category: "outcome_unknown" }));
+      if (failure === "handshake_hang") {
+        await openReadyConnection(1, handle, sockets);
+        expect(sockets[1].sent).toHaveLength(1);
+      }
+    } finally { handle.close(); }
+  });
+
   it("counts one uncertain outcome at most once per connection generation", () => {
     const retry = { retryAttempt: 0, retryCountedGeneration: 0, retryNotBefore: 0 };
     expect(scheduleUncertainCommandRetry(retry, 7)).toBe("retry");

@@ -165,6 +165,14 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {},
   let issued = 0;
   let reportOpened = () => {};
   const opened = new Promise<void>((resolve) => { reportOpened = resolve; });
+  const getTicket = vi.fn(async () => {
+    issued += 1;
+    return {
+      ticket: issued.toString(16).padStart(64, "a"), ttl_seconds: 30,
+      websocket_base_url: "ws://127.0.0.1:43123",
+      displayResourceBase: "http://127.0.0.1:43123",
+    };
+  });
   const handle = openRoomSocket(
     { kind: "host", meetingId: "general" },
     streams,
@@ -176,16 +184,7 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {},
       },
     },
     {
-      getTicket: async () => {
-        issued += 1;
-        const ticket = issued.toString(16).padStart(64, "a");
-        return {
-          ticket,
-          ttl_seconds: 30,
-          websocket_base_url: "ws://127.0.0.1:43123",
-          displayResourceBase: "http://127.0.0.1:43123",
-        };
-      },
+      getTicket,
       createSocket: () => {
         const socket = new FakeWebSocket();
         sockets.push(socket);
@@ -196,7 +195,7 @@ export function openHarness(handlers: Parameters<typeof openRoomSocket>[2] = {},
       expectedParticipantId: "operator-local",
     }
   );
-  return { handle, opened, sockets };
+  return { handle, opened, sockets, getTicket };
 }
 
 export async function flushPromises() {

@@ -2,6 +2,33 @@
 
 ## Completed whole-repository Pro review (2026-09-14)
 
+Independent follow-up from the running review's progress: an abrupt post-send
+disconnect clears the command timer; ticket failure/hang or unfinished subscription
+can then leave its Promise pending indefinitely. All three controlled regressions
+fail before the change (no settlement after 60 virtual seconds); the existing six
+exact-replay tests pass. The command owner now arms its existing timer while awaiting
+replay, allowing the existing retry backoff plus 20 seconds. New connection attempts
+do not reset that preparation deadline. It settles outcome_unknown without replaying
+again or claiming the original effect failed. Existing eight-attempt and identical
+serialized-request behavior remain. Retry9, full frontend149/865 (15.22s), production
+build/CSS and mandatory source gates pass. No new timer/polling owner or gate change
+is introduced.
+
+Signed 0.1.40 pauses only its test server PID 20507 (owned by supervisor20479 and
+app20355), then sends a generated message from the copied UI. After the ACK and
+recovery waits, the draft becomes editable and uncertainty is displayed. Resuming
+the same server restores the room with the original message visible once. This
+demonstrates why a transport deadline cannot assert server-side rejection. Signed
+0.1.41 repeats the flow with its own server23054/supervisor23041/app23035, verifies
+the final Korean guidance, retained draft, reconnect, and a distinct fresh message
+whose success clears the error. No provider starts or real network settings change.
+Both paused servers are resumed before normal Quit; every named PID is absent
+afterward. Codesign deep/strict passes; notarization is not claimed.
+Logs: `/tmp/aa-recovery-deadline-baseline.log`, `/tmp/aa-recovery-deadline-fixed.log`,
+`/tmp/aa-recovery-deadline-frontend.log`, `/tmp/aa-recovery-deadline-gates.log`,
+`/tmp/aa-recovery-deadline-package.log`, `/tmp/aa-recovery-deadline-copy-package.log`.
+The running frozen review does not include this correction; re-review remains.
+
 Packaged follow-up after the frozen snapshot: signed 0.1.38 reveals the old compact
 member-panel z-index 100 hiding the persistent header search popover. The existing
 shared-width panel style resets that obsolete overlay stack to auto. Signed 0.1.39

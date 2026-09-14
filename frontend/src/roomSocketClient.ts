@@ -150,9 +150,10 @@ export function openRoomSocket(
 
   function rejectUnknown(requestId: string, command: PendingRoomCommand) {
     pending.delete(requestId);
+    if (command.timerId !== null) window.clearTimeout(command.timerId);
     if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
     command.reject(new RoomSocketSayError(
-      "The room command outcome remained unresolved after bounded exact replay.",
+      "요청 결과를 확인하지 못했어요. 다시 요청하기 전에 방의 현재 상태를 확인해 주세요.",
       "outcome_unknown"
     ));
   }
@@ -166,6 +167,10 @@ export function openRoomSocket(
       if (pending.get(requestId) !== command) return;
       command.timerId = null;
       if (command.everSent) {
+        if (command.transmissionPhase === "idle") {
+          rejectUnknown(requestId, command);
+          return;
+        }
         if (scheduleUncertainCommandRetry(command, connectionGeneration) === "exhausted") {
           rejectUnknown(requestId, command);
         }
@@ -180,7 +185,8 @@ export function openRoomSocket(
         "Room command timed out before it could be sent.",
         "timeout"
       ));
-    }, ROOM_SOCKET_COMMAND_TIMEOUT_MS);
+    }, ROOM_SOCKET_COMMAND_TIMEOUT_MS + (command.transmissionPhase === "idle"
+      ? Math.max(0, command.retryNotBefore - Date.now()) : 0));
   }
 
   function fail(currentSocket: WebSocket, generation: number, error: unknown) {
@@ -636,6 +642,9 @@ export function openRoomSocket(
           command.timerId = null;
           if (scheduleUncertainCommandRetry(command, generation) === "exhausted") {
             rejectUnknown(requestId, command);
+          } else {
+            command.transmissionPhase = "idle";
+            armCommandDeadline(requestId, command);
           }
         });
         if (terminalLeaveCommitted) return;

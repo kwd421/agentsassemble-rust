@@ -52,6 +52,14 @@
   preservation. Header/side-chat7, production build/CSS and mandatory gates pass.
   Normal Quit confirms exact owned-process cleanup. This later correction requires
   review after the current frozen answer.
+  During the ongoing review, independently reproduced three post-send recovery
+  stalls (ticket failure/hang and unfinished handshake). The existing command timer
+  now bounds replay preparation and settles outcome_unknown without new intent or
+  false rejection. Retry9, full frontend865, production build/CSS and mandatory
+  gates pass. Signed 0.1.40/0.1.41 verify held-server deadline, editable preserved
+  draft, Korean uncertainty guidance, actual reconnect and a distinct fresh send.
+  Held servers are resumed and exact processes exit normally. The completed
+  whole-source review and re-review of these later corrections remain pending.
 
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was

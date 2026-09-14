@@ -15,6 +15,23 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ### Frontend corrections and acceptance boundaries (2026-09-14)
 
+Uncertain command recovery: after an abrupt post-send disconnect, repeated ticket
+failure, a hanging ticket or an unfinished handshake left the caller waiting
+indefinitely. All three cases reproduce with controlled timers. The existing command
+owner now keeps a recovery deadline through preparation for exact replay, retaining
+the current backoff plus 20-second wait. Expiry uses the existing outcome_unknown
+UI path and removes further replay of that intent; ordinary reconnect continues.
+No control/layout, new request identity or claimed server rejection is added.
+Retry9 and full frontend865 pass. Signed 0.1.40, with only its own test server paused,
+shows the pending composer unlock with its draft retained; resuming the server
+restores the room and the original message appears once. The visible raw English
+retry description is replaced with Korean guidance to check the room before another
+request, since the first request may have committed. Signed 0.1.41 repeats the real
+server pause: Korean guidance and retained editable draft are visible, reconnect
+restores one original message, and a distinct fresh message succeeds and clears the
+error. Both runs resume the held server before normal Quit, with owned-process
+cleanup confirmed. Corrected-source whole review remains pending.
+
 Packaged search stacking follow-up: with the shared-width room panel open, the
 old compact member-panel z-index 100 obscures the persistent rail's search results.
 The existing shared panel style now resets that overlay z-index to auto. Panel
