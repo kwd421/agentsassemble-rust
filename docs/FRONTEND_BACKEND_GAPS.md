@@ -24,8 +24,11 @@ The API/Local hint now describes file reading and per-change approval only; it i
 not applied to native harness permission semantics. No new control, layout, shell
 execution or alternate harness is introduced.
 Read-only selection remains workspace-free. Controlled file and approval/custody
-checks plus an actual driver/HTTP/SSE/Room Portal tool round pass; signed packaged
-selection/approval and current-source whole-repository review remain pending.
+checks plus an actual driver/HTTP/SSE/Room Portal tool round pass. Signed 0.1.37
+confirms the native folder picker and configured DeepSeek read/search, denial,
+separate write/replace approvals and actual final file read. Signed 0.1.38 confirms
+the corrected hint and restored history/stopped state. Current-source whole-
+repository review remains pending; real Local-provider execution is not claimed.
 
 Deleted edit-history correction (whole-repository R3): the server now removes the
 edited body from subsequent public event reads when the canonical target is deleted.

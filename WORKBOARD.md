@@ -36,8 +36,10 @@
   frontend862, production build/CSS and workspace Clippy; packaged checks remain.
   R7 now passes actual 31-second wait/message delivery, Connector14 and transport2
   while preserving ordinary HTTP limits. R4 builtin API/Local workspace tools are now locally restored with provider258,
-  controlled approval/custody and API tool-round checks passing. Signed packaged
-  verification and corrected-source whole-repository review are still required.
+  controlled approval/custody and API tool-round checks passing. Signed 0.1.37
+  verifies configured DeepSeek read/search, denied write, approved write/replace
+  and actual file read; 0.1.38 verifies the corrected hint and restart persistence.
+  Corrected-source whole-repository review is still required.
 
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was

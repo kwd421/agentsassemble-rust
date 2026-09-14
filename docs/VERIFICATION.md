@@ -15,7 +15,7 @@ the retained text is not represented as those separate artifacts.
 | R1 | High | Deleted in-flight input restored to queue blocks later messages | Locally corrected across restoration owners; persistence334 and workspace Clippy pass; re-review pending |
 | R2 | High | Historical participants exceed mandatory snapshot frame size | Locally corrected; canonical 1000-departure/actual socket and persistence334 pass; re-review pending |
 | R3 | Medium | Prior edit events return deleted message content | Locally corrected; persistence335, frontend862 and workspace Clippy pass; packaged verification/re-review pending |
-| R4 | Medium | Original builtin API/Local workspace file tools omitted | Locally restored; provider258, filesystem/approval/custody3, API round and workspace Clippy pass; packaged verification/re-review pending |
+| R4 | Medium | Original builtin API/Local workspace file tools omitted | Locally restored; provider258, controlled tools/API and signed packaged DeepSeek file approval pass; whole-source re-review pending |
 | R5 | Medium | Initial resync repeats ahead-of-history cursor | Locally corrected at `50aaa0bc`; latest-source review pending |
 | R6 | Medium | Admitted Connector cannot leave after initial read failure | Locally corrected; actual Connector13 and workspace Clippy pass; re-review pending |
 | R7 | Medium | Connection-wide 30-second timeout aborts normal wait-next | Locally corrected; real 31-second wait, Connector14, transport2 and workspace Clippy pass; re-review pending |
@@ -94,8 +94,26 @@ not explicitly advance time while a blocking worker waited; the corrected full r
 passes. This was a test synchronization failure, not evidence of product quiescence.
 Logs: `/tmp/aa-review-r4-provider-final.log`, `/tmp/aa-review-r4-tools-final.log`,
 `/tmp/aa-review-r4-api.log`, `/tmp/aa-review-r4-clippy-final.log`,
-`/tmp/aa-review-r4-gates.log`. Signed packaged selection/approval and whole-current-
-repository Pro review remain pending.
+`/tmp/aa-review-r4-gates.log`. Signed packaged 0.1.37 uses configured DeepSeek `deepseek-flash`/low in the new
+`Workspace Tools 0.1.37` room and only an isolated generated workspace. The native
+picker retains the exact selected directory. The agent lists/reads/searches the
+input token; UI denial sends a durable response and creates no result file. A new
+explicit request receives separate UI approvals for creation and exact replacement;
+the resulting file and the agent's actual read both contain
+`LOCAL-FILE-0.1.37-VERIFIED` (26 bytes). File evidence is retained in
+`/tmp/aa-review-r4-packaged-files.json`. The session is visibly stopped; normal Quit
+removes exact app/supervisor/server PIDs 94596/94759/94784. The existing main composer
+and top action rail remain visible beside the right side-chat panel, without overlap.
+The package exposed misleading shell-execution wording in its folder hint. That
+copy is corrected for API/Local only, with creation40, production build/CSS and
+unchanged gates passing. Signed 0.1.38 visibly shows the corrected file-only hint;
+restart preserves the verification history and stopped session. Normal Quit removes
+PIDs 4395/4442/4475. Both packages pass strict signature verification; notarization
+is not claimed. The prior integration data and active evidence are preserved.
+Logs: `/tmp/aa-review-r4-package.log`, `/tmp/aa-review-r4-package-0138.log`,
+`/tmp/aa-review-r4-frontend.log`, `/tmp/aa-review-r4-build.log`,
+`/tmp/aa-review-r4-copy-gates.log`. Real Local-provider execution is not claimed.
+Whole-current-repository Pro review remains pending.
 
 R6 is reproduced with the actual HTTP server and client: the relay truncates only
 the initial successful read response after admission. Before the fix, leave returns
