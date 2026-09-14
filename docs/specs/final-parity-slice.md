@@ -263,6 +263,15 @@ No pagination, frame limit increase, row deletion or UI layout change is require
 for this lifetime correction. This does not establish bounds for every other kind
 of snapshot metadata or certify expired-but-still-Joined participant handling.
 
+## Shared panel search stacking correction (2026-09-14)
+
+Packaged follow-up: at the current desktop width, the old compact member panel's
+z-index 100 covers the persistent rail's search popover. The shared-width panel
+layout owner must reset that obsolete overlay stacking, while retaining panel
+width, top actions, main composer and dialog layers. Verify actual search opening,
+result selection/dismissal and panel switching in the signed package. No search
+authority, CSS gate or mobile-layout change is needed.
+
 ## Deleted edit-event public projection (2026-09-14)
 
 Whole-repository R3 is reproduced by edit/delete followed by a newly admitted

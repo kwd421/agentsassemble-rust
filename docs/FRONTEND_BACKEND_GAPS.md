@@ -15,6 +15,15 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ### Frontend corrections and acceptance boundaries (2026-09-14)
 
+Packaged search stacking follow-up: with the shared-width room panel open, the
+old compact member-panel z-index 100 obscures the persistent rail's search results.
+The existing shared panel style now resets that overlay z-index to auto. Panel
+width, rail, search behavior and composer placement are preserved. Signed 0.1.39
+confirms unobscured search results, result selection, Escape dismissal and switching
+to side chat with both composers and the stable top rail visible. Existing header/
+side-chat7 tests, production build and the unchanged CSS/architecture gates pass.
+The change follows the frozen `7df6bb09` review and requires subsequent review.
+
 Builtin workspace tools correction (whole-repository R4): API and Local catalogs
 now offer the existing workspace-write permission option. `AgentCreateModal`
 already derives its native folder picker from that permission; the existing
@@ -35,8 +44,11 @@ edited body from subsequent public event reads when the canonical target is dele
 The existing message_deleted marker also preserves the deleted placeholder when an
 old edit arrives without the later deletion event in that history window. Layout,
 buttons and deletion controls remain unchanged. Persistence335, frontend862,
-production build/CSS and workspace Clippy pass; packaged verification and latest
-whole-source review remain pending.
+production build/CSS and workspace Clippy pass. Signed 0.1.38 confirms visible
+edit/delete, the retained deletion placeholder after normal restart and no search
+match for the edited body. The response-byte and edit-only history-window cases
+remain covered by the stated controlled tests, not claimed as packaged interactions.
+Latest whole-source review remains pending.
 
 Departed-roster correction (whole-repository R2): public initial snapshots now omit
 Left participant records at the persistence query, matching the existing live

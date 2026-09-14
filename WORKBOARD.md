@@ -40,6 +40,18 @@
   verifies configured DeepSeek read/search, denied write, approved write/replace
   and actual file read; 0.1.38 verifies the corrected hint and restart persistence.
   Corrected-source whole-repository review is still required.
+  At 20:44 KST, submitted the complete corrected snapshots at Rust
+  `7df6bb092e00c63534d58bc25e3732b60e186142` and original `d5046473` in the same
+  in-app Pro conversation. The posted request explicitly retains independent
+  whole-repository scope without previous-finding or file restrictions; attachment
+  and active response are visible. Await the completed answer; this is not approval.
+  While waiting, signed 0.1.38 verifies R3 edit/delete/restart display and search.
+  It also exposes stale compact-panel stacking hiding search results; the shared
+  panel owner now resets the overlay z-index. Signed 0.1.39 verifies unobscured
+  search, result selection/dismissal, side-chat switching and composer/top-rail
+  preservation. Header/side-chat7, production build/CSS and mandatory gates pass.
+  Normal Quit confirms exact owned-process cleanup. This later correction requires
+  review after the current frozen answer.
 
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was

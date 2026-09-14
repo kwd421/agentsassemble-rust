@@ -2,6 +2,27 @@
 
 ## Completed whole-repository Pro review (2026-09-14)
 
+Packaged follow-up after the frozen snapshot: signed 0.1.38 reveals the old compact
+member-panel z-index 100 hiding the persistent header search popover. The existing
+shared-width panel style resets that obsolete overlay stack to auto. Signed 0.1.39
+confirms the full search box/results visibly above the open room panel, successful
+result selection, Escape dismissal and side-chat switching with both composers
+and fixed top controls intact. Existing header/side-chat7 tests, production build,
+original CSS asset verification and mandatory source gates pass. Codesign deep/
+strict passes; notarization is not claimed. Normal Quit removes app/supervisor/server
+PIDs 13991/14014/14031. Logs: `/tmp/aa-search-stacking-tests.log`,
+`/tmp/aa-search-stacking-package.log`, `/tmp/aa-search-stacking-gates.log`.
+This later correction is not included in the frozen review and needs re-review.
+
+Corrected-source re-review was submitted at 20:44 KST in the same in-app conversation
+at `7df6bb092e00c63534d58bc25e3732b60e186142`, with independent whole-repository
+scope and no previous-finding/file restrictions. `aa-whole-repository-7df6bb09.zip`
+contains all 2,683 tracked files from this Rust snapshot and original `d5046473`;
+each manifest entry was verified. Archive SHA-256:
+`a8f95000b7c7d2f2948b288c84d827cd62415be02a8aa8b5df255b9a9267bfe1`.
+The posted request, attachment and active Pro response are visible. Its completed
+verdict remains pending and must not be inferred from the local corrections.
+
 The second answer in https://chatgpt.com/c/6aa7aa6c-8608-83ee-b6b9-0e7833fcaf68
 completed after 54m54s at frozen `0ee154c8`: **REVISE, H2/M5/L1**. The complete
 answer was read, including all eight findings, whole-source coverage and execution
@@ -14,7 +35,7 @@ the retained text is not represented as those separate artifacts.
 | --- | --- | --- | --- |
 | R1 | High | Deleted in-flight input restored to queue blocks later messages | Locally corrected across restoration owners; persistence334 and workspace Clippy pass; re-review pending |
 | R2 | High | Historical participants exceed mandatory snapshot frame size | Locally corrected; canonical 1000-departure/actual socket and persistence334 pass; re-review pending |
-| R3 | Medium | Prior edit events return deleted message content | Locally corrected; persistence335, frontend862 and workspace Clippy pass; packaged verification/re-review pending |
+| R3 | Medium | Prior edit events return deleted message content | Locally corrected; persistence335, frontend862, Clippy and signed edit/delete/restart display pass; re-review pending |
 | R4 | Medium | Original builtin API/Local workspace file tools omitted | Locally restored; provider258, controlled tools/API and signed packaged DeepSeek file approval pass; whole-source re-review pending |
 | R5 | Medium | Initial resync repeats ahead-of-history cursor | Locally corrected at `50aaa0bc`; latest-source review pending |
 | R6 | Medium | Admitted Connector cannot leave after initial read failure | Locally corrected; actual Connector13 and workspace Clippy pass; re-review pending |
@@ -69,8 +90,15 @@ edit sequence retention and initial/incremental deleted-placeholder projection.
 Logs: `/tmp/aa-review-r3-baseline.log`, `/tmp/aa-review-r3-fixed.log`,
 `/tmp/aa-review-r3-persistence.log`, `/tmp/aa-review-r3-frontend.log`,
 `/tmp/aa-review-r3-build.log`, `/tmp/aa-review-r3-clippy.log`,
-`/tmp/aa-review-r3-gates.log`. Signed packaged verification of the later source
-remains pending; tests do not establish visible UI proof.
+`/tmp/aa-review-r3-gates.log`. Signed 0.1.38 additionally verifies a newly generated
+message in the isolated `Workspace Tools 0.1.37` room: visible edit save, deletion
+placeholder, normal Quit and relaunch, and the same placeholder after fresh history
+load. Search for the edited token returns no match. No provider was started.
+This complements the response-byte tests; it does not claim the packaged UI loaded
+an old page containing only the edit and not its later deletion. Both app lifetimes
+quit normally, with exact PIDs 9758/9846/9876 and 11279/11302/11327 absent afterward.
+The search check also exposes an independent compact-panel stacking defect, tracked
+in the frontend gap map; AX text alone did not establish unobscured search rendering.
 
 R4 restores the original builtin workspace tool path, independent of deferred
 alternate harnesses. API/Local catalogs reuse the existing workspace permission,

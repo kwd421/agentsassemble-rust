@@ -105,7 +105,7 @@ export default function AppView({ controller }: { controller: AppController }) {
   const sideChatOpen = canOpenSideChat && sideChatScope === channelScope;
   const roomInfoOpen = !mobileViewport && hasRoom && showMembers && membersOpen && !sideChatOpen;
   const persistentRail = !mobileViewport && canOpenSideChat;
-  const panelStyle = { position: "relative", display: "flex", width: "clamp(220px, 32%, 300px)", minWidth: 0, marginTop: persistentRail ? 48 : 0, boxShadow: "none" } as const;
+  const panelStyle = { position: "relative", zIndex: "auto", display: "flex", width: "clamp(220px, 32%, 300px)", minWidth: 0, marginTop: persistentRail ? 48 : 0, boxShadow: "none" } as const;
   function toggleRoomInfo() {
     if (sideChatOpen) {
       setSideChatScope("");
