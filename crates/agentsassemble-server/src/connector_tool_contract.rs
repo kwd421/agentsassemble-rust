@@ -64,6 +64,8 @@ pub(super) struct Context {
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Say {
+    /// Generate a UUID before the first call; retain it unchanged for retries of this intent.
+    pub(super) request_id: String,
     pub(super) content: String,
     #[serde(default)]
     pub(super) connection_id: String,
@@ -72,6 +74,8 @@ pub(super) struct Say {
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct VoteCreate {
+    /// Generate a UUID before the first call; retain it unchanged for retries of this intent.
+    pub(super) request_id: String,
     pub(super) question: String,
     pub(super) options: Vec<String>,
     #[serde(default)]
@@ -83,6 +87,8 @@ pub(super) struct VoteCreate {
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct VoteCast {
+    /// Generate a UUID before the first call; retain it unchanged for retries of this intent.
+    pub(super) request_id: String,
     pub(super) vote_id: String,
     pub(super) choice: String,
     #[serde(default)]
@@ -99,7 +105,20 @@ pub(super) struct VoteTarget {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct VoteMutation {
+    /// Generate a UUID before the first call; retain it unchanged for retries of this intent.
+    pub(super) request_id: String,
+    #[serde(rename = "vote_id")]
+    pub(super) vote: String,
+    #[serde(default)]
+    pub(super) connection_id: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Roll {
+    /// Generate a UUID before the first call; retain it unchanged for retries of this intent.
+    pub(super) request_id: String,
     pub(super) notation: String,
     #[serde(default)]
     pub(super) reason: String,
@@ -110,6 +129,8 @@ pub(super) struct Roll {
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub(super) struct Choose {
+    /// Generate a UUID before the first call; retain it unchanged for retries of this intent.
+    pub(super) request_id: String,
     pub(super) options: Vec<String>,
     #[serde(default)]
     pub(super) reason: String,

@@ -658,6 +658,19 @@ pass. Actual MCP/current-conversation and packaged invitation flows remain pendi
 
 ### MCP terminal receipt custody correction
 
+Ordinary MCP mutations require a caller-owned `request_id` UUID, generated before
+the first call and retained unchanged for retries of the same action/payload.
+The relay passes it through to the existing room command receipt owner. A new
+intent uses a new UUID, even when its content matches an earlier message. The
+client keeps only its existing unresolved command; conflicting intent cannot
+replace it. After committed HTTP success, a repeated MCP call with the same UUID
+recovers the canonical room result instead of generating another operation.
+No content-based duplicate heuristic or unbounded relay receipt cache is added.
+The tool schema requires the ID; omission is a clear input error, not an unsafe
+automatic-ID compatibility path. Acceptance loses the MCP response after actual
+publication, retries the exact ID, rejects changed payload reuse, and allows a
+distinct ID to intentionally publish the same content again.
+
 The relay must retain the canonical successful leave response until the external
 caller explicitly acknowledges it, because room HTTP success precedes MCP delivery.
 The existing private connection registry remains bounded at 128 entries, including

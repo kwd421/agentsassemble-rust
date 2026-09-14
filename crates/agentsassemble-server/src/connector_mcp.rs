@@ -18,7 +18,7 @@ mod hub;
 pub mod transport;
 use contract::{
     Choose, Connection, Context, Join, Leave, Read, Roll, Say, Search, VoteCast, VoteCreate,
-    VoteTarget,
+    VoteMutation, VoteTarget,
 };
 use hub::ConnectorHub;
 
@@ -48,14 +48,17 @@ impl ConnectorMcp {
     async fn command(
         &self,
         id: &str,
+        request_id: &str,
         action: RoomAction,
         payload: Value,
     ) -> Result<String, String> {
+        let request_id = uuid::Uuid::parse_str(request_id)
+            .map_err(|_| "invalid_connector_request_id".to_owned())?;
         encode(
             &self
                 .hub
                 .client(id)?
-                .command(action, payload)
+                .command_with_request_id(request_id, action, payload)
                 .await
                 .map_err(|error| error.code)?,
         )
@@ -129,6 +132,7 @@ impl ConnectorMcp {
     async fn room_say(&self, Parameters(input): Parameters<Say>) -> Result<String, String> {
         self.command(
             &input.connection_id,
+            &input.request_id,
             RoomAction::MessageSend,
             json!({"content": input.content}),
         )
@@ -140,7 +144,7 @@ impl ConnectorMcp {
         &self,
         Parameters(input): Parameters<VoteCreate>,
     ) -> Result<String, String> {
-        self.command(&input.connection_id, RoomAction::MessageSend, json!({"kind":"vote", "vote_question":input.question, "vote_options":input.options, "vote_duration_seconds":input.duration_seconds})).await
+        self.command(&input.connection_id, &input.request_id, RoomAction::MessageSend, json!({"kind":"vote", "vote_question":input.question, "vote_options":input.options, "vote_duration_seconds":input.duration_seconds})).await
     }
 
     #[tool(description = "Cast or replace this participant's ballot.")]
@@ -150,6 +154,7 @@ impl ConnectorMcp {
     ) -> Result<String, String> {
         self.command(
             &input.connection_id,
+            &input.request_id,
             RoomAction::MessageSend,
             json!({"kind":"vote_cast", "vote_id":input.vote_id, "vote_choice":input.choice}),
         )
@@ -159,12 +164,13 @@ impl ConnectorMcp {
     #[tool(description = "Withdraw this participant's ballot.")]
     async fn room_vote_withdraw(
         &self,
-        Parameters(input): Parameters<VoteTarget>,
+        Parameters(input): Parameters<VoteMutation>,
     ) -> Result<String, String> {
         self.command(
             &input.connection_id,
+            &input.request_id,
             RoomAction::MessageSend,
-            json!({"kind":"vote_withdraw", "vote_id":input.vote_id}),
+            json!({"kind":"vote_withdraw", "vote_id":input.vote}),
         )
         .await
     }
@@ -172,12 +178,13 @@ impl ConnectorMcp {
     #[tool(description = "Close a poll created by this participant.")]
     async fn room_vote_close(
         &self,
-        Parameters(input): Parameters<VoteTarget>,
+        Parameters(input): Parameters<VoteMutation>,
     ) -> Result<String, String> {
         self.command(
             &input.connection_id,
+            &input.request_id,
             RoomAction::MessageSend,
-            json!({"kind":"vote_close", "vote_id":input.vote_id}),
+            json!({"kind":"vote_close", "vote_id":input.vote}),
         )
         .await
     }
@@ -201,6 +208,7 @@ impl ConnectorMcp {
     async fn room_roll_dice(&self, Parameters(input): Parameters<Roll>) -> Result<String, String> {
         self.command(
             &input.connection_id,
+            &input.request_id,
             RoomAction::RoomRandomRoll,
             json!({"notation":input.notation,"reason":input.reason}),
         )
@@ -214,6 +222,7 @@ impl ConnectorMcp {
     ) -> Result<String, String> {
         self.command(
             &input.connection_id,
+            &input.request_id,
             RoomAction::RoomRandomChoose,
             json!({"options":input.options,"reason":input.reason}),
         )

@@ -5,6 +5,83 @@ use super::{
 use rmcp::{ServiceExt, model::CallToolRequestParams, transport::StreamableHttpClientTransport};
 
 #[tokio::test]
+async fn lost_mcp_publication_response_retries_one_canonical_command()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, manager) = fixture().await?;
+    let server = human_invite::start(store.clone()).await;
+    let remote = RemoteMcp::start(&server.base_url).await?;
+    let client = ()
+        .serve(StreamableHttpClientTransport::from_uri(
+            remote.endpoint.clone(),
+        ))
+        .await?;
+    let invite = store
+        .create_connector_invite(
+            &manager,
+            Uuid::new_v4(),
+            InviteScope::ReadWrite,
+            chrono::Utc::now(),
+        )
+        .await?;
+    let mut invitation =
+        json!({"invite_url":format!("{}/join?token={}",server.base_url,invite.invite_bearer)});
+    let prepared = call(&client, "room_join", invitation.clone()).await;
+    invitation["connection_id"] = prepared["connection_id"].clone();
+    let joined = call(&client, "room_join", invitation).await;
+    let args = json!({"connection_id":joined["connection_id"],"content":"One logical publication","request_id":Uuid::new_v4().to_string()});
+    let relay = LossyHttpRelay::start(
+        remote
+            .endpoint
+            .strip_suffix("/mcp")
+            .ok_or("MCP path missing")?,
+        &["/mcp"],
+    )
+    .await?;
+    let lost = reqwest::Client::new().post(format!("{}/mcp",relay.base_url))
+        .header("accept", "application/json, text/event-stream")
+        .header("mcp-protocol-version", "2025-03-26")
+        .json(&json!({"jsonrpc":"2.0","id":42,"method":"tools/call","params":{"name":"room_say","arguments":args}}))
+        .send().await?.error_for_status()?.text().await?;
+    assert_eq!(lost, "{");
+    let before = store.snapshot("general", 0, 200).await?;
+    assert_eq!(
+        before
+            .events
+            .iter()
+            .filter(|event| event.content.as_deref() == Some("One logical publication"))
+            .count(),
+        1
+    );
+    let recovered = call(&client, "room_say", args.clone()).await;
+    assert_eq!(recovered["deduplicated"], true);
+    let after = store.snapshot("general", 0, 200).await?;
+    assert_eq!(
+        after
+            .events
+            .iter()
+            .filter(|event| event.content.as_deref() == Some("One logical publication"))
+            .count(),
+        1
+    );
+    let mut changed = args.clone();
+    changed["content"] = json!("Changed intent under an existing ID");
+    super::mcp_remote::rejected(&client, "room_say", changed, "command_conflict").await;
+    let mut distinct = args;
+    distinct["request_id"] = json!(Uuid::new_v4().to_string());
+    let new = call(&client, "room_say", distinct).await;
+    assert_eq!(new["deduplicated"], false);
+    assert_ne!(
+        new["result"]["event"]["id"],
+        recovered["result"]["event"]["id"]
+    );
+    client.cancel().await?;
+    relay.stop().await?;
+    remote.stop().await?;
+    server.stop().await;
+    Ok(())
+}
+
+#[tokio::test]
 async fn lost_mcp_leave_response_retains_receipt_until_explicit_release()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, manager) = fixture().await?;

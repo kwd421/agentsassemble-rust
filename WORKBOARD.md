@@ -33,6 +33,12 @@
   concurrent replay, authority denial and capacity recovery pass. Connector10,
   workspace Clippy and unchanged architecture/format/diff gates pass.
   All new corrections require affected-source re-review.
+  The ordinary MCP publication response-loss candidate is also independently
+  reproduced: the original path writes two messages for one retried intent.
+  Caller-owned required request UUIDs now reach the existing canonical receipt
+  owner; exact replay, conflicting reuse and intentional distinct-ID publication
+  pass in actual HTTP/MCP. Connector11 and workspace Clippy pass; no approval is
+  inferred for this later source from the frozen review.
   User correction: implementer-selected findings, files and paths must not limit
   or steer the independent review. Derive coverage from user requirements and
   actual source, including omissions and new problems outside those examples.

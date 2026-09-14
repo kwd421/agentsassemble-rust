@@ -106,8 +106,24 @@ async fn packaged_connector_cli_exposes_current_conversation_tools()
 pub(super) async fn call(
     client: &RunningService<RoleClient, ()>,
     name: &'static str,
-    arguments: Value,
+    mut arguments: Value,
 ) -> Value {
+    if matches!(
+        name,
+        "room_say"
+            | "room_vote_create"
+            | "room_vote_cast"
+            | "room_vote_withdraw"
+            | "room_vote_close"
+            | "room_roll_dice"
+            | "room_choose_random"
+    ) {
+        arguments
+            .as_object_mut()
+            .unwrap_or_else(|| panic!("tool arguments"))
+            .entry("request_id")
+            .or_insert_with(|| json!(Uuid::new_v4().to_string()));
+    }
     let response = client
         .call_tool(
             CallToolRequestParams::new(name).with_arguments(

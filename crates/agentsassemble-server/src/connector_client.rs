@@ -71,6 +71,12 @@ struct PendingCommand {
     hash: String,
 }
 
+struct TerminalLeave {
+    request_id: Uuid,
+    hash: String,
+    response: Value,
+}
+
 pub struct RoomConnectorClient {
     http: Client,
     server: Url,
@@ -78,7 +84,7 @@ pub struct RoomConnectorClient {
     pub(crate) display_name: String,
     state: Mutex<JoinState>,
     pending_command: Mutex<Option<PendingCommand>>,
-    terminal_leave: parking_lot::Mutex<Option<(String, Value)>>,
+    terminal_leave: parking_lot::Mutex<Option<TerminalLeave>>,
     cancellation: CancellationToken,
 }
 
@@ -293,13 +299,38 @@ impl RoomConnectorClient {
         action: RoomAction,
         payload: Value,
     ) -> Result<Value, ConnectorClientError> {
+        self.command_identified(None, action, payload).await
+    }
+
+    /// Preserves the external caller's operation identity across MCP response loss.
+    ///
+    /// # Errors
+    /// Reports conflicting unresolved intent, rejected authority and transport uncertainty.
+    pub async fn command_with_request_id(
+        &self,
+        request_id: Uuid,
+        action: RoomAction,
+        payload: Value,
+    ) -> Result<Value, ConnectorClientError> {
+        self.command_identified(Some(request_id), action, payload)
+            .await
+    }
+
+    async fn command_identified(
+        &self,
+        request_id: Option<Uuid>,
+        action: RoomAction,
+        payload: Value,
+    ) -> Result<Value, ConnectorClientError> {
         let hash = agentsassemble_domain::canonical_payload_hash(&payload);
         let mut pending = self.pending_command.lock().await;
         if action == RoomAction::ParticipantLeave
-            && let Some((completed_hash, response)) = &*self.terminal_leave.lock()
+            && let Some(completed) = &*self.terminal_leave.lock()
         {
-            return if completed_hash == &hash {
-                Ok(response.clone())
+            return if completed.hash == hash
+                && request_id.is_none_or(|id| id == completed.request_id)
+            {
+                Ok(completed.response.clone())
             } else {
                 Err(ConnectorClientError::local(
                     "connector_leave_payload_conflict",
@@ -308,14 +339,17 @@ impl RoomConnectorClient {
         }
         let session = self.session().await?;
         if let Some(current) = &*pending {
-            if current.action != action || current.hash != hash {
+            if current.action != action
+                || current.hash != hash
+                || request_id.is_some_and(|id| current.request_id != id)
+            {
                 return Err(ConnectorClientError::local(
                     "previous_connector_command_unresolved",
                 ));
             }
         } else {
             *pending = Some(PendingCommand {
-                request_id: Uuid::new_v4(),
+                request_id: request_id.unwrap_or_else(Uuid::new_v4),
                 action,
                 payload,
                 hash,
@@ -330,7 +364,11 @@ impl RoomConnectorClient {
                 if response.get("resolution").and_then(Value::as_str) == Some("committed") =>
             {
                 if action == RoomAction::ParticipantLeave {
-                    *self.terminal_leave.lock() = Some((current.hash.clone(), response.clone()));
+                    *self.terminal_leave.lock() = Some(TerminalLeave {
+                        request_id: current.request_id,
+                        hash: current.hash.clone(),
+                        response: response.clone(),
+                    });
                     self.close();
                 }
                 *pending = None;

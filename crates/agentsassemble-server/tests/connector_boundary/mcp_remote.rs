@@ -200,7 +200,7 @@ async fn cancel_preparation(client: &RunningService<RoleClient, ()>, invitation:
     rejected(client, "room_join", cancelled, "invalid_connection_id").await;
 }
 
-async fn rejected(
+pub(super) async fn rejected(
     client: &RunningService<RoleClient, ()>,
     name: &'static str,
     arguments: Value,

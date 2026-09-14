@@ -2,6 +2,31 @@
 
 Status: current real-client verification owner
 
+## MCP mutation identity across response loss (2026-09-14)
+
+The review's unconfirmed general-mutation candidate was independently reproduced
+with a real room HTTP server, Streamable HTTP MCP and the existing lossy relay.
+Only the MCP result is replaced after a committed publication. Repeating the
+original tool intent before the correction produces two durable messages; the
+regression fails with actual2/expected1. The room already keys canonical receipts
+by principal/request/action/payload; the relay was generating a fresh UUID after
+it received success, before its external caller had necessarily received success.
+
+All seven ordinary mutating MCP tools now require a caller-owned `request_id`
+UUID and pass it unchanged to that existing owner. Missing/invalid IDs fail
+explicitly. Read/vote-summary/wait remain unchanged; leave retains its separate
+terminal result and explicit-release lifecycle. The existing direct Rust client
+continues owning IDs for its own HTTP retries. No content deduplication, additional
+receipt cache, compatibility fallback or background task is introduced.
+
+The corrected real MCP regression recovers `deduplicated: true` and one durable
+publication; changing content under that ID returns `command_conflict`. A new UUID
+with the same content yields a distinct committed event. Connector boundary11
+PASS (11.60s), all-target/all-feature workspace Clippy PASS after preserving the
+wire `vote_id` field while renaming its Rust member, architecture/format/diff and
+19 existing policy/artifact-owner tests PASS. Review of the affected new source
+and remaining authorized real-provider acceptance are still open.
+
 ## MCP caller terminal response recovery (2026-09-14)
 
 G3-M1-R1 is supported by the actual Hub removal/handler return order. The
