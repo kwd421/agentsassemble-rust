@@ -297,3 +297,36 @@ lifetime limits. No automatic retry loop, empty successful heartbeat, larger pub
 limit or swallowed transport failure is introduced. Verify a real Connector wait
 across 30 seconds of silence, then one delivered message; also verify that an
 unleased handler still loses its connection at the original boundary.
+
+## Builtin API and Local workspace tools (R4, 2026-09-14)
+
+Restore the reachable original builtin `api_work_tools.py` contract: selected
+workspace file listing, UTF-8 reading, literal search, and owner-approved file
+write/exact replacement. Read-only rooms remain workspace-free. Existing catalog
+permission selection, canonical workspace identity and execution-bound provider
+requests own admission; no alternate harness or shell command is introduced.
+
+An opened directory capability is checked against the selected workspace identity.
+Relative paths exclude repository control directories. Capability resolution admits
+only symlink targets within the selected workspace; subsequent descriptor traversal
+does not follow substituted symlinks.
+Reads/discovery retain bounded file, entry and result budgets. Writes use a private
+sibling and atomic rename, so replacing a hard-linked file cannot truncate an
+outside inode. Replacement rechecks the read content after approval; this is not
+a filesystem transaction against independent concurrent external writers.
+
+The driver retains each blocking filesystem task through turn cancellation and
+joined cleanup. Cancellation denies work before publication where still possible;
+started write effects remain uncertain for retry purposes. A cleanup timeout must
+retain custody and report failure, never imply quiescence. Approval is one operation
+on one relative path, through the exact session/turn/execution request owner; no
+owner, denial, expiry or delivery failure permits a write. Tool file contents are excluded from approval descriptions and logs; tool results
+stay in the private API conversation instead of being automatically added to room
+history. An agent can still explicitly discuss a file in its ordinary room reply.
+
+Acceptance: builtin API and Local catalogs expose the existing workspace option;
+read/search return actual selected files; approved writes and replacement succeed;
+denial/cancellation/path escape/control directories/symlink and hard-link cases
+preserve protected data. Controlled API tool calls, affected provider tests,
+mandatory gates, and signed packaged selection/approval must pass. Whole-current-
+repository Pro review remains required.

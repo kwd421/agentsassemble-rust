@@ -9,6 +9,8 @@ agent-client-protocol.workspace = true
 agentsassemble-domain = { path = "../agentsassemble-domain" }
 base64.workspace = true
 bytes.workspace = true
+cap-std = "4.0.2"
+cap-fs-ext = "4.0.2"
 chrono.workspace = true
 eventsource-stream.workspace = true
 futures-util.workspace = true
