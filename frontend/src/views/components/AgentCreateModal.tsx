@@ -9,7 +9,7 @@ import {
   type RoomMember,
   type ProviderCredentialStatus,
 } from "../../api";
-import type { NativeCliProviderAvailability, ProviderControl } from "../../roomSocketClient";
+import { RoomSocketSayError, type NativeCliProviderAvailability, type ProviderControl } from "../../roomSocketClient";
 import {
   displayProviderControls,
   effectiveProviderControlOptions,
@@ -91,6 +91,7 @@ export default function AgentCreateModal({
   const [personaCardId, setPersonaCardId] = useState("");
   const [credentialStatus, setCredentialStatus] = useState<ProviderCredentialStatus | null>(null);
   const [credentialBusy, setCredentialBusy] = useState(false);
+  const createRetry = useRef<{ key: string; retry: NonNullable<RoomSocketSayError["retry"]> } | null>(null);
   const wasOpen = useRef(false);
   const pendingInitialSettings = useRef("");
   const groupedProviders = projectProvidersByCatalogGroup(providers);
@@ -144,6 +145,7 @@ export default function AgentCreateModal({
 
   useEffect(() => {
     if (!open) {
+      createRetry.current = null;
       wasOpen.current = false;
       setExistingSessionId("");
       setCustomEndpoint("");
@@ -278,31 +280,39 @@ export default function AgentCreateModal({
     }
     setBusy(true);
     setStatus(startNow ? "에이전트 시작 중..." : "에이전트 추가 중...");
+    const request: FrontendLiveAgentCreateRequest = {
+      meetingId,
+      sessionId: existingSessionId || undefined,
+      providerId: selectedProvider.id,
+      catalogRevision,
+      displayName,
+      workspacePath,
+      providerEndpoint: selectedProvider.custom_endpoint
+        ? customEndpoint.trim()
+        : "",
+      modelId: selectedProvider.custom_model
+        ? customModel.trim()
+        : settings.model || "",
+      reasoningEffort: settings.reasoning_effort || "",
+      serviceTier: settings.service_tier || "",
+      variant: settings.variant || "",
+      permissionMode: settings.permission_mode || "meeting_read_only",
+      maxOutputTokens: Number(settings.max_output_tokens || 0),
+      personaCardId,
+      startNow,
+    };
+    const key = JSON.stringify(request);
+    if (createRetry.current?.key !== key) createRetry.current = null;
     try {
-      await onCreate({
-        meetingId,
-        sessionId: existingSessionId || undefined,
-        providerId: selectedProvider.id,
-        catalogRevision,
-        displayName,
-        workspacePath,
-        providerEndpoint: selectedProvider.custom_endpoint
-          ? customEndpoint.trim()
-          : "",
-        modelId: selectedProvider.custom_model
-          ? customModel.trim()
-          : settings.model || "",
-        reasoningEffort: settings.reasoning_effort || "",
-        serviceTier: settings.service_tier || "",
-        variant: settings.variant || "",
-        permissionMode: settings.permission_mode || "meeting_read_only",
-        maxOutputTokens: Number(settings.max_output_tokens || 0),
-        personaCardId,
-        startNow,
-      });
+      if (createRetry.current) await createRetry.current.retry();
+      else await onCreate(request);
+      createRetry.current = null;
       onCreated?.();
       onClose();
     } catch (error) {
+      if (error instanceof RoomSocketSayError && error.retry) {
+        createRetry.current = { key, retry: error.retry };
+      }
       setStatus(error instanceof Error ? error.message : "에이전트 추가 실패");
     } finally {
       setBusy(false);
