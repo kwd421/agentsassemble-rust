@@ -1,5 +1,35 @@
 # Verification Contract
 
+## Admitted rejoin read failure preserves leave custody (2026-09-14)
+
+At `b2acf04d`, an actual remote MCP regression exhausts the existing room event-read
+budget with successful reads, then repeats the admitted join. `room_read_limit`
+is correctly returned, but the Hub removes the connection because it mistakes the
+follow-up read rejection for admission rejection. Exact leave then fails with
+`invalid_connection_id` while membership remains Joined. The baseline test failed
+on that public result; no fabricated error, internal mutation or arbitrary sleep
+was used.
+
+Removal now requires the client to remain Pending admission; its existing state
+lock guards the check and close before Hub removal. An admitted connection retains
+its identity after a rejected read. The same regression now receives a committed
+leave and observes membership no longer Joined. Connector boundary 12/12 pass
+(11.61s), including existing actual rejected admission, uncertain admission,
+response-loss, terminal receipt, resync and stdio lifecycle cases. Workspace
+all-target/all-feature Clippy, unchanged architecture/source-growth gates, 19 policy
+and artifact tests, format/diff and artifact maintenance checks pass. This adds no
+polling, fallback, permission
+bypass or new state owner. Corrected-source external review remains open.
+
+The next completed Pro answer (95m50s) remained partial with zero additional full
+patches read. Its new G3-M3 claimed `context` sends `event`, but frozen `2135d511`
+lines 225–237 and ancestor `4bf1c154` already send `event_id`. The implementer
+verified those exact git objects, sent the source rebuttal in a full-scope
+continuation, and verified that request persisted after reload at 14:07 KST.
+Pro's subsequent in-progress response explicitly withdrew M3 after checking both
+revisions; it could not identify the revision behind its earlier quotation.
+No code was changed for M3. The existing full-group coverage and remaining-review
+limits remain; neither this withdrawal nor progress text is final approval.
 
 ## Restore the shared chat/right-panel layout (2026-09-14)
 

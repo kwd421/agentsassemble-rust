@@ -182,6 +182,17 @@ impl RoomConnectorClient {
         }
     }
 
+    /// Discards a definitively rejected admission, never an admitted session's read failure.
+    pub(crate) async fn close_rejected_admission(&self) -> bool {
+        let state = self.state.lock().await;
+        if matches!(&*state, JoinState::Pending(_)) {
+            // Fence other join calls under the same state lock before the Hub removes us.
+            self.close();
+            return true;
+        }
+        false
+    }
+
     /// Cancels preparation only before this owner has attempted any admission I/O.
     pub(crate) async fn cancel_prepared(&self) -> bool {
         let state = self.state.lock().await;

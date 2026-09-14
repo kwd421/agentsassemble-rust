@@ -1638,3 +1638,21 @@ Windows console host, native fixture and native child before whole-Job cleanup.
 No gate, toolchain policy or test expectation is weakened. No Windows UI or real
 provider run is claimed. The final Unix-only fixture correction also passes local
 Clippy, architecture, nineteen policy tests, formatting and diff checks.
+
+
+## Rejoin snapshot rejection retains admission custody (2026-09-14)
+
+Actual remote MCP reproduction at `b2acf04d` exhausts the existing read budget
+through successful room reads, then retries the admitted `room_join`. Its snapshot
+read returns `room_read_limit` with Rejected. The Hub incorrectly treats this as
+admission rejection and deletes the handle; exact subsequent leave fails with
+`invalid_connection_id` while the participant remains joined.
+
+A Rejected result permits removal only while the client is still Pending admission.
+The client checks that phase and closes under its existing state lock, fencing
+concurrent joins before Hub removal. Admitted/Ready snapshot errors retain private
+identity and membership custody so the caller can retry or explicitly leave. No
+new retry loop, fallback, timer, map or permission bypass is added. Existing rejected
+unconsumed/consumed invitation handling remains subject to the same canonical result.
+Acceptance is the actual read-budget/MCP/room path followed by an exact committed
+leave, plus existing rejected-admission and response-loss regressions.

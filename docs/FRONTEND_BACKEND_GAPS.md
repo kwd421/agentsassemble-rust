@@ -51,6 +51,7 @@ those evidence owners.
 | `550c7b5d` | `useCompanionInvites` and `CompanionInviteCard` use the accepted paired room-session authority for invitation and management; no borrowed host-native authority. | Paired issuance and cleanup corrections have scoped source and packaged evidence; the final split review remains separate. |
 | `a41b4f0c`, `2135d511` | Native `runtime_supervisor` and `local_runtime/control_exchange` retain outer shutdown and pending control-response custody; a normal ticket timeout cannot destroy valid recovery. | Signed 0.1.29–0.1.31 recovery/quit evidence and affected Phase 1–3 source approval are recorded. They do not approve later UI changes. |
 | `b23f826b`, `62155cf8`, `4a5a06ab`, `683bb03c` | External Connector MCP adds explicit read resync, retains terminal receipts until explicit release, requires caller mutation UUIDs, and rejects ambiguous implicit leave. These are external-client contracts, not new React buttons. | Actual HTTP/MCP evidence is recorded; real external Antigravity admission and corrected-source review remain open. |
+| Rejoin read rejection correction (2026-09-14) | Admitted external MCP connections retain their private handle after a rejected snapshot read, preserving exact leave. No React control changes. | Actual remote read-budget regression and Connector12 pass; corrected-source review remains open. |
 
 The route owner is `crates/agentsassemble-server/src/product_surface.rs`, derived
 from the same registrations mounted by `web.rs`. Room actions and per-viewer

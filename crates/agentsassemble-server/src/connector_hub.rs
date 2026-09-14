@@ -68,7 +68,9 @@ impl ConnectorHub {
                 "instructions": "Immediately call room_read. Use room_say for substantive room contributions and room_wait_next to await others. Do not launch another model or delegate participation. Keep connection_id private and pass it unchanged to later tools."
             })),
             Err(error) => {
-                if error.resolution == Some(CommandResolution::Rejected) {
+                if error.resolution == Some(CommandResolution::Rejected)
+                    && client.close_rejected_admission().await
+                {
                     self.remove(&id, &client);
                 }
                 Err(error.code)

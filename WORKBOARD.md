@@ -2,6 +2,18 @@
 
 ## Active work
 
+- Connector admission/read custody correction (2026-09-14): actual remote MCP at
+  `b2acf04d` reproduced a read-budget rejection during an admitted rejoin deleting
+  its private handle and preventing leave. Removal now requires Pending admission,
+  checked and closed under the client's existing state lock. Actual Connector12
+  and all-target/all-feature workspace Clippy pass; affected-source review remains.
+  Pro's next completed 95m50s answer remained partial (no additional full patches).
+  Its G3-M3 `event` claim contradicts frozen `2135d511` context lines 225–237 and
+  ancestor `4bf1c154`, both already using `event_id`. The full-scope continuation
+  and source rebuttal were saved and verified after reload at 14:07 KST. During
+  that ongoing review Pro explicitly withdrew M3 after checking both revisions.
+  This is a withdrawn finding, not a new code fix or a whole-group approval.
+
 - Active frontend correction (2026-09-14): preserve existing UI except required
   behavior additions or demonstrated usability fixes. Keep the top action rail
   stable while the right panel changes; restore side chat beside the main chat.
