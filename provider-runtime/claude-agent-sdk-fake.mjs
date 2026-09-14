@@ -65,12 +65,22 @@ class FakeQuery {
         session_id: session,
         cwd: this.options.cwd,
         model: this.options.model,
-        effort: this.options.effort,
         fast_mode_state: this.options.settings?.fastMode ? "on" : "off",
         permissionMode: this.options.permissionMode,
         tools: Array.isArray(this.options.tools) ? this.options.tools : [],
         mcp_servers: [{ name: "agentsassemble_room", status: "connected" }],
       };
+      if (process.env.AA_FAKE_STOP_RECEIPT !== "missing") {
+        for (const matcher of this.options.hooks.Stop) {
+          for (const hook of matcher.hooks) {
+            await hook({
+              hook_event_name: "Stop",
+              session_id: process.env.AA_FAKE_STOP_RECEIPT === "foreign" ? "foreign-session" : session,
+              effort: { level: process.env.AA_FAKE_STOP_RECEIPT === "mismatch" ? "low" : this.options.effort },
+            });
+          }
+        }
+      }
       yield {
         type: "result",
         subtype: "success",

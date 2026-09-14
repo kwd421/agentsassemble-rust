@@ -10,10 +10,11 @@ import { fileURLToPath } from "node:url";
 const bridge = fileURLToPath(new URL("./claude-agent-sdk-bridge.mjs", import.meta.url));
 const fakeSdk = fileURLToPath(new URL("./claude-agent-sdk-fake.mjs", import.meta.url));
 
-function start(mode, cwd) {
+function start(mode, cwd, receipt) {
   const child = spawn(process.execPath, [bridge, fakeSdk, "/fixture/claude", mode], {
     stdio: ["pipe", "pipe", "pipe"],
     cwd,
+    env: { ...process.env, ...(receipt ? { AA_FAKE_STOP_RECEIPT: receipt } : {}) },
   });
   const lines = createInterface({ input: child.stdout });
   const iterator = lines[Symbol.asyncIterator]();
@@ -108,3 +109,20 @@ test("session rejects a non-UUID durable identity", async () => {
   assert.deepEqual(await runtime.next(), { type: "fatal", code: "claude_sdk_bridge_failed" });
   assert.equal(await exit, 1);
 });
+
+for (const receipt of ["missing", "mismatch", "foreign"]) {
+  test(`session rejects ${receipt} applied-effort receipt without publication`, async () => {
+    const runtime = start("session", undefined, receipt);
+    const exit = closed(runtime.child);
+    runtime.child.stdin.write(`${JSON.stringify({
+      type: "initialize", workspace: "/fixture/workspace", model: "claude-sonnet-5",
+      reasoning_effort: "high", service_tier: "default", permission_mode: "meeting_read_only",
+      resume_session_id: "",
+      room_portal: { url: "http://127.0.0.1:43210/mcp", bearer_token: "fixture-token" },
+    })}\n`);
+    assert.equal((await runtime.next()).type, "ready");
+    runtime.child.stdin.write(`${JSON.stringify({ type: "turn", turn_id: "turn-1", input: "hello" })}\n`);
+    assert.equal((await runtime.next()).type, "fatal");
+    assert.equal(await exit, 1);
+  });
+}

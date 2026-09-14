@@ -207,7 +207,6 @@ function validInit(message, active, session) {
     message.session_id === session.id &&
     message.cwd === session.workspace &&
     message.model === session.model &&
-    message.effort === session.effort &&
     (session.tier === "fast" ? message.fast_mode_state === "on" : message.fast_mode_state !== "on") &&
     message.permissionMode === (session.permission === "workspace_write" ? "acceptEdits" : "dontAsk") &&
     Array.isArray(message.tools) &&
@@ -226,6 +225,7 @@ function validResult(message, active, session) {
   return (
     active !== null &&
     active.initialized &&
+    active.effortVerified === true &&
     message.session_id === session.id &&
     message.user_message_uuid === active.sdkTurnId &&
     typeof message.uuid === "string" &&
@@ -257,7 +257,21 @@ async function session(sdk, claudePath, command, commands) {
     process.stdin.destroy();
   };
   const requests = new OwnerRequests(state, delivery, emit, fail);
-  configured.options.hooks = requests.hooks;
+  configured.options.hooks = {
+    ...requests.hooks,
+    // SDK-hosted init frames omit effort. The native Stop hook reports the
+    // applied effort for this turn, including provider-side downgrades.
+    Stop: [{ hooks: [async (input) => {
+      if (state.failed || state.shuttingDown || !state.active?.initialized ||
+          input.hook_event_name !== "Stop" || input.session_id !== state.id ||
+          input.agent_id !== undefined || input.effort?.level !== state.effort) {
+        fail();
+        throw new Error("invalid SDK applied effort receipt");
+      }
+      state.active.effortVerified = true;
+      return {};
+    }] }],
+  };
   configured.options.canUseTool = requests.canUseTool;
   const query = sdk.query({ prompt: queue, options: configured.options });
   const initialization = await query.initializationResult();

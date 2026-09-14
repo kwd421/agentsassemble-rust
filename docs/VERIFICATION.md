@@ -1,6 +1,91 @@
 # Verification Contract
 
+## Real Claude SDK Opus Low verification (2026-09-14)
+
+Signed0.1.46 at00:02–00:04 KST on2026-09-15 passes refreshed catalog selection of
+claude-opus-5/Low, selected isolated workspace, startup, actual room read/public
+answer41+43=84, a second same-session read/answer repeating84, and normal Stop.
+Native session4b546dc1-cb39-4b26-b3b4-098a608a7a7d records read_discussion2 and
+publish_message2; only tool names/counts were inspected. Durable session
+claude-cc8ddd82-07e0-53ac-bdea-a519a07e258b has turn_count2 and no error. The UI
+shows stopped; exact children68575/68621/68622/68630/68631 are absent. Actual
+Claude Opus Low flow passes. App66738/supervisor66811/server66812 remain open for
+other packaged checks. This does not close the older failed-session Stop defect
+or pending whole-source review. Package and deep/strict codesign pass.
+
+The user authorizes this real provider at23:30 KST. After the user's browser login,
+native structured auth status reports loggedIn=true/authMethod=claude.ai/exit0;
+Safari's localhost callback page fails to connect, but the credential is usable.
+The callback failure's cause is unconfirmed. Do not retain its code/state URL.
+Signed0.1.45 selects claude-opus-5/Low and starts Idle, but the23:44 room request
+fails with invalid protocol receipt and no public answer. Normal Stop then rejects
+missing exact runtime-handle ownership; this is unresolved, not successful stop.
+Normal Quit leaves exact app50272/supervisor50297/server50301 absent.
+
+Direct installed SDK0.3.258 calls return68 successfully on both CLI2.1.231 and
+2.1.270 (updated through official claude update). Both SDK-hosted init frames omit
+effort; the public SDK declaration says that field is emitted by other hosts.
+The current CLI's native Stop hook reports effort.level=low and the same session.
+Its prompt_id differs from user_message_uuid, so they are not interchangeable.
+The bridge now requires the native Stop receipt on its sole active initialized
+main turn before accepting the exact UUID-correlated result. Missing, mismatched
+and foreign receipts reject publication. Native model/permission/MCP checks remain.
+The captured missing-init shape fails the old bridge; all11 provider JavaScript
+checks now pass. Unchanged architecture/policy19/format/diff gates pass. Packaged
+Opus Low delivery and normal stop subsequently pass as recorded above. Logs are private
+/tmp/aa-claude-sdk-{wire-current,effort-probe,effort-correlation}.log and
+/tmp/aa-claude-effort-{baseline,tests,gates}.log; only public result and whitelisted
+protocol metadata were emitted, without provider transcript or OAuth secrets.
+
 ## Completed whole-repository Pro review (2026-09-14)
+
+R1 correction atbed0ed50 bounds encoded public persona summaries to1KiB at import
+and stored-card decode, preserving private card fields and rejecting rather than
+truncating. Actual HTTP oversized-import regression changes200 to400; HTTP3,
+persistence336 plus the extracted stored-create/configure regression1 pass. The
+64-session actual create/configure/socket/reopen capacity test passes. Workspace
+Clippy and unchanged gates pass. Signed0.1.46 rejects the300,000-character name,
+accepts Persona Capacity Verification, creates an add-only selected-persona session,
+and restores that applied card after normal restart. No API inference is performed.
+
+R2 retains exact uncertain-request retry in existing vote and custom-channel
+forms. Unchanged submissions reuse the original request; editing the channel draft
+uses a new intent, and closing the vote dialog clears its retry. Baseline actual
+form tests fail2; corrected affected28 and full frontend149/869 pass, production
+build/CSS pass, then the refined channel draft-edit case passes5. No layout changes.
+Signed0.1.46 pauses only its exact server66812 for each test. Deadline uncertainty
+preserves each draft; resuming commits the original once; unchanged UI resubmission
+clears the error/draft. Read-only SQLite confirms one event and one receipt each:
+vote request bcebb9a1-e727-41ab-9e73-f4d9e04c7e1e atseq186, channel request
+882b685e-4fb2-44ce-a737-f88a458f57dd atseq187. Both remain single after normal
+restart; the frontend visibly restores both. Both pauses are resumed before Quit.
+Exact first-run66738/66811/66812 and restart75369/75391/75412 processes are absent;
+artifact check passes. Evidence /tmp/aa-{vote,channel}-retry-packaged-evidence.json.
+These corrections and the later Claude receipt correction require latest whole-source
+review; they are not final approval.
+
+Signed0.1.45 with the official package in process-local PATH now passes catalog
+discovery, Auto selection, native isolated workspace selection and session startup.
+The actual public request at23:30 KST receives no answer and reaches Recovery
+Required; public turns remains0. Normal Stop succeeds, followed by normal Quit.
+App37527/supervisor37572/server37589 and exact provider children39234,39369,39377,
+39378,39682 are absent. Global Cursor installation remains unchanged. Actual Cursor
+response is not a pass and requires diagnosis. Package/code-sign and artifact
+checks pass; logs `/tmp/aa-cursor-package-size-{sidecar,package,artifacts}.log`.
+
+Whole-source Pro at3d91736d completes48m43s with REVISE High1/Medium1. The entire
+answer is read. R1 traces unrestricted imported display_name through public persona
+summary and persisted session metadata into an oversized required snapshot; its
+300,000-character counterexample is calculated and TypeScript-validated, not run
+through Rust persistence/socket. R2 executes current vote/custom-channel TypeScript
+with controlled transport/hooks and observes a new UUID on unchanged resubmission;
+direct retry preserves it. Actual Rust duplicate commits were not executed there.
+The prior terminal-roster and generic/lobby retry fixes are confirmed. Python
+policy tests19 pass; providerJS7 pass/1 missing-Claude-SDK load failure. Rust, full
+frontend, packaged and real-provider execution are not reviewer passes. Architecture
+invocation lacks Cargo and source-growth lacks Git metadata in the archive. These
+are reviewer environment limits, not additional product defects. Both supported
+findings require local reproduction, correction, verification and latest full review.
 
 Signed0.1.44 exposes a second Cursor startup boundary: the official2026.09.10
 package contains two native SEA binaries and totals584,651,262 extracted bytes,

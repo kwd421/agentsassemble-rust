@@ -1,5 +1,17 @@
 # Frontend/backend exposure map
 
+2026-09-15 signed0.1.46: vote/custom-channel forms now retain the transport's exact
+retry after an uncertain result. Existing inputs, buttons and layout stay in place;
+unchanged resubmission confirms the original request and edited text starts a new
+intent. Actual held-server UI retries each produce one event/receipt, clear the
+draft/error, and survive restart once. Full frontend149/869 and production build/CSS
+pass. The persona importer rejects oversized public metadata, accepts a normal
+card and retains its session application after restart. Claude Opus5/Low now passes
+actual room read/reply twice and normal Stop using the SDK's applied-effort receipt.
+The earlier failed-Claude recovery/Stop path and real Cursor response remain open;
+latest whole-repository review remains required.
+
+
 Status: current Phase 9 source exposure reconciled after startup correction
 `5f881ad` and the workspace-picker HTTP removal, following Phase 1–8 local acceptance and Daybreak approval. Final integrated
 packaged/real-provider verification and both full-product reviews remain pending.
@@ -19,7 +31,9 @@ Cursor's official2026.09.10 native MCP identity updates now have an explicit ACP
 contract in the existing permission owner. Provider259/Clippy/gates pass; signed
 Auto response remains pending. Signed0.1.44 catalog discovery rejects the official
 558MiB package against the old512MiB runtime bound; the owner is corrected to640MiB
-with full identity verification retained. No frontend layout or global CLI installation changes.
+with full identity verification retained. Signed0.1.45 then passes catalog/Auto/start,
+but the real room turn reaches Recovery Required with no answer. Stop and normal
+Quit pass. Cursor response remains open. No layout or global CLI installation changes.
 
 Signed0.1.43 now verifies the current-AI invitation flow with real external
 Antigravity: temporary public access, invitation create/copy, live joined roster,

@@ -2,6 +2,28 @@
 
 ## Active work
 
+- Claude OAuth is confirmed logged in despite Safari's final localhost callback
+  error. Direct SDK Opus5 returns68; native Stop confirms applied low. App.45 rejects
+  absent init effort, a field the SDK only advertises on other host types. Correct
+  the receipt owner. Signed0.1.46 now passes two actual Opus5/Low room reads and
+  replies, normal Stop and exact provider-process exit. Normal Stop also exposes
+  missing runtime-handle ownership after recovery; retain this unresolved failure.
+
+- User authorization added: verify real Claude SDK with the currently advertised
+  Opus model and Low reasoning (2026-09-14). Confirm catalog selection, actual room
+  read/response and normal stop; retain the ongoing review corrections and Cursor
+  diagnosis. This overrides the earlier real-provider exclusion for this run only.
+
+- Whole-source Pro at frozen3d91736d completed48m43s: REVISE High1/Medium1;
+  full answer read. R1: imported persona names can exceed mandatory snapshot bytes
+  after session creation/configuration. R2: vote/custom-channel UI discard exact
+  retry handles and can resubmit uncertain intent with a new ID. Reproduce through
+  actual owners, correct, verify packaged flows and obtain whole-source re-review.
+  R1 bed0ed50 and R2 now pass affected checks plus signed0.1.46 import/retry/restart
+  verification; both retry cases have one event and one receipt. Latest whole-source
+  review remains. Earlier roster and generic/lobby corrections are confirmed. Cursor.45
+  package verification continues; prepared3abb4c15 archive is not yet submitted.
+
 - Signed0.1.44 finds the official Cursor package exceeds the old512MiB staging
   bound (584,651,262 bytes). Correct the runtime bound to640MiB while preserving
   complete package identity and verified copying; repeat actual Auto verification.

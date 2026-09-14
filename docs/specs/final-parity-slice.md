@@ -105,6 +105,31 @@ session/turn clearing through existing ACP tests, then the new official package'
 actual Auto room response and stop in the signed app. Existing installations remain
 unchanged during the isolated diagnostic. Final source requires whole review.
 
+## Public persona metadata acceptance (2026-09-14)
+
+Whole-source R1 reproduces through actual HTTP import: a300,000-byte name returns
+200 and is persisted. Required public session metadata cannot be trimmed during
+snapshot fitting. The library owner must reject a normalized card whose complete
+JSON-encoded public summary (including possible thumbnail URL) exceeds1KiB before
+replacement, and revalidate stored selections before create/configure commits.
+This bounds the persona contribution at64KiB for64 sessions, including JSON escapes,
+without truncating private descriptions/lore or changing the WebSocket frame limit.
+Invalid replacement leaves the previous card intact; invalid stored selection
+must not partially create/configure a session. Verify actual HTTP rejection,
+selection/create/configuration/reopen and full-capacity socket delivery. No existing
+user data is deleted or silently repaired.
+
+## Vote and channel exact retry (2026-09-14)
+
+Whole-source R2: the socket owns exact request replay, but vote and custom-channel
+forms discard its handle. Keep uncertain intent with the existing form/draft owner.
+Same form payload retries the original receipt; changed content/attachments or
+closing the vote form starts a new intent. Channel retries still use the transcript
+owner's busy and connection checks; room replacement remains rejected by the socket.
+Do not change layout or infer success from matching text. Verify receipt-loss retry,
+intermediate offline failure, intentional edits and room identity changes, then
+actual packaged vote/channel retry and one durable publication.
+
 ## Acceptance and verification
 
 Reconnect recovery (2026-09-14): an ahead-of-history subscription can receive the
@@ -422,3 +447,17 @@ denial/cancellation/path escape/control directories/symlink and hard-link cases
 preserve protected data. Controlled API tool calls, affected provider tests,
 mandatory gates, and signed packaged selection/approval must pass. Whole-current-
 repository Pro review remains required.
+
+## Claude SDK applied effort receipt (2026-09-14)
+
+Real Opus Low verification exposes a bridge contract error: SDK-hosted init frames
+do not publish effort, whereas the installed SDK defines applied turn effort on
+the native Stop hook. Both installed CLI versions 2.1.231 and 2.1.270 omit init
+effort; the current CLI's Stop hook reports low and its exact result returns 68.
+Use the SDK Stop callback for applied-effort confirmation on the one active main
+turn and exact session, before accepting its correlated successful result. Missing,
+mismatched or foreign receipts must reject publication. Retain model, permission,
+MCP identity, session and result correlation checks. Do not infer applied effort
+from the requested option, echo it into a fabricated provider receipt, or add a
+legacy fallback. Verify the missing-init successful native shape and rejected
+missing/mismatched Stop receipts, then actual packaged Opus Low room read/reply.
