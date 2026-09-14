@@ -31,7 +31,6 @@ pub(super) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile:
         )
         .await
         .unwrap_or_else(|error| panic!("create room: {error}"));
-    seed_agent(&store, now).await;
     let principal = AuthenticatedPrincipal {
         principal_id: "operator-local-user".to_owned(),
         participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
@@ -42,10 +41,20 @@ pub(super) async fn fixture() -> (SqliteStore, AuthenticatedPrincipal, tempfile:
         is_operator: true,
         capabilities: CapabilitySet::local_operator(ClientKind::Browser, InviteScope::ReadWrite),
     };
+    let source = store
+        .execute_message_with_turn(
+            &principal,
+            "lifecycle-queue-source",
+            "message.send",
+            &json!({"content": "Input retained across lifecycle changes"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("create queued input: {error}"));
+    seed_agent(&store, now, source.outcome.event.id).await;
     (store, principal, directory)
 }
 
-async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
+async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>, input_id: String) {
     let participant = Participant {
         room_id: "general".to_owned(),
         participant_id: AGENT_ID.to_owned(),
@@ -116,7 +125,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>) {
         turn_generation: 0,
         schedule_requested: false,
         pending_inputs: vec![QueuedRoomInput {
-            event_id: "pending-1".to_owned(),
+            event_id: input_id,
             delivery_kind: RoomInputDeliveryKind::OrderedObservation,
         }],
         inflight_inputs: Vec::new(),

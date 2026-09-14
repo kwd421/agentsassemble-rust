@@ -142,7 +142,7 @@ async fn apply_reconciliation(
         transaction.commit().await?;
         return Ok(Vec::new());
     }
-    let detach = reconcile_observation(&mut session, observation)?;
+    let detach = reconcile_observation(&mut transaction, &mut session, observation).await?;
     if observation == &RuntimeReconciliationObservation::Gone
         && crate::room_runtime_cleanup::cleanup_exists(
             &mut transaction,
@@ -199,7 +199,7 @@ pub(crate) async fn apply_live_reconciliation(
     }
     let retry = match observation {
         RuntimeReconciliationObservation::Gone => {
-            let detach = reconcile_gone(&mut session)?;
+            let detach = reconcile_gone(&mut transaction, &mut session).await?;
             save_reconciled_session(&mut transaction, &session).await?;
             if detach {
                 detach_participant(
@@ -361,13 +361,8 @@ async fn finalize_recovered_stop(
         .as_ref()
         .ok_or_else(invalid_stored_authority)?;
     finish_lifecycle_command(transaction, &reservation_ref(reservation)).await?;
-    session.pending_inputs = crate::turn_queue::merge_room_inputs(
-        session
-            .inflight_inputs
-            .iter()
-            .chain(&session.pending_inputs),
-    )
-    .map_err(|_| invalid_stored_authority())?;
+    session.pending_inputs =
+        crate::agent_lifecycle::merged_turn_queue(transaction, session).await?;
     session.inflight_inputs.clear();
     session.public.status = AgentSessionStatus::Detached;
     session.public.enabled = false;

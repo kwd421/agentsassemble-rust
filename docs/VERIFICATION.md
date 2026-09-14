@@ -12,7 +12,7 @@ the retained text is not represented as those separate artifacts.
 
 | ID | Severity | Reviewer finding | Current disposition |
 | --- | --- | --- | --- |
-| R1 | High | Deleted in-flight input restored to queue blocks later messages | Validating restoration owners |
+| R1 | High | Deleted in-flight input restored to queue blocks later messages | Locally corrected across restoration owners; persistence334 and workspace Clippy pass; re-review pending |
 | R2 | High | Historical participants exceed mandatory snapshot frame size | Open, source/size evidence; no repeated-admission reproduction yet |
 | R3 | Medium | Prior edit events return deleted message content | Open, source path identified |
 | R4 | Medium | Original builtin API/Local workspace file tools omitted | Open, reconcile actual original path and approved scope |
@@ -20,6 +20,22 @@ the retained text is not represented as those separate artifacts.
 | R6 | Medium | Admitted Connector cannot leave after initial read failure | Open, distinguish Admitted from existing Ready correction |
 | R7 | Medium | Connection-wide 30-second timeout aborts normal wait-next | Open, actual transport verification pending |
 | R8 | Low | Failed stdout cleanup skips stderr join | Locally corrected; controlled reader cleanup3, workspace Clippy and gates pass; re-review pending |
+
+R1 is reproduced by canonical message assignment, deletion and retained-interrupt
+completion: the next message fails with `queued_room_event_invalid` before the fix.
+All restoration paths now use the existing merged-queue owner with their current
+transaction. It excludes only canonical deletion tombstones, while absent or
+malformed events/queues remain errors. Active in-flight custody remains intact until
+its existing finalization; no external effect or provider cursor is rolled back.
+The extra work is bounded by the existing 256-input queue, on restoration only;
+no timer or state table is added. Retained and runtime-gone deletion cases pass;
+all persistence334 tests pass in 4.77s and all-target/all-feature workspace Clippy
+passes. The lifecycle fixture now creates its formerly nonexistent queued message
+through the canonical command, and its budget test measures the operation delta.
+No production validation was relaxed to accommodate the fixture.
+Logs: `/tmp/aa-review-r1-baseline.log`, `/tmp/aa-review-r1-fixed.log`,
+`/tmp/aa-review-r1-persistence.log`, `/tmp/aa-review-r1-clippy.log`,
+`/tmp/aa-review-r1-gates.log`. Packaged/live-provider reproduction is not claimed.
 
 R8 uses concurrent joined cleanup for both existing reader owners, retaining each
 existing five-second abort/join bound and exposing failure. A paused-clock test

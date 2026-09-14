@@ -252,7 +252,7 @@ impl SqliteStore {
         )?;
         let active_turn = active_turn_authority(&session).map_err(|_| invalid_turn_queue())?;
         if !active_turn {
-            session.pending_inputs = merged_turn_queue(&session)?;
+            session.pending_inputs = merged_turn_queue(&mut transaction, &session).await?;
             session.inflight_inputs.clear();
             session.public.runtime_status = AgentRuntimeStatus::Disconnected;
             session.public.provider_session_active = false;
@@ -399,7 +399,7 @@ async fn detach_confirmed_session(
     agent_id: &str,
     session: &mut DurableAgentSession,
 ) -> Result<Vec<RoomEvent>, PersistenceError> {
-    session.pending_inputs = merged_turn_queue(session)?;
+    session.pending_inputs = merged_turn_queue(transaction, session).await?;
     session.inflight_inputs.clear();
     session.public.status = AgentSessionStatus::Detached;
     session.public.enabled = false;

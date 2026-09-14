@@ -14,7 +14,6 @@ use crate::{
     PersistenceError,
     agent_lifecycle::{load_session, save_session},
     room_event_sequence::next_sequence,
-    turn_queue::merge_room_inputs,
 };
 use agentsassemble_domain::{
     AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, InviteScope, MAX_MESSAGE_CHARACTERS,
@@ -270,18 +269,8 @@ pub(super) async fn fail(
     };
     let error = error_event(transaction, &session, turn_id, code, &message).await?;
     let finished = turn_finished_event(transaction, &session, turn_id, "error", None, None).await?;
-    session.pending_inputs = merge_room_inputs(
-        session
-            .inflight_inputs
-            .iter()
-            .chain(&session.pending_inputs),
-    )
-    .map_err(|_| {
-        rejected(
-            "stored_turn_authority_invalid",
-            "Stored Agent Session turn queue authority is inconsistent or oversized.",
-        )
-    })?;
+    session.pending_inputs =
+        crate::agent_lifecycle::merged_turn_queue(transaction, &session).await?;
     session.inflight_inputs.clear();
     session.public.status = AgentSessionStatus::Error;
     session.public.runtime_status = AgentRuntimeStatus::Error;

@@ -41,7 +41,7 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(());
         }
-        retain_uncertain_runtime(&mut session)?;
+        retain_uncertain_runtime(&mut transaction, &mut session).await?;
         let code = "managed_bridge_exited";
         let message = "The managed provider bridge ended unexpectedly. Stop it before restarting.";
         code.clone_into(&mut session.public.last_error_code);

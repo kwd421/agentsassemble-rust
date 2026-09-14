@@ -13,6 +13,7 @@ use super::{
 async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() {
     let payload = json!({"agent_id": AGENT_ID});
     let (stopped_store, stopped_principal, _stopped_directory) = fixture().await;
+    let stopped_before = write_budget(&stopped_store).await;
     let stopped_authority = TrustedPrincipal(&stopped_principal);
     assert!(
         stopped_store
@@ -43,15 +44,10 @@ async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() 
             .await
             .unwrap_or_else(|error| panic!("classify stopped replay: {error}"))
     );
-    let stopped_budget = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(SUM(command_count), 0) FROM room_write_budgets WHERE room_id = 'general'",
-    )
-    .fetch_one(&stopped_store.pool)
-    .await
-    .unwrap_or_else(|error| panic!("read stopped-session budget: {error}"));
-    assert_eq!(stopped_budget, 1);
+    assert_eq!(write_budget(&stopped_store).await, stopped_before + 1);
 
     let (running_store, running_principal, _running_directory) = fixture().await;
+    let running_before = write_budget(&running_store).await;
     let running_authority = TrustedPrincipal(&running_principal);
     let mut transaction = running_store
         .pool
@@ -102,13 +98,7 @@ async fn every_fresh_stop_requires_principal_budget_and_exact_replay_does_not() 
             .await
             .unwrap_or_else(|error| panic!("classify owned cleanup replay: {error}"))
     );
-    let running_budget = sqlx::query_scalar::<_, i64>(
-        "SELECT COALESCE(SUM(command_count), 0) FROM room_write_budgets WHERE room_id = 'general'",
-    )
-    .fetch_one(&running_store.pool)
-    .await
-    .unwrap_or_else(|error| panic!("read cleanup budget: {error}"));
-    assert_eq!(running_budget, 0);
+    assert_eq!(write_budget(&running_store).await, running_before);
 }
 
 #[tokio::test]
@@ -157,4 +147,13 @@ async fn terminal_lifecycle_rejection_requires_a_new_principal_budget_debit() {
             .await
             .unwrap_or_else(|error| panic!("classify terminal rejection replay: {error}"))
     );
+}
+
+async fn write_budget(store: &crate::SqliteStore) -> i64 {
+    sqlx::query_scalar::<_, i64>(
+        "SELECT COALESCE(SUM(command_count), 0) FROM room_write_budgets WHERE room_id = 'general'",
+    )
+    .fetch_one(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("read budget: {error}"))
 }

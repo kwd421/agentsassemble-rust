@@ -17,7 +17,6 @@ use crate::{
         turn_finished_event,
     },
     turn_authority::active_turn_authority,
-    turn_queue::merge_room_inputs,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -384,13 +383,8 @@ pub(crate) async fn finalize_proven_no_effect_task_death(
         Some("provider_turn_task_failed"),
     )
     .await?;
-    session.pending_inputs = merge_room_inputs(
-        session
-            .inflight_inputs
-            .iter()
-            .chain(&session.pending_inputs),
-    )
-    .map_err(|_| invalid_execution())?;
+    session.pending_inputs =
+        crate::agent_lifecycle::merged_turn_queue(&mut transaction, &session).await?;
     session.inflight_inputs.clear();
     session.public.status = AgentSessionStatus::Error;
     session.public.runtime_status = AgentRuntimeStatus::Error;

@@ -231,3 +231,19 @@ they do not manufacture a timestamp or derive an empty cursor from unloaded even
 Keep the existing preference error/reload and serialized writer. Acceptance covers
 initial pending/failure without POST and successful load preserving other channel
 entries and notification values when the read cursor advances.
+
+## Deleted in-flight input restoration correction (2026-09-14)
+
+Whole-repository R1 identifies a deleted message being restored after an interrupted
+turn, poisoning subsequent message scheduling. Preserve active execution custody
+until quiescence; deletion must not erase already-performed effects or active source
+authority. Every restoration owner must merge the canonical queue under its existing
+transaction and omit only inputs whose canonical event has the explicit deletion
+tombstone. Missing/corrupt authority remains an error. Apply the same rule to retained
+interrupt, runtime loss, failed turn, stop and restart reconciliation. No schema,
+queue limit, runtime retry, provider cursor or gate change is required.
+
+Acceptance: delete an input already assigned to a turn, then finalize retained
+interrupt or runtime loss; a subsequent message commits and the deleted input is
+absent from future queues/assignments. Existing undeleted-input retention and
+canonical queue failure tests must continue to pass.

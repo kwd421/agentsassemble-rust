@@ -237,3 +237,97 @@ async fn runtime_gone_explicit_interrupt_restores_input_without_floor_progressio
     );
     assert_eq!(detached.public.last_error_code, "interrupted");
 }
+
+#[tokio::test]
+async fn deleted_inflight_input_is_not_restored_after_interrupt_or_runtime_loss() {
+    for retained_runtime in [true, false] {
+        let (store, principal, _directory) = fixture().await;
+        let first = store
+            .execute_message_with_turn(
+                &principal,
+                "deleted-source",
+                "message.send",
+                &json!({"content": "@Terra input to delete during its turn"}),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("assign source: {error}"));
+        let assignment = &first.assignments[0];
+        let target = &first.outcome.event.id;
+        store
+            .execute_message_mutation(
+                &principal,
+                "delete-inflight",
+                "message.delete",
+                &json!({"event_id": target}),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("delete in-flight message: {error}"));
+        let accepted = store
+            .execute_agent_interrupt(
+                TrustedPrincipal(&principal),
+                "interrupt-deleted-source",
+                &json!({"agent_id": AGENT_ID}),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("interrupt deleted source: {error}"));
+        let effect = accepted
+            .host_interrupt_effect
+            .unwrap_or_else(|| panic!("effect"));
+        if retained_runtime {
+            let claim = store
+                .claim_provider_turn_interrupt(&effect, "10000000-0000-4000-8000-000000000302")
+                .await
+                .unwrap_or_else(|error| panic!("claim: {error}"));
+            let waiting = store
+                .mark_unstarted_interrupt_waiting(&claim)
+                .await
+                .unwrap_or_else(|error| panic!("quiescence: {error}"));
+            store
+                .finalize_interrupted_turn_retained(&waiting)
+                .await
+                .unwrap_or_else(|error| panic!("finalize: {error}"));
+        } else {
+            let candidate = store
+                .load_provider_turn_reconciliation_candidate(
+                    "general",
+                    AGENT_ID,
+                    assignment.turn_generation,
+                )
+                .await
+                .unwrap_or_else(|error| panic!("candidate: {error}"));
+            store
+                .finalize_provider_turn_runtime_gone(&candidate)
+                .await
+                .unwrap_or_else(|error| panic!("runtime gone: {error}"));
+        }
+        let next = store
+            .execute_message_with_turn(
+                &principal,
+                "next-after-deletion",
+                "message.send",
+                &json!({"content": "@Terra next message must commit"}),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("next message: {error}"));
+        assert_eq!(
+            next.outcome.event.content.as_deref(),
+            Some("@Terra next message must commit")
+        );
+        let session = stored_session(&store).await;
+        assert!(
+            session
+                .pending_inputs
+                .iter()
+                .chain(&session.inflight_inputs)
+                .all(|input| &input.event_id != target)
+        );
+        if retained_runtime {
+            assert_eq!(next.assignments.len(), 1);
+            assert!(
+                !next.assignments[0]
+                    .room_view
+                    .contains("input to delete during its turn")
+            );
+        }
+    }
+}

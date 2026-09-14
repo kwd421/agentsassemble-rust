@@ -10,7 +10,6 @@ use sqlx::{Row, Sqlite, Transaction};
 use crate::{
     PersistenceError, SqliteStore, agent_lifecycle_authority::payload_agent_id,
     agent_session_rows::update_agent_session_row, turn_authority::active_turn_authority,
-    turn_queue::merge_room_inputs,
 };
 
 const ACTIVE_RUNTIME_STATES: [AgentRuntimeStatus; 6] = [
@@ -487,12 +486,13 @@ fn reservation_matches_intent(reservation: &Value, intent_action: &str) -> bool 
     )
 }
 
-pub(crate) fn reconcile_observation(
+pub(crate) async fn reconcile_observation(
+    transaction: &mut Transaction<'_, Sqlite>,
     session: &mut DurableAgentSession,
     observation: &RuntimeReconciliationObservation,
 ) -> Result<bool, PersistenceError> {
     if confirmed_stop_needs_reconciliation(session) {
-        reconcile_confirmed_stop(session)?;
+        reconcile_confirmed_stop(transaction, session).await?;
         return Ok(true);
     }
     match observation {
@@ -513,7 +513,7 @@ pub(crate) fn reconcile_observation(
             session.runtime_owner_id.clone_from(new_owner_id);
             session.public.provider_session_active = false;
             if active_turn_authority(session).unwrap_or(false) {
-                merge_inflight_events(session)?;
+                merge_inflight_events(transaction, session).await?;
                 session.public.status = AgentSessionStatus::Unavailable;
                 session.public.enabled = false;
                 session.public.runtime_status = AgentRuntimeStatus::Recovering;
@@ -529,27 +529,30 @@ pub(crate) fn reconcile_observation(
             session.public.updated_at = Utc::now();
             Ok(false)
         }
-        RuntimeReconciliationObservation::Gone => reconcile_gone(session),
+        RuntimeReconciliationObservation::Gone => reconcile_gone(transaction, session).await,
         RuntimeReconciliationObservation::LeaseUncertain {
             handle_id,
             owner_id,
             reason_code,
         } => {
             validate_uncertain_lease(session, handle_id, owner_id, reason_code)?;
-            retain_uncertain_runtime(session)?;
+            retain_uncertain_runtime(transaction, session).await?;
             Ok(true)
         }
         RuntimeReconciliationObservation::Ambiguous { reason_code } => {
             if reason_code.is_empty() {
                 return Err(invalid_observation());
             }
-            retain_uncertain_runtime(session)?;
+            retain_uncertain_runtime(transaction, session).await?;
             Ok(true)
         }
     }
 }
 
-pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, PersistenceError> {
+pub(crate) async fn reconcile_gone(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &mut DurableAgentSession,
+) -> Result<bool, PersistenceError> {
     if session.lifecycle_intent_action == AgentLifecycleAction::Stop
         && matches!(
             session.lifecycle_intent_status,
@@ -559,7 +562,7 @@ pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, 
         )
     {
         session.lifecycle_intent_status = AgentLifecycleIntentStatus::EffectApplied;
-        reconcile_confirmed_stop(session)?;
+        reconcile_confirmed_stop(transaction, session).await?;
         return Ok(true);
     }
     if session.lifecycle_intent_action == AgentLifecycleAction::Start
@@ -582,7 +585,7 @@ pub(crate) fn reconcile_gone(session: &mut DurableAgentSession) -> Result<bool, 
     if ACTIVE_RUNTIME_STATES.contains(&session.public.runtime_status)
         || session.public.runtime_status == AgentRuntimeStatus::Disconnected
     {
-        stop_after_confirmed_absence(session)?;
+        stop_after_confirmed_absence(transaction, session).await?;
         return Ok(true);
     }
     Ok(invalidate_previous_runtime_owner(session))
@@ -653,8 +656,11 @@ fn confirmed_stop_needs_reconciliation(session: &DurableAgentSession) -> bool {
             || session.public.status != AgentSessionStatus::Unavailable)
 }
 
-fn reconcile_confirmed_stop(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
-    merge_inflight_events(session)?;
+async fn reconcile_confirmed_stop(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &mut DurableAgentSession,
+) -> Result<(), PersistenceError> {
+    merge_inflight_events(transaction, session).await?;
     session.public.status = AgentSessionStatus::Unavailable;
     session.public.enabled = false;
     session.public.runtime_status = AgentRuntimeStatus::Stopping;
@@ -669,10 +675,11 @@ fn reconcile_confirmed_stop(session: &mut DurableAgentSession) -> Result<(), Per
     Ok(())
 }
 
-pub(crate) fn retain_uncertain_runtime(
+pub(crate) async fn retain_uncertain_runtime(
+    transaction: &mut Transaction<'_, Sqlite>,
     session: &mut DurableAgentSession,
 ) -> Result<(), PersistenceError> {
-    merge_inflight_events(session)?;
+    merge_inflight_events(transaction, session).await?;
     if matches!(
         session.lifecycle_intent_action,
         AgentLifecycleAction::Start | AgentLifecycleAction::Stop
@@ -696,12 +703,13 @@ pub(crate) fn retain_uncertain_runtime(
     Ok(())
 }
 
-pub(crate) fn stop_after_confirmed_absence(
+pub(crate) async fn stop_after_confirmed_absence(
+    transaction: &mut Transaction<'_, Sqlite>,
     session: &mut DurableAgentSession,
 ) -> Result<(), PersistenceError> {
     // Gone is positive proof. Persist it before clearing custody, so later room
     // cleanup does not have to re-observe a handle that this transaction erased.
-    merge_inflight_events(session)?;
+    merge_inflight_events(transaction, session).await?;
     session.public.last_error.clear();
     session.public.last_error_code.clear();
     session.lifecycle_intent_action = AgentLifecycleAction::None;
@@ -736,14 +744,12 @@ fn invalidate_previous_runtime_owner(session: &mut DurableAgentSession) -> bool 
     true
 }
 
-fn merge_inflight_events(session: &mut DurableAgentSession) -> Result<(), PersistenceError> {
-    session.pending_inputs = merge_room_inputs(
-        session
-            .inflight_inputs
-            .iter()
-            .chain(&session.pending_inputs),
-    )
-    .map_err(|_| invalid_stored_authority())?;
+async fn merge_inflight_events(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &mut DurableAgentSession,
+) -> Result<(), PersistenceError> {
+    session.pending_inputs =
+        crate::agent_lifecycle::merged_turn_queue(transaction, session).await?;
     session.inflight_inputs.clear();
     session.active_source_event_id.clear();
     session.input_up_to_event_id.clear();

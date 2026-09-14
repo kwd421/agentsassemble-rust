@@ -264,7 +264,7 @@ async fn checkpoint_absence(
     if !crate::agent_lifecycle_authority::lifecycle_intent_is_empty(&session) {
         return Err(stale_cleanup());
     }
-    crate::agent_reconciliation::stop_after_confirmed_absence(&mut session)?;
+    crate::agent_reconciliation::stop_after_confirmed_absence(tx, &mut session).await?;
     save_session(tx, &session).await?;
     let mut participant =
         crate::agent_lifecycle::load_participant(tx, &key.room_id, &key.session_id).await?;

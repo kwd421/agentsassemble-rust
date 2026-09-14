@@ -381,16 +381,31 @@ pub(crate) fn require_valid_turn_authority(
     }
 }
 
-pub(crate) fn merged_turn_queue(
+pub(crate) async fn merged_turn_queue(
+    transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<Vec<agentsassemble_domain::QueuedRoomInput>, PersistenceError> {
-    merge_room_inputs(
+    let merged = merge_room_inputs(
         session
             .inflight_inputs
             .iter()
             .chain(&session.pending_inputs),
     )
-    .map_err(|_| invalid_turn_queue())
+    .map_err(|_| invalid_turn_queue())?;
+    let mut restored = Vec::with_capacity(merged.len());
+    for input in merged {
+        let event = crate::room_turns::support::load_event(
+            transaction,
+            &session.public.room_id,
+            &input.event_id,
+        )
+        .await?
+        .ok_or_else(invalid_turn_queue)?;
+        if event.extra.get("message_deleted") != Some(&serde_json::Value::Bool(true)) {
+            restored.push(input);
+        }
+    }
+    Ok(restored)
 }
 
 pub(crate) fn invalid_turn_queue() -> PersistenceError {

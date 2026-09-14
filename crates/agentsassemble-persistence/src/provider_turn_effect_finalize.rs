@@ -19,7 +19,6 @@ use crate::{
         },
     },
     turn_authority::active_turn_authority,
-    turn_queue::merge_room_inputs,
 };
 
 impl SqliteStore {
@@ -81,13 +80,8 @@ pub(crate) async fn finalize_retained_in(
         )
         .await?,
     );
-    session.pending_inputs = merge_room_inputs(
-        session
-            .inflight_inputs
-            .iter()
-            .chain(&session.pending_inputs),
-    )
-    .map_err(|_| invalid_effect())?;
+    session.pending_inputs =
+        crate::agent_lifecycle::merged_turn_queue(transaction, &session).await?;
     session.inflight_inputs.clear();
     session.public.status = AgentSessionStatus::Attached;
     session.public.runtime_status = AgentRuntimeStatus::Idle;

@@ -27,7 +27,9 @@
   All eight findings and execution limits were read; supported corrections and
   latest-source whole-repository review remain. See the current disposition in
   [verification](docs/VERIFICATION.md#completed-whole-repository-pro-review-2026-09-14).
-  Unperformed reviewer execution is not a failed product test.
+  Unperformed reviewer execution is not a failed product test. R1 is now reproduced
+  and corrected across queue restoration owners (persistence334 / workspace Clippy);
+  R8 joined reader cleanup also passes. Both require latest-source review.
 
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was

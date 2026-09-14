@@ -24,7 +24,6 @@ use crate::{
         session_state_event, turn_finished_event,
     },
     turn_authority::active_turn_authority,
-    turn_queue::merge_room_inputs,
 };
 
 const SCAN_LIMIT: i64 = 64;
@@ -575,13 +574,8 @@ async fn finalize_runtime_gone_session(
         )
         .await?,
     );
-    session.pending_inputs = merge_room_inputs(
-        session
-            .inflight_inputs
-            .iter()
-            .chain(&session.pending_inputs),
-    )
-    .map_err(|_| invalid_reconciliation())?;
+    session.pending_inputs =
+        crate::agent_lifecycle::merged_turn_queue(transaction, &session).await?;
     session.inflight_inputs.clear();
     session.public.status = AgentSessionStatus::Detached;
     session.public.runtime_status = AgentRuntimeStatus::Stopped;
