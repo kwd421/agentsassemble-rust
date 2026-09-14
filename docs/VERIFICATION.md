@@ -2,6 +2,16 @@
 
 ## Completed whole-repository Pro review (2026-09-14)
 
+Signed0.1.44 exposes a second Cursor startup boundary: the official2026.09.10
+package contains two native SEA binaries and totals584,651,262 extracted bytes,
+exceeding the existing512MiB staging bound. Direct CLI authentication succeeds.
+The package owner now permits640MiB; all-member content/mode identity, canonical
+regular-file checks, traversal limits and verified copying remain intact. This is
+a runtime package-size bound, not a change to a blocking architecture gate.
+Domain65, workspace all-target/all-feature Clippy and unchanged architecture,
+policy19, format and diff gates pass. Packaged re-verification and latest-source
+review remain pending. Logs: `/tmp/aa-cursor-package-size-{domain,clippy,gates}.log`.
+
 Cursor's current official installer points to2026.09.10-fd3934a; installed
 2026.08.11-e8db854 remains unchanged. An isolated downloaded official package's
 actual Auto/default ACP exchange emits empty initial rawInput, a same-call update

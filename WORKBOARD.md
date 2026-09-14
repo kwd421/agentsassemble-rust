@@ -2,6 +2,10 @@
 
 ## Active work
 
+- Signed0.1.44 finds the official Cursor package exceeds the old512MiB staging
+  bound (584,651,262 bytes). Correct the runtime bound to640MiB while preserving
+  complete package identity and verified copying; repeat actual Auto verification.
+
 - Cursor's official2026.09.10 package now emits qualified same-call MCP identity
   before permission; a real isolated Auto diagnostic confirms it. Correct the ACP
   contract selection to consume Cursor's native notification identity while keeping

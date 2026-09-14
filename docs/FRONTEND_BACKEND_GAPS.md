@@ -17,7 +17,9 @@ The product plan owns exclusions, phase order and final verification limits.
 
 Cursor's official2026.09.10 native MCP identity updates now have an explicit ACP
 contract in the existing permission owner. Provider259/Clippy/gates pass; signed
-Auto response remains pending. No frontend layout or global CLI installation changes.
+Auto response remains pending. Signed0.1.44 catalog discovery rejects the official
+558MiB package against the old512MiB runtime bound; the owner is corrected to640MiB
+with full identity verification retained. No frontend layout or global CLI installation changes.
 
 Signed0.1.43 now verifies the current-AI invitation flow with real external
 Antigravity: temporary public access, invitation create/copy, live joined roster,

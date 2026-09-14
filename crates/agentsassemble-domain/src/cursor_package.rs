@@ -9,10 +9,11 @@ use std::{
 };
 use walkdir::WalkDir;
 
-// The observed package is 234 MB / 459 files. Bounds constrain traversal and
-// copying of user-selected executable directories, including damaged installs.
+// Official 2026.09.10-fd3934a adds two native SEA binaries: the extracted package
+// is 584,651,262 bytes, exceeding the previous 512 MiB bound. Keep a 640 MiB
+// total bound for verified staging; every member still contributes to identity.
 const MAX_ENTRIES: usize = 4_096;
-const MAX_BYTES: u64 = 512 * 1024 * 1024;
+const MAX_BYTES: u64 = 640 * 1024 * 1024;
 const MAX_DEPTH: usize = 32;
 
 pub struct CursorPackageMember {
