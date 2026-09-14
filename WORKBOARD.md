@@ -7,8 +7,9 @@
   expired participant accumulation; M1 covers manual retry identity loss; M2 is the
   post-send recovery stall already corrected and packaged-verified at `12f556b4`.
   H1 now passes canonical 1000-departure/expiry actual WebSocket4, persistence336
-  and workspace Clippy. Correct M1, finish affected verification, then submit the
-  latest whole repository without restrictions.
+  and workspace Clippy. M1 now passes transport/composer28, frontend867, production
+  build/CSS and signed 0.1.42 exact retry with one stored message/receipt plus restart.
+  Submit the latest whole repository without restrictions and read its full answer.
   The prepared `12f556b4` archive is superseded by these active corrections and has
   not been sent. [Current evidence](docs/VERIFICATION.md#completed-whole-repository-pro-review-2026-09-14).
 

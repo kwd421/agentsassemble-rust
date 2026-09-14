@@ -2,6 +2,34 @@
 
 ## Completed whole-repository Pro review (2026-09-14)
 
+M1 explicit retry now retains original encoded command and room UID through the
+returned uncertainty error, with caller-owned retry retained in the existing room
+draft. Unchanged draft submission replays that exact intent; edits create a new
+one. Closed/replaced transport refuses the old intent. No automatic retries occur
+after settlement. Baseline production fails three transport/composer cases; the
+corrected suite passes28. Full frontend149/867 (16.75s), production build/CSS and
+mandatory gates pass. The full suite preceded only a test assertion refinement and
+generic non-message error copy; the final targeted28 and package build pass.
+
+Signed 0.1.42 includes H1's rebuilt server. Its exact test server46918 (supervisor46900,
+app46878) was paused. The first native AX button click did not submit; Enter visibly
+disabled the composer and is the verified submission. After 43 seconds, the draft
+is editable, the Korean guidance is visible and the control is labelled same-request
+retry. Resuming the server commits the original message once. Enter retries the
+unchanged draft, receives the stored result, and clears the draft/error with no
+second message. Read-only SQLite confirms one message and one command receipt for
+`Disposable exact retry verification 0.1.42`; a distinct fresh send succeeds.
+Normal Quit removes all three PIDs. Restart50189/supervisor50213/server50268 shows
+both messages retained once and the stopped provider unchanged; normal Quit removes
+all three. No provider execution or network-setting mutation occurs. Codesign deep/
+strict and artifact check pass; notarization is not claimed.
+Evidence: `/tmp/aa-explicit-retry-packaged-evidence.json`; logs:
+`/tmp/aa-explicit-retry-baseline.log`, `/tmp/aa-explicit-retry-fixed.log`,
+`/tmp/aa-explicit-retry-frontend.log`, `/tmp/aa-explicit-retry-build.log`,
+`/tmp/aa-explicit-retry-gates.log`, `/tmp/aa-explicit-retry-sidecar.log`,
+`/tmp/aa-explicit-retry-package.log`, `/tmp/aa-explicit-retry-artifacts.log`.
+Latest whole-repository re-review remains pending; this is not phase closure.
+
 H1 follow-up now passes: canonical Connector admission/leave, kick and export
 (1,000 each) and 1,000 controlled-expired admissions over actual WebSockets. Before
 the correction, kick/export and expired Joined metadata return snapshot_too_large;

@@ -46,11 +46,13 @@ export interface RoomSayRequest {
 
 export class RoomSocketSayError extends Error {
   category: string;
+  readonly retry?: () => Promise<RoomCommandAck>;
 
-  constructor(message: string, category = "rejected") {
+  constructor(message: string, category = "rejected", retry?: () => Promise<RoomCommandAck>) {
     super(message);
     this.name = "RoomSocketSayError";
     this.category = category;
+    this.retry = retry;
   }
 }
 

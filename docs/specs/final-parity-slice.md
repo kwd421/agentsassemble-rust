@@ -282,6 +282,25 @@ and history remain unchanged, and a removed managed-session participant remains
 available for creation eligibility. Verify actual expired Connector reconnect and
 human expiry/current-session snapshot behavior without sleeps or a new cleanup loop.
 
+## Explicit retry after an uncertain command (2026-09-14)
+
+Completed whole-repository M1 identifies a real caller-boundary loss: bounded exact
+replay rejects the Promise and deletes the only request identity, then the composer
+resends the restored text with a new ID. Keep automatic replay bounded, while the
+returned uncertainty error owns an explicit retry of the exact encoded command,
+original room instance and original transport authority. No payload-based global
+registry, server heuristic, new receipt store or automatic post-deadline replay.
+A closed/replaced room transport cannot send this intent into another incarnation.
+
+The existing per-room composer draft retains that retry operation. Sending an
+unchanged uncertain draft retries the original command and is labelled accordingly;
+editing text/attachments creates a new message intent. Successful receipt clears
+both draft and retry. Further transport failure must not silently turn an uncertain
+intent into a new one. Preserve existing composer position, top rail and panels.
+Verify original committed command/ACK loss, bounded settlement, user retry with exact
+ID/bytes and deduplicated receipt; stale-room refusal, edited new intent and actual
+packaged interaction. Current verification and whole-source review remain pending.
+
 ## Uncertain command recovery deadline (2026-09-14)
 
 Review progress identifies a sent command left pending when every later ticket or

@@ -263,6 +263,34 @@ describe("LobbyComposer", () => {
     expect(screen.getByText("map.png")).toBeTruthy();
   });
 
+  it("retries the original uncertain draft and creates a new intent only after editing", async () => {
+    const retry = vi.fn().mockRejectedValueOnce(new Error("still offline")).mockResolvedValue({});
+    const say = vi.fn().mockRejectedValueOnce(new RoomSocketSayError("uncertain", "outcome_unknown", retry))
+      .mockResolvedValue({ events: [] });
+    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
+    render(<RoomSocketProvider socket={socket}><LobbyComposer meetingId="room-a" onPosted={vi.fn()} /></RoomSocketProvider>);
+    const input = screen.getByLabelText("채팅 입력") as HTMLTextAreaElement;
+    fireEvent.change(input, { target: { value: "committed once" } });
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+    fireEvent.click(await screen.findByLabelText("같은 요청 다시 보내기"));
+    await screen.findByText("still offline");
+    expect(say).toHaveBeenCalledTimes(1);
+    expect(input.value).toBe("committed once");
+    fireEvent.click(screen.getByLabelText("같은 요청 다시 보내기"));
+    await waitFor(() => expect(input.value).toBe(""));
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(say).toHaveBeenCalledTimes(1);
+    say.mockRejectedValueOnce(new RoomSocketSayError("uncertain again", "outcome_unknown", retry));
+    fireEvent.change(input, { target: { value: "second uncertain message" } });
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+    await screen.findByLabelText("같은 요청 다시 보내기");
+    fireEvent.change(input, { target: { value: "new edited message" } });
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+    await waitFor(() => expect(input.value).toBe(""));
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(say).toHaveBeenLastCalledWith(expect.objectContaining({ message: "new edited message" }));
+  });
+
   it("keeps text and attachments after the canonical socket rejects the send", async () => {
     const id = `ma_${"a".repeat(32)}`;
     const uploaded = {

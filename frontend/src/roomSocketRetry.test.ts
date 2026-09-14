@@ -7,6 +7,7 @@ import {
   receiveServerFrame,
   sentClientFrame,
 } from "./test/roomSocketHarness";
+import { RoomSocketSayError } from "./roomSocketClient";
 import { scheduleUncertainCommandRetry } from "./roomSocketRetryPolicy";
 
 const COMMAND_TIMEOUT_MS = 20_000;
@@ -37,6 +38,31 @@ describe("room socket exact-command retry", () => {
         expect(sockets[1].sent).toHaveLength(1);
       }
     } finally { handle.close(); }
+  });
+
+  it("refuses an explicit uncertain retry after the room instance changes", async () => {
+    vi.useFakeTimers();
+    const { handle, sockets, getTicket } = openHarness();
+    await flushPromises();
+    await openReadyConnection(0, handle, sockets);
+    const ticket = await getTicket();
+    const pending = handle.say({ message: "old room intent" }).catch((error: RoomSocketSayError) => error);
+    getTicket.mockRejectedValue(new Error("offline"));
+    sockets[0].close();
+    await vi.advanceTimersByTimeAsync(60_000);
+    const failure = await pending as RoomSocketSayError;
+    expect(failure.retry).toBeTypeOf("function");
+    getTicket.mockReset().mockImplementation(async () => ticket);
+    await vi.advanceTimersByTimeAsync(5_000);
+    sockets[1].open();
+    const replacement = handshakeFrames(0, 0);
+    replacement.snap.room.room_uid = "00000000-0000-4000-8000-000000000002";
+    sockets[1].receive(replacement.receipt);
+    sockets[1].receiveRaw(JSON.stringify(replacement.snap));
+    await flushPromises();
+    await expect(failure.retry!()).rejects.toMatchObject({ category: "room_replaced" });
+    expect(sockets[1].sent).toHaveLength(1);
+    handle.close();
   });
 
   it("counts one uncertain outcome at most once per connection generation", () => {
@@ -216,7 +242,22 @@ describe("room socket exact-command retry", () => {
     await expect(pendingCommand).rejects.toMatchObject({ category: "outcome_unknown" });
     expect(sockets[7].readyState).toBe(WebSocket.OPEN);
     expect(sockets).toHaveLength(8);
+    const failure = await pendingCommand.catch((error: RoomSocketSayError) => error);
+    expect(failure).toBeInstanceOf(RoomSocketSayError);
+    const retry = (failure as RoomSocketSayError).retry;
+    expect(retry).toBeTypeOf("function");
+    const recovered = retry!();
+    expect(sockets[7].sent).toHaveLength(3);
+    const retried = sentClientFrame(sockets[7], 2);
+    expect(retried).toEqual(exactCommand);
+    receiveServerFrame(sockets[7], {
+      op: "ack", accepted: true, resolution: "committed",
+      request_id: retried.request_id, action: "message.send",
+      result: { event: event(1), event_seq: 1 }, deduplicated: true,
+    });
+    await expect(recovered).resolves.toMatchObject({ deduplicated: true });
     handle.close();
+    await expect(retry!()).rejects.toMatchObject({ category: "socket_closed" });
   });
 
   it("ends one command after eight ACK deadlines and restores the room without replay", async () => {

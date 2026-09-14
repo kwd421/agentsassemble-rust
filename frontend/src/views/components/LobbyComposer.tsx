@@ -49,6 +49,7 @@ type ComposerAccessory = {
 type LobbyComposerDraft = {
   message: string;
   pendingAttachments: LobbyAttachmentRef[];
+  retry?: () => Promise<unknown>;
 };
 
 type AttachmentUploadOperation = {
@@ -142,7 +143,7 @@ export default function LobbyComposer({
       if (current.message === nextMessage) return previous;
       return {
         ...previous,
-        [meetingId]: { ...current, message: nextMessage },
+        [meetingId]: { ...current, message: nextMessage, retry: undefined },
       };
     });
   }
@@ -177,6 +178,7 @@ export default function LobbyComposer({
         [meetingId]: {
           ...current,
           pendingAttachments: nextAttachments,
+          retry: undefined,
         },
       };
     });
@@ -311,8 +313,9 @@ export default function LobbyComposer({
         voteQuestion: voteCommand?.question || "",
         voteOptions: voteCommand?.options || [],
       };
-      const payload =
-        submitMessage && sayRequest.kind === "message" && sayRequest.attachments.length === 0
+      const payload = activeDraft.retry
+        ? (await activeDraft.retry(), { events: [] })
+        : submitMessage && sayRequest.kind === "message" && sayRequest.attachments.length === 0
           ? { events: await submitMessage(sayRequest.message) }
           : roomSocket?.ready()
             ? await roomSocket.say(sayRequest)
@@ -338,8 +341,15 @@ export default function LobbyComposer({
         draftAttachments,
         errorValue instanceof Error ? errorValue.message : "채팅 메시지 전송 실패"
       );
-      setMessage(restored.message);
-      setPendingAttachments(restored.pendingAttachments);
+      setDraftsByRoom((previous) => ({
+        ...previous,
+        [meetingId]: {
+          message: restored.message,
+          pendingAttachments: restored.pendingAttachments,
+          retry: errorValue instanceof RoomSocketSayError && errorValue.retry
+            ? errorValue.retry : activeDraft.retry,
+        },
+      }));
       setError(restored.error);
     } finally {
       setBusy(false);
@@ -583,7 +593,8 @@ export default function LobbyComposer({
           disabled={!canSubmit}
           className="dc-composer-button send"
           data-role="send"
-          aria-label="채팅 메시지 보내기"
+          aria-label={activeDraft.retry ? "같은 요청 다시 보내기" : "채팅 메시지 보내기"}
+          title={activeDraft.retry ? "같은 요청 다시 보내기" : "채팅 메시지 보내기"}
         >
           <Send size={17} />
         </button>

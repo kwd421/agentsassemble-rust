@@ -64,6 +64,7 @@ interface PendingRoomCommand extends PendingCommandRetryState {
   action: string;
   payload: Record<string, unknown>;
   encoded: string;
+  roomUid: string | null;
   resolve: (value: RoomCommandAck) => void;
   reject: (reason: Error) => void;
 }
@@ -135,14 +136,11 @@ export function openRoomSocket(
   }
 
   function rejectAll(error: Error) {
-    pending.forEach((command) => {
+    pending.forEach((command, requestId) => {
       if (command.timerId !== null) window.clearTimeout(command.timerId);
       if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
       command.reject(command.everSent
-        ? new RoomSocketSayError(
-            "The room command outcome could not be confirmed before the socket closed.",
-            "outcome_unknown"
-          )
+        ? unknownOutcome(requestId, command)
         : error);
     });
     pending.clear();
@@ -152,10 +150,27 @@ export function openRoomSocket(
     pending.delete(requestId);
     if (command.timerId !== null) window.clearTimeout(command.timerId);
     if (command.retryTimerId !== null) window.clearTimeout(command.retryTimerId);
-    command.reject(new RoomSocketSayError(
-      "요청 결과를 확인하지 못했어요. 다시 요청하기 전에 방의 현재 상태를 확인해 주세요.",
-      "outcome_unknown"
-    ));
+    command.reject(unknownOutcome(requestId, command));
+  }
+
+  function unknownOutcome(requestId: string, command: PendingRoomCommand) {
+    const roomUid = command.roomUid;
+    return new RoomSocketSayError(
+      command.action === "message.send"
+        ? "전송 결과를 확인하지 못했어요. 그대로 다시 보내면 같은 요청의 결과를 확인해요. 내용을 바꾸면 새 메시지로 보내요."
+        : "요청 결과를 확인하지 못했어요. 다시 요청하기 전에 방의 현재 상태를 확인해 주세요.",
+      "outcome_unknown",
+      () => {
+        if (!roomUid || roomUid !== acceptedRoomUid) {
+          return Promise.reject(new RoomSocketSayError(
+            "이전 방의 요청을 현재 방에 다시 보낼 수 없어요.", "room_replaced"
+          ));
+        }
+        return enqueueCommand(command.action, command.payload, requestId, {
+          roomUid, encoded: command.encoded,
+        });
+      }
+    );
   }
 
   function armCommandDeadline(
@@ -361,6 +376,7 @@ export function openRoomSocket(
             command.retryTimerId = null;
           }
           command.transmissionGeneration = generation;
+          command.roomUid ??= acceptedRoomUid;
           try {
             currentSocket.send(command.encoded);
           } catch (error) {
@@ -666,7 +682,10 @@ export function openRoomSocket(
     return enqueueCommand(action, payload);
   }
 
-  function enqueueCommand(action: string, payload: Record<string, unknown>, providerRequestId?: string) {
+  function enqueueCommand(
+    action: string, payload: Record<string, unknown>, providerRequestId?: string,
+    replay?: { roomUid: string; encoded: string }
+  ) {
     return new Promise<RoomCommandAck>((resolve, reject) => {
       if (closed) {
         reject(new RoomSocketSayError("Room socket is closed.", "socket_closed"));
@@ -693,7 +712,7 @@ export function openRoomSocket(
         reject(new RoomSocketSayError("A response for this request is already pending or has no identity.", "request_id_conflict"));
         return;
       }
-      const encoded = JSON.stringify({
+      const encoded = replay?.encoded ?? JSON.stringify({
         op: "command",
         request_id: requestId,
         action,
@@ -704,6 +723,7 @@ export function openRoomSocket(
         action,
         payload: transmitted.payload,
         encoded,
+        roomUid: replay?.roomUid ?? acceptedRoomUid,
         resolve,
         reject,
         timerId: null,
@@ -713,7 +733,7 @@ export function openRoomSocket(
         retryNotBefore: 0,
         transmissionGeneration: 0,
         transmissionPhase: "idle" as const,
-        everSent: false,
+        everSent: Boolean(replay),
       };
       pending.set(requestId, waiting);
       armCommandDeadline(requestId, waiting);

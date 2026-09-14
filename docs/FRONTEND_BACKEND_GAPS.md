@@ -15,6 +15,17 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ### Frontend corrections and acceptance boundaries (2026-09-14)
 
+Active M1 correction: preserve an uncertain command's exact retry in the existing
+room draft. The existing send control retries that request while the draft remains
+unchanged, with an explicit retry label; changing the draft returns to normal new
+message submission. Layout and automatic-retry bounds are preserved. Controlled
+transport/composer28 and full frontend149/867 pass. Signed 0.1.42 confirms the
+uncertainty guidance, editable draft and changed send label; keyboard retry after
+reconnection clears the draft/error without another message. Read-only SQLite
+inspection confirms one message and one command receipt. A fresh message succeeds
+and both survive restart. Top rail and right panel remain in place. Whole-source
+re-review remains pending.
+
 Uncertain command recovery: after an abrupt post-send disconnect, repeated ticket
 failure, a hanging ticket or an unfinished handshake left the caller waiting
 indefinitely. All three cases reproduce with controlled timers. The existing command
