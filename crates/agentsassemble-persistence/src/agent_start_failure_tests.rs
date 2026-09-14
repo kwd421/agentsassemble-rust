@@ -72,16 +72,27 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
     assert_eq!(failure.code, "runtime_start_failed");
     assert_eq!(failure.message, "[local path]\n[redacted]");
     assert_terminal_start_failure(&store, &principal, &payload, &failure).await;
+    let stop_request = "stop-after-failed-start";
     assert!(matches!(
         store
-            .prepare_agent_stop(
-                TrustedPrincipal(&principal),
-                "stop-after-failed-start",
-                &payload
-            )
-            .await,
-        Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_handle_unavailable")
+            .prepare_agent_stop(TrustedPrincipal(&principal), stop_request, &payload)
+            .await
+            .unwrap_or_else(|error| panic!("stop confirmed start failure: {error}")),
+        crate::AgentStopPlan::Finalize
     ));
+    let stopped = store
+        .finalize_agent_stop(&principal, stop_request, &payload)
+        .await
+        .unwrap_or_else(|error| panic!("finalize failed start: {error}"));
+    let replay = store
+        .prepare_agent_stop(TrustedPrincipal(&principal), stop_request, &payload)
+        .await
+        .unwrap_or_else(|error| panic!("repeat failed-start stop: {error}"));
+    let crate::AgentStopPlan::Outcome(replay) = replay else {
+        panic!("stored stop outcome");
+    };
+    assert!(replay.deduplicated);
+    assert_eq!(replay.result, stopped.outcome.result);
     assert!(matches!(
         store
             .prepare_agent_start(

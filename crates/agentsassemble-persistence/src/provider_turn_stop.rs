@@ -141,21 +141,28 @@ fn stale_stop_turn() -> PersistenceError {
     }
 }
 
-/// Failure completion clears custody only after an exact confirmed runtime stop.
-/// The terminal execution distinguishes that receipt from absent/unclaimed custody.
-pub(crate) async fn failed_turn_has_confirmed_runtime_exit(
+/// Start failure records Unavailable only after definite rejection/confirmed exit.
+/// Turn failure additionally requires its exact terminal execution after custody clears.
+pub(crate) async fn failed_session_has_confirmed_runtime_exit(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<bool, PersistenceError> {
     if session.public.runtime_status != agentsassemble_domain::AgentRuntimeStatus::Error
-        || !session.public.recovery_required
         || session.public.provider_session_active
         || !session.runtime_handle_id.is_empty()
         || !session.runtime_owner_id.is_empty()
         || !session.runtime_lease_token.is_empty()
-        || session.turn_generation == 0
         || active_turn_authority(session).map_err(|_| invalid_stop_turn())?
     {
+        return Ok(false);
+    }
+    if session.public.status == agentsassemble_domain::AgentSessionStatus::Unavailable
+        && !session.public.enabled
+        && !session.public.recovery_required
+    {
+        return Ok(true);
+    }
+    if !session.public.recovery_required || session.turn_generation == 0 {
         return Ok(false);
     }
     let execution = load_execution_in(

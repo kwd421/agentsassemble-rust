@@ -125,7 +125,7 @@ impl SqliteStore {
             transaction.commit().await?;
             return Ok(plan);
         }
-        let exited = crate::provider_turn_stop::failed_turn_has_confirmed_runtime_exit(
+        let exited = crate::provider_turn_stop::failed_session_has_confirmed_runtime_exit(
             &mut transaction,
             &session,
         )
