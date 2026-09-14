@@ -671,6 +671,16 @@ until that receipt is resolved. Wait observation has separate custody, so a pend
 wait does not block a contribution or explicit leave. Reads do not consume pending
 observations. Close cancels owned transport and never claims a provider stop.
 
+Explicit gap recovery uses `room_read` with `resync: true`. The client serializes
+this read with wait observation and adopts only the `last_seq` of the successfully
+decoded, authorized snapshot returned to the caller. Ordinary reads and repeated
+joins remain non-consuming. Failed or cancelled snapshot reads leave the cursor
+unchanged; no automatic retry, credential change or membership replacement occurs.
+The bounded snapshot does not claim to recover every skipped message; existing
+history search/context remain available. Acceptance requires an actual MCP/HTTP
+history gap, persistent failure after ordinary reads, explicit recovery, and
+delivery of the next contribution without replaying the replaced pending range.
+
 Direct local-client flow and a controlled HTTP relay pass. The relay invalidates
 responses only after the real server commits admission and publication; retries
 recover the original participant and command receipt, with exactly one message.

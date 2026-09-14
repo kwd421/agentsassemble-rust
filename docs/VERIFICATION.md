@@ -2,6 +2,36 @@
 
 Status: current real-client verification owner
 
+## Connector explicit wait resynchronization (2026-09-14)
+
+An actual local HTTP server and the built `assemble room connector-mcp` stdio
+process reproduce a 201-message history gap. Repeated `room_wait_next` calls fail
+with `connector_resync_required` even after ordinary reads. Before the correction,
+explicit `room_read` resync input is rejected as an unknown field. The corrected
+read accepts `resync: true` and adopts the authorized snapshot sequence under the
+existing wait mutex. A subsequent ordinary read does not consume the new message;
+the next wait returns exactly that new contribution and its committed sequence.
+The test respects the real principal's 1,000-event/10-second read budget, waiting
+for that declared window rather than weakening admission or synchronizing a race
+with a guessed delay. This is HTTP/MCP evidence, not packaged provider admission.
+
+Connector boundary9 PASS (11.43s), all-target/all-feature workspace Clippy PASS,
+architecture/format/diff gates and 19 existing policy/artifact-owner tests PASS.
+No new background job, retry, persistent store, authority or tool is introduced.
+Corrected-source Pro re-review remains open.
+
+The resumed frozen `2135d511` Pro answer was read in full from the saved in-app
+conversation after reload. It remains partial: 2 full patches, 1 partial and 179
+unread out of 182; four current production files and seven contract documents.
+Its confirmed G3-M1-R1 concerns `ConnectorHub::leave` removing the private handle
+after room HTTP commit but before delivery of the MCP response to its caller.
+This is distinct from the already-corrected room-HTTP lost-response and inactive
+room receipt paths. H1's private-client selection correction is narrowly approved;
+M2, retained parity and whole G3 remain incomplete. No whole C/H/M/L is inferred.
+The reviewer did not deliver verified separate evidence files. A full-scope
+continuation was submitted with the independently verified Python repository URL;
+no implementer finding or file list limits the requested remaining review.
+
 ## Scope
 
 Verification claims only the boundary actually observed. Build, lint, unit tests, simulated sockets, responsive browser emulation, and real provider runs are separate evidence classes and cannot substitute for one another.

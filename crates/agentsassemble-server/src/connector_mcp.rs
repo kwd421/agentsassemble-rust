@@ -17,7 +17,7 @@ mod hub;
 #[path = "connector_mcp_transport.rs"]
 pub mod transport;
 use contract::{
-    Choose, Connection, Context, Join, Roll, Say, Search, VoteCast, VoteCreate, VoteTarget,
+    Choose, Connection, Context, Join, Read, Roll, Say, Search, VoteCast, VoteCreate, VoteTarget,
 };
 use hub::ConnectorHub;
 
@@ -79,16 +79,17 @@ impl ConnectorMcp {
         )
     }
 
-    #[tool(description = "Read the bounded current room context and finalized public messages.")]
-    async fn room_read(&self, Parameters(input): Parameters<Connection>) -> Result<String, String> {
-        encode(
-            &self
-                .hub
-                .client(&input.connection_id)?
-                .read()
-                .await
-                .map_err(|error| error.code)?,
-        )
+    #[tool(
+        description = "Read the bounded current room context and finalized public messages. After connector_resync_required, set resync true to explicitly replace pending wait observations with this snapshot; older messages remain searchable. Ordinary reads do not consume pending observations."
+    )]
+    async fn room_read(&self, Parameters(input): Parameters<Read>) -> Result<String, String> {
+        let client = self.hub.client(&input.connection_id)?;
+        let response = if input.resync {
+            client.resync().await
+        } else {
+            client.read().await
+        };
+        encode(&response.map_err(|error| error.code)?)
     }
 
     #[tool(
@@ -219,7 +220,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Wait for another participant's public message without a model deadline. Other tools may run concurrently."
+        description = "Wait for another participant's public message without a model deadline. Other tools may run concurrently. On connector_resync_required, call room_read with resync true before waiting again."
     )]
     async fn room_wait_next(
         &self,

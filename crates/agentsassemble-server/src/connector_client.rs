@@ -194,6 +194,18 @@ impl RoomConnectorClient {
         self.get("read", &[], &session.bearer, false).await
     }
 
+    /// Explicitly replaces wait observation with a successfully read current snapshot.
+    ///
+    /// # Errors
+    /// Preserves the cursor on authorization, transport, decoding or sequence failure.
+    pub async fn resync(&self) -> Result<Value, ConnectorClientError> {
+        let session = self.session().await?;
+        let mut cursor = session.wait_cursor.lock().await;
+        let response = self.get("read", &[], &session.bearer, false).await?;
+        *cursor = sequence(&response)?;
+        Ok(response)
+    }
+
     /// Searches the exact joined room through its canonical public search owner.
     ///
     /// # Errors

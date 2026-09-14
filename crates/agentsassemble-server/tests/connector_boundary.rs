@@ -203,3 +203,6 @@ mod mcp_remote;
 
 #[path = "connector_boundary/leave_retry.rs"]
 mod leave_retry;
+
+#[path = "connector_boundary/resync.rs"]
+mod resync;

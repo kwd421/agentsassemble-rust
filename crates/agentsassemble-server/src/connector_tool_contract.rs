@@ -21,6 +21,16 @@ pub(super) struct Connection {
 
 #[derive(Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
+pub(super) struct Read {
+    #[serde(default)]
+    pub(super) connection_id: String,
+    /// Explicitly replace pending wait observations with this bounded snapshot.
+    #[serde(default)]
+    pub(super) resync: bool,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub(super) struct Search {
     pub(super) query: String,
     #[serde(default = "all_channels")]
