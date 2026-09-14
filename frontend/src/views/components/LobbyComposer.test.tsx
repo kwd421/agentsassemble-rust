@@ -438,6 +438,27 @@ describe("LobbyComposer", () => {
     expect(say).not.toHaveBeenCalled();
   });
 
+  it("retains the uncertain vote request across retry failures", async () => {
+    const retry = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValue({});
+    const say = vi.fn().mockRejectedValueOnce(new RoomSocketSayError("uncertain vote", "outcome_unknown", retry)).mockResolvedValue({ events: [] });
+    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
+    render(<RoomSocketProvider socket={socket}><LobbyComposer meetingId="room-a" onPosted={vi.fn()} /></RoomSocketProvider>);
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "/vote" } });
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+    const dialog = await screen.findByRole("dialog", { name: "투표 만들기" });
+    for (const [name, value] of [["질문", "One vote"], ["선택지 1", "A"], ["선택지 2", "B"]])
+      fireEvent.change(within(dialog).getByRole("textbox", { name }), { target: { value } });
+    fireEvent.click(within(dialog).getByRole("button", { name: "만들기" }));
+    await within(dialog).findByText("uncertain vote");
+    fireEvent.click(within(dialog).getByRole("button", { name: "만들기" }));
+    await within(dialog).findByText("offline");
+    expect(say).toHaveBeenCalledTimes(1);
+    fireEvent.click(within(dialog).getByRole("button", { name: "만들기" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "투표 만들기" })).toBeNull());
+    expect(retry).toHaveBeenCalledTimes(2);
+    expect(say).toHaveBeenCalledTimes(1);
+  });
+
   it("submits the validated vote and clears its staged attachment", async () => {
     const id = `ma_${"a".repeat(32)}`;
     const uploaded = {

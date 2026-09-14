@@ -118,6 +118,7 @@ export default function LobbyComposer({
   const [accessoryNotice, setAccessoryNotice] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [voteDialogOpen, setVoteDialogOpen] = useState(false);
+  const voteRetry = useRef<{ key: string; retry: NonNullable<RoomSocketSayError["retry"]> } | null>(null);
   const [activeCommandIndex, setActiveCommandIndex] = useState(0);
   const [dismissedCommandMessage, setDismissedCommandMessage] = useState("");
   const roomSocket = useRoomSocket();
@@ -135,7 +136,7 @@ export default function LobbyComposer({
     !busy &&
     matchingCommands.length > 0 &&
     dismissedCommandMessage !== message;
-  const closeVoteDialog = useCallback(() => setVoteDialogOpen(false), []);
+  const closeVoteDialog = useCallback(() => { voteRetry.current = null; setVoteDialogOpen(false); }, []);
 
   function setMessage(nextMessage: string) {
     setDraftsByRoom((previous) => {
@@ -360,6 +361,8 @@ export default function LobbyComposer({
     if (disabled || busy || uploading) {
       throw new Error("지금은 투표를 만들 수 없습니다.");
     }
+    const key = JSON.stringify([meetingId, value, pendingAttachments]);
+    if (voteRetry.current?.key !== key) voteRetry.current = null;
     setBusy(true);
     setError("");
     try {
@@ -372,7 +375,9 @@ export default function LobbyComposer({
           "socket_not_ready"
         );
       }
-      const payload = await roomSocket.say({
+      const payload = voteRetry.current
+        ? (await voteRetry.current.retry(), { events: [] })
+        : await roomSocket.say({
         message: "",
         attachments: pendingAttachments,
         kind: "vote",
@@ -385,6 +390,9 @@ export default function LobbyComposer({
       setPendingAttachments(cleared.pendingAttachments);
       onPosted(payload.events || (payload.event ? [payload.event] : []));
     } catch (errorValue) {
+      if (errorValue instanceof RoomSocketSayError && errorValue.retry) {
+        voteRetry.current = { key, retry: errorValue.retry };
+      }
       if (
         isUnauthorizedApiError(errorValue) ||
         (errorValue instanceof RoomSocketSayError &&

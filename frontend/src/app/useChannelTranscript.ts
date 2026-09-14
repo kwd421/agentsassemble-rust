@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { RoomEvent } from "../api";
-import type { RoomSocketHandle } from "../roomSocketTypes";
+import type { RoomSocketHandle, RoomSocketSayError } from "../roomSocketTypes";
 import type { ChannelHistoryPage } from "../types/generated/ChannelHistoryPage";
 import { CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE } from "../types/generated/TEXT_CHAT_WIRE";
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
@@ -99,12 +99,13 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
     owner.window = { events, following: false, hasMore: false, newMessages: false };
     publish(owner, "");
   }, [current, publish]);
-  const send = useCallback(async (content: string) => {
+  const send = useCallback(async (content: string, retry?: RoomSocketSayError["retry"]) => {
     const owner = ownerRef.current;
     if (!owner || !current(owner) || !owner.window || owner.sending || !socket?.ready()) throw new Error("채널 연결이 완료된 뒤 보내 주세요.");
     owner.sending = true; publish(owner);
     try {
-      await socket.command("channel.message.send", { channel_id: channelId, content });
+      if (retry) await retry();
+      else await socket.command("channel.message.send", { channel_id: channelId, content });
       if (!current(owner)) throw new Error("메시지를 보내는 동안 채널 연결이 바뀌었어요.");
       // The canonical stream supplies ordered durable messages, including this ACK's event.
     } finally { owner.sending = false; publish(owner); }

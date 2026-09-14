@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Hash, Pin, Send } from "lucide-react";
+import { RoomSocketSayError } from "../roomSocketTypes";
 import type { MessagePinsAuthority, RoomChannel, RoomSearchResult } from "../api";
 import type { useChannelTranscript } from "../app/useChannelTranscript";
 import type { CanonicalParticipantProfile } from "../lib/canonicalRoomProjection";
@@ -35,7 +36,7 @@ export default function CustomChannelView({
   const scopeRef = useRef(transcript.scope); scopeRef.current = transcript.scope;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const [draft, setDraft] = useState({ identity, value: "" });
+  const [draft, setDraft] = useState<{ identity: string; value: string; retry?: RoomSocketSayError["retry"] }>({ identity, value: "" });
   const [sendError, setSendError] = useState({ identity, message: "" });
   const [selected, setSelected] = useState<{ scope: object; id: string } | null>(null);
   const pendingFocus = useRef<typeof selected>(null);
@@ -92,11 +93,18 @@ export default function CustomChannelView({
     if (disabled || !value.trim() || tooLong) return;
     setSendError({ identity, message: "" });
     try {
-      await transcript.send(value);
+      if (draft.retry) await transcript.send(value, draft.retry);
+      else await transcript.send(value);
       if (!mounted.current || identityRef.current !== identity) return;
       setDraft({ identity, value: "" }); focusAfterSend.current = true;
     } catch (cause) {
-      if (mounted.current && identityRef.current === identity) setSendError({ identity, message: cause instanceof Error ? cause.message : "메시지를 보내지 못했어요." });
+      if (mounted.current && identityRef.current === identity) {
+        setSendError({ identity, message: cause instanceof Error ? cause.message : "메시지를 보내지 못했어요." });
+        if (cause instanceof RoomSocketSayError && cause.retry) {
+          setDraft((current) => current.identity === identity && current.value === value
+            ? { ...current, retry: cause.retry } : current);
+        }
+      }
     }
   }
   const searchItems = messageSearch.results.map((result) => ({

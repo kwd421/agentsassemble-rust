@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import type { ComponentProps } from "react";
 const api = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
 vi.mock("../api", async () => ({ ...(await vi.importActual("../api")), fetchMessagePins: api.read, setMessagePinned: api.write }));
+import { RoomSocketSayError } from "../roomSocketTypes";
 import CustomChannelView from "./CustomChannelView";
 import { channelId, channelMessage } from "../test/channelMessage";
 
@@ -73,4 +74,23 @@ it("preserves a draft across a connection interruption and rejects stale context
   expect(input.disabled).toBe(true);
   await act(async () => complete({ channel_id: channelId, event_id: "channel-event-1", events: [channelMessage(1)] }));
   expect(options.transcript.showContext).not.toHaveBeenCalled();
+});
+
+it("retains exact channel retry until the draft changes", async () => {
+  const options = props();
+  const retry = vi.fn().mockResolvedValue({});
+  vi.mocked(options.transcript.send)
+    .mockRejectedValueOnce(new RoomSocketSayError("uncertain channel", "outcome_unknown", retry))
+    .mockRejectedValueOnce(new Error("still offline"));
+  render(<CustomChannelView {...options} />);
+  const input = screen.getByRole("textbox", { name: "채널 메시지 입력" });
+  fireEvent.change(input, { target: { value: "committed once" } });
+  fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
+  await screen.findByText("uncertain channel");
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("committed once", retry));
+  await screen.findByText("still offline");
+  fireEvent.change(input, { target: { value: "different intent" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("different intent"));
 });
