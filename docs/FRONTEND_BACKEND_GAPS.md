@@ -15,6 +15,14 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ### Frontend corrections and acceptance boundaries (2026-09-14)
 
+Deleted edit-history correction (whole-repository R3): the server now removes the
+edited body from subsequent public event reads when the canonical target is deleted.
+The existing message_deleted marker also preserves the deleted placeholder when an
+old edit arrives without the later deletion event in that history window. Layout,
+buttons and deletion controls remain unchanged. Persistence335, frontend862,
+production build/CSS and workspace Clippy pass; packaged verification and latest
+whole-source review remain pending.
+
 Departed-roster correction (whole-repository R2): public initial snapshots now omit
 Left participant records at the persistence query, matching the existing live
 participant_left removal. Historical rows and message author names remain intact;

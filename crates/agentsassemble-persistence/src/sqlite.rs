@@ -291,22 +291,8 @@ impl SqliteStore {
             .ok_or(PersistenceError::RoomMissing)?;
         let room = serde_json::from_str(row.try_get("room_json")?)?;
         let settings = serde_json::from_str(row.try_get("settings_json")?)?;
-        // A public participant_left transition removes this record from the live roster.
-        // Preserve historical rows for authority/history, without reintroducing all of them
-        // into every new connection's mandatory metadata. Exported records remain available
-        // to the agent-creation reactivation policy.
-        let participant_rows = sqlx::query(
-            "SELECT participant_json FROM participants WHERE room_id = ? \
-             AND (? OR json_extract(participant_json, '$.status') IS NOT 'left') ORDER BY participant_id",
-        )
-        .bind(room_id)
-        .bind(principal.is_none())
-        .fetch_all(&mut *transaction)
-        .await?;
-        let participants = participant_rows
-            .into_iter()
-            .map(|row| serde_json::from_str(row.get::<&str, _>("participant_json")))
-            .collect::<Result<Vec<_>, _>>()?;
+        let participants =
+            load_snapshot_participants(&mut transaction, room_id, principal.is_none()).await?;
         let agent_sessions = load_agent_sessions(&mut transaction, room_id).await?;
         let durable_last_seq = sqlx::query_scalar::<_, i64>(
             "SELECT COALESCE(MAX(seq), 0) FROM room_events WHERE room_id = ?",
@@ -342,10 +328,14 @@ impl SqliteStore {
             .fetch_all(&mut *transaction)
             .await?
         };
-        let events = event_rows
+        let mut events = event_rows
             .into_iter()
             .map(|row| serde_json::from_str(row.get::<&str, _>("event_json")))
             .collect::<Result<Vec<_>, _>>()?;
+        for event in &mut events {
+            crate::message_mutations::project_deleted_message_update(&mut transaction, event)
+                .await?;
+        }
         let oldest_seq = events.first().map_or(0, |event: &RoomEvent| event.seq);
         let last_seq = events
             .last()
@@ -366,6 +356,29 @@ impl SqliteStore {
             snapshot_mode,
         })
     }
+}
+
+async fn load_snapshot_participants(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    include_departed: bool,
+) -> Result<Vec<Participant>, PersistenceError> {
+    // A public participant_left transition removes this record from the live roster.
+    // Preserve historical rows for authority/history, without reintroducing all of them
+    // into every new connection's mandatory metadata. Exported records remain available
+    // to the agent-creation reactivation policy.
+    let participant_rows = sqlx::query(
+        "SELECT participant_json FROM participants WHERE room_id = ? \
+         AND (? OR json_extract(participant_json, '$.status') IS NOT 'left') ORDER BY participant_id",
+    )
+    .bind(room_id)
+    .bind(include_departed)
+    .fetch_all(&mut **transaction)
+    .await?;
+    Ok(participant_rows
+        .into_iter()
+        .map(|row| serde_json::from_str(row.get::<&str, _>("participant_json")))
+        .collect::<Result<Vec<_>, _>>()?)
 }
 
 async fn load_agent_sessions(

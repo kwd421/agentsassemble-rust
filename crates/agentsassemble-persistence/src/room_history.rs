@@ -65,7 +65,7 @@ impl SqliteStore {
         let mut events = Vec::with_capacity(rows.len().min(limit));
         for row in rows.into_iter().take(limit) {
             let stored_seq = row.get::<i64, _>("seq");
-            let event = serde_json::from_str::<RoomEvent>(row.get::<&str, _>("event_json"))?;
+            let mut event = serde_json::from_str::<RoomEvent>(row.get::<&str, _>("event_json"))?;
             if stored_seq != expected
                 || event.seq != stored_seq
                 || event.room_id != principal.room_id
@@ -75,6 +75,8 @@ impl SqliteStore {
                     found: stored_seq,
                 });
             }
+            crate::message_mutations::project_deleted_message_update(&mut transaction, &mut event)
+                .await?;
             events.push(public_event_for_principal(&event, principal));
             expected = expected.saturating_sub(1);
         }

@@ -3,6 +3,7 @@ use agentsassemble_domain::{
     LOCAL_OPERATOR_USER_ID, RoomEvent,
 };
 use serde_json::json;
+use sha2::{Digest, Sha256};
 
 use crate::{PersistenceError, SqliteStore};
 
@@ -326,4 +327,126 @@ fn assert_rejected<T: std::fmt::Debug>(result: Result<T, PersistenceError>, expe
         Err(PersistenceError::CommandRejected { code, .. }) if code == expected => {}
         other => panic!("expected {expected} rejection, got {other:?}"),
     }
+}
+
+#[tokio::test]
+async fn deleted_edit_content_is_absent_from_later_public_read_paths() {
+    let (store, operator) = fixture().await;
+    let sent = store
+        .execute_message_with_turn(
+            &operator,
+            "redaction-source",
+            "message.send",
+            &json!({"content":"Original public text"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("send: {error}"));
+    let target = &sent.outcome.event.id;
+    let edit = store
+        .execute_message_mutation(
+            &operator,
+            "redaction-edit",
+            "message.edit",
+            &json!({"event_id":target,"content":"Deleted edit private needle"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("edit: {error}"));
+    let before = store
+        .snapshot("general", 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("before deletion: {error}"));
+    assert!(
+        serde_json::to_string(&before.events)
+            .unwrap_or_default()
+            .contains("Deleted edit private needle")
+    );
+    let deleted = store
+        .execute_message_mutation(
+            &operator,
+            "redaction-delete",
+            "message.delete",
+            &json!({"event_id":target}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("delete: {error}"));
+    let admitted = new_read_only_connector(&store).await;
+    let reader = admitted.authorization.principal();
+    let snapshot = store
+        .snapshot_for(
+            crate::RoomMutationAuthority::ConnectorSession(&admitted.authorization),
+            0,
+            200,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("snapshot: {error}"));
+    let history = store
+        .room_history_page(
+            reader,
+            agentsassemble_domain::RoomHistoryRequest {
+                before_seq: deleted.event.seq,
+                limit: 200,
+            },
+        )
+        .await
+        .unwrap_or_else(|error| panic!("history: {error}"));
+    let catch_up = store
+        .room_subscription_catch_up(reader, 0, 200)
+        .await
+        .unwrap_or_else(|error| panic!("catch up: {error}"));
+    let publication = store
+        .pending_room_publications("general")
+        .await
+        .unwrap_or_else(|error| panic!("publication: {error}"));
+    for events in [
+        &snapshot.events,
+        &history.events,
+        &catch_up.events,
+        &publication,
+    ] {
+        let bytes = serde_json::to_string(events).unwrap_or_else(|error| panic!("encode: {error}"));
+        assert!(
+            !bytes.contains("Deleted edit private needle"),
+            "deleted edit body returned"
+        );
+        let transition = events
+            .iter()
+            .find(|event| event.id == edit.event.id)
+            .unwrap_or_else(|| panic!("edit sequence was discarded"));
+        assert_eq!(transition.seq, edit.event.seq);
+        assert_eq!(transition.event_type, "message_updated");
+        assert_eq!(transition.extra["message_deleted"], true);
+        assert_eq!(transition.extra["target_event_id"], *target);
+    }
+}
+
+async fn new_read_only_connector(store: &SqliteStore) -> crate::ConnectorAdmission {
+    let manager = crate::RoomManagerAuthority::Local(
+        store
+            .authorize_local_room_manager(
+                "general",
+                LOCAL_OPERATOR_USER_ID,
+                LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("manager: {error}")),
+    );
+    let invite = store
+        .create_connector_invite(
+            &manager,
+            uuid::Uuid::new_v4(),
+            InviteScope::ReadOnly,
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("invite: {error}"));
+    store
+        .admit_connector(
+            &Sha256::digest(invite.invite_bearer.as_bytes()).into(),
+            &[8; 32],
+            uuid::Uuid::new_v4(),
+            "Reader admitted after deletion",
+            chrono::Utc::now(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("admit reader: {error}"))
 }

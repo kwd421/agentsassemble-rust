@@ -41,10 +41,12 @@ impl SqliteStore {
         let mut events = Vec::with_capacity(rows.len());
         for row in rows {
             let stored_seq = row.get::<i64, _>("seq");
-            let event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
+            let mut event: RoomEvent = serde_json::from_str(row.get::<&str, _>("event_json"))?;
             if stored_seq != expected || event.seq != stored_seq || event.room_id != room_id {
                 return Err(invalid_publication_state());
             }
+            crate::message_mutations::project_deleted_message_update(&mut transaction, &mut event)
+                .await?;
             events.push(event);
             expected = expected.saturating_add(1);
         }

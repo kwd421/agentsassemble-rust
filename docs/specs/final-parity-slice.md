@@ -262,3 +262,20 @@ participant read query so historical departures do not become response allocatio
 No pagination, frame limit increase, row deletion or UI layout change is required
 for this lifetime correction. This does not establish bounds for every other kind
 of snapshot metadata or certify expired-but-still-Joined participant handling.
+
+## Deleted edit-event public projection (2026-09-14)
+
+Whole-repository R3 is reproduced by edit/delete followed by a newly admitted
+read-only participant receiving the edited body. Project historical message_updated
+events against the canonical target's current deletion state within the same read
+transaction. Apply this to initial/resumed snapshots, history pages, subscription
+catch-up and queued publication. Preserve event IDs, sequence positions and original
+transition type; remove the body and expose the existing message_deleted marker.
+The frontend interprets that marker as the existing deleted-message state even if
+the deletion transition lies outside the loaded history window. Historical reads
+must not resurrect text or replace the deleted placeholder with an empty edit.
+
+This is an authoritative public projection, not a schema migration or a new
+compatibility path. It covers already-stored deletions as well as new ones. Exact
+private command receipts retain their established replay contract; this does not
+claim erasure of a previously delivered copy or physical database purging.

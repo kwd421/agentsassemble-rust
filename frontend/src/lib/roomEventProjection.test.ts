@@ -17,6 +17,24 @@ function event(overrides: Partial<RoomEvent>): RoomEvent {
 }
 
 describe("projectRoomEventsToTimeline", () => {
+  it("keeps deleted text hidden when a redacted edit is loaded without the deletion event", () => {
+    const original = event({ id: "deleted-target", seq: 1, content: "previously visible" });
+    const redacted = event({
+      id: "old-edit", seq: 2, type: "message_updated", target_event_id: "deleted-target",
+      content: null, message_deleted: true,
+    });
+    const together = projectRoomEventsToTimeline([original, redacted]);
+    const separately = mergeLobbyEvents(
+      projectRoomEventsToTimeline([original]), projectRoomEventsToTimeline([redacted]),
+    );
+    for (const timeline of [together, separately]) {
+      expect(timeline).toHaveLength(1);
+      expect(timeline[0]).toMatchObject({
+        record_id: "deleted-target", message_deleted: true, message: "삭제된 메시지입니다",
+      });
+    }
+  });
+
   it("updates one bubble across multiple deltas and the final message", () => {
     const attachment = {
       id: "attachment-1",

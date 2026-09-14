@@ -14,7 +14,7 @@ the retained text is not represented as those separate artifacts.
 | --- | --- | --- | --- |
 | R1 | High | Deleted in-flight input restored to queue blocks later messages | Locally corrected across restoration owners; persistence334 and workspace Clippy pass; re-review pending |
 | R2 | High | Historical participants exceed mandatory snapshot frame size | Locally corrected; canonical 1000-departure/actual socket and persistence334 pass; re-review pending |
-| R3 | Medium | Prior edit events return deleted message content | Open, source path identified |
+| R3 | Medium | Prior edit events return deleted message content | Locally corrected; persistence335, frontend862 and workspace Clippy pass; packaged verification/re-review pending |
 | R4 | Medium | Original builtin API/Local workspace file tools omitted | Open, reconcile actual original path and approved scope |
 | R5 | Medium | Initial resync repeats ahead-of-history cursor | Locally corrected at `50aaa0bc`; latest-source review pending |
 | R6 | Medium | Admitted Connector cannot leave after initial read failure | Locally corrected; actual Connector13 and workspace Clippy pass; re-review pending |
@@ -51,6 +51,26 @@ in `/tmp/aa-review-r2-final-wire.log` and `/tmp/aa-review-r2-gates.log`.
 Baseline: `/tmp/aa-review-r2-baseline.log`; other logs:
 `/tmp/aa-review-r2-persistence.log`, `/tmp/aa-review-r2-clippy.log`.
 This correction does not prove bounds for all other metadata or expired Joined rows.
+
+R3 is reproduced by an actual canonical edit/delete followed by new read-only
+Connector admission: its public snapshot includes the old edited body before the
+correction. The message-mutation owner now projects historical edit events against
+the target's current deletion state within each reader's existing transaction.
+Snapshot (including resumed reads), history, subscription catch-up and pending
+publication all invoke that owner; the indexed target lookup occurs only for edit
+events and preserves original event IDs/sequences/type. A deleted body is omitted
+and the existing message_deleted marker reaches the frontend's existing deletion
+projection, including an older page without the later deletion event. Canonical
+private receipts and physical storage are not represented as purged.
+Persistence335 tests pass (4.72s), frontend149 files/862 tests pass (19.39s), production
+build and unchanged CSS verification pass, as does all-target/all-feature workspace
+Clippy. The regression checks serialized responses for all four read paths, original
+edit sequence retention and initial/incremental deleted-placeholder projection.
+Logs: `/tmp/aa-review-r3-baseline.log`, `/tmp/aa-review-r3-fixed.log`,
+`/tmp/aa-review-r3-persistence.log`, `/tmp/aa-review-r3-frontend.log`,
+`/tmp/aa-review-r3-build.log`, `/tmp/aa-review-r3-clippy.log`,
+`/tmp/aa-review-r3-gates.log`. Signed packaged verification of the later source
+remains pending; tests do not establish visible UI proof.
 
 R6 is reproduced with the actual HTTP server and client: the relay truncates only
 the initial successful read response after admission. Before the fix, leave returns

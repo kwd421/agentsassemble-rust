@@ -196,6 +196,52 @@ async fn delete_message(
     Ok((updated, mutation, result))
 }
 
+/// Applies current deletion authority to a historical edit without losing its cursor.
+pub(crate) async fn project_deleted_message_update(
+    transaction: &mut Transaction<'_, Sqlite>,
+    event: &mut RoomEvent,
+) -> Result<(), PersistenceError> {
+    if event.event_type != "message_updated" {
+        return Ok(());
+    }
+    let invalid = || {
+        rejected(
+            "message_update_target_invalid",
+            "Stored message edit target is inconsistent.",
+        )
+    };
+    let target_seq = event
+        .extra
+        .get("target_seq")
+        .and_then(Value::as_i64)
+        .filter(|seq| *seq > 0 && *seq < event.seq)
+        .ok_or_else(invalid)?;
+    let target_id = event
+        .extra
+        .get("target_event_id")
+        .and_then(Value::as_str)
+        .ok_or_else(invalid)?;
+    let encoded = sqlx::query_scalar::<_, String>(
+        "SELECT event_json FROM room_events WHERE room_id = ? AND seq = ?",
+    )
+    .bind(&event.room_id)
+    .bind(target_seq)
+    .fetch_optional(&mut **transaction)
+    .await?
+    .ok_or_else(invalid)?;
+    let target: RoomEvent = serde_json::from_str(&encoded)?;
+    if target.id != target_id || target.seq != target_seq || target.room_id != event.room_id {
+        return Err(invalid());
+    }
+    if target.extra.get("message_deleted") == Some(&Value::Bool(true)) {
+        event.content = None;
+        event
+            .extra
+            .insert("message_deleted".to_owned(), Value::Bool(true));
+    }
+    Ok(())
+}
+
 fn rejection(error: agentsassemble_domain::CommandRejection) -> PersistenceError {
     rejected(error.code, error.message)
 }

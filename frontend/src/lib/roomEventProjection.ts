@@ -276,7 +276,8 @@ export function projectRoomEventsToTimeline(
     }
 
     if (event.type === "message_updated" || event.type === "message_deleted") {
-      if (event.type === "message_deleted") {
+      const deleted = event.type === "message_deleted" || event.message_deleted === true;
+      if (deleted) {
         deletedVoteIds.add(String(event.target_event_id || ""));
       }
       const targetIndex = recordIndex.get(String(event.target_event_id || ""));
@@ -291,13 +292,13 @@ export function projectRoomEventsToTimeline(
           message: String(event.content || ""),
           edited_at: String(event.edited_at || "") || undefined,
           flow_meeting_id: event.room_id,
-          flow_action: event.type,
+          flow_action: deleted ? "message_deleted" : event.type,
           target_event_id: String(event.target_event_id || ""),
         });
         return;
       }
       const existing = timeline[targetIndex];
-      timeline[targetIndex] = event.type === "message_deleted"
+      timeline[targetIndex] = deleted
         ? {
             ...existing,
             message: "삭제된 메시지입니다",
