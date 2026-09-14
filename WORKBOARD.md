@@ -2,6 +2,12 @@
 
 ## Active work
 
+- At 21:50 KST, submitted independent whole-repository re-review at frozen
+  `6935beb11317d0586285928dea15fbafb0d0066f` in the same in-app Pro conversation.
+  The complete Rust/original archive and unrestricted request are visibly posted;
+  Pro is generating. Await and read the completed verdict; do not end merely for
+  waiting. Code and packaged corrections are complete locally, not yet approved.
+
 - Whole-source Pro at `7df6bb09` completed (43m1s): REVISE H1/M2; full answer read.
   The other seven prior corrections are confirmed. Current H1 covers terminal and
   expired participant accumulation; M1 covers manual retry identity loss; M2 is the
