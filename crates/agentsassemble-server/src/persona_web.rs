@@ -100,7 +100,12 @@ async fn import_persona(
         store
             .replace_persona_asset(imported)
             .await
-            .map_err(PersonaHttpError::from)
+            .map_err(|error| match error {
+                PersistenceError::InvalidPersonaAsset => PersonaHttpError::bad_request(
+                    "The persona's public metadata or asset exceeds the supported limits.",
+                ),
+                other => PersonaHttpError::from(other),
+            })
     });
     let persona = task
         .await

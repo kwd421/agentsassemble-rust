@@ -121,6 +121,33 @@ async fn local_tcp_import_list_and_thumbnail_use_atomic_private_library() {
 }
 
 #[tokio::test]
+async fn oversized_persona_summary_is_rejected_before_library_publication() {
+    let server = start().await;
+    let client = Client::new();
+    let card = json!({"spec":"chara_card_v3", "data":{"name":"A".repeat(300_000)}});
+    let response = client
+        .post(format!("{}/api/personas/import", server.base_url))
+        .bearer_auth(issue_operator(&server.tickets).await)
+        .json(
+            &json!({"filename":"oversized.json", "data_base64":STANDARD.encode(card.to_string())}),
+        )
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("import: {error}"));
+    let status = response.status();
+    let listed = client
+        .get(format!("{}/api/personas", server.base_url))
+        .bearer_auth(issue_operator(&server.tickets).await)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("list: {error}"));
+    let listed = json_body(listed).await;
+    server.stop().await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert_eq!(listed["items"], json!([]));
+}
+
+#[tokio::test]
 async fn tcp_boundary_consumes_exact_operator_before_reading_import_body() {
     let server = start().await;
     let client = Client::new();

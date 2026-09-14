@@ -408,6 +408,74 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn oversized_stored_persona_cannot_mutate_session_authority() {
+        let (store, principal, directory) = fixture().await;
+        let selected = draft(
+            directory
+                .path()
+                .to_str()
+                .unwrap_or_else(|| panic!("workspace")),
+        );
+        store
+            .execute_agent_create(
+                TrustedPrincipal(&principal),
+                "create-valid",
+                &json!({"provider_id":"api"}),
+                &selected,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("create valid session: {error}"));
+        // A pre-existing oversized card must not enter either create or configure.
+        let oversized = persona_card("oversized", &"A".repeat(300_000));
+        sqlx::query("INSERT INTO persona_assets(persona_id, card_json) VALUES (?, ?)")
+            .bind(&oversized.id)
+            .bind(
+                serde_json::to_string(&oversized)
+                    .unwrap_or_else(|error| panic!("oversized persona fixture: {error}")),
+            )
+            .execute(&store.pool)
+            .await
+            .unwrap_or_else(|error| panic!("oversized persona fixture: {error}"));
+        let before = store
+            .snapshot("general", 0, 200)
+            .await
+            .unwrap_or_else(|error| panic!("oversized persona fixture: {error}"));
+        let mut rejected = selected.clone();
+        rejected.persona_card_id = "oversized".into();
+        rejected.runtime_profile_key = "oversized-profile".into();
+        assert!(
+            store
+                .execute_agent_configuration(
+                    TrustedPrincipal(&principal),
+                    "configure-oversized",
+                    &json!({"persona_card_id":"oversized"}),
+                    &selected.runtime_profile_key,
+                    &rejected
+                )
+                .await
+                .is_err()
+        );
+        rejected.agent_id = "new-oversized".into();
+        assert!(
+            store
+                .execute_agent_create(
+                    TrustedPrincipal(&principal),
+                    "create-oversized",
+                    &json!({"persona_card_id":"oversized"}),
+                    &rejected
+                )
+                .await
+                .is_err()
+        );
+        let after = store
+            .snapshot("general", 0, 200)
+            .await
+            .unwrap_or_else(|error| panic!("oversized persona fixture: {error}"));
+        assert_eq!(before.agent_sessions, after.agent_sessions);
+        assert_eq!(before.last_seq, after.last_seq);
+    }
+
+    #[tokio::test]
     async fn persona_selection_create_failure_and_clear_share_session_custody() {
         let (store, principal, directory) = fixture().await;
         store

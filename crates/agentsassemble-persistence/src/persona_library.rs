@@ -7,6 +7,10 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{ImportedPersonaAsset, PersistenceError, SqliteStore, raster_assets::PNG_SIGNATURE};
 
+// Required session metadata cannot be dropped to fit a socket snapshot. At the
+// 64-session capacity, persona summaries may contribute at most 64 KiB total.
+const MAX_PUBLIC_PERSONA_SUMMARY_BYTES: usize = 1_024;
+
 impl SqliteStore {
     /// Atomically replaces one normalized persona card and its optional canonical thumbnail.
     ///
@@ -160,14 +164,17 @@ async fn load_persona_row(
 fn decode_card(persona_id: &str, card_json: &str) -> Result<PersonaCard, PersistenceError> {
     let card: PersonaCard =
         serde_json::from_str(card_json).map_err(|_| PersistenceError::InvalidPersonaAsset)?;
-    if card.id != persona_id || !valid_persona_id(&card.id) {
+    if card.id != persona_id {
         return Err(PersistenceError::InvalidPersonaAsset);
     }
+    validate_card(&card)?;
     Ok(card)
 }
 
 fn validate_card(card: &PersonaCard) -> Result<(), PersistenceError> {
-    if valid_persona_id(&card.id) {
+    if valid_persona_id(&card.id)
+        && serde_json::to_vec(&card.summary(true))?.len() <= MAX_PUBLIC_PERSONA_SUMMARY_BYTES
+    {
         Ok(())
     } else {
         Err(PersistenceError::InvalidPersonaAsset)
