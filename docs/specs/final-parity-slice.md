@@ -247,3 +247,18 @@ Acceptance: delete an input already assigned to a turn, then finalize retained
 interrupt or runtime loss; a subsequent message commits and the deleted input is
 absent from future queues/assignments. Existing undeleted-input retention and
 canonical queue failure tests must continue to pass.
+
+## Departed participants in initial connection metadata (2026-09-14)
+
+Whole-repository R2 is reproduced by 1,000 canonical Connector admissions and
+leaves with at most one current external participant, followed by an actual local
+WebSocket subscription. Historical membership alone exceeds the unchanged 256 KiB
+frame limit. Public snapshots must exclude Left membership records, consistent with
+the live participant_left transition that removes them from frontend state. Keep
+Joined/Detached and moderation/removal records needed by agent creation, including
+Exported. Keep all canonical participant rows and embedded historical author identity;
+internal unfiltered snapshots remain available to authority owners. Filter at the
+participant read query so historical departures do not become response allocations.
+No pagination, frame limit increase, row deletion or UI layout change is required
+for this lifetime correction. This does not establish bounds for every other kind
+of snapshot metadata or certify expired-but-still-Joined participant handling.

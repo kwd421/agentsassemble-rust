@@ -15,6 +15,16 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ### Frontend corrections and acceptance boundaries (2026-09-14)
 
+Departed-roster correction (whole-repository R2): public initial snapshots now omit
+Left participant records at the persistence query, matching the existing live
+participant_left removal. Historical rows and message author names remain intact;
+Exported and other creation/moderation records remain available. The actual socket
+regression performs 1,000 canonical admissions/leaves with only one concurrent
+external participant: the old source rejects with snapshot_too_large, and the new
+source connects with readable departed-author history under the unchanged frame
+limit. No frontend control, layout, participant event contract or browser validator
+is changed. Packaged verification of this later source remains pending.
+
 Reconnect correction: the server may reject an ahead-of-history cursor
 before sending a subscription receipt. The client now recognizes that explicit
 response and requests an initial snapshot while retaining its verified cursor,

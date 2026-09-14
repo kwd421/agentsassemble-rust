@@ -291,10 +291,16 @@ impl SqliteStore {
             .ok_or(PersistenceError::RoomMissing)?;
         let room = serde_json::from_str(row.try_get("room_json")?)?;
         let settings = serde_json::from_str(row.try_get("settings_json")?)?;
+        // A public participant_left transition removes this record from the live roster.
+        // Preserve historical rows for authority/history, without reintroducing all of them
+        // into every new connection's mandatory metadata. Exported records remain available
+        // to the agent-creation reactivation policy.
         let participant_rows = sqlx::query(
-            "SELECT participant_json FROM participants WHERE room_id = ? ORDER BY participant_id",
+            "SELECT participant_json FROM participants WHERE room_id = ? \
+             AND (? OR json_extract(participant_json, '$.status') IS NOT 'left') ORDER BY participant_id",
         )
         .bind(room_id)
+        .bind(principal.is_none())
         .fetch_all(&mut *transaction)
         .await?;
         let participants = participant_rows

@@ -13,7 +13,7 @@ the retained text is not represented as those separate artifacts.
 | ID | Severity | Reviewer finding | Current disposition |
 | --- | --- | --- | --- |
 | R1 | High | Deleted in-flight input restored to queue blocks later messages | Locally corrected across restoration owners; persistence334 and workspace Clippy pass; re-review pending |
-| R2 | High | Historical participants exceed mandatory snapshot frame size | Open, source/size evidence; no repeated-admission reproduction yet |
+| R2 | High | Historical participants exceed mandatory snapshot frame size | Locally corrected; canonical 1000-departure/actual socket and persistence334 pass; re-review pending |
 | R3 | Medium | Prior edit events return deleted message content | Open, source path identified |
 | R4 | Medium | Original builtin API/Local workspace file tools omitted | Open, reconcile actual original path and approved scope |
 | R5 | Medium | Initial resync repeats ahead-of-history cursor | Locally corrected at `50aaa0bc`; latest-source review pending |
@@ -36,6 +36,21 @@ No production validation was relaxed to accommodate the fixture.
 Logs: `/tmp/aa-review-r1-baseline.log`, `/tmp/aa-review-r1-fixed.log`,
 `/tmp/aa-review-r1-persistence.log`, `/tmp/aa-review-r1-clippy.log`,
 `/tmp/aa-review-r1-gates.log`. Packaged/live-provider reproduction is not claimed.
+
+R2 now has an actual server-side reproduction, not only the reviewer's size estimate:
+1,000 canonical Connector admissions/leaves, one concurrent external participant,
+then a real WebSocket subscription returns snapshot_too_large. Authorized snapshots
+now exclude Left rows in the participant query. Internal snapshots, canonical rows,
+message author identity, active and removal/moderation records remain intact; existing
+frontend live participant_left handling already removes these roster entries. The
+query retains malformed non-Left rows for normal validation rather than silently
+excluding missing status. The regression connects under the unchanged 256 KiB limit
+and reads the last departed author's name and message. Persistence334 passes (4.79s),
+workspace Clippy passes; current-source socket/removal checks and gates are recorded
+in `/tmp/aa-review-r2-final-wire.log` and `/tmp/aa-review-r2-gates.log`.
+Baseline: `/tmp/aa-review-r2-baseline.log`; other logs:
+`/tmp/aa-review-r2-persistence.log`, `/tmp/aa-review-r2-clippy.log`.
+This correction does not prove bounds for all other metadata or expired Joined rows.
 
 R6 is reproduced with the actual HTTP server and client: the relay truncates only
 the initial successful read response after admission. Before the fix, leave returns

@@ -30,7 +30,9 @@
   Unperformed reviewer execution is not a failed product test. R1 is now reproduced
   and corrected across queue restoration owners (persistence334 / workspace Clippy);
   R8 joined reader cleanup also passes. R6 admitted leave now passes actual
-  Connector13 and workspace Clippy. These corrections require latest-source review.
+  Connector13 and workspace Clippy. R2 now reproduces 1,000 canonical departures
+  and fixes new-socket metadata while retaining author history. These corrections
+  require latest-source review.
 
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was
