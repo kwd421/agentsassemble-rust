@@ -35,8 +35,9 @@
   require latest-source review. R3 deleted-edit public reads now pass persistence335,
   frontend862, production build/CSS and workspace Clippy; packaged checks remain.
   R7 now passes actual 31-second wait/message delivery, Connector14 and transport2
-  while preserving ordinary HTTP limits. R4 builtin API/Local workspace tools remain
-  to be restored; corrected-source whole-repository review is still required.
+  while preserving ordinary HTTP limits. R4 builtin API/Local workspace tools are now locally restored with provider258,
+  controlled approval/custody and API tool-round checks passing. Signed packaged
+  verification and corrected-source whole-repository review are still required.
 
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was

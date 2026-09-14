@@ -99,6 +99,8 @@ mod unix_custody;
 #[cfg(unix)]
 mod unix_process_tree;
 mod vercel;
+mod workspace_files;
+mod workspace_tools;
 
 pub use catalog_service::{CatalogRefreshError, CatalogShutdownError, ProviderCatalogService};
 pub use credential_provider::ProviderCredentialId;

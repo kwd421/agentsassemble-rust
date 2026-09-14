@@ -15,6 +15,15 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ### Frontend corrections and acceptance boundaries (2026-09-14)
 
+Builtin workspace tools correction (whole-repository R4): API and Local catalogs
+now offer the existing workspace-write permission option. `AgentCreateModal`
+already derives its native folder picker from that permission; the existing
+execution-bound owner request panel receives per-file write/replace approvals.
+No new control, layout, shell execution or alternate harness is introduced.
+Read-only selection remains workspace-free. Controlled file and approval/custody
+checks plus an actual driver/HTTP/SSE/Room Portal tool round pass; signed packaged
+selection/approval and current-source whole-repository review remain pending.
+
 Deleted edit-history correction (whole-repository R3): the server now removes the
 edited body from subsequent public event reads when the canonical target is deleted.
 The existing message_deleted marker also preserves the deleted placeholder when an

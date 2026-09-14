@@ -58,6 +58,7 @@ pub(crate) struct RemoteOpenAiDriver {
     portal: Option<RoomPortal>,
     portal_client: PortalClientState,
     tools: Vec<Tool>,
+    workspace_tools: crate::workspace_tools::WorkspaceTools,
     credentials: ProviderCredentialStore,
     attached_session_id: Option<String>,
     turn_effect_uncertain: bool,
@@ -182,6 +183,7 @@ impl RemoteOpenAiDriver {
             portal: Some(portal),
             portal_client: PortalClientState::Active(portal_client),
             tools,
+            workspace_tools: crate::workspace_tools::WorkspaceTools::default(),
             credentials,
             attached_session_id: None,
             turn_effect_uncertain: false,
@@ -195,12 +197,11 @@ impl RemoteOpenAiDriver {
         session: &DurableAgentSession,
         request: &ProviderTurnRequest,
     ) -> Result<ProviderTurnCompleted, DriverError> {
-        self.turn_effect_uncertain = false;
         self.validate_session(session)?;
+        self.turn_effect_uncertain = false;
         let credential = self.load_credential().await?;
         let observation = request.room_observation.as_ref();
-        let tools =
-            observation.map(|observation| api_tools(&self.tools, observation.tabletop_tools));
+        let tools = self.turn_tools(session, request);
         let mut messages = vec![json!({"role": "user", "content": request.input})];
         for round in 0..=MAX_TOOL_ROUNDS {
             let response = self
@@ -263,7 +264,12 @@ impl RemoteOpenAiDriver {
             let mut executed = Vec::new();
             for call in message.tool_calls.iter().cloned() {
                 let result = self
-                    .execute_tool(call, observation.is_some_and(|value| value.tabletop_tools))
+                    .execute_turn_tool(
+                        call,
+                        observation.is_some_and(|value| value.tabletop_tools),
+                        session,
+                        request,
+                    )
                     .await?;
                 let terminal = result.terminal;
                 executed.push(result);
@@ -298,6 +304,57 @@ impl RemoteOpenAiDriver {
             .map(Some)
             .map_err(|error| self.spec.credential_error(error))
     }
+    async fn execute_turn_tool(
+        &mut self,
+        call: ToolCall,
+        random_tools: bool,
+        session: &DurableAgentSession,
+        request: &ProviderTurnRequest,
+    ) -> Result<ExecutedTool, DriverError> {
+        if crate::workspace_tools::names().contains(&call.function.name.as_str()) {
+            let result = self
+                .workspace_tools
+                .execute(
+                    session,
+                    request,
+                    &call.function.name,
+                    &call.function.arguments,
+                    &mut self.turn_effect_uncertain,
+                )
+                .await;
+            let result = match result {
+                Ok(result) => result,
+                Err(error) if !self.workspace_tools.pending() => {
+                    json!({"error": error.code}).to_string()
+                }
+                Err(error) => return Err(error),
+            };
+            return Ok(ExecutedTool {
+                call,
+                result,
+                terminal: false,
+            });
+        }
+        self.execute_tool(call, random_tools).await
+    }
+
+    fn turn_tools(
+        &self,
+        session: &DurableAgentSession,
+        request: &ProviderTurnRequest,
+    ) -> Option<Vec<Value>> {
+        let mut tools = request
+            .room_observation
+            .as_ref()
+            .map_or_else(Vec::new, |observation| {
+                api_tools(&self.tools, observation.tabletop_tools)
+            });
+        if session.public.permission_mode == "workspace_write" {
+            tools.extend(crate::workspace_tools::schemas());
+        }
+        (!tools.is_empty()).then_some(tools)
+    }
+
     async fn execute_tool(
         &mut self,
         call: ToolCall,
@@ -360,7 +417,11 @@ impl RemoteOpenAiDriver {
             || session.public.provider_kind != self.spec.provider_kind
             || session.public.runtime_kind != "api"
             || session.public.transport != self.spec.endpoint.transport()
-            || session.public.permission_mode != "meeting_read_only"
+            || !matches!(
+                session.public.permission_mode.as_str(),
+                "meeting_read_only" | "workspace_write"
+            )
+            || self.workspace_tools.pending()
             || !endpoint_matches
         {
             return Err(provider_error(
@@ -428,6 +489,7 @@ impl ProviderDriver for RemoteOpenAiDriver {
         _request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<(), DriverError>> {
         Box::pin(async move {
+            self.workspace_tools.cleanup().await?;
             if self.turn_effect_uncertain {
                 Err(provider_error(
                     "provider_turn_interrupt_uncertain",
@@ -451,6 +513,7 @@ impl ProviderDriver for RemoteOpenAiDriver {
     fn stop(&mut self) -> DriverFuture<'_, Result<(), DriverError>> {
         Box::pin(async move {
             self.stopped = true;
+            self.workspace_tools.cleanup().await?;
             self.attached_session_id = None;
             let client = match std::mem::replace(&mut self.portal_client, PortalClientState::Closed)
             {
@@ -518,7 +581,7 @@ impl ProviderDriver for RemoteOpenAiDriver {
     }
 
     fn requires_restart(&self) -> bool {
-        self.stopped || self.portal_failed
+        self.stopped || self.portal_failed || self.workspace_tools.pending()
     }
 
     fn turn_failure_effect_uncertain(&self) -> bool {

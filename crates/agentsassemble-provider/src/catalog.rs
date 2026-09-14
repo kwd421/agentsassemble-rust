@@ -319,7 +319,7 @@ pub(crate) async fn discover_custom_api(
     ready_provider(
         provider,
         String::new(),
-        vec![remote_output_token_control(), permission_control(false)],
+        vec![remote_output_token_control(), permission_control(true)],
     )
 }
 
@@ -356,7 +356,7 @@ fn ready_gateway(
     let default_model = preferred_model(&models, preferred);
     let mut controls = vec![control("model", "모델", "combobox", models, &default_model)];
     controls.extend(provider_control);
-    controls.extend([remote_output_token_control(), permission_control(false)]);
+    controls.extend([remote_output_token_control(), permission_control(true)]);
     ready_provider(provider, default_model.clone(), controls)
 }
 
