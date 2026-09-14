@@ -15,6 +15,14 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ### Frontend corrections and acceptance boundaries (2026-09-14)
 
+Signed0.1.43 now verifies the current-AI invitation flow with real external
+Antigravity: temporary public access, invitation create/copy, live joined roster,
+one public CLI message, leave removing the roster entry, and public-access closure.
+The CLI uses individual native tool approvals and remains externally owned; no
+managed Antigravity session or UI layout change is introduced. Durable evidence
+confirms one message and revoked/Left membership. This real-flow gap is closed;
+Cursor and final whole-repository approval remain open.
+
 Active M1 correction: preserve an uncertain command's exact retry in the existing
 room draft. The existing send control retries that request while the draft remains
 unchanged, with an explicit retry label; changing the draft returns to normal new

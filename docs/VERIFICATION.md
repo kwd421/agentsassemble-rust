@@ -2,6 +2,29 @@
 
 ## Completed whole-repository Pro review (2026-09-14)
 
+External Antigravity real verification now passes at signed0.1.43 (22:25–22:27 KST).
+After the user requested direct CLI execution, an isolated interactive PTY runs the
+installed `agy`1.1.28 with its configured Gemini3.8 Flash High. It discovers all14
+Room Connector tools. The packaged current-AI invite is passed privately to this
+external conversation, without creating an app-managed Agent Session. Native CLI
+prompts approve only each individual join/read/say/leave/receipt-release call; no
+skip-permissions flag, persistent approval or provider patch is used. The app visibly
+shows `Antigravity Final 0.1.43` joined and its single public message
+`Antigravity external Connector verification: 17 + 19 = 36.`. After room_read,
+room_say, room_leave and the separate receipt-release call, the CLI reports successful
+leave/release and the participant disappears from the live roster. Read-only SQLite
+confirms one matching message (seq8), participant Left and connector revoked=1.
+Evidence: `/tmp/aa-antigravity-final-evidence.json` and the observed native/CLI outputs.
+The previously recorded Terminal-app restriction does not block this direct CLI path.
+
+External access is visibly closed after verification, and the old invite is disabled.
+The CLI exits0 through `/exit`; temporary MCP registration is removed and its list
+returns empty again. Normal app Quit removes app80573/supervisor80623/server80644;
+CLI80156 and Connector80200 are also absent. Artifact check passes at
+`/tmp/aa-antigravity-final-artifacts.log`. Existing room/history/provider settings are
+preserved. This closes external Antigravity's real participation gap; Cursor's
+structured permission boundary and the current whole-source review remain open.
+
 While frozen6935beb1 is reviewed, a query-cost follow-up removes repeated human
 session scans from the live-roster query. A single room-scoped grouping identifies
 memberships with no current human session; current replacements and managed-session

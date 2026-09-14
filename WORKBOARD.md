@@ -13,7 +13,10 @@
   all exact owned processes absent; review this later source after the frozen answer.
   User-approved temporary external access and current-AI invitation creation/copy
   pass. Terminal UI access is denied by Computer Use, so Antigravity participation
-  is not verified. External access is visibly closed and the temporary MCP removed.
+  was initially unverified. Direct interactive CLI verification subsequently passes
+  join/read/publication/leave/receipt release with individual tool approvals. The
+  app and database confirm one message, Left and revoked membership. External access
+  is closed, temporary MCP removed and all owned processes exit; see verification.
 
 - Whole-source Pro at `7df6bb09` completed (43m1s): REVISE H1/M2; full answer read.
   The other seven prior corrections are confirmed. Current H1 covers terminal and
