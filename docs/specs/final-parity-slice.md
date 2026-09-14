@@ -461,3 +461,16 @@ MCP identity, session and result correlation checks. Do not infer applied effort
 from the requested option, echo it into a fabricated provider receipt, or add a
 legacy fallback. Verify the missing-init successful native shape and rejected
 missing/mismatched Stop receipts, then actual packaged Opus Low room read/reply.
+
+## Stop after confirmed failed-runtime exit (2026-09-15)
+
+Real Claude protocol failure confirms provider process exit and clears exact runtime
+custody, but leaves recovery_required. A subsequent user Stop currently demands the
+removed handle and never reaches finalization. The existing stop owner must recognize
+its terminal Failed execution at the current generation together with cleared runtime
+custody, no active provider session/turn and no competing lifecycle intent. Finalize
+the explicit Stop through the existing durable lifecycle receipt, keeping queued input
+and releasing recovery. Do not invoke a nonexistent external effect or infer exit
+from a missing handle alone. Live, uncertain or partially retained custody still
+requires the exact runtime stop. Verify both confirmed-gone and retained-runtime
+failures, exact stop replay, and the originally affected packaged session.

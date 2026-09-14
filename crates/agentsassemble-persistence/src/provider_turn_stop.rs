@@ -140,3 +140,34 @@ fn stale_stop_turn() -> PersistenceError {
         message: "Provider turn authority changed before confirmed stop committed.".to_owned(),
     }
 }
+
+/// Failure completion clears custody only after an exact confirmed runtime stop.
+/// The terminal execution distinguishes that receipt from absent/unclaimed custody.
+pub(crate) async fn failed_turn_has_confirmed_runtime_exit(
+    transaction: &mut Transaction<'_, Sqlite>,
+    session: &DurableAgentSession,
+) -> Result<bool, PersistenceError> {
+    if session.public.runtime_status != agentsassemble_domain::AgentRuntimeStatus::Error
+        || !session.public.recovery_required
+        || session.public.provider_session_active
+        || !session.runtime_handle_id.is_empty()
+        || !session.runtime_owner_id.is_empty()
+        || !session.runtime_lease_token.is_empty()
+        || session.turn_generation == 0
+        || active_turn_authority(session).map_err(|_| invalid_stop_turn())?
+    {
+        return Ok(false);
+    }
+    let execution = load_execution_in(
+        transaction,
+        &session.public.room_id,
+        &session.public.session_id,
+        session.turn_generation,
+    )
+    .await?;
+    Ok(execution.phase == crate::ProviderTurnExecutionPhase::Failed
+        && execution.participant_id == session.public.participant_id
+        && !execution.runtime_handle_id.is_empty()
+        && !execution.runtime_owner_id.is_empty()
+        && !execution.runtime_lease_token.is_empty())
+}

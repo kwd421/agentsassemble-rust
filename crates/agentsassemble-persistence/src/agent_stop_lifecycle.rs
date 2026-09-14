@@ -110,35 +110,43 @@ impl SqliteStore {
         crate::room_runtime_cleanup::require_server_custody(&session)?;
         if !lifecycle_intent_is_empty(&session) {
             require_matching_operation(&session, AgentLifecycleAction::Stop, &operation_id)?;
-            if session.lifecycle_intent_status == AgentLifecycleIntentStatus::EffectApplied {
-                transaction.commit().await?;
-                return Ok(AgentStopPlan::Finalize);
-            }
-            if session.lifecycle_intent_status == AgentLifecycleIntentStatus::Prepared {
-                let effect = stop_effect(&session)?;
-                transaction.commit().await?;
-                return Ok(AgentStopPlan::Stop(effect));
-            }
-            if matches!(
-                session.lifecycle_intent_status,
+            let plan = match session.lifecycle_intent_status {
+                AgentLifecycleIntentStatus::EffectApplied => AgentStopPlan::Finalize,
+                AgentLifecycleIntentStatus::Prepared => AgentStopPlan::Stop(stop_effect(&session)?),
                 AgentLifecycleIntentStatus::EffectInflight
-                    | AgentLifecycleIntentStatus::Unconfirmed
-            ) {
-                return Err(unresolved_effect());
-            }
-            return Err(rejected(
-                "invalid_state",
-                "Stored provider stop intent is invalid.",
-            ));
+                | AgentLifecycleIntentStatus::Unconfirmed => return Err(unresolved_effect()),
+                AgentLifecycleIntentStatus::None => {
+                    return Err(rejected(
+                        "invalid_state",
+                        "Stored provider stop intent is invalid.",
+                    ));
+                }
+            };
+            transaction.commit().await?;
+            return Ok(plan);
         }
+        let exited = crate::provider_turn_stop::failed_turn_has_confirmed_runtime_exit(
+            &mut transaction,
+            &session,
+        )
+        .await?;
         session.lifecycle_intent_action = AgentLifecycleAction::Stop;
         session.lifecycle_intent_id.clone_from(&operation_id);
-        session.lifecycle_intent_status = AgentLifecycleIntentStatus::Prepared;
+        session.lifecycle_intent_status = if exited {
+            AgentLifecycleIntentStatus::EffectApplied
+        } else {
+            AgentLifecycleIntentStatus::Prepared
+        };
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
-        let effect = stop_effect(&session)?;
+        // Failure completion already confirmed exit; only the retained state needs finalization.
+        let plan = if exited {
+            AgentStopPlan::Finalize
+        } else {
+            AgentStopPlan::Stop(stop_effect(&session)?)
+        };
         transaction.commit().await?;
-        Ok(AgentStopPlan::Stop(effect))
+        Ok(plan)
     }
 
     /// Rejects an exact prepared stop without claiming that its live runtime stopped.

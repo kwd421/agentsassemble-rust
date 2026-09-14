@@ -216,3 +216,79 @@ async fn runtime_gone_rejects_a_stop_intent_without_its_exact_reservation() {
     );
     assert_eq!(count_events_containing(&store, "operator_stop").await, 0);
 }
+
+#[tokio::test]
+async fn failed_turn_stop_uses_confirmed_exit_but_never_skips_retained_runtime() {
+    for confirmed in [false, true] {
+        let (store, principal, _directory) = fixture().await;
+        let mutation = store
+            .execute_message_with_turn(
+                &principal,
+                "failed-stop-message",
+                "message.send",
+                &json!({"content":"@Terra fail and retain input"}),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("assign: {error}"));
+        let assignment = &mutation.assignments[0];
+        let start = store
+            .authorize_provider_turn_start(
+                "general",
+                AGENT_ID,
+                assignment.turn_generation,
+                &assignment.turn_id,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("authorize: {error}"));
+        let stop = confirmed.then_some((
+            start.runtime_handle_id.as_str(),
+            start.runtime_owner_id.as_str(),
+            start.runtime_lease_token.as_str(),
+        ));
+        store
+            .fail_agent_turn(
+                "general",
+                AGENT_ID,
+                super::authority(&start, "", None),
+                "provider_protocol_invalid",
+                "Invalid provider receipt.",
+                stop,
+            )
+            .await
+            .unwrap_or_else(|error| panic!("record failure: {error}"));
+        let failed = stored_session(&store).await;
+        assert!(failed.public.recovery_required);
+        let payload = json!({"agent_id":AGENT_ID});
+        let plan = store
+            .prepare_agent_stop(TrustedPrincipal(&principal), "stop-failed", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("prepare stop: {error}"));
+        if !confirmed {
+            assert!(matches!(plan, crate::AgentStopPlan::Stop(_)));
+            continue;
+        }
+        assert!(matches!(plan, crate::AgentStopPlan::Finalize));
+        let stopped = store
+            .finalize_agent_stop(&principal, "stop-failed", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("finalize: {error}"));
+        let stored = stored_session(&store).await;
+        assert_eq!(
+            stored.public.runtime_status,
+            agentsassemble_domain::AgentRuntimeStatus::Stopped
+        );
+        assert!(!stored.public.recovery_required);
+        assert!(!stored.public.enabled);
+        assert_eq!(stored.pending_inputs, failed.pending_inputs);
+        assert!(stored.runtime_handle_id.is_empty());
+        let replay = store
+            .prepare_agent_stop(TrustedPrincipal(&principal), "stop-failed", &payload)
+            .await
+            .unwrap_or_else(|error| panic!("replay: {error}"));
+        let crate::AgentStopPlan::Outcome(replay) = replay else {
+            panic!("stored stop result");
+        };
+        assert!(replay.deduplicated);
+        assert_eq!(replay.result, stopped.outcome.result);
+    }
+}
