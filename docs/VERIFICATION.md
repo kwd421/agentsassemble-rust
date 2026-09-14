@@ -1,5 +1,37 @@
 # Verification Contract
 
+## Cursor session policy and confirmed-failure Stop correction (2026-09-15)
+
+Signed0.1.45 Cursor native tool results reject both read_discussion calls despite
+qualified room identities. The runtime spawn reused catalog configuration with
+default Reject. Explicit runtime RoomTools/catalog Reject fixes the existing owner
+contract without changing native user permissions. The existing qualified-call
+regression fails when wired to the actual old Cursor configuration, then passes
+with the corrected configuration; inactive observation, wrong/conflicting tool
+identity and catalog rejection remain covered. Workspace Clippy and unchanged
+architecture/policy19/format/diff gates pass. The full provider run also exposes a
+stale512MiB oversized-package fixture after the earlier640MiB runtime correction;
+updating the fixture to exceed640MiB passes its targeted test. The full run finishes
+258 passed and that one stale fixture failed; the corrected
+fixture passes separately, covering all259 provider tests. Signed0.1.47 at00:33 KST
+resumes the same Cursor session and native context, reads the room and publishes
+23+29=52, then reads and publishes the same answer on follow-up. Native records
+add two read_discussion and two publish_message calls; durable turn_count is2 with
+no error. Normal Stop shows stopped and exact provider processes99395/99568/99569/
+99577/99845 are absent. Global Cursor settings and installation are unchanged.
+
+Failed-runtime Stop baseline rejects runtime_handle_unavailable after the exact
+process exit was already confirmed. The correction uses the current terminal
+Failed execution, cleared custody and no active turn to finalize an explicit Stop
+through its existing durable receipt. Retained-runtime failure still requires the
+external Stop. Persistence338 pass; the final refined branch passes stop-race3,
+workspace Clippy and unchanged gates. Signed0.1.47 stops the originally failed
+Claude session through its existing
+profile button: stopped, recovery_required=false, empty last_error_code. Normal
+Quit leaves app98807/supervisor98837/server98839 absent. Deep/strict codesign and
+artifact check pass. Evidence /tmp/aa-cursor-policy-packaged-evidence.json; logs
+/tmp/aa-{failed-stop,cursor-policy}-*.log. Latest whole-source review remains.
+
 ## Real Claude SDK Opus Low verification (2026-09-14)
 
 Signed0.1.46 at00:02–00:04 KST on2026-09-15 passes refreshed catalog selection of

@@ -2,7 +2,7 @@ use agentsassemble_domain::ProviderAvailability;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    acp_client::{AcpClient, AcpClientConfiguration, AcpToolIdentityContract},
+    acp_client::{AcpClient, AcpClientConfiguration, AcpPermissionPolicy, AcpToolIdentityContract},
     catalog::{await_filesystem, failed_provider, provider_executable, ready_provider},
     process::{ProbeFailure, inspect},
 };
@@ -11,8 +11,11 @@ use crate::{
 mod models;
 pub(crate) use models::CursorCatalog;
 
-pub(crate) fn client_configuration() -> AcpClientConfiguration {
+pub(crate) fn client_configuration(
+    permission_policy: AcpPermissionPolicy,
+) -> AcpClientConfiguration {
     let mut configuration = AcpClientConfiguration {
+        permission_policy,
         tool_identity: AcpToolIdentityContract::QualifiedMcpCall,
         ..Default::default()
     };
@@ -61,9 +64,13 @@ pub(crate) async fn discover(
         cancellation,
         &[],
         |stdin, stdout| async move {
-            let mut client = AcpClient::connect(stdin, stdout, client_configuration())
-                .await
-                .map_err(|_| ProbeFailure::Failed)?;
+            let mut client = AcpClient::connect(
+                stdin,
+                stdout,
+                client_configuration(AcpPermissionPolicy::Reject),
+            )
+            .await
+            .map_err(|_| ProbeFailure::Failed)?;
             let result = CursorCatalog::read(&mut client)
                 .await
                 .map_err(|_| ProbeFailure::Malformed);

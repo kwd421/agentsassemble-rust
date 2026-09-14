@@ -100,7 +100,7 @@ fn missing_node_and_oversized_package_are_not_native_executables() {
     let oversized = fs::File::create(root.path().join("oversized"))
         .unwrap_or_else(|error| panic!("create oversized member: {error}"));
     oversized
-        .set_len(512 * 1024 * 1024 + 1)
+        .set_len(640 * 1024 * 1024 + 1)
         .unwrap_or_else(|error| panic!("set oversized length: {error}"));
     assert!(super::identity(&entry).is_err());
 }

@@ -323,9 +323,10 @@ fn room_tool_permission_requires_exact_active_bound_authority() {
 
 #[test]
 fn qualified_mcp_notification_authorizes_only_the_same_known_room_call() {
+    let configuration = crate::cursor::client_configuration(AcpPermissionPolicy::RoomTools);
     let state = Mutex::new(ProtocolState {
-        tool_identity: crate::cursor::client_configuration().tool_identity,
-        permission_policy: AcpPermissionPolicy::RoomTools,
+        tool_identity: configuration.tool_identity,
+        permission_policy: configuration.permission_policy,
         room_observation_active: true,
         session_id: Some(SessionId::new("session")),
         active_turn_id: Some("turn".to_owned()),
@@ -379,6 +380,16 @@ fn qualified_mcp_notification_authorizes_only_the_same_known_room_call() {
         .active_tools
         .clear();
     announce(qualified);
+    {
+        let mut locked = state.lock().unwrap_or_else(|_| panic!("lock state"));
+        locked.permission_policy =
+            crate::cursor::client_configuration(AcpPermissionPolicy::Reject).permission_policy;
+    }
+    assert_selected(&permission_response(&state, &request), "reject");
+    state
+        .lock()
+        .unwrap_or_else(|_| panic!("lock state"))
+        .permission_policy = configuration.permission_policy;
     state
         .lock()
         .unwrap_or_else(|_| panic!("lock state"))

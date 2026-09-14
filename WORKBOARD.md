@@ -2,12 +2,29 @@
 
 ## Active work
 
+- Cursor Auto native calls were rejected because runtime spawn reused the catalog's
+  default Reject policy. Exact qualified tool identity was present. Pass RoomTools
+  explicitly for real sessions and Reject explicitly for catalog discovery. The
+  regression now uses the actual Cursor configuration: baseline rejects an allowed
+  read. Provider coverage259 (258 full-run passes plus corrected stale size fixture1),
+  Clippy and unchanged gates pass. Signed0.1.47 resumes the exact old session, reads
+  and publishes52 twice, then stops with all exact children absent. Claude old
+  failure Stop now also passes; normal Quit and artifact checks pass. Latest review
+  remains pending.
+
+- At00:16 KST2026-09-15, posted complete Rust/original source atb09d3de4 for
+  independent whole-repository Pro review in the existing in-app conversation.
+  Attachment, full request and active generation are visible. Await/read final.
+  The post-failure Stop dead end is corrected and signed0.1.47 verified: the
+  terminal failed execution already confirms runtime exit, so explicit Stop can
+  finalize its durable state. Persistence338 and unchanged gates pass.
+
 - Claude OAuth is confirmed logged in despite Safari's final localhost callback
   error. Direct SDK Opus5 returns68; native Stop confirms applied low. App.45 rejects
   absent init effort, a field the SDK only advertises on other host types. Correct
   the receipt owner. Signed0.1.46 now passes two actual Opus5/Low room reads and
   replies, normal Stop and exact provider-process exit. Normal Stop also exposes
-  missing runtime-handle ownership after recovery; retain this unresolved failure.
+  missing runtime-handle ownership after recovery; corrected and verified above.
 
 - User authorization added: verify real Claude SDK with the currently advertised
   Opus model and Low reasoning (2026-09-14). Confirm catalog selection, actual room

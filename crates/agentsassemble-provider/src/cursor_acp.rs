@@ -1,4 +1,5 @@
 use crate::{
+    acp_client::AcpPermissionPolicy,
     acp_runtime::AcpRuntime,
     cursor::{CursorCatalog, client_configuration},
     driver::{
@@ -30,7 +31,7 @@ impl CursorAcpDriver {
             guardian,
             &["acp".to_owned()],
             &[],
-            client_configuration(),
+            client_configuration(AcpPermissionPolicy::RoomTools),
         )
         .await?;
         Ok(Self { runtime })
@@ -49,7 +50,7 @@ impl CursorAcpDriver {
             bind(session).await?,
             &["acp".to_owned()],
             &[],
-            client_configuration(),
+            client_configuration(AcpPermissionPolicy::RoomTools),
         )
         .await?;
         Ok(Self { runtime })

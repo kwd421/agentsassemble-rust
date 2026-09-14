@@ -474,3 +474,16 @@ and releasing recovery. Do not invoke a nonexistent external effect or infer exi
 from a missing handle alone. Live, uncertain or partially retained custody still
 requires the exact runtime stop. Verify both confirmed-gone and retained-runtime
 failures, exact stop replay, and the originally affected packaged session.
+
+## Cursor runtime permission policy (2026-09-15)
+
+The signed Auto run supplies exact qualified room MCP identities, but every read
+is rejected. Runtime spawn shares catalog configuration whose default is Reject.
+Make the existing policy explicit at each caller: catalog remains Reject; real
+session spawn uses RoomTools on both platforms, as required by the room contract.
+Retain live observation, exact native session/call identity, recognized room tool,
+conflict rejection and AllowOnce. No global permissions or native user settings
+change. The regression must exercise Cursor configuration rather than replacing
+its policy with an independently constructed passing value. Verify qualified read,
+foreign/unknown/conflicting identity, inactive observation and catalog rejection,
+then actual packaged Auto room read, publication, follow-up and normal Stop.
