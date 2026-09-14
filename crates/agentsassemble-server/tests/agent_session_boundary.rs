@@ -117,9 +117,12 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
     let first = start(store, catalog.clone()).await;
     let mut socket = connect(&first.base_url, &first.state).await;
     subscribe(&mut socket).await;
-    let snapshot = receive_json(&mut socket).await;
+    assert_eq!(receive_json(&mut socket).await["op"], "snapshot");
     assert_eq!(
-        snapshot["provider_catalog"]["catalog_revision"],
+        socket
+            .initial_catalog
+            .as_ref()
+            .unwrap_or_else(|| panic!("initial catalog missing"))["catalog_revision"],
         "catalog-boundary-1"
     );
     let payload = json!({

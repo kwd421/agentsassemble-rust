@@ -44,6 +44,7 @@ struct PreparedSnapshot {
     catalog_updates: watch::Receiver<ProviderCatalog>,
     cursor: i64,
     encoded: String,
+    encoded_catalog: String,
 }
 
 pub(crate) async fn establish<S, R>(
@@ -138,6 +139,10 @@ where
         catch_up.high_water,
     );
     send_subscription_receipt(sender, &state.shutdown, receipt).await?;
+    refresh_room_session(state, &mut principal, &mut room_session).await?;
+    send_encoded(sender, &state.shutdown, prepared.encoded_catalog)
+        .await
+        .ok()?;
     refresh_room_session(state, &mut principal, &mut room_session).await?;
     send_encoded(sender, &state.shutdown, prepared.encoded)
         .await
@@ -412,10 +417,15 @@ where
         has_more_before: snapshot_data.has_more_before,
         resume_gap: snapshot_data.resume_gap,
         snapshot_mode: snapshot_data.snapshot_mode,
-        provider_catalog,
         capabilities: principal.capabilities.clone(),
     };
-    let Some(encoded_snapshot) = fit_snapshot_frame(snapshot) else {
+    let catalog_frame = ServerFrame::ProviderCatalogUpdated {
+        catalog: provider_catalog,
+    };
+    let encoded = encode_server_frame(&catalog_frame)
+        .ok()
+        .zip(fit_snapshot_frame(snapshot));
+    let Some((encoded_catalog, encoded_snapshot)) = encoded else {
         let _ = send_subscription_nack(
             sender,
             state,
@@ -435,6 +445,7 @@ where
         catalog_updates,
         cursor: snapshot_cursor,
         encoded: encoded_snapshot,
+        encoded_catalog,
     })
 }
 

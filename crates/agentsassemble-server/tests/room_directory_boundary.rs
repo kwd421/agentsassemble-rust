@@ -442,6 +442,8 @@ async fn verify_created_room_socket(
         .unwrap_or_else(|error| panic!("subscribe newly created room: {error}"));
     let receipt = receive_json(&mut socket).await;
     assert_eq!(receipt["op"], "subscribed");
+    let catalog = receive_json(&mut socket).await;
+    assert_eq!(catalog["op"], "provider_catalog_updated");
     let snapshot = receive_json(&mut socket).await;
     assert_eq!(snapshot["op"], "snapshot");
     assert_eq!(&snapshot["room"]["room_uid"], room_uid);

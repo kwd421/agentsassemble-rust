@@ -304,7 +304,7 @@ The Rust protocol crate owns WebSocket envelopes, request correlation, error sha
 The existing outer envelope remains compatible:
 
 - client: `subscribe`, `command`, `ping`;
-- server: `subscribed`, `snapshot`, `event`, `ack`, `nack`,
+- server: `subscribed`, `provider_catalog_updated`, `snapshot`, `event`, `ack`, `nack`,
   `resync_required`, `pong`.
 
 Action payloads are added only by the slice that implements them.
@@ -314,7 +314,12 @@ issuer runtime; the ingress owner separately enforces the expected Origin, Host,
 loopback peer, or remote TLS boundary. The server consumes the ticket, registers the canonical live receiver before reading a
 durable snapshot, serializes one bounded Snapshot at cursor `C`, and fixes one
 transactionally authorized high-water `H`. It sends strict generated `Subscribed`
-metadata, that Snapshot, then the bounded contiguous durable range `C+1..H`;
+metadata, the complete bounded catalog frame, that Snapshot without catalog data,
+then the bounded contiguous durable range `C+1..H`. Surface revision14 requires this
+order for every subscription; the client validates both components before exposing
+the combined room view or readiness. Catalog watch updates after readiness use the
+same catalog frame. This keeps each frame bounded without discarding models or
+spending the same metadata budget twice;
 overflow, malformed JSON, an identity/surface mismatch, or a missing sequence closes
 without readiness. Remote TLS/origin admission protects the transport and adds no
 proof using a key from that same authority. The audited local desktop additionally

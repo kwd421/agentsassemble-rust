@@ -19,7 +19,7 @@ describe("anonymous vote marker transport", () => {
     try {
       await flushPromises(); sockets[0].open();
       const frames = handshakeFrames(1, 1);
-      sockets[0].receive(frames.receipt);
+      sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
       sockets[0].receive({ ...frames.snap, events: [cast] });
       await flushPromises();
       expect(onError).not.toHaveBeenCalled();

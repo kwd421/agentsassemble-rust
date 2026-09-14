@@ -113,25 +113,94 @@ async fn full_persona_capacity_create_configure_and_reopen_fit_actual_socket()
 }
 
 async fn verify_socket(store: SqliteStore) -> Result<(), Box<dyn std::error::Error>> {
-    let server = support::human_invite::start(store).await;
-    let ticket = issue_local_ticket(server.state(), "general").await?;
-    let (socket, _) = tokio_tungstenite::connect_async(format!(
-        "{}/ws?ticket={}",
-        server.base_url.replacen("http://", "ws://", 1),
-        ticket.ticket
-    ))
-    .await?;
-    let mut socket = support::room_socket_peer::RoomSocketPeer::new(socket);
-    assert_eq!(socket.subscribe(0).await["op"], "subscribed");
-    let wire = socket.receive_text().await;
-    let snapshot: Value = serde_json::from_str(&wire)?;
-    assert_eq!(snapshot["op"], "snapshot");
-    assert_eq!(
-        snapshot["agent_sessions"].as_array().map(Vec::len),
-        Some(64)
-    );
-    assert!(wire.len() <= agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES);
-    socket.close().await;
+    let catalog = capacity_catalog();
+    assert!(serde_json::to_vec(&catalog)?.len() > 170_000);
+    assert!(serde_json::to_vec(&catalog)?.len() < 192 * 1024);
+    let server = support::human_invite::start_with_catalog(store, catalog).await;
+    for _ in 0..2 {
+        let ticket = issue_local_ticket(server.state(), "general").await?;
+        let (socket, _) = tokio_tungstenite::connect_async(format!(
+            "{}/ws?ticket={}",
+            server.base_url.replacen("http://", "ws://", 1),
+            ticket.ticket
+        ))
+        .await?;
+        let mut socket = support::room_socket_peer::RoomSocketPeer::new(socket);
+        assert_eq!(socket.subscribe(0).await["op"], "subscribed");
+        let wire = socket.receive_text().await;
+        let snapshot: Value = serde_json::from_str(&wire)?;
+        assert_eq!(snapshot["op"], "snapshot");
+        assert!(snapshot.get("provider_catalog").is_none());
+        let mut combined = snapshot.clone();
+        combined["provider_catalog"] = socket.initial_catalog.clone().ok_or("missing catalog")?;
+        assert!(
+            serde_json::to_vec(&combined)?.len()
+                > agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES
+        );
+        assert_eq!(
+            snapshot["agent_sessions"].as_array().map(Vec::len),
+            Some(64)
+        );
+        assert!(wire.len() <= agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES);
+        socket.close().await;
+    }
     server.stop().await;
     Ok(())
+}
+
+fn capacity_catalog() -> agentsassemble_domain::ProviderCatalog {
+    use agentsassemble_domain::{
+        ProviderAvailability, ProviderCatalog, ProviderControl, ProviderControlOption,
+    };
+    use std::collections::BTreeMap;
+    let options = (0..240)
+        .map(|index| ProviderControlOption {
+            value: format!("owner/model-{index}"),
+            label: format!("Model {index} {}", "X".repeat(32)),
+            metadata: BTreeMap::from([("description".to_owned(), json!("x".repeat(256)))]),
+        })
+        .collect();
+    let mut catalog = ProviderCatalog {
+        status: "ready".to_owned(),
+        catalog_revision: "large-provider-catalog".to_owned(),
+        discovered_at: String::new(),
+        providers: vec![ProviderAvailability {
+            id: "vercel".to_owned(),
+            display_name: "Vercel AI Gateway".to_owned(),
+            provider_kind: "vercel_ai_gateway".to_owned(),
+            runtime_kind: "api".to_owned(),
+            catalog_group: "api".to_owned(),
+            workspace_required: false,
+            connection_kind: "native_cli_bridge".to_owned(),
+            executable: String::new(),
+            executable_identity: String::new(),
+            default_model: "owner/model-0".to_owned(),
+            interactive: true,
+            turn_interrupt: agentsassemble_domain::ProviderTurnInterrupt::Unsupported,
+            startable: true,
+            available: true,
+            discovery_status: "ready".to_owned(),
+            catalog_source: "discovered".to_owned(),
+            discovery_error_code: String::new(),
+            discovery_error: String::new(),
+            credential_available: true,
+            custom_endpoint: false,
+            custom_model: false,
+            login_supported: false,
+            update_supported: false,
+            usage_supported: false,
+            controls: vec![ProviderControl {
+                key: "model".to_owned(),
+                label: "Model".to_owned(),
+                kind: "combobox".to_owned(),
+                options,
+                default_value: "owner/model-0".to_owned(),
+            }],
+        }],
+    };
+    let mut second = catalog.providers[0].clone();
+    "llmgateway".clone_into(&mut second.id);
+    "llm_gateway_api".clone_into(&mut second.provider_kind);
+    catalog.providers.push(second);
+    catalog
 }

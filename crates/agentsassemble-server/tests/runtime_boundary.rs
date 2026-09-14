@@ -606,6 +606,14 @@ async fn websocket_snapshot_is_bound_to_the_private_ticket_scope_and_finite_curs
         .unwrap_or_else(|error| panic!("send bounded subscription: {error}"));
     let receipt = receive_raw_json(&mut socket).await;
     assert_eq!(receipt["op"], "subscribed");
+    let catalog = receive_raw_json(&mut socket).await;
+    assert_eq!(catalog["op"], "provider_catalog_updated");
+    assert!(
+        serde_json::to_vec(&catalog)
+            .unwrap_or_else(|error| panic!("encode catalog frame: {error}"))
+            .len()
+            <= MAX_ROOM_SOCKET_MESSAGE_BYTES
+    );
     let raw_snapshot = receive_text(&mut socket).await;
     let snapshot: Value = serde_json::from_str(&raw_snapshot)
         .unwrap_or_else(|error| panic!("decode bounded snapshot: {error}"));
@@ -618,7 +626,7 @@ async fn websocket_snapshot_is_bound_to_the_private_ticket_scope_and_finite_curs
 }
 
 #[tokio::test]
-async fn websocket_snapshot_carries_one_large_provider_catalog_projection() {
+async fn websocket_subscription_carries_a_separate_large_provider_catalog_projection() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let database_url = format!(
@@ -638,7 +646,7 @@ async fn websocket_snapshot_carries_one_large_provider_catalog_projection() {
 
     assert!(encoded.len() <= MAX_ROOM_SOCKET_MESSAGE_BYTES);
     assert_eq!(
-        snapshot["provider_catalog"]["providers"][0]["controls"][0]["options"]
+        socket.initial_catalog.as_ref().unwrap_or_else(|| panic!("initial catalog missing"))["providers"][0]["controls"][0]["options"]
             .as_array()
             .map(Vec::len),
         Some(229)

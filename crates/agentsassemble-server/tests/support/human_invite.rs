@@ -261,6 +261,10 @@ fn canonical_now() -> DateTime<Utc> {
 }
 
 pub async fn start(store: SqliteStore) -> RunningServer {
+    start_with_catalog(store, ProviderCatalog::default()).await
+}
+
+pub async fn start_with_catalog(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("bind human invite runtime: {error}"));
@@ -272,7 +276,7 @@ pub async fn start(store: SqliteStore) -> RunningServer {
     let state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
-        ProviderCatalogService::fixed(ProviderCatalog::default()),
+        ProviderCatalogService::fixed(catalog),
     )
     .await
     .unwrap_or_else(|error| panic!("build human invite app state: {error}"));

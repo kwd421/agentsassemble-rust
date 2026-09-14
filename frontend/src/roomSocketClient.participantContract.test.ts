@@ -40,7 +40,7 @@ async function expectSnapshotRejected(
   sockets[0].open();
   const frames = handshakeFrames(0, 0);
   mutate(frames.snap);
-  sockets[0].receive(frames.receipt);
+  sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
   sockets[0].receive(frames.snap);
 
   await vi.waitFor(() =>
@@ -113,7 +113,7 @@ describe("Participant socket contract", () => {
     (frames.snap as { participants: unknown[] }).participants = [participant({
       participant_id: "connector-one", participant_type: "agent", role: "agent",
     })];
-    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
     sockets[0].receive(frames.snap);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     handle.close();
@@ -129,7 +129,7 @@ describe("Participant socket contract", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pending = handle.command("participant.role.update", {
@@ -162,7 +162,7 @@ describe("Participant socket contract", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     void handle.command("participant.role.update", {

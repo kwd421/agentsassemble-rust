@@ -1,5 +1,11 @@
 # Frontend/backend exposure map
 
+2026-09-15: signed0.1.47 confirms Cursor Auto read/reply twice and normal Stop,
+and resolves the earlier failed-Claude recovery Stop. Whole-source b09d3de4 then
+finds creation-modal uncertain retry, combined catalog/snapshot capacity, and safe
+start-failure Stop mismatch. Correct the existing form and transport/state owners;
+retain layout and visible controls, then verify actual packaged paths.
+
 2026-09-15 signed0.1.46: vote/custom-channel forms now retain the transport's exact
 retry after an uncertain result. Existing inputs, buttons and layout stay in place;
 unchanged resubmission confirms the original request and edited text starts a new
@@ -737,3 +743,9 @@ cutoff manager invite create/revoke was not made reachable through fake host
 authority. The backend controls, exact private-control tickets, and native desktop
 manager-invite bridge and copied controller/UI activation are implemented and
 packaged-verified.
+
+Packaged0.1.48 (2026-09-15): unchanged AgentCreateModal now recovers the exact
+uncertain request for both add-only and add-and-start; each retains one session and
+one stored receipt. Normal start/Stop, initial split catalog/snapshot and model
+refresh pass. Existing layout and upper button rail are unchanged. Final review
+and latest runtime correction verification remain pending; see VERIFICATION.md.

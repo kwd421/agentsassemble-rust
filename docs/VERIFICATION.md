@@ -1,5 +1,40 @@
 # Verification Contract
 
+## Whole-source b09d3de4 final review (2026-09-15)
+
+Corrections now separate the initial complete catalog frame from room metadata at
+surface revision14. The UI combines the two validated frames only after the exact
+snapshot receipt matches. The populated-catalog test creates/configures64 persona
+sessions, proves their old combined encoding exceeds256KiB, and confirms both
+bounded wire frames across two subscriptions and reopened storage. The catalog is
+170–192KiB, with two240-option gateways, and no models are dropped. The first
+fixture attempt stopped at an insufficient-size setup assertion; it was corrected
+before claiming the aggregate case. Frontend admission tests cover missing, invalid,
+duplicate catalog and live-update/reconnect; no ready callback occurs prematurely.
+
+Creation modal baseline fails both add-only and add-and-start exact retry cases.
+The existing transport retry is now retained for an unchanged form, survives a
+retry connection error and is discarded on changed input or form close. All3 new
+modal tests and existing25 modal tests pass. Full frontend runs876 passing with one
+surface-version digest fixture failure; updating its expected digest preserves the
+downgrade rejection test and all9 directory-contract cases pass, covering877 tests.
+Production TypeScript/build/CSS pass. Confirmed-start-failure Stop baseline rejects
+runtime_handle_unavailable; corrected persistence338 pass, including exact stop
+replay and subsequent Start. Server full-suite, Clippy and signed0.1.48 validation
+are in progress; neither these corrections nor the earlier Cursor/Stop commits are
+claimed approved by the frozen b09d3de4 review.
+
+Pro completes46m25s with REVISE High1/Medium1/Low1; the entire final answer is read.
+H1 constructs valid179,527-byte catalog plus64 bounded persona sessions; required
+snapshot totals328,070 bytes against262,144. Current TypeScript validators accept
+it. Rust aggregate execution was not run by the reviewer; the existing capacity
+fixture has an empty catalog. M1 runs extracted real creation UI functions and socket
+with controlled transport, observing a new ID on unchanged resubmission. L1 traces
+confirmed startup failure to empty runtime custody and an enabled Stop that rejects.
+This differs from the failed-turn correction188ba086. Python19 pass; providerJS10
+pass/1 missing-SDK failure. Rust, full frontend, packaged and providers are not
+reviewer-executed passes. Latest corrections and whole-source re-review remain.
+
 ## Cursor session policy and confirmed-failure Stop correction (2026-09-15)
 
 Signed0.1.45 Cursor native tool results reject both read_discussion calls despite
@@ -11320,3 +11355,67 @@ After both normal quits, Computer Use was reset and only this run's bundle,
 configuration directory, Application Support, Caches and WebKit directories were
 removed. The in-app Pro review tab was preserved and reacquired. Artifact maintenance
 passes and retains useful Cargo output. No broader mobile acceptance is claimed.
+
+## Whole-review corrections packaged 0.1.48 (2026-09-15)
+
+Signed0.1.48 loads the revision14 catalog/snapshot handshake with retained rooms,
+transcript and16 sessions. The original confirmed-start-failure session
+codex-5c724da7-befa-5a50-b03a-0c9c73145523 now accepts normal Stop; the UI and
+database show stopped, empty last_error_code and recovery_required=false.
+
+The actual Codex0.147.0 login-status/model commands reject the current configuration
+with invalid map/boolean in features. The existing official in-app update to0.154.0
+succeeds and refreshes model selection without changing user configuration.
+For agent creation, hold only exact verification server41610 until the unchanged
+form exposes outcome uncertainty, then resume it and retry that same form. Both
+add-only and add-and-start close successfully with one session and one creation
+receipt each: add-only session codex-630908a2-79d8-5b97-8c08-0e158e382b89, request
+a692bbcd-0aca-4fee-863c-869472df107d; start session
+codex-0025f75e-5c08-5708-89cf-fe307ccbee28, request
+32df7a32-2326-4bf3-90d7-76ebbaa8cf37. The latter reaches Idle with one native
+session01a0a0c9-20c7-7f90-a97c-2b4f2666594b. Normal Stop shows stopped and
+exact children57662/57856/57911/57936/57937 are absent. A shorter43-second hold
+on an earlier add-only request recovered automatically; it is not manual-retry proof.
+No verification server remains paused.
+
+The full server suite finds a separate reproducible failed-turn error-custody race:
+StopConfirmed discards active-turn results before persistence completion. Baseline
+full suite17/18 and two focused runs fail, emitting provider_runtime_gone instead
+of the actual typed failure. Retain the existing exact turn in StopConfirmed until
+durable release. The unchanged failed/interrupted actual-socket scenario now passes.
+Provider and full server suites, Clippy and updated signed package remain pending.
+
+Provider259, native36, all-feature workspace Clippy and unchanged gates pass.
+Signed0.1.49 restores19 sessions and retained history, refreshes the actual Codex
+catalog, leaves/re-enters the room and exits normally; app66439/supervisor66577/
+server66585 are absent. Full server verification then stalls in the shared
+agent-session boundary binary with no provider child alive. Stop retaining empty
+turn slots for ordinary operator/shutdown stops: install a typed failure atomically
+only on owned failed-turn cleanup. The exact test binary was terminated to allow
+remaining independent binaries to finish; serialized boundary verification and
+affected provider checks now run on the correction. No full server pass is claimed.
+
+The isolated canonical-removal path completes all kick/readd/export/normal-shutdown
+steps in16.01s. The earlier full/serialized boundary runs were interrupted before
+completion after appearing stalled; they do not prove a deadlock. The atomic
+failed-result change preserves a concrete custody invariant independently of that
+unconfirmed timing diagnosis. Remove diagnostic prints and complete the full suite
+without treating a temporarily unchanged log as a failure. The separate raw
+room-directory fixture now consumes the initial catalog frame; all4 pass. Human
+deadline fixture3 pass with a joined blocking guard that inhibits Tokio automatic
+clock advancement during real I/O; the manual expiry and idle bounds are unchanged.
+
+Latest all-feature server run passes274 tests across51 test/doc-test targets, with
+no interrupted target or failure. Final provider259 and all-feature workspace
+Clippy/architecture/policy19/format/diff pass. Logs: /tmp/aa-hml-server-complete.log,
+/tmp/aa-retained-final-provider.log, /tmp/aa-final-slice-{clippy,gates}.log.
+
+Signed0.1.50 finds a distinct native Codex idle-thread persistence limitation:
+a newly created thread with zero turns cannot resume after Stop (native response
+-32600, no rollout found); both legacy and paginated history modes reproduce.
+A native thread/name/set checkpoint then normal process exit permits exact-ID
+resume of the same empty thread. No replacement thread fallback is used. This
+needs an attachment-owner correction and its packaged regression before review.
+The old gRPC verification's removed temporary workspace correctly rejects resume;
+that separate rejected attempt is not a provider-persistence failure. Both failed
+app attempts are normally stopped; app75069/supervisor75221/server75231 are absent.

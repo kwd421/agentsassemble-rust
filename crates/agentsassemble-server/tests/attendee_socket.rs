@@ -210,7 +210,7 @@ async fn verify_started_and_result(peer: &mut Peer, turn: &Value) {
 async fn departed_external_runtime_stays_pending_until_its_cleanup_report_is_published()
 -> TestResult {
     for self_leave in [false, true] {
-        departed_cleanup(self_leave).await?;
+        Box::pin(departed_cleanup(self_leave)).await?;
     }
     Ok(())
 }

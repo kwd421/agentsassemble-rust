@@ -487,3 +487,55 @@ change. The regression must exercise Cursor configuration rather than replacing
 its policy with an independently constructed passing value. Verify qualified read,
 foreign/unknown/conflicting identity, inactive observation and catalog rejection,
 then actual packaged Auto room read, publication, follow-up and normal Stop.
+
+## Aggregate snapshot and creation retry correction (2026-09-15)
+
+Completed whole-source Pro at b09d3de4 finds valid192KiB catalogs and64 bounded
+persona sessions can exceed the256KiB snapshot. The existing capacity test used
+an empty catalog. Separate initial catalog delivery from room metadata under an
+explicit subscription contract; validate both before exposing the room as ready.
+Keep the complete catalog, persisted sessions, frame bound and exact room lifetime.
+A missing or malformed component must fail closed, not substitute an empty catalog.
+Verify populated catalogs with maximum session/persona capacity across subscription,
+reconnect, catalog update and reopened storage, plus frontend handshake ordering.
+
+The creation form must retain the existing socket retry for an unchanged creation
+request, including add-only and add-and-start. Changed settings are a new intent;
+closing the form discards the retained form operation. Preserve native controls,
+busy state, room-instance checks and server-owned creation/start receipts. Verify
+real modal retry and edited request, then packaged uncertain creation without a
+second session or repeated start effect.
+
+Confirmed start failure is separate from failed-turn recovery: its durable state is
+Unavailable, Error, disabled, inactive, without runtime custody or lifecycle intent.
+Use the established owner state to finalize explicit Stop with no external effect.
+Retained or uncertain startup custody must continue to require its exact cleanup.
+Verify safe-start-failure Stop/replay/new Start and retained-custody rejection.
+
+## Confirmed failed-turn result custody (2026-09-15)
+
+The actual server boundary reproducibly loses the typed failed-turn result when
+the provider adapter confirms process stop: replacing Running with StopConfirmed
+drops its active turn before retention, allowing live reconciliation to publish
+runtime-gone instead. Preserve that exact turn and its result through confirmed
+stop until the durable completion releases custody. Do not infer a successful
+turn, weaken timeout assertions, or permit another runtime before checkpoint.
+Acceptance: failed/interrupted native completion publishes no tentative message
+and preserves its typed error through both normal completion and recovery.
+
+Retain a turn in StopConfirmed only for the owned failed-turn completion, with its
+typed confirmed-stop error installed atomically under the existing runtime lock.
+Ordinary operator/shutdown stops must still signal RuntimeGone and relinquish
+active-turn ownership; retaining their empty result would block reconciliation.
+
+## Codex empty-thread persistence before attachment (2026-09-15)
+
+The native CLI0.154.0 returns an ID from thread/start but does not persist an empty
+thread under either history mode. Normal Stop followed by Resume then fails with
+no rollout found. Native thread/name/set checkpoints the same ID and allows exact
+resume without a user turn. Complete that checkpoint before reporting attachment,
+retain its pending identity across cancellation/retry, and fail explicitly if it
+cannot be confirmed. Apply the selected display name at that native owner. Never
+replace a missing durable thread with a new thread or fabricate user conversation.
+Verify no duplicate thread/start, confirmed-name failure handling, and actual idle
+Start/Stop/restart/Resume preserving the same native ID.

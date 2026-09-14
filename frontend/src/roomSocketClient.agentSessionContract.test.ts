@@ -22,7 +22,7 @@ async function openReadyHarness(errors: RoomSocketSayError[]) {
   await flushPromises();
   harness.sockets[0].open();
   const frames = handshakeFrames(0, 0);
-  harness.sockets[0].receive(frames.receipt);
+  harness.sockets[0].receive(frames.receipt); harness.sockets[0].receive(frames.catalog);
   harness.sockets[0].receiveRaw(frames.rawSnapshot);
   await vi.waitFor(() => expect(harness.handle.ready()).toBe(true));
   return harness;
@@ -147,7 +147,7 @@ describe("Agent Session socket contract", () => {
     expect(applyParticipantEvents([], [admitted])).toEqual([joined]);
     expect(agentSessionUpdatesFromEvents([admitted])).toEqual([external]);
     const frames = handshakeFrames(1, 1);
-    const snapshot = JSON.parse(frames.rawSnapshot);
+    const snapshot = { ...JSON.parse(frames.rawSnapshot), provider_catalog: frames.catalog.catalog };
     Object.assign(snapshot, { participants: [joined], agent_sessions: [external], events: [admitted] });
     expect(snapshotValidationError(snapshot, { expectedRoomId: "general", currentLastSeq: 0 })).toBeNull();
     const errors: RoomSocketSayError[] = [];

@@ -89,7 +89,6 @@ const GENERATED_SNAPSHOT_KEYS = [
   "has_more_before",
   "resume_gap",
   "snapshot_mode",
-  "provider_catalog",
   "capabilities",
 ] as const;
 const SNAPSHOT_KEYS: ExactGeneratedKeys<RoomSnapshot, typeof GENERATED_SNAPSHOT_KEYS> =
@@ -495,6 +494,17 @@ export function commandAckResultIsValid(
   return true;
 }
 
+// The wire snapshot and its separately validated catalog are one admitted view.
+export function snapshotWithCatalog(value: unknown, catalog: import("../types/generated/ProviderCatalog").ProviderCatalog): Record<string, unknown> {
+  try {
+    const snapshot = strictRecord(value, "room snapshot");
+    assertExactKeys(snapshot, ["op", ...SNAPSHOT_KEYS], "room snapshot");
+    return { ...snapshot, provider_catalog: catalog };
+  } catch {
+    throw new RoomSocketSayError("Room snapshot did not match the canonical browser schema; reconnecting.", "snapshot_schema_invalid");
+  }
+}
+
 export function snapshotValidationError(
   value: unknown,
   {
@@ -504,7 +514,7 @@ export function snapshotValidationError(
 ): RoomSocketSayError | null {
   if (isRecord(value)) {
     try {
-      assertExactKeys(value, ["op", ...SNAPSHOT_KEYS], "room snapshot");
+      assertExactKeys(value, ["op", ...SNAPSHOT_KEYS, "provider_catalog"], "room snapshot");
       parsePublicRoom(value.room, expectedRoomId);
     } catch {
       return new RoomSocketSayError(

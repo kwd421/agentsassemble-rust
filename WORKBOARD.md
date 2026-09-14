@@ -2,6 +2,17 @@
 
 ## Active work
 
+- Whole-source b09d3de4 completed46m25s, REVISE H1/M1/L1; fully read.
+  All three owner corrections now pass frontend877, persistence338, provider259,
+  full all-feature server274, native36 and unchanged source gates. Signed0.1.48
+  proves both exact manual creation retries and failed-start Stop;0.1.49 proves
+  catalog refresh/re-entry/restart. The independent failed-turn result-loss fix
+  now preserves its typed result atomically through process exit.
+  Existing empty Codex native threads cannot resume: actual CLI returns no rollout
+  found after idle Stop. A native thread/name/set checkpoint preserves the same
+  empty thread across process restart. Implement/verify this owner contract before
+  the next unrestricted whole-source review. Current old archives are superseded.
+
 - Cursor Auto native calls were rejected because runtime spawn reused the catalog's
   default Reject policy. Exact qualified tool identity was present. Pass RoomTools
   explicitly for real sessions and Reject explicitly for catalog discovery. The

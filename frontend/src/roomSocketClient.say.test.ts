@@ -34,7 +34,7 @@ describe("room socket message attachments", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 
@@ -87,7 +87,7 @@ describe("room socket message attachments", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const valid = attachment("a");
@@ -110,7 +110,7 @@ describe("room socket message attachments", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 

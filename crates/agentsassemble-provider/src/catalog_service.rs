@@ -27,8 +27,8 @@ use crate::{
     selection::{ProviderSelection, ProviderSelectionError},
 };
 
-// The complete public catalog must leave a quarter of the 256 KiB WebSocket
-// frame for room metadata; oversized catalogs fail closed before publication.
+// The complete catalog has its own bounded frame, including during subscription.
+// Keep margin for its envelope; oversized catalogs fail closed before publication.
 const MAX_PUBLIC_CATALOG_BYTES: usize = 192 * 1024;
 const PROVIDER_CACHE_TTL: Duration = Duration::from_hours(24);
 

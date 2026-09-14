@@ -20,7 +20,7 @@ describe("owned provider request projection", () => {
     });
     const { result, rerender } = renderHook(({ roomId }) => useCanonicalRoom({ roomId, viewerParticipantId: "operator-local", auth: { kind: "host", meetingId: roomId }, serverSurface: TEST_SERVER_PRODUCT_SURFACE, openSocket }), { initialProps: { roomId: "general" } });
     await waitFor(() => expect(openSocket).toHaveBeenCalledOnce());
-    const snapshot = { ...handshakeFrames(0, 0).snap, provider_requests: [pendingRequest] } as RoomSocketSnapshot;
+    const snapshot = { ...handshakeFrames(0, 0).snap, provider_catalog: handshakeFrames(0, 0).catalog.catalog, provider_requests: [pendingRequest] } as RoomSocketSnapshot;
     act(() => { handlers.onRoomSnapshot?.(snapshot, "http://127.0.0.1:43123"); });
     expect(result.current.providerRequests).toEqual([pendingRequest]);
     const resolving = { ...baseEvent, type: "provider_request_resolving", provider_request_id: pendingRequest.request.provider_request_id } as RoomEvent;

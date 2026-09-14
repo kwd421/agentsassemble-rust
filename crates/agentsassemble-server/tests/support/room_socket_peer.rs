@@ -8,6 +8,7 @@ use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 
 pub struct RoomSocketPeer<S> {
     socket: WebSocketStream<S>,
+    pub initial_catalog: Option<Value>,
 }
 
 impl<S> RoomSocketPeer<S>
@@ -15,7 +16,10 @@ where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
     pub fn new(socket: WebSocketStream<S>) -> Self {
-        Self { socket }
+        Self {
+            socket,
+            initial_catalog: None,
+        }
     }
 
     pub async fn subscribe(&mut self, cursor: i64) -> Value {
@@ -44,11 +48,31 @@ where
     }
 
     pub async fn receive_text(&mut self) -> String {
-        receive_wire_text(&mut self.socket).await
+        let raw = receive_wire_text(&mut self.socket).await;
+        Box::pin(self.accept_initial_catalog(&raw, None)).await;
+        raw
     }
 
     async fn receive_text_with_timeout(&mut self, timeout: Duration) -> String {
-        receive_wire_text_with_timeout(&mut self.socket, timeout).await
+        let raw = receive_wire_text_with_timeout(&mut self.socket, timeout).await;
+        Box::pin(self.accept_initial_catalog(&raw, Some(timeout))).await;
+        raw
+    }
+
+    // Subscription consists of receipt, catalog and snapshot. Keep the catalog
+    // independently available; never merge it into the actual snapshot wire bytes.
+    async fn accept_initial_catalog(&mut self, raw: &str, timeout: Option<Duration>) {
+        if parse_json(raw)["op"] != "subscribed" {
+            return;
+        }
+        let wire = match timeout {
+            Some(timeout) => receive_wire_text_with_timeout(&mut self.socket, timeout).await,
+            None => receive_wire_text(&mut self.socket).await,
+        };
+        assert!(wire.len() <= agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES);
+        let frame = parse_json(&wire);
+        assert_eq!(frame["op"], "provider_catalog_updated");
+        self.initial_catalog = Some(frame["catalog"].clone());
     }
 
     pub async fn send_binary(&mut self, bytes: Vec<u8>) {

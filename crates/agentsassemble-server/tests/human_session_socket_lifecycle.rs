@@ -43,6 +43,11 @@ async fn durable_session_deadline_closes_an_active_socket() {
     )
     .await;
 
+    // Keep Tokio from auto-advancing past the manually selected deadline while
+    // real socket readiness is still pending. Dropping the sender also releases
+    // the blocking guard if an assertion unwinds.
+    let (release_clock, clock_held) = std::sync::mpsc::channel::<()>();
+    let clock_guard = tokio::task::spawn_blocking(move || clock_held.recv());
     tokio::time::pause();
     for nonce in 0..14 {
         tokio::time::advance(Duration::from_mins(4)).await;
@@ -65,6 +70,8 @@ async fn durable_session_deadline_closes_an_active_socket() {
         "session socket stayed open past its durable expiry deadline"
     );
     server.stop().await;
+    drop(release_clock);
+    let _ = clock_guard.await;
 }
 
 #[tokio::test]

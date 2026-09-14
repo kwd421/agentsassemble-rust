@@ -17,6 +17,7 @@ import {
   isSequence,
   publicRoomEventIsValid,
   snapshotValidationError,
+  snapshotWithCatalog,
 } from "./lib/roomSocketValidation";
 import {
   RoomSocketSayError,
@@ -303,6 +304,7 @@ export function openRoomSocket(
       socket = currentSocket;
       transportReady = false;
       let receipt: SubscriptionReceipt | null = null;
+      let initialCatalog: import("./types/generated/ProviderCatalog").ProviderCatalog | null = null;
       let snapshotAccepted = false;
       let connectionEstablished = false;
       let connectionFailed = false;
@@ -439,9 +441,22 @@ export function openRoomSocket(
           receipt = verifiedReceipt;
           return;
         }
-        if (!snapshotAccepted) {
+        if (!initialCatalog) {
           const msg = JSON.parse(raw) as unknown;
-          verifyBoundSnapshot(msg, receipt);
+          if (!isRecord(msg) || msg.op !== "provider_catalog_updated") {
+            throw new RoomSocketSayError("Initial provider catalog was missing.", "provider_catalog_invalid");
+          }
+          assertExactKeys(msg, ["op", "catalog"], "initial provider catalog");
+          if (!providerCatalogIsValid(msg.catalog)) {
+            throw new RoomSocketSayError("Initial provider catalog was invalid.", "provider_catalog_invalid");
+          }
+          initialCatalog = msg.catalog;
+          return;
+        }
+        if (!snapshotAccepted) {
+          const wireSnapshot = JSON.parse(raw) as unknown;
+          verifyBoundSnapshot(wireSnapshot, receipt);
+          const msg = snapshotWithCatalog(wireSnapshot, initialCatalog);
           if (!canUseOpenSocket()) return;
           const candidateRoomUid = isRecord(msg) && isRecord(msg.room) ? msg.room.room_uid : null;
           if (acceptedRoomUid !== null && candidateRoomUid !== acceptedRoomUid) {
@@ -458,7 +473,7 @@ export function openRoomSocket(
             currentLastSeq: lastSeq,
           });
           if (validationError) throw validationError;
-          const snapshot = msg as RoomSocketSnapshot;
+          const snapshot = msg as unknown as RoomSocketSnapshot;
           if (
             handlers.onRoomSnapshot?.(
               snapshot,

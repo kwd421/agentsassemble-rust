@@ -113,7 +113,6 @@ function snapshot(cursor: number) {
     has_more_before: false,
     resume_gap: false,
     snapshot_mode: "initial",
-    provider_catalog: { status: "ready", catalog_revision: "cat-1", providers: [] },
     capabilities: CAPABILITIES,
   };
 }
@@ -142,6 +141,7 @@ export function handshakeFrames(
     receipt,
     snap,
     rawSnapshot,
+    catalog: { op: "provider_catalog_updated", catalog: { status: "ready", catalog_revision: "cat-1", providers: [] } },
   };
 }
 
