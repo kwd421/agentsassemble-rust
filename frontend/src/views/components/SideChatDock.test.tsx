@@ -17,7 +17,7 @@ it("retains a rejected draft, confirms a successful send, and disables the read-
     const [open, setOpen] = useState(false);
     const chat = useRoomSideChat("general", { kind: "local" });
     useEffect(() => chat.connect("uid"), [chat.connect]);
-    return <SideChatDock open={open} onOpenChange={setOpen} chat={chat} socket={socket} canPost={canPost} mentionables={[]} />;
+    return <><button onClick={() => setOpen(true)}>사이드챗 열기</button><SideChatDock open={open} onOpenChange={setOpen} chat={chat} socket={socket} canPost={canPost} mentionables={[]} /></>;
   }
   const view = render(<Fixture canPost />);
   fireEvent.click(screen.getByRole("button", { name: "사이드챗 열기" }));
@@ -29,7 +29,7 @@ it("retains a rejected draft, confirms a successful send, and disables the read-
   expect((input as HTMLTextAreaElement).value).toBe("keep my text");
   fireEvent.click(screen.getByRole("button", { name: "사이드챗 닫기" }));
   expect(screen.queryByRole("dialog", { name: "사이드챗" })).toBeNull();
-  expect(document.activeElement).toBe(screen.getByRole("button", { name: "사이드챗 열기" }));
+  expect(screen.queryByRole("textbox", { name: "비공식 사이드챗 입력" })).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "사이드챗 열기" }));
   input = screen.getByRole("textbox", { name: "비공식 사이드챗 입력" });
   expect((input as HTMLTextAreaElement).value).toBe("keep my text");

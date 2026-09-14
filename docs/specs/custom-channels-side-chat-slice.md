@@ -238,15 +238,17 @@ formatting, diff and artifact gates pass. Packaged UI acceptance remains pending
 
 ## Side-chat frontend connection
 
-The human dock has a compact entry below the active channel. It opens a native
-modal conversation panel with its own scrolling transcript and fixed composer;
-expansion never consumes the main transcript layout. This replaces the original
-stacked implementation after packaged 390px/420px inspection exposed collapsed
-message and input areas. The panel has at least 16px outer and 24px inner margins,
-Escape/outside/close dismissal, background inertness and focus restoration. It restores the original human-only notice, plain-text
-mention/emoji insertion and scoped drafts. Current canonical membership, mute and
-message capability control its composer; failure retains the draft and success
-clears it only after the server receipt. No author name is supplied by the client.
+User correction (2026-09-14): preserve the existing frontend unless a required
+behavior or observed usability issue needs a change. The lower opener/modal was
+not accepted. Side chat belongs beside the main conversation, without making that
+conversation inert. The top action rail stays fixed in place while room information
+and side chat switch in the right column. Opening either panel must resize the
+main transcript and composer instead of covering them. The running Discord app
+confirms this shared-width layout and unchanged header control positions.
+Acceptance includes panel switching, independent scrolling and composing, draft
+preservation, header search/pins access, and visible message/input bounds in the
+signed app. Existing side-chat authorization, live projection and receipt ownership
+remain unchanged; no server or persistence mechanism is added.
 Drafts remain private memory scoped to HTTP authority, room ID and room UID.
 
 The existing canonical room socket forwards its accepted UID, private updates and

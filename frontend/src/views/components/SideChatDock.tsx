@@ -19,8 +19,6 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
   mentionables: Mentionable[];
 }) {
   const [sendError, setSendError] = useState({ scope: chat.scope, message: "" });
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const openerRef = useRef<HTMLButtonElement>(null);
   const messagesRef = useRef<HTMLDivElement>(null);
   const atBottom = useRef(true);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -50,13 +48,7 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
   useLayoutEffect(() => {
     if (!open) return;
     atBottom.current = true;
-    const dialog = dialogRef.current;
-    dialog?.showModal();
     inputRef.current?.focus();
-    return () => {
-      dialog?.close();
-      openerRef.current?.focus();
-    };
   }, [open]);
   useLayoutEffect(() => {
     const messages = messagesRef.current;
@@ -84,23 +76,13 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
       if (currentScope.current === scope) setSendError({ scope, message: cause instanceof Error ? cause.message : "메시지를 보내지 못했어요." });
     }
   }
-  return <section aria-label="비공식 사이드챗" style={{ flexShrink: 0, borderTop: "1px solid var(--color-panel-soft)", padding: "0 24px", background: "var(--color-panel-bg)" }}>
-    <button ref={openerRef} type="button" aria-haspopup="dialog" aria-expanded={open} aria-label="사이드챗 열기" onClick={() => onOpenChange(true)} style={{ display: "flex", alignItems: "center", gap: 8, minHeight: 44, width: "100%", textAlign: "left" }}>
-      <MessageSquare size={17} /><span>사이드챗</span><span style={{ marginLeft: "auto", fontSize: 11, color: "var(--color-text-muted)" }}>사람 전용</span>
-    </button>
-    {open && <dialog ref={dialogRef} aria-label="사이드챗" className="dc-create-channel-modal"
-      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(480px, calc(100vw - 32px))", height: "min(680px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)", padding: 0, display: "flex", flexDirection: "column", gap: 0, overflow: "hidden", color: "var(--color-text-primary)" }}
-      onCancel={(event) => { event.preventDefault(); onOpenChange(false); }}
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onOpenChange(false);
-      }}>
-      <header style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 24px", flexShrink: 0, borderBottom: "1px solid var(--color-panel-soft)" }}>
+  if (!open) return null;
+  return <section aria-label="비공식 사이드챗" style={{ display: "flex", flexDirection: "column", flex: 1, minHeight: 0, minWidth: 0, overflow: "hidden" }}>
+      <header style={{ display: "flex", alignItems: "center", gap: 12, padding: "12px 16px", flexShrink: 0, borderBottom: "1px solid var(--color-panel-soft)" }}>
         <MessageSquare size={20} /><h2 style={{ flex: 1, fontWeight: 700 }}>사이드챗</h2>
         <button type="button" aria-label="사이드챗 닫기" onClick={() => onOpenChange(false)} style={actionStyle}><X size={20} /></button>
       </header>
-      <div ref={messagesRef} className="chat-scroll" aria-label="사이드챗 메시지" style={{ overflowY: "auto", minHeight: 0, flex: 1, padding: "16px 24px" }}
+      <div ref={messagesRef} className="chat-scroll" aria-label="사이드챗 메시지" style={{ overflowY: "auto", minHeight: 0, flex: 1, padding: "16px" }}
         onScroll={(event) => { const node = event.currentTarget; atBottom.current = node.scrollHeight - node.scrollTop - node.clientHeight < 24; }}>
         <p style={{ fontSize: 12, color: "var(--color-text-muted)", marginBottom: 16 }}>에이전트에게 보이지 않는 대화예요. 최근 24시간·최대 200개를 보관하며 서버를 다시 켜면 사라져요.</p>
         {chat.snapshot?.messages.map((message) => <article key={message.id} style={{ padding: "8px 0", overflowWrap: "anywhere" }}>
@@ -110,7 +92,7 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
         {chat.snapshot?.messages.length === 0 && <p>아직 메시지가 없어요.</p>}
         {!chat.snapshot && !chat.error && <p role="status">사이드챗 연결을 기다리고 있어요.</p>}
       </div>
-      <footer style={{ flexShrink: 0, padding: "12px 24px 16px", borderTop: "1px solid var(--color-panel-soft)", display: "flex", flexDirection: "column", gap: 8 }}>
+      <footer style={{ flexShrink: 0, padding: "12px 16px", borderTop: "1px solid var(--color-panel-soft)", display: "flex", flexDirection: "column", gap: 8 }}>
       {(chat.error || error) && <p role="alert">{error || chat.error}</p>}
       {chat.error && <button type="button" className="dc-agent-create-secondary" onClick={() => socket?.resync?.()} style={{ minHeight: 44 }}>다시 연결</button>}
       {!canPost && <p style={{ fontSize: 12 }}>이 방에서는 사이드챗을 보기만 할 수 있어요.</p>}
@@ -126,6 +108,6 @@ export default function SideChatDock({ chat, socket, canPost, mentionables, open
         <button type="button" aria-label="사이드챗 보내기" disabled={disabled || !value.trim() || tooLong} onClick={() => void send()} style={actionStyle}><Send size={17} /></button>
       </div>
       </footer>
-    </dialog>}
+
   </section>;
 }

@@ -1,5 +1,53 @@
 # Verification Contract
 
+
+## Restore the shared chat/right-panel layout (2026-09-14)
+
+The user requires the existing frontend to remain the baseline except for required
+behavior additions or demonstrated usability corrections. The lower side-chat
+opener/modal and the compact member panel covering the main chat were rejected.
+The running Discord app was inspected directly: opening its member list retains
+the header controls/search in place and reduces the main transcript/composer width.
+The reference app was returned to its original closed-member-list state.
+
+At `683bb03c`, native packaged 0.1.33 visibly covered the header action rail and
+main chat with its 761–1279px fixed member panel, leaving an X in the upper area.
+The roster itself existed; this was presentation overlap, not missing room data.
+`AppView` now owns the shared-width conversation/right-panel layout and existing
+panel selection; `ChannelHeader` spans that area; `SideChatDock` is an inline
+right-column conversation using its unchanged private projection/receipt owner.
+No additional socket, polling, persistence, provider or backend authority is added.
+
+Signed 0.1.34 actual interaction and screenshots confirm:
+- Existing integration messages restore, including the earlier DeepSeek response;
+  no new provider turn was executed.
+- Header notification/pin/side-chat/member/search controls remain visible with
+  room information or side chat open.
+- In the disposable Antigravity Final 683bb03c room, main and side-chat drafts can
+  be entered and sent independently while both transcripts/composers remain visible.
+- Switching to room information and back preserves the side-chat draft.
+- A native Window > Move & Resize > Left operation produces a narrower desktop
+  window: main text wraps, neither composer is covered, and the header pin action
+  still opens its result. This is desktop evidence, not actual phone acceptance.
+- The window was restored and the exact app was normally quit.
+
+A follow-up changes closing side chat to leave the right column closed instead of
+reopening the prior member panel, and preserves the mobile-specific room-info
+entrance. Frontend 149 files / 859 tests pass after that change (36.66s).
+TypeScript/production generation and the unchanged CSS byte-cascade gate passed
+on both layout candidates. Signed 0.1.35 signature/version verification passes;
+actual app checks confirm side-chat close leaves both panels closed and restores
+main width, member open keeps the same top controls, room search returns the
+previous test message, and the existing custom channel retains its messages and
+fully visible composer. Restart preserves main chat while ephemeral side chat
+starts empty, as contracted. Normal Quit leaves none of its exact app36792,
+supervisor36833 or server36851 processes running. An unused
+Tailwind rule accidentally generated from the initial position keyword was removed
+at its source; no CSS verifier hash, gate limit or exception was changed.
+Architecture/source-growth, 19 policy/artifact tests, format and diff checks passed
+on the final candidate as well. No new full Rust/provider/whole-phase approval is
+inferred. Affected-source Pro review and other final acceptance remain open.
+
 Status: current real-client verification owner
 
 ## Stdio leave identity after retained receipts (2026-09-14)

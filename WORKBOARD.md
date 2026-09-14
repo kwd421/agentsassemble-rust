@@ -2,6 +2,18 @@
 
 ## Active work
 
+- Active frontend correction (2026-09-14): preserve existing UI except required
+  behavior additions or demonstrated usability fixes. Keep the top action rail
+  stable while the right panel changes; restore side chat beside the main chat.
+  The current compact fixed panel covers the transcript/composer. Replace that
+  overlap with shared-width layout, verify against the running Discord reference
+  and signed packaged interaction, and reconcile each change in
+  `docs/FRONTEND_BACKEND_GAPS.md`. Signed 0.1.34/0.1.35 now confirms shared-width
+  main/side chat, stable top actions, panel close/switch, drafts, search and custom
+  channel layout. Frontend859 and unchanged mandatory gates pass. The gap map
+  also reconciles omitted post-September-10 exposure changes. Final source review
+  and remaining acceptance are still open; this is not phase completion.
+
 - Current closeout handoff (2026-09-14): review source is GitHub repository
   `kwd421/agentsassemble-rust` at frozen `2135d5112d00f80996a5f6ce98762515049cfcb8`.
   Completed Pro Phase 1–3 and Phase 4–6 source verdicts are APPROVE

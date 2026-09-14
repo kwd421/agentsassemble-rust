@@ -15,7 +15,6 @@ import {
   Plus,
   UserPlus,
   UserRound,
-  X,
 } from "lucide-react";
 import { CHANNEL_SECTIONS, DeferredViewFallback } from "./appModel";
 import type { AppController } from "./useAppController";
@@ -103,6 +102,24 @@ export default function AppView({ controller }: { controller: AppController }) {
     }} />;
   const hasRoom = Boolean(activeRoom.meetingId);
   const canOpenSideChat = hasRoom && !guestExpired && !activeRoomDisconnected && !adminOpen && !friendsOpen;
+  const sideChatOpen = canOpenSideChat && sideChatScope === channelScope;
+  const roomInfoOpen = !mobileViewport && hasRoom && showMembers && membersOpen && !sideChatOpen;
+  const persistentRail = !mobileViewport && canOpenSideChat;
+  const panelStyle = { position: "relative", display: "flex", width: "clamp(220px, 32%, 300px)", minWidth: 0, marginTop: persistentRail ? 48 : 0, boxShadow: "none" } as const;
+  function toggleRoomInfo() {
+    if (sideChatOpen) {
+      setSideChatScope("");
+      if (!membersOpen) toggleMembers();
+    } else toggleMembers();
+  }
+  function setSideChatOpen(open: boolean) {
+    if (open && membersOpen) toggleMembers();
+    setSideChatScope(open ? channelScope : "");
+  }
+  function headerActionsFor(channelId: Parameters<typeof channelHeaderActions>[0]) {
+    return { ...channelHeaderActions(channelId), persistentRail, sideChatOpen,
+      onToggleSideChat: canOpenSideChat ? () => setSideChatOpen(!sideChatOpen) : undefined };
+  }
   return (
     <RoomSocketProvider socket={roomSocket}>
     <div
@@ -345,8 +362,9 @@ export default function AppView({ controller }: { controller: AppController }) {
         onKeyDown={adjustSidebarWidthWithKeyboard}
       />
 
+      <div style={{ display: "flex", position: "relative", flex: 1, minWidth: 0, minHeight: 0 }}>
       {/* Central channel column */}
-      <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" inert={mobileViewport && (mobileSidebarOpen || mobileRoomInfoOpen)}>
+      <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" style={{ paddingTop: persistentRail ? 48 : 0 }} inert={mobileViewport && (mobileSidebarOpen || mobileRoomInfoOpen)}>
         {hasRoom && canonicalRoom.room && <ProviderRequestsPanel key={`${canonicalRoom.room.room_uid}:${guestSession?.agentId || "operator-local"}`}
           requests={canonicalRoom.providerRequests} socket={canonicalRoom.socket} events={canonicalRoom.events}
           connected={canonicalRoom.connectionState === "connected"} canPost={canonicalRoom.capabilities["message.send"] === true} />}
@@ -391,9 +409,9 @@ export default function AppView({ controller }: { controller: AppController }) {
               }
               postingMode={lobbyPostingState.mode}
               composerDisabledReason={lobbyPostingState.disabledReason}
-              membersOpen={membersOpen}
-              onToggleMembers={toggleMembers}
-              headerActions={channelHeaderActions("lobby")}
+              membersOpen={roomInfoOpen}
+              onToggleMembers={toggleRoomInfo}
+              headerActions={headerActionsFor("lobby")}
               onOpenMobileSidebar={openMobileSidebar}
               onOpenMobileInfo={openMobileRoomInfo}
               appearance={activeAppearance}
@@ -428,9 +446,9 @@ export default function AppView({ controller }: { controller: AppController }) {
               messageSearch={roomMessageSearch} canPost={canPostHumanMessage}
               canPin={Boolean(canonicalRoom.capabilities["message.modify"])}
               participantProfiles={canonicalRoom.participantProfiles} mentionables={scopedMentionables}
-              searchLabel={activeRoom.label} membersOpen={membersOpen} onToggleMembers={toggleMembers}
+              searchLabel={activeRoom.label} membersOpen={roomInfoOpen} onToggleMembers={toggleRoomInfo}
               onOpenMobileSidebar={openMobileSidebar} onOpenMobileInfo={openMobileRoomInfo}
-              headerActions={channelHeaderActions(channel)} messageSearchScope={messageSearchScope}
+              headerActions={headerActionsFor(channel)} messageSearchScope={messageSearchScope}
               onMessageSearchScopeChange={setMessageSearchScope} messageSearchChannelLabels={messageSearchChannelLabels}
               pendingSearchTargetEventId={pendingMessageSearchTarget?.channelId === channel ? pendingMessageSearchTarget.eventId : ""}
               onSearchTargetHandled={() => setPendingMessageSearchTarget(null)}
@@ -440,11 +458,6 @@ export default function AppView({ controller }: { controller: AppController }) {
             <DeferredViewFallback />
           )}
         </Suspense>
-        {canOpenSideChat && <SideChatDock
-          open={sideChatScope === channelScope} onOpenChange={(open) => setSideChatScope(open ? channelScope : "")}
-          chat={controller.sideChat} socket={roomSocket}
-          canPost={canPostHumanMessage}
-          mentionables={scopedMentionables} />}
       </main>
 
       {hasRoom && mobileRoomInfoOpen && (
@@ -460,7 +473,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           guestLocked={guestLocked}
           onClose={closeMobileRoomInfo}
           onStartAddAgent={openAgentCreate}
-          onOpenSideChat={canOpenSideChat ? () => { closeMobileRoomInfo(); setSideChatScope(channelScope); } : undefined}
+          onOpenSideChat={canOpenSideChat ? () => { closeMobileRoomInfo(); setSideChatOpen(true); } : undefined}
           onInvite={guestLocked ? undefined : () => inviteRoom(activeRoom.id)}
           onOpenSettings={!guestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined}
           agentSessions={activeRoomAgentSessions}
@@ -488,22 +501,13 @@ export default function AppView({ controller }: { controller: AppController }) {
       {pairedRoomLifecycle.open && <RoomManagementModal controller={pairedRoomLifecycle} />}
 
       {/* Right panel */}
-      {hasRoom && showMembers && membersOpen && (
+      {roomInfoOpen && (
         <aside
           className="dc-members hidden shrink-0 xl:flex xl:flex-col"
           aria-label="방 연결 정보"
+          style={panelStyle}
           data-testid="room-right-panel"
         >
-          <div className="dc-right-panel-header-spacer">
-            <button
-              type="button"
-              className="dc-compact-panel-close"
-              onClick={toggleMembers}
-              aria-label="멤버 목록 닫기"
-            >
-              <X size={18} />
-            </button>
-          </div>
           <div className="dc-right-panel-tabs" role="tablist" aria-label="우측 패널">
             <button
               type="button"
@@ -549,6 +553,11 @@ export default function AppView({ controller }: { controller: AppController }) {
           </section>
         </aside>
       )}
+      {sideChatOpen && <aside aria-label="사이드챗 패널" style={{ ...panelStyle, flexShrink: 0, flexDirection: "column", borderLeft: "1px solid var(--color-panel-separator)", background: "var(--color-sidebar)" }}>
+        <SideChatDock open onOpenChange={setSideChatOpen}
+          chat={controller.sideChat} socket={roomSocket} canPost={canPostHumanMessage} mentionables={scopedMentionables} />
+      </aside>}
+      </div>
     </div>
     </RoomSocketProvider>
   );

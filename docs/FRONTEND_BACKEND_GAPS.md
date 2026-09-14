@@ -13,6 +13,45 @@ The product plan owns exclusions, phase order and final verification limits.
 
 ## Current retained exposure (2026-09-09)
 
+### Frontend corrections and acceptance boundaries (2026-09-14)
+
+The user requires preservation of the existing frontend wherever possible. Change
+it only to add a required behavior or correct poor usability; implementation
+convenience is not authorization to rearrange existing controls. The top button
+rail must remain in place while only the right-side panel opens, closes or changes
+content. Side chat must remain beside the main conversation so both are usable
+together. The source correction below now has scoped packaged evidence; final review is open.
+
+| Gap | Actual current behavior and source | Required correction / verification status |
+| --- | --- | --- |
+| Side-chat placement | `app/AppView.tsx` mounts `SideChatDock` below channel content; `views/components/SideChatDock.tsx` opens a modal. Lower placement entered in `6d1472d6`; `28229337` changed the expanded content to a modal while retaining the lower opener. | Restore side-by-side use of the main conversation and side chat. The previous "right panel" exposure description was incorrect. Observed in signed 0.1.33 at `683bb03c`; restored in signed 0.1.34/0.1.35 with simultaneous composing/sending and draft-preserving panel switches. Final source review pending. |
+| Top button rail with room information open | `app/AppView.tsx` adds a separate `dc-right-panel-header-spacer` with an X. Signed 0.1.33 screenshot shows the room panel open with an X in the upper area and the ordinary header actions no longer visible. The room roster itself is present; this is not an empty-data result. | Preserve the existing top controls and their usable placement across panel toggles; change only the right-side content. Signed 0.1.34/0.1.35 open/close screenshots now confirm the stable header and main/composer width reflow. Narrow desktop and custom-channel checks pass; final source review pending. |
+
+The earlier source-exposure table and passing functional checks do not establish
+acceptance of these layouts. The rejected side-chat placement had been recorded
+in `VERIFICATION.md` but was not reconciled here. A working-tree correction now shares the available width between the main chat
+and right panel and keeps the action rail above both. Signed 0.1.34 confirms
+simultaneous main/side-chat input and send, draft preservation across panel
+switching, retained header controls, and wrapping rather than overlap in a tiled
+desktop window. Signed 0.1.35 also confirms final close/reopen state, search, custom-channel
+layout and main-message restoration. Final-source review remains pending.
+
+### Post-September-10 exposure reconciliation
+
+The prior last update was `06df01d9`; later UI/native changes were recorded in
+`VERIFICATION.md` and their slice contracts but omitted from this map. The entries
+below reconcile that omission, without backdating the record or claiming a new
+independent verification run. Exact signed-build/test/review boundaries remain in
+those evidence owners.
+
+| Changes since `06df01d9` | Current entry and ownership | Recorded evidence / remaining limit |
+| --- | --- | --- |
+| `8f5f74f8`, `ecbede03`, `bfa62144`, `cd2474bb` | `AgentCreateModal`, `ProviderSetupActions`, `ProviderSetupPanel` and `ProviderUpdatePrompt`: confirmed authentication need starts login during creation; optional updates preserve the draft and pending operation across selection, with owned completion/readiness refresh. | Signed creation/login/update/cancel/retry flows are recorded in the operational-surfaces slice and VERIFICATION; real OAuth/installer completion remains unverified. Permanent setup buttons were rejected, not an accepted substitute. |
+| `d387f1ba`, `1fa4b658`, `114970f2`, `7a3d6359`, `295841b3` | `OwnComputerCreateModal`, `LocalAttendeePanel`, `localAttendee` API/native handoff: browser invitation continues into creation on the user's own computer; pending start retains cancellation and exact local runtime ownership. | Signed local/controlled remote admission, draft preservation, add-only/start/cancel/restart checks are recorded. Browser-to-OS dispatch and two physical computers are not proven by those checks. |
+| `550c7b5d` | `useCompanionInvites` and `CompanionInviteCard` use the accepted paired room-session authority for invitation and management; no borrowed host-native authority. | Paired issuance and cleanup corrections have scoped source and packaged evidence; the final split review remains separate. |
+| `a41b4f0c`, `2135d511` | Native `runtime_supervisor` and `local_runtime/control_exchange` retain outer shutdown and pending control-response custody; a normal ticket timeout cannot destroy valid recovery. | Signed 0.1.29–0.1.31 recovery/quit evidence and affected Phase 1–3 source approval are recorded. They do not approve later UI changes. |
+| `b23f826b`, `62155cf8`, `4a5a06ab`, `683bb03c` | External Connector MCP adds explicit read resync, retains terminal receipts until explicit release, requires caller mutation UUIDs, and rejects ambiguous implicit leave. These are external-client contracts, not new React buttons. | Actual HTTP/MCP evidence is recorded; real external Antigravity admission and corrected-source review remain open. |
+
 The route owner is `crates/agentsassemble-server/src/product_surface.rs`, derived
 from the same registrations mounted by `web.rs`. Room actions and per-viewer
 capabilities come from the protocol/domain and room command owners. A route's
@@ -33,7 +72,7 @@ existence alone does not establish a frontend entry or authorize its caller.
 | Search/context, pins and attachments | `message_search_web`, `message_pins_web`, message attachment custody | stable room-named header search, context jump, pin controls, upload/preview/download; remote HTTP uses room-session authority |
 | Vote create/cast/withdraw/close/summary | room vote owner and canonical publication | vote dialog, `/vote`, poll cards and no-deadline mode; provider tools use the same room authority |
 | Custom text channels/history/search/pins | room channel settings and dedicated channel message/event owner | channel creation and selection, context menus, text composer, room-wide search and pins; original text-only scope adds no custom-channel attachments |
-| Side chat | `side_chat_web`, room side-chat mutation and event owner | right panel and mobile room information; bootstrap plus live projection, without copied missing-route polling |
+| Side chat | `side_chat_web`, room side-chat mutation and event owner | header side-chat toggle and an inline right panel in `SideChatDock`, also reachable from mobile room information; bootstrap plus live projection. Signed 0.1.34/0.1.35 verifies shared-width interaction; final review remains open. |
 | Persona-card/Risu library and explicit selection | `persona_web`, persona custody and safe prompt construction | `AgentPersonaPicker` import/search/select and session persona settings for supported API/Local profiles; executable card data stays inert |
 | Human invite/admission/session and invite revocation | human invite manager, admission, session and recovery owners | human invite/copy/revoke, join/preflight/leave and room reconnect; retained client receipts are presentation, not invite authority |
 | Account/Google/native handoff/recovery | account challenge/connect/disconnect, central return broker and human recovery transaction | account settings, native browser handoff and recovery-code UI; unconfigured external identity dependencies remain explicit |

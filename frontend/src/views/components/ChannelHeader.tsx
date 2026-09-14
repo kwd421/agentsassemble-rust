@@ -7,13 +7,16 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { ArrowLeft, Bell, ChevronRight, Pin, Search, Users, PanelRight } from "lucide-react";
+import { ArrowLeft, Bell, ChevronRight, Pin, Search, Users, PanelRight, MessageSquare } from "lucide-react";
 import type { MessagePin } from "../../api/messagePins";
 import ProviderLogo from "./ProviderLogo";
 
 type HeaderPanel = "notifications" | "pins" | "search";
 
 export type ChannelHeaderActions = {
+  persistentRail?: boolean;
+  sideChatOpen?: boolean;
+  onToggleSideChat?: () => void;
   notificationSummary?: string;
   lastReadSummary?: string;
   lastReadCursor?: string;
@@ -194,7 +197,8 @@ export default function ChannelHeader({
   return (
     <header
       className="dc-chat-head flex h-12 shrink-0 items-center gap-2 px-3 lg:px-4"
-      data-members-available={Boolean(onToggleMembers)}
+      style={headerActions?.persistentRail ? { position: "absolute", top: 0, left: 0, right: 0, zIndex: 60, background: "var(--color-chat-bg)" } : undefined}
+      data-members-available={Boolean(onToggleMembers) && !headerActions?.persistentRail}
       data-members-open={Boolean(membersOpen)}
     >
       {onOpenMobileSidebar && (
@@ -265,6 +269,9 @@ export default function ChannelHeader({
         >
           <Pin size={17} />
         </button>
+        {headerActions?.onToggleSideChat && <button type="button" className="dc-head-icon"
+          aria-label="사이드챗 열기" aria-pressed={headerActions.sideChatOpen}
+          onClick={headerActions.onToggleSideChat}><MessageSquare size={18} /></button>}
         {onToggleMembers && (
           <button
             type="button"
