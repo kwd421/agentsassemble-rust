@@ -17,7 +17,7 @@ the retained text is not represented as those separate artifacts.
 | R3 | Medium | Prior edit events return deleted message content | Open, source path identified |
 | R4 | Medium | Original builtin API/Local workspace file tools omitted | Open, reconcile actual original path and approved scope |
 | R5 | Medium | Initial resync repeats ahead-of-history cursor | Locally corrected at `50aaa0bc`; latest-source review pending |
-| R6 | Medium | Admitted Connector cannot leave after initial read failure | Open, distinguish Admitted from existing Ready correction |
+| R6 | Medium | Admitted Connector cannot leave after initial read failure | Locally corrected; actual Connector13 and workspace Clippy pass; re-review pending |
 | R7 | Medium | Connection-wide 30-second timeout aborts normal wait-next | Open, actual transport verification pending |
 | R8 | Low | Failed stdout cleanup skips stderr join | Locally corrected; controlled reader cleanup3, workspace Clippy and gates pass; re-review pending |
 
@@ -36,6 +36,17 @@ No production validation was relaxed to accommodate the fixture.
 Logs: `/tmp/aa-review-r1-baseline.log`, `/tmp/aa-review-r1-fixed.log`,
 `/tmp/aa-review-r1-persistence.log`, `/tmp/aa-review-r1-clippy.log`,
 `/tmp/aa-review-r1-gates.log`. Packaged/live-provider reproduction is not claimed.
+
+R6 is reproduced with the actual HTTP server and client: the relay truncates only
+the initial successful read response after admission. Before the fix, leave returns
+`connector_not_joined`. The command owner now permits only `participant.leave` to
+use retained Admitted credentials; ordinary mutations/read operations still require
+Ready. A second truncated response after committed leave proves exact request replay,
+one durable leave event, terminal receipt retention and departed membership without
+a successful initial read. All Connector13 actual HTTP/MCP/stdio tests pass (11.59s),
+as does all-target/all-feature workspace Clippy. Logs:
+`/tmp/aa-review-r6-baseline.log`, `/tmp/aa-review-r6-connector.log`,
+`/tmp/aa-review-r6-clippy.log`, `/tmp/aa-review-r6-gates.log`.
 
 R8 uses concurrent joined cleanup for both existing reader owners, retaining each
 existing five-second abort/join bound and exposing failure. A paused-clock test

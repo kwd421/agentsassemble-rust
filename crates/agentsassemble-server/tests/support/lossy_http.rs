@@ -56,7 +56,6 @@ impl LossyHttpRelay {
 
 async fn forward(State(relay): State<Relay>, request: Request) -> Response {
     let (mut parts, body) = request.into_parts();
-    let mutation = parts.method == axum::http::Method::POST;
     parts.headers.remove("host");
     let path = parts.uri.path();
     let body = axum::body::to_bytes(body, 65536)
@@ -75,7 +74,7 @@ async fn forward(State(relay): State<Relay>, request: Request) -> Response {
         .bytes()
         .await
         .unwrap_or_else(|_| panic!("relay response failed"));
-    let body = if status.is_success() && mutation && relay.pending_loss.lock().await.remove(path) {
+    let body = if status.is_success() && relay.pending_loss.lock().await.remove(path) {
         Body::from("{")
     } else {
         Body::from(bytes)

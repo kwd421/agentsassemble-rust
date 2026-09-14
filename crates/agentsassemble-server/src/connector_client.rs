@@ -348,7 +348,21 @@ impl RoomConnectorClient {
                 ))
             };
         }
-        let session = self.session().await?;
+        let bearer = if action == RoomAction::ParticipantLeave {
+            let state = self.state.lock().await;
+            if self.cancellation.is_cancelled() {
+                return Err(ConnectorClientError::local("connector_closed"));
+            }
+            match &*state {
+                JoinState::Admitted(admission) => admission.session_bearer.clone(),
+                JoinState::Ready(session) => session.bearer.clone(),
+                JoinState::Pending(_) => {
+                    return Err(ConnectorClientError::local("connector_not_joined"));
+                }
+            }
+        } else {
+            self.session().await?.bearer.clone()
+        };
         if let Some(current) = &*pending {
             if current.action != action
                 || current.hash != hash
@@ -369,7 +383,7 @@ impl RoomConnectorClient {
         let current = pending
             .as_ref()
             .ok_or_else(|| ConnectorClientError::local("connector_command_missing"))?;
-        let result = self.request(self.http.post(self.endpoint("command")).bearer_auth(&session.bearer).json(&json!({"request_id":current.request_id.to_string(),"action":current.action,"payload":current.payload})).timeout(COMMAND_TIMEOUT)).await;
+        let result = self.request(self.http.post(self.endpoint("command")).bearer_auth(&bearer).json(&json!({"request_id":current.request_id.to_string(),"action":current.action,"payload":current.payload})).timeout(COMMAND_TIMEOUT)).await;
         match &result {
             Ok(response)
                 if response.get("resolution").and_then(Value::as_str) == Some("committed") =>
