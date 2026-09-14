@@ -2,6 +2,20 @@
 
 ## Completed whole-repository Pro review (2026-09-14)
 
+While frozen6935beb1 is reviewed, a query-cost follow-up removes repeated human
+session scans from the live-roster query. A single room-scoped grouping identifies
+memberships with no current human session; current replacements and managed-session
+eligibility remain unchanged. The same extracted-SQL benchmark with existing
+applicable indexes and one current replacement returns identical rows. At 1,000
+historical human records: 18.5ms before/0.7ms after; at 10,000: 1.6883s before/6.7ms
+after. These are controlled in-memory query timings, not full-server latency.
+Actual socket4, persistence336, workspace Clippy and unchanged source gates pass.
+No new index/schema, cache, cleanup loop or UI behavior is introduced. Evidence:
+`/tmp/aa-roster-query-cost-probe.py`, `/tmp/aa-roster-query-cost-comparison.json`,
+`/tmp/aa-roster-cost-socket.log`, `/tmp/aa-roster-cost-persistence.log`,
+`/tmp/aa-roster-cost-clippy.log`, `/tmp/aa-roster-cost-gates.log`.
+This later source requires packaged follow-up and review after the frozen answer.
+
 At 21:50 KST, submitted another independent whole-source review at frozen
 `6935beb11317d0586285928dea15fbafb0d0066f` in the same Pro conversation. The
 posted unrestricted whole-repository request and active answer are visible.

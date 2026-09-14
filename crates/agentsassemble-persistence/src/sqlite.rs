@@ -370,8 +370,8 @@ async fn load_snapshot_participants(
     let participant_rows = sqlx::query(
         "SELECT participant_json FROM participants AS p WHERE p.room_id = ? \
          AND (? OR (coalesce(json_extract(p.participant_json, '$.status'), '') NOT IN ('left', 'kicked', 'exported') \
-         AND (NOT EXISTS (SELECT 1 FROM human_room_sessions AS h WHERE h.room_id = p.room_id AND h.participant_id = p.participant_id) \
-         OR EXISTS (SELECT 1 FROM human_room_sessions AS h WHERE h.room_id = p.room_id AND h.participant_id = p.participant_id AND h.state = 'active' AND h.expires_at > ?)) \
+         AND p.participant_id NOT IN (SELECT h.participant_id FROM human_room_sessions AS h \
+         WHERE h.room_id = ? GROUP BY h.participant_id HAVING MAX(h.state = 'active' AND h.expires_at > ?) = 0) \
          AND NOT EXISTS (SELECT 1 FROM room_connector_invites AS c WHERE c.room_id = p.room_id AND c.participant_id = p.participant_id AND (c.revoked = 1 OR c.session_expires_at <= ?))) \
          OR EXISTS (SELECT 1 FROM agent_sessions AS s WHERE s.room_id = p.room_id \
          AND json_extract(s.session_json, '$.participant_id') = p.participant_id)) \
@@ -379,6 +379,7 @@ async fn load_snapshot_participants(
     )
     .bind(room_id)
     .bind(include_departed)
+    .bind(room_id)
     .bind(now)
     .bind(now)
     .fetch_all(&mut **transaction)

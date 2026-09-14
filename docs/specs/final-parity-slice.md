@@ -282,6 +282,15 @@ and history remain unchanged, and a removed managed-session participant remains
 available for creation eligibility. Verify actual expired Connector reconnect and
 human expiry/current-session snapshot behavior without sleeps or a new cleanup loop.
 
+Cost follow-up while whole review runs: extracted current SQL with the applicable
+existing SQLite indexes takes 18.2ms at 1,000 expired human memberships and 1.6646s
+at 10,000 in a controlled in-memory query benchmark. Correlated ownership checks
+repeat the human-session scan for each participant. Derive the inactive human IDs
+once per room in the same SQL query by grouping canonical session rows; any current
+session still retains its participant. No cache, index/schema change or new state
+owner. Re-run the actual socket/expiry and managed-session retention checks and the
+same cost probe; distinguish query-only timings from real server latency.
+
 ## Explicit retry after an uncertain command (2026-09-14)
 
 Completed whole-repository M1 identifies a real caller-boundary loss: bounded exact

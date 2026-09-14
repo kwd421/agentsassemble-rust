@@ -7,6 +7,10 @@
   The complete Rust/original archive and unrestricted request are visibly posted;
   Pro is generating. Await and read the completed verdict; do not end merely for
   waiting. Code and packaged corrections are complete locally, not yet approved.
+  A later measured query correction computes inactive human membership once per room:
+  identical 10,000-row query results improve from1.6883s to6.7ms; actual socket4,
+  persistence336 and Clippy pass. Package and review this later source after the
+  current frozen answer.
 
 - Whole-source Pro at `7df6bb09` completed (43m1s): REVISE H1/M2; full answer read.
   The other seven prior corrections are confirmed. Current H1 covers terminal and
