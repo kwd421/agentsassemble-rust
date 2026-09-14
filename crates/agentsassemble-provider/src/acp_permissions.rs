@@ -1,5 +1,6 @@
 //! Native ACP permissions retain exact room execution and flushed-response custody.
-use super::{ProtocolState, delivery::Deliveries, permission_response};
+use super::{AcpPermissionPolicy, ProtocolState, delivery::Deliveries};
+use crate::room_portal_tool_contract::PROVIDER_ROOM_TOOL_NAMES;
 use crate::{
     ProviderRequestIngress,
     driver::{DriverError, ProviderTurnRequest},
@@ -15,8 +16,17 @@ use agentsassemble_domain::{
     ProviderRequest, ProviderRequestKind, ProviderRequestOption, ProviderRequestPrompt,
     ProviderRequestResolution, redact_persisted_diagnostic_text,
 };
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use tokio_util::{sync::CancellationToken, task::TaskTracker};
+
+/// Each provider selects its observed native identity contract; no shape guessing.
+#[derive(Clone, Copy, Default)]
+pub(crate) enum AcpToolIdentityContract {
+    #[default]
+    RequestToolName,
+    QualifiedMcpCall,
+}
 
 pub(super) struct RequestTurn(Scope);
 #[derive(Clone)]
@@ -208,4 +218,124 @@ pub(super) const fn request_error() -> DriverError {
         "provider_request_unavailable",
         "The ACP provider request could not complete.",
     )
+}
+
+pub(super) fn permission_response(
+    state: &Mutex<ProtocolState>,
+    request: &RequestPermissionRequest,
+) -> RequestPermissionResponse {
+    let Ok(state) = state.lock() else {
+        return RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled);
+    };
+    if state.session_id.as_ref() != Some(&request.session_id) || state.active_turn_id.is_none() {
+        return RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled);
+    }
+    let requested_tool = request
+        .tool_call
+        .fields
+        .raw_input
+        .as_ref()
+        .and_then(|raw| room_tool_identity(state.tool_identity, raw));
+    let cached_tool = state
+        .active_tools
+        .get(&request.tool_call.tool_call_id.to_string())
+        .map(String::as_str);
+    let identity_confirmed = match state.tool_identity {
+        AcpToolIdentityContract::RequestToolName => {
+            requested_tool.is_some()
+                && cached_tool != Some("")
+                && cached_tool.is_none_or(|cached| Some(cached) == requested_tool)
+        }
+        AcpToolIdentityContract::QualifiedMcpCall => {
+            // ACP permission toolCall is an update referring to the same call ID.
+            // Cursor announces qualified MCP identity before that request, but does
+            // not repeat it there. Only this configured native contract uses it.
+            cached_tool.is_some_and(|cached| !cached.is_empty())
+                && request
+                    .tool_call
+                    .fields
+                    .raw_input
+                    .as_ref()
+                    .is_none_or(|raw| {
+                        raw.as_object().is_some_and(serde_json::Map::is_empty)
+                            || requested_tool == cached_tool
+                    })
+        }
+    };
+    let allow = matches!(state.permission_policy, AcpPermissionPolicy::RoomTools)
+        && state.room_observation_active
+        && identity_confirmed;
+    let selected = if allow {
+        request
+            .options
+            .iter()
+            .find(|option| option.kind == PermissionOptionKind::AllowOnce)
+    } else {
+        request
+            .options
+            .iter()
+            .find(|option| option.kind == PermissionOptionKind::RejectOnce)
+            .or_else(|| {
+                request
+                    .options
+                    .iter()
+                    .find(|option| option.kind == PermissionOptionKind::RejectAlways)
+            })
+    };
+    selected.map_or_else(
+        || RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled),
+        |option| {
+            RequestPermissionResponse::new(RequestPermissionOutcome::Selected(
+                SelectedPermissionOutcome::new(option.option_id.clone()),
+            ))
+        },
+    )
+}
+
+pub(super) fn record_tool_identity(
+    contract: AcpToolIdentityContract,
+    active_tools: &mut HashMap<String, String>,
+    tool_call_id: String,
+    raw_input: Option<&serde_json::Value>,
+) {
+    let Some(tool) = raw_input.and_then(|raw| room_tool_identity(contract, raw)) else {
+        if matches!(contract, AcpToolIdentityContract::QualifiedMcpCall)
+            && raw_input.is_some_and(|raw| {
+                !raw.is_null() && !raw.as_object().is_some_and(serde_json::Map::is_empty)
+            })
+        {
+            // A nonempty replacement with unknown/foreign identity invalidates
+            // this call permanently; later updates cannot revive it.
+            active_tools.insert(tool_call_id, String::new());
+        }
+        return;
+    };
+    match active_tools.entry(tool_call_id) {
+        std::collections::hash_map::Entry::Vacant(entry) => {
+            entry.insert(tool.to_owned());
+        }
+        std::collections::hash_map::Entry::Occupied(mut entry) if entry.get() != tool => {
+            entry.insert(String::new());
+        }
+        std::collections::hash_map::Entry::Occupied(_) => {}
+    }
+}
+
+fn room_tool_identity(
+    contract: AcpToolIdentityContract,
+    raw_input: &serde_json::Value,
+) -> Option<&str> {
+    if matches!(contract, AcpToolIdentityContract::QualifiedMcpCall) {
+        if raw_input.get("providerIdentifier")?.as_str()? != "agentsassemble_room" {
+            return None;
+        }
+        let name = raw_input.get("toolName")?.as_str()?;
+        return PROVIDER_ROOM_TOOL_NAMES.contains(&name).then_some(name);
+    }
+    let name = raw_input.get("tool_name")?.as_str()?;
+    let bare = name
+        .strip_prefix("agentsassemble_room__")
+        .or_else(|| name.strip_prefix("agentsassemble_room_"))
+        .unwrap_or(name);
+    PROVIDER_ROOM_TOOL_NAMES.contains(&bare).then_some(bare)
 }

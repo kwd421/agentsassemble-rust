@@ -2,7 +2,7 @@ use agentsassemble_domain::ProviderAvailability;
 use tokio_util::sync::CancellationToken;
 
 use crate::{
-    acp_client::{AcpClient, AcpClientConfiguration},
+    acp_client::{AcpClient, AcpClientConfiguration, AcpToolIdentityContract},
     catalog::{await_filesystem, failed_provider, provider_executable, ready_provider},
     process::{ProbeFailure, inspect},
 };
@@ -12,7 +12,10 @@ mod models;
 pub(crate) use models::CursorCatalog;
 
 pub(crate) fn client_configuration() -> AcpClientConfiguration {
-    let mut configuration = AcpClientConfiguration::default();
+    let mut configuration = AcpClientConfiguration {
+        tool_identity: AcpToolIdentityContract::QualifiedMcpCall,
+        ..Default::default()
+    };
     configuration.capabilities.meta = Some(serde_json::Map::from_iter([(
         "parameterizedModelPicker".to_owned(),
         serde_json::json!(true),

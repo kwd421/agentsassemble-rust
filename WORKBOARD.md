@@ -2,6 +2,14 @@
 
 ## Active work
 
+- Cursor's official2026.09.10 package now emits qualified same-call MCP identity
+  before permission; a real isolated Auto diagnostic confirms it. Correct the ACP
+  contract selection to consume Cursor's native notification identity while keeping
+  Grok's existing contract, exact room scope, conflict rejection and AllowOnce.
+  Baseline regression fails; full provider259, workspace Clippy and unchanged gates
+  now pass. Signed app Auto response and latest whole-source review remain pending.
+  [Acceptance](docs/specs/final-parity-slice.md#cursor-qualified-mcp-permission-contract-2026-09-14).
+
 - At22:37 KST, continued the unrestricted whole-repository Pro review at frozen
   `3d91736da0d5a5dccf850b0a9857077c61ade026`, including the later query correction
   and real Antigravity evidence. The complete attachment/request and active response

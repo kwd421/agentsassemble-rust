@@ -12,10 +12,9 @@ use agent_client_protocol::schema::{
     ProtocolVersion,
     v1::{
         AgentCapabilities, CancelNotification, ClientCapabilities, ContentBlock, InitializeRequest,
-        LoadSessionRequest, McpServer, NewSessionRequest, PermissionOptionKind, PromptRequest,
-        RequestPermissionOutcome, RequestPermissionRequest, RequestPermissionResponse,
-        SelectedPermissionOutcome, SessionConfigOption, SessionId, SessionNotification,
-        SessionUpdate, StopReason, TextContent,
+        LoadSessionRequest, McpServer, NewSessionRequest, PromptRequest, RequestPermissionRequest,
+        SessionConfigOption, SessionId, SessionNotification, SessionUpdate, StopReason,
+        TextContent,
     },
 };
 use agent_client_protocol::{Agent, Client, ConnectionTo, Lines};
@@ -29,7 +28,6 @@ use tokio_util::{
     sync::CancellationToken,
 };
 
-use crate::room_portal_tool_contract::PROVIDER_ROOM_TOOL_NAMES;
 use crate::{
     driver::{DriverError, ProviderTurnCompleted, ProviderTurnRequest},
     launch_error::DriverLaunchError,
@@ -45,6 +43,8 @@ type ProtocolReady = (ConnectionTo<Agent>, AgentCapabilities, Option<String>);
 mod delivery;
 #[path = "acp_permissions.rs"]
 mod permissions;
+pub(crate) use permissions::AcpToolIdentityContract;
+use permissions::record_tool_identity;
 
 #[path = "acp_configuration.rs"]
 mod configuration;
@@ -52,12 +52,14 @@ mod configuration;
 #[derive(Default)]
 pub(crate) struct AcpClientConfiguration {
     pub(crate) permission_policy: AcpPermissionPolicy,
+    pub(crate) tool_identity: AcpToolIdentityContract,
     pub(crate) capabilities: ClientCapabilities,
 }
 
 #[derive(Default)]
 struct ProtocolState {
     permission_policy: AcpPermissionPolicy,
+    tool_identity: AcpToolIdentityContract,
     room_observation_active: bool,
     session_id: Option<SessionId>,
     active_turn_id: Option<String>,
@@ -117,6 +119,7 @@ impl AcpClient {
     {
         let state = Arc::new(Mutex::new(ProtocolState {
             permission_policy: configuration.permission_policy,
+            tool_identity: configuration.tool_identity,
             ..ProtocolState::default()
         }));
         let shutdown = CancellationToken::new();
@@ -611,6 +614,7 @@ fn record_notification(state: &Mutex<ProtocolState>, notification: SessionNotifi
     {
         return;
     }
+    let contract = state.tool_identity;
     match notification.update {
         SessionUpdate::AgentMessageChunk(chunk) => {
             if let ContentBlock::Text(text) = chunk.content {
@@ -623,97 +627,19 @@ fn record_notification(state: &Mutex<ProtocolState>, notification: SessionNotifi
             }
         }
         SessionUpdate::ToolCall(tool) => record_tool_identity(
+            contract,
             &mut state.active_tools,
             tool.tool_call_id.to_string(),
             tool.raw_input.as_ref(),
         ),
         SessionUpdate::ToolCallUpdate(tool) => record_tool_identity(
+            contract,
             &mut state.active_tools,
             tool.tool_call_id.to_string(),
             tool.fields.raw_input.as_ref(),
         ),
         _ => {}
     }
-}
-
-fn permission_response(
-    state: &Mutex<ProtocolState>,
-    request: &RequestPermissionRequest,
-) -> RequestPermissionResponse {
-    let Ok(state) = state.lock() else {
-        return RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled);
-    };
-    if state.session_id.as_ref() != Some(&request.session_id) || state.active_turn_id.is_none() {
-        return RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled);
-    }
-    let requested_tool = request
-        .tool_call
-        .fields
-        .raw_input
-        .as_ref()
-        .and_then(room_tool_identity);
-    let cached_tool = state
-        .active_tools
-        .get(&request.tool_call.tool_call_id.to_string())
-        .map(String::as_str);
-    let allow = matches!(state.permission_policy, AcpPermissionPolicy::RoomTools)
-        && state.room_observation_active
-        && requested_tool.is_some()
-        && cached_tool != Some("")
-        && cached_tool.is_none_or(|cached| Some(cached) == requested_tool);
-    let selected = if allow {
-        request
-            .options
-            .iter()
-            .find(|option| option.kind == PermissionOptionKind::AllowOnce)
-    } else {
-        request
-            .options
-            .iter()
-            .find(|option| option.kind == PermissionOptionKind::RejectOnce)
-            .or_else(|| {
-                request
-                    .options
-                    .iter()
-                    .find(|option| option.kind == PermissionOptionKind::RejectAlways)
-            })
-    };
-    selected.map_or_else(
-        || RequestPermissionResponse::new(RequestPermissionOutcome::Cancelled),
-        |option| {
-            RequestPermissionResponse::new(RequestPermissionOutcome::Selected(
-                SelectedPermissionOutcome::new(option.option_id.clone()),
-            ))
-        },
-    )
-}
-
-fn record_tool_identity(
-    active_tools: &mut HashMap<String, String>,
-    tool_call_id: String,
-    raw_input: Option<&serde_json::Value>,
-) {
-    let Some(tool) = raw_input.and_then(room_tool_identity) else {
-        return;
-    };
-    match active_tools.entry(tool_call_id) {
-        std::collections::hash_map::Entry::Vacant(entry) => {
-            entry.insert(tool.to_owned());
-        }
-        std::collections::hash_map::Entry::Occupied(mut entry) if entry.get() != tool => {
-            entry.insert(String::new());
-        }
-        std::collections::hash_map::Entry::Occupied(_) => {}
-    }
-}
-
-fn room_tool_identity(raw_input: &serde_json::Value) -> Option<&str> {
-    let name = raw_input.get("tool_name")?.as_str()?;
-    let bare = name
-        .strip_prefix("agentsassemble_room__")
-        .or_else(|| name.strip_prefix("agentsassemble_room_"))
-        .unwrap_or(name);
-    PROVIDER_ROOM_TOOL_NAMES.contains(&bare).then_some(bare)
 }
 
 fn initialized_model_id(

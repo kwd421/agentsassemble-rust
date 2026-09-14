@@ -4,9 +4,9 @@ use agent_client_protocol::schema::{
         AgentCapabilities, ContentBlock, ContentChunk, HttpHeader, InitializeResponse,
         LoadSessionResponse, McpCapabilities, McpServer, McpServerHttp, NewSessionResponse,
         PermissionOption, PermissionOptionKind, PromptResponse, RequestPermissionOutcome,
-        RequestPermissionRequest, SessionConfigOption, SessionConfigOptionCategory,
-        SessionConfigSelectOption, SessionId, SessionNotification, SessionUpdate,
-        SetSessionConfigOptionResponse, StopReason, TextContent, ToolCallUpdate,
+        RequestPermissionRequest, RequestPermissionResponse, SessionConfigOption,
+        SessionConfigOptionCategory, SessionConfigSelectOption, SessionId, SessionNotification,
+        SessionUpdate, SetSessionConfigOptionResponse, StopReason, TextContent, ToolCallUpdate,
         ToolCallUpdateFields,
     },
 };
@@ -20,7 +20,7 @@ use tokio::{
 
 use super::{
     AcpClient, AcpClientConfiguration, AcpPermissionPolicy, MAX_PROTOCOL_LINE_BYTES, ProtocolState,
-    permission_response, record_tool_identity,
+    permissions::permission_response, record_tool_identity,
 };
 
 #[tokio::test]
@@ -300,11 +300,13 @@ fn room_tool_permission_requires_exact_active_bound_authority() {
         .lock()
         .unwrap_or_else(|_| panic!("lock protocol state"));
     record_tool_identity(
+        super::AcpToolIdentityContract::RequestToolName,
         &mut locked.active_tools,
         "call".to_owned(),
         Some(&json!({"tool_name": "read_discussion"})),
     );
     record_tool_identity(
+        super::AcpToolIdentityContract::RequestToolName,
         &mut locked.active_tools,
         "call".to_owned(),
         Some(&json!({"tool_name": "publish_message"})),
@@ -316,6 +318,71 @@ fn room_tool_permission_requires_exact_active_bound_authority() {
         .lock()
         .unwrap_or_else(|_| panic!("lock protocol state"))
         .permission_policy = AcpPermissionPolicy::Reject;
+    assert_selected(&permission_response(&state, &request), "reject");
+}
+
+#[test]
+fn qualified_mcp_notification_authorizes_only_the_same_known_room_call() {
+    let state = Mutex::new(ProtocolState {
+        tool_identity: crate::cursor::client_configuration().tool_identity,
+        permission_policy: AcpPermissionPolicy::RoomTools,
+        room_observation_active: true,
+        session_id: Some(SessionId::new("session")),
+        active_turn_id: Some("turn".to_owned()),
+        ..ProtocolState::default()
+    });
+    let mut request = permission_request("call", "unused");
+    request.tool_call.fields.raw_input = None;
+    assert_selected(&permission_response(&state, &request), "reject");
+    let announce = |raw: Value| {
+        let notification = serde_json::from_value(json!({
+            "sessionId": "session",
+            "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call", "rawInput": raw}
+        }))
+        .unwrap_or_else(|error| panic!("native notification: {error}"));
+        super::record_notification(&state, notification);
+    };
+    let qualified = json!({"providerIdentifier": "agentsassemble_room", "toolName": "read_discussion", "args": {}});
+    announce(json!({}));
+    assert_selected(&permission_response(&state, &request), "reject");
+    announce(qualified.clone());
+    assert_selected(&permission_response(&state, &request), "allow");
+    announce(qualified.clone());
+    assert_selected(&permission_response(&state, &request), "allow");
+
+    request.tool_call.tool_call_id = "other-call".into();
+    assert_selected(&permission_response(&state, &request), "reject");
+    request.tool_call.tool_call_id = "call".into();
+    request.tool_call.fields.raw_input =
+        Some(json!({"providerIdentifier": "other_server", "toolName": "read_discussion"}));
+    assert_selected(&permission_response(&state, &request), "reject");
+    request.tool_call.fields.raw_input = None;
+    for replacement in [
+        json!({"providerIdentifier": "other_server", "toolName": "read_discussion"}),
+        json!({"providerIdentifier": "agentsassemble_room", "toolName": "unknown_tool"}),
+        json!({"providerIdentifier": "agentsassemble_room", "toolName": "publish_message"}),
+    ] {
+        state
+            .lock()
+            .unwrap_or_else(|_| panic!("lock state"))
+            .active_tools
+            .clear();
+        announce(qualified.clone());
+        announce(replacement);
+        assert_selected(&permission_response(&state, &request), "reject");
+        announce(qualified.clone());
+        assert_selected(&permission_response(&state, &request), "reject");
+    }
+    state
+        .lock()
+        .unwrap_or_else(|_| panic!("lock state"))
+        .active_tools
+        .clear();
+    announce(qualified);
+    state
+        .lock()
+        .unwrap_or_else(|_| panic!("lock state"))
+        .room_observation_active = false;
     assert_selected(&permission_response(&state, &request), "reject");
 }
 
@@ -508,7 +575,7 @@ fn permission_request(call_id: &str, tool_name: &str) -> RequestPermissionReques
     )
 }
 
-fn assert_selected(response: &super::RequestPermissionResponse, option_id: &str) {
+fn assert_selected(response: &RequestPermissionResponse, option_id: &str) {
     let RequestPermissionOutcome::Selected(selected) = &response.outcome else {
         panic!("permission response did not select an option");
     };

@@ -84,6 +84,27 @@ creates no native conversation and retains bounded process cleanup. Verify nativ
 metadata, changed/contradictory receipts, existing Grok ACP behavior, and a packaged
 Cursor Auto turn and stop; other real model turns remain outside authorization.
 
+## Cursor qualified MCP permission contract (2026-09-14)
+
+The official2026.09.10-fd3934a package now refreshes structured tool input before
+permission. An isolated real Auto diagnostic confirms an empty initial tool call,
+a same-ID update with providerIdentifier=agentsassemble_room and
+toolName=read_discussion, then a same-ID permission request without rawInput.
+Current Rust reads only tool_name and requires identity repeated in the permission
+request, so this actual supported Cursor exchange cannot authorize the room tool.
+
+Cursor selects its explicit qualified-MCP notification contract at configuration;
+Grok retains its existing request-tool-name contract. Existing session/active-turn/
+room-observation authority and call-ID lifetime remain the owner. Only a previously
+qualified exact room tool on that same call ID can authorize AllowOnce. Missing,
+wrong-server, unknown or conflicting identity must reject; titles never authorize.
+No new MCP operation, permanent approval, global CLI configuration or fallback is
+introduced. Old Cursor versions that never emit complete identity still fail closed.
+Verify the captured sequence, conflicting/cross-server/unknown identities and
+session/turn clearing through existing ACP tests, then the new official package's
+actual Auto room response and stop in the signed app. Existing installations remain
+unchanged during the isolated diagnostic. Final source requires whole review.
+
 ## Acceptance and verification
 
 Reconnect recovery (2026-09-14): an ahead-of-history subscription can receive the

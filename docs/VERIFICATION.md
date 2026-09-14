@@ -2,6 +2,25 @@
 
 ## Completed whole-repository Pro review (2026-09-14)
 
+Cursor's current official installer points to2026.09.10-fd3934a; installed
+2026.08.11-e8db854 remains unchanged. An isolated downloaded official package's
+actual Auto/default ACP exchange emits empty initial rawInput, a same-call update
+with providerIdentifier=agentsassemble_room/toolName=read_discussion, then a same-ID
+permission request with no rawInput. The diagnostic rejects that call and ends;
+it is protocol evidence, not a room publication pass. Evidence:
+`/tmp/aa-cursor-qualified-evidence/permission-evidence.json` and `probe.py`.
+The source owner previously read only tool_name and required it in the request.
+The captured qualified-notification regression fails on that source (reject vs allow).
+Cursor now selects its exact native identity contract; Grok keeps the prior one.
+Same-call qualification, foreign/unknown/conflicting identity rejection and the
+room-observation gate pass through actual typed notification consumption. Permission
+and identity logic stay together in the existing acp_permissions owner. Full provider
+259 passes (226.62s), workspace all-target/all-feature Clippy and unchanged architecture,
+policy19, format and diff gates pass. Signed packaged Auto response remains pending.
+Logs: `/tmp/aa-cursor-qualified-baseline.log`, `aa-cursor-qualified-provider.log`,
+`aa-cursor-qualified-clippy.log`, `aa-cursor-qualified-gates.log` in `/tmp`.
+This later code requires whole-source review after the current frozen answer.
+
 At22:37 KST, submitted the latest unrestricted whole-repository continuation at
 `3d91736da0d5a5dccf850b0a9857077c61ade026` in the same in-app6Pro conversation.
 After a single reload, the earlier6935beb1 answer retained only progress prose and
