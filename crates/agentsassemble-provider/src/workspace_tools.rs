@@ -123,7 +123,7 @@ impl WorkspaceTools {
             })
             .await?;
         let encoded = result.to_string();
-        if encoded.len() > 128 * 1024 {
+        if encoded.len() > workspace_files::RESULT_BYTES {
             return Err(FAILED);
         }
         Ok(encoded)
@@ -196,7 +196,7 @@ pub(crate) fn schemas() -> Vec<Value> {
     let line = json!({"type":"integer","minimum":1});
     names().into_iter().zip([
         (json!({"path":text}), json!([]), "List files in the selected workspace."),
-        (json!({"path":text,"start_line":line,"end_line":line}), json!(["path"]), "Read a UTF-8 workspace file."),
+        (json!({"path":text,"start_line":line,"end_line":line,"offset":{"type":"integer","minimum":0}}), json!(["path"]), "Read a UTF-8 workspace file. If next_offset is returned, repeat the same line range with that character offset to continue."),
         (json!({"path":text,"query":text}), json!(["query"]), "Search workspace files for literal text."),
         (json!({"path":text,"content":text}), json!(["path","content"]), "Create or replace a workspace file after owner approval."),
         (json!({"path":text,"old_text":text,"new_text":text,"expected_replacements":{"type":"integer","minimum":1,"maximum":100}}), json!(["path","old_text","new_text"]), "Replace exact text in a workspace file after owner approval."),

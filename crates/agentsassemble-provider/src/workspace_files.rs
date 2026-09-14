@@ -13,6 +13,7 @@ use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
 const FILE_BYTES: u64 = 1_000_000;
+pub(super) const RESULT_BYTES: usize = 128 * 1024;
 
 #[derive(Deserialize, Serialize)]
 #[serde(tag = "operation", deny_unknown_fields)]
@@ -28,6 +29,8 @@ pub(super) enum FileOperation {
         #[serde(default = "first_line")]
         start_line: usize,
         end_line: Option<usize>,
+        #[serde(default)]
+        offset: usize,
     },
     #[serde(rename = "search_workspace_text")]
     Search {
@@ -227,6 +230,7 @@ pub(super) fn execute(
             path,
             start_line,
             end_line,
+            offset,
         } => {
             let text = read(root, path, 2_000_000)?;
             let end = end_line.unwrap_or_else(|| start_line.saturating_add(399));
@@ -236,10 +240,22 @@ pub(super) fn execute(
                 .take(end.saturating_sub(*start_line).saturating_add(1))
                 .collect();
             let selected = lines.concat();
-            let content: String = selected.chars().take(100_000).collect();
-            Ok(
-                json!({"path":path,"start_line":start_line,"end_line":start_line.saturating_add(lines.len()).saturating_sub(1),"truncated":content.len()<selected.len() || end < text.lines().count(),"content":content}),
-            )
+            let remaining: String = selected.chars().skip(*offset).collect();
+            let mut result = json!({"path":path,"start_line":start_line,"end_line":start_line.saturating_add(lines.len()).saturating_sub(1),"truncated":false,"content":"","next_offset":offset.saturating_add(remaining.chars().count())});
+            // Reserve the full JSON envelope, including the largest continuation offset.
+            let budget = RESULT_BYTES
+                .checked_sub(result.to_string().len())
+                .ok_or_else(invalid)?;
+            let content = json_text_prefix(&remaining, budget, 100_000);
+            let more = content.len() < remaining.len();
+            result["next_offset"] = if more {
+                json!(offset.saturating_add(content.chars().count()))
+            } else {
+                Value::Null
+            };
+            result["truncated"] = json!(more || end < text.lines().count());
+            result["content"] = json!(content);
+            Ok(result)
         }
         FileOperation::Write { path, content } => {
             write(root, path, content, None, cancel)?;
@@ -342,6 +358,9 @@ fn discover(
     let mut entries_seen = 0;
     let mut bytes_read = 0;
     let mut truncated = false;
+    let key = if query.is_some() { "matches" } else { "files" };
+    // false is one byte longer than true, so either final truncation flag fits.
+    let mut result_bytes = json!({key:[],"truncated":false}).to_string().len();
     'walk: while let Some(path) = pending.pop() {
         for entry in directory(root, &path, false)?.entries()? {
             if cancel.is_cancelled() {
@@ -380,14 +399,21 @@ fn discover(
                         .enumerate()
                         .filter(|(_, text)| text.contains(query))
                     {
-                        result.push(json!({"path":encoded,"line":line+1,"text":text.chars().take(500).collect::<String>()}));
+                        let item = json!({"path":encoded,"line":line+1,"text":text.chars().take(500).collect::<String>()});
+                        if !push_bounded(&mut result, item, &mut result_bytes) {
+                            truncated = true;
+                            break 'walk;
+                        }
                         if result.len() >= 200 {
                             truncated = true;
                             break 'walk;
                         }
                     }
                 } else {
-                    result.push(json!(encoded));
+                    if !push_bounded(&mut result, json!(encoded), &mut result_bytes) {
+                        truncated = true;
+                        break 'walk;
+                    }
                     if result.len() >= 500 {
                         truncated = true;
                         break 'walk;
@@ -401,4 +427,34 @@ fn discover(
     } else {
         json!({"files":result,"truncated":truncated})
     })
+}
+
+// The JSON string encoder escapes controls, quotes and backslashes in addition
+// to preserving UTF-8; a character count alone cannot bound the tool wire result.
+fn json_text_prefix(text: &str, budget: usize, maximum_chars: usize) -> &str {
+    let mut bytes = 0;
+    let mut end = 0;
+    for (index, character) in text.char_indices().take(maximum_chars) {
+        let cost = match character {
+            '"' | '\\' | '\n' | '\r' | '\t' | '\u{0008}' | '\u{000c}' => 2,
+            '\u{0000}'..='\u{001f}' => 6,
+            _ => character.len_utf8(),
+        };
+        if bytes + cost > budget {
+            break;
+        }
+        bytes += cost;
+        end = index + character.len_utf8();
+    }
+    &text[..end]
+}
+
+fn push_bounded(items: &mut Vec<Value>, item: Value, bytes: &mut usize) -> bool {
+    let added = item.to_string().len() + usize::from(!items.is_empty());
+    if *bytes + added > RESULT_BYTES {
+        return false;
+    }
+    *bytes += added;
+    items.push(item);
+    true
 }

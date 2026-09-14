@@ -220,3 +220,78 @@ async fn cancellation_retains_job_until_confirmed_quiescence() -> Result<(), Box
     assert!(!tools.pending());
     Ok(())
 }
+
+#[tokio::test]
+async fn file_result_budget_preserves_unicode_and_escaped_partial_results()
+-> Result<(), Box<dyn Error>> {
+    let directory = tempfile::tempdir()?;
+    let mut session = durable_session("room", "session", "API", "deepseek", "model", "https");
+    session.public.permission_mode = "workspace_write".to_owned();
+    (session.workspace, session.workspace_identity) =
+        canonical_workspace(directory.path().to_string_lossy().into_owned())
+            .await
+            .map_err(|_| "workspace")?;
+    let request = ProviderTurnRequest {
+        request_ingress: None,
+        turn_id: "turn".to_owned(),
+        turn_generation: 1,
+        execution_id: "execution".to_owned(),
+        input: String::new(),
+        room_observation: None,
+    };
+    let mut tools = WorkspaceTools::default();
+    for text in ["A".repeat(50_000), "가".repeat(50_000), "\"".repeat(80_000)] {
+        std::fs::write(directory.path().join("text.txt"), &text)?;
+        let first = tools
+            .execute(
+                &session,
+                &request,
+                "read_workspace_file",
+                r#"{"path":"text.txt","start_line":1,"end_line":1}"#,
+                &mut false,
+            )
+            .await
+            .map_err(|e| format!("read: {}", e.code))?;
+        assert!(first.len() <= 128 * 1024);
+        let first: serde_json::Value = serde_json::from_str(&first)?;
+        let mut content = first["content"]
+            .as_str()
+            .ok_or("content missing")?
+            .to_owned();
+        if content != text {
+            assert_eq!(first["truncated"], true);
+            let next = tools.execute(&session, &request, "read_workspace_file", &json!({"path":"text.txt","start_line":1,"end_line":1,"offset":first["next_offset"]}).to_string(), &mut false).await.map_err(|e| format!("continue: {}", e.code))?;
+            assert!(next.len() <= 128 * 1024);
+            let next: serde_json::Value = serde_json::from_str(&next)?;
+            content.push_str(
+                next["content"]
+                    .as_str()
+                    .ok_or("continued content missing")?,
+            );
+            assert_eq!(next["next_offset"], serde_json::Value::Null);
+        }
+        assert_eq!(content, text);
+    }
+    std::fs::write(
+        directory.path().join("text.txt"),
+        format!("{}\n", "가".repeat(500)).repeat(201),
+    )?;
+    let search = tools
+        .execute(
+            &session,
+            &request,
+            "search_workspace_text",
+            r#"{"query":"가"}"#,
+            &mut false,
+        )
+        .await
+        .map_err(|e| format!("search: {}", e.code))?;
+    assert!(search.len() <= 128 * 1024);
+    let search: serde_json::Value = serde_json::from_str(&search)?;
+    let matches = search["matches"].as_array().ok_or("matches missing")?;
+    assert!(!matches.is_empty());
+    assert!(matches.len() < 200);
+    assert_eq!(matches[0]["text"], "가".repeat(500));
+    assert_eq!(search["truncated"], true);
+    Ok(())
+}
