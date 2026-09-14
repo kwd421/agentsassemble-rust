@@ -23,6 +23,11 @@
   workspace Clippy and mandatory gates pass. Signed 0.1.36 confirms ordinary
   reconnect, history and post-restart delivery; packaged same-name recreation is
   not claimed. The corrected source requires review after the frozen review.
+  The second whole-source answer is now complete (54m54s): REVISE H2/M5/L1.
+  All eight findings and execution limits were read; supported corrections and
+  latest-source whole-repository review remain. See the current disposition in
+  [verification](docs/VERIFICATION.md#completed-whole-repository-pro-review-2026-09-14).
+  Unperformed reviewer execution is not a failed product test.
 
 - Review evidence retention correction (2026-09-14): the 15:24 continuation later
   left only progress text and no final verdict; after reload the stop control was

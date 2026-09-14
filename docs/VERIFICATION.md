@@ -1,5 +1,42 @@
 # Verification Contract
 
+## Completed whole-repository Pro review (2026-09-14)
+
+The second answer in https://chatgpt.com/c/6aa7aa6c-8608-83ee-b6b9-0e7833fcaf68
+completed after 54m54s at frozen `0ee154c8`: **REVISE, H2/M5/L1**. The complete
+answer was read, including all eight findings, whole-source coverage and execution
+limits. Its observed text is retained at
+`/tmp/aa-whole-review-0ee154c8-evidence/completed-review-ax.txt`.
+The page's artifact download controls have not produced a confirmed local file;
+the retained text is not represented as those separate artifacts.
+
+| ID | Severity | Reviewer finding | Current disposition |
+| --- | --- | --- | --- |
+| R1 | High | Deleted in-flight input restored to queue blocks later messages | Validating restoration owners |
+| R2 | High | Historical participants exceed mandatory snapshot frame size | Open, source/size evidence; no repeated-admission reproduction yet |
+| R3 | Medium | Prior edit events return deleted message content | Open, source path identified |
+| R4 | Medium | Original builtin API/Local workspace file tools omitted | Open, reconcile actual original path and approved scope |
+| R5 | Medium | Initial resync repeats ahead-of-history cursor | Locally corrected at `50aaa0bc`; latest-source review pending |
+| R6 | Medium | Admitted Connector cannot leave after initial read failure | Open, distinguish Admitted from existing Ready correction |
+| R7 | Medium | Connection-wide 30-second timeout aborts normal wait-next | Open, actual transport verification pending |
+| R8 | Low | Failed stdout cleanup skips stderr join | Locally corrected; controlled reader cleanup3, workspace Clippy and gates pass; re-review pending |
+
+R8 uses concurrent joined cleanup for both existing reader owners, retaining each
+existing five-second abort/join bound and exposing failure. A paused-clock test
+starts with an aborted stdout owner and a blocked stderr owner and proves both
+are finished. No external tunnel or real provider ran. Logs:
+`/tmp/aa-review-r8-test.log`, `/tmp/aa-review-r8-clippy.log`,
+`/tmp/aa-review-r8-gates.log`. Architecture, formatting and diff gates are unchanged.
+
+The reviewer reports Python policy tests19 PASS, provider JavaScript7 PASS and
+one missing-Claude-SDK environment failure, plus a controlled actual-frontend
+cursor reproduction and participant serialization-size calculation. Rust tools,
+full frontend suite, packaged/real-provider/platform execution were not performed
+there. These are not all failed product tests; code-review REVISE is independently
+supported by the reported source findings. The former indefinite pending-command
+progress candidate was not included in the eight final findings and remains a
+separate unconfirmed investigation, not a closed or accepted defect.
+
 ## Whole-repository Pro continuation (2026-09-14)
 
 The new whole-repository request at `0ee154c8423beb1283e13c649685738064da35c8`

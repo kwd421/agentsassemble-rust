@@ -106,8 +106,7 @@ pub(crate) async fn run_generation(
         });
     }
     let child_cleanup_failed = !matches!(child_result, Ok(Ok(_)));
-    let reader_cleanup_failed =
-        !join_reader(stdout_owner).await || !join_reader(stderr_owner).await;
+    let reader_cleanup_failed = !join_output_readers(stdout_owner, stderr_owner).await;
     if !join_publication(&mut stable_publication).await {
         publication_cleanup_failed = true;
     }
@@ -327,6 +326,11 @@ fn child_failure(result: &Result<io::Result<ExitStatus>, JoinError>) -> String {
     }
 }
 
+async fn join_output_readers(stdout: JoinHandle<()>, stderr: JoinHandle<()>) -> bool {
+    let (stdout_clean, stderr_clean) = tokio::join!(join_reader(stdout), join_reader(stderr));
+    stdout_clean && stderr_clean
+}
+
 async fn join_reader(mut owner: JoinHandle<()>) -> bool {
     if let Ok(result) = tokio::time::timeout(READER_SHUTDOWN_TIMEOUT, &mut owner).await {
         result.is_ok()
@@ -355,6 +359,16 @@ async fn failed_with_stable_cleanup(
 #[cfg(test)]
 mod tests {
     use super::trycloudflare_origin;
+
+    #[tokio::test(start_paused = true)]
+    async fn failed_stdout_cleanup_still_joins_and_aborts_blocked_stderr() {
+        let stdout = tokio::spawn(std::future::pending::<()>());
+        stdout.abort();
+        let stderr = tokio::spawn(std::future::pending::<()>());
+        let stderr_observation = stderr.abort_handle();
+        assert!(!super::join_output_readers(stdout, stderr).await);
+        assert!(stderr_observation.is_finished());
+    }
 
     #[test]
     fn output_parser_extracts_one_exact_trycloudflare_tenant() {
