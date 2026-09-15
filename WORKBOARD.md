@@ -2,6 +2,12 @@
 
 ## Active work
 
+- At21:58 KST2026-09-15, submitted unrestricted whole-source Pro re-review at
+  e60a8e761ff3fe5108a8126285bf184ae26646b6 with both full source snapshots.
+  Complete request, attachment and active generation are visibly confirmed in
+  the existing in-app conversation. Await/read the completed answer and continue
+  supported corrections. Packaged R1 and actual Rust R2 verification now pass.
+
 - Whole-source6b5b19dd Pro completes26m58s: REVISE Medium2; full final answer read.
   R1: independently valid pending questions overflow required owner reconnect
   metadata. R2: builtin file results satisfy character caps but overflow the final

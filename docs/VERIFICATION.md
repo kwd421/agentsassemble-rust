@@ -1,5 +1,18 @@
 # Verification Contract
 
+## Whole-source e60a8e76 review submission (2026-09-15)
+
+At21:58 KST the existing in-app conversation visibly contains the unrestricted
+whole-repository request, both repository URLs and commits, and complete attachment.
+Frozen Rust commit:e60a8e761ff3fe5108a8126285bf184ae26646b6; original remains
+d5046473010d1353a81ee38337360e6d98f7bd6f. Archive `/tmp/aa-whole-repository-e60a8e76.zip`
+contains2,688 tracked files,7,527,470 bytes,SHA256
+c6e4156749791431d11085ccbc4486b23dbe82bf3394816f9ca7570c7380c1e3.
+All manifest entries verify. Pro is generating; await and read the completed verdict.
+Packaged request transport now passes; all four stored requests are resolved at
+78,175 bytes each. Current architecture/source-growth/policy19/format/diff/artifact
+gates pass. No review approval is claimed.
+
 ## Whole-source 6b5b19dd review submission (2026-09-15)
 
 The complete26m58s final answer is now read: REVISE Medium2. R1 constructs four
