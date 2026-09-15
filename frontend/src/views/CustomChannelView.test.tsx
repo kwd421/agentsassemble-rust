@@ -4,6 +4,8 @@ import type { ComponentProps } from "react";
 const api = vi.hoisted(() => ({ read: vi.fn(), write: vi.fn() }));
 vi.mock("../api", async () => ({ ...(await vi.importActual("../api")), fetchMessagePins: api.read, setMessagePinned: api.write }));
 import { RoomSocketSayError } from "../roomSocketTypes";
+import { useChannelTranscript } from "../app/useChannelTranscript";
+import type { RoomCommandAck, RoomSocketHandle } from "../roomSocketTypes";
 import CustomChannelView from "./CustomChannelView";
 import { channelId, channelMessage } from "../test/channelMessage";
 
@@ -93,4 +95,42 @@ it("retains exact channel retry until the draft changes", async () => {
   fireEvent.change(input, { target: { value: "different intent" } });
   fireEvent.keyDown(input, { key: "Enter" });
   await waitFor(() => expect(options.transcript.send).toHaveBeenLastCalledWith("different intent"));
+});
+
+
+it.each(["reconnect", "channel", "room", "return"])("binds an in-flight receipt to its draft across %s", async (change) => {
+  const options = props();
+  let complete!: (value: RoomCommandAck) => void;
+  const receipt = new Promise<RoomCommandAck>((resolve) => { complete = resolve; });
+  const command = vi.fn((action: string) => action === "channel.message.send" ? receipt : Promise.resolve({
+    result: { events: [], last_seq: 0, has_more_before: false },
+  } as unknown as RoomCommandAck));
+  const socket = { ready: () => true, command } as unknown as RoomSocketHandle;
+  function View({ connected = true, selected = channelId, uid = "room-one" }) {
+    const transcript = useChannelTranscript({ roomId: "general", roomUid: uid, channelId: selected, socket, connected });
+    return <CustomChannelView {...options} roomUid={uid} channelId={selected} transcript={transcript} />;
+  }
+  const view = render(<View />);
+  const input = screen.getByRole("textbox", { name: "채널 메시지 입력" }) as HTMLTextAreaElement;
+  await waitFor(() => expect(input.disabled).toBe(false));
+  fireEvent.change(input, { target: { value: "send once" } });
+  fireEvent.keyDown(input, { key: "Enter" });
+  view.rerender(<View connected={false} />);
+  const selected = (change === "channel" || change === "return") ? "c111111111111" : channelId;
+  const uid = change === "room" ? "room-two" : "room-one";
+  view.rerender(<View selected={selected} uid={uid} />);
+  await act(async () => {});
+  if (change === "reconnect") {
+    expect(input.disabled).toBe(true);
+    expect(input.value).toBe("send once");
+  } else {
+    expect(input.disabled).toBe(false);
+    if (change === "return") { view.rerender(<View />); await act(async () => {}); }
+    fireEvent.change(input, { target: { value: "new draft" } });
+  }
+  await act(async () => complete({ accepted: true, resolution: "committed" } as RoomCommandAck));
+  expect(input.value).toBe(change === "reconnect" ? "" : "new draft");
+  expect(input.disabled).toBe(false);
+  expect(screen.queryByRole("alert")).toBeNull();
+  expect(command.mock.calls.filter(([action]) => action === "channel.message.send")).toHaveLength(1);
 });

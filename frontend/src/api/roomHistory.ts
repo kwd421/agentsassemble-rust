@@ -28,6 +28,9 @@ export type LobbyAttachmentUploadOptions = {
 };
 
 export interface LobbyEvent {
+  provider_request_id?: string;
+  provider_request_title?: string;
+  provider_request_state?: string;
   id: string;
   record_id?: string;
   seq?: number;

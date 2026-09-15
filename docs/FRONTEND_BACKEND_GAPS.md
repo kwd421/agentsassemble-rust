@@ -1,5 +1,18 @@
 # Frontend/backend exposure map
 
+2026-09-16 user-directed correction: provider requests move from a standalone
+header row/modal into the requesting agent message. No additional rail button or
+side panel. Signed0.1.56 directly verifies agent-attributed question/selection/response and
+same-message resolved result. No standalone opener or modal remains. Whole frontend890
+tests and unchanged production CSS pass. Controlled post-answer provider
+continuation is not claimed complete; the exact app was normally quit.
+
+2026-09-15 c2d1a117 review: custom-channel reconnect currently turns a successful
+ACK into an error and retains the draft. Separate send custody from history reloads;
+preserve existing layout, controls and exact retry. React regressions cover reconnect, channel/room switch and leave/return.
+Signed0.1.55 held-server reconnect confirms one command receipt, one message,
+cleared draft and restored input focus.
+
 2026-09-15 whole-source6b5b19dd: pending owner questions can exceed the required
 reconnect snapshot. Deliver complete request bodies in bounded admission frames;
 stage until completion and the bound snapshot before exposing the existing request

@@ -1,3 +1,7 @@
+import ProviderRequestMessage from "./components/ProviderRequestMessage";
+import { withPendingProviderRequests } from "./lobby/providerRequestRows";
+import type { PendingProviderRequest } from "../types/generated/PendingProviderRequest";
+import type { RoomAgentSession } from "../api";
 import { useMessagePins } from "./useMessagePins";
 import { useEffect, useMemo, useState } from "react";
 import { Hash } from "lucide-react";
@@ -64,6 +68,9 @@ export default function LobbyView({
   viewerParticipantId = "",
   typingIndicators = [],
   submitMessage,
+  providerRequests = [],
+  providerSessions = [],
+  providerRequestsConnected = false,
   canonicalEvents,
   canonicalHistoryReady = true,
   canonicalOldestSeq = 0,
@@ -103,6 +110,9 @@ export default function LobbyView({
   messagePinsAuthority?: MessagePinsAuthority;
   viewerParticipantId?: string;
   submitMessage?: (message: string) => Promise<LobbyEvent[]>;
+  providerRequests?: PendingProviderRequest[];
+  providerSessions?: RoomAgentSession[];
+  providerRequestsConnected?: boolean;
   canonicalEvents?: LobbyEvent[];
   canonicalHistoryReady?: boolean;
   canonicalOldestSeq?: number;
@@ -415,8 +425,8 @@ export default function LobbyView({
     return { completedEvents, eventsByParticipant };
   }, [typingIndicators, visibleEvents]);
   const lobbyRows = useMemo(
-    () => buildLobbyRows(activeThinking.completedEvents),
-    [activeThinking.completedEvents]
+    () => buildLobbyRows(withPendingProviderRequests(activeThinking.completedEvents, providerRequests, providerSessions)),
+    [activeThinking.completedEvents, providerRequests, providerSessions]
   );
 
 
@@ -524,7 +534,7 @@ export default function LobbyView({
         )}
         {!loaded ? (
           <p className="px-4 text-[13px] text-text-muted">불러오는 중...</p>
-        ) : visibleEvents.length === 0 ? (
+        ) : lobbyRows.length === 0 ? (
           <p className="px-4 text-[13px] text-text-muted preserve-words">
             아직 채팅 메시지가 없습니다. 첫 메시지를 남겨 보세요.
           </p>
@@ -569,7 +579,12 @@ export default function LobbyView({
                   event.provider_kind ||
                   providerKindByParticipant.get(event.actor_id || "")
                 }
-                showHeader={row.showHeader}
+                showHeader={event.kind === "provider_request" || row.showHeader}
+                requestCard={event.provider_request_id ? <ProviderRequestMessage
+                  entry={providerRequests.find((entry) => entry.request.provider_request_id === event.provider_request_id)}
+                  title={event.provider_request_title} state={event.provider_request_state}
+                  socket={roomSocket} connected={providerRequestsConnected} canPost={canPostMessages}
+                /> : undefined}
                 voteCard={
                   event.kind === "vote" && !event.message_deleted ? (
                     <VotePollCard
@@ -590,7 +605,7 @@ export default function LobbyView({
                 messageAttachmentReadScheduler={messageAttachmentReadScheduler}
                 pinned={pinnedEventIds.has(event.record_id || event.id)}
                 canPin={
-                  canPostMessages &&
+                  event.kind !== "provider_request" && canPostMessages &&
                   Boolean(messagePinsAuthority) &&
                   !event.message_deleted &&
                   pinBusyIds.size === 0

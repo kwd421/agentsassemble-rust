@@ -1,5 +1,4 @@
 import { isDesktopWebview } from "../lib/desktopBridge";
-import ProviderRequestsPanel from "../views/components/ProviderRequestsPanel";
 import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
 import CustomChannelView from "../views/CustomChannelView";
@@ -365,9 +364,6 @@ export default function AppView({ controller }: { controller: AppController }) {
       <div style={{ display: "flex", position: "relative", flex: 1, minWidth: 0, minHeight: 0 }}>
       {/* Central channel column */}
       <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" style={{ paddingTop: persistentRail ? 48 : 0 }} inert={mobileViewport && (mobileSidebarOpen || mobileRoomInfoOpen)}>
-        {hasRoom && canonicalRoom.room && <ProviderRequestsPanel key={`${canonicalRoom.room.room_uid}:${guestSession?.agentId || "operator-local"}`}
-          requests={canonicalRoom.providerRequests} socket={canonicalRoom.socket} events={canonicalRoom.events}
-          connected={canonicalRoom.connectionState === "connected"} canPost={canonicalRoom.capabilities["message.send"] === true} />}
         <Suspense fallback={<DeferredViewFallback />}>
           {friendsOpen && roomLifecycle.enabled ? (
             <FriendsView onClose={() => setFriendsOpen(false)} />
@@ -417,6 +413,9 @@ export default function AppView({ controller }: { controller: AppController }) {
               appearance={activeAppearance}
               onGuestSessionExpired={expireGuestSession}
               typingIndicators={typingIndicators}
+              providerRequests={canonicalRoom.providerRequests}
+              providerSessions={canonicalRoom.agentSessions}
+              providerRequestsConnected={canonicalRoom.connectionState === "connected"}
               canonicalEvents={visibleRoomTimelineEvents}
               canonicalHistoryReady={activeRoomHistory.initialized}
               canonicalOldestSeq={activeRoomHistory.oldestSeq}

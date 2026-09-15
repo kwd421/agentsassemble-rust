@@ -2,6 +2,28 @@
 
 ## Active work
 
+- 2026-09-16 corrections verified: custom-channel reconnect18/whole frontend890,
+  actual Rust workspace file-owner6 including cross-process exclusion, unchanged
+  architecture/source gates, policy19 and workspace all-feature Clippy pass.
+  Signed0.1.55 held-server reconnect preserves one receipt, displays one message,
+  clears draft and restores focus. Signed0.1.56 removes the standalone request
+  row/modal: actual agent-attributed question, selection, response and same-message
+  resolved result are verified visually. The controlled fixture receives the answer;
+  its subsequent MCP continuation does not finish, so no completed provider turn
+  is claimed. Stop retains recovery uncertainty; normal Quit leaves no owned
+  processes. Isolated data retained in Trash. Freeze and submit full-source review.
+
+- 2026-09-16 user correction: remove the standalone provider-request button/modal;
+  put response controls and results inside the requesting agent message. Preserve
+  existing header and panels. Include verified correction in current re-review.
+
+- Current user request: read c2d1a117 review, correct supported findings, verify,
+  submit unrestricted whole-repository re-review, then stop after visible submission.
+  Completed Pro answer43m12s: REVISE Medium2. Channel send ACK lifetime incorrectly
+  follows history reconnect lifetime; concurrent approved workspace replacements
+  compare and rename without shared exclusion. Both are confirmed in source.
+  Current implementation/verification remains in progress; no approval claimed.
+
 - At22:57 KST2026-09-15, the next unrestricted whole-source Pro request is visibly
   posted with both complete source snapshots at c2d1a1172354a06e9a3e10b98baeddc9e05df4a8.
   Attachment, complete request and active generation are confirmed in the existing

@@ -40,6 +40,9 @@ type TimelineRoomEvent = Pick<
   | "seq"
   | "type"
 > & {
+  provider_request?: { provider_request_id: string; title: string };
+  provider_request_id?: string;
+  state?: string;
   activity_detail?: string;
   activity_id?: string;
   activity_kind?: string;
@@ -129,6 +132,27 @@ export function projectRoomEventsToTimeline(
       participantProfiles,
       displayResourceBase,
     );
+
+    if (event.type === "provider_request_opened" || event.type === "provider_request_closed") {
+      const requestId = event.provider_request?.provider_request_id || event.provider_request_id;
+      if (!requestId) return;
+      const id = `provider-request:${requestId}`;
+      const existingIndex = timeline.findIndex((item) => item.id === id);
+      const previous = timeline[existingIndex];
+      const projected: LobbyEvent = {
+        id, kind: "provider_request", message: "", side: speaker.side,
+        created_at: previous?.created_at || event.created_at,
+        seq: Number(event.seq) || undefined,
+        actor_id: eventActor.id, actor_type: eventActor.type, name: speaker.name,
+        avatar_image_url: speaker.avatarImageUrl, provider_kind: speaker.providerKind,
+        provider_request_id: requestId,
+        provider_request_title: event.provider_request?.title || previous?.provider_request_title,
+        provider_request_state: event.type === "provider_request_closed" ? event.state : "open",
+      };
+      if (existingIndex < 0) timeline.push(projected);
+      else timeline[existingIndex] = projected;
+      return;
+    }
 
     if (event.type === "activity_delta" && event.category === "compaction") {
       return;

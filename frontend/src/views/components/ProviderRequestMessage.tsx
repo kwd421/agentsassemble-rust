@@ -1,58 +1,24 @@
-import { useLayoutEffect, useRef, useState } from "react";
-import type { RoomEvent } from "../../api";
+import { useRef, useState } from "react";
 import type { PendingProviderRequest } from "../../types/generated/PendingProviderRequest";
 import type { ProviderRequestQuestion } from "../../types/generated/ProviderRequestQuestion";
 import type { ProviderRequestResolution } from "../../types/generated/ProviderRequestResolution";
 import { RoomSocketSayError, type RoomSocketHandle } from "../../roomSocketTypes";
 
-const controlStyle = { minHeight: 44, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-text-muted)" } as const;
+const controlStyle = { minHeight: 44, padding: "8px 12px", borderRadius: 6, border: "1px solid var(--color-panel-separator)", background: "var(--color-panel)", color: "var(--color-text-primary)" } as const;
 const terminalLabels: Record<string, string> = {
   resolved: "응답을 전달했어요.", failed: "응답을 전달하지 못했어요. 에이전트에서 새 요청이 필요해요.",
   cancelled: "요청이 취소됐어요.", expired: "응답 시간이 만료됐어요.",
 };
 
-export default function ProviderRequestsPanel({ requests, socket, connected, canPost, events }: {
-  requests: PendingProviderRequest[];
-  socket: RoomSocketHandle | null;
-  connected: boolean;
-  canPost: boolean;
-  events: RoomEvent[];
+export default function ProviderRequestMessage({ entry, title, state, socket, connected, canPost }: {
+  entry?: PendingProviderRequest; title?: string; state?: string;
+  socket: RoomSocketHandle | null; connected: boolean; canPost: boolean;
 }) {
-  const [open, setOpen] = useState(false);
-  const dialogRef = useRef<HTMLDialogElement>(null);
-  const openerRef = useRef<HTMLButtonElement>(null);
-  const lastClosed = events.filter((event) => event.type === "provider_request_closed").at(-1);
-  useLayoutEffect(() => {
-    if (!open) return;
-    const dialog = dialogRef.current;
-    dialog?.showModal();
-    return () => { dialog?.close(); openerRef.current?.focus(); };
-  }, [open]);
-  if (!requests.length && !lastClosed) return null;
-  return <section aria-label="에이전트 요청" style={{ padding: "8px 24px", borderBottom: "1px solid var(--color-panel-soft)", flexShrink: 0 }}>
-    <button ref={openerRef} type="button" style={controlStyle} onClick={() => setOpen(true)}>
-      에이전트 요청 {requests.length > 0 ? `(${requests.length})` : "결과"}
-    </button>
-    <dialog ref={dialogRef} className="dc-create-channel-modal" aria-label="에이전트 요청"
-      style={{ display: open ? "block" : "none", position: "fixed", inset: 0, margin: "auto", width: "min(560px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", padding: 0, color: "var(--color-text-primary)", overflowY: "auto" }}
-      onCancel={(event) => { event.preventDefault(); setOpen(false); }}
-      onClick={(event) => {
-        if (event.target !== event.currentTarget) return;
-        const bounds = event.currentTarget.getBoundingClientRect();
-        if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) setOpen(false);
-      }}>
-      <header style={{ padding: "16px 24px", display: "flex", gap: 12, alignItems: "center" }}>
-        <h2 style={{ flex: 1 }}>에이전트 요청</h2>
-        <button type="button" style={controlStyle} onClick={() => setOpen(false)}>닫기</button>
-      </header>
-      <div style={{ padding: "0 24px 24px", display: "grid", gap: 24, overflowWrap: "anywhere" }}>
-        {!connected && <p role="status">연결을 복구하고 있어요. 연결되면 응답할 수 있어요.</p>}
-        {lastClosed && <p role="status">{requests.length > 0 && "이전 요청: "}{terminalLabels[String(lastClosed.state)]}</p>}
-        {requests.map((entry) => <RequestForm key={entry.request.provider_request_id} entry={entry}
-          socket={socket} enabled={connected && canPost} />)}
-        {!requests.length && <p>대기 중인 요청이 없어요.</p>}
-      </div>
-    </dialog>
+  return <section aria-label="에이전트 요청" style={{ marginTop: 8, maxWidth: 560, borderLeft: "2px solid var(--color-panel-separator)", padding: "4px 0 4px 12px", fontSize: 14, overflowWrap: "anywhere" }}>
+    {entry ? <>
+      {!connected && <p role="status">연결을 복구하고 있어요. 연결되면 응답할 수 있어요.</p>}
+      <RequestForm key={entry.request.provider_request_id} entry={entry} socket={socket} enabled={connected && canPost} />
+    </> : <><p className="font-semibold">{title || "요청"}</p><p role="status">{terminalLabels[state || ""] || "현재 응답할 수 없는 요청이에요."}</p></>}
   </section>;
 }
 

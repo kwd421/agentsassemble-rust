@@ -590,3 +590,35 @@ Empty/malformed results, unavailable portals and uncertain writes remain errors.
 Verify real portal-to-API delivery and subsequent publication for text, image,
 binary, ASCII/multibyte/escaped oversized attachments and large search results.
 This correction does not introduce media support or partial-attachment reading.
+
+## Reconnect receipts and workspace commit exclusion (2026-09-15)
+
+Separate selected-channel send custody from connection-specific history reads.
+A confirmed transport ACK remains success across reconnect, retains send exclusion
+until completion and clears only the same channel/room incarnation's draft. History
+still reloads after reconnect; stale pages cannot publish. Preserve layout and retry
+identity, and verify reconnect completion plus true channel/room switches.
+
+Builtin workspace writes need a cross-process commit boundary after approval.
+Use the existing fs2 OS lock library on a persistent reserved regular lock file in
+its capability-opened parent directory. Hold exclusion over compare, temporary write
+and rename; contention fails explicitly instead of waiting or silently overwriting.
+Do not unlink the lock inode on completion. Reserve it from file-tool operations
+and discovery. This coordinates app workers across rooms and nested workspace roots;
+external editors do not participate in advisory locking. Existing permissions,
+no-follow checks, cancellation and temporary cleanup remain authoritative. Verify
+actual Rust child-process contention, stale preapproval content and successful
+replacement, and exercise the affected signed frontend flow before re-review.
+
+## Inline agent requests (2026-09-16 user correction)
+
+Remove the standalone header row and modal. Questions, approvals and their exact
+request outcome belong inside the requesting agent's chat message, using the
+existing message avatar/name/body layout. No new header action or side panel.
+Project owner-visible request events with stable request identity; attach live
+controls only from the canonical owner-only pending snapshot. Keep pending requests
+reachable when their opening event falls outside bounded history. Closed requests
+show their own result in place, never the last result from another request. Preserve
+secret masking, exact uncertain retry, server authority and reconnect disablement.
+Verify attribution, multiple requests, history eviction, terminal results, and the
+signed app's actual inline answer flow before unrestricted re-review.

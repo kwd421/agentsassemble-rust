@@ -1,3 +1,5 @@
+import { pendingRequest } from "../test/providerRequest";
+import type { RoomAgentSession } from "../api";
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Hash } from "lucide-react";
 import { useState, type ComponentProps } from "react";
@@ -773,4 +775,16 @@ describe("LobbyView history loading", () => {
 
     await waitFor(() => expect(loadCanonicalHistory).toHaveBeenCalledWith(21));
   });
+});
+
+
+it("renders an evicted pending request inside the requesting agent message without a header opener", () => {
+  const sessions = [{ session_id: pendingRequest.session_id, participant_id: "agent-a", display_name: "Requesting Agent", provider_kind: "codex" }] as RoomAgentSession[];
+  render(<LobbyView activeRoom={room} agents={[]} canonicalEvents={[]} providerRequests={[pendingRequest]} providerSessions={sessions} providerRequestsConnected />);
+  const input = screen.getByLabelText("답변");
+  const message = input.closest("[data-room-event-id]");
+  expect(message?.textContent).toContain("Requesting Agent");
+  expect(message?.textContent).toContain(pendingRequest.request.title);
+  expect(screen.queryByRole("button", { name: /에이전트 요청/ })).toBeNull();
+  expect(screen.queryByRole("dialog")).toBeNull();
 });

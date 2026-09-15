@@ -571,3 +571,18 @@ describe("projectRoomEventsToTimeline", () => {
     });
   });
 });
+
+
+it("keeps each agent request and its terminal result in the same attributed message", () => {
+  const opened = (id: string, actorId: string, seq: number) => event({ id: `open-${id}`, seq,
+    type: "provider_request_opened", actor: { participant_id: actorId, participant_type: "agent" },
+    provider_request: { provider_request_id: id, title: `Question ${id}` },
+  });
+  const rows = projectRoomEventsToTimeline([
+    opened("a", "agent-a", 1), opened("b", "agent-b", 2),
+    event({ id: "close-a", seq: 3, type: "provider_request_closed", actor: { participant_id: "agent-a", participant_type: "agent" }, provider_request_id: "a", state: "resolved" }),
+  ]);
+  expect(rows).toHaveLength(2);
+  expect(rows[0]).toMatchObject({ id: "provider-request:a", actor_id: "agent-a", provider_request_title: "Question a", provider_request_state: "resolved" });
+  expect(rows[1]).toMatchObject({ id: "provider-request:b", actor_id: "agent-b", provider_request_state: "open" });
+});

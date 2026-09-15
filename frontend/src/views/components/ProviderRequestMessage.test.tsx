@@ -1,6 +1,6 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import ProviderRequestsPanel from "./ProviderRequestsPanel";
+import ProviderRequestMessage from "./ProviderRequestMessage";
 import { pendingRequest } from "../../test/providerRequest";
 import { RoomSocketSayError, type RoomCommandAck, type RoomSocketHandle } from "../../roomSocketTypes";
 
@@ -14,8 +14,7 @@ const ack: RoomCommandAck = { op: "ack", accepted: true, resolution: "committed"
 describe("provider request controls", () => {
   it("masks a secret answer and only retries the same answer after uncertain delivery", async () => {
     const resolve = vi.fn().mockRejectedValueOnce(new RoomSocketSayError("Unknown", "outcome_unknown")).mockResolvedValueOnce(ack);
-    const { rerender } = render(<ProviderRequestsPanel requests={[pendingRequest]} socket={socket(resolve)} connected canPost events={[]} />);
-    fireEvent.click(screen.getByRole("button", { name: "에이전트 요청 (1)" }));
+    const { rerender } = render(<ProviderRequestMessage entry={pendingRequest} socket={socket(resolve)} connected canPost />);
     const input = screen.getByLabelText("답변") as HTMLInputElement;
     expect(input.type).toBe("password");
     fireEvent.change(input, { target: { value: "synthetic-secret" } });
@@ -29,17 +28,21 @@ describe("provider request controls", () => {
     ]);
     expect(input.value).toBe("");
     expect(screen.getByRole("status").textContent).toContain("결과를 기다리고");
-    rerender(<ProviderRequestsPanel requests={[{ ...pendingRequest, state: "resolving" }]} socket={socket(resolve)} connected canPost events={[]} />);
+    rerender(<ProviderRequestMessage entry={{ ...pendingRequest, state: "resolving" }} socket={socket(resolve)} connected canPost />);
     expect(screen.queryByRole("button", { name: "응답 보내기" })).toBeNull();
   });
 
-  it("keeps requests read-only while disconnected and restores focus on close", () => {
-    render(<ProviderRequestsPanel requests={[pendingRequest]} socket={socket(vi.fn())} connected={false} canPost events={[]} />);
-    const opener = screen.getByRole("button", { name: "에이전트 요청 (1)" });
-    fireEvent.click(opener);
+  it("keeps in-message requests read-only while disconnected, without a separate opener or modal", () => {
+    render(<ProviderRequestMessage entry={pendingRequest} socket={socket(vi.fn())} connected={false} canPost />);
     expect((screen.getByRole("button", { name: "응답 보내기" }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
-    expect(document.activeElement).toBe(opener);
     expect(screen.queryByRole("dialog")).toBeNull();
+    expect(screen.queryByRole("button", { name: /에이전트 요청/ })).toBeNull();
+  });
+  it("replaces only this request's form with its result", () => {
+    const { rerender } = render(<ProviderRequestMessage entry={pendingRequest} socket={socket(vi.fn())} connected canPost />);
+    rerender(<ProviderRequestMessage title={pendingRequest.request.title} state="resolved" socket={socket(vi.fn())} connected canPost />);
+    expect(screen.getByRole("status").textContent).toBe("응답을 전달했어요.");
+    expect(screen.queryByRole("button")).toBeNull();
+    expect(screen.queryByLabelText("답변")).toBeNull();
   });
 });

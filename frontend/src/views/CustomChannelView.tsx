@@ -32,7 +32,8 @@ export default function CustomChannelView({
   onSearchTargetHandled?: () => void; onOpenCrossChannelSearchResult: (result: RoomSearchResult) => void;
 }) {
   const identity = JSON.stringify([roomId, roomUid, channelId, authority]);
-  const identityRef = useRef(identity); identityRef.current = identity;
+  const selection = useMemo(() => ({ identity }), [identity]);
+  const selectionRef = useRef(selection); selectionRef.current = selection;
   const scopeRef = useRef(transcript.scope); scopeRef.current = transcript.scope;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
@@ -95,10 +96,10 @@ export default function CustomChannelView({
     try {
       if (draft.retry) await transcript.send(value, draft.retry);
       else await transcript.send(value);
-      if (!mounted.current || identityRef.current !== identity) return;
+      if (!mounted.current || selectionRef.current !== selection) return;
       setDraft({ identity, value: "" }); focusAfterSend.current = true;
     } catch (cause) {
-      if (mounted.current && identityRef.current === identity) {
+      if (mounted.current && selectionRef.current === selection) {
         setSendError({ identity, message: cause instanceof Error ? cause.message : "메시지를 보내지 못했어요." });
         if (cause instanceof RoomSocketSayError && cause.retry) {
           setDraft((current) => current.identity === identity && current.value === value

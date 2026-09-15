@@ -349,6 +349,7 @@ export function LobbyMessageRow({
   event,
   providerKind,
   voteCard,
+  requestCard,
   showHeader = true,
   mentionLabels,
   messageAttachmentReadScheduler,
@@ -363,6 +364,7 @@ export function LobbyMessageRow({
   event: LobbyEvent;
   providerKind?: string;
   voteCard?: ReactNode;
+  requestCard?: ReactNode;
   showHeader?: boolean;
   mentionLabels: MentionLabels;
   messageAttachmentReadScheduler: MessageAttachmentReadScheduler;
@@ -427,7 +429,7 @@ export function LobbyMessageRow({
             </span>
           </p>
         )}
-        {voteCard ? (
+        {requestCard ? requestCard : voteCard ? (
           voteCard
         ) : event.message_deleted ? (
           <div className="text-[14px] italic leading-relaxed text-text-muted">

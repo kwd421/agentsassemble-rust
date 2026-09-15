@@ -6,8 +6,8 @@ import { CHANNEL_HISTORY_PAGE_SIZE, CHANNEL_MESSAGE_EVENT_TYPE } from "../types/
 import { ROOM_HISTORY_MAX_EVENTS } from "../types/generated/ROOM_HISTORY_WIRE";
 
 type Window = { events: RoomEvent[]; hasMore: boolean; following: boolean; newMessages: boolean };
-type Owner = { scope: object; window: Window | null; buffer: RoomEvent[]; trimmed: boolean; reading: boolean; readVersion: number; sending: boolean; active: boolean };
-type View = { scope: object; window: Window | null; loading: boolean; sending: boolean; error: string };
+type Owner = { scope: object; window: Window | null; buffer: RoomEvent[]; trimmed: boolean; reading: boolean; readVersion: number; active: boolean };
+type View = { scope: object; window: Window | null; loading: boolean; error: string };
 function mergeEvents(older: RoomEvent[], newer: RoomEvent[]) {
   const bySeq = new Map(older.map((event) => [event.seq, event]));
   for (const event of newer) bySeq.set(event.seq, event);
@@ -19,12 +19,15 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
   roomId: string; roomUid: string; channelId: string; socket: RoomSocketHandle | null; connected: boolean;
 }) {
   const scope = useMemo(() => ({ roomId, roomUid, channelId, socket, connected }), [roomId, roomUid, channelId, socket, connected]);
+  const sendIdentity = useMemo(() => ({ roomId, roomUid, channelId, socket }), [roomId, roomUid, channelId, socket]);
+  const pendingSend = useRef<object | null>(null);
+  const [sendingIdentity, setSendingIdentity] = useState<object | null>(null);
   const currentScope = useRef(scope); currentScope.current = scope;
   const ownerRef = useRef<Owner | null>(null);
-  const [view, setView] = useState<View>({ scope, window: null, loading: false, sending: false, error: "" });
+  const [view, setView] = useState<View>({ scope, window: null, loading: false, error: "" });
   const current = useCallback((owner: Owner) => currentScope.current === scope && owner.scope === scope && ownerRef.current === owner && owner.active, [scope]);
   const publish = useCallback((owner: Owner, error?: string) => {
-    if (current(owner)) setView((previous) => ({ scope, window: owner.window, loading: owner.reading, sending: owner.sending, error: error ?? (previous.scope === scope ? previous.error : "") }));
+    if (current(owner)) setView((previous) => ({ scope, window: owner.window, loading: owner.reading, error: error ?? (previous.scope === scope ? previous.error : "") }));
   }, [current, scope]);
   const read = useCallback(async (owner: Owner, before: number) => {
     if (!current(owner) || !socket?.ready()) return;
@@ -52,9 +55,8 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
   }, [channelId, current, publish, socket]);
   const latest = useCallback(() => {
     if (currentScope.current !== scope || !roomId || !roomUid || !channelId || !connected || !socket?.ready()) return;
-    if (ownerRef.current?.sending) return;
     if (ownerRef.current) ownerRef.current.active = false;
-    const owner: Owner = { scope, window: null, buffer: [], trimmed: false, reading: false, readVersion: 0, sending: false, active: true };
+    const owner: Owner = { scope, window: null, buffer: [], trimmed: false, reading: false, readVersion: 0, active: true };
     ownerRef.current = owner;
     void read(owner, 0);
   }, [channelId, connected, read, roomId, roomUid, scope, socket]);
@@ -101,20 +103,23 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
   }, [current, publish]);
   const send = useCallback(async (content: string, retry?: RoomSocketSayError["retry"]) => {
     const owner = ownerRef.current;
-    if (!owner || !current(owner) || !owner.window || owner.sending || !socket?.ready()) throw new Error("채널 연결이 완료된 뒤 보내 주세요.");
-    owner.sending = true; publish(owner);
+    if (!owner || !current(owner) || !owner.window || pendingSend.current === sendIdentity || !socket?.ready()) throw new Error("채널 연결이 완료된 뒤 보내 주세요.");
+    pendingSend.current = sendIdentity; setSendingIdentity(sendIdentity);
     try {
       if (retry) await retry();
       else await socket.command("channel.message.send", { channel_id: channelId, content });
-      if (!current(owner)) throw new Error("메시지를 보내는 동안 채널 연결이 바뀌었어요.");
+      // A history reload cannot invalidate the canonical transport's successful receipt.
       // The canonical stream supplies ordered durable messages, including this ACK's event.
-    } finally { owner.sending = false; publish(owner); }
-  }, [channelId, current, publish, socket]);
+    } finally {
+      if (pendingSend.current === sendIdentity) pendingSend.current = null;
+      setSendingIdentity((pending) => pending === sendIdentity ? null : pending);
+    }
+  }, [channelId, current, sendIdentity, socket]);
   const visible = view.scope === scope ? view : null;
   return { scope, receive, latest, earlier, showContext, send,
     events: visible?.window?.events ?? [], hasMore: visible?.window?.hasMore ?? false,
     following: visible?.window?.following ?? true, newMessages: visible?.window?.newMessages ?? false,
     ready: Boolean(visible?.window), loading: visible?.loading ?? false,
-    sending: visible?.sending ?? false, error: visible?.error ?? "",
+    sending: sendingIdentity === sendIdentity, error: visible?.error ?? "",
   };
 }

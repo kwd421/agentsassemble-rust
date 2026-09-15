@@ -295,3 +295,87 @@ async fn file_result_budget_preserves_unicode_and_escaped_partial_results()
     assert_eq!(search["truncated"], true);
     Ok(())
 }
+
+#[test]
+fn workspace_commit_child() -> Result<(), Box<dyn Error>> {
+    let Some(path) = std::env::var_os("AA_WORKSPACE_COMMIT_TEST") else {
+        return Ok(());
+    };
+    let root = cap_std::fs::Dir::open_ambient_dir(path, cap_std::ambient_authority())?;
+    let operation = FileOperation::Replace {
+        path: "file.txt".into(),
+        old_text: "beta=0".into(),
+        new_text: "beta=1".into(),
+        expected_replacements: 1,
+    };
+    assert!(
+        workspace_files::execute(
+            &root,
+            &operation,
+            Some("alpha=0 beta=0"),
+            &CancellationToken::new()
+        )
+        .is_err()
+    );
+    Ok(())
+}
+
+#[test]
+fn workspace_commit_excludes_other_processes_and_stale_approvals() -> Result<(), Box<dyn Error>> {
+    use std::fs::OpenOptions;
+    let workspace = tempfile::tempdir()?;
+    std::fs::write(workspace.path().join("file.txt"), "alpha=0 beta=0")?;
+    let root = cap_std::fs::Dir::open_ambient_dir(workspace.path(), cap_std::ambient_authority())?;
+    let lock = OpenOptions::new()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(workspace.path().join(".agentsassemble-write.lock"))?;
+    fs2::FileExt::try_lock_exclusive(&lock)?;
+    let child = || -> Result<(), Box<dyn Error>> {
+        let output = std::process::Command::new(std::env::current_exe()?)
+            .args([
+                "--exact",
+                "workspace_tools::tests::workspace_commit_child",
+                "--nocapture",
+            ])
+            .env("AA_WORKSPACE_COMMIT_TEST", workspace.path())
+            .output()?;
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stdout)
+        );
+        assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+        Ok(())
+    };
+    // Parent holds the real commit boundary before comparison: another OS process
+    // must fail, not reach its rename. No scheduling sleeps or model filesystem.
+    child()?;
+    assert_eq!(
+        std::fs::read_to_string(workspace.path().join("file.txt"))?,
+        "alpha=0 beta=0"
+    );
+    drop(lock);
+    let operation = FileOperation::Replace {
+        path: "file.txt".into(),
+        old_text: "alpha=0".into(),
+        new_text: "alpha=1".into(),
+        expected_replacements: 1,
+    };
+    workspace_files::execute(
+        &root,
+        &operation,
+        Some("alpha=0 beta=0"),
+        &CancellationToken::new(),
+    )?;
+    // The same preapproval snapshot is now stale even after exclusion is released.
+    child()?;
+    assert_eq!(
+        std::fs::read_to_string(workspace.path().join("file.txt"))?,
+        "alpha=1 beta=0"
+    );
+    assert_eq!(std::fs::read_dir(workspace.path())?.count(), 2);
+    Ok(())
+}

@@ -12,6 +12,8 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio_util::sync::CancellationToken;
 
+const WRITE_LOCK: &str = ".agentsassemble-write.lock";
+
 const FILE_BYTES: u64 = 1_000_000;
 pub(super) const RESULT_BYTES: usize = 128 * 1024;
 
@@ -164,7 +166,7 @@ fn relative(path: &str) -> io::Result<PathBuf> {
         match component {
             Component::CurDir => {}
             Component::Normal(name)
-                if ![".git", ".hg", ".svn"]
+                if ![".git", ".hg", ".svn", WRITE_LOCK]
                     .iter()
                     .any(|blocked| name.eq_ignore_ascii_case(blocked)) =>
             {
@@ -304,6 +306,25 @@ fn write(
         return Err(invalid());
     }
     let parent = directory(root, path.parent().ok_or_else(invalid)?, true)?;
+    // Persistent inode: removing it would let another worker lock a different inode.
+    // The parent capability also gives nested workspace selections the same lock.
+    let mut lock_options = OpenOptions::new();
+    lock_options
+        .read(true)
+        .write(true)
+        .create(true)
+        .nonblock(true)
+        .follow(FollowSymlinks::No);
+    #[cfg(unix)]
+    {
+        use cap_std::fs::OpenOptionsExt;
+        lock_options.mode(0o600);
+    }
+    let commit_lock = parent.open_with(WRITE_LOCK, &lock_options)?.into_std();
+    if !commit_lock.metadata()?.is_file() {
+        return Err(invalid());
+    }
+    fs2::FileExt::try_lock_exclusive(&commit_lock)?;
     if let Some(before) = before
         && read_at(&parent, name, FILE_BYTES)? != before
     {
