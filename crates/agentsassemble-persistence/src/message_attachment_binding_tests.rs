@@ -392,3 +392,75 @@ fn assert_rejected_code<T>(result: Result<T, PersistenceError>, expected: &str) 
         Ok(_) => panic!("expected {expected} rejection"),
     }
 }
+
+#[tokio::test]
+async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, principal, _directory) = super::fixture().await;
+    let active = store
+        .execute_message_with_turn(
+            &principal,
+            "hold-attachments",
+            "message.send",
+            &json!({"content":"@Terra hold"}),
+        )
+        .await?;
+    let active = &active.assignments[0];
+    let mut batches = Vec::new();
+    for (index, count) in [5, 4].into_iter().enumerate() {
+        let mut ids = Vec::new();
+        for item in 0..count {
+            let attachment = store
+                .store_message_attachment(
+                    &principal,
+                    &format!("{index}-{item}.txt"),
+                    "text/plain",
+                    vec![b'a'],
+                )
+                .await?;
+            ids.push(attachment.id);
+        }
+        let queued = store
+            .execute_message_with_turn(
+                &principal,
+                &format!("queued-attachments-{index}"),
+                "message.send",
+                &json!({"content":"@Terra inspect attachments", "attachment_ids":ids}),
+            )
+            .await?;
+        assert!(queued.assignments.is_empty());
+        batches.push((queued.outcome.event.id, ids));
+    }
+    let started = super::running_authority(&store, active, "held-native").await;
+    let committed = store
+        .complete_agent_turn(
+            "general",
+            super::AGENT_ID,
+            super::authority(&started, "held-native", None),
+            "held complete",
+            "",
+        )
+        .await?;
+    let first = &committed.next_assignments[0];
+    assert_eq!(first.attachment_ids, batches[0].1);
+    assert_eq!(
+        super::input_ids(&first.session.pending_inputs),
+        [batches[1].0.clone()]
+    );
+    assert_eq!(first.session.input_up_to_event_id, batches[0].0);
+    let started = super::running_authority(&store, first, "first-attachments").await;
+    let committed = store
+        .complete_agent_turn(
+            "general",
+            super::AGENT_ID,
+            super::authority(&started, "first-attachments", None),
+            "first complete",
+            "",
+        )
+        .await?;
+    let second = &committed.next_assignments[0];
+    assert_eq!(second.attachment_ids, batches[1].1);
+    assert!(second.session.pending_inputs.is_empty());
+    assert_eq!(second.session.input_up_to_event_id, batches[1].0);
+    Ok(())
+}

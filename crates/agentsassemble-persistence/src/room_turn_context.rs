@@ -1,9 +1,9 @@
 use std::collections::{BTreeMap, HashSet};
 
 use agentsassemble_domain::{
-    DurableAgentSession, MAX_ROOM_OBSERVATION_AGENT_IDS, MAX_ROOM_VIEW_CHARACTERS, QueuedRoomInput,
-    Room, RoomEvent, RoomInputDeliveryKind, has_visible_text, is_provider_input,
-    is_room_observation_view, render_persona_context,
+    DurableAgentSession, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_ROOM_OBSERVATION_AGENT_IDS,
+    MAX_ROOM_VIEW_CHARACTERS, QueuedRoomInput, Room, RoomEvent, RoomInputDeliveryKind,
+    has_visible_text, is_provider_input, is_room_observation_view, render_persona_context,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -193,6 +193,14 @@ fn bounded_pending_prefix<'a>(
             break;
         }
         selected.push(event);
+        // Whole queued messages share the provider observation's attachment budget.
+        // Defer the next event intact so its attachments and cursor remain pending.
+        if message_attachment_ids_from_events(selected.iter().map(|value| &value.event))?.len()
+            > MAX_MESSAGE_ATTACHMENTS_PER_EVENT
+        {
+            selected.pop();
+            break;
+        }
         if render_room_view(
             room,
             session,
