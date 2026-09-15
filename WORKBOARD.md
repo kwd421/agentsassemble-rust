@@ -2,6 +2,13 @@
 
 ## Active work
 
+- At00:33 KST2026-09-16, unrestricted whole-repository Pro re-review is visibly
+  submitted in the existing in-app conversation at722b506ef7c0df1507a86e6efe6912872ff647e8,
+  with both full source snapshots (2690 files). Complete prompt, attachment and
+  active Pro generation are confirmed. The earlier fixture recovery case is
+  explicitly disclosed as unresolved. Stop after this submission per user scope;
+  do not wait for the next review answer or claim final approval.
+
 - Follow-up verification2026-09-16: instrumented native fixture completes the actual
   answer -> MCP initialize/read_discussion/publish_message -> turn completion ->
   normal Stop path twice, including Stop/Resume with the same native session.
