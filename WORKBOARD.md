@@ -2,6 +2,15 @@
 
 ## Active work
 
+- Follow-up verification2026-09-16: instrumented native fixture completes the actual
+  answer -> MCP initialize/read_discussion/publish_message -> turn completion ->
+  normal Stop path twice, including Stop/Resume with the same native session.
+  Session Request Continuation Check is stopped with2 turns, no error/recovery.
+  The earlier Attachment Fixture failure is not explained by these passes: its
+  original stderr was not retained, and its stop intent remains unconfirmed after
+  restart (operation_in_progress). Keep this recovery case explicitly open for the
+  full repository review; do not claim a root-cause fix or discard its evidence.
+
 - 2026-09-16 corrections verified: custom-channel reconnect18/whole frontend890,
   actual Rust workspace file-owner6 including cross-process exclusion, unchanged
   architecture/source gates, policy19 and workspace all-feature Clippy pass.

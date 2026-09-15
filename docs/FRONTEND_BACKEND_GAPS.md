@@ -4,8 +4,10 @@
 header row/modal into the requesting agent message. No additional rail button or
 side panel. Signed0.1.56 directly verifies agent-attributed question/selection/response and
 same-message resolved result. No standalone opener or modal remains. Whole frontend890
-tests and unchanged production CSS pass. Controlled post-answer provider
-continuation is not claimed complete; the exact app was normally quit.
+tests and unchanged production CSS pass. Instrumented native fixture subsequently completes answer/read/publication/turn
+completion/normal Stop twice, including same-session Resume. Earlier reused
+Attachment Fixture remains an unexplained recovery case; these later passes do not
+close it. Exact app normal Quit and no owned processes are verified.
 
 2026-09-15 c2d1a117 review: custom-channel reconnect currently turns a successful
 ACK into an error and retains the draft. Separate send custody from history reloads;
