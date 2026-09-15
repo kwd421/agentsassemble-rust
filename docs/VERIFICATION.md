@@ -1,5 +1,17 @@
 # Verification Contract
 
+## Whole-source c2d1a117 submission and requested stop (2026-09-15)
+
+At22:57 KST the existing in-app Pro conversation visibly contains the complete
+unrestricted whole-repository request, both repository URLs and frozen commits,
+and `aa-whole-repository-c2d1a117.zip`. Rust:c2d1a1172354a06e9a3e10b98baeddc9e05df4a8; original:
+d5046473010d1353a81ee38337360e6d98f7bd6f. The archive includes2689 tracked
+regular files, 7533511 bytes; SHA256
+bcd60f9a03c118e70ad146a43740cfbd94b6a6aae6b475713ec151eece5727dc. All manifest entries verify.
+Posted text, attachment and active generation are confirmed. This satisfies the
+user's latest stopping condition: receive this review, correct/verify, submit the
+next review, then stop without awaiting its answer. No new approval is claimed.
+
 ## Whole-source e60a8e76 final review and API correction (2026-09-15)
 
 The complete45m34s Pro answer is read: REVISE Medium3. R1 aggregates independently

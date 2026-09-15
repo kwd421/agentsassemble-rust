@@ -2,6 +2,13 @@
 
 ## Active work
 
+- At22:57 KST2026-09-15, the next unrestricted whole-source Pro request is visibly
+  posted with both complete source snapshots at c2d1a1172354a06e9a3e10b98baeddc9e05df4a8.
+  Attachment, complete request and active generation are confirmed in the existing
+  in-app conversation. Current review corrections and affected verification are
+  complete. Stop now per the latest user instruction; do not await this next answer.
+  No final review approval is claimed.
+
 - Latest user stop condition (2026-09-15): receive the current e60a8e76 review
   completely, correct its supported findings and complete affected verification,
   submit and visibly confirm the next unrestricted whole-repository review, then
