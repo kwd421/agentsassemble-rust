@@ -700,22 +700,43 @@ fn tool_result_text(
     result: &CallToolResult,
     spec: &RemoteOpenAiSpec,
 ) -> Result<String, DriverError> {
-    let invalid = || provider_error("provider_tool_call_invalid", spec.errors.invalid_tool_call);
-    let text = if result.is_error == Some(true) {
-        "{\"ok\":false,\"error\":{\"code\":\"room_tool_rejected\"}}".to_owned()
-    } else {
-        result
-            .content
-            .iter()
-            .map(|content| content.as_text().map(|text| text.text.as_str()))
-            .collect::<Option<Vec<_>>>()
-            .map(|parts| parts.join("\n"))
-            .filter(|text| !text.is_empty())
-            .ok_or_else(invalid)?
-    };
-    (text.len() <= MAX_TOOL_RESULT_BYTES)
-        .then_some(text)
-        .ok_or_else(invalid)
+    if result.is_error == Some(true) {
+        return Ok("{\"ok\":false,\"error\":{\"code\":\"room_tool_rejected\"}}".to_owned());
+    }
+    let mut text = String::new();
+    for (index, content) in result.content.iter().enumerate() {
+        let Some(part) = content.as_text() else {
+            // This transport carries text tool results, not media. Report the
+            // limitation to the model without claiming the attachment was read.
+            return Ok(json!({"ok": false, "error": {
+                "code": "room_tool_media_unsupported",
+                "message": "This API transport cannot deliver image or binary tool results. The attachment content was not delivered; explain this limitation instead of claiming to have read it."
+            }}).to_string());
+        };
+        if text
+            .len()
+            .saturating_add(usize::from(index > 0))
+            .saturating_add(part.text.len())
+            > MAX_TOOL_RESULT_BYTES
+        {
+            return Ok(json!({"ok": false, "error": {
+                "code": "room_tool_result_too_large",
+                "message": "The tool result exceeds this API transport's byte limit and was not delivered. Narrow the search when possible, or explain the limitation; do not claim to have read the omitted content.",
+                "max_bytes": MAX_TOOL_RESULT_BYTES
+            }}).to_string());
+        }
+        if index > 0 {
+            text.push('\n');
+        }
+        text.push_str(&part.text);
+    }
+    if text.is_empty() {
+        return Err(provider_error(
+            "provider_tool_call_invalid",
+            spec.errors.invalid_tool_call,
+        ));
+    }
+    Ok(text)
 }
 
 fn assistant_value(message: &AssistantMessage, retain_reasoning: bool) -> Value {

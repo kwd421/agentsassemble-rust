@@ -206,6 +206,16 @@ async fn room_turn(
     responses: Vec<String>,
     workspace: Option<&std::path::Path>,
 ) -> (Result<ProviderTurnOutcome, DriverError>, Vec<Value>) {
+    room_turn_with_observation(spec, requested_model, responses, workspace, None).await
+}
+
+async fn room_turn_with_observation(
+    spec: &'static RemoteOpenAiSpec,
+    requested_model: &str,
+    responses: Vec<String>,
+    workspace: Option<&std::path::Path>,
+    observation: Option<ProviderRoomObservation>,
+) -> (Result<ProviderTurnOutcome, DriverError>, Vec<Value>) {
     let (endpoint, mut captured, server) = api_fixture(responses).await;
     let credentials = ProviderCredentialStore::isolated_test_store();
     credentials
@@ -242,7 +252,10 @@ async fn room_turn(
         .attach_session(&session)
         .await
         .unwrap_or_else(|error| panic!("attach session: {error}"));
-    let request = room_request(&session.public.session_id);
+    let mut request = room_request(&session.public.session_id);
+    if let Some(observation) = observation {
+        request.room_observation = Some(observation);
+    }
     driver
         .begin_room_observation(&request)
         .await
@@ -424,3 +437,6 @@ async fn builtin_workspace_tool_reaches_api_and_preserves_room_terminal_flow() {
     );
     assert!(requests[2]["messages"].to_string().contains("visible.txt"));
 }
+
+#[path = "remote_openai_tool_result_tests.rs"]
+mod tool_results;

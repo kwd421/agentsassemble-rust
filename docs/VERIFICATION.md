@@ -1,5 +1,69 @@
 # Verification Contract
 
+## Whole-source e60a8e76 final review and API correction (2026-09-15)
+
+The complete45m34s Pro answer is read: REVISE Medium3. R1 aggregates independently
+valid attachment messages beyond the execution budget; its actual Rust and signed
+package correction is recorded below. R2 rejects successful MCP image/resource
+blocks in the text-only shared API consumer. R3 rejects successful room search and
+text attachment results above128KiB at that same consumer. The reviewer confirmed
+previous split-request admission by executing current TypeScript and checked prior
+workspace result budgeting in source. Reviewer Python19/original attachment43 and
+providerJS10 pass; JS1 lacks Claude SDK, Rust lacks its toolchain, and packaged/real
+provider execution was not performed. These environment limits are not extra defects.
+
+Actual Rust authenticated MCP-to-API regressions reproduce R2/R3 as
+provider_tool_call_invalid, including a large search page and an attachment path.
+The shared text transport now returns bounded explicit ok:false results with
+room_tool_media_unsupported or room_tool_result_too_large. It preserves normal text,
+portal failures, malformed/empty-result rejection, pending effects and terminal
+custody. It never reports unread media or omitted content as success and does not
+expand capacity or add base64-as-text/partial-reading behavior. Both integration
+tests pass through real portal result production, API serialization and subsequent
+publication; cases include small text, PNG, non-UTF8 binary,150KB ASCII, Korean,
+escaped text and four long search results. External API peer and storage ingress
+are controlled fixtures; no real model execution is claimed. Full provider264 and workspace all-target/all-feature Clippy pass.
+
+Signed0.1.54 at22:54 KST verifies the actual shared API/Local path using a controlled
+loopback peer, without running a real model. The native picker uploads normal text,
+a normalized PNG, non-UTF8 binary and150KB text. Four authenticated reads deliver
+text, two explicit media limitations and one size limitation; subsequent API output
+publishes all four results in the visible room. The durable session completes1 turn,
+with empty pending/inflight, no error and no recovery requirement. Normal Stop and
+Quit succeed; app87139 and its children are absent. The exact controlled peer87138
+exits through its shutdown endpoint. Isolated data and fixture are moved to Trash;
+unrelated Ollama and user data remain intact. Sanitized proof is
+`/tmp/aa-api-tool-result-packaged-evidence.json`. No frontend layout change occurred.
+Architecture/source-growth/format/diff, policy19 and artifact maintenance checks pass before commit.
+
+## Queued attachment correction and packaged proof (2026-09-15)
+
+While the e60a8e76 review is still generating, its attachment candidate is reproduced
+at the actual Rust persistence owner: two queued messages with5+4 stored attachments
+produce9 observation IDs. The baseline regression fails on9 versus5. The existing
+whole-message prefix now defers the second event intact under the unchanged8-ID
+contract; the next successful completion assigns its4 IDs and preserves both cursors.
+Full persistence339, authenticated server attachment2 and workspace all-target/all-feature
+Clippy pass. No frontend behavior, permissions or blocking gate is changed.
+
+Signed0.1.53 packaged verification at22:35 KST uses a clearly labeled controlled
+native Codex fixture, not a real provider. During its first pending question, the
+native file picker uploads and sends two actual messages containing5 and4 files.
+Answering the question resumes normal scheduling. Authenticated Room Portal calls
+read the real discussion and each assigned attachment, then publish visible counts
+0,5,4 in successive turns. Nine distinct attachment IDs are read; the durable session
+has3 turns, empty pending/inflight inputs, no error and no recovery requirement.
+Normal Stop leaves detached/stopped; normal Quit leaves no AgentsAssemble or fixture
+process. Only this run's isolated data and fixture are moved to Trash; the signed
+bundle is retained. Sanitized evidence: `/tmp/aa-attachment-prefix-packaged-evidence.json`.
+
+The first release baseline could not load a stripped sqlx proc-macro dylib on macOS27;
+this is a compiler/linker artifact failure, not the product regression. Debug Rust
+reproduces and verifies the defect. The documented Rust issue157750 matches this
+LINKEDIT failure; invocation-only CARGO_PROFILE_RELEASE_STRIP=none permits the signed
+release build, without changing repository profiles, runtime behavior or gates.
+The current Pro final answer is now fully read; its additional R2/R3 corrections are recorded above.
+
 ## Whole-source e60a8e76 review submission (2026-09-15)
 
 At21:58 KST the existing in-app conversation visibly contains the unrestricted

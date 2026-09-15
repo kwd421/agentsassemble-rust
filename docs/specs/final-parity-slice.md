@@ -563,3 +563,30 @@ approval contracts; preserve ASCII controls and report real I/O failures normall
 Verify actual final Rust tool returns for ASCII, multibyte, escaped text and search,
 and actual owner subscription/reconnect/answer/expiry/revocation with large requests.
 Retain existing frontend layout and controls, and verify the signed packaged flow.
+
+## Queued attachment observation budget (2026-09-15)
+
+Actual Rust assignment of queued5+4 attachment messages produces9 attachment IDs,
+while provider observation and read custody retain the8 attachment bound. The
+scheduler's existing whole-message pending-prefix owner must also budget attachment
+IDs before assignment. Preserve all message content and queued IDs; stop the prefix
+before the next whole event would exceed8, leave its cursor pending, then assign it
+after successful completion. Keep native/API attachment validation and read budgets
+unchanged. Verify actual stored attachments, queue assignment, first completion and
+second assignment without dropped IDs or advanced cursors. No frontend controls,
+wire schema, provider permissions or capacity gate changes are required.
+
+## Shared API room-tool result failures (2026-09-15)
+
+The current common API/Local transport serializes tool results as text. Successful
+MCP image/resource blocks and oversized text are currently mislabeled invalid tool
+calls and escape the turn. Preserve the text-only transport,128KiB result budget,
+normal text, authority/receipt ownership and terminal action semantics. At this
+consumer boundary, report explicit non-success tool results for unsupported media
+and oversized results so the model can explain the limitation or use another
+available action, then complete normally. Do not claim media was seen, base64 was
+understood, or oversized content was read; do not silently truncate or expand gates.
+Empty/malformed results, unavailable portals and uncertain writes remain errors.
+Verify real portal-to-API delivery and subsequent publication for text, image,
+binary, ASCII/multibyte/escaped oversized attachments and large search results.
+This correction does not introduce media support or partial-attachment reading.

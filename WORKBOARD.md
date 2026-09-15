@@ -2,6 +2,21 @@
 
 ## Active work
 
+- Latest user stop condition (2026-09-15): receive the current e60a8e76 review
+  completely, correct its supported findings and complete affected verification,
+  submit and visibly confirm the next unrestricted whole-repository review, then
+  stop without waiting for that next review answer. This supersedes the earlier
+  continue-until-approved instruction for this run.
+
+- Current e60a8e76 Pro review is fully read (45m34s): REVISE Medium3.
+  R1 whole-message attachment prefix passes persistence339, server attachment2 and
+  signed0.1.53 real picker/queued5+4/read/publication/Stop/Quit verification. R2/R3
+  explicit API media/size tool failures now reach the model without aborting the
+  turn. Actual portal/API integration, provider264, workspace Clippy and signed0.1.54
+  real upload/read/publication/normal Stop/Quit pass. This preserves text-only API
+  and128KiB limits; it does not claim media or partial-attachment support. Freeze,
+  push and visibly submit the next unrestricted full-source review, then stop.
+
 - At21:58 KST2026-09-15, submitted unrestricted whole-source Pro re-review at
   e60a8e761ff3fe5108a8126285bf184ae26646b6 with both full source snapshots.
   Complete request, attachment and active generation are visibly confirmed in
