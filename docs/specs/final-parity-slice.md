@@ -542,3 +542,24 @@ cannot be confirmed. Apply the selected display name at that native owner. Never
 replace a missing durable thread with a new thread or fabricate user conversation.
 Verify no duplicate thread/start, confirmed-name failure handling, and actual idle
 Start/Stop/restart/Resume preserving the same native ID.
+
+## Pending request admission and file result budgets (2026-09-15)
+
+Whole-source6b5b19dd review identifies independently valid question bodies whose
+aggregate exceeds the mandatory room snapshot, and valid builtin read/search output
+whose JSON serialization exceeds128KiB. Reproduce both through the actual Rust owners.
+During subscription, deliver each full owner-private pending request in a bounded
+frame, followed by an explicit completion marker and the bound room snapshot.
+All data comes from the same durable snapshot; retain per-frame authorization and
+contiguous catch-up. The frontend stages these frames and admits no partial view.
+Preserve question/option text, IDs, answer authority, expiry and revocation semantics.
+Do not raise the256KiB wire limit or add an alternate transport or polling owner.
+
+Builtin file collection must budget the final JSON encoding within128KiB, including
+UTF-8 and escaping, returning valid partial data with explicit truncation. Add a
+character offset for continuing a truncated selected read range, including a long
+single line. Keep original filesystem bounds, authority, cancellation and write
+approval contracts; preserve ASCII controls and report real I/O failures normally.
+Verify actual final Rust tool returns for ASCII, multibyte, escaped text and search,
+and actual owner subscription/reconnect/answer/expiry/revocation with large requests.
+Retain existing frontend layout and controls, and verify the signed packaged flow.

@@ -112,7 +112,7 @@ describe("bounded canonical room socket", () => {
     expect(handle.ready()).toBe(false);
 
     const frames = handshakeFrames(1, 2);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await flushPromises();
     expect(onOpen).not.toHaveBeenCalled();
@@ -157,7 +157,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot.replace('"last_seq":0', '"last_seq":1'));
     await vi.waitFor(() =>
       expect(errors.at(-1)?.category).toBe("snapshot_boundary_invalid")
@@ -193,7 +193,7 @@ describe("bounded canonical room socket", () => {
     const frames = handshakeFrames(0, 0, (receipt) => {
       receipt.server_surface_digest = "d".repeat(64);
     });
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     await vi.waitFor(() =>
       expect(errors.at(-1)?.category).toBe("subscription_receipt_scope_invalid")
     );
@@ -211,7 +211,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(1, 3);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     receiveServerFrame(sockets[0], {
       op: "event",
@@ -237,7 +237,7 @@ describe("bounded canonical room socket", () => {
     const frames = handshakeFrames(1, 1);
     frames.snap.events = [malformedRoleEvent(1)];
     frames.rawSnapshot = JSON.stringify(frames.snap);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
 
     await vi.waitFor(() => expect(errors.at(-1)?.category).toBe("snapshot_event_invalid"));
@@ -262,7 +262,7 @@ describe("bounded canonical room socket", () => {
     (frames.snap as unknown as Record<string, unknown>).agent_sessions = [
       { session_id: "partial-session" },
     ];
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receive(frames.snap);
 
     await vi.waitFor(() =>
@@ -282,7 +282,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 
@@ -321,7 +321,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(1, 2);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     receiveServerFrame(sockets[0], {
       op: "event",
@@ -350,7 +350,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(1, 1);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     receiveServerFrame(sockets[0], {
@@ -379,7 +379,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(1, 1);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     receiveServerFrame(sockets[0], {
@@ -408,7 +408,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const first = handshakeFrames(0, 0);
-    sockets[0].receive(first.receipt); sockets[0].receive(first.catalog);
+    sockets[0].receive(first.receipt); sockets[0].receive(first.catalog); sockets[0].receive(first.requestsEnd);
     sockets[0].receiveRaw(first.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     receiveServerFrame(sockets[0], {
@@ -451,7 +451,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     void handle.command("message.send", { content: "hello" }).catch(() => {});
@@ -479,7 +479,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     void handle
@@ -520,7 +520,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});
@@ -557,7 +557,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pending = handle.command("message.send", { content: "rejected" });
@@ -587,7 +587,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});
@@ -614,7 +614,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await flushPromises();
     receiveServerFrame(sockets[0], {
@@ -645,7 +645,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 
@@ -676,7 +676,7 @@ describe("bounded canonical room socket", () => {
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
     (frames.snap as unknown as Record<string, unknown>).available_providers = [];
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receive(frames.snap);
 
     await vi.waitFor(() =>
@@ -699,7 +699,7 @@ describe("bounded canonical room socket", () => {
     if (fault === "settings-field") delete (frames.snap.room_settings as unknown as Record<string, unknown>).tool_mode;
     else if (fault === "room-identity") delete (frames.snap.room as unknown as Record<string, unknown>).room_uid;
     else (frames.snap.room as unknown as Record<string, unknown>).status = "invented";
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receive(frames.snap);
 
     await vi.waitFor(() =>
@@ -715,7 +715,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 
@@ -771,7 +771,7 @@ describe("bounded canonical room socket", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     const pendingLeave = handle.command("participant.leave", {});

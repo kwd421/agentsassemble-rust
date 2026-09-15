@@ -22,7 +22,7 @@ describe("provider request response transport", () => {
     try {
       await flushPromises(); sockets[0].open();
       const first = handshakeFrames(2, 2);
-      sockets[0].receive(first.receipt); sockets[0].receive(first.catalog);
+      sockets[0].receive(first.receipt); sockets[0].receive(first.catalog); sockets[0].receive(first.requestsEnd);
       sockets[0].receive({ ...first.snap, events: [event(1), hidden(2)] });
       await flushPromises();
       expect(onError).not.toHaveBeenCalled();
@@ -50,7 +50,7 @@ describe("provider request response transport", () => {
     try {
       await flushPromises(); sockets[0].open();
       const first = handshakeFrames(0, 0);
-      sockets[0].receive(first.receipt); sockets[0].receive(first.catalog); sockets[0].receiveRaw(first.rawSnapshot); await opened;
+      sockets[0].receive(first.receipt); sockets[0].receive(first.catalog); sockets[0].receive(first.requestsEnd); sockets[0].receiveRaw(first.rawSnapshot); await opened;
       await expect(handle.command("provider.request.resolve", resolution)).rejects.toMatchObject({ category: "request_id_required" });
       const pending = handle.resolveProviderRequest(requestId, resolution);
       const sent = sockets[0].sent.at(-1);
@@ -59,7 +59,7 @@ describe("provider request response transport", () => {
       sockets[0].close();
       await vi.advanceTimersByTimeAsync(500); await flushPromises(); sockets[1].open();
       const next = handshakeFrames(0, 0);
-      sockets[1].receive(next.receipt); sockets[1].receive(next.catalog); sockets[1].receiveRaw(next.rawSnapshot);
+      sockets[1].receive(next.receipt); sockets[1].receive(next.catalog); sockets[1].receive(next.requestsEnd); sockets[1].receiveRaw(next.rawSnapshot);
       await vi.advanceTimersByTimeAsync(1_000); await flushPromises();
       expect(sockets[1].sent.filter((frame) => frame.op === "command")).toEqual([sent]);
       sockets[1].receive(ack);

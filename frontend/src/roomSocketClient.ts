@@ -37,6 +37,7 @@ import { MAX_ROOM_SOCKET_MESSAGE_BYTES } from "./types/generated/ROOM_SOCKET_WIR
 import { scheduleUncertainCommandRetry, type PendingCommandRetryState } from "./roomSocketRetryPolicy";
 import { createSecureRequestId } from "./lib/secureRequestId";
 import { ROOM_STREAMS } from "./types/generated/ROOM_STREAMS";
+import { pendingProviderRequestsAreValid } from "./lib/providerRequestContract";
 import { parseSideChatUpdate } from "./lib/sideChatContract";
 import { assertExactKeys } from "./lib/strictJsonContract";
 
@@ -304,6 +305,8 @@ export function openRoomSocket(
       socket = currentSocket;
       transportReady = false;
       let receipt: SubscriptionReceipt | null = null;
+      const initialRequests: import("./types/generated/PendingProviderRequest").PendingProviderRequest[] = [];
+      let requestsComplete = false;
       let initialCatalog: import("./types/generated/ProviderCatalog").ProviderCatalog | null = null;
       let snapshotAccepted = false;
       let connectionEstablished = false;
@@ -453,10 +456,21 @@ export function openRoomSocket(
           initialCatalog = msg.catalog;
           return;
         }
+        if (!requestsComplete) {
+          const msg = JSON.parse(raw) as unknown;
+          if (!isRecord(msg) || msg.op !== "provider_request_snapshot") {
+            throw new RoomSocketSayError("Initial provider requests were incomplete.", "provider_requests_invalid");
+          }
+          assertExactKeys(msg, ["op", "request"], "initial provider request");
+          if (msg.request === null) requestsComplete = true;
+          else if (pendingProviderRequestsAreValid([...initialRequests, msg.request])) initialRequests.push(msg.request as import("./types/generated/PendingProviderRequest").PendingProviderRequest);
+          else throw new RoomSocketSayError("Initial provider request was invalid.", "provider_requests_invalid");
+          return;
+        }
         if (!snapshotAccepted) {
           const wireSnapshot = JSON.parse(raw) as unknown;
           verifyBoundSnapshot(wireSnapshot, receipt);
-          const msg = snapshotWithCatalog(wireSnapshot, initialCatalog);
+          const msg = snapshotWithCatalog(wireSnapshot, initialCatalog, initialRequests);
           if (!canUseOpenSocket()) return;
           const candidateRoomUid = isRecord(msg) && isRecord(msg.room) ? msg.room.room_uid : null;
           if (acceptedRoomUid !== null && candidateRoomUid !== acceptedRoomUid) {

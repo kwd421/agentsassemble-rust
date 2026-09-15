@@ -106,7 +106,6 @@ function snapshot(cursor: number) {
     participants: [],
     agent_sessions: [],
     active_turns: [],
-    provider_requests: [],
     events,
     oldest_seq: events[0]?.seq || 0,
     last_seq: cursor,
@@ -141,6 +140,7 @@ export function handshakeFrames(
     receipt,
     snap,
     rawSnapshot,
+    requestsEnd: { op: "provider_request_snapshot", request: null },
     catalog: { op: "provider_catalog_updated", catalog: { status: "ready", catalog_revision: "cat-1", providers: [] } },
   };
 }

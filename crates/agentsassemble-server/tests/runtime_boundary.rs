@@ -614,6 +614,10 @@ async fn websocket_snapshot_is_bound_to_the_private_ticket_scope_and_finite_curs
             .len()
             <= MAX_ROOM_SOCKET_MESSAGE_BYTES
     );
+    assert_eq!(
+        receive_raw_json(&mut socket).await,
+        json!({"op":"provider_request_snapshot","request":null})
+    );
     let raw_snapshot = receive_text(&mut socket).await;
     let snapshot: Value = serde_json::from_str(&raw_snapshot)
         .unwrap_or_else(|error| panic!("decode bounded snapshot: {error}"));

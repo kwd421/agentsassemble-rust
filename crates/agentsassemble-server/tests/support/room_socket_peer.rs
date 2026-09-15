@@ -9,6 +9,7 @@ use tokio_tungstenite::{WebSocketStream, tungstenite::Message};
 pub struct RoomSocketPeer<S> {
     socket: WebSocketStream<S>,
     pub initial_catalog: Option<Value>,
+    pub initial_requests: Vec<Value>,
 }
 
 impl<S> RoomSocketPeer<S>
@@ -19,6 +20,7 @@ where
         Self {
             socket,
             initial_catalog: None,
+            initial_requests: Vec::new(),
         }
     }
 
@@ -73,6 +75,20 @@ where
         let frame = parse_json(&wire);
         assert_eq!(frame["op"], "provider_catalog_updated");
         self.initial_catalog = Some(frame["catalog"].clone());
+        self.initial_requests.clear();
+        loop {
+            let wire = match timeout {
+                Some(timeout) => receive_wire_text_with_timeout(&mut self.socket, timeout).await,
+                None => receive_wire_text(&mut self.socket).await,
+            };
+            assert!(wire.len() <= agentsassemble_protocol::MAX_ROOM_SOCKET_MESSAGE_BYTES);
+            let frame = parse_json(&wire);
+            assert_eq!(frame["op"], "provider_request_snapshot");
+            if frame["request"].is_null() {
+                break;
+            }
+            self.initial_requests.push(frame["request"].clone());
+        }
     }
 
     pub async fn send_binary(&mut self, bytes: Vec<u8>) {

@@ -12,7 +12,7 @@ it("admits a complete room only after its catalog, snapshot and catch-up arrive"
   sockets[0].receive(first.receipt);
   expect(handle.ready()).toBe(false);
   expect(onRoomSnapshot).not.toHaveBeenCalled();
-  sockets[0].receive(first.catalog);
+  sockets[0].receive(first.catalog); sockets[0].receive(first.requestsEnd);
   expect(handle.ready()).toBe(false);
   expect(onProviderCatalog).not.toHaveBeenCalled();
   expect(onRoomSnapshot).not.toHaveBeenCalled();
@@ -35,7 +35,7 @@ it.each(["missing", "invalid", "duplicate"])("rejects %s initial catalog without
   sockets[0].receive(frames.receipt);
   if (kind === "missing") sockets[0].receiveRaw(frames.rawSnapshot);
   if (kind === "invalid") sockets[0].receive({ ...frames.catalog, private_field: "rejected" });
-  if (kind === "duplicate") { sockets[0].receive(frames.catalog); sockets[0].receive(frames.catalog); }
+  if (kind === "duplicate") { sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd); }
   await flushPromises();
   expect(onError).toHaveBeenCalled(); expect(onOpen).not.toHaveBeenCalled();
   expect(onRoomSnapshot).not.toHaveBeenCalled(); expect(handle.ready()).toBe(false);
@@ -48,7 +48,7 @@ it("requires the new catalog again on reconnect after a live catalog update", as
   const { handle, sockets, opened } = openHarness({ onRoomSnapshot });
   await flushPromises(); sockets[0].open();
   const first = handshakeFrames(0, 0);
-  sockets[0].receive(first.receipt); sockets[0].receive(first.catalog); sockets[0].receiveRaw(first.rawSnapshot);
+  sockets[0].receive(first.receipt); sockets[0].receive(first.catalog); sockets[0].receive(first.requestsEnd); sockets[0].receiveRaw(first.rawSnapshot);
   await opened;
   const updated = { ...first.catalog, catalog: { ...first.catalog.catalog, catalog_revision: "cat-2" } };
   sockets[0].receive(updated); sockets[0].close();
@@ -56,7 +56,7 @@ it("requires the new catalog again on reconnect after a live catalog update", as
   const next = handshakeFrames(0, 0);
   sockets[1].receive(next.receipt);
   expect(handle.ready()).toBe(false);
-  sockets[1].receive(updated);
+  sockets[1].receive(updated); sockets[1].receive(next.requestsEnd);
   expect(handle.ready()).toBe(false);
   sockets[1].receiveRaw(next.rawSnapshot); await flushPromises();
   expect(handle.ready()).toBe(true);

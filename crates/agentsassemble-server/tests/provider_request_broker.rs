@@ -24,6 +24,9 @@ mod room_socket_peer;
 #[path = "provider_request_broker/socket.rs"]
 mod request_socket;
 
+#[path = "provider_request_broker/large_snapshot.rs"]
+mod large_snapshot;
+
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
 #[tokio::test]
@@ -243,6 +246,17 @@ async fn assigned_request(
     (AttendeeConnectionAuthorization, OpenProviderRequest, String),
     Box<dyn std::error::Error>,
 > {
+    assigned_request_with_handle(store, human, "request-runtime".to_owned()).await
+}
+
+async fn assigned_request_with_handle(
+    store: &SqliteStore,
+    human: &agentsassemble_persistence::HumanSessionAuthorization,
+    runtime_handle: String,
+) -> Result<
+    (AttendeeConnectionAuthorization, OpenProviderRequest, String),
+    Box<dyn std::error::Error>,
+> {
     let now = chrono::Utc::now();
     let invite = store
         .create_companion_attendee_invite(
@@ -271,8 +285,10 @@ async fn assigned_request(
         .claim_attendee_connection(&admitted.authorization, Uuid::new_v4(), now)
         .await?
         .authorization;
+    let mut ready = ready_report();
+    ready.runtime_handle_id = runtime_handle;
     store
-        .record_attendee_ready(&connection, &ready_report(), now)
+        .record_attendee_ready(&connection, &ready, now)
         .await?;
     store
         .execute_authorized_message_with_turn(

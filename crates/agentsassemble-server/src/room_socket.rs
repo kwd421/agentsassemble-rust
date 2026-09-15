@@ -45,6 +45,7 @@ struct PreparedSnapshot {
     cursor: i64,
     encoded: String,
     encoded_catalog: String,
+    encoded_requests: Vec<String>,
 }
 
 pub(crate) async fn establish<S, R>(
@@ -143,6 +144,10 @@ where
     send_encoded(sender, &state.shutdown, prepared.encoded_catalog)
         .await
         .ok()?;
+    for frame in prepared.encoded_requests {
+        refresh_room_session(state, &mut principal, &mut room_session).await?;
+        send_encoded(sender, &state.shutdown, frame).await.ok()?;
+    }
     refresh_room_session(state, &mut principal, &mut room_session).await?;
     send_encoded(sender, &state.shutdown, prepared.encoded)
         .await
@@ -399,13 +404,13 @@ where
     let provider_catalog = catalog_updates.borrow_and_update().clone();
     let snapshot_cursor = snapshot_data.last_seq;
     let room_uid = snapshot_data.room.room_uid;
+    let requests = snapshot_data.provider_requests;
     let snapshot = RoomSnapshot {
         stream: "room_events",
         room: snapshot_data.room,
         room_settings: settings,
         participants: snapshot_data.participants,
         agent_sessions: snapshot_data.agent_sessions,
-        provider_requests: snapshot_data.provider_requests,
         active_turns: Vec::new(),
         events: snapshot_data
             .events
@@ -422,10 +427,18 @@ where
     let catalog_frame = ServerFrame::ProviderCatalogUpdated {
         catalog: provider_catalog,
     };
+    let encoded_requests = requests
+        .into_iter()
+        .map(Some)
+        .chain(std::iter::once(None))
+        .map(|request| encode_server_frame(&ServerFrame::ProviderRequestSnapshot { request }))
+        .collect::<Result<Vec<_>, _>>()
+        .ok();
     let encoded = encode_server_frame(&catalog_frame)
         .ok()
-        .zip(fit_snapshot_frame(snapshot));
-    let Some((encoded_catalog, encoded_snapshot)) = encoded else {
+        .zip(fit_snapshot_frame(snapshot))
+        .zip(encoded_requests);
+    let Some(((encoded_catalog, encoded_snapshot), encoded_requests)) = encoded else {
         let _ = send_subscription_nack(
             sender,
             state,
@@ -446,6 +459,7 @@ where
         cursor: snapshot_cursor,
         encoded: encoded_snapshot,
         encoded_catalog,
+        encoded_requests,
     })
 }
 

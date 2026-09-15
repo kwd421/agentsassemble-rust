@@ -2,6 +2,61 @@
 
 ## Whole-source 6b5b19dd review submission (2026-09-15)
 
+The complete26m58s final answer is now read: REVISE Medium2. R1 constructs four
+individually valid79,426-byte pending requests whose empty-event snapshot is324,284
+bytes; current TS accepts their shapes but socket frame sizing rejects the aggregate.
+The reviewer statically traces the Rust failure, without executing Rust. R2 runs
+original Python reading/search and computes current Rust JSON above128KiB for Korean
+or escaped one-line content and200 search results. Both require actual Rust reproduction
+and correction. Earlier catalog separation, exact creation retry including catalog-only
+refresh, and confirmed-start-failure Stop corrections are confirmed. Python19 pass;
+providerJS10 pass/1 missing-SDK dependency failure. Full Rust, frontend, packaged,
+real-provider and OS execution were not run by the reviewer; these are not product
+test failures. Latest corrected-source whole-repository review remains required.
+
+R1 actual Rust baseline now opens four valid large questions under distinct active
+native handles in an ambient room, then the authenticated owner subscription
+returns a NACK instead of Subscribed. Earlier fixture attempts had duplicate labels,
+ordered-turn exclusion and repeated synthetic runtime handles; those setup failures
+were corrected before this baseline. The corrected protocol15 sends each full request
+in a bounded owner-authorized frame, then an explicit end marker and the same bound
+snapshot. Three actual owner admissions recover all four complete bodies, answer
+each exactly once and clear pending custody. Broker6 includes live secret delivery,
+expiry, cancellation and replacement. Frontend request admission rejects missing end,
+malformed/duplicate/post-end bodies and discards partial reconnect state; socket90 pass.
+
+R2 actual Rust final tool execution baseline fails workspace_tool_failed for a normal
+multibyte one-line file. Collection now budgets JSON escaping and UTF-8 inside the
+unchanged128KiB bound, returns partial data/truncated and provides next_offset for
+continuing the same selected line range. ASCII control, Korean, quotes and search
+pass through the final WorkspaceTools return; continued reads reconstruct the entire
+original. Existing write approval/cancellation/filesystem boundary coverage also
+passes (workspace tools4). Current Clippy and unchanged architecture/policy19/format/
+diff/artifact gates pass. Full frontend870 pass/13 stale-fixture failures are followed
+by corrected retry/startup22 and directory9 passes, covering883 tests; production
+TypeScript/Vite/CSS build passes. Full server/provider and signed-package checks continue.
+
+The complete current server run now passes275 tests across51 targets; the full
+provider run passes262 in219.23s with no failures. After confirming no Cargo/rustc/
+test processes remain, the existing artifact owner removes28.0GiB of accumulated
+target files. Prior signed0.1.51 is retained outside target. Build the isolated0.1.52
+package for actual large-request reconnect/answer verification; no real provider
+or account is used by its clearly labeled controlled Codex question generator.
+
+Signed0.1.52 packaged verification completes at21:55 KST2026-09-15. The first
+controlled generator omitted its code-mode companion readiness response, so that
+fixture start failed; this was corrected in the isolated generator without changing
+product code. Four native controlled sessions then start normally. One room message
+opens four large requests; navigating to Friends and back restores all four pending
+requests. The existing dialog accepts all twelve free-text answers, sends four exact
+native receipts and shows no pending requests. Its long-content scroll reaches the
+last input and submit control visibly. This fixture intentionally supplies no room
+publication receipt, so completed turns correctly require recovery; it is request
+transport/UI proof, not a real-provider conversation pass. All four normal Stops
+succeed and leave stopped/detached with no error. Normal Quit leaves app90587,
+supervisor90622 and server90658 absent. Earlier native36 and final release Clippy
+passed; current source gates and artifact maintenance are checked before commit.
+
 At02:36 KST, the in-app Pro conversation visibly contains the complete unrestricted
 whole-repository request, repository URLs, exact Rust commit
 6b5b19dd9df82a9a065634a8e6062d42f93d7c87 and original commit

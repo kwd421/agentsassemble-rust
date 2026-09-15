@@ -22,7 +22,7 @@ describe("canonical room socket quiet keepalive", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await opened;
     expect(handle.ready()).toBe(true);
@@ -57,7 +57,7 @@ describe("canonical room socket quiet keepalive", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await opened;
     expect(handle.ready()).toBe(true);
@@ -111,7 +111,7 @@ describe("canonical room socket quiet keepalive", () => {
     await flushPromises();
     sockets[0].open();
     const frames = handshakeFrames(0, 0);
-    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog);
+    sockets[0].receive(frames.receipt); sockets[0].receive(frames.catalog); sockets[0].receive(frames.requestsEnd);
     sockets[0].receiveRaw(frames.rawSnapshot);
     await opened;
     expect(handle.ready()).toBe(true);

@@ -17,7 +17,7 @@ describe("independent ephemeral socket stream", () => {
     await flushPromises();
     sockets[0].open();
     const handshake = handshakeFrames(0,0,(receipt) => {receipt.streams=["room_events","side_chat"];});
-    sockets[0].receive(handshake.receipt); sockets[0].receive(handshake.catalog);
+    sockets[0].receive(handshake.receipt); sockets[0].receive(handshake.catalog); sockets[0].receive(handshake.requestsEnd);
     sockets[0].receiveRaw(handshake.rawSnapshot);
     await opened;
     sockets[0].receive({op:"side_chat_updated",update:update()});
@@ -40,7 +40,7 @@ describe("independent ephemeral socket stream", () => {
     await flushPromises();
     sockets[0].open();
     const handshake = handshakeFrames(0,0);
-    sockets[0].receive(handshake.receipt); sockets[0].receive(handshake.catalog);
+    sockets[0].receive(handshake.receipt); sockets[0].receive(handshake.catalog); sockets[0].receive(handshake.requestsEnd);
     sockets[0].receiveRaw(handshake.rawSnapshot);
     await opened;
     sockets[0].receive({op:"side_chat_updated",update:update()});

@@ -1,5 +1,12 @@
 # Frontend/backend exposure map
 
+2026-09-15 whole-source6b5b19dd: pending owner questions can exceed the required
+reconnect snapshot. Deliver complete request bodies in bounded admission frames;
+stage until completion and the bound snapshot before exposing the existing request
+panel. Preserve all question text, controls and layout. Signed0.1.52 now verifies all four long requests after room re-entry, twelve
+answers through the existing panel, zero pending requests and four normal Stops.
+Whole-source re-review remains required.
+
 2026-09-15: signed0.1.47 confirms Cursor Auto read/reply twice and normal Stop,
 and resolves the earlier failed-Claude recovery Stop. Whole-source b09d3de4 then
 finds creation-modal uncertain retry, combined catalog/snapshot capacity, and safe

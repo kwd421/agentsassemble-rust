@@ -2,6 +2,16 @@
 
 ## Active work
 
+- Whole-source6b5b19dd Pro completes26m58s: REVISE Medium2; full final answer read.
+  R1: independently valid pending questions overflow required owner reconnect
+  metadata. R2: builtin file results satisfy character caps but overflow the final
+  JSON byte cap and become generic failures. Correct bounded request admission
+  frames and file-result byte budgeting; reproduce at real Rust owners, verify
+  packaged behavior and obtain unrestricted whole-source re-review. Signed0.1.52
+  now passes four concurrent long requests, re-entry, all answers and normal Stops.
+  Server275/provider262/native36 and frontend883 covered pass. Freeze the corrected
+  source and obtain the completed unrestricted whole-source Pro answer.
+
 - Whole-source b09d3de4 completed46m25s, REVISE H1/M1/L1; fully read.
   All three owner corrections now pass frontend877, persistence338, provider259,
   full all-feature server274, native36 and unchanged source gates. Signed0.1.48

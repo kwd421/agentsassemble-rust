@@ -57,7 +57,7 @@ describe("room socket exact-command retry", () => {
     sockets[1].open();
     const replacement = handshakeFrames(0, 0);
     replacement.snap.room.room_uid = "00000000-0000-4000-8000-000000000002";
-    sockets[1].receive(replacement.receipt); sockets[1].receive(replacement.catalog);
+    sockets[1].receive(replacement.receipt); sockets[1].receive(replacement.catalog); sockets[1].receive(replacement.requestsEnd);
     sockets[1].receiveRaw(JSON.stringify(replacement.snap));
     await flushPromises();
     await expect(failure.retry!()).rejects.toMatchObject({ category: "room_replaced" });
@@ -142,7 +142,7 @@ describe("room socket exact-command retry", () => {
     await flushPromises();
     sockets[0].open();
     const firstFrames = handshakeFrames(0, 0);
-    sockets[0].receive(firstFrames.receipt); sockets[0].receive(firstFrames.catalog);
+    sockets[0].receive(firstFrames.receipt); sockets[0].receive(firstFrames.catalog); sockets[0].receive(firstFrames.requestsEnd);
     sockets[0].receiveRaw(firstFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
 
@@ -164,7 +164,7 @@ describe("room socket exact-command retry", () => {
     await vi.advanceTimersByTimeAsync(500);
     sockets[1].open();
     const secondFrames = handshakeFrames(0, 0);
-    sockets[1].receive(secondFrames.receipt); sockets[1].receive(secondFrames.catalog);
+    sockets[1].receive(secondFrames.receipt); sockets[1].receive(secondFrames.catalog); sockets[1].receive(secondFrames.requestsEnd);
     sockets[1].receiveRaw(secondFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     await vi.waitFor(() => expect(sockets[1].sent).toHaveLength(2));
@@ -178,7 +178,7 @@ describe("room socket exact-command retry", () => {
     await vi.advanceTimersByTimeAsync(500);
     sockets[2].open();
     const thirdFrames = handshakeFrames(0, 0);
-    sockets[2].receive(thirdFrames.receipt); sockets[2].receive(thirdFrames.catalog);
+    sockets[2].receive(thirdFrames.receipt); sockets[2].receive(thirdFrames.catalog); sockets[2].receive(thirdFrames.requestsEnd);
     sockets[2].receiveRaw(thirdFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     await vi.waitFor(() => expect(sockets[2].sent).toHaveLength(2));
@@ -190,7 +190,7 @@ describe("room socket exact-command retry", () => {
     await vi.advanceTimersByTimeAsync(500);
     sockets[3].open();
     const fourthFrames = handshakeFrames(0, 0);
-    sockets[3].receive(fourthFrames.receipt); sockets[3].receive(fourthFrames.catalog);
+    sockets[3].receive(fourthFrames.receipt); sockets[3].receive(fourthFrames.catalog); sockets[3].receive(fourthFrames.requestsEnd);
     sockets[3].receiveRaw(fourthFrames.rawSnapshot);
     await vi.waitFor(() => expect(handle.ready()).toBe(true));
     expect(sockets[3].sent).toHaveLength(1);
@@ -311,7 +311,7 @@ async function openReadyConnection(
   expect(sockets).toHaveLength(index + 1);
   sockets[index].open();
   const frames = handshakeFrames(0, 0);
-  sockets[index].receive(frames.receipt); sockets[index].receive(frames.catalog);
+  sockets[index].receive(frames.receipt); sockets[index].receive(frames.catalog); sockets[index].receive(frames.requestsEnd);
   sockets[index].receiveRaw(frames.rawSnapshot);
   await vi.waitFor(() => expect(handle.ready()).toBe(true));
   return frames;

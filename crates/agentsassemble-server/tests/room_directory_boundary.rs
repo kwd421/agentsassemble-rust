@@ -444,6 +444,10 @@ async fn verify_created_room_socket(
     assert_eq!(receipt["op"], "subscribed");
     let catalog = receive_json(&mut socket).await;
     assert_eq!(catalog["op"], "provider_catalog_updated");
+    assert_eq!(
+        receive_json(&mut socket).await,
+        json!({"op":"provider_request_snapshot","request":null})
+    );
     let snapshot = receive_json(&mut socket).await;
     assert_eq!(snapshot["op"], "snapshot");
     assert_eq!(&snapshot["room"]["room_uid"], room_uid);
