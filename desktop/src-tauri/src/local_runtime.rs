@@ -419,7 +419,7 @@ fn open_private_new_log(path: &Path) -> Result<File, String> {
         .write(true)
         .open(path)
         .map_err(|error| format!("cannot create {}: {error}", path.display()))?;
-    make_private_file(&file)
+    make_private_file(&file, path)
         .map_err(|error| format!("cannot secure {}: {error}", path.display()))?;
     Ok(file)
 }
@@ -478,15 +478,15 @@ pub(crate) fn make_private_directory(path: &Path) -> std::io::Result<()> {
 }
 
 #[cfg(unix)]
-pub(crate) fn make_private_file(file: &File) -> std::io::Result<()> {
+pub(crate) fn make_private_file(file: &File, _path: &Path) -> std::io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     file.set_permissions(fs::Permissions::from_mode(0o600))
 }
 
 #[cfg(windows)]
-pub(crate) fn make_private_file(file: &File) -> std::io::Result<()> {
-    crate::private_fs::secure_file(file)
+pub(crate) fn make_private_file(_file: &File, path: &Path) -> std::io::Result<()> {
+    crate::private_fs::secure_file_path(path)
 }
 
 fn capture_runtime_output(
