@@ -221,6 +221,15 @@ impl PublicIngress {
         }
     }
 
+    /// The runtime's own loopback listener origin, available whether or not public access is up.
+    pub(crate) fn local_url(&self) -> Option<String> {
+        match self.0.as_ref() {
+            PublicIngressKind::Disabled => None,
+            PublicIngressKind::Manual(ingress) => Some(ingress.local_url.to_string()),
+            PublicIngressKind::Managed(ingress) => Some(ingress.controller.config.local_url.clone()),
+        }
+    }
+
     pub(crate) async fn start(
         &self,
         issue_sequence: NonZeroU64,

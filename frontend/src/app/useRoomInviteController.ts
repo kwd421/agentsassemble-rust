@@ -70,6 +70,7 @@ export function useRoomInviteController({
   const connectorInvites = useManagedAiInvites({
     roomDockId: modal?.roomId || "",
     publicOrigin: publicInviteStatus?.public_url || "",
+    localOrigin: publicInviteStatus?.tunnel.local_url || "",
     resolveManager: resolveManagerRoomAuthority,
     copyText,
     captureOriginRefresh: captureCurrentPublicOriginRefresh,
@@ -154,6 +155,7 @@ export function useRoomInviteController({
         if (!ingressOperationIsCurrent(generation)) return null;
         return Object.freeze({
           publicOrigin: status.public_url,
+          localOrigin: status.tunnel.local_url,
           isCurrent: () => ingressOperationIsCurrent(generation),
         });
       } catch (error) {

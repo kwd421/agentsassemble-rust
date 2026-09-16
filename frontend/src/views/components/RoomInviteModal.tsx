@@ -343,7 +343,8 @@ export default function RoomInviteModal({
           </section>
 
           {attendeeInvites && <AttendeeFriendInviteCard directory={friendsDirectory} controls={attendeeInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
-          {connectorInvites && <ConnectorInviteCard controls={connectorInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
+          {connectorInvites && <ConnectorInviteCard controls={connectorInvites} localOnly={!publicAccessRunning}
+            disabled={publicAccessBusy || (!publicAccessRunning && !tunnelStatus?.local_url)} />}
           {onCreatePairing && onCopyPairing && onRevokePairing && (
             <section className="dc-invite-card" aria-labelledby="operator-pairing-heading">
               <div>

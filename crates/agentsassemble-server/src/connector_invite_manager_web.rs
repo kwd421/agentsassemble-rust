@@ -1,5 +1,5 @@
 use agentsassemble_persistence::{PersistenceError, RoomManagerAuthority};
-use agentsassemble_protocol::{CreateConnectorInviteRequest, CreatedConnectorInvite};
+use agentsassemble_protocol::{CreateConnectorInviteRequest, CreatedConnectorInvite, InviteReach};
 use axum::{
     Json, Router,
     extract::{Request, State},
@@ -44,12 +44,26 @@ async fn create(
     let payload: CreateConnectorInviteRequest = decode_json_body(request, 8192).await?;
     let request_id =
         Uuid::parse_str(&payload.request_id).map_err(|_| ConnectorHttpError::invalid())?;
-    let ingress = state.public_ingress.ready_snapshot().ok_or_else(|| {
-        ConnectorHttpError::from_persistence(PersistenceError::CommandRejected {
-            code: "public_ingress_not_ready".into(),
-            message: "Public ingress must be ready before creating an invite.".to_owned(),
-        })
-    })?;
+    let origin = match payload.reach {
+        InviteReach::Public => state
+            .public_ingress
+            .ready_snapshot()
+            .map(|ingress| ingress.public_url)
+            .ok_or_else(|| {
+                rejected(
+                    "public_ingress_not_ready",
+                    "Public ingress must be ready before creating an invite.",
+                )
+            })?,
+        // A local link reaches only this machine, so it needs no public ingress. The
+        // loopback listener is already authorized for connector routes by LocalIngress.
+        InviteReach::Local => state.public_ingress.local_url().ok_or_else(|| {
+            rejected(
+                "local_ingress_unavailable",
+                "This runtime has no local listener for invite links.",
+            )
+        })?,
+    };
     let room_uid = grant.authority.room_uid.to_string();
     let invite = state
         .store
@@ -61,11 +75,8 @@ async fn create(
         )
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
-    let mut join = url::Url::parse(&format!(
-        "{}/join",
-        ingress.public_url.trim_end_matches('/')
-    ))
-    .map_err(|_| ConnectorHttpError::invalid())?;
+    let mut join = url::Url::parse(&format!("{}/join", origin.trim_end_matches('/')))
+        .map_err(|_| ConnectorHttpError::invalid())?;
     join.query_pairs_mut()
         .append_pair("token", &invite.invite_bearer);
     Ok(Json(CreatedConnectorInvite {
@@ -75,4 +86,11 @@ async fn create(
         expires_at: invite.expires_at.to_rfc3339(),
         join_url: join.to_string(),
     }))
+}
+
+fn rejected(code: &'static str, message: &str) -> ConnectorHttpError {
+    ConnectorHttpError::from_persistence(PersistenceError::CommandRejected {
+        code: code.into(),
+        message: message.to_owned(),
+    })
 }
