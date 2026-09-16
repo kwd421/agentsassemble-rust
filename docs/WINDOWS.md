@@ -11,6 +11,7 @@ Windows에서만 드러나는 결함 세 건을 고쳤다. 대부분 컴파일�
 것, 그리고 실제 Tauri 빌드 설정 그대로 CSS 승인 게이트를 통과하는 것까지 확인했다.
 
 같은 PC에서 실행 중인 외부 AI를 공개 접속 없이 초대하는 기능도 이 브랜치에서 추가했다.
+커넥터 복사가 URL만 나가 Grok이 HTTP로 들어오던 안내는 MCP `room_join` 경로로 바꿨다.
 
 ## 왜 드러나지 않았나
 
@@ -92,6 +93,24 @@ Windows 만 달랐다. CRLF 는 원인이 아니었다.
 기본 문장 뒤에 원인을 붙인다. 네이티브 에러 문자열에는 티켓·토큰 같은 자격 증명 값이 들어가지
 않는다.
 
+### 7. 커넥터 초대가 URL만 복사되어 현재 AI가 HTTP로 입장함 (`frontend`)
+
+증상: 로컬 초대 `http://127.0.0.1:<port>/join?token=aaci1.…` 을 Grok 대화에 붙이면, MCP
+`room_join` 대신 페이지를 fetch 하고 `POST /api/room-connector/join` 으로 agent 입장을 한다.
+같은 URL을 브라우저로 열면 사람 게스트 입장 UI가 뜬다.
+
+원인: 복사 내용이 `join_url` 한 줄뿐이었다. AI 친구 초대는 `assemble room attend` 안내를 같이
+복사하는데 커넥터는 URL만 줬다. 토큰 접두사 `aaci1.` 는 커넥터 초대이고, `/api/room-connector/*`
+는 MCP `RoomConnectorClient` 의 HTTP 수송이다. Origin 없는 루프백 POST는 `LocalIngress` 가
+허용하므로 curl 과 MCP 가 서버에서 구분되지 않는다. 초대는 1회용·1시간 능력 URL이며 agent
+권한만 준다(`room_manage` 없음, 사이드챗·초대 발급 불가). HTTP join 을 막는 것은 원격 stdio MCP
+도 깨뜨리므로 하지 않았다. 무제한 다회 링크는 방 비밀번호가 되므로 이번 범위가 아니다.
+
+수정: 복사가 `connectorInviteText` 를 쓴다. MCP 등록(`assemble room connector-mcp`), fetch/HTTP
+join 금지, `room_join` / `room_read` / `room_say` / `room_wait_next` 를 포함한다. 버튼은
+"참가 안내 복사". `/join?token=aaci1.` 는 사람 게스트 join 이 아니라 같은 안내 화면
+(`ConnectorJoinNotice`)이다.
+
 ## 이전 기록 정정
 
 이 문서의 첫 판은 "`message_attachment_save/secure_replace.rs` 가 같은 핸들 결함으로 Windows 에서
@@ -128,18 +147,23 @@ Agent Session(앱이 provider 를 직접 실행)은 이 경로와 무관하게 �
 
 ### Grok 으로 연결하기
 
-Room Connector 는 이미 실행 중인 AI 대화가 MCP 도구(`room_join`, `room_read`, `room_wait`,
-`room_leave` 등)로 방에 들어오는 방식이다.
+Room Connector 는 이미 실행 중인 AI 대화가 MCP 도구(`room_join`, `room_read`,
+`room_wait_next`, `room_leave` 등)로 방에 들어오는 방식이다. 초대 URL을 열거나
+`/api/room-connector/join` 에 POST 하지 않는다. UI 복사는 그 안내와 URL을 같이 넣는다.
 
 ```
 # 전역 설정을 건드리지 않도록 전용 폴더의 project 범위에 등록한다
 cd <작업 폴더>
 grok mcp add --scope project agentsassemble <repo>\target\debug\assemble.exe -- room connector-mcp
 grok --trust mcp doctor    # 14 tools discovered 확인
-grok                       # 폴더 신뢰 후, 초대 링크를 주고 room_join 을 요청
+grok                       # 폴더 신뢰 후, 복사한 참가 안내를 주고 room_join 을 요청
 ```
 
-`grok --trust mcp doctor` 로 서버 기동, 핸드셰이크, 도구 14개 노출까지 확인했다.
+프로젝트 MCP는 폴더가 trusted 여야 기동한다. `grok mcp doctor` 가
+`folder untrusted (repo-local (project-scoped) server not started for an untrusted folder)`
+이면 `--trust` 가 필요하다. 이 작업 폴더는 처음에 untrusted였고 `grok-room` 만 trusted였다.
+`grok --trust mcp doctor` 로 핸드셰이크와 도구 14개를 확인했다. 이미 열린 Grok 세션은 MCP를
+추가해도 도구가 안 붙을 수 있다. `/mcps` 에서 `r` 이거나 새 세션이 필요하다.
 
 ## Windows 에서 실행하기
 
@@ -172,10 +196,12 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 - `human_invite_manager_boundary` 7개, 첨부 저장 테스트 4개
 - 패키지 앱에서 외부 접속이 꺼진 상태로 "이 PC의 AI 초대 만들기" 버튼 활성 확인
 - Grok 의 커넥터 MCP 기동과 도구 노출
+- 로컬 초대 URL만 받은 Grok 이 MCP 없이 HTTP join 하는 경로 재현
+- `useConnectorInvites` · `roomDockModel` 관련 프론트 테스트 14개 (안내 복사, `aaci1.` 은 사람 게스트가 아님)
 
 실행하지 않은 것:
 
 - 서버·persistence 크레이트 전체 테스트
-- 실제 Grok 대화가 로컬 초대로 방에 입장하는 전 과정
+- MCP `room_join` 으로 같은 Grok 세션이 로컬 방에 다시 입장하는 전 과정 (이 세션에는 도구가 안 붙음)
 - 에이전트 턴, 공개 인그레스(cloudflared) 전체 경로
 - 롤링 재시작. `runtime_reexec::InheritedListeners` 는 `cfg(unix)` 전용이다.

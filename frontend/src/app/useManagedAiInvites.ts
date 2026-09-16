@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { createConnectorInvite, type ConnectorInviteCustody } from "../api/connectorInvite";
+import { connectorInviteText, createConnectorInvite, type ConnectorInviteCustody } from "../api/connectorInvite";
 import { createFriendAttendeeInvite, attendeePacketText, type AttendeePacketCustody } from "../api/attendeeInvite";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import type { InviteReach } from "../types/generated/InviteReach";
@@ -88,8 +88,8 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
       publishStatus(friendId
         ? "AI 친구 초대를 만들었어요. 참가 안내를 복사해 전달해 주세요."
         : reach === "local"
-          ? "이 PC 전용 외부 AI 초대를 만들었어요. 같은 PC에서 실행 중인 AI 대화에 링크를 전달해 주세요."
-          : "외부 AI 초대를 만들었어요. 현재 AI 대화에 링크를 전달해 주세요.");
+          ? "이 PC 전용 외부 AI 초대를 만들었어요. MCP 참가 안내를 복사해 같은 PC의 AI 대화에 전달해 주세요."
+          : "외부 AI 초대를 만들었어요. MCP 참가 안내를 복사해 현재 AI 대화에 전달해 주세요.");
     } catch (error) {
       if (active.current && (!proof || proof.isCurrent())) publishStatus(error instanceof Error ? error.message : "외부 AI 초대를 만들지 못했어요. 다시 시도해 주세요.");
     } finally {
@@ -103,7 +103,7 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
     const refresh = captureOriginRefresh();
     let proof: OriginProof | null = null;
     try {
-      const copied = await copyText(record.kind === "attendee" ? attendeePacketText(record.result) : record.result.join_url, async () => {
+      const copied = await copyText(record.kind === "attendee" ? attendeePacketText(record.result) : connectorInviteText(record.result.join_url, record.result.expires_at), async () => {
         proof = await refresh();
         const currentProof = proof;
         function assertCurrent() {
@@ -113,7 +113,7 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
         }
         assertCurrent(); return assertCurrent;
       });
-      if (active.current && proof !== null && (proof as OriginProof).isCurrent()) publishStatus(copied ? record.kind === "attendee" ? "참가 안내를 복사했어요." : "외부 AI 초대 링크를 복사했어요." : "초대 내용을 복사하지 못했어요.");
+      if (active.current && proof !== null && (proof as OriginProof).isCurrent()) publishStatus(copied ? "참가 안내를 복사했어요." : "초대 내용을 복사하지 못했어요.");
     } catch (error) {
       if (active.current) publishStatus(error instanceof Error ? error.message : "링크를 복사하지 못했어요.");
     }

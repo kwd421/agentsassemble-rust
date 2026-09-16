@@ -49,6 +49,12 @@ function cleanText(value: unknown, limit: number): string {
     .trim();
 }
 
+export const CONNECTOR_INVITE_TOKEN_PREFIX = "aaci1.";
+
+export function isConnectorInviteToken(token: string): boolean {
+  return token.startsWith(CONNECTOR_INVITE_TOKEN_PREFIX);
+}
+
 export function joinInviteTokenFromUrl(url: string): string {
   try {
     const parsed = new URL(url);

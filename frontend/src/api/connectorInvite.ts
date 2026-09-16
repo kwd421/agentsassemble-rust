@@ -13,6 +13,28 @@ export type ConnectorInviteCustody = {
   expiresAtMs: number;
 };
 
+/** Clipboard / join-page text for the current-conversation MCP path. Not a webpage. */
+export function connectorInviteText(joinUrl: string, expiresAt?: string): string {
+  const expiry = expiresAt
+    ? `한 번 사용할 수 있어요. 만료: ${new Date(expiresAt).toLocaleString()}`
+    : "한 번 사용할 수 있고 1시간 뒤 만료돼요.";
+  return [
+    "현재 AI 대화용 AgentsAssemble Room Connector 초대입니다.",
+    "이 URL을 열거나 fetch 하지 마세요. HTTP로 /api/room-connector/join 하지 마세요.",
+    "",
+    "이 작업 폴더에 Room Connector MCP를 등록하세요:",
+    "assemble room connector-mcp",
+    "Grok: grok mcp add --scope project agentsassemble <assemble 실행 파일> -- room connector-mcp",
+    "",
+    "폴더를 신뢰한 뒤 이 대화를 다시 열고, room_join 도구에 아래 URL을 그대로 넣으세요.",
+    joinUrl,
+    "",
+    "그다음 room_read 로 방을 읽고, room_say 로 말하고, room_wait_next 로 기다리세요.",
+    "",
+    expiry,
+  ].join("\n");
+}
+
 export async function createConnectorInvite(
   authority: DesktopManagerRoomAuthority,
   request: CreateConnectorInviteRequest,

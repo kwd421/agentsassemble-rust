@@ -6,6 +6,7 @@ import {
 } from "../api/room";
 import type { RoomAppearance } from "./roomAppearance";
 import {
+  isConnectorInviteToken,
   joinInviteTokenFromUrl,
   loadRoomGuestSession,
   type RoomGuestSession,
@@ -37,6 +38,7 @@ export type StartupRoute = {
   guestInvite: RoomDockItem | null;
   guestSession: RoomGuestSession | null;
   guestJoinToken: string;
+  connectorJoinUrl: string;
   directRoom: RoomDockItem | null;
   startupRooms: RoomDockItem[];
   activeRoomId: string;
@@ -402,12 +404,16 @@ function activeRoomIdForStartup(rooms: RoomDockItem[], routeRoom?: RoomDockItem 
 }
 
 export function createStartupRoute({ operatorPairingPending = false } = {}): StartupRoute {
-  const guestJoinToken = operatorPairingPending ? "" : joinInviteTokenFromUrl(window.location.href);
+  const rawJoinToken = operatorPairingPending ? "" : joinInviteTokenFromUrl(window.location.href);
+  const connectorJoinUrl = isConnectorInviteToken(rawJoinToken)
+    ? `${window.location.origin}/join?token=${rawJoinToken}`
+    : "";
+  const guestJoinToken = connectorJoinUrl ? "" : rawJoinToken;
   const guestSession = loadRoomGuestSession();
   const guestInvite =
     operatorPairingPending
       ? roomFromPendingAdmission("pairing")
-      : guestJoinToken
+      : guestJoinToken || connectorJoinUrl
       ? roomFromPendingAdmission("invite")
       : guestSession
         ? roomFromGuestSession(guestSession)
@@ -418,6 +424,7 @@ export function createStartupRoute({ operatorPairingPending = false } = {}): Sta
     guestInvite,
     guestSession,
     guestJoinToken,
+    connectorJoinUrl,
     directRoom,
     startupRooms,
     activeRoomId: guestInvite?.id || activeRoomIdForStartup(startupRooms, directRoom),

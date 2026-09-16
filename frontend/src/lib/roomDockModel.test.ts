@@ -62,6 +62,14 @@ describe("createStartupRoute", () => {
     expect(route.guestInvite?.meetingId).toBe("pending-join");
   });
 
+  it("does not treat a Room Connector invite as a human guest join", () => {
+    window.history.replaceState({}, "", "/join?token=aaci1.connector-secret");
+    const route = createStartupRoute();
+    expect(route.guestJoinToken).toBe("");
+    expect(route.connectorJoinUrl).toBe(`${window.location.origin}/join?token=aaci1.connector-secret`);
+    expect(route.guestInvite?.meetingId).toBe("pending-join");
+  });
+
   it("does not let legacy query state steer a canonical invite", () => {
     window.history.replaceState(
       {},
