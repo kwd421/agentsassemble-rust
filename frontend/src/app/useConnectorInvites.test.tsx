@@ -35,7 +35,6 @@ it("retries uncertain creation with the same identity and guards copying by refr
   expect(api.create.mock.calls[0][1]).toEqual(api.create.mock.calls[1][1]);
   await act(() => hook.result.current.copy("invite"));
   expect(copied).toHaveLength(1);
-  expect(copied[0]).toContain("room_join");
   expect(copied[0]).toContain("assemble room connector-mcp");
   expect(copied[0]).toContain(`${origin}/join?token=private`);
   expect(copied[0]).not.toMatch(/^https:\/\/public\.example\.test\/join\?token=private$/);
@@ -110,7 +109,7 @@ it("creates a connector invite on this machine's loopback origin while public ac
   expect(publishStatus).toHaveBeenLastCalledWith(expect.stringContaining("이 PC 전용"));
   await act(() => hook.result.current.copy("local-invite"));
   expect(copied).toHaveLength(1);
-  expect(copied[0]).toContain("room_join");
+  expect(copied[0]).toContain("assemble room connector-mcp");
   expect(copied[0]).toContain(`${LOCAL}/join?token=private`);
   expect(copied[0]).not.toBe(`${LOCAL}/join?token=private`);
 

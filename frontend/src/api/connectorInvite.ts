@@ -26,10 +26,8 @@ export function connectorInviteText(joinUrl: string, expiresAt?: string): string
     "assemble room connector-mcp",
     "Grok: grok mcp add --scope project agentsassemble <assemble 실행 파일> -- room connector-mcp",
     "",
-    "폴더를 신뢰한 뒤 이 대화를 다시 열고, room_join 도구에 아래 URL을 그대로 넣으세요.",
+    "폴더를 신뢰한 뒤 이 대화를 다시 열고, 아래 URL을 그대로 쓰세요.",
     joinUrl,
-    "",
-    "그다음 room_read 로 방을 읽고, room_say 로 말하고, room_wait_next 로 기다리세요.",
     "",
     expiry,
   ].join("\n");

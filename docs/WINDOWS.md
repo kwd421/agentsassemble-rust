@@ -106,8 +106,8 @@ Windows 만 달랐다. CRLF 는 원인이 아니었다.
 권한만 준다(`room_manage` 없음, 사이드챗·초대 발급 불가). HTTP join 을 막는 것은 원격 stdio MCP
 도 깨뜨리므로 하지 않았다. 무제한 다회 링크는 방 비밀번호가 되므로 이번 범위가 아니다.
 
-수정: 복사가 `connectorInviteText` 를 쓴다. MCP 등록(`assemble room connector-mcp`), fetch/HTTP
-join 금지, `room_join` / `room_read` / `room_say` / `room_wait_next` 를 포함한다. 버튼은
+수정: 복사가 `connectorInviteText` 를 쓴다. MCP 등록(`assemble room connector-mcp`)과
+fetch/HTTP join 금지를 포함하고, 도구 이름은 MCP 서버 지시에 맡긴다. 버튼은
 "참가 안내 복사". `/join?token=aaci1.` 는 사람 게스트 join 이 아니라 같은 안내 화면
 (`ConnectorJoinNotice`)이다.
 
@@ -147,16 +147,16 @@ Agent Session(앱이 provider 를 직접 실행)은 이 경로와 무관하게 �
 
 ### Grok 으로 연결하기
 
-Room Connector 는 이미 실행 중인 AI 대화가 MCP 도구(`room_join`, `room_read`,
-`room_wait_next`, `room_leave` 등)로 방에 들어오는 방식이다. 초대 URL을 열거나
-`/api/room-connector/join` 에 POST 하지 않는다. UI 복사는 그 안내와 URL을 같이 넣는다.
+Room Connector 는 이미 실행 중인 AI 대화가 MCP 로 방에 들어오는 방식이다. 초대 URL을
+열거나 `/api/room-connector/join` 에 POST 하지 않는다. UI 복사는 MCP 등록 안내와 URL을
+같이 넣고, 도구 이름은 MCP 서버 지시에 맡긴다.
 
 ```
 # 전역 설정을 건드리지 않도록 전용 폴더의 project 범위에 등록한다
 cd <작업 폴더>
 grok mcp add --scope project agentsassemble <repo>\target\debug\assemble.exe -- room connector-mcp
 grok --trust mcp doctor    # 14 tools discovered 확인
-grok                       # 폴더 신뢰 후, 복사한 참가 안내를 주고 room_join 을 요청
+grok                       # 폴더 신뢰 후, 복사한 참가 안내를 전달
 ```
 
 프로젝트 MCP는 폴더가 trusted 여야 기동한다. `grok mcp doctor` 가
