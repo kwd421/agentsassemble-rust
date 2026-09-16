@@ -111,6 +111,37 @@ fetch/HTTP join 금지를 포함하고, 도구 이름은 MCP 서버 지시에 �
 "참가 안내 복사". `/join?token=aaci1.` 는 사람 게스트 join 이 아니라 같은 안내 화면
 (`ConnectorJoinNotice`)이다.
 
+### 8. 에이전트 생성이 Windows에서 프로바이더마다 실패함 (미수정)
+
+증상: 에이전트 추가 창에서 프로바이더가 쓸 수 없는 상태로 보인다. Grok만이 아니다.
+
+| 프로바이더 | UI에 보인 문구 |
+| --- | --- |
+| Grok | `The original provider start did not complete before server recovery. Retry with a new request.` 새 create 에도 동일. 목록에 `configured command missing` 이 보이기도 함 |
+| Codex | `현재·최신 버전을 확인하지 못했어요. 설치된 버전은 계속 사용할 수 있어요.` / `provider model discovery failed` |
+| Claude | `configured command missing` |
+| OpenCode | `configured command missing` |
+| Cursor | `configured command missing` |
+
+코드상 `configured command missing` 은 `ProbeFailure::Missing` → `command_missing` 이다. `provider_executable` 이 PATH에서 `probe_executable` 이름을 못 찾을 때 쓰는 문구다. 사이드카가 받은 PATH, PATHEXT, `.cmd` vs `.exe` 중 무엇이 빠졌는지는 프로바이더마다 확인하지 않았다.
+
+Codex 쪽 문구는 업데이트 확인 실패와 모델 디스커버리 실패(`model_discovery_failed`)로 보인다. 설치본 유무, PATH, 로그인, 타임아웃 중 무엇인지는 이 머신에서 Codex 프로브를 직접 돌려 보지 않았다.
+
+Grok start 거절은 sqlite 에서 일부 봤다 (`runtime.sqlite3`, `room-20260916T154644`):
+
+- 두 세션 모두 executable 이 `\\?\C:\Users\Fleurdelys\.grok\bin\grok.exe` 로 기록됨. 카탈로그가 한때는 실행 파일을 찾은 상태로 보인다.
+- `grok-4237a397-…`: `agent.create` 후 `agent.resume` 3회가 `runtime_start_recovered_gone`. 세션 `detached` / `stopped`.
+- `grok-29a775ea-…`: 이후의 `agent.create` 도 `creation_committed` 에서 같은 코드로 rejected. 세션 `unavailable` / `error`.
+- 앱을 여러 번 재시작한 뒤에 남은 기록이라, 재시작과 라이브 start 실패를 이 로그만으로 가르지는 못한다.
+
+Grok 관련으로 코드와 셸에서 본 것 (다른 프로바이더에는 적용하지 말 것, 인과로 단정하지 말 것):
+
+- 에이전트 Grok 런치 인자는 `grok agent --model … --reasoning-effort … stdio` 로 읽힌다. Room Connector MCP 와는 다른 경로.
+- start 시 `GROK_HOME` 을 세션 전용 디렉터리로 잡는 코드가 있다. 이 셸에서 빈 `GROK_HOME` 으로 `grok agent stdio` initialize 를 넣어 보면 `cached_token` 이 안 나오고, 로그인된 `~\.grok` 에서는 나온다. 에이전트 추가 실패의 원인인지는 앱 경로에서 start 를 끝까지 로깅해 보지 않아 모른다.
+- attach 실패가 `runtime_start.rs` 에서 uncertain 으로 올라가고, 복구 워처가 `Gone` 이면 `runtime_start_recovered_gone` 문구가 남는 코드 경로가 있다. UI 문구가 그 경로인지는 라이브 트레이스로 확인하지 않았다.
+
+수정: 하지 않았다.
+
 ## 이전 기록 정정
 
 이 문서의 첫 판은 "`message_attachment_save/secure_replace.rs` 가 같은 핸들 결함으로 Windows 에서
@@ -198,10 +229,14 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 - Grok 의 커넥터 MCP 기동과 도구 노출
 - 로컬 초대 URL만 받은 Grok 이 MCP 없이 HTTP join 하는 경로 재현
 - `useConnectorInvites` · `roomDockModel` 관련 프론트 테스트 14개 (안내 복사, `aaci1.` 은 사람 게스트가 아님)
+- `runtime.sqlite3` 에서 Grok 에이전트 세션 2개의 `runtime_start_recovered_gone` 과 `grok.exe` 경로 기록 확인
+- 에이전트 추가 UI에서 Codex / Claude / OpenCode / Cursor / Grok 실패 문구를 운영자가 보고함 (이 세션에서 각 프로바이더 프로브를 재현하지는 않음)
 
 실행하지 않은 것:
 
 - 서버·persistence 크레이트 전체 테스트
-- MCP `room_join` 으로 같은 Grok 세션이 로컬 방에 다시 입장하는 전 과정 (이 세션에는 도구가 안 붙음)
+- MCP `room_join` 으로 같은 Grok 세션이 로컬 방에 다시 입장하는 전 과정
+- 에이전트 추가에서 어느 프로바이더든 start/discovery 가 되는 것
+- Codex / Claude / OpenCode / Cursor 의 `command_missing` · 디스커버리 실패를 사이드카 PATH 기준으로 재현하는 것
 - 에이전트 턴, 공개 인그레스(cloudflared) 전체 경로
 - 롤링 재시작. `runtime_reexec::InheritedListeners` 는 `cfg(unix)` 전용이다.
