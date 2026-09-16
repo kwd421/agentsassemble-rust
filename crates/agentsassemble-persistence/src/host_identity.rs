@@ -92,7 +92,7 @@ mod tests {
             .write(true)
             .open(&path)
             .unwrap_or_else(|error| panic!("create marker database: {error}"));
-        crate::private_fs::secure_file(&file)
+        crate::private_fs::secure_file(&file, &path)
             .unwrap_or_else(|error| panic!("secure marker database: {error}"));
         drop(file);
         let pool = SqlitePoolOptions::new()

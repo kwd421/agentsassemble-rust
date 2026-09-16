@@ -60,7 +60,7 @@ impl HostKeyMaterial {
             Ok(_) if policy == HostKeyPolicy::CreateOnly => {
                 Err(PersistenceError::InvalidHostIdentity)
             }
-            Ok(file) => Self::read(file, initialization_nonce),
+            Ok(file) => Self::read(file, path, initialization_nonce),
             Err(error) if error.kind() == io::ErrorKind::NotFound && allow_create => create_key(
                 path,
                 policy == HostKeyPolicy::CreateOrReuse,
@@ -100,8 +100,12 @@ impl HostKeyMaterial {
         Self::parse(document.as_ref().to_vec(), session_hmac_key)
     }
 
-    fn read(mut file: File, initialization_nonce: &str) -> Result<Self, PersistenceError> {
-        validate_key_file(&file)?;
+    fn read(
+        mut file: File,
+        path: &Path,
+        initialization_nonce: &str,
+    ) -> Result<Self, PersistenceError> {
+        validate_key_file(&file, path)?;
         let mut payload = Vec::new();
         Read::take(&mut file, MAX_PRIVATE_KEY_BYTES + 1)
             .read_to_end(&mut payload)
@@ -168,7 +172,7 @@ fn create_key(
     }
     match options.open(path) {
         Ok(mut file) => {
-            if let Err(error) = write_key(&mut file, &material, initialization_nonce) {
+            if let Err(error) = write_key(&mut file, path, &material, initialization_nonce) {
                 drop(file);
                 let _ = std::fs::remove_file(path);
                 return Err(PersistenceError::HostIdentityFile(error));
@@ -178,6 +182,7 @@ fn create_key(
         Err(error) if error.kind() == io::ErrorKind::AlreadyExists && allow_existing => {
             HostKeyMaterial::read(
                 open_existing(path).map_err(PersistenceError::HostIdentityFile)?,
+                path,
                 initialization_nonce,
             )
         }
@@ -190,10 +195,11 @@ fn create_key(
 
 fn write_key(
     file: &mut File,
+    path: &Path,
     material: &HostKeyMaterial,
     initialization_nonce: &str,
 ) -> io::Result<()> {
-    secure_file(file)?;
+    secure_file(file, path)?;
     let payload = serde_json::to_vec(&StoredHostKey {
         version: HOST_KEY_ENVELOPE_VERSION,
         initialization_nonce: initialization_nonce.to_owned(),
@@ -221,7 +227,7 @@ fn open_existing(path: &Path) -> io::Result<File> {
     OpenOptions::new().read(true).open(path)
 }
 
-fn validate_key_file(file: &File) -> Result<(), PersistenceError> {
+fn validate_key_file(file: &File, path: &Path) -> Result<(), PersistenceError> {
     let metadata = file
         .metadata()
         .map_err(PersistenceError::HostIdentityFile)?;
@@ -229,7 +235,7 @@ fn validate_key_file(file: &File) -> Result<(), PersistenceError> {
         return Err(PersistenceError::InvalidHostIdentity);
     }
     validate_link_count(file, &metadata)?;
-    if !validate_file(file).map_err(PersistenceError::HostIdentityFile)? {
+    if !validate_file(file, path).map_err(PersistenceError::HostIdentityFile)? {
         return Err(PersistenceError::InvalidHostIdentity);
     }
     Ok(())
