@@ -255,12 +255,9 @@ fn secure_directory(path: &Path) -> std::io::Result<()> {
 }
 
 pub(crate) fn auth_path() -> Option<PathBuf> {
-    env::var_os(AUTH_PATH_ENV).map(PathBuf::from).or_else(|| {
-        env::var_os(crate::grok::HOME_ENV)
-            .map(PathBuf::from)
-            .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".grok")))
-            .map(|home| home.join("auth.json"))
-    })
+    env::var_os(AUTH_PATH_ENV)
+        .map(PathBuf::from)
+        .or_else(|| crate::grok::user_home().map(|home| home.join("auth.json")))
 }
 
 fn validate_profile(session: &DurableAgentSession) -> Result<(), DriverError> {

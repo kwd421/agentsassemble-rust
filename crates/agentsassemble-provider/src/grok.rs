@@ -154,10 +154,26 @@ fn parse_custom_model_ids(bytes: &[u8]) -> Result<BTreeSet<String>, ProbeFailure
 }
 
 fn config_path() -> Option<PathBuf> {
-    env::var_os(HOME_ENV)
+    user_home().map(|home| home.join("config.toml"))
+}
+
+/// The Grok home the installed CLI itself uses: `GROK_HOME`, else `.grok` under the
+/// platform home. Windows does not set `HOME`; the profile directory is `USERPROFILE`.
+pub(crate) fn user_home() -> Option<PathBuf> {
+    #[cfg(windows)]
+    let platform_home = env::var_os("USERPROFILE");
+    #[cfg(not(windows))]
+    let platform_home = env::var_os("HOME");
+    resolve_user_home(env::var_os(HOME_ENV), platform_home)
+}
+
+fn resolve_user_home(
+    grok_home: Option<std::ffi::OsString>,
+    platform_home: Option<std::ffi::OsString>,
+) -> Option<PathBuf> {
+    grok_home
         .map(PathBuf::from)
-        .or_else(|| env::var_os("HOME").map(|home| PathBuf::from(home).join(".grok")))
-        .map(|home| home.join("config.toml"))
+        .or_else(|| platform_home.map(|home| PathBuf::from(home).join(".grok")))
 }
 
 pub(crate) fn valid_model_id(value: &str) -> bool {

@@ -1,6 +1,6 @@
 use std::collections::BTreeSet;
 
-use super::{parse_custom_model_ids, parse_models};
+use super::{parse_custom_model_ids, parse_models, resolve_user_home};
 
 #[test]
 fn native_catalog_excludes_custom_models_and_preserves_advertised_default() {
@@ -31,4 +31,20 @@ fn catalog_and_custom_model_inputs_fail_closed() {
     );
     assert!(parse_custom_model_ids(b"model = [\"not-a-table\"]").is_err());
     assert!(parse_custom_model_ids(b"[model.'bad/model']\nname = 'bad'").is_err());
+}
+
+#[test]
+fn user_home_prefers_grok_home_then_the_platform_profile() {
+    use std::{ffi::OsString, path::PathBuf};
+
+    assert_eq!(
+        resolve_user_home(Some(OsString::from("custom")), Some(OsString::from("profile"))),
+        Some(PathBuf::from("custom"))
+    );
+    // Windows sets USERPROFILE and no HOME; the caller passes that profile here.
+    assert_eq!(
+        resolve_user_home(None, Some(OsString::from("profile"))),
+        Some(PathBuf::from("profile").join(".grok"))
+    );
+    assert_eq!(resolve_user_home(None, None), None);
 }
