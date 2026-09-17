@@ -5,13 +5,18 @@ Node 24.13.1 에서 확인했다.
 
 ## 요약
 
-Windows에서 런타임이 기동한 적이 없었다. 부팅 경로의 결함 세 건과, 빌드·재요청·오류 표시에서
-Windows에서만 드러나는 결함 세 건을 고쳤다. 대부분 컴파일과 clippy를 통과하는 종류라 게이트에
-걸리지 않았다. 데스크톱 앱이 사이드카를 띄우고 `{"status":"ready","runtime":"rust"}` 를 보고하는
-것, 그리고 실제 Tauri 빌드 설정 그대로 CSS 승인 게이트를 통과하는 것까지 확인했다.
+Windows에서 런타임이 기동한 적이 없었다. 이 문서는 그 과정에서 **관찰한 증상, 코드에서 찾은
+원인, 적용한 수정, 실제로 확인한 범위**를 적는다. 적은 것보다 넓은 범위가 정상이라고 주장하지
+않는다. 다루는 것은 부팅 경로 세 건, 빌드·재요청·오류 표시 세 건, provider 실행 관련 세 건이며,
+대부분 컴파일과 clippy 를 통과하는 종류라 기존 게이트에 걸리지 않았다.
 
-같은 PC에서 실행 중인 외부 AI를 공개 접속 없이 초대하는 기능도 이 브랜치에서 추가했다.
-커넥터 복사가 URL만 나가 Grok이 HTTP로 들어오던 안내는 MCP `room_join` 경로로 바꿨다.
+같은 PC에서 실행 중인 외부 AI를 공개 접속 없이 초대하는 기능과, 없는 provider CLI 를 확인 후
+설치하는 기능도 이 브랜치에서 추가했다. 커넥터 복사가 URL만 나가 Grok이 HTTP로 들어오던 안내는
+MCP `room_join` 경로로 바꿨다.
+
+한 가지 한계를 먼저 적는다. 이 작업은 모두 한 대의 Windows 11 PC 에서, 이 계정의 설치 상태
+(npm 전역 설치, `HOME` 없음, Claude · OpenCode 데스크톱 앱)를 기준으로 확인했다. 다른 설치
+방식이나 다른 계정 환경에서 같은 결론이 나오는지는 확인하지 않았다.
 
 ## 왜 드러나지 않았나
 
@@ -117,10 +122,10 @@ fetch/HTTP join 금지를 포함하고, 도구 이름은 MCP 서버 지시에 �
 `The original provider start did not complete before server recovery.`, Codex 는
 `provider model discovery failed`, Claude · OpenCode · Cursor 는 `configured command missing`.
 
-원인은 하나가 아니었고, 이번 브랜치의 부팅 수정이 만든 회귀도 아니었다. 부팅이 가능해지면서
-드러난 기존 provider 코드의 결함이다.
+원인은 하나가 아니었다. 코드를 읽고 이 PC 의 환경과 대조해 아래처럼 판단했으며, 세 가지 모두
+이번 브랜치의 부팅 수정이 만든 회귀가 아니라 부팅이 가능해지면서 드러난 기존 코드의 문제로 보인다.
 
-#### 8-1. Grok 이 기존 로그인을 넘겨받지 못함 (`grok_acp.rs`, `grok.rs`)
+#### 8-1. Grok 이 기존 로그인을 넘겨받지 못하는 경로 (`grok_acp.rs`, `grok.rs`)
 
 세션마다 전용 `GROK_HOME` 을 만들고 기존 로그인은 `GROK_AUTH_PATH` 로 따로 넘기는 구조인데,
 그 경로를 찾는 코드가 `GROK_AUTH_PATH` → `GROK_HOME` → `HOME/.grok` 만 확인했다. Windows 는
@@ -131,6 +136,10 @@ fetch/HTTP join 금지를 포함하고, 도구 이름은 MCP 서버 지시에 �
 
 두 호출부가 하나의 해석기를 쓰도록 바꿨다. `GROK_HOME`, 없으면 플랫폼 홈 아래 `.grok`
 (Windows 는 `USERPROFILE`, Codex 설정이 이미 쓰던 방식). 세션 격리는 그대로다.
+
+수정 뒤 패키지 앱에서 기존 Grok 세션을 시작하면 `grok agent … stdio` 자식 프로세스가 유지되고
+복구 문구 없이 대기 상태로 들어갔다. 다만 수정 전후의 실패 지점을 런타임 로그로 직접 비교하지는
+않았으므로, 이 변경이 그 증상의 유일한 원인이었다고 단정하지는 않는다.
 
 #### 8-2. Codex 가 npm 의 Windows 래퍼를 네이티브 실행 파일로 오인함 (`codex_executable.rs`)
 
@@ -154,7 +163,18 @@ ode_modules\@openai\codex-win32-x64endor\…in\` 에 있다.
 접근하지 못한다. 즉 `configured command missing` 은 정확한 보고였다.
 
 이 상태를 사용자가 해결할 수 있도록 in-app 설치를 추가했다(아래). Cursor 는 npm 배포가 아니라
-기존 공식 안내만 유지한다.
+기존 공식 안내만 유지한다. Cursor 는 `cursor-agent` 가 PATH 에 없다는 것까지만 확인했고, 다른
+위치에 설치되어 있는지는 확인하지 않았다.
+
+#### 8-4. Codex 의 in-app 업데이트가 Windows 에서 비활성 (`provider_updater.rs`)
+
+npm 업데이트는 실행 전에 "지금 찾은 런처가 npm 전역 prefix 가 소유한 것인가" 를 확인한다. 이
+비교 대상이 패키지 스크립트였는데, unix 는 심링크가 그 스크립트로 정규화되어 일치하지만 Windows
+에서 찾는 것은 `codex.cmd` 래퍼라 일치하지 않는다. 그래서 Codex 는 "네이티브 업데이터 없음" 으로
+보고되고 UI 는 공식 안내 링크만 제공했다.
+
+비교 시 Windows 래퍼를 그 래퍼가 실행하는 스크립트로 따라가도록 바꿨다. 수정 뒤 UI 가
+"업데이트" 버튼을 제공하는 것까지 확인했고, 실제 업데이트 실행은 하지 않았다.
 
 ### 9. 없는 provider CLI 를 앱에서 설치
 
@@ -179,6 +199,10 @@ ode_modules\@openai\codex-win32-x64endor\…in\` 에 있다.
 
 또한 없음 상태 문구를 바꿨다. `configured command missing` 원문 대신 "이 PC에서 <이름> CLI를 찾지
 못했어요. 데스크톱 앱에만 포함된 CLI는 다른 앱에서 사용할 수 없어요." 로 안내한다.
+
+설치 · 업데이트 · 설치 불가 세 상태의 UI 는 방 초대 화면이 쓰는 상태 블록(아이콘 · 상태 배지 ·
+설명 · 액션)과 확인 다이얼로그를 그대로 재사용한다. 승인된 CSS 에 이미 있는 클래스만 조합했고,
+새 CSS 규칙은 추가하지 않았다.
 
 ## 이전 기록 정정
 
@@ -264,20 +288,22 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 - 프론트엔드 전체 테스트 897개, `human_invite_manager_boundary` 7개, 첨부 저장 4개
 - 패키지 앱에서 외부 접속이 꺼진 상태로 "이 PC의 AI 초대 만들기" 버튼 활성
 - Grok 의 커넥터 MCP 기동과 도구 노출
-- 패키지 앱에서 Codex 가 모델 목록과 버전 확인까지 정상 동작 (8-2 수정 확인)
-- 패키지 앱에서 Grok 기존 세션 시작: `grok agent --model … stdio` 자식 프로세스가 유지되고
-  복구 문구 없이 대기 상태로 진입 (8-1 수정 확인). 앱 종료 시 자식까지 정리됨
-- 패키지 앱에서 Claude Code · OpenCode 를 in-app 설치: 확인 창의 명령 그대로 실행되고,
-  각각 6초 · 15초에 완료, 재시작 없이 카탈로그가 갱신됨. Claude Code 는 "로그인 필요",
-  OpenCode 는 모델까지 로드된 사용 가능 상태가 됐다. 디스크에서도 `claude.cmd --version` 확인
+- 패키지 앱에서 Codex 가 모델 목록 · 버전 확인 · "업데이트" 버튼까지 표시 (8-2, 8-4)
+- 패키지 앱에서 Grok 기존 세션 시작: 자식 프로세스 유지, 복구 문구 없이 대기 진입 (8-1).
+  앱 종료 시 자식까지 정리됨
+- 패키지 앱에서 Claude Code · OpenCode in-app 설치: 확인 창의 명령 그대로 실행,
+  각각 6초 · 15초에 완료, 재시작 없이 카탈로그 갱신. 디스크에서 `claude.cmd --version` 확인
+- 설치 불가 provider(Cursor)에서 설치 버튼 없이 안내만 표시
 
 실행하지 않은 것:
 
-- 실제 모델 턴(에이전트 대화). 시작과 카탈로그까지만 확인했다
+- 실제 모델 턴(에이전트 대화). 시작과 카탈로그 확인까지만 했다
+- Codex 실제 업데이트 실행. 버튼이 제공되는 것까지만 확인했다
 - Claude 로그인. 계정 로그인은 사용자 몫이다
 - 서버 · persistence 크레이트 전체 테스트
 - 공개 인그레스(cloudflared) 전체 경로
 - 롤링 재시작. `runtime_reexec::InheritedListeners` 는 `cfg(unix)` 전용이다
+- 다른 설치 방식(pnpm · yarn · bun · winget)이나 다른 계정 환경
 
 ## 남은 진단 과제
 

@@ -111,11 +111,10 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
         {error && <span className="mt-1 text-[12px] font-bold text-offline preserve-words" role="alert">{error}</span>}
       </div>
       {phase !== "done" && <div className="dc-invite-hosting-actions">
-        <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
-          disabled={busy || !installable} onClick={() => void check()} hidden={!installable}>
+        {installable ? <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
+          disabled={busy} onClick={() => void check()}>
           {phase === "checking" ? "확인 중…" : "앱에서 설치하기"}
-        </button>
-        {!installable && <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
+        </button> : <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
           onClick={() => void openHelp()}>설치 안내 열기</button>}
       </div>}
     </section>
