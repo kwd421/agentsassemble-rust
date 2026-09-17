@@ -4,6 +4,7 @@ import { requestDesktopHostProductSurface } from "../../lib/desktopBridge";
 import { providerSetupDestination } from "../../lib/providerSetup";
 import type { ProviderAvailability } from "../../types/generated/ProviderAvailability";
 import ProviderLogin from "./ProviderLogin";
+import { providerUnavailableText } from "./agentCreateModel";
 import ProviderSetupActions from "./ProviderSetupActions";
 
 export default function ProviderSetupPanel({ providerId }: { providerId: string }) {
@@ -45,7 +46,7 @@ export default function ProviderSetupPanel({ providerId }: { providerId: string 
       <p role="status">{updating ? "제공자 업데이트 상태를 확인하고 있어요." : busy ? "상태를 확인하고 있어요."
         : error ? "현재 실행 가능한 상태를 확인하지 못했어요." : provider?.startable ? "이 PC에서 사용할 준비가 됐어요."
         : provider?.discovery_error_code === "authentication_required" ? "로그인이 필요해요."
-        : provider?.discovery_error_code === "command_missing" ? "이 PC에 제공자 CLI를 설치해 주세요."
+        : provider?.discovery_error_code === "command_missing" ? providerUnavailableText(provider)
         : provider?.discovery_status === "loading" ? "제공자 정보를 확인 중이에요. 잠시 후 다시 확인해 주세요."
         : provider?.discovery_error || "아직 실행 가능한 상태를 확인하지 못했어요."}</p>
       <button type="button" className="ops-button rounded-lg px-4 py-2" disabled={busy || updating}
