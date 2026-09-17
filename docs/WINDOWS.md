@@ -111,36 +111,74 @@ fetch/HTTP join 금지를 포함하고, 도구 이름은 MCP 서버 지시에 �
 "참가 안내 복사". `/join?token=aaci1.` 는 사람 게스트 join 이 아니라 같은 안내 화면
 (`ConnectorJoinNotice`)이다.
 
-### 8. 에이전트 생성이 Windows에서 프로바이더마다 실패함 (미수정)
+### 8. 에이전트 생성이 Windows에서 프로바이더마다 실패함
 
-증상: 에이전트 추가 창에서 프로바이더가 쓸 수 없는 상태로 보인다. Grok만이 아니다.
+증상: 에이전트 추가 창에서 프로바이더가 쓸 수 없는 상태로 보였다. Grok 은
+`The original provider start did not complete before server recovery.`, Codex 는
+`provider model discovery failed`, Claude · OpenCode · Cursor 는 `configured command missing`.
 
-| 프로바이더 | UI에 보인 문구 |
-| --- | --- |
-| Grok | `The original provider start did not complete before server recovery. Retry with a new request.` 새 create 에도 동일. 목록에 `configured command missing` 이 보이기도 함 |
-| Codex | `현재·최신 버전을 확인하지 못했어요. 설치된 버전은 계속 사용할 수 있어요.` / `provider model discovery failed` |
-| Claude | `configured command missing` |
-| OpenCode | `configured command missing` |
-| Cursor | `configured command missing` |
+원인은 하나가 아니었고, 이번 브랜치의 부팅 수정이 만든 회귀도 아니었다. 부팅이 가능해지면서
+드러난 기존 provider 코드의 결함이다.
 
-코드상 `configured command missing` 은 `ProbeFailure::Missing` → `command_missing` 이다. `provider_executable` 이 PATH에서 `probe_executable` 이름을 못 찾을 때 쓰는 문구다. 사이드카가 받은 PATH, PATHEXT, `.cmd` vs `.exe` 중 무엇이 빠졌는지는 프로바이더마다 확인하지 않았다.
+#### 8-1. Grok 이 기존 로그인을 넘겨받지 못함 (`grok_acp.rs`, `grok.rs`)
 
-Codex 쪽 문구는 업데이트 확인 실패와 모델 디스커버리 실패(`model_discovery_failed`)로 보인다. 설치본 유무, PATH, 로그인, 타임아웃 중 무엇인지는 이 머신에서 Codex 프로브를 직접 돌려 보지 않았다.
+세션마다 전용 `GROK_HOME` 을 만들고 기존 로그인은 `GROK_AUTH_PATH` 로 따로 넘기는 구조인데,
+그 경로를 찾는 코드가 `GROK_AUTH_PATH` → `GROK_HOME` → `HOME/.grok` 만 확인했다. Windows 는
+`HOME` 을 설정하지 않으므로(이 PC 에서 프로세스 · 사용자 · 시스템 수준 모두 없음) 로그인해 둔
+`%USERPROFILE%\.grokuth.json` 이 있어도 결과가 `None` 이었다. 빈 전용 홈과 자격 증명 없는
+상태로 `grok agent … stdio` 가 실행되고, attach 실패가 복구 경로를 거쳐
+`runtime_start_recovered_gone` 문구로 끝났다.
 
-Grok start 거절은 sqlite 에서 일부 봤다 (`runtime.sqlite3`, `room-20260916T154644`):
+두 호출부가 하나의 해석기를 쓰도록 바꿨다. `GROK_HOME`, 없으면 플랫폼 홈 아래 `.grok`
+(Windows 는 `USERPROFILE`, Codex 설정이 이미 쓰던 방식). 세션 격리는 그대로다.
 
-- 두 세션 모두 executable 이 `\\?\C:\Users\Fleurdelys\.grok\bin\grok.exe` 로 기록됨. 카탈로그가 한때는 실행 파일을 찾은 상태로 보인다.
-- `grok-4237a397-…`: `agent.create` 후 `agent.resume` 3회가 `runtime_start_recovered_gone`. 세션 `detached` / `stopped`.
-- `grok-29a775ea-…`: 이후의 `agent.create` 도 `creation_committed` 에서 같은 코드로 rejected. 세션 `unavailable` / `error`.
-- 앱을 여러 번 재시작한 뒤에 남은 기록이라, 재시작과 라이브 start 실패를 이 로그만으로 가르지는 못한다.
+#### 8-2. Codex 가 npm 의 Windows 래퍼를 네이티브 실행 파일로 오인함 (`codex_executable.rs`)
 
-Grok 관련으로 코드와 셸에서 본 것 (다른 프로바이더에는 적용하지 말 것, 인과로 단정하지 말 것):
+Windows 의 PATHEXT 탐색은 확장자 붙은 후보만 보므로 npm 전역 설치에서 `codex.cmd` 가 선택된다.
+해석기는 첫 두 바이트가 `#!` 가 아니면 네이티브로 보고 `.cmd` **옆에서** 동반 실행 파일
+(`codex-code-mode-host.exe`)을 찾다가 실패했다. 실제 번들은
+`<prefix>
+ode_modules\@openai\codex
+ode_modules\@openai\codex-win32-x64endor\…in\` 에 있다.
 
-- 에이전트 Grok 런치 인자는 `grok agent --model … --reasoning-effort … stdio` 로 읽힌다. Room Connector MCP 와는 다른 경로.
-- start 시 `GROK_HOME` 을 세션 전용 디렉터리로 잡는 코드가 있다. 이 셸에서 빈 `GROK_HOME` 으로 `grok agent stdio` initialize 를 넣어 보면 `cached_token` 이 안 나오고, 로그인된 `~\.grok` 에서는 나온다. 에이전트 추가 실패의 원인인지는 앱 경로에서 start 를 끝까지 로깅해 보지 않아 모른다.
-- attach 실패가 `runtime_start.rs` 에서 uncertain 으로 올라가고, 복구 워처가 `Gone` 이면 `runtime_start_recovered_gone` 문구가 남는 코드 경로가 있다. UI 문구가 그 경로인지는 라이브 트레이스로 확인하지 않았다.
+이제 `.cmd` 항목은 npm 이 셸 안에 적어 두는 `"%dp0%\<상대 경로>.js"` 를 따라가 패키지 스크립트로
+해석하고, 기존 스크립트 경로가 네이티브 번들을 찾는다. 상대 경로의 일반 세그먼트만 허용하며 동반
+파일 검증은 그대로다. npm 전역 · 프로젝트 로컬 설치를 덮고, 다른 패키지 매니저의 래퍼는 아니다.
 
-수정: 하지 않았다.
+#### 8-3. Claude · OpenCode · Cursor 는 실제로 PATH 에 없었다
+
+이 PC 에서 `claude`, `opencode`, `cursor-agent` 는 PATH 에 없다. 대신 Claude 는 Claude 데스크톱
+앱이, OpenCode 는 OpenCode 데스크톱 앱이 각자 번들로 설치해 두었다. Claude 데스크톱은 MSIX 앱이라
+그 파일이 `%APPDATA%\Claude\...` 로 보이지만 실제로는 앱 전용 저장소
+(`%LOCALAPPDATA%\Packages\Claude_<게시자>\LocalCache\...`)에 있고, 다른 프로그램은 그 경로로
+접근하지 못한다. 즉 `configured command missing` 은 정확한 보고였다.
+
+이 상태를 사용자가 해결할 수 있도록 in-app 설치를 추가했다(아래). Cursor 는 npm 배포가 아니라
+기존 공식 안내만 유지한다.
+
+### 9. 없는 provider CLI 를 앱에서 설치
+
+`configured command missing` 은 상태 표시일 뿐 해결 수단이 없었다. 이제 확인 절차를 거쳐 앱이 직접
+설치한다.
+
+- `POST /api/providers/install/check` 가 설치 제안을 만든다. 런처가 실제로 없어야 하고, npm 이
+  있어야 하며, 버전은 npm 레지스트리의 `latest` 다. 응답에는 실행할 인자 목록이 그대로 들어간다.
+- UI 는 그 명령을 그대로 보여주고, 사용자가 "설치" 를 누른 뒤에만
+  `POST /api/providers/install/start` 로 **확인된 그 버전**을 설치한다. 버전이 달라졌으면 거부한다.
+- 설치 후 런처를 다시 탐색해 npm 전역 prefix 안에 있는지 확인하고, 카탈로그를 갱신한다. PATH 에
+  prefix 가 없으면 성공으로 넘기지 않고 `provider_install_outside_path` 로 보고한다.
+- 대상은 공식 npm 패키지가 있는 Codex(`@openai/codex`), Claude Code(`@anthropic-ai/claude-code`),
+  OpenCode(`opencode-ai`) 뿐이다. 카탈로그의 `install_supported` 가 이를 알려주므로 UI 는 설치할 수
+  없는 provider 에 버튼을 띄우지 않는다.
+- 전역 설치는 하나의 prefix 를 공유하므로 한 번에 하나만 실행한다. 시작된 설치는 요청 핸들러가
+  사라져도 작업이 끝까지 소유한다.
+
+`AGENTS.md` 는 새 설치 경로를 소유자 승인 사항으로 둔다. 이 기능은 소유자 결정으로 추가했고,
+"창을 여는 것은 설치 프로그램을 시작하지 않는다" 는 기존 딥링크 계약은 그대로다. 앱이 실행하는
+것은 사용자가 화면에서 읽고 확인한 고정 명령뿐이다.
+
+또한 없음 상태 문구를 바꿨다. `configured command missing` 원문 대신 "이 PC에서 <이름> CLI를 찾지
+못했어요. 데스크톱 앱에만 포함된 CLI는 다른 앱에서 사용할 수 없어요." 로 안내한다.
 
 ## 이전 기록 정정
 
@@ -223,20 +261,32 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 
 - 데스크톱 앱 기동, 사이드카 ready, `/healthz` · `/app/` 200
 - 실제 Tauri 빌드에서 CSS 승인 게이트 통과, Linux 컨테이너 빌드와 해시 일치
-- 프론트엔드 전체 테스트 893개 (병렬 부하에서 타임아웃 난 1개는 단독 실행 시 통과)
-- `human_invite_manager_boundary` 7개, 첨부 저장 테스트 4개
-- 패키지 앱에서 외부 접속이 꺼진 상태로 "이 PC의 AI 초대 만들기" 버튼 활성 확인
+- 프론트엔드 전체 테스트 897개, `human_invite_manager_boundary` 7개, 첨부 저장 4개
+- 패키지 앱에서 외부 접속이 꺼진 상태로 "이 PC의 AI 초대 만들기" 버튼 활성
 - Grok 의 커넥터 MCP 기동과 도구 노출
-- 로컬 초대 URL만 받은 Grok 이 MCP 없이 HTTP join 하는 경로 재현
-- `useConnectorInvites` · `roomDockModel` 관련 프론트 테스트 14개 (안내 복사, `aaci1.` 은 사람 게스트가 아님)
-- `runtime.sqlite3` 에서 Grok 에이전트 세션 2개의 `runtime_start_recovered_gone` 과 `grok.exe` 경로 기록 확인
-- 에이전트 추가 UI에서 Codex / Claude / OpenCode / Cursor / Grok 실패 문구를 운영자가 보고함 (이 세션에서 각 프로바이더 프로브를 재현하지는 않음)
+- 패키지 앱에서 Codex 가 모델 목록과 버전 확인까지 정상 동작 (8-2 수정 확인)
+- 패키지 앱에서 Grok 기존 세션 시작: `grok agent --model … stdio` 자식 프로세스가 유지되고
+  복구 문구 없이 대기 상태로 진입 (8-1 수정 확인). 앱 종료 시 자식까지 정리됨
+- 패키지 앱에서 Claude Code · OpenCode 를 in-app 설치: 확인 창의 명령 그대로 실행되고,
+  각각 6초 · 15초에 완료, 재시작 없이 카탈로그가 갱신됨. Claude Code 는 "로그인 필요",
+  OpenCode 는 모델까지 로드된 사용 가능 상태가 됐다. 디스크에서도 `claude.cmd --version` 확인
 
 실행하지 않은 것:
 
-- 서버·persistence 크레이트 전체 테스트
-- MCP `room_join` 으로 같은 Grok 세션이 로컬 방에 다시 입장하는 전 과정
-- 에이전트 추가에서 어느 프로바이더든 start/discovery 가 되는 것
-- Codex / Claude / OpenCode / Cursor 의 `command_missing` · 디스커버리 실패를 사이드카 PATH 기준으로 재현하는 것
-- 에이전트 턴, 공개 인그레스(cloudflared) 전체 경로
-- 롤링 재시작. `runtime_reexec::InheritedListeners` 는 `cfg(unix)` 전용이다.
+- 실제 모델 턴(에이전트 대화). 시작과 카탈로그까지만 확인했다
+- Claude 로그인. 계정 로그인은 사용자 몫이다
+- 서버 · persistence 크레이트 전체 테스트
+- 공개 인그레스(cloudflared) 전체 경로
+- 롤링 재시작. `runtime_reexec::InheritedListeners` 는 `cfg(unix)` 전용이다
+
+## 남은 진단 과제
+
+GPT Pro 리뷰가 지적한 오류 보존 문제는 이 브랜치에서 고치지 않았다.
+
+- `acp_client.rs` 는 ACP `session/new` · `session/load` 실패를 일반 `protocol_error()` 로 바꿔
+  인증 거부인지 세션 거부인지 구분을 잃는다.
+- `reject_recovered_start()` 는 세션의 공개 `last_error` 를 복구 문구로 덮어쓴다. 살아 있는 서버의
+  reconciliation 도 같은 경로를 쓰므로, 실제 재시작이 없어도 그 문구로 끝날 수 있다.
+
+8-1 을 고치면서 이번 증상은 사라졌지만, 다음 provider 실패에서도 같은 진단 비용을 치르게 된다.
+최초 실패 원인과 정리 결과를 분리해 보존하는 것이 다음 과제다.
