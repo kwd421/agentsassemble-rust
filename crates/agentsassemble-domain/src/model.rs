@@ -344,6 +344,9 @@ pub struct ProviderAvailability {
     pub login_supported: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub update_supported: bool,
+    /// The runtime can install this missing CLI after the user confirms its exact command.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub install_supported: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]
     pub usage_supported: bool,
     #[serde(default, skip_serializing_if = "std::ops::Not::not")]

@@ -188,6 +188,7 @@ fn capacity_catalog() -> agentsassemble_domain::ProviderCatalog {
             custom_model: false,
             login_supported: false,
             update_supported: false,
+            install_supported: false,
             usage_supported: false,
             controls: vec![ProviderControl {
                 key: "model".to_owned(),

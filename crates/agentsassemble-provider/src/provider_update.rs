@@ -2,7 +2,7 @@ use crate::{
     catalog::{provider_executable, resolved_codex},
     registration::provider_registration_by_id,
 };
-use agentsassemble_domain::ProviderUpdate;
+use agentsassemble_domain::{ProviderInstall, ProviderUpdate};
 use futures_util::{
     FutureExt,
     future::{BoxFuture, Shared, join_all},
@@ -35,6 +35,12 @@ pub enum ProviderUpdateError {
     InstallationUnconfirmed,
     #[error("The provider was updated, but its model catalog could not be refreshed.")]
     CatalogUnavailable,
+    #[error("The provider CLI is already installed.")]
+    AlreadyInstalled,
+    #[error("npm is required to install this provider CLI.")]
+    NpmMissing,
+    #[error("The provider CLI was installed outside the runtime's PATH.")]
+    InstalledOutsidePath,
 }
 
 impl From<crate::process::ProbeFailure> for ProviderUpdateError {
@@ -60,6 +66,8 @@ struct UpdateOwner {
     cancellation: CancellationToken,
     catalog: crate::ProviderCatalogService,
     runs: Mutex<BTreeMap<&'static str, UpdateRun>>,
+    // Global npm installs share one prefix, so at most one runs at a time.
+    installing: Arc<Mutex<()>>,
 }
 impl Drop for UpdateOwner {
     fn drop(&mut self) {
@@ -75,7 +83,56 @@ impl ProviderUpdateService {
             cancellation,
             catalog,
             runs: Mutex::new(BTreeMap::new()),
+            installing: Arc::new(Mutex::new(())),
         }))
+    }
+
+    /// None builds an npm install offer for a missing provider CLI. Some runs that offer.
+    /// # Errors
+    /// Reports unsupported, already installed, missing npm, busy, stale offer, install and
+    /// catalog failures.
+    pub async fn install(
+        &self,
+        provider_id: &str,
+        expected: Option<String>,
+    ) -> Result<ProviderInstall, ProviderUpdateError> {
+        if expected
+            .as_ref()
+            .is_some_and(|v| v.is_empty() || v.len() > 64)
+        {
+            return Err(ProviderUpdateError::OfferChanged);
+        }
+        let Ok(guard) = self.0.installing.clone().try_lock_owned() else {
+            return Err(ProviderUpdateError::Busy);
+        };
+        if self.0.cancellation.is_cancelled() {
+            return Err(ProviderUpdateError::Cancelled);
+        }
+        let cancellation = self.0.cancellation.child_token();
+        let catalog = self.0.catalog.clone();
+        let provider_id = provider_id.to_owned();
+        // This task owns a started install even if the requesting handler disappears.
+        let task = tokio::spawn(async move {
+            let _guard = guard;
+            let plan = crate::provider_install::plan(&provider_id, &cancellation).await?;
+            let Some(expected) = expected else {
+                return Ok(plan.offer);
+            };
+            let installed = crate::provider_install::run(plan, &expected, &cancellation).await?;
+            let refreshed = catalog.refresh_provider(&provider_id, true).await;
+            if !refreshed.is_ok_and(|catalog| {
+                catalog.status == "ready"
+                    && catalog.providers.iter().any(|provider| {
+                        provider.id == provider_id
+                            && provider.discovery_error_code != "command_missing"
+                    })
+            }) {
+                return Err(ProviderUpdateError::CatalogUnavailable);
+            }
+            Ok(installed)
+        });
+        task.await
+            .map_err(|_| ProviderUpdateError::CleanupUnconfirmed)?
     }
     /// None reads versions or joins an active update. Some requires a matching offer.
     /// # Errors
@@ -191,6 +248,8 @@ impl ProviderUpdateService {
             .map(|run| run.result.clone())
             .collect::<Vec<_>>();
         let results = join_all(results).await;
+        // A running install holds this lock until its cancelled npm process is reaped.
+        let _install = self.0.installing.lock().await;
         if results.contains(&Err(ProviderUpdateError::CleanupUnconfirmed)) {
             return Err(ProviderUpdateError::CleanupUnconfirmed);
         }

@@ -152,6 +152,7 @@ fn export_operational_contracts(
     agentsassemble_domain::LocalResourceStatus::export_all(config)?;
     agentsassemble_domain::ProviderUsage::export_all(config)?;
     agentsassemble_domain::ProviderUpdate::export_all(config)?;
+    agentsassemble_domain::ProviderInstall::export_all(config)?;
     agentsassemble_domain::LocalAttendeeCreate::export_all(config)?;
     agentsassemble_domain::LocalAttendeeStatus::export_all(config)?;
     agentsassemble_domain::LocalAttendeeCommand::export_all(config)?;

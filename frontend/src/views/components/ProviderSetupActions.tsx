@@ -1,3 +1,4 @@
+import ProviderInstallPrompt from "./ProviderInstallPrompt";
 import ProviderUpdatePrompt from "./ProviderUpdatePrompt";
 import type { ProviderAvailability } from "../../types/generated/ProviderAvailability";
 import { useState } from "react";
@@ -25,6 +26,8 @@ export default function ProviderSetupActions({ providerId, provider, localAvaila
     }
   }
   return <section className="dc-agent-section" aria-label={`${destination.display_name} 설치 및 로그인 도움말`}>
+    {desktop && provider?.install_supported && <ProviderInstallPrompt key={providerId} providerId={providerId} displayName={destination.display_name}
+      onUpdating={onUpdating} onInstalled={onUpdated} />}
     {!desktop && <>
       <p className="dc-agent-hint preserve-words">이 PC의 로그인·설치 상태는 AgentsAssemble 앱에서 확인할 수 있어요.</p>
       <a className="ops-button rounded-lg px-4 py-2" href={link}
