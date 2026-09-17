@@ -19,11 +19,11 @@ it("runs nothing until the user reads the exact command and confirms that versio
   vi.mocked(providerInstallOperation).mockResolvedValueOnce(offer);
   const installed = vi.fn();
   const updating = vi.fn();
-  render(<ProviderInstallPrompt providerId="claude" displayName="Claude Code" onInstalled={installed} onUpdating={updating} />);
+  render(<ProviderInstallPrompt providerId="claude" displayName="Claude Code" installable onInstalled={installed} onUpdating={updating} />);
 
   expect(providerInstallOperation).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
-  expect(await screen.findByText(offer.command.join(" "))).toBeTruthy();
+  expect((await screen.findByLabelText("이 PC에서 실행할 명령") as HTMLInputElement).value).toBe(offer.command.join(" "));
   expect(providerInstallOperation).toHaveBeenCalledExactlyOnceWith("claude");
   expect(installed).not.toHaveBeenCalled();
 
@@ -38,7 +38,7 @@ it("runs nothing until the user reads the exact command and confirms that versio
 
 it("cancels the offer without installing", async () => {
   vi.mocked(providerInstallOperation).mockResolvedValueOnce(offer);
-  render(<ProviderInstallPrompt providerId="claude" displayName="Claude Code" />);
+  render(<ProviderInstallPrompt providerId="claude" displayName="Claude Code" installable />);
   fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
   fireEvent.click(await screen.findByRole("button", { name: "취소" }));
 
@@ -49,11 +49,19 @@ it("cancels the offer without installing", async () => {
 it("keeps the updating guard when an install result is uncertain", async () => {
   vi.mocked(providerInstallOperation).mockResolvedValueOnce(offer);
   const updating = vi.fn();
-  render(<ProviderInstallPrompt providerId="claude" displayName="Claude Code" onUpdating={updating} />);
+  render(<ProviderInstallPrompt providerId="claude" displayName="Claude Code" installable onUpdating={updating} />);
   fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
   vi.mocked(providerInstallOperation).mockRejectedValueOnce(new ApiError(503, "설치 프로세스의 종료를 확인하지 못했어요.", "provider_install_cleanup_unconfirmed"));
   fireEvent.click(await screen.findByRole("button", { name: "설치" }));
 
   expect((await screen.findByRole("alert")).textContent).toContain("상태를 다시 확인해 주세요");
   expect(updating.mock.calls).toEqual([[true]]);
+});
+
+it("only points at the official instructions when the runtime cannot install it", () => {
+  render(<ProviderInstallPrompt providerId="cursor" displayName="Cursor" installable={false} />);
+
+  expect(screen.getByRole("button", { name: "설치 안내 열기" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "앱에서 설치하기" })).toBeNull();
+  expect(providerInstallOperation).not.toHaveBeenCalled();
 });

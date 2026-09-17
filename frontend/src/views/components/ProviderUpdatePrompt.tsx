@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowUpCircle, CircleCheck, LoaderCircle } from "lucide-react";
 import { ApiError } from "../../lib/apiErrors";
 import { providerUpdateOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
@@ -71,27 +72,41 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
     await run(observation.latest_version);
   }
   if (deferred || (!busy && !error && !observation?.update_available && !observation?.completed)) return null;
-  return <section className="dc-agent-section" aria-label="제공자 버전">
-    {busy ? <p role="status" className="dc-agent-hint preserve-words">{installing ? "업데이트하고 있어요…" : "새 버전을 확인하고 있어요…"}</p>
-      : observation?.completed ? <p role="status" className="dc-agent-hint preserve-words">
-        {observation.current_version} 버전으로 업데이트했어요.
-      </p> : observation?.update_available && <>
-        <p className="dc-agent-hint preserve-words">새 버전 {observation.latest_version}이 있어요. 지금 업데이트할까요?</p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }}
-            onClick={() => {
-              if (observation.native_update) void update();
-              else void openProviderSetupHelp(providerId).catch((failure: unknown) =>
-                setError({ message: failure instanceof Error ? failure.message : "공식 안내를 열지 못했어요." }));
-            }}>{observation.native_update ? "업데이트" : "업데이트 방법 보기"}</button>
-          <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }}
-            onClick={() => setDeferred(true)}>나중에</button>
-        </div>
+  const heading = `provider-update-${providerId}`;
+  const state = busy ? "busy" : observation?.completed ? "public" : "local";
+  return <section className="dc-invite-hosting" aria-labelledby={heading} data-state={state}>
+    <span className="dc-invite-hosting-icon" aria-hidden="true">
+      {busy ? <LoaderCircle className="dc-invite-hosting-spinner" size={22} />
+        : observation?.completed ? <CircleCheck size={22} /> : <ArrowUpCircle size={22} />}
+    </span>
+    <div className="dc-invite-hosting-copy">
+      <div className="dc-invite-hosting-title-row">
+        <h3 id={heading}>{provider?.display_name || "제공자"} 버전</h3>
+        <span className="dc-invite-hosting-state">
+          {installing ? "업데이트 중" : busy ? "확인 중" : observation?.completed ? "최신" : "새 버전"}
+        </span>
+      </div>
+      <p style={{ whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }} role="status">
+        {busy ? (installing ? "업데이트하고 있어요…" : "새 버전을 확인하고 있어요…")
+          : observation?.completed ? `${observation.current_version} 버전으로 업데이트했어요.`
+            : observation?.update_available ? `새 버전 ${observation.latest_version}이 있어요. 지금 업데이트할까요?`
+              : ""}
+      </p>
+      {error && <span className="mt-1 text-[12px] font-bold text-offline preserve-words" role="alert">{error.message}</span>}
+    </div>
+    <div className="dc-invite-hosting-actions">
+      {!busy && observation?.update_available && !observation.completed && <>
+        <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
+          onClick={() => {
+            if (observation.native_update) void update();
+            else void openProviderSetupHelp(providerId).catch((failure: unknown) =>
+              setError({ message: failure instanceof Error ? failure.message : "공식 안내를 열지 못했어요." }));
+          }}>{observation.native_update ? "업데이트" : "업데이트 방법 보기"}</button>
+        <button type="button" className="dc-agent-create-secondary" style={{ minWidth: 44, minHeight: 44 }}
+          onClick={() => setDeferred(true)}>나중에</button>
       </>}
-    {error && <>
-      <p role="alert" className="dc-agent-hint preserve-words">{error.message}</p>
-      <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }}
-        disabled={busy} onClick={() => void run()}>버전 다시 확인</button>
-    </>}
+      {!busy && error && <button type="button" className="dc-agent-create-secondary" style={{ minWidth: 44, minHeight: 44 }}
+        onClick={() => void run()}>버전 다시 확인</button>}
+    </div>
   </section>;
 }
