@@ -21,6 +21,8 @@ mod executable_staging;
 
 #[cfg(unix)]
 pub(crate) use codex_executable::codex_code_mode_host_path;
+#[cfg(windows)]
+pub(crate) use codex_executable::npm_cmd_shim_script;
 pub(crate) use codex_executable::{
     bind_codex_executable, codex_executable_identity, resolve_codex_executable,
 };

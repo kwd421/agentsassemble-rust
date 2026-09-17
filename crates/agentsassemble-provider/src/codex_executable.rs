@@ -110,7 +110,7 @@ fn resolve_codex_entry(entry: &Path) -> io::Result<Option<(String, String)>> {
 /// npm writes the target as `"%dp0%\<relative path>.js"`, relative to the wrapper's own
 /// directory. Only a relative path made of plain segments is followed.
 #[cfg(windows)]
-fn npm_cmd_shim_script(shim: &Path) -> io::Result<Option<std::path::PathBuf>> {
+pub(crate) fn npm_cmd_shim_script(shim: &Path) -> io::Result<Option<std::path::PathBuf>> {
     const MAX_SHIM_BYTES: u64 = 16 * 1024;
     let mut text = String::new();
     File::open(shim)?
