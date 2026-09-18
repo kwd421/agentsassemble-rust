@@ -3,6 +3,7 @@ use agentsassemble_persistence::{
     AgentStopPlan, LiveRuntimeReconciliation, PersistenceError, SqliteStore,
 };
 use agentsassemble_protocol::RoomAction;
+use serde_json::Value;
 use agentsassemble_provider::{
     ProviderAdapter, ProviderAdapterError, ProviderResidentRuntime, ProviderRuntimeStarted,
 };
@@ -362,6 +363,7 @@ pub(crate) async fn execute_agent_stop(
     provider_adapter: &ProviderAdapter,
     command: &RoomCommand,
 ) -> CommandExecution {
+    confirm_lost_runtime_owner(store, provider_adapter, command).await;
     let plan = match prepare_agent_stop_with_recovery(store, provider_adapter, command).await {
         Ok(plan) => plan,
         Err(error) => return CommandExecution::transactional_failure(error),
@@ -475,6 +477,41 @@ async fn execute_managed_stop(
     {
         Ok(mutation) => CommandExecution::mutation(mutation),
         Err(error) => CommandExecution::unresolved_failure(error),
+    }
+}
+
+/// Lets an owner-requested stop finish a session stranded by a killed server.
+///
+/// A server that dies without a clean shutdown leaves the session recovery-required with an
+/// uncertain runtime, and every later observation stays ambiguous, so the stop below can never
+/// resolve it. The provider decides whether the previous owner is provably gone; an unproven
+/// loss changes nothing and the stop reports the same uncertainty as before.
+async fn confirm_lost_runtime_owner(
+    store: &SqliteStore,
+    provider_adapter: &ProviderAdapter,
+    command: &RoomCommand,
+) {
+    let Some(session_id) = command.payload.get("agent_id").and_then(Value::as_str) else {
+        return;
+    };
+    let candidate = store
+        .load_runtime_reconciliation_candidate(&command.principal.room_id, session_id)
+        .await;
+    let Ok(Some(candidate)) = candidate else {
+        return;
+    };
+    if !candidate.session.public.recovery_required
+        || candidate.session.public.last_error_code != "runtime_authority_uncertain"
+    {
+        return;
+    }
+    if let Err(error) = provider_adapter.confirm_owner_loss(&candidate.session).await {
+        tracing::info!(
+            code = %error.code,
+            room_id = %command.principal.room_id,
+            %session_id,
+            "owner-requested stop could not prove the previous runtime owner is gone"
+        );
     }
 }
 

@@ -2,7 +2,9 @@ use crate::{
     ProviderCredentialError, ProviderCredentialId,
     credentials::{ProviderCredentialStore, private_handoff::SelectedCredential},
     provider_factory::{DriverFactory, ProductionDriverFactory},
-    runtime_lease::{HeldRuntimeLease, LeaseObservation, observe_runtime_lease},
+    runtime_lease::{
+        HeldRuntimeLease, LeaseObservation, confirm_windows_owner_loss, observe_runtime_lease,
+    },
 };
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
@@ -101,6 +103,29 @@ async fn cancelled_handshake_retains_real_job_cleanup_authority() -> TestResult 
     drop(connection);
     drop(proof);
     lease.release_and_remove();
+    Ok(())
+}
+
+#[test]
+fn owner_loss_receipt_requires_an_unlocked_activated_lease_of_the_same_generation() -> TestResult {
+    let room = uuid::Uuid::new_v4().to_string();
+    let lease = HeldRuntimeLease::prepare(&room, "owner-loss")?;
+    let token = lease.token().to_owned();
+    lease.begin_launch_effect()?;
+    // A live owner still holds the lease, so its runtime is never declared gone.
+    assert!(confirm_windows_owner_loss(&room, "owner-loss", &token).is_err());
+    drop(lease);
+    assert!(confirm_windows_owner_loss(&room, "owner-loss", &uuid::Uuid::new_v4().to_string()).is_err());
+    confirm_windows_owner_loss(&room, "owner-loss", &token)?;
+    assert_eq!(
+        observe_runtime_lease(&room, "owner-loss"),
+        LeaseObservation::GenerationGone {
+            launch_token: token.clone(),
+        }
+    );
+    // The receipt is the recorded outcome, so repeating the request changes nothing.
+    confirm_windows_owner_loss(&room, "owner-loss", &token)?;
+    crate::runtime_lease::cleanup_stale_runtime_lease(&room, "owner-loss");
     Ok(())
 }
 

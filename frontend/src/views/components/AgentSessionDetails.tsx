@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { CirclePause, Play, RotateCcw, Save, Square, Zap } from "lucide-react";
+import { CirclePause, LifeBuoy, Play, RotateCcw, Save, Square, Zap } from "lucide-react";
 import type { RoomAgentSession } from "../../api";
 import type { NativeCliProviderAvailability } from "../../roomSocketClient";
 import {
@@ -61,6 +61,9 @@ function sessionErrorMessage(session: RoomAgentSession) {
   if (session.last_error_code === "managed_bridge_exited") {
     return "에이전트 연결이 끊겼어요. 중지한 뒤 재개해 주세요.";
   }
+  if (session.last_error_code === "runtime_authority_uncertain") {
+    return "앱이 갑자기 종료돼 이 세션이 실제로 끝났는지 확인하지 못했어요. 복구를 누르면 확인 후 정리해요.";
+  }
   if (session.last_error_code === "provider_turn_recovery_required") {
     return "Provider 응답 결과가 불확실해 런타임 복구가 필요합니다.";
   }
@@ -115,6 +118,10 @@ export default function AgentSessionDetails({
     ["", "available", "stopped", "error", "disconnected"].includes(status || "");
   const canPause = serverOwned && status === "idle" && !session.recovery_required;
   const canStop = agentSessionIsPresent(status) || status === "error" || session.recovery_required;
+  // A server killed without a clean shutdown leaves this: stop is the owner request that lets
+  // the runtime prove the previous owner is gone, so it is offered as recovery.
+  const strandedRuntime =
+    session.recovery_required && session.last_error_code === "runtime_authority_uncertain";
   const canResume =
     serverOwned && !session.recovery_required && (status === "paused" ||
     (hasRunBefore && ["stopped", "error", "disconnected", "available"].includes(status || "")));
@@ -259,13 +266,13 @@ export default function AgentSessionDetails({
           {(canStop || pendingAction === "stop") && <button
             type="button"
             className="dc-member-session-button"
-            data-variant="danger"
-            title="세션 중지"
+            data-variant={strandedRuntime ? undefined : "danger"}
+            title={strandedRuntime ? "남은 런타임이 정말 끝났는지 확인하고 세션을 정리합니다" : "세션 중지"}
             disabled={!canStop || Boolean(pendingAction)}
             onClick={() => void runControl("stop")}
           >
-            <Square size={14} />
-            중지
+            {strandedRuntime ? <LifeBuoy size={15} /> : <Square size={15} />}
+            {strandedRuntime ? "복구" : "중지"}
           </button>}
           {(canResume || pendingAction === "resume") && <button
             type="button"
@@ -324,7 +331,9 @@ export default function AgentSessionDetails({
           })}
           <button
             type="button"
-            className="dc-agent-create-primary"
+            className="dc-member-session-button"
+            // The settings grid stretches its own row, so keep the action at its label width.
+            style={{ justifySelf: "start" }}
             disabled={
               !canConfigure ||
               !settingsChanged ||
@@ -333,7 +342,7 @@ export default function AgentSessionDetails({
             }
             onClick={() => void saveSettings()}
           >
-            <Save size={14} />
+            <Save size={15} />
             런타임 설정 저장
           </button>
           <p className="preserve-words">

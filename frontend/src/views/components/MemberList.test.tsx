@@ -73,6 +73,20 @@ describe("MemberList component wiring", () => {
     expect(within(dialog).getByText("고급 진단")).toBeTruthy();
   });
 
+  it("closes the detail modal on a click outside the card, not inside it", () => {
+    render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onAgentControl={vi.fn()} />);
+    fireEvent.click(screen.getByText("Agent One"));
+    const dialog = screen.getByRole("dialog", { name: "Agent One" });
+    // A modal dialog reports its own backdrop clicks as the dialog itself, so only the
+    // pointer position separates them. jsdom gives the card a zero-sized rectangle.
+    fireEvent.click(within(dialog).getByRole("region", { name: "Agent One 실행 및 설정" }), { clientX: 5, clientY: 5 });
+    expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeTruthy();
+    fireEvent.click(dialog, { clientX: 0, clientY: 0 });
+    expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeTruthy();
+    fireEvent.click(dialog, { clientX: 5, clientY: 5 });
+    expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeNull();
+  });
+
   it("takes an Agent Session moderation scope from its canonical room participant", async () => {
     const onParticipantMute = vi.fn().mockResolvedValue(undefined);
     render(
