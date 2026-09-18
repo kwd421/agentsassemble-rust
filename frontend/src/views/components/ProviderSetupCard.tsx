@@ -1,41 +1,70 @@
 import { useEffect, useState, type ReactNode } from "react";
-import ProviderLogo from "./ProviderLogo";
 
-export type ProviderSetupTone = "install" | "update" | "done" | "error";
+export type ProviderSetupTone = "install" | "update" | "done" | "error" | "quiet";
 
-// How long a finished install or update stays visible before it leaves the dialog.
+// How long a finished install or update stays visible before it folds away.
 export const SETUP_RESULT_VISIBLE_MS = 2600;
 const SETUP_LEAVE_MS = 320;
 
-/** The shared frame for a provider CLI's install, update and result states. */
-export default function ProviderSetupCard({ providerId, headingId, title, tone, badge, busy = false, leaving = false,
-  children, detail, actions }: {
-  providerId: string;
-  headingId: string;
-  title: string;
+/**
+ * One row under the provider grid for a CLI's install, update and result states. The selected
+ * provider chip above already names the provider, so the row carries only what changes.
+ */
+export default function ProviderSetupCard({ label, tone, glyph, busy = false, leaving = false, since,
+  children, actions, detail }: {
+  label: string;
   tone: ProviderSetupTone;
-  badge: string;
+  glyph: ReactNode;
   busy?: boolean;
   leaving?: boolean;
-  children?: ReactNode;
-  detail?: ReactNode;
+  /** When set, the row shows how long the running step has taken. */
+  since?: number;
+  children: ReactNode;
   actions?: ReactNode;
+  detail?: ReactNode;
 }) {
-  return <section className="dc-provider-setup" aria-labelledby={headingId} aria-busy={busy || undefined}
+  return <section className="dc-setup" aria-label={label} aria-busy={busy || undefined}
     data-tone={tone} data-busy={busy ? "true" : undefined} data-leaving={leaving ? "true" : undefined}>
-    <div className="dc-provider-setup-head">
-      <span className="dc-provider-setup-logo" aria-hidden="true"><ProviderLogo providerId={providerId} size={24} /></span>
-      <div className="dc-provider-setup-body">
-        <h3 id={headingId} className="dc-provider-setup-title">
-          {title}<span className="dc-provider-setup-badge">{badge}</span>
-        </h3>
-        {children}
+    <div className="dc-setup-fold">
+      <div className="dc-setup-inner">
+        <div className="dc-setup-row">
+          <span className="dc-setup-glyph" aria-hidden="true">{glyph}</span>
+          <div className="dc-setup-main">{children}</div>
+          {since !== undefined && <Elapsed since={since} />}
+          {actions && <div className="dc-setup-actions">{actions}</div>}
+        </div>
+        {detail}
+        {busy && <span className="dc-setup-progress" aria-hidden="true" />}
       </div>
     </div>
-    {detail}
-    {actions && <div className="dc-provider-setup-actions">{actions}</div>}
-    {busy && <span className="dc-provider-setup-progress" aria-hidden="true" />}
   </section>;
+}
+
+function Elapsed({ since }: { since: number }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const seconds = Math.max(0, Math.floor((now - since) / 1000));
+  return <span className="dc-setup-elapsed" aria-hidden="true">
+    {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+  </span>;
+}
+
+/** Shows two versions with the unchanged leading segments dimmed, so the change reads at a glance. */
+export function VersionShift({ from, to }: { from?: string; to: string }) {
+  const next = to.split(".");
+  const previous = from?.split(".") ?? [];
+  let same = 0;
+  while (same < next.length - 1 && next[same] === previous[same]) same += 1;
+  const kept = next.slice(0, same).join(".");
+  return <span className="dc-setup-versions">
+    {from && <><span className="dc-setup-version-from">{from}</span><span aria-hidden="true">→</span></>}
+    <span className="dc-setup-version-to">
+      {kept && <span className="dc-setup-version-kept">{kept}.</span>}{next.slice(same).join(".")}
+    </span>
+  </span>;
 }
 
 /** Shows a finished result briefly, then reports leaving and finally gone. */

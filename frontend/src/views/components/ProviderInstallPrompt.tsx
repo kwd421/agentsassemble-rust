@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { Check, Copy, Download, ExternalLink } from "lucide-react";
+import { Check, CircleAlert, Copy, Download, ExternalLink, LoaderCircle } from "lucide-react";
 import { ApiError } from "../../lib/apiErrors";
 import { providerInstallOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
@@ -31,9 +31,9 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
   const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
+  const [startedAt, setStartedAt] = useState(0);
   const inflight = useRef(false);
   const result = useTransientResult(phase === "done");
-  const heading = `provider-install-${providerId}`;
 
   async function check() {
     if (inflight.current) return;
@@ -58,6 +58,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
     if (inflight.current || !offer) return;
     inflight.current = true;
     onUpdating?.(true);
+    setStartedAt(Date.now());
     setPhase("installing");
     setError("");
     try {
@@ -98,49 +99,62 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
 
   if (result === "gone") return null;
   const title = `${displayName} CLI`;
+  const label = `${title} 설치`;
 
   if (phase === "done") {
-    return <ProviderSetupCard providerId={providerId} headingId={heading} title={title} tone="done"
-      badge="설치 완료" leaving={result === "leaving"}>
-      <p className="dc-provider-setup-text" role="status">{title} {offer?.version}을 설치했어요.</p>
+    return <ProviderSetupCard label={label} tone="done" glyph={<Check size={15} strokeWidth={3} />}
+      leaving={result === "leaving"}>
+      <p className="dc-setup-text" role="status">{title} {offer?.version}을 설치했어요.</p>
     </ProviderSetupCard>;
   }
 
   const installing = phase === "installing";
-  return <ProviderSetupCard providerId={providerId} headingId={heading} title={title}
-    tone={error ? "error" : "install"} busy={installing || phase === "checking"}
-    badge={installing ? "설치 중" : phase === "checking" ? "확인 중" : error ? "확인 필요" : "설치 필요"}
-    detail={phase === "confirming" && offer ? <div className="dc-provider-setup-terminal">
-      <div className="dc-provider-setup-terminal-bar">
-        <span>이 PC에서 실행할 명령</span>
-        <button type="button" className="dc-provider-setup-copy-command" onClick={() => void copyCommand()}>
-          {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
-          {copied ? "복사됨" : "복사"}
-        </button>
-      </div>
-      <pre className="dc-provider-setup-command" aria-label="이 PC에서 실행할 명령">{offer.command.join(" ")}</pre>
-      <p className="dc-provider-setup-note">{offer.package} {offer.version}을 이 계정 권한으로 설치해요. 관리자 권한은 쓰지 않아요.</p>
-    </div> : undefined}
-    actions={phase === "confirming" ? <>
-      <button type="button" className="dc-provider-setup-button" data-variant="ghost"
-        onClick={() => { setOffer(null); setPhase("idle"); }}>취소</button>
-      <button type="button" className="dc-provider-setup-button" data-variant="primary" autoFocus
-        onClick={() => void install()}><Download size={15} aria-hidden="true" />설치</button>
-    </> : installing ? undefined : installable ? <>
-      <button type="button" className="dc-provider-setup-button" data-variant="ghost"
+  const command = offer && (phase === "confirming" || installing) ? <div className="dc-setup-term"
+    data-running={installing ? "true" : undefined}>
+    <pre className="dc-setup-command" aria-label="이 PC에서 실행할 명령">{offer.command.join(" ")}</pre>
+    {!installing && <button type="button" className="dc-setup-copy" onClick={() => void copyCommand()}
+      aria-label={copied ? "명령 복사됨" : "명령 복사"}>
+      {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+    </button>}
+  </div> : undefined;
+
+  if (installing && offer) {
+    return <ProviderSetupCard label={label} tone="install" busy since={startedAt}
+      glyph={<LoaderCircle size={15} className="dc-setup-spin" />} detail={command}>
+      <p className="dc-setup-text" role="status"><strong>설치하는 중</strong>
+        <span className="dc-setup-muted">보통 1분 안에 끝나요</span></p>
+    </ProviderSetupCard>;
+  }
+
+  if (phase === "confirming" && offer) {
+    return <ProviderSetupCard label={label} tone="install" glyph={<Download size={15} strokeWidth={2.5} />}
+      detail={<>{command}<p className="dc-setup-note">
+        {offer.package} {offer.version} · 이 계정 권한으로 설치해요 · 관리자 권한은 쓰지 않아요</p></>}
+      actions={<>
+        <button type="button" className="dc-setup-button" data-variant="ghost"
+          onClick={() => { setOffer(null); setPhase("idle"); }}>취소</button>
+        <button type="button" className="dc-setup-button" data-variant="primary" autoFocus
+          onClick={() => void install()}>설치</button>
+      </>}>
+      <p className="dc-setup-text" role="status"><strong>아래 명령을 실행해요</strong>
+        <span className="dc-setup-muted">확인하면 이 PC에서 바로 설치해요</span></p>
+    </ProviderSetupCard>;
+  }
+
+  const checking = phase === "checking";
+  return <ProviderSetupCard label={label} tone={error ? "error" : "install"} busy={checking}
+    glyph={checking ? <LoaderCircle size={15} className="dc-setup-spin" />
+      : error ? <CircleAlert size={15} strokeWidth={2.5} /> : <Download size={15} strokeWidth={2.5} />}
+    actions={installable ? <>
+      <button type="button" className="dc-setup-button" data-variant="ghost"
         onClick={() => void openHelp()}>직접 설치 방법</button>
-      <button type="button" className="dc-provider-setup-button" data-variant="primary"
-        disabled={phase === "checking"} onClick={() => void check()}>
-        <Download size={15} aria-hidden="true" />{phase === "checking" ? "확인 중…" : "앱에서 설치하기"}
-      </button>
-    </> : <button type="button" className="dc-provider-setup-button" data-variant="primary"
-      onClick={() => void openHelp()}><ExternalLink size={15} aria-hidden="true" />설치 안내 열기</button>}>
-    <p className="dc-provider-setup-text" role="status">
-      {installing ? "npm으로 설치하고 있어요. 보통 1분 안에 끝나요."
-        : phase === "confirming" ? "아래 명령을 확인한 뒤 설치해 주세요."
-          : installable ? "이 PC에서 찾지 못했어요. 앱에서 바로 설치할 수 있어요."
-            : "이 PC에서 찾지 못했어요. 공식 안내를 따라 설치한 뒤 상태를 다시 확인해 주세요."}
-    </p>
-    {error && <p className="dc-provider-setup-error" role="alert">{error}</p>}
+      <button type="button" className="dc-setup-button" data-variant="primary"
+        disabled={checking} onClick={() => void check()}>{checking ? "확인 중…" : "앱에서 설치하기"}</button>
+    </> : <button type="button" className="dc-setup-button" data-variant="primary"
+      onClick={() => void openHelp()}>설치 안내 열기<ExternalLink size={13} aria-hidden="true" /></button>}>
+    <p className="dc-setup-text" role="status"><strong>{title} 없음</strong>
+      <span className="dc-setup-muted">{installable ? "이 PC에서 찾지 못했어요"
+        : "공식 안내대로 설치한 뒤 다시 확인해 주세요"}</span></p>
+    {error && <p className="dc-setup-error" role="alert">{error}</p>}
   </ProviderSetupCard>;
 }
