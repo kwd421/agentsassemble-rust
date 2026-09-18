@@ -209,10 +209,20 @@ function validateInitialization(models, model, effort, tier) {
   }
 }
 
+// The runtime passes Windows workspaces in verbatim form (\\?\C:\...), while Claude Code
+// reports the same directory in Win32 form (C:\...). Compare without that prefix only,
+// so every other difference still fails.
+function win32Form(path) {
+  if (typeof path !== "string") return path;
+  if (path.startsWith("\\\\?\\UNC\\")) return `\\\\${path.slice(8)}`;
+  if (path.startsWith("\\\\?\\")) return path.slice(4);
+  return path;
+}
+
 function validInit(message, active, session) {
   return (
     message.session_id === session.id &&
-    message.cwd === session.workspace &&
+    win32Form(message.cwd) === win32Form(session.workspace) &&
     message.model === session.model &&
     (session.tier === "fast" ? message.fast_mode_state === "on" : message.fast_mode_state !== "on") &&
     message.permissionMode === (session.permission === "workspace_write" ? "acceptEdits" : "dontAsk") &&
