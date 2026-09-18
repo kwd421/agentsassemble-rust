@@ -305,6 +305,37 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 - 롤링 재시작. `runtime_reexec::InheritedListeners` 는 `cfg(unix)` 전용이다
 - 다른 설치 방식(pnpm · yarn · bun · winget)이나 다른 계정 환경
 
+## Windows 테스트 현황
+
+`cargo test -p agentsassemble-provider --lib` 를 이 PC 에서 샌드박스 밖으로 실행했다. 변경 전
+커밋(`4a319f9`)과 이 브랜치를 같은 조건으로 비교했다.
+
+| | 통과 | 실패 |
+| --- | --- | --- |
+| `4a319f9` | 166 | 4 |
+| 이 브랜치 | 171 | 4 |
+
+늘어난 5개는 이 브랜치가 추가한 테스트(Codex 래퍼 2, Grok 홈 1, 설치 2)다. 실패 4건은 두 커밋에서
+같으므로 이 브랜치가 만든 것이 아니라 기존에 Windows 에서 통과하지 않던 테스트로 본다.
+
+- `selection::tests::workspace_path_is_exact_and_per_model_relations_are_mandatory` —
+  `" workspace "` 를 기대하지만 Windows 가 이름 끝 공백을 제거해 `" workspace"` 가 된다
+- `workspace_tools::tests::file_tools_preserve_boundaries_and_exact_replacement` —
+  `workspace file operation rejected`
+- `managed_bridge::windows_tests::managed_api_uses_private_credentials_and_confirms_whole_job_stop`,
+  `managed_bridge::platform::native_tests::managed_native_stop_and_pipe_loss_remove_the_entire_nested_job` —
+  `managed_bridge_protocol_failed`. Windows CI 가 실행하는 필터와 겹치므로 CI 환경과 이 PC 의
+  차이는 따로 확인이 필요하다. 샌드박스 안에서 실행하면 실패가 더 늘어나므로 샌드박스 밖 결과만 적었다
+- `workspace_tools::tests::writes_require_exact_owner_response_and_delivery_receipt` 는 두 커밋
+  모두에서 90초 이상 끝나지 않았다
+
+서버 테스트는 이 브랜치가 건드린 세 바이너리만 실행했다. `provider_operations_boundary` 1개,
+`human_invite_manager_boundary` 7개는 통과했다. `persona_snapshot_capacity` 는 DB 를 임시 폴더에
+만드는데, Windows 의 `%TEMP%` 는 다른 계정 권한을 상속하므로 "DB 폴더는 현재 사용자 전용"
+검사(`UnsafeDatabasePath`)에서 DB 를 열기 전에 실패한다. 이 브랜치가 그 파일에 추가한 카탈로그
+필드와는 관련이 없어 보이며, 같은 방식으로 임시 폴더에 DB 를 만드는 다른 서버 테스트도 Windows
+에서 같은 이유로 실패할 가능성이 높다. 전체 서버 테스트는 실행하지 않았다.
+
 ## 남은 진단 과제
 
 GPT Pro 리뷰가 지적한 오류 보존 문제는 이 브랜치에서 고치지 않았다.
