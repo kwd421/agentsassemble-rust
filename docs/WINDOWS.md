@@ -294,10 +294,17 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 - 패키지 앱에서 Claude Code · OpenCode in-app 설치: 확인 창의 명령 그대로 실행,
   각각 6초 · 15초에 완료, 재시작 없이 카탈로그 갱신. 디스크에서 `claude.cmd --version` 확인
 - 설치 불가 provider(Cursor)에서 설치 버튼 없이 안내만 표시
+- 패키지 앱에서 Grok 에이전트 실제 턴: 작업 폴더 `C:\Users\Fleurdelys\Downloads\aa\temp agents`
+  (이름에 공백), 권한 "작업 폴더 쓰기". 파일 작성을 요청하자 에이전트 메시지 안에 권한 요청
+  (`Write hello-from-grok.txt`)이 떴고, "한 번 허용" 으로 응답하자 파일이 디스크에 정확한 내용으로
+  생성됐다. 에이전트는 파일을 다시 읽어 내용을 방에 답했고 대기 상태로 돌아왔다
 
 실행하지 않은 것:
 
-- 실제 모델 턴(에이전트 대화). 시작과 카탈로그 확인까지만 했다
+- API provider(DeepSeek 등)의 턴과 런타임 내장 파일 도구. 이 PC 에 API 키가 없어 실행하지 못했다.
+  실패하는 테스트 `workspace_tools::…file_tools_preserve_boundaries_and_exact_replacement` 와
+  `managed_bridge::…managed_api_uses_private_credentials…` 가 바로 이 경로라 확인이 필요하다
+- Codex · OpenCode 의 실제 턴
 - Codex 실제 업데이트 실행. 버튼이 제공되는 것까지만 확인했다
 - Claude 로그인. 계정 로그인은 사용자 몫이다
 - 서버 · persistence 크레이트 전체 테스트
