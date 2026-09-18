@@ -7,7 +7,7 @@ Node 24.13.1 에서 확인했다.
 
 Windows에서 런타임이 기동한 적이 없었다. 이 문서는 그 과정에서 **관찰한 증상, 코드에서 찾은
 원인, 적용한 수정, 실제로 확인한 범위**를 적는다. 적은 것보다 넓은 범위가 정상이라고 주장하지
-않는다. 다루는 것은 부팅 경로 세 건, 빌드·재요청·오류 표시 세 건, provider 실행 관련 세 건이며,
+않는다. 다루는 것은 부팅 경로 세 건, 빌드·재요청·오류 표시 세 건, provider 실행 관련 네 건이며,
 대부분 컴파일과 clippy 를 통과하는 종류라 기존 게이트에 걸리지 않았다.
 
 같은 PC에서 실행 중인 외부 AI를 공개 접속 없이 초대하는 기능과, 없는 provider CLI 를 확인 후
@@ -200,9 +200,50 @@ npm 업데이트는 실행 전에 "지금 찾은 런처가 npm 전역 prefix 가
 또한 없음 상태 문구를 바꿨다. `configured command missing` 원문 대신 "이 PC에서 <이름> CLI를 찾지
 못했어요. 데스크톱 앱에만 포함된 CLI는 다른 앱에서 사용할 수 없어요." 로 안내한다.
 
-설치 · 업데이트 · 설치 불가 세 상태의 UI 는 방 초대 화면이 쓰는 상태 블록(아이콘 · 상태 배지 ·
-설명 · 액션)과 확인 다이얼로그를 그대로 재사용한다. 승인된 CSS 에 이미 있는 클래스만 조합했고,
-새 CSS 규칙은 추가하지 않았다.
+### 10. 설치 · 업데이트 카드 UI와 업데이트 뒤 남는 카드 (`frontend`)
+
+처음 판은 방 초대 화면의 상태 블록과 확인 다이얼로그를 재사용했다. 실제로 써 보니 두 가지 문제가
+있었다.
+
+- CLI 업데이트가 끝난 뒤에도 "업데이트 중" 배지와 카드가 계속 남았다. 원인은 업데이트 시작 시
+  켜는 플래그(`installing`)를 끄는 곳이 없었던 것과, 완료 상태가 사라지는 조건 없이 계속
+  렌더링되던 것으로 봤다.
+- 초대 화면용 블록이라 이 용도에 맞지 않았다(provider 구분 없음, 버전 비교 없음, 설치 명령 확인이
+  별도 다이얼로그).
+
+그래서 전용 카드(`ProviderSetupCard`, `styles/provider-setup.css`)로 바꿨다.
+
+- provider 로고, 상태에 따라 색이 바뀌는 배지(설치 필요 주황 · 새 버전 파랑 · 완료 초록 ·
+  실패 빨강), 현재 → 새 버전 칩, 오른쪽 정렬 액션.
+- 설치 확인은 별도 다이얼로그 대신 카드 안에 `$` 프롬프트가 붙은 터미널 블록으로 명령을 보여주고
+  복사 버튼을 둔다. 실행 중에는 카드 하단에 진행 막대를 표시한다.
+- 업데이트 프롬프트는 진행 중인 요청이 "확인"인지 "업데이트"인지를 상태로 들고, 요청이 끝나면
+  `finally` 에서 비운다. 배지는 이 상태에서만 "업데이트 중"을 표시한다.
+- 설치 · 업데이트 완료 카드는 약 2.6초 보여준 뒤 사라진다(`useTransientResult`).
+- 버전 확인 중에는 카드를 계속 보인다. 확인 요청이 다른 화면이 시작한 업데이트에 합류할 수 있고,
+  그동안 에이전트 생성이 막히기 때문이다(`AgentCreateModal.update` 테스트가 이를 요구한다).
+
+패키지 앱에서 이 카드가 31px 로 눌려 보였다. 에이전트 대화상자 본문이 스크롤되는 flex column
+이라 카드가 줄어들면서 `overflow: hidden` 에 잘린 것으로 판단했고, 카드에 `flex: none` 을 줬다.
+
+새 CSS 규칙이 추가되므로 CSS 승인 게이트(`frontend/scripts/verify-original-css.mjs`)의 승인
+엔트리를 `index-Rir_kKlO.css` 로 갱신했다. 추가된 규칙은 `dc-provider-setup` 계열뿐이고 기존 규칙은
+바뀌지 않았다. Linux 컨테이너(node:24-bookworm)와 Windows 빌드에서 같은 SHA-256 이 나오는 것을
+확인한 뒤 갱신했다. 인라인 스타일 문자열 `"break-all"` 이 Tailwind 에 유틸리티로 잡혀 게이트에
+걸린 일이 있어 `overflowWrap: "anywhere"` 로 바꿨다.
+
+### 11. 런타임 내장 파일 도구가 Windows 에서 모든 쓰기를 거부 (`crates/agentsassemble-provider/src/workspace_files.rs`)
+
+API provider(DeepSeek)에게 작업 폴더 쓰기를 요청하자 `write_workspace_file` 이 매번
+`workspace_tool_failed` 를 돌려줬다. 읽기와 목록은 정상이었다.
+
+원인은 경로 표기로 봤다. `resolve()` 와 `discover()` 가 `PathBuf::to_str()` 로 계약 경로를 만드는데,
+Windows 에서는 구분자가 `\` 가 된다. 도구 계약의 `relative()` 는 `\` 와 `:` 를 거부하므로, 내부에서
+다시 검증하는 쓰기 · 치환 경로가 전부 실패했다. 읽기는 이 재검증을 거치지 않아 드러나지 않았다.
+
+`contract_path()` 를 추가해 Windows 에서는 경로 구성 요소를 `/` 로 이어 붙이게 했다. `.` 는
+건너뛰고, 일반 이름이 아닌 구성 요소(루트 · 드라이브 · `..`)가 나오면 원래 표기를 그대로 넘겨 기존
+거부 로직이 처리하게 했다. 다른 플랫폼은 동작이 같다.
 
 ## 이전 기록 정정
 
@@ -285,7 +326,7 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 
 - 데스크톱 앱 기동, 사이드카 ready, `/healthz` · `/app/` 200
 - 실제 Tauri 빌드에서 CSS 승인 게이트 통과, Linux 컨테이너 빌드와 해시 일치
-- 프론트엔드 전체 테스트 897개, `human_invite_manager_boundary` 7개, 첨부 저장 4개
+- 프론트엔드 전체 테스트 899개, `human_invite_manager_boundary` 7개, 첨부 저장 4개
 - 패키지 앱에서 외부 접속이 꺼진 상태로 "이 PC의 AI 초대 만들기" 버튼 활성
 - Grok 의 커넥터 MCP 기동과 도구 노출
 - 패키지 앱에서 Codex 가 모델 목록 · 버전 확인 · "업데이트" 버튼까지 표시 (8-2, 8-4)
@@ -298,12 +339,20 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
   (이름에 공백), 권한 "작업 폴더 쓰기". 파일 작성을 요청하자 에이전트 메시지 안에 권한 요청
   (`Write hello-from-grok.txt`)이 떴고, "한 번 허용" 으로 응답하자 파일이 디스크에 정확한 내용으로
   생성됐다. 에이전트는 파일을 다시 읽어 내용을 방에 답했고 대기 상태로 돌아왔다
+- 패키지 앱에서 DeepSeek API 에이전트(`deepseek-flash`, 작업 폴더 쓰기) 실제 턴. 사용자가 앱에
+  API 키를 등록한 뒤 실행했다. 11 을 고치기 전에는 쓰기가 `workspace_tool_failed` 로 실패했고,
+  고친 뒤 같은 요청에서 방에 권한 요청(`hello-from-deepseek.txt 파일을 생성하거나 덮어씁니다`)이
+  떴다. "이번 변경 허용" 으로 응답하자 파일이 디스크에 정확한 내용(43바이트)으로 생성됐고,
+  에이전트가 다시 읽어 같은 내용을 답했다
+- 설치 · 업데이트 카드의 각 상태를 실제 컴포넌트와 빌드된 CSS 로 렌더링해 확인. 이 PC 에는 지금
+  업데이트가 필요한 provider 가 없어서, 실제 앱에서 업데이트 완료 후 카드가 사라지는 장면은 단위
+  테스트(3.2초 뒤 영역 없음)로만 확인했다
 
 실행하지 않은 것:
 
-- API provider(DeepSeek 등)의 턴과 런타임 내장 파일 도구. 이 PC 에 API 키가 없어 실행하지 못했다.
-  실패하는 테스트 `workspace_tools::…file_tools_preserve_boundaries_and_exact_replacement` 와
-  `managed_bridge::…managed_api_uses_private_credentials…` 가 바로 이 경로라 확인이 필요하다
+- `managed_bridge::…managed_api_uses_private_credentials…` 테스트는 여전히 실패한다. 같은 관리
+  경로로 DeepSeek 가 실제로 동작했으므로 테스트 환경 쪽 문제일 가능성이 있지만 원인은 확인하지
+  않았다
 - Codex · OpenCode 의 실제 턴
 - Codex 실제 업데이트 실행. 버튼이 제공되는 것까지만 확인했다
 - Claude 로그인. 계정 로그인은 사용자 몫이다
@@ -320,21 +369,23 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 | | 통과 | 실패 |
 | --- | --- | --- |
 | `4a319f9` | 166 | 4 |
-| 이 브랜치 | 171 | 4 |
+| 이 브랜치 (11 수정 전) | 171 | 4 |
+| 이 브랜치 (11 수정 후) | 173 | 3 |
 
-늘어난 5개는 이 브랜치가 추가한 테스트(Codex 래퍼 2, Grok 홈 1, 설치 2)다. 실패 4건은 두 커밋에서
-같으므로 이 브랜치가 만든 것이 아니라 기존에 Windows 에서 통과하지 않던 테스트로 본다.
+처음 늘어난 5개는 이 브랜치가 추가한 테스트(Codex 래퍼 2, Grok 홈 1, 설치 2)다. 11 을 고친 뒤
+`workspace_tools::tests::file_tools_preserve_boundaries_and_exact_replacement` 가 통과했고,
+두 커밋 모두에서 90초 이상 끝나지 않던
+`workspace_tools::tests::writes_require_exact_owner_response_and_delivery_receipt` 도 끝까지
+실행되어 통과했다. 두 테스트 모두 11 과 같은 경로 표기 문제였던 것으로 본다.
+
+남은 실패 3건은 변경 전 커밋에서도 실패하던 테스트다.
 
 - `selection::tests::workspace_path_is_exact_and_per_model_relations_are_mandatory` —
   `" workspace "` 를 기대하지만 Windows 가 이름 끝 공백을 제거해 `" workspace"` 가 된다
-- `workspace_tools::tests::file_tools_preserve_boundaries_and_exact_replacement` —
-  `workspace file operation rejected`
 - `managed_bridge::windows_tests::managed_api_uses_private_credentials_and_confirms_whole_job_stop`,
   `managed_bridge::platform::native_tests::managed_native_stop_and_pipe_loss_remove_the_entire_nested_job` —
   `managed_bridge_protocol_failed`. Windows CI 가 실행하는 필터와 겹치므로 CI 환경과 이 PC 의
   차이는 따로 확인이 필요하다. 샌드박스 안에서 실행하면 실패가 더 늘어나므로 샌드박스 밖 결과만 적었다
-- `workspace_tools::tests::writes_require_exact_owner_response_and_delivery_receipt` 는 두 커밋
-  모두에서 90초 이상 끝나지 않았다
 
 서버 테스트는 이 브랜치가 건드린 세 바이너리만 실행했다. `provider_operations_boundary` 1개,
 `human_invite_manager_boundary` 7개는 통과했다. `persona_snapshot_capacity` 는 DB 를 임시 폴더에
