@@ -1,6 +1,6 @@
 import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
-import { MoreHorizontal, VolumeX, Zap } from "lucide-react";
+import { VolumeX, Zap } from "lucide-react";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
 import ProviderLogo from "../ProviderLogo";
 import {
@@ -32,6 +32,9 @@ export default function MemberRow({
   const Icon = entry.icon;
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
   const roleLabel = ROLE_OPTIONS.find((option) => option.id === entry.role)?.label || "에이전트";
+  // Moderation opens from the row's context menu. A row without a profile button still
+  // takes focus, so the menu key and Shift+F10 reach it from the keyboard.
+  const manageable = Boolean(!entry.owner && entry.meetingId && canManageParticipant);
 
   function openDetails() {
     if (canOpenDetails) onOpenDetails(entry);
@@ -60,7 +63,8 @@ export default function MemberRow({
 
   return (
     <div
-      className="dc-member group"
+      className={canOpenDetails ? "dc-member group cursor-pointer" : "dc-member group"}
+      tabIndex={manageable && !canOpenDetails ? 0 : undefined}
       data-role={entry.role}
       data-active={entry.active}
       data-ultra={entry.ultraMode}
@@ -103,7 +107,7 @@ export default function MemberRow({
       <div className="min-w-0 flex-1">
         <div className="dc-member-name-row">
           <p className="dc-member-name truncate preserve-words">
-            {canOpenDetails ? <button type="button" className="truncate preserve-words" style={{ maxWidth: "100%", textAlign: "left" }}
+            {canOpenDetails ? <button type="button" className="truncate preserve-words cursor-pointer" style={{ maxWidth: "100%", textAlign: "left" }}
               aria-label={`${entry.displayName} 프로필 보기`} onClick={(event) => { event.stopPropagation(); openDetails(); }}>{entry.displayName}</button> : entry.displayName}
           </p>
           {entry.owner && (
@@ -182,11 +186,6 @@ export default function MemberRow({
           )}
         </div>
       </div>
-      {!entry.owner && entry.meetingId && canManageParticipant && (
-        <button type="button" className="dc-modal-close" aria-label={`${entry.displayName} 관리 메뉴`}
-          onClick={(event) => { event.stopPropagation(); onContextMenu(entry, event); }}
-          onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={18} /></button>
-      )}
     </div>
   );
 }

@@ -40,16 +40,14 @@ afterEach(() => {
 });
 
 describe("MemberList component wiring", () => {
-  it("opens only moderation when the overflow SVG receives pointer input", () => {
+  it("opens only moderation from the row's context menu, without an overflow button", () => {
     render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onParticipantRemove={vi.fn()} />);
-    const icon = screen.getByLabelText("Agent One 관리 메뉴").querySelector("svg")!;
-    fireEvent.pointerDown(icon, { pointerType: "mouse", button: 0, clientX: 40, clientY: 40 });
-    fireEvent.pointerUp(icon, { pointerType: "mouse", button: 0, clientX: 40, clientY: 40 });
-    fireEvent.click(icon);
+    expect(screen.queryByLabelText("Agent One 관리 메뉴")).toBeNull();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Agent One 프로필 보기" }), { clientX: 40, clientY: 40 });
     expect(screen.getByRole("menu")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Agent One 강퇴" }));
-    expect(screen.getByRole("button", { name: "강퇴" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Agent One 내보내기" }));
+    expect(screen.getByRole("button", { name: "내보내기" })).toBeTruthy();
   });
 
   it("opens the extracted detail modal with Agent Session controls", () => {
