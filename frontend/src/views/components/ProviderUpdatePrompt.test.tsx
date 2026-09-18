@@ -76,3 +76,16 @@ it.each([
   await screen.findByRole("alert");
   expect(updating).toHaveBeenLastCalledWith(guarded);
 });
+
+it("shows a completed update briefly, then leaves without an updating badge", async () => {
+  vi.mocked(providerUpdateOperation).mockResolvedValueOnce(offer)
+    .mockResolvedValueOnce({ ...offer, current_version: offer.latest_version, update_available: false, completed: true });
+  render(<ProviderUpdatePrompt providerId="grok" />);
+  fireEvent.click(await screen.findByRole("button", { name: "업데이트" }));
+  await screen.findByText("1.0.24 버전으로 업데이트했어요.");
+  expect(screen.queryByText("업데이트 중")).toBeNull();
+
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 3200)); });
+
+  expect(screen.queryByRole("region")).toBeNull();
+}, 10_000);

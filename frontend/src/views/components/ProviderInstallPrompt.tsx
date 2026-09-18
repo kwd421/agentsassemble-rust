@@ -1,9 +1,10 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { CircleCheck, LoaderCircle, PackagePlus } from "lucide-react";
+import { useRef, useState } from "react";
+import { Check, Copy, Download, ExternalLink } from "lucide-react";
 import { ApiError } from "../../lib/apiErrors";
 import { providerInstallOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
 import type { ProviderInstall } from "../../types/generated/ProviderInstall";
+import ProviderSetupCard, { useTransientResult } from "./ProviderSetupCard";
 
 // Owner responses that prove no installer is still running for this request.
 const TERMINAL_INSTALL_FAILURES = [
@@ -12,9 +13,11 @@ const TERMINAL_INSTALL_FAILURES = [
   "provider_install_unconfirmed", "provider_install_outside_path", "provider_install_catalog_unavailable",
 ];
 
+type Phase = "idle" | "checking" | "confirming" | "installing" | "done";
+
 /**
  * Offers to install a missing provider CLI. Nothing runs until the user reads the exact
- * command in a confirmation and accepts it; the runtime then installs only that version.
+ * command and confirms it; the runtime then installs only that offered version.
  */
 export default function ProviderInstallPrompt({ providerId, displayName, installable, onUpdating, onInstalled }: {
   providerId: string;
@@ -25,10 +28,11 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
   onInstalled?: () => void;
 }) {
   const [offer, setOffer] = useState<ProviderInstall | null>(null);
-  const [phase, setPhase] = useState<"idle" | "checking" | "confirming" | "installing" | "done">("idle");
+  const [phase, setPhase] = useState<Phase>("idle");
   const [error, setError] = useState("");
+  const [copied, setCopied] = useState(false);
   const inflight = useRef(false);
-  const busy = phase === "checking" || phase === "installing";
+  const result = useTransientResult(phase === "done");
   const heading = `provider-install-${providerId}`;
 
   async function check() {
@@ -38,6 +42,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
     setError("");
     try {
       setOffer(await providerInstallOperation(providerId));
+      setCopied(false);
       setPhase("confirming");
     } catch (failure) {
       if (failure instanceof ApiError && failure.code === "provider_install_already_installed") onInstalled?.();
@@ -81,77 +86,61 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
     }
   }
 
-  function dismissOffer() {
-    setOffer(null);
-    setPhase("idle");
+  async function copyCommand() {
+    if (!offer) return;
+    try {
+      await navigator.clipboard.writeText(offer.command.join(" "));
+      setCopied(true);
+    } catch {
+      setError("명령을 복사하지 못했어요. 직접 선택해 복사해 주세요.");
+    }
   }
 
-  return <>
-    <section className="dc-invite-hosting" aria-labelledby={heading}
-      data-state={busy ? "busy" : phase === "done" ? "public" : "local"}>
-      <span className="dc-invite-hosting-icon" aria-hidden="true">
-        {busy ? <LoaderCircle className="dc-invite-hosting-spinner" size={22} />
-          : phase === "done" ? <CircleCheck size={22} /> : <PackagePlus size={22} />}
-      </span>
-      <div className="dc-invite-hosting-copy">
-        <div className="dc-invite-hosting-title-row">
-          <h3 id={heading}>{displayName} CLI</h3>
-          <span className="dc-invite-hosting-state">
-            {phase === "installing" ? "설치 중" : phase === "checking" ? "확인 중"
-              : phase === "done" ? "설치 완료" : "설치 필요"}
-          </span>
-        </div>
-        <p style={{ whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }} role="status">
-          {phase === "installing" ? "설치하고 있어요. 몇 분 걸릴 수 있어요."
-            : phase === "done" ? `${displayName} CLI ${offer?.version}을 설치했어요.`
-              : installable
-                ? "이 PC에서 찾지 못했어요. 앱에서 설치하거나 공식 안내를 따라 설치할 수 있어요."
-                : "이 PC에서 찾지 못했어요. 공식 안내를 따라 설치한 뒤 상태를 다시 확인해 주세요."}
-        </p>
-        {error && <span className="mt-1 text-[12px] font-bold text-offline preserve-words" role="alert">{error}</span>}
-      </div>
-      {phase !== "done" && <div className="dc-invite-hosting-actions">
-        {installable ? <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
-          disabled={busy} onClick={() => void check()}>
-          {phase === "checking" ? "확인 중…" : "앱에서 설치하기"}
-        </button> : <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}
-          onClick={() => void openHelp()}>설치 안내 열기</button>}
-      </div>}
-    </section>
-    {installable && phase !== "done" && <button type="button" className="dc-agent-create-secondary preserve-words"
-      style={{ minHeight: 40, marginTop: 8 }} onClick={() => void openHelp()}>
-      직접 설치하는 방법 보기
-    </button>}
-    {phase === "confirming" && offer && <InstallConfirmation heading={`${heading}-confirm`} onCancel={dismissOffer}>
-      <h3 id={`${heading}-confirm`}>{displayName} CLI를 설치할까요?</h3>
-      <p>버전 {offer.version} · {offer.package}</p>
-      <label className="dc-invite-command-label" htmlFor={`${heading}-command`}>이 PC에서 실행할 명령</label>
-      <input id={`${heading}-command`} className="dc-invite-link-input" style={{ width: "100%" }}
-        readOnly value={offer.command.join(" ")} onFocus={(event) => event.currentTarget.select()} />
-      <div className="dc-invite-confirm-actions">
-        <button type="button" className="dc-agent-create-secondary" style={{ minWidth: 44, minHeight: 44 }}
-          autoFocus onClick={dismissOffer}>취소</button>
-        <button type="button" className="dc-invite-confirm-primary" style={{ minWidth: 44, minHeight: 44 }}
-          onClick={() => void install()}>설치</button>
-      </div>
-    </InstallConfirmation>}
-  </>;
-}
+  if (result === "gone") return null;
+  const title = `${displayName} CLI`;
 
-function InstallConfirmation({ heading, onCancel, children }: {
-  heading: string;
-  onCancel: () => void;
-  children: ReactNode;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-  const [opener] = useState(() => document.activeElement);
-  useEffect(() => {
-    const dialog = ref.current;
-    dialog?.showModal();
-    return () => { dialog?.close(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
-  }, [opener]);
-  return <dialog ref={ref} className="dc-invite-confirm" role="alertdialog" aria-labelledby={heading}
-    onCancel={(event) => { event.preventDefault(); onCancel(); }}>
-    {children}
-  </dialog>;
+  if (phase === "done") {
+    return <ProviderSetupCard providerId={providerId} headingId={heading} title={title} tone="done"
+      badge="설치 완료" leaving={result === "leaving"}>
+      <p className="dc-provider-setup-text" role="status">{title} {offer?.version}을 설치했어요.</p>
+    </ProviderSetupCard>;
+  }
+
+  const installing = phase === "installing";
+  return <ProviderSetupCard providerId={providerId} headingId={heading} title={title}
+    tone={error ? "error" : "install"} busy={installing || phase === "checking"}
+    badge={installing ? "설치 중" : phase === "checking" ? "확인 중" : error ? "확인 필요" : "설치 필요"}
+    detail={phase === "confirming" && offer ? <div className="dc-provider-setup-terminal">
+      <div className="dc-provider-setup-terminal-bar">
+        <span>이 PC에서 실행할 명령</span>
+        <button type="button" className="dc-provider-setup-copy-command" onClick={() => void copyCommand()}>
+          {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}
+          {copied ? "복사됨" : "복사"}
+        </button>
+      </div>
+      <pre className="dc-provider-setup-command" aria-label="이 PC에서 실행할 명령">{offer.command.join(" ")}</pre>
+      <p className="dc-provider-setup-note">{offer.package} {offer.version}을 이 계정 권한으로 설치해요. 관리자 권한은 쓰지 않아요.</p>
+    </div> : undefined}
+    actions={phase === "confirming" ? <>
+      <button type="button" className="dc-provider-setup-button" data-variant="ghost"
+        onClick={() => { setOffer(null); setPhase("idle"); }}>취소</button>
+      <button type="button" className="dc-provider-setup-button" data-variant="primary" autoFocus
+        onClick={() => void install()}><Download size={15} aria-hidden="true" />설치</button>
+    </> : installing ? undefined : installable ? <>
+      <button type="button" className="dc-provider-setup-button" data-variant="ghost"
+        onClick={() => void openHelp()}>직접 설치 방법</button>
+      <button type="button" className="dc-provider-setup-button" data-variant="primary"
+        disabled={phase === "checking"} onClick={() => void check()}>
+        <Download size={15} aria-hidden="true" />{phase === "checking" ? "확인 중…" : "앱에서 설치하기"}
+      </button>
+    </> : <button type="button" className="dc-provider-setup-button" data-variant="primary"
+      onClick={() => void openHelp()}><ExternalLink size={15} aria-hidden="true" />설치 안내 열기</button>}>
+    <p className="dc-provider-setup-text" role="status">
+      {installing ? "npm으로 설치하고 있어요. 보통 1분 안에 끝나요."
+        : phase === "confirming" ? "아래 명령을 확인한 뒤 설치해 주세요."
+          : installable ? "이 PC에서 찾지 못했어요. 앱에서 바로 설치할 수 있어요."
+            : "이 PC에서 찾지 못했어요. 공식 안내를 따라 설치한 뒤 상태를 다시 확인해 주세요."}
+    </p>
+    {error && <p className="dc-provider-setup-error" role="alert">{error}</p>}
+  </ProviderSetupCard>;
 }
