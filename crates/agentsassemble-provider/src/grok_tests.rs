@@ -38,7 +38,10 @@ fn user_home_prefers_grok_home_then_the_platform_profile() {
     use std::{ffi::OsString, path::PathBuf};
 
     assert_eq!(
-        resolve_user_home(Some(OsString::from("custom")), Some(OsString::from("profile"))),
+        resolve_user_home(
+            Some(OsString::from("custom")),
+            Some(OsString::from("profile"))
+        ),
         Some(PathBuf::from("custom"))
     );
     // Windows sets USERPROFILE and no HOME; the caller passes that profile here.

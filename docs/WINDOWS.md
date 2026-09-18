@@ -7,7 +7,7 @@ Node 24.13.1 에서 확인했다.
 
 Windows에서 런타임이 기동한 적이 없었다. 이 문서는 그 과정에서 **관찰한 증상, 코드에서 찾은
 원인, 적용한 수정, 실제로 확인한 범위**를 적는다. 적은 것보다 넓은 범위가 정상이라고 주장하지
-않는다. 다루는 것은 부팅 경로 세 건, 빌드·재요청·오류 표시 세 건, provider 실행 관련 네 건이며,
+않는다. 다루는 것은 부팅 경로 세 건, 빌드·재요청·오류 표시 세 건, provider 실행 관련 다섯 건이며,
 대부분 컴파일과 clippy 를 통과하는 종류라 기존 게이트에 걸리지 않았다.
 
 같은 PC에서 실행 중인 외부 AI를 공개 접속 없이 초대하는 기능과, 없는 provider CLI 를 확인 후
@@ -173,6 +173,29 @@ npm 업데이트는 실행 전에 "지금 찾은 런처가 npm 전역 prefix 가
 
 비교 시 Windows 래퍼를 그 래퍼가 실행하는 스크립트로 따라가도록 바꿨다. 수정 뒤 UI 가
 "업데이트" 버튼을 제공하는 것까지 확인했고, 실제 업데이트 실행은 하지 않았다.
+
+#### 8-5. Claude 모델 디스커버리가 Windows 에서 항상 실패 (`claude.rs`, `codex_executable.rs`)
+
+Claude Code 를 npm 으로 설치한 뒤에도 에이전트 추가 창에 `provider model discovery failed` 가 떴다.
+`claude auth status` 는 로그인 상태(exit 0)로 정상이었다.
+
+디스커버리는 `claude` 경로를 Node 로 실행하는 SDK 브리지에 넘기고, 브리지가 그 경로로 Claude 를
+띄워 모델 목록을 받는다. Windows 에서 PATH 탐색이 고르는 것은 npm 래퍼 `claude.cmd` 인데, Node 는
+보안 수정 이후 `.cmd` 파일을 셸 없이 실행하지 않는다. 같은 SDK 호출을 직접 재현하면 `claude.cmd`
+에서는 `spawn EINVAL` 이 나고, 래퍼가 실행하는 `claude.exe` 를 넘기면 모델 목록이 돌아왔다. 세션
+시작과 사용량 조회도 같은 경로를 쓰므로 같은 이유로 실패했을 것으로 본다.
+
+npm 래퍼 파서를 확장자별로 일반화해 `.exe` 대상도 따라가게 했고(`npm_cmd_shim_native`), Claude
+디스커버리 · 사용량 조회가 래퍼 대신 그 실행 파일을 쓰도록 했다(`claude_executable`). 세션은
+디스커버리가 기록한 경로를 쓰므로 함께 바뀐다. 래퍼 안의 대상은 `node_modules` 아래 경로만
+따른다. JS 래퍼에 들어 있는 `"%dp0%\node.exe"` 는 Node 인터프리터라서, 이 조건이 없으면 `.exe` 탐색이
+그것을 패키지로 오인한다. 수정 뒤 패키지 앱에서 오류 문구가 사라지고 모델 · 추론 강도 선택이
+나타나는 것까지 확인했다. Claude 실제 턴은 실행하지 않았다.
+
+남은 점: 모델 목록에는 Default(Sonnet 5) · Fable · Opus 세 개만 나온다. 브리지와 서버가
+`claude-<계열>-N(-N)` 모양의 id 만 받는데, SDK 가 Haiku 를 날짜가 붙은 `claude-haiku-4-5-20251001`
+로 돌려줘서 걸러진다. 기본 모델로 지정된 `claude-haiku-4-5` 가 목록에 없으므로 모델을 직접 골라야
+한다. Windows 와 무관한 동작이라 이 브랜치에서는 바꾸지 않았다.
 
 ### 9. 없는 provider CLI 를 앱에서 설치
 
@@ -373,8 +396,10 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
 | `4a319f9` | 166 | 4 |
 | 이 브랜치 (11 수정 전) | 171 | 4 |
 | 이 브랜치 (11 수정 후) | 173 | 3 |
+| 이 브랜치 (8-5 수정 후) | 174 | 3 |
 
-처음 늘어난 5개는 이 브랜치가 추가한 테스트(Codex 래퍼 2, Grok 홈 1, 설치 2)다. 11 을 고친 뒤
+처음 늘어난 5개는 이 브랜치가 추가한 테스트(Codex 래퍼 2, Grok 홈 1, 설치 2)다. 8-5 에서 래퍼 파서
+테스트 1개가 더해졌다. 11 을 고친 뒤
 `workspace_tools::tests::file_tools_preserve_boundaries_and_exact_replacement` 가 통과했고,
 두 커밋 모두에서 90초 이상 끝나지 않던
 `workspace_tools::tests::writes_require_exact_owner_response_and_delivery_receipt` 도 끝까지

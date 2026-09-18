@@ -111,31 +111,51 @@ fn resolve_codex_entry(entry: &Path) -> io::Result<Option<(String, String)>> {
 /// directory. Only a relative path made of plain segments is followed.
 #[cfg(windows)]
 pub(crate) fn npm_cmd_shim_script(shim: &Path) -> io::Result<Option<std::path::PathBuf>> {
+    npm_cmd_shim_file(shim, ".js")
+}
+
+/// Resolves the native executable an npm `cmd-shim` wrapper launches directly.
+///
+/// Packages that ship a platform binary as their `bin` (Claude Code does) get a wrapper that
+/// runs `"%dp0%\<relative path>.exe"`. Node refuses to spawn `.cmd` files without a shell, so
+/// callers that hand the launcher to a Node child must use this target instead.
+#[cfg(windows)]
+pub(crate) fn npm_cmd_shim_native(shim: &Path) -> io::Result<Option<std::path::PathBuf>> {
+    npm_cmd_shim_file(shim, ".exe")
+}
+
+#[cfg(windows)]
+fn npm_cmd_shim_file(shim: &Path, extension: &str) -> io::Result<Option<std::path::PathBuf>> {
     const MAX_SHIM_BYTES: u64 = 16 * 1024;
     let mut text = String::new();
     File::open(shim)?
         .take(MAX_SHIM_BYTES)
         .read_to_string(&mut text)?;
-    let (Some(target), Some(directory)) = (npm_cmd_shim_target(&text), shim.parent()) else {
+    let (Some(target), Some(directory)) = (npm_cmd_shim_target(&text, extension), shim.parent())
+    else {
         return Ok(None);
     };
-    let script = target
+    let file = target
         .split(['\\', '/'])
         .fold(directory.to_path_buf(), |path, segment| path.join(segment));
-    Ok(script.is_file().then_some(script))
+    Ok(file.is_file().then_some(file))
 }
 
 #[cfg(any(windows, test))]
-fn npm_cmd_shim_target(text: &str) -> Option<&str> {
+fn npm_cmd_shim_target<'a>(text: &'a str, extension: &str) -> Option<&'a str> {
     const DP0: &str = "\"%dp0%\\";
     text.match_indices(DP0)
         .filter_map(|(start, _)| {
             let rest = &text[start + DP0.len()..];
             let target = &rest[..rest.find('"')?];
-            let plain = target
-                .split(['\\', '/'])
-                .all(|segment| !segment.is_empty() && segment != "." && segment != "..");
-            (plain && target.to_ascii_lowercase().ends_with(".js")).then_some(target)
+            let mut segments = target.split(['\\', '/']);
+            // The package lives under the wrapper's node_modules; a bare `node.exe` beside the
+            // wrapper is the interpreter npm may prefer, never the package.
+            let packaged = segments.next() == Some("node_modules");
+            let plain =
+                segments.all(|segment| !segment.is_empty() && segment != "." && segment != "..");
+            (packaged && plain && target.to_ascii_lowercase().ends_with(extension))
+                .then_some(target)
         })
         .last()
 }
@@ -380,7 +400,7 @@ mod tests {
     #[test]
     fn npm_cmd_shim_target_is_the_package_script_not_node() {
         assert_eq!(
-            super::npm_cmd_shim_target(NPM_CMD_SHIM),
+            super::npm_cmd_shim_target(NPM_CMD_SHIM, ".js"),
             Some("node_modules\\@openai\\codex\\bin\\codex.js")
         );
         for escaping in [
@@ -389,8 +409,27 @@ mod tests {
             "\"%dp0%\\node_modules\\\\codex.js\"",
             "\"%dp0%\\node.exe\"",
         ] {
-            assert_eq!(super::npm_cmd_shim_target(escaping), None, "{escaping}");
+            assert_eq!(
+                super::npm_cmd_shim_target(escaping, ".js"),
+                None,
+                "{escaping}"
+            );
         }
+    }
+
+    #[test]
+    fn npm_cmd_shim_target_follows_a_native_package_binary() {
+        const NATIVE_SHIM: &str = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe\"   %*\r\n";
+        assert_eq!(
+            super::npm_cmd_shim_target(NATIVE_SHIM, ".exe"),
+            Some("node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe")
+        );
+        assert_eq!(super::npm_cmd_shim_target(NATIVE_SHIM, ".js"), None);
+        assert_eq!(super::npm_cmd_shim_target(NPM_CMD_SHIM, ".exe"), None);
+        assert_eq!(
+            super::npm_cmd_shim_target("\"%dp0%\\..\\evil\\claude.exe\"", ".exe"),
+            None
+        );
     }
 
     #[cfg(windows)]
@@ -399,7 +438,8 @@ mod tests {
         let Some((platform_package, target, binary)) = super::codex_native_layout() else {
             return;
         };
-        let prefix = tempfile::tempdir().unwrap_or_else(|error| panic!("create npm prefix: {error}"));
+        let prefix =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create npm prefix: {error}"));
         let shim = prefix.path().join("codex.cmd");
         std::fs::write(&shim, NPM_CMD_SHIM).unwrap_or_else(|error| panic!("write shim: {error}"));
         let package = prefix.path().join("node_modules/@openai/codex");
