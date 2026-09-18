@@ -41,7 +41,7 @@ test("catalog emits exact model authority outside the caller workspace", async (
     models: [
       {
         id: "claude-sonnet-5",
-        label: "Claude Sonnet 5",
+        label: "Sonnet 5",
         efforts: ["low", "medium", "high", "xhigh"],
         fast: true,
       },

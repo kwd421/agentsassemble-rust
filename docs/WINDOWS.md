@@ -192,10 +192,15 @@ npm 래퍼 파서를 확장자별로 일반화해 `.exe` 대상도 따라가게 
 그것을 패키지로 오인한다. 수정 뒤 패키지 앱에서 오류 문구가 사라지고 모델 · 추론 강도 선택이
 나타나는 것까지 확인했다. Claude 실제 턴은 실행하지 않았다.
 
-남은 점: 모델 목록에는 Default(Sonnet 5) · Fable · Opus 세 개만 나온다. 브리지와 서버가
-`claude-<계열>-N(-N)` 모양의 id 만 받는데, SDK 가 Haiku 를 날짜가 붙은 `claude-haiku-4-5-20251001`
-로 돌려줘서 걸러진다. 기본 모델로 지정된 `claude-haiku-4-5` 가 목록에 없으므로 모델을 직접 골라야
-한다. Windows 와 무관한 동작이라 이 브랜치에서는 바꾸지 않았다.
+모델 이름: SDK 의 `displayName` 은 메뉴용 별칭("Default (recommended)", "Opus", "Fable")이라 버전이
+보이지 않았고, `default` 와 `sonnet` 이 같은 `claude-sonnet-5` 로 풀려 Sonnet 이 "Default" 로만 보였다.
+브리지가 SDK 가 알려준 실제 모델 id 에서 이름을 만들도록 했다(`claude-fable-5-1` → `Fable 5.1`).
+패키지 앱 드롭다운에 `Fable 5.1 / Opus 5 / Sonnet 5` 로 표시되는 것을 확인했다.
+
+남은 점: Haiku 는 목록에 없다. SDK 가 Haiku 를 날짜가 붙은 `claude-haiku-4-5-20251001` 로 돌려주고
+추론 강도도 주지 않아, 목록 검사와 실행 시 검증을 모두 통과하지 못한다. 기본 모델로 지정된
+`claude-haiku-4-5` 가 목록에 없으므로 모델을 직접 골라야 한다. 목록은 SDK 가 주는 것만 쓰며,
+SDK 에 없는 버전(Opus 4.6 등)은 실행 시 검증에서 막히므로 추가하지 않았다.
 
 ### 9. 없는 provider CLI 를 앱에서 설치
 

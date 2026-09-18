@@ -89,6 +89,13 @@ function parseLine(line) {
   return value;
 }
 
+// SDK display names are picker aliases ("Default (recommended)", "Opus") that hide the release,
+// and two aliases can resolve to one model. Name each option after the exact model it runs.
+function modelLabel(id) {
+  const [, family, ...version] = id.split("-");
+  return `${family[0].toUpperCase()}${family.slice(1)} ${version.join(".")}`;
+}
+
 function exactModels(models) {
   const exact = new Map();
   for (const model of Array.isArray(models) ? models : []) {
@@ -103,7 +110,7 @@ function exactModels(models) {
       : [];
     exact.set(id, {
       id,
-      label: typeof model.displayName === "string" && model.displayName.trim() ? model.displayName : id,
+      label: modelLabel(id),
       efforts: [...new Set(efforts)],
       fast: model.supportsFastMode === true,
     });
