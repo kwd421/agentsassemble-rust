@@ -1,5 +1,6 @@
 import { useEffect, useState, type FocusEvent, type MouseEvent } from "react";
 import { createPortal } from "react-dom";
+import { overlayHost } from "../../lib/overlayHost";
 
 import type { ProviderControlOption } from "../../roomSocketClient";
 
@@ -7,6 +8,8 @@ type DetailState = {
   option: ProviderControlOption;
   left: number;
   top: number;
+  /// The row this card describes, which also decides where the card may render.
+  anchor: HTMLElement;
 };
 
 type DetailItem = {
@@ -35,6 +38,7 @@ export function useProviderModelDetails(enabled: boolean) {
     const opensRight = window.innerWidth - rect.right >= CARD_WIDTH + CARD_GAP + 8;
     setDetail({
       option,
+      anchor,
       left: opensRight
         ? rect.right + CARD_GAP
         : Math.max(8, rect.left - CARD_WIDTH - CARD_GAP),
@@ -77,7 +81,7 @@ export function useProviderModelDetails(enabled: boolean) {
             ))}
           </dl>
         </aside>,
-        document.body
+        overlayHost(detail.anchor)
       ),
   };
 }
