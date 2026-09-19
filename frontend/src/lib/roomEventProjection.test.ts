@@ -17,6 +17,28 @@ function event(overrides: Partial<RoomEvent>): RoomEvent {
 }
 
 describe("projectRoomEventsToTimeline", () => {
+  it("shows a declined turn as one skip line and adds later skips to it", () => {
+    const decline = (id: string, seq: number, name: string, reason: string) => event({
+      id, seq, type: "turn_finished", status: "declined", reason_code: reason,
+      display_name: name, actor: { participant_id: "room-system", participant_type: "system" },
+    } as Partial<RoomEvent>);
+    const timeline = projectRoomEventsToTimeline([
+      decline("a", 1, "Sonnet", "not_addressed"),
+      decline("b", 2, "DeepSeek", "nothing_useful_to_add"),
+    ]);
+    expect(timeline).toHaveLength(1);
+    expect(timeline[0].kind).toBe("system");
+    expect(timeline[0].message).toBe("차례 넘김 — Sonnet(나를 부른 게 아님), DeepSeek(덧붙일 말 없음)");
+
+    const withMessageBetween = projectRoomEventsToTimeline([
+      decline("a", 1, "Sonnet", "not_addressed"),
+      event({ id: "said", seq: 2, content: "말함" }),
+      decline("c", 3, "DeepSeek", "duplicate"),
+    ]);
+    expect(withMessageBetween.map((item) => item.kind)).toEqual(["system", "message", "system"]);
+    expect(withMessageBetween.at(-1)?.message).toBe("차례 넘김 — DeepSeek(이미 나온 내용)");
+  });
+
   it("keeps deleted text hidden when a redacted edit is loaded without the deletion event", () => {
     const original = event({ id: "deleted-target", seq: 1, content: "previously visible" });
     const redacted = event({

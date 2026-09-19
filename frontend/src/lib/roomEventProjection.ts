@@ -58,6 +58,7 @@ type TimelineRoomEvent = Pick<
   role?: string;
   source_event_id?: string;
   status?: string;
+  reason_code?: string;
   target_agent_id?: string;
   target_event_id?: string;
   turn_id?: string;
@@ -105,6 +106,16 @@ function speakerIdentity(
     role: String(currentProfile?.role || event.role || ""),
     side: mine ? "mine" : "other",
   };
+}
+
+/// The reason an agent gave for staying silent, in the room's own words.
+function declineReason(code?: string): string {
+  const reason = {
+    not_addressed: "나를 부른 게 아님",
+    nothing_useful_to_add: "덧붙일 말 없음",
+    duplicate: "이미 나온 내용",
+  }[String(code || "")];
+  return reason ? `(${reason})` : "";
 }
 
 export function projectRoomEventsToTimeline(
@@ -334,6 +345,32 @@ export function projectRoomEventsToTimeline(
             message: String(event.content || ""),
             edited_at: String(event.edited_at || "") || undefined,
           };
+      return;
+    }
+
+    if (event.type === "turn_finished" && event.status === "declined") {
+      // A declined turn publishes nothing, so without this line the room just goes quiet and
+      // the reason is only visible in the event log. Consecutive skips share one line.
+      const skipped = `${speaker.name}${declineReason(event.reason_code)}`;
+      const previous = timeline.at(-1);
+      if (previous?.kind === "system" && previous.id.startsWith("turn-declined:")) {
+        timeline[timeline.length - 1] = {
+          ...previous,
+          message: `${previous.message}, ${skipped}`,
+        };
+        return;
+      }
+      timeline.push({
+        id: `turn-declined:${event.id}`,
+        kind: "system",
+        message: `차례 넘김 — ${skipped}`,
+        side: "other",
+        created_at: event.created_at,
+        seq: Number(event.seq) || undefined,
+        actor_id: eventActor.id,
+        actor_type: eventActor.type,
+        name: speaker.name,
+      });
       return;
     }
 
