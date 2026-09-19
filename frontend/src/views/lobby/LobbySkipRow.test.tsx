@@ -21,10 +21,13 @@ describe("LobbySkipRow", () => {
     expect(screen.queryByText("Sonnet")).toBeNull();
 
     const row = container.querySelector(".dc-system-divider")!;
+    expect(container.querySelectorAll("img, svg").length).toBeGreaterThan(0);
     fireEvent.mouseEnter(row);
     expect(screen.getByText("Sonnet")).toBeTruthy();
     expect(screen.getByText("DeepSeek")).toBeTruthy();
     expect(screen.getByText("덧붙일 말 없음")).toBeTruthy();
+    // The stacked faces give way to the named list, so the label is not preceded by them.
+    expect(screen.getByText("차례 넘김")).toBeTruthy();
 
     fireEvent.mouseLeave(row);
     expect(screen.queryByText("Sonnet")).toBeNull();

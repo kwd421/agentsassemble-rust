@@ -344,7 +344,8 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
         aria-label={event.message}
         style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "default" }}
       >
-        <span style={{ display: "inline-flex", alignItems: "center" }} aria-hidden="true">
+        {/* The faces are the collapsed form; the expanded list shows each one beside its name. */}
+        {!open && <span style={{ display: "inline-flex", alignItems: "center" }} aria-hidden="true">
           {/* Newest first and drawn over the ones before it, so earlier skips peek out to the right. */}
           {skips.map((skip, index) => (
             <span
@@ -362,8 +363,8 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
                 : <ProviderLogo providerKind={skip.provider_kind} size={18} fallback={<Bot size={11} />} />}
             </span>
           ))}
-        </span>
-        <span>차례 넘김{skips.length > 1 ? ` ${skips.length}` : ""}</span>
+        </span>}
+        <span>차례 넘김{!open && skips.length > 1 ? ` ${skips.length}` : ""}</span>
       </span>
       {open && skips.length > 0 && (
         <span style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 10px", marginTop: 4 }}>
