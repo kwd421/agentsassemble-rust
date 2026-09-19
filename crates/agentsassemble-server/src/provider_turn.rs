@@ -527,7 +527,10 @@ pub(crate) async fn handle_provider_result(
                 "discarded provider result after durable turn authority changed"
             );
         }
-        Err(_) => tracing::error!(
+        // The turn is lost either way, so keep the reason: without it the only visible symptom
+        // is a session that stays "responding" with nothing to explain why.
+        Err(error) => tracing::error!(
+            %error,
             room_id,
             session_id,
             "provider turn result could not be committed; durable restart recovery is required"
