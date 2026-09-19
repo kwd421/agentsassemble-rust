@@ -27,6 +27,15 @@ export type LobbyAttachmentUploadOptions = {
   beforeDispatch?: () => void;
 };
 
+/** One agent that took its turn and chose not to speak, with the reason it gave. */
+export interface LobbySkip {
+  participant_id: string;
+  name: string;
+  reason: string;
+  avatar_image_url?: string;
+  provider_kind?: string;
+}
+
 export interface LobbyEvent {
   provider_request_id?: string;
   provider_request_title?: string;
@@ -69,6 +78,7 @@ export interface LobbyEvent {
   vote_deadline_at?: string;
   vote_choice?: string;
   attachments?: LobbyAttachmentRef[];
+  skips?: LobbySkip[];
 }
 
 export interface LobbyPostResponse {

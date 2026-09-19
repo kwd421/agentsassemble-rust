@@ -139,6 +139,79 @@ async fn settings_result_binds_event_sequence_and_replays() {
     assert_eq!(replay.event.seq, committed.event.seq);
 }
 
+#[tokio::test]
+async fn a_declined_ordered_turn_hands_the_floor_to_the_next_agent() {
+    let (store, principal, _directory) = fixture().await;
+    insert_second_agent(&store).await;
+    let routed = store
+        .execute_message_with_turn(
+            &principal,
+            "ordered-decline",
+            "message.send",
+            &json!({"content": "둘이 말좀 주고받아봐"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("route ordered message: {error}"));
+    assert_eq!(routed.assignments.len(), 1);
+    let first = routed.assignments[0].clone();
+
+    let declined = decline_assignment(&store, &first, "decline-1", "not_addressed").await;
+
+    // The floor moves to the only other agent, and its turn carries the same message.
+    assert_eq!(declined.next_assignments.len(), 1);
+    let second = &declined.next_assignments[0];
+    assert_ne!(
+        second.session.public.session_id,
+        first.session.public.session_id
+    );
+
+    // A second decline ends the exchange instead of handing the floor back.
+    let ended = decline_assignment(&store, second, "decline-2", "nothing_useful_to_add").await;
+    assert!(ended.next_assignments.is_empty());
+}
+
+async fn decline_assignment(
+    store: &SqliteStore,
+    assignment: &crate::AgentTurnAssignment,
+    provider_turn_id: &str,
+    reason_code: &str,
+) -> crate::AgentTurnCommit {
+    let start = store
+        .authorize_provider_turn_start(
+            &assignment.session.public.room_id,
+            &assignment.session.public.session_id,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize provider turn: {error}"));
+    store
+        .mark_provider_turn_running(&start, provider_turn_id)
+        .await
+        .unwrap_or_else(|error| panic!("mark provider turn running: {error}"));
+    store
+        .decline_agent_turn(
+            &start.room_id,
+            &start.session_id,
+            crate::ProviderTurnAuthority {
+                room_id: &start.room_id,
+                session_id: &start.session_id,
+                turn_id: &start.turn_id,
+                turn_generation: start.turn_generation,
+                execution_id: &start.execution_id,
+                start_dispatch_nonce: &start.start_dispatch_nonce,
+                runtime_handle_id: &start.runtime_handle_id,
+                runtime_owner_id: &start.runtime_owner_id,
+                runtime_lease_token: &start.runtime_lease_token,
+                provider_turn_id,
+                provider_session_id: None,
+            },
+            reason_code,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("decline turn: {error}"))
+}
+
 async fn insert_second_agent(store: &SqliteStore) {
     let now = chrono::Utc::now();
     let second_participant = participant(

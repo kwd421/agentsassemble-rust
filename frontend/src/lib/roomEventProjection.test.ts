@@ -29,6 +29,10 @@ describe("projectRoomEventsToTimeline", () => {
     expect(timeline).toHaveLength(1);
     expect(timeline[0].kind).toBe("system");
     expect(timeline[0].message).toBe("차례 넘김 — Sonnet(나를 부른 게 아님), DeepSeek(덧붙일 말 없음)");
+    expect(timeline[0].skips?.map((skip) => [skip.name, skip.reason])).toEqual([
+      ["Sonnet", "나를 부른 게 아님"],
+      ["DeepSeek", "덧붙일 말 없음"],
+    ]);
 
     const withMessageBetween = projectRoomEventsToTimeline([
       decline("a", 1, "Sonnet", "not_addressed"),

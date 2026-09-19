@@ -110,12 +110,16 @@ function speakerIdentity(
 
 /// The reason an agent gave for staying silent, in the room's own words.
 function declineReason(code?: string): string {
-  const reason = {
+  return {
     not_addressed: "나를 부른 게 아님",
     nothing_useful_to_add: "덧붙일 말 없음",
     duplicate: "이미 나온 내용",
-  }[String(code || "")];
-  return reason ? `(${reason})` : "";
+  }[String(code || "")] || "이유 없음";
+}
+
+/// Read by search and screen readers, so the row still says who skipped without hovering.
+function skipSummary(skips: readonly { name: string; reason: string }[]): string {
+  return `차례 넘김 — ${skips.map((skip) => `${skip.name}(${skip.reason})`).join(", ")}`;
 }
 
 export function projectRoomEventsToTimeline(
@@ -349,27 +353,42 @@ export function projectRoomEventsToTimeline(
     }
 
     if (event.type === "turn_finished" && event.status === "declined") {
-      // A declined turn publishes nothing, so without this line the room just goes quiet and
-      // the reason is only visible in the event log. Consecutive skips share one line.
-      const skipped = `${speaker.name}${declineReason(event.reason_code)}`;
+      // A declined turn publishes nothing, so without this row the room just goes quiet and the
+      // reason lives only in the event log. Consecutive skips share one row.
+      // The room system finishes the turn, so the agent's own identity comes from the
+      // participant it names rather than from the actor.
+      const skippedId = String(event.participant_id || eventActor.id || "");
+      const skipped = speakerIdentity(
+        event,
+        skippedId,
+        viewerParticipantId,
+        participantProfiles,
+        displayResourceBase,
+      );
+      const skip = {
+        participant_id: skippedId,
+        name: skipped.name,
+        reason: declineReason(event.reason_code),
+        avatar_image_url: skipped.avatarImageUrl,
+        provider_kind: skipped.providerKind,
+      };
       const previous = timeline.at(-1);
-      if (previous?.kind === "system" && previous.id.startsWith("turn-declined:")) {
-        timeline[timeline.length - 1] = {
-          ...previous,
-          message: `${previous.message}, ${skipped}`,
-        };
+      if (previous?.kind === "system" && previous.skips) {
+        const skips = [...previous.skips, skip];
+        timeline[timeline.length - 1] = { ...previous, skips, message: skipSummary(skips) };
         return;
       }
       timeline.push({
         id: `turn-declined:${event.id}`,
         kind: "system",
-        message: `차례 넘김 — ${skipped}`,
+        message: skipSummary([skip]),
+        skips: [skip],
         side: "other",
         created_at: event.created_at,
         seq: Number(event.seq) || undefined,
         actor_id: eventActor.id,
         actor_type: eventActor.type,
-        name: speaker.name,
+        name: skipped.name,
       });
       return;
     }
