@@ -38,6 +38,7 @@ pub(crate) static CUSTOM_API_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         context_limit: "The bounded Custom API request context is too large.",
         rate_limited: "Custom API rate-limited the request.",
         invalid_response: "Custom API returned an invalid bounded response.",
+        output_truncated: "Custom API stopped at the maximum response length.",
         invalid_tool_call: "Custom API returned an invalid room-tool call.",
         api_unavailable: "The Custom API request did not complete.",
         session_mismatch: "Custom API runtime authority does not match the Agent Session.",

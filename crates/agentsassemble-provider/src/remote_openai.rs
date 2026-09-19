@@ -360,19 +360,24 @@ impl RemoteOpenAiDriver {
         call: ToolCall,
         random_tools: bool,
     ) -> Result<ExecutedTool, DriverError> {
+        // A tool this room does not offer, or arguments that are not an object, is the model
+        // getting it wrong, not the transport breaking. Nothing reached the room, so report it
+        // the way a rejected room tool is reported and let the same turn correct itself.
         if !crate::room_portal::is_available_provider_tool(&call.function.name, random_tools) {
-            return Err(provider_error(
-                "provider_tool_call_invalid",
-                self.spec.errors.invalid_tool_call,
-            ));
+            return Ok(ExecutedTool {
+                call,
+                result: tool_error_text("room_tool_unavailable"),
+                terminal: false,
+            });
         }
-        let arguments = serde_json::from_str::<Map<String, Value>>(&call.function.arguments)
-            .map_err(|_| {
-                provider_error(
-                    "provider_tool_call_invalid",
-                    self.spec.errors.invalid_tool_call,
-                )
-            })?;
+        let Ok(arguments) = serde_json::from_str::<Map<String, Value>>(&call.function.arguments)
+        else {
+            return Ok(ExecutedTool {
+                call,
+                result: tool_error_text("room_tool_arguments_invalid"),
+                terminal: false,
+            });
+        };
         let terminal_action = crate::room_portal::is_terminal_provider_tool(&call.function.name);
         let replay_unsafe = crate::room_portal::is_replay_unsafe_provider_tool(&call.function.name);
         let previous_effect_uncertain = self.turn_effect_uncertain;
@@ -685,6 +690,14 @@ fn validate_completion(
         ));
     }
     let has_tools = !response.message.tool_calls.is_empty();
+    // Hitting the response limit is the model obeying max_output_tokens, not a malformed reply.
+    // Reporting both as one protocol fault hid a setting the owner can actually change.
+    if !has_tools && response.finish_reason == "length" {
+        return Err(provider_error(
+            "provider_output_truncated",
+            spec.errors.output_truncated,
+        ));
+    }
     if (has_tools && response.finish_reason != "tool_calls")
         || (!has_tools && response.finish_reason != "stop")
     {
@@ -694,6 +707,11 @@ fn validate_completion(
         ));
     }
     Ok(())
+}
+
+/// The shape the room already returns for a rejected tool, so one reader covers both.
+fn tool_error_text(code: &str) -> String {
+    json!({"ok": false, "error": {"code": code}}).to_string()
 }
 
 fn tool_result_text(

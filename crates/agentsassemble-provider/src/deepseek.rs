@@ -29,6 +29,7 @@ pub(crate) static DEEPSEEK_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         context_limit: "The bounded DeepSeek request context is too large.",
         rate_limited: "DeepSeek rate-limited the request.",
         invalid_response: "DeepSeek returned an invalid bounded response.",
+        output_truncated: "DeepSeek stopped at the maximum response length.",
         invalid_tool_call: "DeepSeek returned an invalid room-tool call.",
         api_unavailable: "The DeepSeek API request did not complete.",
         session_mismatch: "DeepSeek runtime authority does not match the Agent Session.",

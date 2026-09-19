@@ -61,6 +61,9 @@ function sessionErrorMessage(session: RoomAgentSession) {
   if (session.last_error_code === "managed_bridge_exited") {
     return "에이전트 연결이 끊겼어요. 중지한 뒤 재개해 주세요.";
   }
+  if (session.last_error_code === "provider_output_truncated") {
+    return "응답이 최대 응답 길이에서 잘렸어요. 실행 설정에서 최대 응답 길이를 늘리거나 더 짧게 요청해 주세요.";
+  }
   if (session.last_error_code === "runtime_authority_uncertain") {
     return "앱이 갑자기 종료돼 이 세션이 실제로 끝났는지 확인하지 못했어요. 복구를 누르면 확인 후 정리해요.";
   }
