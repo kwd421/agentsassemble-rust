@@ -1,9 +1,21 @@
 import { render, screen } from "@testing-library/react";
 import { describe, expect, it } from "vitest";
 
-import DiscordText from "./DiscordText";
+import DiscordText, { KnownChannels } from "./DiscordText";
 
 describe("DiscordText", () => {
+  it("colours only channels the room actually has", () => {
+    const { container } = render(
+      <KnownChannels names={["general", "Design Notes"]}>
+        <DiscordText text="이전 턴(#107)에서 말한 내용은 #general 과 #design notes 채널에 있어요. #없는채널 은 아니에요." />
+      </KnownChannels>
+    );
+    const channels = [...container.querySelectorAll(".dc-channel-mention")].map((node) => node.textContent);
+    expect(channels).toEqual(["#general"]);
+    expect(container.textContent).toContain("이전 턴(#107)에서");
+    expect(container.textContent).toContain("#없는채널");
+  });
+
   it("preserves structured provider replies as GitHub-flavored markdown", () => {
     const { container } = render(
       <DiscordText

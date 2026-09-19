@@ -256,7 +256,12 @@ async fn issue_revoke(server: &RunningServer, room_id: &str) -> String {
 }
 
 async fn start(ready: bool) -> RunningServer {
-    start_with(if ready { Ingress::ManualPublic } else { Ingress::None }).await
+    start_with(if ready {
+        Ingress::ManualPublic
+    } else {
+        Ingress::None
+    })
+    .await
 }
 
 async fn start_with(ingress: Ingress) -> RunningServer {

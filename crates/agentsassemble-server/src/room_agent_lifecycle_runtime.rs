@@ -3,10 +3,10 @@ use agentsassemble_persistence::{
     AgentStopPlan, LiveRuntimeReconciliation, PersistenceError, SqliteStore,
 };
 use agentsassemble_protocol::RoomAction;
-use serde_json::Value;
 use agentsassemble_provider::{
     ProviderAdapter, ProviderAdapterError, ProviderResidentRuntime, ProviderRuntimeStarted,
 };
+use serde_json::Value;
 
 use crate::{
     room_command_execution::{CommandExecution, progressed_execution},
@@ -505,7 +505,10 @@ async fn confirm_lost_runtime_owner(
     {
         return;
     }
-    if let Err(error) = provider_adapter.confirm_owner_loss(&candidate.session).await {
+    if let Err(error) = provider_adapter
+        .confirm_owner_loss(&candidate.session)
+        .await
+    {
         tracing::info!(
             code = %error.code,
             room_id = %command.principal.room_id,

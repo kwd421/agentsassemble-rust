@@ -131,8 +131,10 @@ fn npm_cmd_shim_file(shim: &Path, extension: &str) -> io::Result<Option<std::pat
     File::open(shim)?
         .take(MAX_SHIM_BYTES)
         .read_to_string(&mut text)?;
-    let (Some(target), Some(directory)) = (npm_cmd_shim_target(&text, extension), shim.parent())
-    else {
+    let Some(directory) = shim.parent() else {
+        return Ok(None);
+    };
+    let Some(target) = npm_cmd_shim_target(&text, extension, project_local_bin(directory)) else {
         return Ok(None);
     };
     let file = target
@@ -141,17 +143,41 @@ fn npm_cmd_shim_file(shim: &Path, extension: &str) -> io::Result<Option<std::pat
     Ok(file.is_file().then_some(file))
 }
 
+/// Whether this wrapper is npm's project-local launcher directory, `node_modules/.bin`.
 #[cfg(any(windows, test))]
-fn npm_cmd_shim_target<'a>(text: &'a str, extension: &str) -> Option<&'a str> {
+fn project_local_bin(directory: &Path) -> bool {
+    directory.file_name().is_some_and(|name| name == ".bin")
+        && directory
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == "node_modules")
+}
+
+/// Resolves the package file an npm `cmd-shim` names, relative to the wrapper's own directory.
+///
+/// A global wrapper sits beside its `node_modules`, so its target starts there. A project-local
+/// wrapper sits inside `node_modules/.bin`, so its target starts with one `..` that leads back to
+/// the same `node_modules`. Nothing else may leave the wrapper's tree: a second `..`, a `.`, an
+/// empty segment, or a bare `node.exe` beside the wrapper is refused.
+#[cfg(any(windows, test))]
+fn npm_cmd_shim_target<'a>(text: &'a str, extension: &str, local_bin: bool) -> Option<&'a str> {
     const DP0: &str = "\"%dp0%\\";
     text.match_indices(DP0)
         .filter_map(|(start, _)| {
             let rest = &text[start + DP0.len()..];
             let target = &rest[..rest.find('"')?];
-            let mut segments = target.split(['\\', '/']);
-            // The package lives under the wrapper's node_modules; a bare `node.exe` beside the
-            // wrapper is the interpreter npm may prefer, never the package.
-            let packaged = segments.next() == Some("node_modules");
+            let mut segments = target.split(['\\', '/']).peekable();
+            let packaged = match segments.peek() {
+                Some(&"node_modules") => {
+                    segments.next();
+                    true
+                }
+                Some(&"..") if local_bin => {
+                    segments.next();
+                    true
+                }
+                _ => false,
+            };
             let plain =
                 segments.all(|segment| !segment.is_empty() && segment != "." && segment != "..");
             (packaged && plain && target.to_ascii_lowercase().ends_with(extension))
@@ -400,7 +426,7 @@ mod tests {
     #[test]
     fn npm_cmd_shim_target_is_the_package_script_not_node() {
         assert_eq!(
-            super::npm_cmd_shim_target(NPM_CMD_SHIM, ".js"),
+            super::npm_cmd_shim_target(NPM_CMD_SHIM, ".js", false),
             Some("node_modules\\@openai\\codex\\bin\\codex.js")
         );
         for escaping in [
@@ -410,7 +436,7 @@ mod tests {
             "\"%dp0%\\node.exe\"",
         ] {
             assert_eq!(
-                super::npm_cmd_shim_target(escaping, ".js"),
+                super::npm_cmd_shim_target(escaping, ".js", false),
                 None,
                 "{escaping}"
             );
@@ -418,16 +444,49 @@ mod tests {
     }
 
     #[test]
+    fn npm_cmd_shim_target_follows_a_project_local_bin_wrapper_one_level_up() {
+        const LOCAL_SHIM: &str =
+            concat!("@ECHO off", r#""%dp0%\..\@openai\codex\bin\codex.js" %*"#);
+        assert_eq!(
+            super::npm_cmd_shim_target(LOCAL_SHIM, ".js", true),
+            Some(r"..\@openai\codex\bin\codex.js")
+        );
+        // Only node_modules/.bin gets that allowance, and only for one level.
+        assert_eq!(super::npm_cmd_shim_target(LOCAL_SHIM, ".js", false), None);
+        for escaping in [r#""%dp0%\..\..\evil\codex.js""#, r#""%dp0%\..\.\codex.js""#] {
+            assert_eq!(
+                super::npm_cmd_shim_target(escaping, ".js", true),
+                None,
+                "{escaping}"
+            );
+        }
+    }
+
+    #[test]
+    fn project_local_bin_is_only_npms_own_launcher_directory() {
+        use std::path::Path;
+
+        assert!(super::project_local_bin(Path::new(
+            r"C:\app\node_modules\.bin"
+        )));
+        assert!(!super::project_local_bin(Path::new(r"C:\app\.bin")));
+        assert!(!super::project_local_bin(Path::new(r"C:\app\node_modules")));
+    }
+
+    #[test]
     fn npm_cmd_shim_target_follows_a_native_package_binary() {
         const NATIVE_SHIM: &str = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe\"   %*\r\n";
         assert_eq!(
-            super::npm_cmd_shim_target(NATIVE_SHIM, ".exe"),
+            super::npm_cmd_shim_target(NATIVE_SHIM, ".exe", false),
             Some("node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe")
         );
-        assert_eq!(super::npm_cmd_shim_target(NATIVE_SHIM, ".js"), None);
-        assert_eq!(super::npm_cmd_shim_target(NPM_CMD_SHIM, ".exe"), None);
+        assert_eq!(super::npm_cmd_shim_target(NATIVE_SHIM, ".js", false), None);
         assert_eq!(
-            super::npm_cmd_shim_target("\"%dp0%\\..\\evil\\claude.exe\"", ".exe"),
+            super::npm_cmd_shim_target(NPM_CMD_SHIM, ".exe", false),
+            None
+        );
+        assert_eq!(
+            super::npm_cmd_shim_target("\"%dp0%\\..\\evil\\claude.exe\"", ".exe", false),
             None
         );
     }

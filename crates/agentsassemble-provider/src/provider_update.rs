@@ -51,21 +51,33 @@ impl From<crate::process::ProbeFailure> for ProviderUpdateError {
             E::Cancelled => Self::Cancelled,
             E::CleanupUnconfirmed => Self::CleanupUnconfirmed,
             E::Malformed | E::CatalogTooLarge => Self::InvalidResponse,
-            E::Authentication | E::Timeout | E::Failed => Self::Unavailable,
+            E::Authentication | E::Timeout | E::Failed | E::BridgeRuntimeMissing => {
+                Self::Unavailable
+            }
         }
     }
 }
 
 type ResultFuture = Shared<BoxFuture<'static, Result<ProviderUpdate, ProviderUpdateError>>>;
+type InstallFuture = Shared<BoxFuture<'static, Result<ProviderInstall, ProviderUpdateError>>>;
 struct UpdateRun {
     expected: Option<String>,
     task: AbortHandle,
     result: ResultFuture,
 }
+/// An install keeps the same owned-result shape as an update: the service retains the task and
+/// its outcome, so a lost request can rejoin it and an unconfirmed cleanup survives the request,
+/// the next install and shutdown.
+struct InstallRun {
+    expected: Option<ProviderInstall>,
+    task: AbortHandle,
+    result: InstallFuture,
+}
 struct UpdateOwner {
     cancellation: CancellationToken,
     catalog: crate::ProviderCatalogService,
     runs: Mutex<BTreeMap<&'static str, UpdateRun>>,
+    installs: Mutex<BTreeMap<String, InstallRun>>,
     // Global npm installs share one prefix, so at most one runs at a time.
     installing: Arc<Mutex<()>>,
 }
@@ -83,56 +95,97 @@ impl ProviderUpdateService {
             cancellation,
             catalog,
             runs: Mutex::new(BTreeMap::new()),
+            installs: Mutex::new(BTreeMap::new()),
             installing: Arc::new(Mutex::new(())),
         }))
     }
 
-    /// None builds an npm install offer for a missing provider CLI. Some runs that offer.
+    /// None builds an npm install offer for a missing provider CLI. Some runs that exact offer.
     /// # Errors
     /// Reports unsupported, already installed, missing npm, busy, stale offer, install and
     /// catalog failures.
     pub async fn install(
         &self,
         provider_id: &str,
-        expected: Option<String>,
+        confirmed: Option<ProviderInstall>,
     ) -> Result<ProviderInstall, ProviderUpdateError> {
-        if expected
-            .as_ref()
-            .is_some_and(|v| v.is_empty() || v.len() > 64)
-        {
+        let expected = confirmed;
+        if expected.as_ref().is_some_and(|offer| {
+            offer.provider_id != provider_id
+                || offer.completed
+                || offer.version.is_empty()
+                || offer.version.len() > 64
+        }) {
             return Err(ProviderUpdateError::OfferChanged);
         }
-        let Ok(guard) = self.0.installing.clone().try_lock_owned() else {
-            return Err(ProviderUpdateError::Busy);
-        };
-        if self.0.cancellation.is_cancelled() {
-            return Err(ProviderUpdateError::Cancelled);
-        }
-        let cancellation = self.0.cancellation.child_token();
-        let catalog = self.0.catalog.clone();
-        let provider_id = provider_id.to_owned();
-        // This task owns a started install even if the requesting handler disappears.
-        let task = tokio::spawn(async move {
-            let _guard = guard;
-            let plan = crate::provider_install::plan(&provider_id, &cancellation).await?;
-            let Some(expected) = expected else {
-                return Ok(plan.offer);
-            };
-            let installed = crate::provider_install::run(plan, &expected, &cancellation).await?;
-            let refreshed = catalog.refresh_provider(&provider_id, true).await;
-            if !refreshed.is_ok_and(|catalog| {
-                catalog.status == "ready"
-                    && catalog.providers.iter().any(|provider| {
-                        provider.id == provider_id
-                            && provider.discovery_error_code != "command_missing"
-                    })
-            }) {
-                return Err(ProviderUpdateError::CatalogUnavailable);
+        let result = {
+            let mut installs = self.0.installs.lock().await;
+            if self.0.cancellation.is_cancelled() {
+                return Err(ProviderUpdateError::Cancelled);
             }
-            Ok(installed)
-        });
-        task.await
-            .map_err(|_| ProviderUpdateError::CleanupUnconfirmed)?
+            if let Some(run) = installs.get(provider_id) {
+                if !run.task.is_finished() {
+                    if expected.is_some() && run.expected != expected {
+                        return Err(ProviderUpdateError::Busy);
+                    }
+                    let result = run.result.clone();
+                    drop(installs);
+                    return result.await;
+                }
+                // A retained unconfirmed cleanup keeps this provider closed to new installs.
+                if matches!(
+                    run.result.clone().await,
+                    Err(ProviderUpdateError::CleanupUnconfirmed)
+                ) {
+                    return Err(ProviderUpdateError::CleanupUnconfirmed);
+                }
+            }
+            let Ok(guard) = self.0.installing.clone().try_lock_owned() else {
+                return Err(ProviderUpdateError::Busy);
+            };
+            let cancellation = self.0.cancellation.child_token();
+            let catalog = self.0.catalog.clone();
+            let requested = expected.clone();
+            let owned_id = provider_id.to_owned();
+            // This task owns a started install even if the requesting handler disappears.
+            let task = tokio::spawn(async move {
+                let _guard = guard;
+                let plan = crate::provider_install::plan(&owned_id, &cancellation).await?;
+                let Some(expected) = requested else {
+                    return Ok(plan.offer);
+                };
+                let installed =
+                    crate::provider_install::run(plan, &expected, &cancellation).await?;
+                let refreshed = catalog.refresh_provider(&owned_id, true).await;
+                if !refreshed.is_ok_and(|catalog| {
+                    catalog.status == "ready"
+                        && catalog.providers.iter().any(|provider| {
+                            provider.id == owned_id
+                                && provider.discovery_error_code != "command_missing"
+                        })
+                }) {
+                    return Err(ProviderUpdateError::CatalogUnavailable);
+                }
+                Ok(installed)
+            });
+            let completion = task.abort_handle();
+            let result = async move {
+                task.await
+                    .map_err(|_| ProviderUpdateError::CleanupUnconfirmed)?
+            }
+            .boxed()
+            .shared();
+            installs.insert(
+                provider_id.to_owned(),
+                InstallRun {
+                    expected,
+                    task: completion,
+                    result: result.clone(),
+                },
+            );
+            result
+        };
+        result.await
     }
     /// None reads versions or joins an active update. Some requires a matching offer.
     /// # Errors
@@ -247,10 +300,23 @@ impl ProviderUpdateService {
             .values()
             .map(|run| run.result.clone())
             .collect::<Vec<_>>();
+        let installs = self
+            .0
+            .installs
+            .lock()
+            .await
+            .values()
+            .map(|run| run.result.clone())
+            .collect::<Vec<_>>();
         let results = join_all(results).await;
+        let installs = join_all(installs).await;
         // A running install holds this lock until its cancelled npm process is reaped.
         let _install = self.0.installing.lock().await;
-        if results.contains(&Err(ProviderUpdateError::CleanupUnconfirmed)) {
+        if results.contains(&Err(ProviderUpdateError::CleanupUnconfirmed))
+            || installs
+                .iter()
+                .any(|result| matches!(result, Err(ProviderUpdateError::CleanupUnconfirmed)))
+        {
             return Err(ProviderUpdateError::CleanupUnconfirmed);
         }
         Ok(())

@@ -106,7 +106,15 @@ pub(crate) async fn inspect(
     inspection: Inspection,
     cancellation: &CancellationToken,
 ) -> Result<String, ProbeFailure> {
-    let (node, _) = provider_executable("node", cancellation).await?;
+    // Claude itself can be installed and signed in while the bridge's Node is missing; that is
+    // a different failure and must not be reported as a missing Claude CLI.
+    let (node, _) =
+        provider_executable("node", cancellation)
+            .await
+            .map_err(|failure| match failure {
+                ProbeFailure::Missing => ProbeFailure::BridgeRuntimeMissing,
+                failure => failure,
+            })?;
     let bundle = PrivateClaudeSdkBundle::stage()
         .await
         .map_err(|_| ProbeFailure::Failed)?;

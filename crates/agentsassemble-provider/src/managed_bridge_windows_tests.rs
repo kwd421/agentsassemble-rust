@@ -115,7 +115,9 @@ fn owner_loss_receipt_requires_an_unlocked_activated_lease_of_the_same_generatio
     // A live owner still holds the lease, so its runtime is never declared gone.
     assert!(confirm_windows_owner_loss(&room, "owner-loss", &token).is_err());
     drop(lease);
-    assert!(confirm_windows_owner_loss(&room, "owner-loss", &uuid::Uuid::new_v4().to_string()).is_err());
+    assert!(
+        confirm_windows_owner_loss(&room, "owner-loss", &uuid::Uuid::new_v4().to_string()).is_err()
+    );
     confirm_windows_owner_loss(&room, "owner-loss", &token)?;
     assert_eq!(
         observe_runtime_lease(&room, "owner-loss"),

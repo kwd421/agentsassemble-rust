@@ -297,10 +297,16 @@ impl ProviderAdapter {
             if handle.platform != RuntimeHandlePlatform::Windows
                 || handle.launch_token != lease_token
             {
-                return Err(refused("The durable runtime handle is from another launch."));
+                return Err(refused(
+                    "The durable runtime handle is from another launch.",
+                ));
             }
             let confirmed = tokio::task::spawn_blocking(move || {
-                crate::runtime_lease::confirm_windows_owner_loss(&room_id, &session_id, &lease_token)
+                crate::runtime_lease::confirm_windows_owner_loss(
+                    &room_id,
+                    &session_id,
+                    &lease_token,
+                )
             })
             .await;
             return match confirmed {

@@ -11,7 +11,7 @@ const offer = {
   provider_id: "claude",
   package: "@anthropic-ai/claude-code",
   version: "2.1.271",
-  command: ["npm", "install", "--global", "--prefix", "C:\\npm", "@anthropic-ai/claude-code@2.1.271"],
+  command: ["npm", "install", "--global", "--prefix", "C:\\npm dir", "@anthropic-ai/claude-code@2.1.271"],
   completed: false,
 };
 
@@ -23,7 +23,8 @@ it("runs nothing until the user reads the exact command and confirms that versio
 
   expect(providerInstallOperation).not.toHaveBeenCalled();
   fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
-  expect((await screen.findByLabelText("이 PC에서 실행할 명령")).textContent).toBe(offer.command.join(" "));
+  expect((await screen.findByLabelText("이 PC에서 실행할 명령")).textContent)
+    .toBe('npm install --global --prefix "C:\\npm dir" @anthropic-ai/claude-code@2.1.271');
   expect(providerInstallOperation).toHaveBeenCalledExactlyOnceWith("claude");
   expect(installed).not.toHaveBeenCalled();
 
@@ -31,7 +32,8 @@ it("runs nothing until the user reads the exact command and confirms that versio
   fireEvent.click(screen.getByRole("button", { name: "설치" }));
 
   expect(await screen.findByText("Claude Code CLI 2.1.271을 설치했어요.")).toBeTruthy();
-  expect(providerInstallOperation).toHaveBeenLastCalledWith("claude", "2.1.271");
+  // The confirmed offer goes back whole, so a prefix or version that changed is refused.
+  expect(providerInstallOperation).toHaveBeenLastCalledWith("claude", offer);
   expect(installed).toHaveBeenCalledOnce();
   expect(updating.mock.calls).toEqual([[true], [false]]);
 });

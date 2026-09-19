@@ -112,12 +112,17 @@ pub(crate) async fn plan(
 }
 
 /// Runs the exact offered command and confirms discovery finds the launcher npm just wrote.
+///
+/// The confirmed offer carries the package, version and the full command, and the command holds
+/// the npm prefix this install writes to. Re-deriving the plan and requiring the same offer means
+/// a prefix or version that changed after the confirmation is refused instead of installing
+/// somewhere the user never saw.
 pub(crate) async fn run(
     plan: InstallPlan,
-    expected_version: &str,
+    confirmed: &ProviderInstall,
     cancellation: &CancellationToken,
 ) -> Result<ProviderInstall, Error> {
-    if plan.offer.version != expected_version {
+    if plan.offer != *confirmed {
         return Err(Error::OfferChanged);
     }
     let arguments = install_arguments(&plan.prefix, &plan.offer.package, &plan.offer.version);
@@ -189,6 +194,35 @@ mod tests {
             assert_eq!(
                 install.latest_endpoint,
                 format!("https://registry.npmjs.org/{}/latest", install.package)
+            );
+        }
+    }
+
+    #[tokio::test]
+    async fn a_changed_prefix_or_version_refuses_the_confirmed_install() {
+        let offer = |prefix: &str, version: &str| ProviderInstall {
+            provider_id: "claude".to_owned(),
+            package: "@anthropic-ai/claude-code".to_owned(),
+            command: install_arguments(prefix, "@anthropic-ai/claude-code", version)
+                .into_iter()
+                .fold(vec!["npm".to_owned()], |mut command, argument| {
+                    command.push(argument);
+                    command
+                }),
+            version: version.to_owned(),
+            completed: false,
+        };
+        let plan = |prefix: &str, version: &str| InstallPlan {
+            launcher: "claude",
+            npm: "npm".to_owned(),
+            prefix: prefix.to_owned(),
+            offer: offer(prefix, version),
+        };
+        let cancellation = CancellationToken::new();
+        for confirmed in [offer("C:/other", "2.1.0"), offer("C:/npm", "2.0.9")] {
+            assert_eq!(
+                run(plan("C:/npm", "2.1.0"), &confirmed, &cancellation).await,
+                Err(Error::OfferChanged)
             );
         }
     }

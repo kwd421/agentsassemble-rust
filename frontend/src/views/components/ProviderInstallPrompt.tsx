@@ -3,6 +3,7 @@ import { Check, CircleAlert, Copy, Download, ExternalLink, LoaderCircle } from "
 import { ApiError } from "../../lib/apiErrors";
 import { providerInstallOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
+import { shellCommandText } from "../../lib/shellCommandText";
 import type { ProviderInstall } from "../../types/generated/ProviderInstall";
 import ProviderSetupCard, { useTransientResult } from "./ProviderSetupCard";
 
@@ -62,7 +63,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
     setPhase("installing");
     setError("");
     try {
-      await providerInstallOperation(providerId, offer.version);
+      await providerInstallOperation(providerId, offer);
       setPhase("done");
       onUpdating?.(false);
       onInstalled?.();
@@ -90,7 +91,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
   async function copyCommand() {
     if (!offer) return;
     try {
-      await navigator.clipboard.writeText(offer.command.join(" "));
+      await navigator.clipboard.writeText(shellCommandText(offer.command));
       setCopied(true);
     } catch {
       setError("명령을 복사하지 못했어요. 직접 선택해 복사해 주세요.");
@@ -111,7 +112,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
   const installing = phase === "installing";
   const command = offer && (phase === "confirming" || installing) ? <div className="dc-setup-term"
     data-running={installing ? "true" : undefined}>
-    <pre className="dc-setup-command" aria-label="이 PC에서 실행할 명령">{offer.command.join(" ")}</pre>
+    <pre className="dc-setup-command" aria-label="이 PC에서 실행할 명령">{shellCommandText(offer.command)}</pre>
     {!installing && <button type="button" className="dc-setup-copy" onClick={() => void copyCommand()}
       aria-label={copied ? "명령 복사됨" : "명령 복사"}>
       {copied ? <Check size={13} aria-hidden="true" /> : <Copy size={13} aria-hidden="true" />}

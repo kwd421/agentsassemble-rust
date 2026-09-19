@@ -226,7 +226,9 @@ impl PublicIngress {
         match self.0.as_ref() {
             PublicIngressKind::Disabled => None,
             PublicIngressKind::Manual(ingress) => Some(ingress.local_url.to_string()),
-            PublicIngressKind::Managed(ingress) => Some(ingress.controller.config.local_url.clone()),
+            PublicIngressKind::Managed(ingress) => {
+                Some(ingress.controller.config.local_url.clone())
+            }
         }
     }
 

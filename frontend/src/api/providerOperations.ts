@@ -43,11 +43,15 @@ export async function cancelProviderLogin(providerId: string): Promise<boolean> 
   return (await providerLoginOperation(providerId, true)) === "cancelled";
 }
 
-/** Without a version this reads an install offer; with the offered version it runs that exact install. */
-export async function providerInstallOperation(providerId: string, expectedVersion?: string): Promise<import("../types/generated/ProviderInstall").ProviderInstall> {
+/** Without an offer this reads one; with the confirmed offer it runs exactly that install. */
+export async function providerInstallOperation(
+  providerId: string,
+  confirmed?: import("../types/generated/ProviderInstall").ProviderInstall
+): Promise<import("../types/generated/ProviderInstall").ProviderInstall> {
+  const expectedVersion = confirmed?.version;
   const result = await postJsonServerOperator<unknown>(
-    expectedVersion === undefined ? "/api/providers/install/check" : "/api/providers/install/start",
-    expectedVersion === undefined ? { provider_id: providerId } : { provider_id: providerId, expected_version: expectedVersion }
+    confirmed === undefined ? "/api/providers/install/check" : "/api/providers/install/start",
+    confirmed === undefined ? { provider_id: providerId } : { provider_id: providerId, confirmed }
   );
   if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("설치 응답이 올바르지 않아요.");
   const value = result as Record<string, unknown>;

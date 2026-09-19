@@ -275,7 +275,9 @@ export default function AgentCreateModal({
       setStatus(
         invalidControl
           ? `${invalidControl.label} 선택값을 확인하세요`
-          : selectedProvider?.discovery_error_code === "command_missing" ? providerUnavailableText(selectedProvider)
+          : selectedProvider &&
+            ["command_missing", "bridge_runtime_missing"].includes(selectedProvider.discovery_error_code || "")
+            ? providerUnavailableText(selectedProvider)
           : selectedProvider?.discovery_error || "실행 가능한 provider와 폴더를 확인하세요"
       );
       return;

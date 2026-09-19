@@ -118,6 +118,14 @@ struct ProviderUpdateRequest {
     expected_version: String,
 }
 
+/// The install offer the user confirmed, echoed back so the runtime can require the same one.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderInstallRequest {
+    provider_id: String,
+    confirmed: agentsassemble_domain::ProviderInstall,
+}
+
 async fn start_update(
     State(state): State<AppState>,
     request: Request,
@@ -156,12 +164,12 @@ async fn start_install(
     request: Request,
 ) -> Result<Json<agentsassemble_domain::ProviderInstall>, ProviderOperationHttpError> {
     authorize(&state, request.headers()).await?;
-    let input: ProviderUpdateRequest = decode_json_body(request, 4096)
+    let input: ProviderInstallRequest = decode_json_body(request, 8192)
         .await
         .map_err(ProviderOperationHttpError::from_body)?;
     state
         .provider_update
-        .install(&input.provider_id, Some(input.expected_version))
+        .install(&input.provider_id, Some(input.confirmed))
         .await
         .map(Json)
         .map_err(ProviderOperationHttpError::from_install)
