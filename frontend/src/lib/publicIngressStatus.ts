@@ -125,6 +125,12 @@ function optionalPublicOrigin(value: string): string {
   return value ? parsePublicIngressOrigin(value) : "";
 }
 
+/** The runtime's own loopback origin, which only processes on this machine can reach. */
+export function parseLocalIngressOrigin(value: string): string {
+  if (!value) invalid();
+  return localOrigin(value);
+}
+
 function localOrigin(value: string): string {
   if (!value) return "";
   const url = exactOrigin(value, "http:");

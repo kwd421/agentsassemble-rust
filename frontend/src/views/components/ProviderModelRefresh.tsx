@@ -24,6 +24,11 @@ export default function ProviderModelRefresh({ title, providerId, automaticAllow
       if (signal?.aborted || current !== generation.current) return;
       catalogChanged.current?.(catalog);
       const provider = catalog.providers.find((entry) => entry.id === providerId);
+      // A missing CLI is explained, and installable, by the setup actions below.
+      if (provider?.discovery_error_code === "command_missing") {
+        setStatus("");
+        return;
+      }
       if (!provider || provider.discovery_status !== "ready") {
         throw new Error(provider?.discovery_error || "이 제공자의 모델 목록을 확인하지 못했어요.");
       }

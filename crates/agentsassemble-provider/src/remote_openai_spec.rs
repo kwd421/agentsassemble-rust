@@ -11,6 +11,8 @@ pub(crate) struct RemoteOpenAiErrors {
     pub(crate) context_limit: &'static str,
     pub(crate) rate_limited: &'static str,
     pub(crate) invalid_response: &'static str,
+    /// The model stopped at the response limit, which is a bounded outcome, not a protocol fault.
+    pub(crate) output_truncated: &'static str,
     pub(crate) invalid_tool_call: &'static str,
     pub(crate) api_unavailable: &'static str,
     pub(crate) session_mismatch: &'static str,

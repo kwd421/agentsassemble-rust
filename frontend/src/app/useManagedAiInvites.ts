@@ -1,18 +1,26 @@
 import { useEffect, useRef, useState } from "react";
-import { createConnectorInvite, type ConnectorInviteCustody } from "../api/connectorInvite";
+import { connectorInviteText, createConnectorInvite, type ConnectorInviteCustody } from "../api/connectorInvite";
 import { createFriendAttendeeInvite, attendeePacketText, type AttendeePacketCustody } from "../api/attendeeInvite";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
+import type { InviteReach } from "../types/generated/InviteReach";
 import { sameManagerAuthority } from "./useManagedHumanInvites";
 
-type OriginProof = { publicOrigin: string; isCurrent: () => boolean };
+type Origins = { publicOrigin: string; localOrigin: string };
+type OriginProof = Origins & { isCurrent: () => boolean };
 type Pending = { authority: DesktopManagerRoomAuthority; requestId: string };
-export type ConnectorInvitePresentation = { key: string; expiresAt: string; copyable: boolean };
+export type ConnectorInvitePresentation = { key: string; expiresAt: string; copyable: boolean; local: boolean };
 export type AttendeeInvitePresentation = ConnectorInvitePresentation & { displayName: string; provider: string };
 type ManagedAiInvite = (ConnectorInviteCustody & { kind: "connector" }) | (AttendeePacketCustody & { kind: "attendee"; authority: DesktopManagerRoomAuthority });
 
-export function useManagedAiInvites({ roomDockId, publicOrigin, resolveManager, captureOriginRefresh, copyText, publishStatus }: {
+function isLocal(record: ManagedAiInvite) {
+  return record.kind === "connector" && record.reach === "local";
+}
+
+export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, resolveManager, captureOriginRefresh, copyText, publishStatus }: {
   roomDockId: string;
   publicOrigin: string;
+  /** The runtime's loopback origin; lets a connector invite reach an AI on this machine without public access. */
+  localOrigin: string;
   resolveManager: (roomDockId: string) => DesktopManagerRoomAuthority;
   captureOriginRefresh: () => () => Promise<OriginProof | null>;
   copyText: (text: string, prepare: () => Promise<() => void>) => Promise<boolean>;
@@ -36,7 +44,8 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, resolveManager, 
     try { return sameManagerAuthority(resolveManager(roomDockId), authority); }
     catch { return false; }
   }
-  function copyable(record: ManagedAiInvite, origin: string, time: number) {
+  function copyable(record: ManagedAiInvite, origins: Origins, time: number) {
+    const origin = isLocal(record) ? origins.localOrigin : origins.publicOrigin;
     return record.origin === origin && record.expiresAtMs > time && authorityCurrent(record.authority);
   }
   async function create(friendId?: string) {
@@ -53,7 +62,13 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, resolveManager, 
         pending.current.set(pendingKey, receipt);
       }
       proof = await refresh();
-      if (!proof || !proof.publicOrigin) return;
+      if (!proof) return;
+      // AI friend packets are admitted remotely and still need public access. A connector
+      // invite falls back to this machine's loopback origin only when public access is closed,
+      // and says so, rather than silently handing out a link a remote AI could never open.
+      const reach: InviteReach = friendId || proof.publicOrigin ? "public" : "local";
+      const inviteOrigin = reach === "public" ? proof.publicOrigin : proof.localOrigin;
+      if (!inviteOrigin) return;
       const currentProof = proof;
       function assertCurrent() {
         if (!active.current || !currentProof.isCurrent() || !authorityCurrent(authority)) {
@@ -63,14 +78,18 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, resolveManager, 
       assertCurrent();
       const record: ManagedAiInvite = friendId
         ? { ...await createFriendAttendeeInvite(authority, { request_id: receipt.requestId, friend_id: friendId }, assertCurrent), kind: "attendee", authority }
-        : { ...await createConnectorInvite(authority, { request_id: receipt.requestId, scope: "read_write" }, assertCurrent), kind: "connector" };
+        : { ...await createConnectorInvite(authority, { request_id: receipt.requestId, scope: "read_write", reach }, assertCurrent), kind: "connector" };
       // Keep the receipt after any uncertain response. Only a confirmed result releases it.
       pending.current.delete(pendingKey);
       if (!active.current) return;
       setRecords((prior) => [...prior, record]);
       assertCurrent();
-      if (record.origin !== currentProof.publicOrigin) throw new Error("초대 주소가 변경됐어요. 현재 주소를 확인한 뒤 복사해 주세요.");
-      publishStatus(friendId ? "AI 친구 초대를 만들었어요. 참가 안내를 복사해 전달해 주세요." : "외부 AI 초대를 만들었어요. 현재 AI 대화에 링크를 전달해 주세요.");
+      if (record.origin !== inviteOrigin) throw new Error("초대 주소가 변경됐어요. 현재 주소를 확인한 뒤 복사해 주세요.");
+      publishStatus(friendId
+        ? "AI 친구 초대를 만들었어요. 참가 안내를 복사해 전달해 주세요."
+        : reach === "local"
+          ? "이 PC 전용 외부 AI 초대를 만들었어요. MCP 참가 안내를 복사해 같은 PC의 AI 대화에 전달해 주세요."
+          : "외부 AI 초대를 만들었어요. MCP 참가 안내를 복사해 현재 AI 대화에 전달해 주세요.");
     } catch (error) {
       if (active.current && (!proof || proof.isCurrent())) publishStatus(error instanceof Error ? error.message : "외부 AI 초대를 만들지 못했어요. 다시 시도해 주세요.");
     } finally {
@@ -80,31 +99,32 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, resolveManager, 
   }
   async function copy(key: string) {
     const record = records.find((record) => record.result.invite_id === key);
-    if (!record || !copyable(record, publicOrigin, Date.now())) return;
+    if (!record || !copyable(record, { publicOrigin, localOrigin }, Date.now())) return;
     const refresh = captureOriginRefresh();
     let proof: OriginProof | null = null;
     try {
-      const copied = await copyText(record.kind === "attendee" ? attendeePacketText(record.result) : record.result.join_url, async () => {
+      const copied = await copyText(record.kind === "attendee" ? attendeePacketText(record.result) : connectorInviteText(record.result.join_url, record.result.expires_at), async () => {
         proof = await refresh();
         const currentProof = proof;
         function assertCurrent() {
-          if (!active.current || !currentProof?.isCurrent() || !copyable(record!, currentProof.publicOrigin, Date.now())) {
+          if (!active.current || !currentProof?.isCurrent() || !copyable(record!, currentProof, Date.now())) {
             throw new Error("현재 초대 주소와 권한을 확인할 수 없어요. 다시 시도해 주세요.");
           }
         }
         assertCurrent(); return assertCurrent;
       });
-      if (active.current && proof !== null && (proof as OriginProof).isCurrent()) publishStatus(copied ? record.kind === "attendee" ? "참가 안내를 복사했어요." : "외부 AI 초대 링크를 복사했어요." : "초대 내용을 복사하지 못했어요.");
+      if (active.current && proof !== null && (proof as OriginProof).isCurrent()) publishStatus(copied ? "참가 안내를 복사했어요." : "초대 내용을 복사하지 못했어요.");
     } catch (error) {
       if (active.current) publishStatus(error instanceof Error ? error.message : "링크를 복사하지 못했어요.");
     }
   }
+  const origins = { publicOrigin, localOrigin };
   const currentRecords = records.filter((record) => authorityCurrent(record.authority));
   const invites: ConnectorInvitePresentation[] = currentRecords.filter((record) => record.kind === "connector").map((record) => ({
-    key: record.result.invite_id, expiresAt: record.result.expires_at, copyable: copyable(record, publicOrigin, now),
+    key: record.result.invite_id, expiresAt: record.result.expires_at, copyable: copyable(record, origins, now), local: isLocal(record),
   })).reverse();
   const attendeeInvites: AttendeeInvitePresentation[] = currentRecords.filter((record) => record.kind === "attendee").map((record) => ({
-    key: record.result.invite_id, expiresAt: record.result.expires_at, copyable: copyable(record, publicOrigin, now), displayName: record.result.display_name, provider: record.result.provider,
+    key: record.result.invite_id, expiresAt: record.result.expires_at, copyable: copyable(record, origins, now), local: false, displayName: record.result.display_name, provider: record.result.provider,
   })).reverse();
   return { invites, attendeeInvites, creating, create, copy };
 }

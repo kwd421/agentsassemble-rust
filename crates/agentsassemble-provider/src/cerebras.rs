@@ -32,6 +32,7 @@ pub(crate) static CEREBRAS_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         context_limit: "The bounded Cerebras request context is too large.",
         rate_limited: "Cerebras rate-limited the request.",
         invalid_response: "Cerebras returned an invalid bounded response.",
+        output_truncated: "Cerebras stopped at the maximum response length.",
         invalid_tool_call: "Cerebras returned an invalid room-tool call.",
         api_unavailable: "The Cerebras API request did not complete.",
         session_mismatch: "Cerebras runtime authority does not match the Agent Session.",

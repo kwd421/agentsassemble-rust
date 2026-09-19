@@ -30,7 +30,7 @@ export default function RoomSyncNotice({
       role="status"
       aria-live="polite"
       data-room-sync-issue={issue.category}
-      className="pointer-events-none fixed left-1/2 top-3 z-[220] w-[min(92vw,680px)] -translate-x-1/2 rounded-lg border border-amber-300/25 bg-[#29261f]/95 px-4 py-3 text-sm text-amber-50 shadow-xl backdrop-blur"
+      className="pointer-events-none fixed left-1/2 top-3 z-[220] w-[min(92vw,680px)] -translate-x-1/2 rounded-lg border border-amber-300/25 bg-[rgb(41_38_31/0.95)] px-4 py-3 text-sm text-amber-50 shadow-xl backdrop-blur"
     >
       <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-amber-300" />
       {noticeMessage(issue.category)}

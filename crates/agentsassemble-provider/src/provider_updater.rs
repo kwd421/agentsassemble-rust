@@ -85,7 +85,7 @@ async fn npm_command(
     let (expected, _) = provider_executable(expected, cancellation)
         .await
         .map_err(package_error)?;
-    if installed != expected {
+    if npm_launcher_script(&installed) != expected {
         return Err(Error::Unsupported);
     }
     Ok(UpdateCommand {
@@ -98,6 +98,20 @@ async fn npm_command(
             format!("{package}@{version}"),
         ],
     })
+}
+
+/// npm's Windows wrapper launches the package script; compare that script, not the wrapper.
+fn npm_launcher_script(installed: &str) -> String {
+    #[cfg(windows)]
+    if let Ok(Some(script)) = crate::filesystem::npm_cmd_shim_script(Path::new(installed))
+        && let Some(script) = script
+            .canonicalize()
+            .ok()
+            .and_then(|script| script.to_str().map(str::to_owned))
+    {
+        return script;
+    }
+    installed.to_owned()
 }
 
 fn npm_entry(prefix: &Path, package: &str, entry: &str) -> std::path::PathBuf {

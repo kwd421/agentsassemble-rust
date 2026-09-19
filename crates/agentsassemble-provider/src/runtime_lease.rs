@@ -326,6 +326,32 @@ pub(crate) fn activate_unix_runtime_lease(
     Ok(file)
 }
 
+/// Writes the cleanup receipt for a Windows generation whose owning process has died.
+///
+/// The exclusive lease file and the provider Job belong to one owner process, and the Job is
+/// created with kill-on-close, so an unlocked `windows-active` marker means that owner is gone
+/// and the kernel already ended every Job member. Only an explicit owner stop asks for this;
+/// a live generation still holds the lock and is refused here.
+#[cfg(windows)]
+pub(crate) fn confirm_windows_owner_loss(
+    room_id: &str,
+    session_id: &str,
+    launch_token: &str,
+) -> io::Result<()> {
+    validate_token(launch_token)?;
+    let path = runtime_lease_path(room_id, session_id)?;
+    let mut file = OpenOptions::new().read(true).write(true).open(&path)?;
+    file.try_lock_exclusive()?;
+    let marker = read_marker(&mut file)?;
+    if marker == format!("gone:{launch_token}") {
+        return Ok(());
+    }
+    if marker != format!("windows-active:{launch_token}") {
+        return Err(io::Error::other("runtime lease generation changed"));
+    }
+    write_marker(&mut file, &format!("gone:{launch_token}"))
+}
+
 pub(crate) fn observe_runtime_lease(room_id: &str, session_id: &str) -> LeaseObservation {
     let Ok(path) = runtime_lease_path(room_id, session_id) else {
         return LeaseObservation::Unknown;

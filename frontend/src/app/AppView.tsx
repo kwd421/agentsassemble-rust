@@ -18,6 +18,7 @@ import {
 import { CHANNEL_SECTIONS, DeferredViewFallback } from "./appModel";
 import type { AppController } from "./useAppController";
 import AppOverlays from "./AppOverlays";
+import { KnownChannels } from "../views/components/DiscordText";
 import SideChatDock from "../views/components/SideChatDock";
 import LobbyView from "../views/LobbyView";
 import { RoomSocketProvider } from "../RoomSocketContext";
@@ -119,8 +120,10 @@ export default function AppView({ controller }: { controller: AppController }) {
     return { ...channelHeaderActions(channelId), persistentRail, sideChatOpen,
       onToggleSideChat: canOpenSideChat ? () => setSideChatOpen(!sideChatOpen) : undefined };
   }
+  const channelNames = visibleChannels.map((item) => item.label);
   return (
     <RoomSocketProvider socket={roomSocket}>
+    <KnownChannels names={channelNames}>
     <div
       className="dc-shell flex h-screen max-h-screen overflow-hidden text-text-primary"
       style={shellStyle}
@@ -558,6 +561,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       </aside>}
       </div>
     </div>
+    </KnownChannels>
     </RoomSocketProvider>
   );
 }

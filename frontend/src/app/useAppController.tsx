@@ -87,6 +87,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     !startupRoute.guestInvite &&
     !startupRoute.guestSession &&
     !startupRoute.guestJoinToken &&
+    !startupRoute.connectorJoinUrl &&
     !operatorPairingToken &&
     !guestRecoveryRequest;
   const {
@@ -194,6 +195,7 @@ export function useAppController(deviceToken: string, clientId: string) {
       startupRoute.guestInvite ||
         guestSession ||
         startupRoute.guestJoinToken ||
+        startupRoute.connectorJoinUrl ||
         operatorPairingToken ||
         guestRecoveryRequest
     );
@@ -632,6 +634,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     deviceToken, clientId, exitGuestSurface, expireGuestSession,
     generateInviteLink,
     goToChannel, guestAdmissionBusy,
+    connectorJoinUrl: startupRoute.connectorJoinUrl,
     guestExpired, guestJoinRequested, guestJoinStatus, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
     guestLocked, guestPanelProfile, guestRecoveryRequest, guestSession,

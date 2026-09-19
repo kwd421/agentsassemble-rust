@@ -20,14 +20,14 @@ pub fn secure_private_directory(path: &Path) -> io::Result<()> {
 }
 
 #[cfg(unix)]
-pub(crate) fn secure_file(file: &File) -> io::Result<()> {
+pub(crate) fn secure_file(file: &File, _path: &Path) -> io::Result<()> {
     use std::os::unix::fs::PermissionsExt;
 
     file.set_permissions(std::fs::Permissions::from_mode(0o600))
 }
 
 #[cfg(unix)]
-pub(crate) fn validate_file(file: &File) -> io::Result<bool> {
+pub(crate) fn validate_file(file: &File, _path: &Path) -> io::Result<bool> {
     use std::os::unix::fs::PermissionsExt;
 
     Ok(file.metadata()?.permissions().mode().trailing_zeros() >= 6)
@@ -49,13 +49,16 @@ pub fn secure_private_directory(path: &Path) -> io::Result<()> {
 }
 
 #[cfg(windows)]
-pub(crate) fn secure_file(file: &File) -> io::Result<()> {
-    harden_acl(acl_from_file(file)?, false)
+// The caller's handle is opened with read and write access, which does not carry
+// WRITE_DAC, so writing its DACL through that handle fails with access denied. The
+// owner-only DACL is applied through the path, which acquires the rights it needs.
+pub(crate) fn secure_file(_file: &File, path: &Path) -> io::Result<()> {
+    harden_acl(acl_from_path(path)?, false)
 }
 
 #[cfg(windows)]
-pub(crate) fn validate_file(file: &File) -> io::Result<bool> {
-    validate_acl(&acl_from_file(file)?)
+pub(crate) fn validate_file(_file: &File, path: &Path) -> io::Result<bool> {
+    validate_acl(&acl_from_path(path)?)
 }
 
 #[cfg(windows)]
@@ -64,17 +67,6 @@ fn acl_from_path(path: &Path) -> io::Result<windows_acl::acl::ACL> {
         .to_str()
         .ok_or_else(|| io::Error::other("path is not valid Unicode"))?;
     windows_acl::acl::ACL::from_file_path(path, false).map_err(windows_error)
-}
-
-#[cfg(windows)]
-fn acl_from_file(file: &File) -> io::Result<windows_acl::acl::ACL> {
-    use std::os::windows::io::AsRawHandle;
-
-    windows_acl::acl::ACL::from_file_handle(
-        file.as_raw_handle().cast::<winapi::ctypes::c_void>(),
-        false,
-    )
-    .map_err(windows_error)
 }
 
 #[cfg(windows)]

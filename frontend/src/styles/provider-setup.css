@@ -1,0 +1,278 @@
+/* Provider CLI setup: one row under the provider grid for install, update and their results. */
+.dc-setup {
+  --setup-tone: var(--color-accent);
+  /* The agent dialog body is a scrolling flex column; never let it squeeze the row. */
+  flex: none;
+  display: grid;
+  grid-template-rows: 1fr;
+  transition: grid-template-rows 300ms ease, opacity 220ms ease, margin-top 300ms ease;
+  animation: dc-setup-enter 200ms ease-out;
+}
+
+.dc-setup[data-tone="install"] { --setup-tone: var(--color-idle); }
+.dc-setup[data-tone="done"] { --setup-tone: var(--color-online); }
+.dc-setup[data-tone="error"] { --setup-tone: var(--color-danger); }
+.dc-setup[data-tone="quiet"] { --setup-tone: var(--color-text-muted); }
+
+/* Sit against the provider grid it belongs to instead of floating as a separate block. */
+.dc-agent-create-body > .dc-setup,
+.dc-agent-create-body > .dc-agent-section:has(> .dc-setup:only-child) { margin-top: -8px; }
+
+.dc-setup[data-leaving="true"] {
+  grid-template-rows: 0fr;
+  opacity: 0;
+}
+
+.dc-agent-create-body > .dc-setup[data-leaving="true"] { margin-top: -18px; }
+
+.dc-setup-fold {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.dc-setup-inner {
+  position: relative;
+  overflow: hidden;
+  border-radius: 6px;
+  background: var(--color-panel-soft);
+}
+
+.dc-setup-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 44px;
+  padding: 6px 6px 6px 12px;
+}
+
+.dc-setup-glyph {
+  flex: none;
+  display: grid;
+  place-items: center;
+  color: var(--setup-tone);
+}
+
+.dc-setup-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.dc-setup-text {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 2px 8px;
+  margin: 0;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.dc-setup-text strong {
+  color: var(--color-text-primary);
+  font-weight: 800;
+}
+
+.dc-setup[data-tone="error"] .dc-setup-text { color: color-mix(in srgb, var(--color-danger) 62%, #fff); }
+
+.dc-setup-muted {
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.dc-setup-error {
+  margin: 2px 0 0;
+  color: color-mix(in srgb, var(--color-danger) 62%, #fff);
+  font-size: 12px;
+  font-weight: 700;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+
+.dc-setup-versions,
+.dc-setup-elapsed {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.dc-setup-versions {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  color: var(--color-text-muted);
+}
+
+.dc-setup-version-from {
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--color-text-muted) 55%, transparent);
+}
+
+.dc-setup-version-to {
+  color: var(--setup-tone);
+  font-weight: 700;
+}
+
+.dc-setup-version-kept {
+  color: var(--color-text-secondary);
+  font-weight: 400;
+}
+
+.dc-setup-elapsed {
+  flex: none;
+  padding: 0 6px;
+  color: var(--color-text-muted);
+}
+
+.dc-setup-actions {
+  flex: none;
+  display: flex;
+  gap: 4px;
+}
+
+.dc-setup-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 32px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 800;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.dc-setup-button:focus-visible,
+.dc-setup-copy:focus-visible { outline: 2px solid var(--color-accent); outline-offset: 1px; }
+.dc-setup-button:disabled { cursor: not-allowed; opacity: 0.55; }
+
+.dc-setup-button[data-variant="primary"] {
+  color: #fff;
+  background: var(--color-accent);
+}
+
+.dc-setup-button[data-variant="primary"]:hover:not(:disabled) { background: var(--color-accent-hover); }
+
+.dc-setup-button[data-variant="ghost"] {
+  color: var(--color-text-secondary);
+  background: transparent;
+}
+
+.dc-setup-button[data-variant="ghost"]:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  background: #32343a;
+}
+
+.dc-setup-term {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 0 6px 6px;
+  padding: 9px 6px 9px 12px;
+  border-radius: 4px;
+  background: var(--color-sidebar);
+}
+
+.dc-setup-command {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  color: var(--color-sidebar-text-active);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+
+.dc-setup-command::before {
+  content: "$ ";
+  color: var(--color-online);
+  user-select: none;
+}
+
+.dc-setup-term[data-running="true"] .dc-setup-command { color: var(--color-text-muted); }
+
+.dc-setup-term[data-running="true"] .dc-setup-command::after {
+  content: "";
+  display: inline-block;
+  width: 7px;
+  height: 13px;
+  margin-left: 4px;
+  vertical-align: -2px;
+  background: var(--color-text-secondary);
+  animation: dc-setup-caret 1s steps(1) infinite;
+}
+
+.dc-setup-copy {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  margin: -3px 0;
+  border: 0;
+  border-radius: 4px;
+  color: var(--color-text-muted);
+  background: transparent;
+  cursor: pointer;
+}
+
+.dc-setup-copy:hover { color: var(--color-text-primary); background: var(--color-panel-soft); }
+
+.dc-setup-note {
+  margin: 0 12px 10px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.dc-setup-progress {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  overflow: hidden;
+}
+
+.dc-setup-progress::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -35%;
+  width: 35%;
+  background: var(--setup-tone);
+  animation: dc-setup-progress 1.2s ease-in-out infinite;
+}
+
+.dc-setup-spin { animation: dc-setup-spin 0.9s linear infinite; }
+
+@keyframes dc-setup-enter {
+  from { opacity: 0; transform: translateY(-4px); }
+}
+
+@keyframes dc-setup-progress {
+  to { left: 100%; }
+}
+
+@keyframes dc-setup-spin {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes dc-setup-caret {
+  50% { opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .dc-setup { animation: none; transition: none; }
+  .dc-setup-spin,
+  .dc-setup-term[data-running="true"] .dc-setup-command::after { animation: none; }
+  .dc-setup-progress::after { animation-duration: 3s; }
+}

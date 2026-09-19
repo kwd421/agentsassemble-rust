@@ -40,6 +40,7 @@ pub(crate) static TOKENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         context_limit: "The bounded TokenRouter request context is too large.",
         rate_limited: "TokenRouter rate-limited the request.",
         invalid_response: "TokenRouter returned an invalid bounded response.",
+        output_truncated: "TokenRouter stopped at the maximum response length.",
         invalid_tool_call: "TokenRouter returned an invalid room-tool call.",
         api_unavailable: "The TokenRouter request did not complete.",
         session_mismatch: "TokenRouter runtime authority does not match the Agent Session.",

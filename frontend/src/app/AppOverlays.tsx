@@ -7,6 +7,7 @@ import { agentCreationPayload } from "../api/agentSessions";
 
 import type { AppController } from "./useAppController";
 import AgentCreateModal from "../views/components/AgentCreateModal";
+import ConnectorJoinNotice from "../views/components/ConnectorJoinNotice";
 import GuestJoinProfilePanel from "../views/components/GuestJoinProfilePanel";
 import LeaveRoomDialog from "../views/components/LeaveRoomDialog";
 import RoomInviteModal from "../views/components/RoomInviteModal";
@@ -18,7 +19,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
   const closeCreation = () => { setHostCreation(false); controller.setAgentCreateOpen(false); };
   const {
     activeRoom, agentCreateOpen,
-    canonicalRoom, canControlActiveAgents, closeInviteModal,
+    canonicalRoom, canControlActiveAgents, closeInviteModal, connectorJoinUrl,
     deviceToken,
     generateInviteLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
@@ -166,6 +167,8 @@ export default function AppOverlays({ controller, companionInvites }: { controll
             await roomSocket.command("agent.create", agentCreationPayload(request));
           }}
         />
+
+        {connectorJoinUrl ? <ConnectorJoinNotice joinUrl={connectorJoinUrl} /> : null}
 
         {(guestJoinToken || operatorPairingPending) &&
           (!guestSession || guestPreflightRetryable || guestJoinRetryable) &&

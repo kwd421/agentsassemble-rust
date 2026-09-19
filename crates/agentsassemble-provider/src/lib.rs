@@ -1,3 +1,4 @@
+mod provider_install;
 mod provider_update;
 mod provider_update_specs;
 mod provider_updater;

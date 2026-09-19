@@ -93,7 +93,8 @@ impl FileOperation {
             }
         };
         resolved.extend(missing.into_iter().rev());
-        let resolved = resolved.to_str().ok_or_else(invalid)?;
+        let resolved = contract_path(&resolved).ok_or_else(invalid)?;
+        let resolved = resolved.as_str();
         relative(if resolved.is_empty() { "." } else { resolved })?;
         let target = match self {
             Self::List { path }
@@ -151,6 +152,29 @@ pub(super) fn bind(workspace: &str, identity: &str) -> io::Result<Dir> {
         return Err(invalid());
     }
     Ok(dir)
+}
+
+/// Encodes a workspace-relative path in the tool contract's `/` form.
+///
+/// Windows joins components with `\`, which `relative` rejects by design, so a new
+/// file resolved against the workspace root or any nested entry was refused or skipped.
+/// Neither separator can appear in a Windows file name, so rejoining is lossless. Any
+/// component other than a plain name keeps its native form and is still rejected.
+fn contract_path(path: &Path) -> Option<String> {
+    #[cfg(windows)]
+    {
+        let mut names = Vec::new();
+        for component in path.components() {
+            match component {
+                Component::CurDir => {}
+                Component::Normal(name) => names.push(name.to_str()?),
+                _ => return path.to_str().map(str::to_owned),
+            }
+        }
+        Some(names.join("/"))
+    }
+    #[cfg(not(windows))]
+    path.to_str().map(str::to_owned)
 }
 
 fn relative(path: &str) -> io::Result<PathBuf> {
@@ -394,10 +418,11 @@ fn discover(
             }
             let entry = entry?;
             let child = path.join(entry.file_name());
-            let Some(encoded) = child.to_str() else {
+            let Some(encoded) = contract_path(&child) else {
                 truncated = true;
                 continue;
             };
+            let encoded = encoded.as_str();
             if relative(encoded).is_err() {
                 continue;
             }

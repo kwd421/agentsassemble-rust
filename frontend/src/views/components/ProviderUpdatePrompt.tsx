@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { ArrowUp, Check, CircleAlert, ExternalLink, LoaderCircle, RotateCw } from "lucide-react";
 import { ApiError } from "../../lib/apiErrors";
 import { providerUpdateOperation } from "../../api/providerOperations";
 import { openProviderSetupHelp } from "../../lib/desktopBridge";
 import type { ProviderAvailability } from "../../types/generated/ProviderAvailability";
 import type { ProviderUpdate } from "../../types/generated/ProviderUpdate";
+import ProviderSetupCard, { useTransientResult, VersionShift } from "./ProviderSetupCard";
 
 export default function ProviderUpdatePrompt({ providerId, provider, onUpdating, onUpdated }: {
   providerId: string;
@@ -13,7 +15,8 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
 }) {
   const [observation, setObservation] = useState<ProviderUpdate | null>(null);
   const [busy, setBusy] = useState(false);
-  const [installing, setInstalling] = useState(false);
+  const [request, setRequest] = useState<"check" | "update" | null>(null);
+  const [startedAt, setStartedAt] = useState(0);
   const [error, setError] = useState<{ message: string; code?: string } | null>(null);
   const [deferred, setDeferred] = useState(false);
   const inflight = useRef(false);
@@ -27,7 +30,8 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
     // A read may join an installer owned by an earlier view or lost request.
     updatingCallback.current?.(true);
     setBusy(true);
-    setInstalling(version !== undefined);
+    setRequest(version === undefined ? "check" : "update");
+    setStartedAt(Date.now());
     setError(null);
     try {
       const result = await providerUpdateOperation(providerId, version);
@@ -53,6 +57,7 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
     } finally {
       inflight.current = false;
       setBusy(false);
+      setRequest(null);
     }
   }, [providerId]);
   useEffect(() => {
@@ -70,28 +75,52 @@ export default function ProviderUpdatePrompt({ providerId, provider, onUpdating,
     if (inflight.current || !observation) return;
     await run(observation.latest_version);
   }
-  if (deferred || (!busy && !error && !observation?.update_available && !observation?.completed)) return null;
-  return <section className="dc-agent-section" aria-label="제공자 버전">
-    {busy ? <p role="status" className="dc-agent-hint preserve-words">{installing ? "업데이트하고 있어요…" : "새 버전을 확인하고 있어요…"}</p>
-      : observation?.completed ? <p role="status" className="dc-agent-hint preserve-words">
-        {observation.current_version} 버전으로 업데이트했어요.
-      </p> : observation?.update_available && <>
-        <p className="dc-agent-hint preserve-words">새 버전 {observation.latest_version}이 있어요. 지금 업데이트할까요?</p>
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-          <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }}
-            onClick={() => {
-              if (observation.native_update) void update();
-              else void openProviderSetupHelp(providerId).catch((failure: unknown) =>
-                setError({ message: failure instanceof Error ? failure.message : "공식 안내를 열지 못했어요." }));
-            }}>{observation.native_update ? "업데이트" : "업데이트 방법 보기"}</button>
-          <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }}
-            onClick={() => setDeferred(true)}>나중에</button>
-        </div>
-      </>}
-    {error && <>
-      <p role="alert" className="dc-agent-hint preserve-words">{error.message}</p>
-      <button type="button" className="ops-button rounded-lg px-4 py-2" style={{ minHeight: 44 }}
-        disabled={busy} onClick={() => void run()}>버전 다시 확인</button>
-    </>}
-  </section>;
+  const completed = Boolean(observation?.completed) && !busy && !error;
+  const result = useTransientResult(completed);
+  const offered = !busy && !error && observation?.update_available && !observation.completed;
+  // A check blocks agent creation while it may be joining an update another view started,
+  // so it stays visible; an idle provider with nothing newer shows nothing.
+  if (deferred || result === "gone" || (!offered && !completed && !error && !busy)) return null;
+  const label = `${provider?.display_name || "제공자"} 업데이트`;
+
+  if (completed && observation) {
+    return <ProviderSetupCard label={label} tone="done" glyph={<Check size={15} strokeWidth={3} />}
+      leaving={result === "leaving"}>
+      <p className="dc-setup-text" role="status">{observation.current_version} 버전으로 업데이트했어요.</p>
+    </ProviderSetupCard>;
+  }
+
+  if (busy) {
+    const updating = request === "update";
+    return <ProviderSetupCard label={label} tone={updating ? "update" : "quiet"} busy
+      glyph={<LoaderCircle size={15} className="dc-setup-spin" />} since={updating ? startedAt : undefined}>
+      {updating
+        ? <p className="dc-setup-text" role="status"><strong>업데이트하는 중</strong>
+          {observation && <VersionShift from={observation.current_version} to={observation.latest_version} />}</p>
+        : <p className="dc-setup-text" role="status">새 버전을 확인하고 있어요…</p>}
+    </ProviderSetupCard>;
+  }
+
+  if (error) {
+    return <ProviderSetupCard label={label} tone="error" glyph={<CircleAlert size={15} strokeWidth={2.5} />}
+      actions={<button type="button" className="dc-setup-button" data-variant="ghost" onClick={() => void run()}>
+        <RotateCw size={13} aria-hidden="true" />버전 다시 확인</button>}>
+      <p className="dc-setup-text" role="alert">{error.message}</p>
+    </ProviderSetupCard>;
+  }
+
+  if (!observation) return null;
+  return <ProviderSetupCard label={label} tone="update" glyph={<ArrowUp size={15} strokeWidth={2.75} />}
+    actions={<>
+      <button type="button" className="dc-setup-button" data-variant="ghost" onClick={() => setDeferred(true)}>나중에</button>
+      {observation.native_update
+        ? <button type="button" className="dc-setup-button" data-variant="primary" onClick={() => void update()}>업데이트</button>
+        : <button type="button" className="dc-setup-button" data-variant="primary"
+          onClick={() => void openProviderSetupHelp(providerId).catch((failure: unknown) =>
+            setError({ message: failure instanceof Error ? failure.message : "공식 안내를 열지 못했어요." }))}>
+          업데이트 방법 보기<ExternalLink size={13} aria-hidden="true" /></button>}
+    </>}>
+    <p className="dc-setup-text" role="status"><strong>새 버전</strong>
+      <VersionShift from={observation.current_version} to={observation.latest_version} /></p>
+  </ProviderSetupCard>;
 }

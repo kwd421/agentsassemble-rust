@@ -386,15 +386,6 @@ async fn invalid_completion_and_unpermitted_tools_never_publish() {
             vec![tool_stream("vendor/model", "publish_message", "tool_calls")],
             "provider_room_read_missing",
         ),
-        (
-            &CUSTOM_API_SPEC,
-            "openrouter/auto",
-            vec![
-                tool_stream("vendor/model", "read_discussion", "tool_calls"),
-                tool_stream("vendor/model", "roll_dice", "tool_calls"),
-            ],
-            "provider_tool_call_invalid",
-        ),
     ] {
         let (outcome, _) = room_turn(spec, model, responses, None).await;
         let Err(error) = outcome else {
@@ -402,6 +393,40 @@ async fn invalid_completion_and_unpermitted_tools_never_publish() {
         };
         assert_eq!(error.code, code);
     }
+}
+
+#[tokio::test]
+async fn a_tool_this_room_does_not_offer_is_answered_and_the_turn_continues() {
+    let model = "vendor/model";
+    let (outcome, requests) = room_turn(
+        &CUSTOM_API_SPEC,
+        "openrouter/auto",
+        vec![
+            tool_stream(model, "read_discussion", "tool_calls"),
+            // Dice belong to tabletop rooms; this room never offered them.
+            tool_stream(model, "roll_dice", "tool_calls"),
+            tool_stream(model, "publish_message", "tool_calls"),
+        ],
+        None,
+    )
+    .await;
+    assert_eq!(
+        outcome,
+        Ok(ProviderTurnOutcome::Message {
+            content: "Bounded room reply".to_owned(),
+            target_agent_id: String::new(),
+        })
+    );
+    let answered = requests[2]["messages"]
+        .as_array()
+        .unwrap_or_else(|| panic!("third request messages"))
+        .iter()
+        .filter_map(|message| message["content"].as_str())
+        .any(|content| content.contains("room_tool_unavailable"));
+    assert!(
+        answered,
+        "the refused tool call was not reported to the model"
+    );
 }
 
 #[tokio::test]

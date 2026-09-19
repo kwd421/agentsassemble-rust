@@ -401,6 +401,11 @@ pub(crate) fn failed_provider(
 ) -> ProviderAvailability {
     let (code, message, available) = match failure {
         ProbeFailure::Missing => ("command_missing", "configured command missing", false),
+        ProbeFailure::BridgeRuntimeMissing => (
+            "bridge_runtime_missing",
+            "Node is required by this provider's bridge and was not found",
+            false,
+        ),
         ProbeFailure::Timeout => ("model_discovery_timeout", "model discovery timed out", true),
         ProbeFailure::Authentication => (
             "authentication_required",

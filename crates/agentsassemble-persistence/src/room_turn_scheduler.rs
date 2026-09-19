@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use agentsassemble_domain::{
     AgentRuntimeStatus, AgentSessionStatus, AgentTurnPhase, DurableAgentSession, Participant,
@@ -36,7 +36,9 @@ pub(super) async fn route_message(
     }
     let sessions = route_sessions(transaction, event).await?;
     let targets = match settings.conversation_mode.as_str() {
-        "ordered" => ordered_targets(transaction, settings, event, &sessions).await?,
+        "ordered" => {
+            ordered_targets(transaction, settings, event, &sessions, &BTreeSet::new()).await?
+        }
         "ambient" => ambient_targets(event, &sessions),
         _ => {
             return Err(rejected(
@@ -136,11 +138,51 @@ fn is_routable_message(event: &RoomEvent) -> Result<bool, PersistenceError> {
         && message_has_visible_payload(event)?)
 }
 
+/// Hands the ordered floor to the next agent after the one holding it declined to speak.
+///
+/// Only the selected agent is queued in ordered mode, so a decline used to end the exchange
+/// with nothing said. The same selection runs again without the agents that already held the
+/// floor for this message, which also stops it from returning to a decliner.
+pub(super) async fn route_declined_floor(
+    transaction: &mut Transaction<'_, Sqlite>,
+    settings: &RoomSettings,
+    event: &RoomEvent,
+) -> Result<(), PersistenceError> {
+    if settings.conversation_mode != "ordered" || !is_routable_message(event)? {
+        return Ok(());
+    }
+    let held = floor_holders(transaction, &event.room_id, &event.id).await?;
+    let sessions = route_sessions(transaction, event).await?;
+    for (session_id, delivery_kind) in
+        ordered_targets(transaction, settings, event, &sessions, &held).await?
+    {
+        queue_input(transaction, event, &session_id, delivery_kind).await?;
+    }
+    Ok(())
+}
+
+/// Every session that has already been given the floor for this exact message.
+async fn floor_holders(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    source_event_id: &str,
+) -> Result<BTreeSet<String>, PersistenceError> {
+    let rows = sqlx::query_scalar::<_, String>(
+        "SELECT DISTINCT json_extract(event_json, '$.session_id') FROM room_events          WHERE room_id = ? AND json_extract(event_json, '$.type') = 'turn_started'          AND json_extract(event_json, '$.source_event_id') = ?",
+    )
+    .bind(room_id)
+    .bind(source_event_id)
+    .fetch_all(&mut **transaction)
+    .await?;
+    Ok(rows.into_iter().collect())
+}
+
 async fn ordered_targets(
     transaction: &mut Transaction<'_, Sqlite>,
     settings: &RoomSettings,
     event: &RoomEvent,
     sessions: &[(DurableAgentSession, Participant)],
+    excluded: &BTreeSet<String>,
 ) -> Result<Vec<(String, RoomInputDeliveryKind)>, PersistenceError> {
     let content = event.content.as_deref().unwrap_or_default();
     let structured_target = event
@@ -149,7 +191,9 @@ async fn ordered_targets(
         .and_then(Value::as_str)
         .filter(|target| {
             sessions.iter().any(|(session, _)| {
-                session.public.session_id == *target && !is_actor(session, event)
+                session.public.session_id == *target
+                    && !is_actor(session, event)
+                    && !excluded.contains(&session.public.session_id)
             })
         })
         .map(str::to_owned);
@@ -160,7 +204,9 @@ async fn ordered_targets(
         content,
         sessions
             .iter()
-            .filter(|(session, _)| !is_actor(session, event))
+            .filter(|(session, _)| {
+                !is_actor(session, event) && !excluded.contains(&session.public.session_id)
+            })
             .map(|(session, _)| session),
     )
     .or(structured_target);
@@ -180,7 +226,9 @@ async fn ordered_targets(
         let mut candidates = sessions
             .iter()
             .filter(|(session, participant)| {
-                !is_actor(session, event) && route_session_is_eligible(session, participant)
+                !is_actor(session, event)
+                    && !excluded.contains(&session.public.session_id)
+                    && route_session_is_eligible(session, participant)
             })
             .collect::<Vec<_>>();
         if event.actor.participant_type == "agent" {

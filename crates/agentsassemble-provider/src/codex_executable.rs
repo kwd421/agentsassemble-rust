@@ -85,11 +85,108 @@ fn resolve_codex_executable_sync() -> io::Result<Option<(String, String)>> {
 }
 
 fn resolve_codex_entry(entry: &Path) -> io::Result<Option<(String, String)>> {
+    // PATHEXT lookup selects npm's `codex.cmd` wrapper on Windows. It is not a native
+    // bundle and it does not sit beside the package, so follow it to the package script.
+    #[cfg(windows)]
+    if entry
+        .extension()
+        .is_some_and(|extension| extension.eq_ignore_ascii_case("cmd"))
+    {
+        return match npm_cmd_shim_script(entry)? {
+            Some(script) => resolve_script_entry(&script),
+            None => Ok(None),
+        };
+    }
     let mut prefix = [0_u8; 2];
     let script = File::open(entry)?.read_exact(&mut prefix).is_ok() && prefix == *b"#!";
     if !script {
         return codex_authority(entry).map(Some);
     }
+    resolve_script_entry(entry)
+}
+
+/// Resolves the package script an npm `cmd-shim` wrapper launches.
+///
+/// npm writes the target as `"%dp0%\<relative path>.js"`, relative to the wrapper's own
+/// directory. Only a relative path made of plain segments is followed.
+#[cfg(windows)]
+pub(crate) fn npm_cmd_shim_script(shim: &Path) -> io::Result<Option<std::path::PathBuf>> {
+    npm_cmd_shim_file(shim, ".js")
+}
+
+/// Resolves the native executable an npm `cmd-shim` wrapper launches directly.
+///
+/// Packages that ship a platform binary as their `bin` (Claude Code does) get a wrapper that
+/// runs `"%dp0%\<relative path>.exe"`. Node refuses to spawn `.cmd` files without a shell, so
+/// callers that hand the launcher to a Node child must use this target instead.
+#[cfg(windows)]
+pub(crate) fn npm_cmd_shim_native(shim: &Path) -> io::Result<Option<std::path::PathBuf>> {
+    npm_cmd_shim_file(shim, ".exe")
+}
+
+#[cfg(windows)]
+fn npm_cmd_shim_file(shim: &Path, extension: &str) -> io::Result<Option<std::path::PathBuf>> {
+    const MAX_SHIM_BYTES: u64 = 16 * 1024;
+    let mut text = String::new();
+    File::open(shim)?
+        .take(MAX_SHIM_BYTES)
+        .read_to_string(&mut text)?;
+    let Some(directory) = shim.parent() else {
+        return Ok(None);
+    };
+    let Some(target) = npm_cmd_shim_target(&text, extension, project_local_bin(directory)) else {
+        return Ok(None);
+    };
+    let file = target
+        .split(['\\', '/'])
+        .fold(directory.to_path_buf(), |path, segment| path.join(segment));
+    Ok(file.is_file().then_some(file))
+}
+
+/// Whether this wrapper is npm's project-local launcher directory, `node_modules/.bin`.
+#[cfg(any(windows, test))]
+fn project_local_bin(directory: &Path) -> bool {
+    directory.file_name().is_some_and(|name| name == ".bin")
+        && directory
+            .parent()
+            .and_then(Path::file_name)
+            .is_some_and(|name| name == "node_modules")
+}
+
+/// Resolves the package file an npm `cmd-shim` names, relative to the wrapper's own directory.
+///
+/// A global wrapper sits beside its `node_modules`, so its target starts there. A project-local
+/// wrapper sits inside `node_modules/.bin`, so its target starts with one `..` that leads back to
+/// the same `node_modules`. Nothing else may leave the wrapper's tree: a second `..`, a `.`, an
+/// empty segment, or a bare `node.exe` beside the wrapper is refused.
+#[cfg(any(windows, test))]
+fn npm_cmd_shim_target<'a>(text: &'a str, extension: &str, local_bin: bool) -> Option<&'a str> {
+    const DP0: &str = "\"%dp0%\\";
+    text.match_indices(DP0)
+        .filter_map(|(start, _)| {
+            let rest = &text[start + DP0.len()..];
+            let target = &rest[..rest.find('"')?];
+            let mut segments = target.split(['\\', '/']).peekable();
+            let packaged = match segments.peek() {
+                Some(&"node_modules") => {
+                    segments.next();
+                    true
+                }
+                Some(&"..") if local_bin => {
+                    segments.next();
+                    true
+                }
+                _ => false,
+            };
+            let plain =
+                segments.all(|segment| !segment.is_empty() && segment != "." && segment != "..");
+            (packaged && plain && target.to_ascii_lowercase().ends_with(extension))
+                .then_some(target)
+        })
+        .last()
+}
+
+fn resolve_script_entry(entry: &Path) -> io::Result<Option<(String, String)>> {
     let Some(package_root) = entry.parent().and_then(Path::parent) else {
         return Ok(None);
     };
@@ -317,6 +414,110 @@ mod tests {
         let resolved = super::resolve_codex_entry(&entry)
             .unwrap_or_else(|error| panic!("resolve Codex native bundle: {error}"))
             .unwrap_or_else(|| panic!("Codex native bundle was not resolved"));
+        assert_eq!(
+            resolved.0,
+            native.canonicalize().unwrap_or(native).to_string_lossy()
+        );
+        assert!(resolved.1.starts_with("bundle-identity-v1-"));
+    }
+
+    const NPM_CMD_SHIM: &str = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\r\nIF EXIST \"%dp0%\\node.exe\" (\r\n  SET \"_prog=%dp0%\\node.exe\"\r\n) ELSE (\r\n  SET \"_prog=node\"\r\n  SET PATHEXT=%PATHEXT:;.JS;=;%\r\n)\r\n\r\nendLocal & goto #_undefined_# 2>NUL || title %COMSPEC% & \"%_prog%\"  \"%dp0%\\node_modules\\@openai\\codex\\bin\\codex.js\" %*\r\n";
+
+    #[test]
+    fn npm_cmd_shim_target_is_the_package_script_not_node() {
+        assert_eq!(
+            super::npm_cmd_shim_target(NPM_CMD_SHIM, ".js", false),
+            Some("node_modules\\@openai\\codex\\bin\\codex.js")
+        );
+        for escaping in [
+            "\"%dp0%\\..\\evil\\codex.js\"",
+            "\"%dp0%\\node_modules\\.\\codex.js\"",
+            "\"%dp0%\\node_modules\\\\codex.js\"",
+            "\"%dp0%\\node.exe\"",
+        ] {
+            assert_eq!(
+                super::npm_cmd_shim_target(escaping, ".js", false),
+                None,
+                "{escaping}"
+            );
+        }
+    }
+
+    #[test]
+    fn npm_cmd_shim_target_follows_a_project_local_bin_wrapper_one_level_up() {
+        const LOCAL_SHIM: &str =
+            concat!("@ECHO off", r#""%dp0%\..\@openai\codex\bin\codex.js" %*"#);
+        assert_eq!(
+            super::npm_cmd_shim_target(LOCAL_SHIM, ".js", true),
+            Some(r"..\@openai\codex\bin\codex.js")
+        );
+        // Only node_modules/.bin gets that allowance, and only for one level.
+        assert_eq!(super::npm_cmd_shim_target(LOCAL_SHIM, ".js", false), None);
+        for escaping in [r#""%dp0%\..\..\evil\codex.js""#, r#""%dp0%\..\.\codex.js""#] {
+            assert_eq!(
+                super::npm_cmd_shim_target(escaping, ".js", true),
+                None,
+                "{escaping}"
+            );
+        }
+    }
+
+    #[test]
+    fn project_local_bin_is_only_npms_own_launcher_directory() {
+        use std::path::Path;
+
+        assert!(super::project_local_bin(Path::new(
+            r"C:\app\node_modules\.bin"
+        )));
+        assert!(!super::project_local_bin(Path::new(r"C:\app\.bin")));
+        assert!(!super::project_local_bin(Path::new(r"C:\app\node_modules")));
+    }
+
+    #[test]
+    fn npm_cmd_shim_target_follows_a_native_package_binary() {
+        const NATIVE_SHIM: &str = "@ECHO off\r\nGOTO start\r\n:find_dp0\r\nSET dp0=%~dp0\r\nEXIT /b\r\n:start\r\nSETLOCAL\r\nCALL :find_dp0\r\n\"%dp0%\\node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe\"   %*\r\n";
+        assert_eq!(
+            super::npm_cmd_shim_target(NATIVE_SHIM, ".exe", false),
+            Some("node_modules\\@anthropic-ai\\claude-code\\bin\\claude.exe")
+        );
+        assert_eq!(super::npm_cmd_shim_target(NATIVE_SHIM, ".js", false), None);
+        assert_eq!(
+            super::npm_cmd_shim_target(NPM_CMD_SHIM, ".exe", false),
+            None
+        );
+        assert_eq!(
+            super::npm_cmd_shim_target("\"%dp0%\\..\\evil\\claude.exe\"", ".exe", false),
+            None
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn npm_cmd_shim_resolves_platform_native_bundle() {
+        let Some((platform_package, target, binary)) = super::codex_native_layout() else {
+            return;
+        };
+        let prefix =
+            tempfile::tempdir().unwrap_or_else(|error| panic!("create npm prefix: {error}"));
+        let shim = prefix.path().join("codex.cmd");
+        std::fs::write(&shim, NPM_CMD_SHIM).unwrap_or_else(|error| panic!("write shim: {error}"));
+        let package = prefix.path().join("node_modules/@openai/codex");
+        make_executable(&package.join("bin/codex.js"), b"#!/usr/bin/env node\n");
+        let native_dir = package
+            .join("node_modules/@openai")
+            .join(platform_package)
+            .join("vendor")
+            .join(target)
+            .join("bin");
+        let native = native_dir.join(binary);
+        make_executable(&native, b"native-codex");
+        make_executable(
+            &native_dir.join(super::codex_code_mode_host_name()),
+            b"native-code-mode-host",
+        );
+        let resolved = super::resolve_codex_entry(&shim)
+            .unwrap_or_else(|error| panic!("resolve npm Codex wrapper: {error}"))
+            .unwrap_or_else(|| panic!("npm Codex wrapper was not resolved"));
         assert_eq!(
             resolved.0,
             native.canonicalize().unwrap_or(native).to_string_lossy()

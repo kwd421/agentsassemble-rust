@@ -40,16 +40,14 @@ afterEach(() => {
 });
 
 describe("MemberList component wiring", () => {
-  it("opens only moderation when the overflow SVG receives pointer input", () => {
+  it("opens only moderation from the row's context menu, without an overflow button", () => {
     render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onParticipantRemove={vi.fn()} />);
-    const icon = screen.getByLabelText("Agent One 관리 메뉴").querySelector("svg")!;
-    fireEvent.pointerDown(icon, { pointerType: "mouse", button: 0, clientX: 40, clientY: 40 });
-    fireEvent.pointerUp(icon, { pointerType: "mouse", button: 0, clientX: 40, clientY: 40 });
-    fireEvent.click(icon);
+    expect(screen.queryByLabelText("Agent One 관리 메뉴")).toBeNull();
+    fireEvent.contextMenu(screen.getByRole("button", { name: "Agent One 프로필 보기" }), { clientX: 40, clientY: 40 });
     expect(screen.getByRole("menu")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
-    fireEvent.click(screen.getByRole("button", { name: "Agent One 강퇴" }));
-    expect(screen.getByRole("button", { name: "강퇴" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Agent One 내보내기" }));
+    expect(screen.getByRole("button", { name: "내보내기" })).toBeTruthy();
   });
 
   it("opens the extracted detail modal with Agent Session controls", () => {
@@ -73,6 +71,20 @@ describe("MemberList component wiring", () => {
     expect(within(dialog).getByRole("region", { name: "Agent One 실행 및 설정" })).toBeTruthy();
     expect(within(dialog).getByRole("button", { name: "시작" })).toBeTruthy();
     expect(within(dialog).getByText("고급 진단")).toBeTruthy();
+  });
+
+  it("closes the detail modal on a click outside the card, not inside it", () => {
+    render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onAgentControl={vi.fn()} />);
+    fireEvent.click(screen.getByText("Agent One"));
+    const dialog = screen.getByRole("dialog", { name: "Agent One" });
+    // A modal dialog reports its own backdrop clicks as the dialog itself, so only the
+    // pointer position separates them. jsdom gives the card a zero-sized rectangle.
+    fireEvent.click(within(dialog).getByRole("region", { name: "Agent One 실행 및 설정" }), { clientX: 5, clientY: 5 });
+    expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeTruthy();
+    fireEvent.click(dialog, { clientX: 0, clientY: 0 });
+    expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeTruthy();
+    fireEvent.click(dialog, { clientX: 5, clientY: 5 });
+    expect(screen.queryByRole("dialog", { name: "Agent One" })).toBeNull();
   });
 
   it("takes an Agent Session moderation scope from its canonical room participant", async () => {

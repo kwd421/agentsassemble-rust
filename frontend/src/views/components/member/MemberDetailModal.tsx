@@ -57,7 +57,16 @@ export default function MemberDetailModal({
     <div className="dc-modal-backdrop" role="presentation">
       <dialog ref={dialogRef} className="dc-member-detail-modal fixed inset-0 text-text-primary"
         style={{ margin: "auto" }} aria-modal="true" aria-label={entry.displayName}
-        onCancel={(event) => { event.preventDefault(); onClose(); }}>
+        onCancel={(event) => { event.preventDefault(); onClose(); }}
+        onClick={(event) => {
+          // A modal dialog's own backdrop reports the dialog as the click target, so the
+          // pointer position decides whether the click landed outside the card.
+          if (event.target !== event.currentTarget) return;
+          const bounds = event.currentTarget.getBoundingClientRect();
+          const outside = event.clientX < bounds.left || event.clientX > bounds.right ||
+            event.clientY < bounds.top || event.clientY > bounds.bottom;
+          if (outside) onClose();
+        }}>
         {entry.agentSession ? <AgentProfileCard
           key={`${entry.agentSession.room_id}:${entry.agentSession.session_id}`}
           session={entry.agentSession}

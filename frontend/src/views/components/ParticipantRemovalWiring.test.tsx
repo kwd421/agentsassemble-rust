@@ -20,13 +20,14 @@ describe("participant removal surfaces", () => {
       ? <RoomConnectionPanel {...props} capabilities={capabilities} />
       : <MobileRoomInfoPanel {...props} capabilities={capabilities} appearance={DEFAULT_ROOM_APPEARANCE} channelLabel="general" onClose={vi.fn()} />;
     const { rerender } = render(view({}));
-    expect(screen.queryByRole("button", { name: "Guest 강퇴" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Guest 내보내기" })).toBeNull();
     rerender(view({ "room.manage": true }));
-    expect(screen.queryByRole("button", { name: "Guest 강퇴" })).toBeNull();
-    fireEvent.click(screen.getByLabelText("Guest 관리 메뉴"));
-    expect(screen.getAllByRole("button", { name: /강퇴$/ })).toHaveLength(1);
-    fireEvent.click(screen.getByRole("button", { name: "Guest 강퇴" }));
-    fireEvent.click(screen.getByRole("button", { name: "강퇴" }));
+    expect(screen.queryByRole("button", { name: "Guest 내보내기" })).toBeNull();
+    if (surface === "desktop") fireEvent.contextMenu(screen.getByText("Guest"));
+    else fireEvent.click(screen.getByLabelText("Guest 관리 메뉴"));
+    expect(screen.getAllByRole("button", { name: /내보내기$/ })).toHaveLength(1);
+    fireEvent.click(screen.getByRole("button", { name: "Guest 내보내기" }));
+    fireEvent.click(screen.getByRole("button", { name: "내보내기" }));
     expect(onRemove).toHaveBeenCalledWith("guest", "kick");
   });
 });

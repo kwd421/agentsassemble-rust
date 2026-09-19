@@ -34,7 +34,8 @@ pub use provider_request::{
 };
 pub use provider_setup::{
     PROVIDER_SETUP_DESTINATIONS, PROVIDER_SETUP_HOST, PROVIDER_SETUP_SCHEME,
-    ProviderSetupDestination, ProviderUpdate, provider_setup_destination, provider_setup_from_url,
+    ProviderInstall, ProviderSetupDestination, ProviderUpdate, provider_setup_destination,
+    provider_setup_from_url,
 };
 mod release_health;
 mod runtime_restart;

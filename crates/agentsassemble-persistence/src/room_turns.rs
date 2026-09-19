@@ -537,7 +537,7 @@ mod scheduler;
 pub(crate) mod support;
 
 pub(crate) use scheduler::remove_pending_input_reference;
-use scheduler::{assign_available_pending, route_message};
+use scheduler::{assign_available_pending, route_declined_floor, route_message};
 use support::{
     clear_active_turn_fields, error_event, insert_event, load_active_room, load_participant,
     rejected, rejection, session_state_event, turn_finished_event,

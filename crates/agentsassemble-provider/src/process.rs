@@ -42,6 +42,8 @@ const PROVIDER_ENVIRONMENT: [&str; 22] = [
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum ProbeFailure {
     Missing,
+    /// A helper program the provider bridge needs, not the provider CLI itself.
+    BridgeRuntimeMissing,
     Timeout,
     Authentication,
     Malformed,

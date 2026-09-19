@@ -23,6 +23,18 @@ struct RunningServer {
     credentials: HumanInviteCredentialAuthority,
     cancellation: CancellationToken,
     task: JoinHandle<()>,
+    _state_root: Option<tempfile::TempDir>,
+}
+
+/// The public-ingress configuration a boundary runtime starts with.
+#[derive(Clone, Copy)]
+enum Ingress {
+    /// No ingress owner at all.
+    None,
+    /// A ready startup-configured HTTPS reverse proxy.
+    ManualPublic,
+    /// The desktop sidecar's managed tunnel owner with the tunnel stopped.
+    ManagedStopped,
 }
 
 impl RunningServer {
@@ -244,6 +256,15 @@ async fn issue_revoke(server: &RunningServer, room_id: &str) -> String {
 }
 
 async fn start(ready: bool) -> RunningServer {
+    start_with(if ready {
+        Ingress::ManualPublic
+    } else {
+        Ingress::None
+    })
+    .await
+}
+
+async fn start_with(ingress: Ingress) -> RunningServer {
     let store = SqliteStore::open("sqlite::memory:")
         .await
         .unwrap_or_else(|error| panic!("open human invite manager store: {error}"));
@@ -273,10 +294,23 @@ async fn start(ready: bool) -> RunningServer {
     )
     .await
     .unwrap_or_else(|error| panic!("build human invite manager state: {error}"));
-    if ready {
-        state = state
-            .with_manual_public_ingress(address, PUBLIC_ORIGIN, PROXY_SECRET)
-            .unwrap_or_else(|error| panic!("configure human invite manager ingress: {error}"));
+    let mut state_root = None;
+    match ingress {
+        Ingress::None => {}
+        Ingress::ManualPublic => {
+            state = state
+                .with_manual_public_ingress(address, PUBLIC_ORIGIN, PROXY_SECRET)
+                .unwrap_or_else(|error| panic!("configure human invite manager ingress: {error}"));
+        }
+        Ingress::ManagedStopped => {
+            let root = tempfile::tempdir()
+                .unwrap_or_else(|error| panic!("create managed ingress state root: {error}"));
+            state = state
+                .with_managed_public_ingress(address, None, root.path())
+                .await
+                .unwrap_or_else(|error| panic!("configure managed ingress: {error}"));
+            state_root = Some(root);
+        }
     }
     let credentials = state.human_invite_credentials.clone();
     let cancellation = CancellationToken::new();
@@ -293,6 +327,7 @@ async fn start(ready: bool) -> RunningServer {
         credentials,
         cancellation,
         task,
+        _state_root: state_root,
     }
 }
 

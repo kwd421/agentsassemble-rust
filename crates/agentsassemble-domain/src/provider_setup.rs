@@ -23,6 +23,20 @@ pub struct ProviderUpdate {
     pub completed: bool,
 }
 
+/// A private npm install offer for a missing provider CLI, or its confirmed result.
+///
+/// `command` is the exact argument list the runtime runs after the user confirms this offer,
+/// so the confirmation shows what executes rather than a description of it.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, serde::Deserialize, ts_rs::TS)]
+#[serde(deny_unknown_fields)]
+pub struct ProviderInstall {
+    pub provider_id: String,
+    pub package: String,
+    pub version: String,
+    pub command: Vec<String>,
+    pub completed: bool,
+}
+
 pub const PROVIDER_SETUP_SCHEME: &str = "agentsassemble";
 pub const PROVIDER_SETUP_HOST: &str = "provider-setup";
 

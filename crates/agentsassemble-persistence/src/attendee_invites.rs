@@ -238,17 +238,20 @@ impl SqliteStore {
         let bearer =
             self.attendee_invite_bearer(room.room_uid, &identity.user_id, request.request_id);
         let invite_id = Uuid::new_v4();
+        // Return the stored microsecond value so an exact replay reads back the same expiry
+        // on clocks finer than a microsecond (Windows reports 100 ns).
+        let expires_at = timestamp(owner.expires_at.timestamp_micros())?;
         sqlx::query("INSERT INTO room_attendee_invites(invite_id,room_id,room_uid,creator_id,owner_participant_id,request_id,request_hash,provider_kind,display_name,scope,parent_fingerprint,token_fingerprint,expires_at) VALUES(?,?,?,?,?,?,?,?,?,'read_write',?,?,?)")
             .bind(invite_id.to_string()).bind(&identity.room_id).bind(room.room_uid.to_string()).bind(&identity.user_id).bind(&identity.participant_id)
             .bind(request.request_id.to_string()).bind(hash).bind(request.provider_kind).bind(request.display_name)
-            .bind(owner.parent.as_ref().map(<[u8;32]>::as_slice)).bind(bearer.fingerprint.as_slice()).bind(owner.expires_at.timestamp_micros()).execute(&mut **tx).await?;
+            .bind(owner.parent.as_ref().map(<[u8;32]>::as_slice)).bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).execute(&mut **tx).await?;
         Ok(AttendeeInvite {
             invite_id,
             invite_bearer: bearer.bearer,
             room_uid: room.room_uid,
             provider_kind: request.provider_kind.to_owned(),
             display_name: request.display_name.to_owned(),
-            expires_at: owner.expires_at,
+            expires_at,
         })
     }
 

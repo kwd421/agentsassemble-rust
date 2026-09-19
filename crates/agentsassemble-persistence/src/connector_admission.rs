@@ -77,7 +77,9 @@ impl SqliteStore {
         // Retain manager-created receipts until room deletion. Removing expired
         // requests could recreate the same deterministic credential with a new expiry.
         let invite_id = Uuid::new_v4();
-        let expires_at = now + TTL;
+        // Return the stored microsecond value so an exact replay reads back the same expiry
+        // on clocks finer than a microsecond (Windows reports 100 ns).
+        let expires_at = timestamp((now + TTL).timestamp_micros())?;
         sqlx::query("INSERT INTO room_connector_invites(invite_id,room_id,room_uid,creator_id,request_id,scope,token_fingerprint,expires_at) VALUES(?,?,?,?,?,?,?,?)")
             .bind(invite_id.to_string()).bind(&identity.room_id).bind(room.room_uid.to_string()).bind(&identity.user_id)
             .bind(request_id.to_string()).bind(scope).bind(bearer.fingerprint.as_slice()).bind(expires_at.timestamp_micros()).execute(&mut *tx).await?;

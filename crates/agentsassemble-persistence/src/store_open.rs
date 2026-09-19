@@ -291,7 +291,7 @@ mod tests {
             .write(true)
             .open(&path)
             .unwrap_or_else(|error| panic!("create interrupted database file: {error}"));
-        crate::private_fs::secure_file(&file)
+        crate::private_fs::secure_file(&file, &path)
             .unwrap_or_else(|error| panic!("secure interrupted database file: {error}"));
         drop(file);
 

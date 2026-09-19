@@ -47,7 +47,9 @@ pub(crate) fn render(root: &Path, build_id: &str) -> io::Result<Arc<str>> {
                     let path = asset
                         .to_file_path()
                         .map_err(|()| io::Error::other("frontend asset path is invalid"))?;
-                    if !path.starts_with(root.join("assets")) || !path.is_file() {
+                    if !comparable(&path).starts_with(comparable(&root.join("assets")))
+                        || !path.is_file()
+                    {
                         return Err(
                             io::Error::other("frontend build references a missing asset").into(),
                         );
@@ -69,4 +71,20 @@ pub(crate) fn render(root: &Path, build_id: &str) -> io::Result<Arc<str>> {
         return Err(io::Error::other("frontend document has no build entry"));
     }
     Ok(Arc::from(html))
+}
+
+/// The release root reaches this module from `canonicalize`, which on Windows always
+/// returns a verbatim `\\?\` path, while the asset path comes back from a URL round
+/// trip in plain drive form. Both name the same file, so the verbatim prefix is removed
+/// before the containment check. Other targets compare the paths as they are.
+#[cfg(windows)]
+fn comparable(path: &Path) -> std::path::PathBuf {
+    path.to_str()
+        .and_then(|path| path.strip_prefix(r"\\?\"))
+        .map_or_else(|| path.to_path_buf(), std::path::PathBuf::from)
+}
+
+#[cfg(not(windows))]
+fn comparable(path: &Path) -> &Path {
+    path
 }

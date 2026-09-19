@@ -69,6 +69,7 @@ pub(crate) static OPENROUTER_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         context_limit: "The bounded OpenRouter request context is too large.",
         rate_limited: "OpenRouter rate-limited the request.",
         invalid_response: "OpenRouter returned an invalid bounded response.",
+        output_truncated: "OpenRouter stopped at the maximum response length.",
         invalid_tool_call: "OpenRouter returned an invalid room-tool call.",
         api_unavailable: "The OpenRouter API request did not complete.",
         session_mismatch: "OpenRouter runtime authority does not match the Agent Session.",
