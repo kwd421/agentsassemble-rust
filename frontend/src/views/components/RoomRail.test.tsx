@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { Radio } from "lucide-react";
 import RoomRail from "./RoomRail";
@@ -12,38 +12,20 @@ const room: RoomDockItem = {
   icon: Radio, createdAt: "", tone: "resident",
 };
 
-function renderRail(overrides: Partial<Parameters<typeof RoomRail>[0]> = {}) {
-  const onRoomLifecycle = vi.fn();
+it("keeps destructive room actions out of the rail and its menu", () => {
   render(
     <RoomRail
       rooms={[room]} activeRoom={room} roomAppearances={{}} guestLocked={false} adminOpen={false}
       menuRoom={room} roomMenu={{ roomId: room.id, x: 10, y: 10 }}
       onSelectRoom={vi.fn()} onAddRoom={vi.fn()} onOpenRoomMenu={vi.fn()} onMarkRoomRead={vi.fn()}
       onInviteRoom={vi.fn()} onOpenRoomSettings={vi.fn()} onLeaveRoom={vi.fn()}
-      onRoomLifecycle={onRoomLifecycle}
-      {...overrides}
     />
   );
-  return { onRoomLifecycle };
-}
 
-it("keeps room lifecycle on the server menu rather than a rail button of its own", () => {
-  const { onRoomLifecycle } = renderRail();
-
+  // Deleting a room belongs to its settings, next to everything else about that room.
+  expect(screen.getByRole("menuitem", { name: "방 설정" })).toBeTruthy();
+  expect(screen.queryByRole("menuitem", { name: "방 삭제" })).toBeNull();
+  expect(screen.queryByRole("menuitem", { name: "방 보관" })).toBeNull();
+  expect(screen.queryByRole("menuitem", { name: "방 종료" })).toBeNull();
   expect(screen.queryByRole("button", { name: "방 관리" })).toBeNull();
-  fireEvent.click(screen.getByRole("menuitem", { name: "방 보관" }));
-  expect(onRoomLifecycle).toHaveBeenCalledWith(room, "archive");
-  fireEvent.click(screen.getByRole("menuitem", { name: "방 종료" }));
-  expect(onRoomLifecycle).toHaveBeenLastCalledWith(room, "close");
-  fireEvent.click(screen.getByRole("menuitem", { name: "방 삭제" }));
-  expect(onRoomLifecycle).toHaveBeenLastCalledWith(room, "delete");
-});
-
-it("offers no lifecycle action to a guest or without a controller", () => {
-  renderRail({ guestLocked: true });
-  expect(screen.queryByRole("menuitem", { name: "방 삭제" })).toBeNull();
-
-  cleanup();
-  renderRail({ onRoomLifecycle: undefined });
-  expect(screen.queryByRole("menuitem", { name: "방 삭제" })).toBeNull();
 });

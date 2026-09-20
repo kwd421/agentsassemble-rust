@@ -4,11 +4,6 @@ import CreateChannelModal from "../views/components/CreateChannelModal";
 import CustomChannelView from "../views/CustomChannelView";
 import { isCustomChannelId } from "../lib/customChannelId";
 import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
-import ArchivedRoomsDialog from "../views/components/room/ArchivedRoomsDialog";
-import RoomLifecycleConfirm, {
-  type RoomLifecycleAction,
-  type RoomLifecycleTarget,
-} from "../views/components/room/RoomLifecycleConfirm";
 import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import {
   Bell,
@@ -42,9 +37,6 @@ const FriendsView = lazy(() => import("../views/FriendsView"));
 
 export default function AppView({ controller }: { controller: AppController }) {
   const [friendsOpen, setFriendsOpen] = useState(false);
-  const [lifecycleRequest, setLifecycleRequest] =
-    useState<{ target: RoomLifecycleTarget; action: RoomLifecycleAction } | null>(null);
-  const [archivedRoomsOpen, setArchivedRoomsOpen] = useState(false);
   const [sideChatScope, setSideChatScope] = useState("");
   const [createChannelScope, setCreateChannelScope] = useState("");
   const [messageAttachmentReadOwner] = useState(
@@ -72,7 +64,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
-    roomLifecycle, pairedRoomLifecycle, roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
+    roomLifecycle, roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
     saveAgentAvatar, scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate, sendAgentControl,
     sendParticipantMute, sendParticipantRemove, serverProductSurface, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setLeaveRoomTargetId,
@@ -108,8 +100,6 @@ export default function AppView({ controller }: { controller: AppController }) {
       });
     }} />;
   const hasRoom = Boolean(activeRoom.meetingId);
-  // The host owns room lifecycle; a paired operator device carries its own controller.
-  const lifecycleController = roomLifecycle.enabled ? roomLifecycle : pairedRoomLifecycle.enabled ? pairedRoomLifecycle : null;
   const canOpenSideChat = hasRoom && !guestExpired && !activeRoomDisconnected && !adminOpen && !friendsOpen;
   const sideChatOpen = canOpenSideChat && sideChatScope === channelScope;
   const roomInfoOpen = !mobileViewport && hasRoom && showMembers && membersOpen && !sideChatOpen;
@@ -161,10 +151,6 @@ export default function AppView({ controller }: { controller: AppController }) {
         onOpenAdmin={!guestLocked && isDesktopWebview() ? () => { setAdminOpen(true); setFriendsOpen(false); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onOpenFriends={roomLifecycle.enabled ? () => { setAdminOpen(false); setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onAddRoom={addFreshRoom}
-        onRoomLifecycle={lifecycleController ? (room, action) => {
-          setRoomMenu(null);
-          setLifecycleRequest({ target: { roomId: room.meetingId, roomUid: room.roomUid, label: room.label }, action });
-        } : undefined}
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
         readReady={roomReadReady}
@@ -395,10 +381,9 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
               <h1 id="empty-room-title">열려 있는 방이 없어요</h1>
-              <p>새 방을 만들거나 방 관리에서 보관한 방을 복원할 수 있어요.</p>
+              <p>새 방을 만들어 대화를 시작할 수 있어요.</p>
               <div className="flex flex-wrap gap-3" style={{ justifyContent: "center", marginTop: 20 }}>
                 {!guestLocked && <button type="button" className="dc-agent-create-primary" onClick={addFreshRoom}>새 방 만들기</button>}
-                {lifecycleController && <button type="button" className="dc-agent-create-secondary" onClick={() => setArchivedRoomsOpen(true)}>방 관리</button>}
               </div>
             </section>
           ) : channel === "lobby" ? (
@@ -511,11 +496,6 @@ export default function AppView({ controller }: { controller: AppController }) {
           if (currentChannelScope.current !== channelScope) return;
           setFriendsOpen(false); goToChannel(created.id);
         }} />}
-      {lifecycleController && lifecycleRequest && <RoomLifecycleConfirm
-        target={lifecycleRequest.target} action={lifecycleRequest.action}
-        controller={lifecycleController} onClose={() => setLifecycleRequest(null)} />}
-      {lifecycleController && archivedRoomsOpen && <ArchivedRoomsDialog
-        controller={lifecycleController} onClose={() => setArchivedRoomsOpen(false)} />}
 
       {/* Right panel */}
       {roomInfoOpen && (

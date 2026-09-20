@@ -1,6 +1,5 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Activity, Archive, Check, DoorClosed, LogOut, Plus, Settings, Trash2, UserPlus, Users } from "lucide-react";
-import type { RoomLifecycleAction } from "./room/RoomLifecycleConfirm";
+import { Activity, Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
 import {
   completeRoomAppearance,
   roomAppearanceStyle,
@@ -36,7 +35,7 @@ export default function RoomRail({
   mobileViewport = false,
   inert = false,
   onSelectRoom,
-  onOpenAdmin, onAddRoom, onRoomLifecycle, onOpenFriends, friendsOpen = false,
+  onOpenAdmin, onAddRoom, onOpenFriends, friendsOpen = false,
   onOpenRoomMenu,
   onMarkRoomRead,
   readReady = false,
@@ -59,7 +58,6 @@ export default function RoomRail({
   inert?: boolean;
   onSelectRoom: (roomId: string) => void;
   onAddRoom: () => void;
-  onRoomLifecycle?: (room: RoomDockItem, action: RoomLifecycleAction) => void;
   onOpenAdmin?: () => void;
   onOpenFriends?: () => void;
   friendsOpen?: boolean;
@@ -159,7 +157,7 @@ export default function RoomRail({
           {(!guestLocked || (canManageActiveRoom && menuRoom.id === activeRoom.id)) && !roomIsDisconnected(menuRoom) && (
             <button type="button" role="menuitem" onClick={() => onOpenRoomSettings(menuRoom.id)}>
               <Settings size={16} />
-              서버 설정
+              방 설정
             </button>
           )}
           {guestLocked && (
@@ -168,23 +166,6 @@ export default function RoomRail({
               <button type="button" role="menuitem" className="danger" onClick={() => onLeaveRoom(menuRoom.id)}>
                 <LogOut size={16} />
                 서버 나가기
-              </button>
-            </>
-          )}
-          {onRoomLifecycle && !guestLocked && !roomIsDisconnected(menuRoom) && (
-            <>
-              <span className="dc-context-separator" aria-hidden />
-              <button type="button" role="menuitem" onClick={() => onRoomLifecycle(menuRoom, "archive")}>
-                <Archive size={16} />
-                방 보관
-              </button>
-              <button type="button" role="menuitem" className="danger" onClick={() => onRoomLifecycle(menuRoom, "close")}>
-                <DoorClosed size={16} />
-                방 종료
-              </button>
-              <button type="button" role="menuitem" className="danger" onClick={() => onRoomLifecycle(menuRoom, "delete")}>
-                <Trash2 size={16} />
-                방 삭제
               </button>
             </>
           )}

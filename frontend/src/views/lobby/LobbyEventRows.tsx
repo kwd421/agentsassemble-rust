@@ -334,6 +334,7 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
       className="dc-system-divider px-4"
       data-room-event-id={event.id}
       role="status"
+      style={{ position: "relative" }}
       onMouseEnter={() => setOpen(true)}
       onMouseLeave={() => setOpen(false)}
       onFocus={() => setOpen(true)}
@@ -367,19 +368,32 @@ export function LobbySkipRow({ event }: { event: LobbyEvent }) {
         <span>차례 넘김{!open && skips.length > 1 ? ` ${skips.length}` : ""}</span>
       </span>
       {open && skips.length > 0 && (
-        <span style={{ display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 10px", marginTop: 4 }}>
-          {skips.map((skip, index) => (
-            <span key={`detail:${skip.participant_id}:${index}`}
-              style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
-              <span style={{ width: 16, height: 16, borderRadius: "50%", overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
-                {skip.avatar_image_url
-                  ? <img src={skip.avatar_image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
-                  : <ProviderLogo providerKind={skip.provider_kind} size={16} fallback={<Bot size={10} />} />}
+        // Out of flow, so expanding never moves the messages around it. It opens
+        // upward because a skip is usually the newest row, with the list's edge
+        // right below it.
+        <span style={{
+          position: "absolute", left: 0, right: 0, bottom: "calc(100% + 2px)", maxWidth: "none",
+          display: "flex", justifyContent: "center", zIndex: 5, pointerEvents: "none",
+        }}>
+          <span style={{
+            display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 10px",
+            maxWidth: "min(720px, 80%)", padding: "6px 10px", borderRadius: 8,
+            background: "var(--color-panel)", border: "1px solid var(--color-panel-border)",
+            boxShadow: "0 8px 24px rgb(0 0 0 / 38%)",
+          }}>
+            {skips.map((skip, index) => (
+              <span key={`detail:${skip.participant_id}:${index}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 16, height: 16, borderRadius: "50%", overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                  {skip.avatar_image_url
+                    ? <img src={skip.avatar_image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <ProviderLogo providerKind={skip.provider_kind} size={16} fallback={<Bot size={10} />} />}
+                </span>
+                <span>{skip.name}</span>
+                <span style={{ opacity: 0.7 }}>{skip.reason}</span>
               </span>
-              <span>{skip.name}</span>
-              <span style={{ opacity: 0.7 }}>{skip.reason}</span>
-            </span>
-          ))}
+            ))}
+          </span>
         </span>
       )}
     </div>

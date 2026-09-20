@@ -1,30 +1,134 @@
-.dc-archived-rooms {
-  display: grid;
-  gap: 10px;
-}
-
-.dc-archived-rooms-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.dc-archived-room-rows {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.dc-archived-room-row {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  padding: 10px 12px;
-  border: 1px solid var(--color-panel-border);
-  border-radius: 10px;
+.dc-room-delete {
+  width: min(440px, calc(100vw - 32px));
+  max-height: calc(100dvh - 32px);
+  overflow-y: auto;
+  margin: auto;
+  padding: 24px;
+  color: var(--color-text-primary);
   background: var(--color-panel);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 14px;
+  box-shadow: 0 24px 70px rgb(0 0 0 / 42%);
+}
+
+.dc-room-delete h2 {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 900;
+}
+
+.dc-room-delete p {
+  margin: 12px 0 0;
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.dc-room-delete p strong {
+  color: var(--color-text-primary);
+  font-weight: 800;
+}
+
+.dc-room-delete-field {
+  display: grid;
+  gap: 7px;
+  margin-top: 18px;
+}
+
+.dc-room-delete-field span {
+  color: var(--color-text-muted);
+  font-size: 11px;
+  font-weight: 850;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.dc-room-delete-field input {
+  width: 100%;
+  min-height: 42px;
+  padding: 9px 11px;
+  color: var(--color-text-primary);
+  background: var(--color-input);
+  border: 1px solid var(--color-panel-border);
+  border-radius: 8px;
+  font: inherit;
+}
+
+.dc-room-delete-note {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.dc-room-delete-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 9px;
+  margin-top: 22px;
+}
+
+.dc-room-delete-cancel {
+  padding: 9px 14px;
+  color: var(--color-text-primary);
+  background: none;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dc-room-delete-cancel:hover {
+  text-decoration: underline;
+}
+
+.dc-room-delete-confirm {
+  padding: 9px 14px;
+  color: white;
+  background: #d83c3e;
+  border: 0;
+  border-radius: 8px;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 850;
+  cursor: pointer;
+}
+
+.dc-room-delete-confirm:hover:not(:disabled) {
+  background: #a12d2f;
+}
+
+.dc-room-delete-confirm:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* The settings rail keeps its one destructive entry apart from the sections. */
+.dc-settings-nav-danger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  padding: 0 8px;
+  color: #f1787a;
+  background: none;
+  border: 0;
+  border-radius: 6px;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+  cursor: pointer;
+}
+
+.dc-settings-nav-danger:hover {
+  color: #fff;
+  background: #d83c3e;
+}
+
+.dc-settings-nav-separator {
+  height: 1px;
+  margin: 10px 8px 0;
+  background: rgb(255 255 255 / 8%);
 }
