@@ -13,6 +13,10 @@ use tokio::sync::{Semaphore, oneshot};
 
 #[path = "codex_executable.rs"]
 mod codex_executable;
+#[cfg(target_os = "macos")]
+#[path = "macho_host.rs"]
+mod macho_host;
+
 #[path = "cursor_executable.rs"]
 mod cursor_executable;
 #[cfg(unix)]
@@ -306,6 +310,16 @@ pub(crate) async fn bind_executable_with_children(
     let mut executable = bind_executable(path, expected_identity).await?;
     executable.allows_child_processes = true;
     Ok(executable)
+}
+
+pub(crate) async fn bind_sdk_host(
+    path: String,
+    expected_identity: String,
+) -> Result<BoundExecutable, FilesystemFailure> {
+    #[cfg(target_os = "macos")]
+    return run_bounded(move || macho_host::bind(Path::new(&path), &expected_identity)).await;
+    #[cfg(not(target_os = "macos"))]
+    bind_executable_with_children(path, expected_identity).await
 }
 
 async fn run_bounded<T, F>(operation: F) -> Result<T, FilesystemFailure>

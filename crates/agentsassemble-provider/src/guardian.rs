@@ -920,7 +920,7 @@ fn terminate_runtime(
     lease_path: &Path,
     lease_token: &str,
     fork_policy: ProviderForkPolicy,
-    #[cfg(target_os = "macos")] provider_history: Option<&mut MacProviderHistory>,
+    #[cfg(target_os = "macos")] mut provider_history: Option<&mut MacProviderHistory>,
 ) -> Result<(), GuardianCleanupFailure> {
     #[cfg(not(target_os = "macos"))]
     let _ = fork_policy;
@@ -934,11 +934,24 @@ fn terminate_runtime(
         .is_none();
     #[cfg(target_os = "macos")]
     if !provider_was_running {
-        let _ = terminate_anchor(anchor, raw_pid);
-        return Err(GuardianCleanupFailure::LeaderExited);
+        // The watcher was installed before the launcher continued. A complete
+        // no-fork history proves that an exited leader left no descendants.
+        // AllowInGroup cannot relax this proof after the leader has exited.
+        if provider_history
+            .as_mut()
+            .is_none_or(|history| history.finish(ProviderForkPolicy::Deny).is_err())
+        {
+            let _ = terminate_anchor(anchor, raw_pid);
+            return Err(GuardianCleanupFailure::LeaderExited);
+        }
     }
+    // On macOS either the live tree or the no-fork history above owns custody.
+    #[cfg(target_os = "macos")]
+    let provider_lineage_proven = true;
+    #[cfg(not(target_os = "macos"))]
+    let provider_lineage_proven = provider_was_running;
     let captured =
-        CapturedRuntimeProcesses::freeze(lease_path, lease_token, pid, provider_was_running)
+        CapturedRuntimeProcesses::freeze(lease_path, lease_token, pid, provider_lineage_proven)
             .map_err(|_| GuardianCleanupFailure::RuntimeCapture);
     let anchor_result =
         terminate_anchor(anchor, raw_pid).map_err(|_| GuardianCleanupFailure::AnchorTermination);
@@ -955,10 +968,12 @@ fn terminate_runtime(
         .and_then(|()| {
             let _ = provider.wait();
             #[cfg(target_os = "macos")]
-            provider_history
-                .ok_or(GuardianCleanupFailure::ProviderHistory)?
-                .finish(fork_policy)
-                .map_err(|_| GuardianCleanupFailure::ProviderHistory)?;
+            if provider_was_running {
+                provider_history
+                    .ok_or(GuardianCleanupFailure::ProviderHistory)?
+                    .finish(fork_policy)
+                    .map_err(|_| GuardianCleanupFailure::ProviderHistory)?;
+            }
             captured
                 .confirm_gone(lease_path, lease_token, Duration::from_secs(4))
                 .map_err(|_| GuardianCleanupFailure::AbsenceConfirmation)

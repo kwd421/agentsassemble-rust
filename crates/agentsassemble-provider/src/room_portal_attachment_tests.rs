@@ -18,6 +18,55 @@ const THIRD_ATTACHMENT_ID: &str = "ma_33333333333333333333333333333333";
 type RoomClient = rmcp::service::RunningService<rmcp::RoleClient, ()>;
 
 #[tokio::test]
+async fn historical_attachment_denial_preserves_same_turn_publication() {
+    let portal = RoomPortal::create()
+        .await
+        .unwrap_or_else(|error| panic!("create historical attachment portal: {error}"));
+    portal
+        .begin_observation(RoomObservationStart {
+            session_id: "agent-1",
+            turn_id: "turn-history",
+            input_up_to_seq: 119,
+            durable_turn_generation: 4,
+            execution_id: "00000000-0000-4000-8000-000000000004",
+            room_view: &format!(
+                "Room: General\n#101 Human: Attachment `{ATTACHMENT_ID}`\n#119 Human: Continue"
+            ),
+            attachment_ids: &[],
+            attachment_ingress: None,
+            allowed_agent_ids: &[],
+            tabletop_tools: false,
+            tool_ingress: None,
+        })
+        .unwrap_or_else(|error| panic!("begin historical observation: {error}"));
+    let client = Arc::new(connect(&portal).await);
+    let view = call_tool(client.clone(), "read_discussion", json!({})).await;
+    assert_ne!(view.is_error, Some(true));
+    assert!(view.content.iter().any(|block| {
+        block
+            .as_text()
+            .is_some_and(|text| text.text.contains(ATTACHMENT_ID))
+    }));
+    let denied = call_tool(
+        client.clone(),
+        "read_attachment",
+        json!({"attachment_id": ATTACHMENT_ID}),
+    )
+    .await;
+    assert_eq!(denied.is_error, Some(true));
+    let published = call_tool(
+        client.clone(),
+        "publish_message",
+        json!({"content": "Historical attachment unavailable; continuing current request."}),
+    )
+    .await;
+    assert_ne!(published.is_error, Some(true));
+    let client =
+        Arc::try_unwrap(client).unwrap_or_else(|_| panic!("release historical attachment client"));
+    let _ = client.cancel().await;
+}
+
+#[tokio::test]
 async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
     let portal = RoomPortal::create()
         .await

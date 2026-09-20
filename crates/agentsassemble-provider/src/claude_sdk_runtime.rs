@@ -17,8 +17,7 @@ use crate::{
     claude_sdk_client::{ClaudeSdkAttachment, ClaudeSdkClient, ClaudeSdkTurn},
     driver::{DriverError, ProviderTurnRequest},
     filesystem::{
-        BoundExecutable, PrivateExecutable, bind_executable, bind_executable_with_children,
-        resolve_executable,
+        BoundExecutable, PrivateExecutable, bind_executable, bind_sdk_host, resolve_executable,
     },
     launch_cleanup,
     launch_error::DriverLaunchError,
@@ -289,7 +288,7 @@ async fn bind_runtime(
         .await
         .map_err(|_| DriverLaunchError::safe(node_error()))?
         .ok_or_else(|| DriverLaunchError::safe(node_error()))?;
-    let node = bind_executable_with_children(node_path, node_identity)
+    let node = bind_sdk_host(node_path, node_identity)
         .await
         .map_err(|_| DriverLaunchError::safe(node_error()))?;
     let sdk_bundle = PrivateClaudeSdkBundle::stage()
@@ -398,6 +397,9 @@ const fn stop_error() -> DriverError {
 const fn sdk_error() -> DriverError {
     DriverError::new("provider_sdk_missing", "Claude Agent SDK is unavailable.")
 }
+
+#[cfg(all(test, unix))]
+use crate::filesystem::bind_executable_with_children;
 
 #[cfg(all(test, unix))]
 #[path = "claude_sdk_runtime_tests.rs"]

@@ -45,6 +45,7 @@ nix = { version = "0.31.3", default-features = false }
 rustix.workspace = true
 
 [target.'cfg(target_os = "macos")'.dependencies]
+goblin = "0.10.7"
 nix = { version = "0.31.3", default-features = false, features = ["event"] }
 security-framework.workspace = true
 security-framework-sys.workspace = true

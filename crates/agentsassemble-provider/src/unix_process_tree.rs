@@ -37,11 +37,11 @@ impl CapturedRuntimeProcesses {
         lease_path: &Path,
         token: &str,
         anchored_group: Pid,
-        provider_was_running: bool,
+        provider_lineage_proven: bool,
     ) -> io::Result<Self> {
         rustix::process::kill_process_group(anchored_group, Signal::STOP)
             .map_err(|error| io::Error::other(format!("stop anchor group: {error}")))?;
-        capture_escaped(lease_path, token, anchored_group, provider_was_running)
+        capture_escaped(lease_path, token, anchored_group, provider_lineage_proven)
             .map_err(|error| io::Error::other(format!("capture escaped runtime: {error}")))
     }
 
@@ -126,7 +126,7 @@ fn capture_escaped(
     lease_path: &Path,
     token: &str,
     anchored_group: Pid,
-    _provider_was_running: bool,
+    _provider_lineage_proven: bool,
 ) -> io::Result<CapturedRuntimeProcesses> {
     use std::collections::HashSet;
 
@@ -216,7 +216,7 @@ fn capture_escaped(
     lease_path: &Path,
     token: &str,
     anchored_group: Pid,
-    _provider_was_running: bool,
+    _provider_lineage_proven: bool,
 ) -> io::Result<CapturedRuntimeProcesses> {
     refuse_unstable_escaped_processes(lease_path, token, anchored_group, true)?;
     Ok(CapturedRuntimeProcesses {
@@ -230,9 +230,9 @@ fn capture_escaped(
     lease_path: &Path,
     token: &str,
     anchored_group: Pid,
-    provider_was_running: bool,
+    provider_lineage_proven: bool,
 ) -> io::Result<CapturedRuntimeProcesses> {
-    if !provider_was_running {
+    if !provider_lineage_proven {
         return Err(io::Error::other(
             "provider exited before macOS descendant custody could be proven",
         ));
@@ -548,7 +548,7 @@ fn capture_escaped(
     _lease_path: &Path,
     _token: &str,
     _anchored_group: Pid,
-    _provider_was_running: bool,
+    _provider_lineage_proven: bool,
 ) -> io::Result<CapturedRuntimeProcesses> {
     Err(io::Error::new(
         io::ErrorKind::Unsupported,

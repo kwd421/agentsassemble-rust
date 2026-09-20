@@ -467,10 +467,10 @@ mod tests {
         use std::path::Path;
 
         assert!(super::project_local_bin(Path::new(
-            r"C:\app\node_modules\.bin"
+            "C:/app/node_modules/.bin"
         )));
-        assert!(!super::project_local_bin(Path::new(r"C:\app\.bin")));
-        assert!(!super::project_local_bin(Path::new(r"C:\app\node_modules")));
+        assert!(!super::project_local_bin(Path::new("C:/app/.bin")));
+        assert!(!super::project_local_bin(Path::new("C:/app/node_modules")));
     }
 
     #[test]
