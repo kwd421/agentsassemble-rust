@@ -94,6 +94,64 @@
   cursor: default;
 }
 
+.dc-invite-status {
+  margin: 10px 0 0;
+  padding: 9px 12px;
+  color: #a7f3c4;
+  background: color-mix(in srgb, #23a559 14%, transparent);
+  border: 1px solid color-mix(in srgb, #23a559 34%, transparent);
+  border-radius: 9px;
+  font-size: 12px;
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.dc-invite-status[data-shown="false"] {
+  display: none;
+}
+
+.dc-invite-tabs {
+  display: flex;
+  gap: 4px;
+  margin-top: 16px;
+  padding-bottom: 2px;
+  border-bottom: 1px solid var(--color-panel-border);
+}
+
+.dc-invite-tabs button {
+  position: relative;
+  min-height: 40px;
+  padding: 0 14px;
+  color: var(--color-text-muted);
+  background: none;
+  border: 0;
+  border-radius: 8px 8px 0 0;
+  font: inherit;
+  font-size: 13px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.dc-invite-tabs button:hover {
+  color: var(--color-text-primary);
+  background: color-mix(in srgb, var(--color-panel-soft) 70%, transparent);
+}
+
+.dc-invite-tabs button[data-active="true"] {
+  color: var(--color-text-primary);
+}
+
+.dc-invite-tabs button[data-active="true"]::after {
+  position: absolute;
+  bottom: -3px;
+  left: 10px;
+  right: 10px;
+  height: 2px;
+  background: #5865f2;
+  border-radius: 2px;
+  content: "";
+}
+
 .dc-invite-options {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

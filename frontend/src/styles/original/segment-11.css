@@ -302,7 +302,8 @@
   align-items: flex-start;
 }
 
-.dc-settings-field .dc-radio-stack input[type="radio"] {
+.dc-settings-field .dc-radio-stack input[type="radio"],
+.dc-settings-field .dc-radio-stack input[type="checkbox"] {
   margin-top: 3px;
   flex-shrink: 0;
 }

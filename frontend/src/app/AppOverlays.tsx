@@ -30,11 +30,13 @@ export default function AppOverlays({ controller, companionInvites }: { controll
     operatorPairingPending, operatorPairingState,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
-    roomSettings, roomSocket,
+    roomLifecycle, pairedRoomLifecycle, roomSettings, roomSocket,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
     stopInviteTunnel, updateRoom,
   } = controller;
+  // Archived and closed rooms never reach the rail, so room settings carries the list.
+  const lifecycleController = roomLifecycle.enabled ? roomLifecycle : pairedRoomLifecycle.enabled ? pairedRoomLifecycle : null;
 
   return createPortal(
     <div data-app-overlays style={{ position: "relative", zIndex: 220 }}>
@@ -98,6 +100,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
               roomSettings.orderedExcludePreviousSpeakerFor(settingsModalRoom)
             }
             canInvite={!guestLocked}
+            lifecycleController={lifecycleController}
             onClose={() => setSettingsModal(null)}
             onInvite={() => {
               setSettingsModal(null);

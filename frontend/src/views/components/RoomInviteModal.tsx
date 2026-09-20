@@ -15,6 +15,8 @@ import SavedFriendInvitePicker from "./SavedFriendInvitePicker";
 
 type PendingPublicAction = { kind: "human"; options: HumanInviteOptions };
 
+type InviteTabId = "people" | "ai" | "device";
+
 function humanInviteStatus(invite: HumanInvitePresentation) {
   if (invite.revocation === "dead") return "폐기됨";
   if (invite.revocation === "in_flight") return "폐기 중";
@@ -81,6 +83,7 @@ export default function RoomInviteModal({
     return () => { dialog?.close(); if (opener instanceof HTMLElement && opener.isConnected) opener.focus(); };
   }, [opener]);
   const [humanMaxUses, setHumanMaxUses] = useState(1);
+  const [tab, setTab] = useState<InviteTabId>("people");
   const [friendDisplayName, setFriendDisplayName] = useState<string>();
   const [humanTtlSeconds, setHumanTtlSeconds] = useState(86400);
   const [pendingPublicAction, setPendingPublicAction] =
@@ -110,6 +113,13 @@ export default function RoomInviteModal({
     }
     setPendingPublicAction(action);
   }
+
+  const canPairDevices = Boolean(onCreatePairing && onCopyPairing && onRevokePairing);
+  const tabs: Array<{ id: InviteTabId; label: string }> = [
+    { id: "people", label: "사람" },
+    ...(attendeeInvites || connectorInvites ? [{ id: "ai" as const, label: "AI" }] : []),
+    ...(canPairDevices ? [{ id: "device" as const, label: "내 기기" }] : []),
+  ];
 
   function confirmPublicAction() {
     const action = pendingPublicAction;
@@ -148,6 +158,11 @@ export default function RoomInviteModal({
             <X size={18} />
           </button>
         </header>
+
+        {/* Results belong next to the header: the panel below scrolls away from them. */}
+        <p className="dc-invite-status" role="status" aria-live="polite" data-shown={Boolean(copyStatus)}>
+          {copyStatus}
+        </p>
 
         <section
           className="dc-invite-hosting"
@@ -218,8 +233,30 @@ export default function RoomInviteModal({
           </div>
         </section>
 
-        <div className="dc-invite-primary-grid">
-          <section className="dc-invite-card" aria-labelledby="human-invite-heading">
+        <div className="dc-invite-tabs" role="tablist" aria-label="초대 종류">
+          {tabs.map((entry) => (
+            <button
+              key={entry.id}
+              type="button"
+              role="tab"
+              id={`invite-tab-${entry.id}`}
+              aria-selected={tab === entry.id}
+              aria-controls={`invite-panel-${entry.id}`}
+              data-active={tab === entry.id}
+              onClick={() => setTab(entry.id)}
+            >
+              {entry.label}
+            </button>
+          ))}
+        </div>
+
+        <div
+          className="dc-invite-primary-grid"
+          role="tabpanel"
+          id={`invite-panel-${tab}`}
+          aria-labelledby={`invite-tab-${tab}`}
+        >
+          {tab === "people" && <section className="dc-invite-card" aria-labelledby="human-invite-heading">
             <div>
               <h3 id="human-invite-heading">사람 초대</h3>
               <p>
@@ -340,12 +377,12 @@ export default function RoomInviteModal({
                 </div>
               </div>
             )}
-          </section>
+          </section>}
 
-          {attendeeInvites && <AttendeeFriendInviteCard directory={friendsDirectory} controls={attendeeInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
-          {connectorInvites && <ConnectorInviteCard controls={connectorInvites} localOnly={!publicAccessRunning}
+          {tab === "ai" && attendeeInvites && <AttendeeFriendInviteCard directory={friendsDirectory} controls={attendeeInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
+          {tab === "ai" && connectorInvites && <ConnectorInviteCard controls={connectorInvites} localOnly={!publicAccessRunning}
             disabled={publicAccessBusy || (!publicAccessRunning && !tunnelStatus?.local_url)} />}
-          {onCreatePairing && onCopyPairing && onRevokePairing && (
+          {tab === "device" && onCreatePairing && onCopyPairing && onRevokePairing && (
             <section className="dc-invite-card" aria-labelledby="operator-pairing-heading">
               <div>
                 <h3 id="operator-pairing-heading">내 기기 연결</h3>
@@ -392,11 +429,10 @@ export default function RoomInviteModal({
           )}
         </div>
 
-        <p className="mt-3 text-[12px] text-text-muted preserve-words" role="status">
-          {copyStatus ||
-            (readOnlyInvite
-              ? "이 방의 사람 초대는 읽기 전용 권한으로 발급됩니다."
-              : "초대 링크는 참가할 사람이나 AI 대화에만 전달해 주세요.")}
+        <p className="mt-3 text-[12px] text-text-muted preserve-words">
+          {readOnlyInvite
+            ? "이 방의 사람 초대는 읽기 전용 권한으로 발급됩니다."
+            : "초대 링크는 참가할 사람이나 AI 대화에만 전달해 주세요."}
         </p>
         {pendingPublicAction && (
           <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>

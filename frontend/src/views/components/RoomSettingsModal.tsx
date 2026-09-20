@@ -12,6 +12,8 @@ import {
   type RoomAppearance,
 } from "../../lib/roomAppearance";
 import type { RoomDockItem } from "../../lib/roomDockModel";
+import ArchivedRoomList from "./room/ArchivedRoomList";
+import type { RoomLifecycleController } from "./room/RoomLifecycleConfirm";
 import RoomSettingTextInput from "./RoomSettingTextInput";
 
 const CHANNEL_NOTIFICATION_LABELS: Array<{
@@ -29,7 +31,8 @@ type RoomSettingsSectionId =
   | "settings-appearance"
   | "settings-channels"
   | "settings-notify"
-  | "settings-invite";
+  | "settings-invite"
+  | "settings-rooms";
 
 export default function RoomSettingsModal({
   room,
@@ -47,6 +50,7 @@ export default function RoomSettingsModal({
   toolMode,
   orderedExcludePreviousSpeaker,
   canInvite,
+  lifecycleController,
   onClose,
   onInvite,
   onRoomChange,
@@ -74,6 +78,7 @@ export default function RoomSettingsModal({
   toolMode: RoomToolMode | null;
   orderedExcludePreviousSpeaker: boolean | null;
   canInvite: boolean;
+  lifecycleController?: RoomLifecycleController | null;
   onClose: () => void;
   onInvite: () => void;
   onRoomChange: (updates: Partial<Pick<RoomDockItem, "label" | "topic" | "shortLabel">>) => void;
@@ -189,6 +194,7 @@ export default function RoomSettingsModal({
           <a href="#settings-channels" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널</a>
           <a href="#settings-notify" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>알림</a>
           <a href="#settings-invite" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>초대</a>
+          {lifecycleController && <a href="#settings-rooms" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>방 관리</a>}
         </aside>
         <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
           <header className="dc-settings-titlebar" style={{ flexShrink: 0, padding: mobileViewport ? "20px 24px 0" : "54px 56px 0" }}>
@@ -269,19 +275,23 @@ export default function RoomSettingsModal({
                 </label>
               </div>
               {conversationMode === "ordered" && (
-                <label className="mt-3 flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={orderedExcludePreviousSpeaker === true}
-                    disabled={!routingSettingsReady}
-                    onChange={(event) =>
-                      onOrderedExcludePreviousSpeakerChange(event.target.checked)
-                    }
-                  />
-                  <span className="preserve-words">
-                    직전 발언자 연속 선택 방지 — 다른 선택 가능한 에이전트가 있으면 직전 발언자를 다음 일반 선택 후보에서 제외합니다. @멘션은 이 제한보다 우선합니다.
-                  </span>
-                </label>
+                // The row sits in a radio stack so `.dc-settings-section label`'s grid does not
+                // stretch the box across the column; the stack's own rule lays the row out.
+                <div className="dc-radio-stack" style={{ marginTop: 12 }}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={orderedExcludePreviousSpeaker === true}
+                      disabled={!routingSettingsReady}
+                      onChange={(event) =>
+                        onOrderedExcludePreviousSpeakerChange(event.target.checked)
+                      }
+                    />
+                    <span className="preserve-words">
+                      직전 발언자 연속 선택 방지 — 다른 선택 가능한 에이전트가 있으면 직전 발언자를 다음 일반 선택 후보에서 제외합니다. @멘션은 이 제한보다 우선합니다.
+                    </span>
+                  </label>
+                </div>
               )}
             </div>
             <div className="dc-settings-field">
@@ -500,6 +510,12 @@ export default function RoomSettingsModal({
               </button>
             )}
           </section>
+          {lifecycleController && (
+            <section id="settings-rooms" className="dc-settings-section">
+              <h3>방 관리</h3>
+              <ArchivedRoomList controller={lifecycleController} />
+            </section>
+          )}
           </div>
         </div>
       </dialog>
