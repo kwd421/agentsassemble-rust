@@ -164,3 +164,30 @@ test("native cancellation rejects a racing owner answer", async () => {
     requests.close();
   }
 });
+
+test("permission approval describes the actual native command or URL and returns that input", async () => {
+  const cases = [
+    ["Bash", {command:"cat ./notes.txt"}, "cat ./notes.txt"],
+    ["Bash", {command:"printf updated > ./notes.txt"}, "printf updated > ./notes.txt"],
+    ["WebFetch", {url:"https://example.test/first"}, "https://example.test/first"],
+    ["WebFetch", {url:"https://example.test/second"}, "https://example.test/second"],
+    ["Write", {file_path:"/private/work/notes.txt"}, "notes.txt"],
+  ];
+  for (const [toolName, input, expected] of cases) {
+    const events = [];
+    const delivery = new NativeDelivery();
+    const requests = new OwnerRequests({id:"session", active:{turnId:"turn-1"}}, delivery,
+      async (event) => events.push(event), (error) => { throw error; });
+    const response = requests.canUseTool(toolName, input, {requestId:"native-1", signal:new AbortController().signal});
+    assert.equal(events[0].request.description, expected);
+    assert.equal(events[0].request.title, `Claude requests ${toolName} permission`);
+    assert.equal(JSON.stringify(events[0]).includes('"updatedInput"'), false);
+    const id = events[0].request.provider_request_id;
+    requests.accept({type:"request_answer", request_id:id, resolution:{response_kind:"option", option_id:"allow-once"}});
+    assert.deepEqual(await response, {behavior:"allow", updatedInput:input});
+    delivery.written({type:"control_response", response:{subtype:"success", request_id:"native-1"}});
+    requests.accept({type:"request_complete", request_id:id});
+    await requests.finishTurn();
+    requests.close();
+  }
+});

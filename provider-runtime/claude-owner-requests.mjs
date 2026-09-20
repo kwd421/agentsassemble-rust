@@ -122,8 +122,8 @@ function mapRequest(name, input) {
   }
   const request = {
     provider_request_id: randomUUID(), request_kind: "permission",
-    title: name === "ExitPlanMode" ? "Claude requests plan approval" : "Claude requests permission",
-    description: name === "ExitPlanMode" ? "Claude wants to leave plan mode and start work." : name,
+    title: name === "ExitPlanMode" ? "Claude requests plan approval" : `Claude requests ${name} permission`,
+    description: name === "ExitPlanMode" ? "Claude wants to leave plan mode and start work." : permissionDescription(name, input),
     timeout_seconds: 600,
     prompt: { response_kind: "option", options: [
       { id: "allow-once", label: "Allow once", kind: "allow_once", description: "" },
@@ -162,4 +162,15 @@ function mapRequest(name, input) {
     }));
     return { behavior: "allow", updatedInput: { ...input, answers } };
   } };
+}
+
+// The Rust ingress redacts and bounds this field before it becomes room-visible or durable.
+// Select the operation from the same native input returned to the SDK on approval.
+function permissionDescription(name, input) {
+  for (const key of ["command", "file_path", "url", "query"]) {
+    if (typeof input[key] !== "string" || !input[key].trim()) continue;
+    // A basename distinguishes file operations without sending an absolute local path.
+    return key === "file_path" ? (input[key].trim().split(/[\\/]/).filter(Boolean).at(-1) ?? "[local path]") : input[key];
+  }
+  return `Claude wants to use ${name}.`;
 }
