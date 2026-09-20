@@ -11701,3 +11701,30 @@ Artifact maintenance reports no maintenance required.
 The preexisting retained verification database is preserved; temporary probe copies
 and this run's workspace are disposable. No Windows run or overall product closure
 is claimed. The next action is unrestricted whole-repository Pro re-review.
+
+### Whole-repository review H1/M1 corrections (2026-09-20)
+
+The completed Pro review of dcaa42eb returns REVISE H1/M1. Claude's native
+permission owner now derives its displayed command, URL, query or safe filename
+from the same input that the SDK receives on approval; Rust redacts and bounds it
+before room publication. Node's installed-SDK delivery suite (15) covers distinct
+commands/URLs, file basename, native approval, denial/cancellation and exact
+delivery receipts. The Rust ingress redaction test passes. No real Claude
+permission request was triggered by this correction pass.
+
+The CLI installation check now routes `completed=true` through the existing
+completed state and catalog refresh, releasing the parent guard. An already
+installed response also releases the guard. An uncertain outcome still retains
+the guard until a successful recheck. Frontend component/parent regressions (8),
+whole frontend (914), build, architecture/source/19 policy gates, formatting,
+warning-denied workspace Clippy, signature verification and artifact check pass.
+Provider library full run passed 281/282; the unrelated pending HTTP cancellation
+test timed out under host load (load average around 4–6) and passed alone on
+immediate rerun. Do not count the first full run as green.
+
+Signed isolated 0.1.60 launches, creates a disposable guest/room, and opens the
+agent selection UI under direct app control; normal Quit leaves no owned processes.
+The isolated profile and cache were moved to Trash. This package operation did not
+produce a native Claude permission prompt or a real installer recovery; those
+specific UI outcomes remain unverified in the signed app. Windows execution is
+also unverified.

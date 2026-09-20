@@ -1,11 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { providerUpdateOperation, refreshLocalProviderCatalog } from "../../api/providerOperations";
+import { providerInstallOperation, providerUpdateOperation, refreshLocalProviderCatalog } from "../../api/providerOperations";
 import { ApiError } from "../../lib/apiErrors";
 import { codexProvider } from "./AgentCreateModal.testProviders";
 import ProviderSetupPanel from "./ProviderSetupPanel";
 
-vi.mock("../../api/providerOperations", () => ({ providerUpdateOperation: vi.fn(), refreshLocalProviderCatalog: vi.fn() }));
+vi.mock("../../api/providerOperations", () => ({ providerInstallOperation: vi.fn(), providerUpdateOperation: vi.fn(), refreshLocalProviderCatalog: vi.fn() }));
 vi.mock("../../lib/desktopBridge", () => ({ isDesktopWebview: () => true,
   requestDesktopHostProductSurface: vi.fn().mockResolvedValue(undefined), openProviderSetupHelp: vi.fn() }));
 vi.mock("./ProviderLogin", () => ({ default: () => null }));
@@ -44,4 +44,27 @@ it("rereads readiness after confirmed update success", async () => {
   await waitFor(() => expect(refreshLocalProviderCatalog).toHaveBeenCalledTimes(2));
   await screen.findByText("2.0.0 버전으로 업데이트했어요.");
   await screen.findByText("이 PC에서 사용할 준비가 됐어요.");
+});
+
+it("recovers an uncertain install through check and unlocks parent catalog refresh", async () => {
+  const missing = { ...ready, startable: false, available: false, install_supported: true,
+    discovery_error_code: "command_missing", discovery_status: "failed" } as const;
+  const installed = { ...ready, update_supported: false };
+  const installation = { provider_id: "codex", package: "@openai/codex", version: "1.0.0",
+    command: ["npm", "install", "@openai/codex@1.0.0"], completed: false };
+  vi.mocked(refreshLocalProviderCatalog).mockResolvedValueOnce(catalog(missing))
+    .mockResolvedValueOnce(catalog(installed));
+  vi.mocked(providerInstallOperation).mockResolvedValueOnce(installation)
+    .mockRejectedValueOnce(new ApiError(503, "설치 상태가 불확실해요.", "provider_install_cleanup_unconfirmed"))
+    .mockResolvedValueOnce({ ...installation, completed: true });
+  render(<ProviderSetupPanel providerId="codex" />);
+  fireEvent.click(await screen.findByRole("button", { name: "앱에서 설치하기" }));
+  fireEvent.click(await screen.findByRole("button", { name: "설치" }));
+  await screen.findByText(/설치가 끝났는지 상태를 다시 확인해 주세요/);
+  expect((screen.getByRole("button", { name: "설정 후 상태 다시 확인" }) as HTMLButtonElement).disabled).toBe(true);
+  fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
+  await screen.findByText("이 PC에서 사용할 준비가 됐어요.");
+  await waitFor(() => expect((screen.getByRole("button", { name: "설정 후 상태 다시 확인" }) as HTMLButtonElement).disabled).toBe(false));
+  expect(refreshLocalProviderCatalog).toHaveBeenCalledTimes(2);
+  expect(providerInstallOperation).toHaveBeenLastCalledWith("codex");
 });

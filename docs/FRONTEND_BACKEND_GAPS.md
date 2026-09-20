@@ -1,11 +1,20 @@
 # Frontend/backend exposure map
 
+2026-09-20 whole-source review M1: the provider install check can return a prior
+completed installation after the start response was lost. The existing installation
+row now enters its original completion state, releases the parent updating guard and
+refreshes local catalog readiness; `AlreadyInstalled` also releases that guard.
+No controls, layout, or unrelated frontend flow changed. The uncertain response
+continues to require explicit recheck. Parent/component regressions cover the
+held guard and recovered completion; signed 0.1.60 operated room/add-agent but did
+not exercise an actual installation or its recovered-result display.
+
 2026-09-20 explicit user correction: the existing member-panel toggle always shows
 the people icon in both open and closed states. Remove the redundant room-info
 tab button above the right-panel content; retain the existing toggle, contents,
 layout and accessible section name. Header tests3 and production build pass;
 signed 0.1.58 verifies both toggle states and the absent redundant button.
-No other frontend change authorized.
+No other frontend change authorized beyond the reviewed installation-state correction above.
 
 2026-09-16 user-directed correction: provider requests move from a standalone
 header row/modal into the requesting agent message. No additional rail button or

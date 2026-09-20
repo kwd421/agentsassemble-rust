@@ -2,6 +2,19 @@
 
 ## Active work
 
+- 2026-09-20 whole-repository Pro answer for dcaa42eb is complete: REVISE H1/M1.
+  H1 Claude's approval showed only a tool name despite returning the original input;
+  M1 an install check that recovered `completed=true` reopened the offer and retained
+  the parent updating guard. Both are confirmed in the current owners. Corrections
+  preserve the existing request/installation layout. Affected bridge, Rust and
+  frontend tests plus architecture, build and Clippy checks pass. A provider full
+  test run passed 281/282; its one HTTP-cancellation timing failure passed alone
+  on rerun. Signed isolated 0.1.60 starts and its room/add-agent path was operated;
+  the exact approval/install-recovery UI paths were not exercised in the package.
+  Final bridge resource is rebuilt and matches source in the signed package;
+  inspect and push correction, submit the next
+  unrestricted whole-repository review, then stop after visible submission.
+
 - At 22:25 KST 2026-09-20, unrestricted whole-repository Pro re-review is posted
   in the existing in-app conversation for dcaa42ebc236513dc1aca3935d10080501b05092.
   Both complete source snapshots (2708 files), manifest, full prompt and active

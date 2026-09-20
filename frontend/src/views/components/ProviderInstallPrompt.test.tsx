@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { providerInstallOperation } from "../../api/providerOperations";
 import { ApiError } from "../../lib/apiErrors";
@@ -58,6 +58,25 @@ it("keeps the updating guard when an install result is uncertain", async () => {
 
   expect((await screen.findByRole("alert")).textContent).toContain("상태를 다시 확인해 주세요");
   expect(updating.mock.calls).toEqual([[true]]);
+  vi.mocked(providerInstallOperation).mockResolvedValueOnce({ ...offer, completed: true });
+  fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
+  expect(await screen.findByText("Claude Code CLI 2.1.271을 설치했어요.")).toBeTruthy();
+  expect(providerInstallOperation).toHaveBeenCalledTimes(3);
+  expect(providerInstallOperation).toHaveBeenLastCalledWith("claude");
+  expect(updating.mock.calls).toEqual([[true], [false]]);
+  expect(screen.queryByRole("button", { name: "설치" })).toBeNull();
+});
+
+it("refreshes the catalog and clears the guard when check recovers an already installed CLI", async () => {
+  const installed = vi.fn();
+  const updating = vi.fn();
+  vi.mocked(providerInstallOperation).mockRejectedValueOnce(new ApiError(409, "이미 설치되어 있어요.", "provider_install_already_installed"));
+  render(<ProviderInstallPrompt providerId="claude" displayName="Claude Code" installable
+    onUpdating={updating} onInstalled={installed} />);
+  fireEvent.click(screen.getByRole("button", { name: "앱에서 설치하기" }));
+  await waitFor(() => expect(installed).toHaveBeenCalledOnce());
+  expect(updating).toHaveBeenCalledExactlyOnceWith(false);
+  expect(providerInstallOperation).toHaveBeenCalledExactlyOnceWith("claude");
 });
 
 it("only points at the official instructions when the runtime cannot install it", () => {

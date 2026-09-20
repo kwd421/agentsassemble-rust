@@ -36,17 +36,31 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
   const inflight = useRef(false);
   const result = useTransientResult(phase === "done");
 
+  function completed(installation: ProviderInstall) {
+    setOffer(installation);
+    setPhase("done");
+    onUpdating?.(false);
+    onInstalled?.();
+  }
+
   async function check() {
     if (inflight.current) return;
     inflight.current = true;
     setPhase("checking");
     setError("");
     try {
-      setOffer(await providerInstallOperation(providerId));
-      setCopied(false);
-      setPhase("confirming");
+      const installation = await providerInstallOperation(providerId);
+      if (installation.completed) completed(installation);
+      else {
+        setOffer(installation);
+        setCopied(false);
+        setPhase("confirming");
+      }
     } catch (failure) {
-      if (failure instanceof ApiError && failure.code === "provider_install_already_installed") onInstalled?.();
+      if (failure instanceof ApiError && failure.code === "provider_install_already_installed") {
+        onUpdating?.(false);
+        onInstalled?.();
+      }
       setOffer(null);
       setPhase("idle");
       setError(failure instanceof Error ? failure.message : "설치 정보를 확인하지 못했어요.");
@@ -63,10 +77,7 @@ export default function ProviderInstallPrompt({ providerId, displayName, install
     setPhase("installing");
     setError("");
     try {
-      await providerInstallOperation(providerId, offer);
-      setPhase("done");
-      onUpdating?.(false);
-      onInstalled?.();
+      completed(await providerInstallOperation(providerId, offer));
     } catch (failure) {
       const terminal = failure instanceof ApiError && TERMINAL_INSTALL_FAILURES.includes(failure.code);
       if (terminal) onUpdating?.(false);
