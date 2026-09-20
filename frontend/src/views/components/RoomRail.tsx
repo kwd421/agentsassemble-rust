@@ -103,8 +103,8 @@ export default function RoomRail({
               data-connection-state={disconnected ? "disconnected" : room.connectionState || "local"}
               style={{ ...roomAppearanceStyle(roomAppearance), ...buttonStyle }}
               className="dc-server-btn"
-              aria-label={`${room.label}${disconnected ? " · 연결이 끊긴 서버" : ""}`}
-              title={`${room.label} · ${disconnected ? "연결이 끊긴 서버" : room.topic}`}
+              aria-label={`${room.label}${disconnected ? " · 연결이 끊긴 방" : ""}`}
+              title={`${room.label} · ${disconnected ? "연결이 끊긴 방" : room.topic}`}
             >
               {roomAppearance.iconImage ? null : <Icon size={18} aria-hidden />}
               {disconnected && <span className="dc-server-connection-dot" aria-hidden />}
@@ -125,7 +125,7 @@ export default function RoomRail({
           </button>
         )}
       </div>
-      {onOpenAdmin && <button type="button" className="dc-server-btn" style={{ marginBottom: 80, ...buttonStyle }} aria-label="서버 상태" title="서버 상태" aria-pressed={adminOpen} onClick={onOpenAdmin}><Activity size={20} /></button>}
+      {onOpenAdmin && <button type="button" className="dc-server-btn" style={{ marginBottom: 80, ...buttonStyle }} aria-label="내 컴퓨터" title="내 컴퓨터" aria-pressed={adminOpen} onClick={onOpenAdmin}><Activity size={20} /></button>}
       {menuRoom && roomMenu && (
         <div
           className="dc-context-menu"
@@ -136,7 +136,7 @@ export default function RoomRail({
             maxHeight: `calc(100vh - ${roomMenu.y}px - ${ROOM_RAIL_MENU_VIEWPORT_MARGIN}px)`,
           }}
           role="menu"
-          aria-label={`${menuRoom.label} 서버 메뉴`}
+          aria-label={`${menuRoom.label} 방 메뉴`}
           onClick={(event) => event.stopPropagation()}
           onContextMenu={(event) => event.preventDefault()}
         >
@@ -151,7 +151,7 @@ export default function RoomRail({
           {!guestLocked && menuRoom && !roomIsDisconnected(menuRoom) && (
             <button type="button" role="menuitem" onClick={() => onInviteRoom(menuRoom.id)}>
               <UserPlus size={16} />
-              서버에 초대하기
+              방에 초대하기
             </button>
           )}
           {(!guestLocked || (canManageActiveRoom && menuRoom.id === activeRoom.id)) && !roomIsDisconnected(menuRoom) && (
@@ -165,7 +165,7 @@ export default function RoomRail({
               <span className="dc-context-separator" aria-hidden />
               <button type="button" role="menuitem" className="danger" onClick={() => onLeaveRoom(menuRoom.id)}>
                 <LogOut size={16} />
-                서버 나가기
+                방 나가기
               </button>
             </>
           )}

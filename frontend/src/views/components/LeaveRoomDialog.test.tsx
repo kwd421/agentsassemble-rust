@@ -21,7 +21,7 @@ describe("LeaveRoomDialog", () => {
         "내가 소유한 에이전트도 모두 함께 나가며, 실행 중인 Agent Session은 종료됩니다."
       )
     ).toBeTruthy();
-    fireEvent.click(screen.getByRole("button", { name: "서버 나가기" }));
+    fireEvent.click(screen.getByRole("button", { name: "방 나가기" }));
 
     await waitFor(() => expect(onConfirm).toHaveBeenCalledOnce());
     expect(onClose).toHaveBeenCalledOnce();
@@ -39,7 +39,7 @@ describe("LeaveRoomDialog", () => {
       />
     );
 
-    fireEvent.click(screen.getByRole("button", { name: "서버 나가기" }));
+    fireEvent.click(screen.getByRole("button", { name: "방 나가기" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("퇴장 요청 실패");
     expect(onClose).not.toHaveBeenCalled();

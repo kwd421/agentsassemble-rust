@@ -191,7 +191,7 @@ export default function StartupIdentityGate({
         return;
       }
       try {
-        setStatus("중앙 신원과 서버 목록을 확인하는 중");
+        setStatus("중앙 신원과 방 목록을 확인하는 중");
         await bootstrapCentral();
         const localAuthority = await saveLocalProfile(
           existing.person.display_name,
@@ -413,8 +413,8 @@ export default function StartupIdentityGate({
           </h1>
           <p className="text-[13px] font-semibold leading-5 text-text-muted">
             {screen === "recovery-code"
-              ? "이 코드는 다른 기기에서 같은 게스트 신원과 서버 목록을 복구할 때 필요합니다. 중앙에는 코드 원문을 저장하지 않습니다."
-              : "Google 계정은 내 서버 목록을 기기 간 동기화할 때만 사용합니다. 방과 메시지는 각 서버에 그대로 남습니다."}
+              ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요합니다. 중앙에는 코드 원문을 저장하지 않습니다."
+              : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용합니다. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남습니다."}
           </p>
         </header>
 

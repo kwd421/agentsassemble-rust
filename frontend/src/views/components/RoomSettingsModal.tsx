@@ -19,7 +19,7 @@ const CHANNEL_NOTIFICATION_LABELS: Array<{
   value: ChannelNotificationSetting;
   label: string;
 }> = [
-  { value: "default", label: "서버 기본값" },
+  { value: "default", label: "방 기본값" },
   { value: "all", label: "모든 메시지" },
   { value: "mentions", label: "@멘션만" },
   { value: "mute", label: "알림 끔" },

@@ -178,7 +178,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               disabled={!hasRoom}
               onClick={(event) => openRoomMenu(event, activeRoom)}
               onContextMenu={(event) => openRoomMenu(event, activeRoom)}
-              aria-label={`${activeRoom.label} 서버 메뉴 열기`}
+              aria-label={`${activeRoom.label} 방 메뉴 열기`}
             >
               <span className="truncate preserve-words">{activeRoom.label}</span>
               <ChevronDown size={16} />
@@ -206,8 +206,8 @@ export default function AppView({ controller }: { controller: AppController }) {
                     event.stopPropagation();
                     inviteRoom(activeRoom.id);
                   }}
-                  aria-label="서버에 초대하기"
-                  title="서버에 초대하기"
+                  aria-label="방에 초대하기"
+                  title="방에 초대하기"
                 >
                   <UserPlus size={20} />
                 </button>

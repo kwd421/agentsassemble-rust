@@ -8,7 +8,7 @@ const LABELS: Record<RuntimeRestartPhase, string> = {
   draining: "연결을 정리하고 서버를 교체하고 있어요.",
   recovering: "세션을 복구하고 있어요.",
   completed: "재시작을 완료했어요.",
-  failed: "재시작에 실패했어요. 서버 상태를 확인한 뒤 다시 시도해 주세요.",
+  failed: "재시작에 실패했어요. 자원 사용량을 확인한 뒤 다시 시도해 주세요.",
   aborted: "재시작 요청이 취소됐어요.",
 };
 const inProgress = (phase: RuntimeRestartPhase) => phase === "quiescing" || phase === "draining" || phase === "recovering";
