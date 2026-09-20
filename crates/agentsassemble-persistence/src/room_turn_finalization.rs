@@ -83,12 +83,11 @@ impl ProviderTurnFinalization<'_> {
         events.extend([finished, state]);
         // The declining agent held the ordered floor alone, so the message needs a next speaker
         // or the exchange ends in silence.
-        if let Some(source_event_id) = declined_source_event_id {
-            if let Some(source) =
+        if let Some(source_event_id) = declined_source_event_id
+            && let Some(source) =
                 load_room_event(transaction, &self.room.room_id, &source_event_id).await?
-            {
-                route_declined_floor(transaction, self.settings, &source).await?;
-            }
+        {
+            route_declined_floor(transaction, self.settings, &source).await?;
         }
         let prepared = assign_available_pending(transaction, self.room, self.settings).await?;
         let mut next_assignments = Vec::with_capacity(prepared.len());
