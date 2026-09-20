@@ -2,6 +2,13 @@
 
 ## Active work
 
+- At 22:25 KST 2026-09-20, unrestricted whole-repository Pro re-review is posted
+  in the existing in-app conversation for dcaa42ebc236513dc1aca3935d10080501b05092.
+  Both complete source snapshots (2708 files), manifest, full prompt and active
+  Pro generation are visible. Corrections and affected verification precede this
+  submission. Stop after confirming submission per the user; do not wait for this
+  next answer or claim final approval. Branch: codex/recovery-and-sonnet.
+
 - 2026-09-20 acceptance: signed 0.1.59 verifies actual Claude Sonnet 5 Low,
   two completed turns across Stop/Resume with the same native session, then Stop.
   The original Attachment Fixture generation 4 is recovered through the real
