@@ -11613,3 +11613,91 @@ architecture/policy19/format/diff and unchanged artifact gate pass. Frontend
 creation coverage29 and production TypeScript/Vite/approved-CSS build pass.
 The earlier failed isolated recovery attempt was not reproduced in this complete
 serial run and is not presented as a product failure or a timeout-policy fix.
+
+
+## 2026-09-16 retained request-continuation recovery correction
+
+The retained Attachment Fixture generation4 has a canonical room view containing
+four historical attachment IDs, but its authoritative attachment_ids array is empty.
+The controlled Python fixture extracted every ID from read_discussion and raised
+on an explicit isError tool result. Its original stderr is unavailable, so the
+original exception is not claimed as directly observed. The stored input plus the
+fixture code identify the reproducible historical-attachment denial path. A real
+RoomPortal MCP regression confirms read_discussion -> historical read denial ->
+successful same-turn publish_message; denial neither grants access nor poisons the
+turn. The controlled fixture now counts unavailable attachments and continues; it
+does not claim those files were read. Production attachment authority is unchanged.
+
+A separate product defect discarded the macOS pre-launch fork/exit watcher when
+the leader had already exited. The guardian now uses a complete no-fork history
+before freezing/terminating the retained anchor and checking group, tagged-process
+and lifetime absence, then writing the exact-generation cleanup receipt. Forked,
+missing or failed history remains uncertain even under AllowInGroup. No receipt
+is inferred from absent PIDs or an unlocked lease. Actual process-tree tests6
+pass, including the new no-fork exit/cold-observation path and existing forked and
+escaped negative cases. Full provider267 and the additional historical-attachment
+MCP test1 pass; workspace all-target/all-feature Clippy and policy19 pass.
+
+The original failed generation still has a unix lease marker, not a gone receipt.
+Its exited guardian did not retain the no-fork history durably. This patch cannot
+retroactively create that evidence; an actual boot boundary is the existing cold
+recovery authority for this retained generation. Its database is not modified to
+pretend cleanup succeeded. Packaged verification and exact retained-session
+recovery remain pending; no new review submission or completion is claimed.
+
+## Integrated recovery and Sonnet verification (2026-09-20)
+
+Working branch starts at windows-runtime-fixes f2f08703. The original retained
+Attachment Fixture session codex-d65be25e-a0ad-569e-bd10-bea3f23b2c6d belonged
+to the previous boot. Signed 0.1.58 startup used the existing boot-boundary recovery:
+the exact session now displays Stopped, with recovery_required false and 3 turns.
+The original execution generation 4 is now interrupted with requeue_finalized=1;
+no unconfirmed Stop reservation remains. No database or lease state was manually
+changed. This establishes recovery after
+an actual boot change; it does not establish retroactive same-boot custody proof.
+The new same-boot no-fork process regression passes in the integrated provider run.
+
+The two requested UI changes pass ChannelHeader's 3 tests and the frontend build.
+Signed 0.1.58 visibly retains the people icon across panel open/close and removes
+the redundant room-connection tab button. Other UI behavior was not redesigned.
+
+The completed 722b506e Pro answer (46m10s) returns REVISE H1: a deleted vote
+fails historical context validation and rolls back the next message. A real
+SqliteStore API-session regression reproduced invalid_state before correction.
+The shared visible-text owner now excludes deleted content before vote validation;
+non-deleted invalid votes still fail. The corrected regression verifies the next
+message's committed row, assignment and absence of the deleted question/event.
+Persistence: 341 existing tests plus the corrected new regression pass.
+
+Integrated provider tests: 278 passed; one Windows path fixture incorrectly used
+backslashes under Unix Path parsing. Portable forward-slash fixture paths retain
+the same Windows assertion and its focused rerun passes. Existing architecture,
+source-growth and 19 policy tests pass. Latest-branch formatting and one
+collapsible-if lint were corrected without changing behavior; workspace all-feature
+Clippy passes. No Windows execution was performed on this Mac.
+
+Claude login and SDK catalog are confirmed (CLI 2.1.270, SDK 0.3.258,
+claude-sonnet-5). Initial packaged Sonnet creation failed during SDK initialization
+with provider_protocol_invalid. Direct bridge initialization succeeds. Investigation
+identified the loader defect described below; the later signed run verifies the fix.
+
+Sonnet initialization diagnosis: byte-identical packaged SDK resources match source.
+Direct bridge initialization with the actual Claude binary and its copied binary
+succeeds (0.61s and 2.0s). Copying the current Homebrew Node host alone fails with
+macOS dyld: @rpath/libnode.137.dylib missing. SDK host binding now stages declared
+Mach-O relative libraries with verified bytes and confined destinations. The actual
+compiled loader fixture runs after its source library is removed; a new bind with
+the missing library fails. Both loader tests, 5 Claude SDK Rust tests, 14 SDK JS
+tests, unchanged architecture/source/policy gates and all-feature Clippy pass.
+Signed 0.1.59 now resumes the same app session, obtains native session
+4bbd1d6a-a8dc-4642-9486-4f13d8a297de, reads and publishes SONNET-READY-42,
+then completes normal Stop/Resume and publishes SONNET-RESUMED-43. The exact native
+session ID is unchanged, provider_session_reused is true, turn_count is 2, and the
+final normal Stop leaves runtime_status stopped, no error and no recovery flag.
+Both public responses and Idle/Stopped transitions are observed in the packaged UI.
+The SDK Stop hook verifies applied Low effort before accepting each result.
+Normal Quit completes and all three recorded app/supervisor/server PIDs are absent.
+Artifact maintenance reports no maintenance required.
+The preexisting retained verification database is preserved; temporary probe copies
+and this run's workspace are disposable. No Windows run or overall product closure
+is claimed. The next action is unrestricted whole-repository Pro re-review.

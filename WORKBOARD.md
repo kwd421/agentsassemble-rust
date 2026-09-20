@@ -2,6 +2,34 @@
 
 ## Active work
 
+- 2026-09-20 acceptance: signed 0.1.59 verifies actual Claude Sonnet 5 Low,
+  two completed turns across Stop/Resume with the same native session, then Stop.
+  The original Attachment Fixture generation 4 is recovered through the real
+  previous-boot boundary, not a database reset. Requested header icon/tab changes
+  pass packaged verification. Pro H1 deleted-vote rollback is reproduced in Rust
+  and corrected; current Homebrew Node loader dependency loss is reproduced and
+  corrected at SDK host binding. Affected tests and mandatory gates pass. Freeze
+  and submit the whole repository for Pro re-review, then stop per user instruction.
+
+- 2026-09-20: completed whole-repository Pro answer for 722b506e is read
+  (46m10s, REVISE H1). A deleted vote tombstone fails historical context
+  validation and rolls back the next assigned message. Correct the shared visible
+  payload owner, preserving deletion privacy and non-deleted vote validation;
+  verify actual API-context persistence before requesting unrestricted re-review.
+
+- 2026-09-20: integrate retained recovery correction onto windows-runtime-fixes
+  f2f08703. User authorizes Claude Sonnet verification in addition to the earlier
+  Opus low request. Only requested frontend edits: always use the people icon for
+  the member-panel toggle and remove the redundant room-connection-info tab button.
+  Other frontend changes are prohibited; alternate API harness work is deferred.
+  Finish affected verification and retained-session recovery before full re-review.
+
+- Latest user correction2026-09-16 supersedes the submission stop below: resolve
+  the retained Attachment Fixture continuation/stop recovery failure, complete
+  affected verification, and only then submit the corrected whole-repository review.
+  Investigation is active; neither recovery nor completion is claimed. Preserve
+  the exact failed session and its custody evidence; do not reset its database state.
+
 - At00:33 KST2026-09-16, unrestricted whole-repository Pro re-review is visibly
   submitted in the existing in-app conversation at722b506ef7c0df1507a86e6efe6912872ff647e8,
   with both full source snapshots (2690 files). Complete prompt, attachment and

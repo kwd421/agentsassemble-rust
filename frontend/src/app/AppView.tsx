@@ -505,22 +505,9 @@ export default function AppView({ controller }: { controller: AppController }) {
           style={panelStyle}
           data-testid="room-right-panel"
         >
-          <div className="dc-right-panel-tabs" role="tablist" aria-label="우측 패널">
-            <button
-              type="button"
-              role="tab"
-              id="room-info-panel-tab"
-              data-active="true"
-              aria-selected="true"
-              aria-controls="room-info-panel"
-            >
-              방 연결 정보
-            </button>
-          </div>
           <section
             id="room-info-panel"
-            role="tabpanel"
-            aria-labelledby="room-info-panel-tab"
+            aria-label="방 연결 정보"
             className="min-h-0 flex-1"
             data-testid="room-info-panel"
           >
