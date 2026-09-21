@@ -7,7 +7,7 @@ import {
   type KeyboardEvent as ReactKeyboardEvent,
   type ReactNode,
 } from "react";
-import { ArrowLeft, Bell, ChevronRight, Pin, Search, Users, PanelRight, MessageSquare } from "lucide-react";
+import { ArrowLeft, Bell, ChevronRight, Pin, Search, Users, MessageSquare } from "lucide-react";
 import type { MessagePin } from "../../api/messagePins";
 import ProviderLogo from "./ProviderLogo";
 
@@ -282,7 +282,7 @@ export default function ChannelHeader({
               membersOpen ? "text-text-primary" : "text-text-muted"
             }`}
           >
-            {membersOpen ? <Users size={18} /> : <PanelRight size={18} />}
+            <Users size={18} />
           </button>
         )}
         <label className="dc-head-search hidden md:flex">

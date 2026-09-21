@@ -6,8 +6,7 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     ProviderCredentialStore, ProviderUsageError,
-    catalog::provider_executable,
-    claude::{Inspection, inspect},
+    claude::{Inspection, claude_executable, inspect},
 };
 
 pub(crate) fn read<'a>(
@@ -15,7 +14,7 @@ pub(crate) fn read<'a>(
     cancellation: &'a CancellationToken,
 ) -> BoxFuture<'a, Result<ProviderQuota, ProviderUsageError>> {
     async move {
-        let (claude, _) = provider_executable("claude", cancellation).await?;
+        let (claude, _) = claude_executable(cancellation).await?;
         let output = inspect(&claude, Inspection::Usage, cancellation).await?;
         project(&output)
     }

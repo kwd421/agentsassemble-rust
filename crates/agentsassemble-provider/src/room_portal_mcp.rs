@@ -16,7 +16,7 @@ use crate::room_portal::{
     reserve_tabletop_tool, valid_decline_reason,
 };
 use crate::room_portal_tool_contract::{
-    CastVote, ChooseRandom, CreateVote, DeclineToSpeak, PublishMessage, ReadAttachment,
+    CastVote, ChooseRandom, CreateVote, PassTurn, PublishMessage, ReadAttachment,
     ReadMessageContext, RollDice, SearchMessages, VoteTarget,
 };
 
@@ -60,13 +60,16 @@ impl RoomPortalMcp {
             .await
             .map_err(|error| error.message)?;
         match result {
-            ProviderRoomToolResult::SearchMessages(page) => serde_json::to_string(&page),
-            ProviderRoomToolResult::MessageContext(context) => serde_json::to_string(&context),
+            ProviderRoomToolResult::SearchMessages(page) => {
+                Ok(crate::room_portal_render::search_page(&page))
+            }
+            ProviderRoomToolResult::MessageContext(context) => {
+                Ok(crate::room_portal_render::message_context(&context))
+            }
             ProviderRoomToolResult::Random(_) => {
-                return Err("The room tool owner returned a mismatched result.".to_owned());
+                Err("The room tool owner returned a mismatched result.".to_owned())
             }
         }
-        .map_err(|_| "The room tool result could not be encoded.".to_owned())
     }
 
     fn stage_vote(&self, payload: &serde_json::Value) -> Result<String, String> {
@@ -74,12 +77,14 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         let command = VoteCommand::from_payload(payload).map_err(|error| error.message)?;
         active.outcome = Some(StagedOutcome::Vote {
             receipt_generation: active.turn_generation,
             command,
         });
+        staged.notify_waiters();
         Ok("Staged a vote action for the shared room.".to_owned())
     }
 }
@@ -101,7 +106,9 @@ fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservatio
 
 #[tool_router]
 impl RoomPortalMcp {
-    #[tool(description = "Read the finalized messages in this turn's bounded shared-room view.")]
+    #[tool(
+        description = "Read the finalized messages in this turn's bounded shared-room view. Does not end the turn."
+    )]
     fn read_discussion(&self) -> Result<String, String> {
         let mut state = self
             .state
@@ -115,7 +122,9 @@ impl RoomPortalMcp {
         Ok(active.room_view.clone())
     }
 
-    #[tool(description = "Read one attachment listed in this exact room turn.")]
+    #[tool(
+        description = "Read one attachment listed in this exact room turn. Does not end the turn."
+    )]
     async fn read_attachment(
         &self,
         Parameters(input): Parameters<ReadAttachment>,
@@ -132,7 +141,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Search complete canonical lobby-message history for this exact room turn. Read the discussion first."
+        description = "Search complete canonical lobby-message history for this exact room turn. Does not end the turn. Read the discussion first."
     )]
     async fn search_messages(
         &self,
@@ -146,7 +155,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Read the bounded chronological lobby context around one search result event. Read the discussion first."
+        description = "Read the bounded chronological lobby context around one search result event. Does not end the turn. Read the discussion first."
     )]
     async fn read_message_context(
         &self,
@@ -169,6 +178,7 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         let content = canonical_message(&input.content)
             .ok_or_else(|| "The room publication is invalid.".to_owned())?;
@@ -186,29 +196,29 @@ impl RoomPortalMcp {
             content,
             target_agent_id,
         });
+        staged.notify_waiters();
         Ok("Published to the shared room.".to_owned())
     }
 
     #[tool(
-        description = "End this room turn without posting, using one supported reason code: nothing_useful_to_add, not_addressed, or duplicate. Read the discussion first."
+        description = "Pass this room turn without posting, giving one reason code: nothing_useful_to_add, not_addressed, or duplicate. This is the normal way to end a turn when you have nothing to post. Read the discussion first."
     )]
-    fn decline_to_speak(
-        &self,
-        Parameters(input): Parameters<DeclineToSpeak>,
-    ) -> Result<String, String> {
+    fn pass_turn(&self, Parameters(input): Parameters<PassTurn>) -> Result<String, String> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         if !valid_decline_reason(&input.reason_code) {
-            return Err("The decline reason is unsupported.".to_owned());
+            return Err("The pass reason is unsupported.".to_owned());
         }
         active.outcome = Some(StagedOutcome::Declined {
             receipt_generation: active.turn_generation,
             reason_code: input.reason_code,
         });
-        Ok("Declined this shared-room turn.".to_owned())
+        staged.notify_waiters();
+        Ok("Passed this shared-room turn.".to_owned())
     }
 
     #[tool(
@@ -249,7 +259,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Roll bounded server-owned dice in tabletop mode. Read the discussion first."
+        description = "Roll bounded server-owned dice in tabletop mode. Does not end the turn: publish or pass afterwards. Read the discussion first."
     )]
     async fn roll_dice(&self, Parameters(input): Parameters<RollDice>) -> Result<String, String> {
         let request = RoomRandomRequest::parse(
@@ -261,7 +271,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Choose one bounded option with server-owned randomness in tabletop mode. Read the discussion first."
+        description = "Choose one bounded option with server-owned randomness in tabletop mode. Does not end the turn: publish or pass afterwards. Read the discussion first."
     )]
     async fn choose_random(
         &self,

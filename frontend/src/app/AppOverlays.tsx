@@ -7,6 +7,7 @@ import { agentCreationPayload } from "../api/agentSessions";
 
 import type { AppController } from "./useAppController";
 import AgentCreateModal from "../views/components/AgentCreateModal";
+import ConnectorJoinNotice from "../views/components/ConnectorJoinNotice";
 import GuestJoinProfilePanel from "../views/components/GuestJoinProfilePanel";
 import LeaveRoomDialog from "../views/components/LeaveRoomDialog";
 import RoomInviteModal from "../views/components/RoomInviteModal";
@@ -18,8 +19,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
   const closeCreation = () => { setHostCreation(false); controller.setAgentCreateOpen(false); };
   const {
     activeRoom, agentCreateOpen,
-    canonicalRoom, canControlActiveAgents, closeInviteModal,
-    deviceToken,
+    canonicalRoom, canControlActiveAgents, closeInviteModal, connectorJoinUrl,
     generateInviteLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
@@ -29,11 +29,13 @@ export default function AppOverlays({ controller, companionInvites }: { controll
     operatorPairingPending, operatorPairingState,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
     requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
-    roomSettings, roomSocket,
+    roomLifecycle, pairedRoomLifecycle, roomSettings, roomSocket,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
     stopInviteTunnel, updateRoom,
   } = controller;
+  // Archived and closed rooms never reach the rail, so room settings carries the list.
+  const lifecycleController = roomLifecycle.enabled ? roomLifecycle : pairedRoomLifecycle.enabled ? pairedRoomLifecycle : null;
 
   return createPortal(
     <div data-app-overlays style={{ position: "relative", zIndex: 220 }}>
@@ -97,6 +99,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
               roomSettings.orderedExcludePreviousSpeakerFor(settingsModalRoom)
             }
             canInvite={!guestLocked}
+            lifecycleController={lifecycleController}
             onClose={() => setSettingsModal(null)}
             onInvite={() => {
               setSettingsModal(null);
@@ -167,12 +170,12 @@ export default function AppOverlays({ controller, companionInvites }: { controll
           }}
         />
 
+        {connectorJoinUrl ? <ConnectorJoinNotice joinUrl={connectorJoinUrl} /> : null}
+
         {(guestJoinToken || operatorPairingPending) &&
           (!guestSession || guestPreflightRetryable || guestJoinRetryable) &&
           !guestExpired && (
           <GuestJoinProfilePanel
-            deviceToken={deviceToken}
-            inviteToken={guestJoinToken}
             pairing={operatorPairingPending}
             pairingState={operatorPairingState}
             retryMode={

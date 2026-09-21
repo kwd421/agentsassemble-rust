@@ -1,13 +1,49 @@
 # Frontend/backend exposure map
 
+2026-09-21 user-directed guest photo correction: the existing crop/preview
+control retains PNG bytes locally and the existing Join button sends them with
+admission. The server stores the canonical image in the same transaction that
+consumes the invite and creates the profile. The earlier invite-only upload route
+and client call no longer write before Join. Layout and other frontend controls
+remain unchanged. Frontend 157 files/914 tests, production build and mandatory
+workspace verification pass. The signed isolated package starts and its server
+rejects prejoin attachment upload with 401. Exact packaged guest photo selection,
+crop confirmation and Join passed through a temporary public tunnel and the
+in-app browser: before Join, prejoin/profile asset counts were 0/0 and invite
+use was 0; after Join they were 0/1 and 1, with the photo rendered for the
+guest. The tunnel was closed and isolated app/data removed afterward.
+
+2026-09-20 whole-source review M1: the provider install check can return a prior
+completed installation after the start response was lost. The existing installation
+row now enters its original completion state, releases the parent updating guard and
+refreshes local catalog readiness; `AlreadyInstalled` also releases that guard.
+No controls, layout, or unrelated frontend flow changed. The uncertain response
+continues to require explicit recheck. Parent/component regressions cover the
+held guard and recovered completion; signed 0.1.60 operated room/add-agent but did
+not exercise an actual installation or its recovered-result display.
+
+2026-09-20 explicit user correction: the existing member-panel toggle always shows
+the people icon in both open and closed states. Remove the redundant room-info
+tab button above the right-panel content; retain the existing toggle, contents,
+layout and accessible section name. Header tests3 and production build pass;
+signed 0.1.58 verifies both toggle states and the absent redundant button.
+No other frontend change authorized beyond the reviewed installation-state correction above.
+
 2026-09-16 user-directed correction: provider requests move from a standalone
 header row/modal into the requesting agent message. No additional rail button or
 side panel. Signed0.1.56 directly verifies agent-attributed question/selection/response and
 same-message resolved result. No standalone opener or modal remains. Whole frontend890
 tests and unchanged production CSS pass. Instrumented native fixture subsequently completes answer/read/publication/turn
 completion/normal Stop twice, including same-session Resume. Earlier reused
-Attachment Fixture remains an unexplained recovery case; these later passes do not
-close it. Exact app normal Quit and no owned processes are verified.
+Attachment Fixture remains a retained recovery case; these later passes do not
+close it. Its stored turn has four historical attachment references but no authorized
+attachment IDs; the fixture raised on the resulting tool denial. The guardian also
+discarded no-fork exit history instead of confirming cleanup. The correction and
+exact-generation proof are tracked in VERIFICATION.md. On 2026-09-20, signed
+0.1.58 startup recovers that original session through the actual previous-boot
+boundary: generation 4 interrupted, requeue finalized, Stopped, no recovery flag.
+This is distinct from the no-fork same-boot regression. Exact app normal Quit and
+no owned processes are verified.
 
 2026-09-15 c2d1a117 review: custom-channel reconnect currently turns a successful
 ACK into an error and retains the draft. Separate send custody from history reloads;

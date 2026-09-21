@@ -48,6 +48,21 @@ pub(crate) fn secure_file(file: &File) -> io::Result<()> {
     secure_handle(file, false)
 }
 
+/// Applies the owner-only DACL through the file's path.
+///
+/// A handle opened for reading and writing does not carry `WRITE_DAC`, so hardening
+/// it through that handle fails with access denied; the path acquires the rights it
+/// needs. Callers that hold only a capability handle keep using `secure_file`.
+pub(crate) fn secure_file_path(path: &Path) -> io::Result<()> {
+    let path = path
+        .to_str()
+        .ok_or_else(|| io::Error::other("path is not valid Unicode"))?;
+    harden(
+        ACL::from_file_path(path, false).map_err(windows_error)?,
+        false,
+    )
+}
+
 pub(crate) fn validate_private_directory_handle(file: &File) -> io::Result<()> {
     let descriptor = windows_permissions::wrappers::GetSecurityInfo(
         file,

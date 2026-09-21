@@ -61,6 +61,7 @@ static SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         context_limit: "The bounded Ollama request context is too large.",
         rate_limited: "Ollama rate-limited the request.",
         invalid_response: "Ollama returned an invalid bounded response.",
+        output_truncated: "Ollama stopped at the maximum response length.",
         invalid_tool_call: "Ollama returned an invalid room-tool call.",
         api_unavailable: "The Ollama API request did not complete.",
         session_mismatch: "Ollama runtime authority does not match the Agent Session.",

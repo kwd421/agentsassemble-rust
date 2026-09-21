@@ -9,9 +9,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::{
     catalog::{
-        control, failed_provider, option, permission_control, provider_executable, ready_provider,
+        await_filesystem, control, failed_provider, option, permission_control,
+        provider_executable, ready_provider,
     },
     claude_sdk_assets::PrivateClaudeSdkBundle,
+    filesystem::native_launcher,
     process::{ProbeFailure, probe},
 };
 #[cfg(any(unix, windows))]
@@ -35,7 +37,7 @@ pub(crate) async fn discover(
     mut provider: ProviderAvailability,
     cancellation: &CancellationToken,
 ) -> ProviderAvailability {
-    let (claude, claude_identity) = match provider_executable("claude", cancellation).await {
+    let (claude, claude_identity) = match claude_executable(cancellation).await {
         Ok(authority) => authority,
         Err(failure) => return failed_provider(provider, failure),
     };
@@ -52,6 +54,17 @@ pub(crate) async fn discover(
         return failed_provider(provider, ProbeFailure::Malformed);
     };
     ready_provider(provider, catalog.default_model.clone(), catalog.controls())
+}
+
+/// Resolves the Claude executable the Node SDK bridge can launch.
+///
+/// On Windows an npm install puts `claude.cmd` on PATH. Node will not spawn a `.cmd` file
+/// without a shell, so the wrapper is replaced with the native binary it runs.
+pub(crate) async fn claude_executable(
+    cancellation: &CancellationToken,
+) -> Result<(String, String), ProbeFailure> {
+    let launcher = provider_executable("claude", cancellation).await?;
+    await_filesystem(cancellation, native_launcher(launcher)).await
 }
 
 pub(crate) enum Inspection {
@@ -93,7 +106,15 @@ pub(crate) async fn inspect(
     inspection: Inspection,
     cancellation: &CancellationToken,
 ) -> Result<String, ProbeFailure> {
-    let (node, _) = provider_executable("node", cancellation).await?;
+    // Claude itself can be installed and signed in while the bridge's Node is missing; that is
+    // a different failure and must not be reported as a missing Claude CLI.
+    let (node, _) =
+        provider_executable("node", cancellation)
+            .await
+            .map_err(|failure| match failure {
+                ProbeFailure::Missing => ProbeFailure::BridgeRuntimeMissing,
+                failure => failure,
+            })?;
     let bundle = PrivateClaudeSdkBundle::stage()
         .await
         .map_err(|_| ProbeFailure::Failed)?;

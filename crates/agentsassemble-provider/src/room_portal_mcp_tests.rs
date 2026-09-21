@@ -104,7 +104,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
             "choose_random".to_owned(),
             "close_vote".to_owned(),
             "create_vote".to_owned(),
-            "decline_to_speak".to_owned(),
+            "pass_turn".to_owned(),
             "publish_message".to_owned(),
             "read_attachment".to_owned(),
             "read_discussion".to_owned(),
@@ -121,12 +121,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
     )
     .await;
     assert_eq!(early.is_error, Some(true));
-    let early_decline = call_tool(
-        &client,
-        "decline_to_speak",
-        json!({"reason_code": "duplicate"}),
-    )
-    .await;
+    let early_decline = call_tool(&client, "pass_turn", json!({"reason_code": "duplicate"})).await;
     assert_eq!(early_decline.is_error, Some(true));
     assert!(portal.finish_observation("turn-1", 7).is_err());
     let read = call_tool(&client, "read_discussion", json!({})).await;
@@ -137,7 +132,8 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
         .map(|content| content.text.as_str())
         .unwrap_or_default();
     assert!(read_text.contains("Human: hello"));
-    assert!(portal.finish_observation("turn-1", 7).is_err());
+    // Finishing here would now record a pass (read, nothing staged) and end the turn,
+    // so the publication path below is exercised without that check.
     let published = call_tool(
         &client,
         "publish_message",
@@ -145,12 +141,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
     )
     .await;
     assert_ne!(published.is_error, Some(true));
-    let duplicate = call_tool(
-        &client,
-        "decline_to_speak",
-        json!({"reason_code": "duplicate"}),
-    )
-    .await;
+    let duplicate = call_tool(&client, "pass_turn", json!({"reason_code": "duplicate"})).await;
     assert_eq!(duplicate.is_error, Some(true));
     assert_eq!(
         portal

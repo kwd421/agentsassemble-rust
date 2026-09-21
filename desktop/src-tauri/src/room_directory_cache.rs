@@ -33,7 +33,7 @@ pub(crate) fn store(app: &AppHandle, payload: &str) -> Result<(), String> {
         .write(true)
         .open(&path)
         .map_err(|error| format!("cannot open {}: {error}", path.display()))?;
-    make_private_file(&file)
+    make_private_file(&file, &path)
         .map_err(|error| format!("cannot secure {}: {error}", path.display()))?;
     file.write_all(sanitized.as_bytes())
         .and_then(|()| file.flush())

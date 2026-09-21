@@ -413,6 +413,7 @@ mod tests {
                 custom_model: false,
                 login_supported: false,
                 update_supported: false,
+                install_supported: false,
                 usage_supported: false,
                 controls: vec![
                     control(

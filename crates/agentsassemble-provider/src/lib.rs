@@ -1,3 +1,4 @@
+mod provider_install;
 mod provider_update;
 mod provider_update_specs;
 mod provider_updater;
@@ -80,6 +81,7 @@ mod room_attachment;
 mod room_portal;
 mod room_portal_mcp;
 mod room_portal_mcp_transport;
+mod room_portal_render;
 mod room_portal_tool_contract;
 mod runtime;
 mod runtime_absence;

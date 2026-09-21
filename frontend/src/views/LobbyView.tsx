@@ -29,6 +29,7 @@ import type { Mentionable } from "../lib/mentionComposerModel";
 import { buildLobbyRows } from "./lobby/lobbyRows";
 import {
   LobbyMessageRow,
+  LobbySkipRow,
   LobbySystemRow,
   LobbyThinkingGroup,
   LobbyTypingRow,
@@ -564,6 +565,9 @@ export default function LobbyView({
             }
             const event = row.event;
             if (isVoteTransitionKind(event.kind)) return null;
+            if (event.kind === "system" && event.skips?.length) {
+              return <LobbySkipRow key={row.key} event={event} />;
+            }
             if (
               event.kind === "system" ||
               event.kind === "flow_event"

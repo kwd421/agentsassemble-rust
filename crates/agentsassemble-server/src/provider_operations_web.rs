@@ -32,6 +32,8 @@ registered_routes! {
         private "/api/provider-catalog" => get(read_catalog),
         private "/api/providers/update/check" => post(check_update),
         private "/api/providers/update/start" => post(start_update),
+        private "/api/providers/install/check" => post(check_install),
+        private "/api/providers/install/start" => post(start_install),
         private "/api/providers/usage" => post(usage),
         private "/api/providers/login" => post(login),
         private "/api/providers/login/cancel" => post(cancel_login),
@@ -116,6 +118,14 @@ struct ProviderUpdateRequest {
     expected_version: String,
 }
 
+/// The install offer the user confirmed, echoed back so the runtime can require the same one.
+#[derive(serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct ProviderInstallRequest {
+    provider_id: String,
+    confirmed: agentsassemble_domain::ProviderInstall,
+}
+
 async fn start_update(
     State(state): State<AppState>,
     request: Request,
@@ -130,6 +140,39 @@ async fn start_update(
         .await
         .map(Json)
         .map_err(ProviderOperationHttpError::from_update)
+}
+
+async fn check_install(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<agentsassemble_domain::ProviderInstall>, ProviderOperationHttpError> {
+    authorize(&state, request.headers()).await?;
+    let input: ProviderOperationRequest = decode_json_body(request, 4096)
+        .await
+        .map_err(ProviderOperationHttpError::from_body)?;
+    state
+        .provider_update
+        .install(&input.provider_id, None)
+        .await
+        .map(Json)
+        .map_err(ProviderOperationHttpError::from_install)
+}
+
+/// Runs only the offer the user confirmed; a changed latest version is rejected.
+async fn start_install(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<agentsassemble_domain::ProviderInstall>, ProviderOperationHttpError> {
+    authorize(&state, request.headers()).await?;
+    let input: ProviderInstallRequest = decode_json_body(request, 8192)
+        .await
+        .map_err(ProviderOperationHttpError::from_body)?;
+    state
+        .provider_update
+        .install(&input.provider_id, Some(input.confirmed))
+        .await
+        .map(Json)
+        .map_err(ProviderOperationHttpError::from_install)
 }
 
 async fn usage(
@@ -262,6 +305,80 @@ impl ProviderOperationHttpError {
                 StatusCode::SERVICE_UNAVAILABLE,
                 "provider_update_catalog_unavailable",
                 "업데이트했지만 모델 목록을 갱신하지 못했어요. 모델 목록을 새로고침해 주세요.",
+            ),
+            E::AlreadyInstalled | E::NpmMissing | E::InstalledOutsidePath => {
+                return Self::from_install(error);
+            }
+        };
+        Self {
+            status,
+            code,
+            message,
+        }
+    }
+
+    fn from_install(error: agentsassemble_provider::ProviderUpdateError) -> Self {
+        use agentsassemble_provider::ProviderUpdateError as E;
+        let (status, code, message) = match error {
+            E::Unsupported => (
+                StatusCode::CONFLICT,
+                "provider_install_unsupported",
+                "이 제공자는 앱에서 설치할 수 없어요. 공식 설치 안내를 따라 주세요.",
+            ),
+            E::AlreadyInstalled => (
+                StatusCode::CONFLICT,
+                "provider_install_already_installed",
+                "이미 설치되어 있어요. 상태를 다시 확인해 주세요.",
+            ),
+            E::NpmMissing => (
+                StatusCode::CONFLICT,
+                "provider_install_npm_missing",
+                "설치하려면 Node.js(npm)가 필요해요. Node.js를 설치한 뒤 앱을 다시 시작해 주세요.",
+            ),
+            E::Busy => (
+                StatusCode::CONFLICT,
+                "provider_install_busy",
+                "다른 제공자 설치가 진행 중이에요. 끝난 뒤 다시 시도해 주세요.",
+            ),
+            E::OfferChanged => (
+                StatusCode::CONFLICT,
+                "provider_install_offer_changed",
+                "설치할 버전이 달라졌어요. 다시 확인한 뒤 설치해 주세요.",
+            ),
+            E::Unavailable | E::Missing => (
+                StatusCode::BAD_GATEWAY,
+                "provider_install_unavailable",
+                "설치할 버전을 확인하지 못했어요. 인터넷 연결을 확인한 뒤 다시 시도해 주세요.",
+            ),
+            E::InvalidResponse => (
+                StatusCode::BAD_GATEWAY,
+                "provider_install_invalid",
+                "설치 정보를 확인할 수 없어요. 공식 설치 안내를 따라 주세요.",
+            ),
+            E::Cancelled => (
+                StatusCode::CONFLICT,
+                "provider_install_cancelled",
+                "설치가 취소됐어요.",
+            ),
+            E::CleanupUnconfirmed => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_install_cleanup_unconfirmed",
+                "설치 프로세스의 종료를 확인하지 못했어요.",
+            ),
+            E::InstallationUnconfirmed => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_install_unconfirmed",
+                "설치 완료를 확인하지 못했어요. 상태를 다시 확인한 뒤 시도해 주세요.",
+            ),
+            E::InstalledOutsidePath => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_install_outside_path",
+                "설치했지만 이 앱이 찾을 수 있는 위치가 아니에요. 앱을 다시 시작한 뒤 상태를 확인해 주세요.",
+            ),
+            E::CatalogUnavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "provider_install_catalog_unavailable",
+                "설치했지만 제공자 상태를 갱신하지 못했어요. 상태를 다시 확인해 주세요.",
             ),
         };
         Self {

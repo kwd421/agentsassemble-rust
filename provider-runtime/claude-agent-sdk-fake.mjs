@@ -63,7 +63,7 @@ class FakeQuery {
         type: "system",
         subtype: "init",
         session_id: session,
-        cwd: this.options.cwd,
+        cwd: process.env.AA_FAKE_REPORTED_CWD ?? this.options.cwd,
         model: this.options.model,
         fast_mode_state: this.options.settings?.fastMode ? "on" : "off",
         permissionMode: this.options.permissionMode,

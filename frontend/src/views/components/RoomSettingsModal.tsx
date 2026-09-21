@@ -1,6 +1,6 @@
 import { ROOM_LABEL_LIMIT } from "../../types/generated/ROOM_SETTINGS_WIRE";
 import { useEffect, useRef, useState, type ChangeEvent } from "react";
-import { Image as ImageIcon, UserPlus, X } from "lucide-react";
+import { Image as ImageIcon, Trash2, UserPlus, X } from "lucide-react";
 import {
   type ChannelNotificationSetting,
   type ChannelSettings,
@@ -12,13 +12,14 @@ import {
   type RoomAppearance,
 } from "../../lib/roomAppearance";
 import type { RoomDockItem } from "../../lib/roomDockModel";
+import RoomDeleteDialog, { type RoomLifecycleController } from "./room/RoomDeleteDialog";
 import RoomSettingTextInput from "./RoomSettingTextInput";
 
 const CHANNEL_NOTIFICATION_LABELS: Array<{
   value: ChannelNotificationSetting;
   label: string;
 }> = [
-  { value: "default", label: "서버 기본값" },
+  { value: "default", label: "방 기본값" },
   { value: "all", label: "모든 메시지" },
   { value: "mentions", label: "@멘션만" },
   { value: "mute", label: "알림 끔" },
@@ -47,6 +48,7 @@ export default function RoomSettingsModal({
   toolMode,
   orderedExcludePreviousSpeaker,
   canInvite,
+  lifecycleController,
   onClose,
   onInvite,
   onRoomChange,
@@ -74,6 +76,7 @@ export default function RoomSettingsModal({
   toolMode: RoomToolMode | null;
   orderedExcludePreviousSpeaker: boolean | null;
   canInvite: boolean;
+  lifecycleController?: RoomLifecycleController | null;
   onClose: () => void;
   onInvite: () => void;
   onRoomChange: (updates: Partial<Pick<RoomDockItem, "label" | "topic" | "shortLabel">>) => void;
@@ -90,6 +93,7 @@ export default function RoomSettingsModal({
   onRetryAppearance: () => void;
 }) {
   const [uploadStatus, setUploadStatus] = useState("");
+  const [deleteOpen, setDeleteOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
   const routingSettingsReady = settingsStatus === "ready";
@@ -189,13 +193,20 @@ export default function RoomSettingsModal({
           <a href="#settings-channels" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>채널</a>
           <a href="#settings-notify" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>알림</a>
           <a href="#settings-invite" style={{ flexShrink: 0, minHeight: 44, display: "flex", alignItems: "center" }}>초대</a>
+          {lifecycleController && !mobileViewport && <span className="dc-settings-nav-separator" aria-hidden />}
+          {lifecycleController && (
+            <button type="button" className="dc-settings-nav-danger" onClick={() => setDeleteOpen(true)}>
+              <Trash2 size={15} />
+              방 삭제
+            </button>
+          )}
         </aside>
         <div style={{ minHeight: 0, display: "flex", flexDirection: "column" }}>
           <header className="dc-settings-titlebar" style={{ flexShrink: 0, padding: mobileViewport ? "20px 24px 0" : "54px 56px 0" }}>
             <div>
-              <h2 id="room-settings-title">서버 설정</h2>
+              <h2 id="room-settings-title">방 설정</h2>
             </div>
-            <button type="button" className="dc-settings-close" style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }} autoFocus onClick={onClose} aria-label="설정 닫기">
+            <button type="button" className="dc-settings-close" style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }} autoFocus onClick={onClose} aria-label="방 설정 닫기">
               <X size={18} />
               <span>ESC</span>
             </button>
@@ -204,7 +215,7 @@ export default function RoomSettingsModal({
           <section id="settings-overview" className="dc-settings-section">
             <h3>개요</h3>
             <label>
-              서버 이름
+              방 이름
               <RoomSettingTextInput
                 value={room.label}
                 normalize={(value) => Array.from(value).slice(0, ROOM_LABEL_LIMIT).join("")}
@@ -269,19 +280,23 @@ export default function RoomSettingsModal({
                 </label>
               </div>
               {conversationMode === "ordered" && (
-                <label className="mt-3 flex items-start gap-3">
-                  <input
-                    type="checkbox"
-                    checked={orderedExcludePreviousSpeaker === true}
-                    disabled={!routingSettingsReady}
-                    onChange={(event) =>
-                      onOrderedExcludePreviousSpeakerChange(event.target.checked)
-                    }
-                  />
-                  <span className="preserve-words">
-                    직전 발언자 연속 선택 방지 — 다른 선택 가능한 에이전트가 있으면 직전 발언자를 다음 일반 선택 후보에서 제외합니다. @멘션은 이 제한보다 우선합니다.
-                  </span>
-                </label>
+                // The row sits in a radio stack so `.dc-settings-section label`'s grid does not
+                // stretch the box across the column; the stack's own rule lays the row out.
+                <div className="dc-radio-stack" style={{ marginTop: 12 }}>
+                  <label>
+                    <input
+                      type="checkbox"
+                      checked={orderedExcludePreviousSpeaker === true}
+                      disabled={!routingSettingsReady}
+                      onChange={(event) =>
+                        onOrderedExcludePreviousSpeakerChange(event.target.checked)
+                      }
+                    />
+                    <span className="preserve-words">
+                      직전 발언자 연속 선택 방지 — 다른 선택 가능한 에이전트가 있으면 직전 발언자를 다음 일반 선택 후보에서 제외합니다. @멘션은 이 제한보다 우선합니다.
+                    </span>
+                  </label>
+                </div>
               )}
             </div>
             <div className="dc-settings-field">
@@ -503,6 +518,13 @@ export default function RoomSettingsModal({
           </div>
         </div>
       </dialog>
+      {lifecycleController && deleteOpen && (
+        <RoomDeleteDialog
+          target={{ roomId: room.meetingId, roomUid: room.roomUid, label: room.label }}
+          controller={lifecycleController}
+          onClose={() => setDeleteOpen(false)}
+        />
+      )}
     </div>
   );
 }

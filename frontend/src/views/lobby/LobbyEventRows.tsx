@@ -324,6 +324,82 @@ export function LobbyTypingRow({
   );
 }
 
+/// A turn someone took without speaking. The row stays quiet: stacked faces and a short label,
+/// with the names and reasons revealed while the pointer (or keyboard focus) is on it.
+export function LobbySkipRow({ event }: { event: LobbyEvent }) {
+  const skips = event.skips || [];
+  const [open, setOpen] = useState(false);
+  return (
+    <div
+      className="dc-system-divider px-4"
+      data-room-event-id={event.id}
+      role="status"
+      style={{ position: "relative" }}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+    >
+      <span
+        tabIndex={0}
+        aria-label={event.message}
+        style={{ display: "inline-flex", alignItems: "center", gap: 8, cursor: "default" }}
+      >
+        {/* The faces are the collapsed form; the expanded list shows each one beside its name. */}
+        {!open && <span style={{ display: "inline-flex", alignItems: "center" }} aria-hidden="true">
+          {/* Newest first and drawn over the ones before it, so earlier skips peek out to the right. */}
+          {skips.map((skip, index) => (
+            <span
+              key={`${skip.participant_id}:${index}`}
+              style={{
+                width: 18, height: 18, borderRadius: "50%", overflow: "hidden",
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                background: "var(--color-panel-soft)",
+                boxShadow: "0 0 0 2px var(--color-chat-bg)",
+                marginLeft: index ? -7 : 0, zIndex: skips.length - index,
+              }}
+            >
+              {skip.avatar_image_url
+                ? <img src={skip.avatar_image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                : <ProviderLogo providerKind={skip.provider_kind} size={18} fallback={<Bot size={11} />} />}
+            </span>
+          ))}
+        </span>}
+        <span>차례 넘김{!open && skips.length > 1 ? ` ${skips.length}` : ""}</span>
+      </span>
+      {open && skips.length > 0 && (
+        // Out of flow, so expanding never moves the messages around it. It opens
+        // upward because a skip is usually the newest row, with the list's edge
+        // right below it.
+        <span style={{
+          position: "absolute", left: 0, right: 0, bottom: "calc(100% + 2px)", maxWidth: "none",
+          display: "flex", justifyContent: "center", zIndex: 5, pointerEvents: "none",
+        }}>
+          <span style={{
+            display: "flex", flexWrap: "wrap", justifyContent: "center", gap: "4px 10px",
+            maxWidth: "min(720px, 80%)", padding: "6px 10px", borderRadius: 8,
+            background: "var(--color-panel)", border: "1px solid var(--color-panel-border)",
+            boxShadow: "0 8px 24px rgb(0 0 0 / 38%)",
+          }}>
+            {skips.map((skip, index) => (
+              <span key={`detail:${skip.participant_id}:${index}`}
+                style={{ display: "inline-flex", alignItems: "center", gap: 5 }}>
+                <span style={{ width: 16, height: 16, borderRadius: "50%", overflow: "hidden", display: "inline-flex", alignItems: "center", justifyContent: "center" }}>
+                  {skip.avatar_image_url
+                    ? <img src={skip.avatar_image_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                    : <ProviderLogo providerKind={skip.provider_kind} size={16} fallback={<Bot size={10} />} />}
+                </span>
+                <span>{skip.name}</span>
+                <span style={{ opacity: 0.7 }}>{skip.reason}</span>
+              </span>
+            ))}
+          </span>
+        </span>
+      )}
+    </div>
+  );
+}
+
 export function LobbySystemRow({
   event,
   mentionLabels,

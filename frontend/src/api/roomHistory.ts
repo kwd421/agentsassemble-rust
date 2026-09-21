@@ -13,19 +13,26 @@ import {
   postJsonModerator,
   postJsonWithToken,
   queryString,
-  responseError,
 } from "./http";
 export type { VoteSummary } from "../lib/roomVoteSummaryContract";
 
 export type LobbyAttachmentUploadOptions = {
   roomId?: string;
   sessionToken?: string;
-  inviteToken?: string;
   deviceToken?: string;
   purpose?: "profile_avatar" | "room_appearance";
   signal?: AbortSignal;
   beforeDispatch?: () => void;
 };
+
+/** One agent that took its turn and chose not to speak, with the reason it gave. */
+export interface LobbySkip {
+  participant_id: string;
+  name: string;
+  reason: string;
+  avatar_image_url?: string;
+  provider_kind?: string;
+}
 
 export interface LobbyEvent {
   provider_request_id?: string;
@@ -69,6 +76,7 @@ export interface LobbyEvent {
   vote_deadline_at?: string;
   vote_choice?: string;
   attachments?: LobbyAttachmentRef[];
+  skips?: LobbySkip[];
 }
 
 export interface LobbyPostResponse {
@@ -83,6 +91,9 @@ export function uploadLobbyAttachment(
   options: LobbyAttachmentUploadOptions = {}
 ): Promise<LobbyAttachmentRef> {
   const resolved = options;
+  if (resolved.purpose === "profile_avatar" && !resolved.roomId && !resolved.sessionToken) {
+    return Promise.reject(new Error("프로필 사진은 입장할 때 저장됩니다."));
+  }
   if (!resolved.purpose) {
     return uploadMessageAttachment(
       file,
@@ -101,20 +112,6 @@ export function uploadLobbyAttachment(
       content_type: file.type || "application/octet-stream",
       data_base64: dataBase64,
     };
-    if (resolved.purpose === "profile_avatar" && !resolved.roomId && !resolved.sessionToken) {
-      return fetch("/api/attachments", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "X-Invite-Token": resolved.inviteToken || "",
-          "X-Device-Token": resolved.deviceToken || "",
-        },
-        body: JSON.stringify(body),
-      }).then(async (response) => {
-        if (!response.ok) throw await responseError(response);
-        return response.json() as Promise<{ attachment: LobbyAttachmentRef }>;
-      });
-    }
     if (resolved.purpose === "profile_avatar" && resolved.roomId) {
       return postJsonWithIdentity<{ attachment: LobbyAttachmentRef }>(
         "/api/attachments",

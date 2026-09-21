@@ -72,6 +72,20 @@ describe("AgentSessionDetails diagnostics", () => {
     expect(onControl).toHaveBeenLastCalledWith(recovery, "stop");
   });
 
+  it("offers recovery instead of stop for a runtime stranded by a killed server", async () => {
+    const onControl = vi.fn().mockResolvedValue(undefined);
+    const session = agentSessionFixture({
+      runtime_status: "disconnected", enabled: false, recovery_required: true,
+      last_error_code: "runtime_authority_uncertain",
+      last_error: "Provider runtime authority could not be confirmed.",
+    });
+    render(<AgentSessionDetails session={session} onControl={onControl} />);
+    expect(screen.queryByRole("button", { name: "중지" })).toBeNull();
+    expect(screen.getByText(/앱이 갑자기 종료돼/)).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: "복구" }));
+    expect(onControl).toHaveBeenCalledWith(session, "stop");
+  });
+
   it.each([0, 2])("requires cleanup before restarting a disconnected session (%s turns)", async (turnCount) => {
     const onControl = vi.fn().mockResolvedValue(undefined);
     const session = agentSessionFixture({

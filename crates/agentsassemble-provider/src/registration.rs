@@ -573,6 +573,7 @@ pub(crate) fn loading_provider(registration: &ProviderRegistration) -> ProviderA
             .is_some(),
         login_supported: registration.login.is_some(),
         update_supported: registration.update.is_some(),
+        install_supported: crate::provider_install::supports(registration.id),
         usage_supported: registration.usage.is_some(),
         custom_endpoint: registration.configuration_authority.custom_endpoint(),
         custom_model: registration.configuration_authority.custom_model(),

@@ -4,11 +4,12 @@ use sqlx::{Row, Sqlite, Transaction};
 
 use crate::{
     HumanInvite, PersistenceError, PreparedHumanAdmission,
+    asset_storage::enforce_storage_replacement,
     profile_attachments::replace_profile_avatar,
     profile_store::{
         ProfileIdentity, decode_bound_profile, project_profile_into_rooms, update_profile_row,
     },
-    raster_assets::validate_stored_raster,
+    raster_assets::{CanonicalRaster, prepare_raster, validate_stored_raster},
 };
 
 pub(super) struct ResolvedIdentity {
@@ -24,6 +25,7 @@ pub(super) struct ResolvedIdentity {
 pub(super) struct AdmissionAvatar {
     attachment_id: String,
     url: String,
+    inline: Option<(CanonicalRaster, i64)>,
 }
 
 pub(super) async fn resolve_identity(
@@ -183,6 +185,14 @@ pub(super) async fn resolve_admission_avatar(
     invite: &HumanInvite,
     now: DateTime<Utc>,
 ) -> Result<Option<AdmissionAvatar>, PersistenceError> {
+    if let Some(inline) = request.inline_avatar() {
+        let canonical = prepare_raster("avatar.png", "image/png", inline.content.clone()).await?;
+        return Ok(Some(AdmissionAvatar {
+            attachment_id: inline.attachment_id.clone(),
+            url: format!("/api/attachments/{}?view=1", inline.attachment_id),
+            inline: Some(canonical),
+        }));
+    }
     let Some(attachment_id) = request.avatar_attachment_id() else {
         return Ok(None);
     };
@@ -212,6 +222,7 @@ pub(super) async fn resolve_admission_avatar(
     Ok(Some(AdmissionAvatar {
         attachment_id: attachment_id.to_owned(),
         url: format!("/api/attachments/{attachment_id}?view=1"),
+        inline: None,
     }))
 }
 
@@ -239,6 +250,34 @@ async fn transfer_admission_avatar(
     invite: &HumanInvite,
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
+    if let Some((canonical, size)) = avatar.inline.as_ref() {
+        let previous = sqlx::query_scalar::<_, i64>(
+            "SELECT size FROM profile_avatar_assets WHERE owner_user_id = ? AND state = 'pending'",
+        )
+        .bind(user_id)
+        .fetch_optional(&mut **transaction)
+        .await?;
+        enforce_storage_replacement(transaction, previous, *size).await?;
+        sqlx::query(
+            "DELETE FROM profile_avatar_assets WHERE owner_user_id = ? AND state = 'pending'",
+        )
+        .bind(user_id)
+        .execute(&mut **transaction)
+        .await?;
+        sqlx::query(
+            "INSERT INTO profile_avatar_assets(attachment_id, owner_user_id, filename, content_type, content, size, created_at, state, expires_at) VALUES (?, ?, ?, 'image/png', ?, ?, ?, 'pending', ?)",
+        )
+        .bind(&avatar.attachment_id)
+        .bind(user_id)
+        .bind(&canonical.filename)
+        .bind(&canonical.content)
+        .bind(size)
+        .bind(now.to_rfc3339())
+        .bind((now + chrono::Duration::hours(1)).timestamp())
+        .execute(&mut **transaction)
+        .await?;
+        return Ok(());
+    }
     let custody = request.avatar_custody_fingerprint();
     sqlx::query("DELETE FROM profile_avatar_assets WHERE owner_user_id = ? AND state = 'pending'")
         .bind(user_id)

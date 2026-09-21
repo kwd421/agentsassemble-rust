@@ -31,6 +31,7 @@ pub(crate) static VERCEL_SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         context_limit: "The bounded Vercel AI Gateway request context is too large.",
         rate_limited: "Vercel AI Gateway rate-limited the request.",
         invalid_response: "Vercel AI Gateway returned an invalid bounded response.",
+        output_truncated: "Vercel AI Gateway stopped at the maximum response length.",
         invalid_tool_call: "Vercel AI Gateway returned an invalid room-tool call.",
         api_unavailable: "The Vercel AI Gateway request did not complete.",
         session_mismatch: "Vercel AI Gateway runtime authority does not match the Agent Session.",

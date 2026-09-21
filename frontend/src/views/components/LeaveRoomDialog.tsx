@@ -39,7 +39,7 @@ export default function LeaveRoomDialog({
       setError(
         errorValue instanceof Error
           ? errorValue.message
-          : "서버에서 나가지 못했습니다."
+          : "방에서 나가지 못했습니다."
       );
       setBusy(false);
     }
@@ -61,7 +61,7 @@ export default function LeaveRoomDialog({
             className="dc-settings-close"
             onClick={onClose}
             disabled={busy}
-            aria-label="서버 나가기 취소"
+            aria-label="방 나가기 취소"
             style={{ minWidth: 44, minHeight: 44 }}
           >
             <X size={18} />
@@ -105,7 +105,7 @@ export default function LeaveRoomDialog({
             disabled={busy}
           >
             <LogOut size={16} />
-            {busy ? "나가는 중..." : pairedDevice ? "연결 해제" : "서버 나가기"}
+            {busy ? "나가는 중..." : pairedDevice ? "연결 해제" : "방 나가기"}
           </button>
         </div>
     </dialog>

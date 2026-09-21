@@ -133,9 +133,14 @@ where
             {
                 ClaudeSdkAttachment { session_id, reused }
             }
-            Ok(Ok(_) | Err(_)) | Err(_) => {
-                return Err(DriverLaunchError::uncertain(protocol_error()));
+            Ok(Err(error)) => return Err(DriverLaunchError::uncertain(error)),
+            Err(_) => {
+                return Err(DriverLaunchError::uncertain(DriverError::new(
+                    "provider_initialize_timeout",
+                    "Claude Agent SDK initialization timed out.",
+                )));
             }
+            Ok(Ok(_)) => return Err(DriverLaunchError::uncertain(protocol_error())),
         };
         client.session_id.clone_from(&ready.session_id);
         Ok((client, ready))
@@ -187,9 +192,15 @@ where
     }
 
     async fn receive(&mut self) -> Result<HostMessage, DriverError> {
-        let Some(Ok(line)) = self.output.next().await else {
-            self.poisoned = true;
-            return Err(protocol_error());
+        let line = match self.output.next().await {
+            Some(Ok(line)) => line,
+            Some(Err(_)) => return self.poison(protocol_error()),
+            None => {
+                return self.poison(DriverError::new(
+                    "provider_bridge_closed",
+                    "Claude Agent SDK bridge closed before its receipt.",
+                ));
+            }
         };
         let Ok(message) = serde_json::from_str::<HostMessage>(&line) else {
             return self.poison(protocol_error());

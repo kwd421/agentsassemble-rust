@@ -33,7 +33,7 @@ pub use provider_request::{
     ProviderRequestQuestion, ProviderRequestResolution,
 };
 pub use provider_setup::{
-    PROVIDER_SETUP_DESTINATIONS, PROVIDER_SETUP_HOST, PROVIDER_SETUP_SCHEME,
+    PROVIDER_SETUP_DESTINATIONS, PROVIDER_SETUP_HOST, PROVIDER_SETUP_SCHEME, ProviderInstall,
     ProviderSetupDestination, ProviderUpdate, provider_setup_destination, provider_setup_from_url,
 };
 mod release_health;

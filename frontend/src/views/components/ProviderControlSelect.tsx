@@ -1,5 +1,6 @@
 import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { overlayHost } from "../../lib/overlayHost";
 import { Check, ChevronDown, ChevronLeft, ChevronRight, Search } from "lucide-react";
 
 import type { ProviderControlOption } from "../../roomSocketClient";
@@ -406,7 +407,7 @@ export default function ProviderControlSelect({
                 })}
               </div>
           </div>,
-          document.body
+          overlayHost(controlRef.current)
         )}
       {modelDetails.popover}
     </div>

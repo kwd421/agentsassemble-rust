@@ -1,19 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
-
-const apiMocks = vi.hoisted(() => ({
-  uploadLobbyAttachment: vi.fn(),
-}));
-
-vi.mock("../../api", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../api")>();
-  return {
-    ...actual,
-    uploadLobbyAttachment: apiMocks.uploadLobbyAttachment,
-  };
-});
 
 vi.mock("./ImageCropper", () => ({
   default: ({
@@ -30,29 +18,14 @@ vi.mock("./ImageCropper", () => ({
 }));
 
 describe("GuestJoinProfilePanel", () => {
-  beforeEach(() => {
-    apiMocks.uploadLobbyAttachment.mockReset();
-  });
-
   afterEach(cleanup);
 
-  it("uses the current invite only for an explicit pre-join profile upload", async () => {
+  it("keeps the cropped avatar in the browser until admission", async () => {
     const onAvatarImageChange = vi.fn();
     const croppedFile = new File(["avatar"], "avatar.png", { type: "image/png" });
-    apiMocks.uploadLobbyAttachment.mockResolvedValue({
-      id: "avatar-12345678",
-      filename: "avatar.png",
-      content_type: "image/png",
-      size: 6,
-      is_image: true,
-      url: "/api/attachments/avatar-12345678?view=1",
-      download_url: "/api/attachments/avatar-12345678?download=1",
-    });
 
     render(
       <GuestJoinProfilePanel
-        deviceToken="aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        inviteToken="aaj1_valid-invite"
         displayName="Guest"
         onDisplayNameChange={vi.fn()}
         onAvatarImageChange={onAvatarImageChange}
@@ -65,16 +38,10 @@ describe("GuestJoinProfilePanel", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "테스트 이미지 적용" }));
 
-    await waitFor(() =>
-      expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledWith(croppedFile, {
-        inviteToken: "aaj1_valid-invite",
-        deviceToken: "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA",
-        purpose: "profile_avatar",
-      })
-    );
-    expect(onAvatarImageChange).toHaveBeenCalledWith(
-      "/api/attachments/avatar-12345678?view=1"
-    );
+    await waitFor(() => expect(onAvatarImageChange).toHaveBeenCalledWith(
+      "data:image/png;base64,YXZhdGFy"
+    ));
+    expect(screen.getByText("입장할 때 사진이 저장됩니다.")).toBeTruthy();
   });
 
   it("retries preflight without presenting editable join-profile fields", () => {
@@ -82,8 +49,6 @@ describe("GuestJoinProfilePanel", () => {
 
     render(
       <GuestJoinProfilePanel
-        deviceToken="aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        inviteToken="aaj1_valid-invite"
         displayName="Guest"
         status="방 세션을 브라우저에 영구 저장할 수 없습니다."
         retryMode="preflight"
@@ -102,8 +67,6 @@ describe("GuestJoinProfilePanel", () => {
   it("retries a frozen join intent without presenting editable profile fields", () => {
     render(
       <GuestJoinProfilePanel
-        deviceToken="aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
-        inviteToken="aaj1_valid-invite"
         displayName="Guest"
         status="입장 응답을 확인하지 못했습니다."
         retryMode="join"

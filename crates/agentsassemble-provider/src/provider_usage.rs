@@ -46,7 +46,7 @@ impl From<crate::process::ProbeFailure> for ProviderUsageError {
             E::Timeout => Self::Timeout,
             E::Authentication => Self::Authentication,
             E::Malformed | E::CatalogTooLarge => Self::InvalidResponse,
-            E::Failed => Self::Unavailable,
+            E::Failed | E::BridgeRuntimeMissing => Self::Unavailable,
             E::Cancelled => Self::Cancelled,
             E::CleanupUnconfirmed => Self::CleanupUnconfirmed,
         }

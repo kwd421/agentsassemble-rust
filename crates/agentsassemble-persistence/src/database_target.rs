@@ -102,7 +102,7 @@ fn prepare_file(options: SqliteConnectOptions) -> Result<PreparedDatabase, Persi
         return Err(PersistenceError::InvalidHostIdentity);
     }
     let (file, created) = open_database_identity(&resolved)?;
-    validate_database_file(&file, created)?;
+    validate_database_file(&file, &resolved, created)?;
     let canonical = resolved
         .canonicalize()
         .map_err(PersistenceError::WriterLease)?;
@@ -159,7 +159,7 @@ fn reject_symlink(path: &Path) -> Result<(), PersistenceError> {
     }
 }
 
-fn validate_database_file(file: &File, created: bool) -> Result<(), PersistenceError> {
+fn validate_database_file(file: &File, path: &Path, created: bool) -> Result<(), PersistenceError> {
     let metadata = file.metadata().map_err(PersistenceError::WriterLease)?;
     if !metadata.is_file() {
         return Err(PersistenceError::UnsafeDatabasePath(
@@ -168,8 +168,8 @@ fn validate_database_file(file: &File, created: bool) -> Result<(), PersistenceE
     }
     validate_link_count(file, &metadata)?;
     if created {
-        secure_file(file).map_err(PersistenceError::WriterLease)?;
-    } else if !validate_file(file).map_err(PersistenceError::WriterLease)? {
+        secure_file(file, path).map_err(PersistenceError::WriterLease)?;
+    } else if !validate_file(file, path).map_err(PersistenceError::WriterLease)? {
         return Err(PersistenceError::UnsafeDatabasePath(
             "database and lease files must be private to the current user",
         ));
@@ -190,7 +190,7 @@ fn acquire_writer_lease(database_path: &Path) -> Result<File, PersistenceError> 
         ));
     }
     validate_link_count(&file, &metadata)?;
-    secure_file(&file).map_err(PersistenceError::WriterLease)?;
+    secure_file(&file, &lock_path).map_err(PersistenceError::WriterLease)?;
     match FileExt::try_lock_exclusive(&file) {
         Ok(()) => Ok(file),
         Err(error) if error.kind() == io::ErrorKind::WouldBlock => {

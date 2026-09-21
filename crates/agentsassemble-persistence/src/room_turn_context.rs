@@ -375,7 +375,7 @@ fn render_observation_input(
     let mut sections = vec![
         format!("[{mode} shared-room observation]"),
         format!("Your room identity is {} in {}.", session.public.display_name, room.label),
-        "Call `read_discussion` before deciding. Then finish with exactly one terminal action exposed by the room transport, choosing the action that fulfills the current room request. Ordinary assistant final text is not a room publication.".to_owned(),
+        "Call `read_discussion` before deciding. Reading, searching, attachments and randomness tools can be used as often as needed and do not end your turn. Then end the turn with exactly one of: `publish_message`, `pass_turn`, or one vote command, choosing the one that fulfills the current room request. Until you call one of those, nothing reaches the room: ordinary assistant final text is not a room publication, and a failed tool still needs a publish or a pass afterwards.".to_owned(),
     ];
     if tabletop_tools {
         sections.push("For official game randomness, use the `roll_dice` or `choose_random` room tool; do not invent a result yourself.".to_owned());

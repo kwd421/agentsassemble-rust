@@ -6,7 +6,7 @@ pub(crate) const READ_ATTACHMENT_TOOL: &str = "read_attachment";
 pub(crate) const SEARCH_MESSAGES_TOOL: &str = "search_messages";
 pub(crate) const READ_MESSAGE_CONTEXT_TOOL: &str = "read_message_context";
 pub(crate) const PUBLISH_MESSAGE_TOOL: &str = "publish_message";
-pub(crate) const DECLINE_TO_SPEAK_TOOL: &str = "decline_to_speak";
+pub(crate) const PASS_TURN_TOOL: &str = "pass_turn";
 pub(crate) const CREATE_VOTE_TOOL: &str = "create_vote";
 pub(crate) const CAST_VOTE_TOOL: &str = "cast_vote";
 pub(crate) const WITHDRAW_VOTE_TOOL: &str = "withdraw_vote";
@@ -20,7 +20,7 @@ pub(crate) const PROVIDER_ROOM_TOOL_NAMES: [&str; 12] = [
     SEARCH_MESSAGES_TOOL,
     READ_MESSAGE_CONTEXT_TOOL,
     PUBLISH_MESSAGE_TOOL,
-    DECLINE_TO_SPEAK_TOOL,
+    PASS_TURN_TOOL,
     CREATE_VOTE_TOOL,
     CAST_VOTE_TOOL,
     WITHDRAW_VOTE_TOOL,
@@ -46,7 +46,7 @@ pub(crate) fn is_available_provider_tool(name: &str, tabletop_tools: bool) -> bo
 }
 
 pub(crate) fn is_terminal_provider_tool(name: &str) -> bool {
-    matches!(name, PUBLISH_MESSAGE_TOOL | DECLINE_TO_SPEAK_TOOL) || is_vote_tool(name)
+    matches!(name, PUBLISH_MESSAGE_TOOL | PASS_TURN_TOOL) || is_vote_tool(name)
 }
 
 pub(crate) fn is_replay_unsafe_provider_tool(name: &str) -> bool {
@@ -63,7 +63,7 @@ pub(super) struct PublishMessage {
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]
 #[serde(deny_unknown_fields)]
-pub(super) struct DeclineToSpeak {
+pub(super) struct PassTurn {
     pub(super) reason_code: String,
 }
 

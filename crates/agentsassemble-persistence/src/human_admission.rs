@@ -1,6 +1,8 @@
 use agentsassemble_domain::{
-    InviteScope, RoomEvent, avatar_attachment_id, canonical_avatar_url, clean_identifier,
+    InviteScope, MAX_ATTACHMENT_BYTES, RoomEvent, avatar_attachment_id, canonical_avatar_url,
+    clean_identifier,
 };
+use base64::{Engine, engine::general_purpose::STANDARD};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,6 +23,8 @@ pub enum HumanAdmissionInputError {
     RequestId,
     #[error("browser invite admission requires a human participant type")]
     ParticipantType,
+    #[error("browser admission avatar must be a bounded PNG image")]
+    Avatar,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -141,6 +145,13 @@ pub struct PreparedHumanAdmission {
     owner_display_name: String,
     client_id: String,
     avatar_attachment_id: Option<String>,
+    inline_avatar: Option<InlineHumanAvatar>,
+    inline_avatar_digest: Option<[u8; 32]>,
+}
+
+pub(crate) struct InlineHumanAvatar {
+    pub(crate) attachment_id: String,
+    pub(crate) content: Vec<u8>,
 }
 
 /// Bounded browser inputs accepted by the current direct HTTP admission contract.
@@ -174,8 +185,41 @@ impl PreparedHumanAdmission {
         if !is_human_participant_type(&participant_type_input) {
             return Err(HumanAdmissionInputError::ParticipantType);
         }
-        let avatar_attachment_id = canonical_avatar_url(&input.avatar_image_url)
-            .and_then(|url| avatar_attachment_id(&url).map(str::to_owned));
+        let (avatar_attachment_id, inline_avatar, inline_avatar_digest) = if let Some(encoded) =
+            input
+                .avatar_image_url
+                .strip_prefix("data:image/png;base64,")
+        {
+            if encoded.len() > MAX_ATTACHMENT_BYTES.div_ceil(3) * 4 {
+                return Err(HumanAdmissionInputError::Avatar);
+            }
+            let content = STANDARD
+                .decode(encoded)
+                .map_err(|_| HumanAdmissionInputError::Avatar)?;
+            if content.is_empty() || content.len() > MAX_ATTACHMENT_BYTES {
+                return Err(HumanAdmissionInputError::Avatar);
+            }
+            let attachment_id = Uuid::new_v4().simple().to_string();
+            let digest = Sha256::digest(&content).into();
+            (
+                Some(attachment_id.clone()),
+                Some(InlineHumanAvatar {
+                    attachment_id,
+                    content,
+                }),
+                Some(digest),
+            )
+        } else {
+            if input.avatar_image_url.starts_with("data:") {
+                return Err(HumanAdmissionInputError::Avatar);
+            }
+            (
+                canonical_avatar_url(&input.avatar_image_url)
+                    .and_then(|url| avatar_attachment_id(&url).map(str::to_owned)),
+                None,
+                None,
+            )
+        };
         Ok(Self {
             credential,
             browser_credential_fingerprint,
@@ -186,7 +230,13 @@ impl PreparedHumanAdmission {
             owner_display_name: clean_identifier(&input.owner_display_name, 64),
             client_id: clean_identifier(&input.client_id, 128),
             avatar_attachment_id,
+            inline_avatar,
+            inline_avatar_digest,
         })
+    }
+
+    pub(crate) fn inline_avatar(&self) -> Option<&InlineHumanAvatar> {
+        self.inline_avatar.as_ref()
     }
 
     #[must_use]
@@ -262,7 +312,10 @@ impl PreparedHumanAdmission {
         update_field(&mut digest, &self.participant_type_input);
         update_field(&mut digest, &self.owner_display_name);
         update_field(&mut digest, &self.client_id);
-        if let Some(attachment_id) = &self.avatar_attachment_id {
+        if let Some(avatar_digest) = &self.inline_avatar_digest {
+            digest.update([2]);
+            digest.update(avatar_digest);
+        } else if let Some(attachment_id) = &self.avatar_attachment_id {
             digest.update([1]);
             update_field(&mut digest, attachment_id);
         } else {

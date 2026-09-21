@@ -147,8 +147,11 @@ pub(crate) async fn failed_session_has_confirmed_runtime_exit(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
 ) -> Result<bool, PersistenceError> {
+    // A provider conversation can outlive the runtime that carried it: the failure clears the
+    // handle triple, and the session is then left with a thread nothing can reach. Requiring it
+    // to be inactive here made such a session impossible to stop, because stop needs a handle.
+    // The terminal execution below still has to name the runtime that owned the failed turn.
     if session.public.runtime_status != agentsassemble_domain::AgentRuntimeStatus::Error
-        || session.public.provider_session_active
         || !session.runtime_handle_id.is_empty()
         || !session.runtime_owner_id.is_empty()
         || !session.runtime_lease_token.is_empty()
@@ -159,6 +162,7 @@ pub(crate) async fn failed_session_has_confirmed_runtime_exit(
     if session.public.status == agentsassemble_domain::AgentSessionStatus::Unavailable
         && !session.public.enabled
         && !session.public.recovery_required
+        && !session.public.provider_session_active
     {
         return Ok(true);
     }

@@ -25,7 +25,7 @@ use ts_rs::TS;
 
 mod connector_invite;
 mod local_control;
-pub use connector_invite::{CreateConnectorInviteRequest, CreatedConnectorInvite};
+pub use connector_invite::{CreateConnectorInviteRequest, CreatedConnectorInvite, InviteReach};
 
 pub use local_control::{
     CentralLoginAction, CentralLoginResult, LocalBootstrapGrant, LocalBootstrapPhase,

@@ -224,6 +224,7 @@ describe("RoomInviteModal", () => {
       operatorPairings: [{ key: "pairing-one", expiresAt: "2099-01-01T00:00:00Z",
         state: "unknown", copyable: false, expired: false }],
     });
+    fireEvent.click(screen.getByRole("tab", { name: "내 기기" }));
     fireEvent.click(screen.getByRole("button", { name: "운영자 기기 연결 링크 생성" }));
     expect(onCreatePairing).toHaveBeenCalledOnce();
     expect((screen.getByRole("button", { name: "기기 연결 1 링크 복사" }) as HTMLButtonElement).disabled).toBe(true);

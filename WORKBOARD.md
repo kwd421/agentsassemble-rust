@@ -2,6 +2,68 @@
 
 ## Active work
 
+- 2026-09-21 user-directed guest avatar correction: selecting/cropping a photo now
+  keeps it in the browser until the guest confirms Join. The admission request
+  commits the canonical image with the profile and invite in one transaction;
+  invite-only prejoin attachment upload is closed. Affected server and frontend
+  regressions pass. Signed isolated package starts, retains its test room after
+  restart, and rejects unauthenticated attachment upload with 401. In the exact
+  packaged guest flow, selecting and confirming a photo left prejoin/profile
+  asset counts at 0/0 and invite use at 0; Join changed them to 0/1 and 1,
+  and the browser rendered the guest photo. The temporary public tunnel was
+  closed and the isolated app/data removed after verification. Full
+  `make verify` passes with build-only `CARGO_PROFILE_DEV_DEBUG=line-tables-only`,
+  `CARGO_PROFILE_TEST_DEBUG=0`, and `CARGO_PROFILE_TEST_BUILD_OVERRIDE_STRIP=none`
+  to stay within the artifact gate and avoid the macOS 27 LINKEDIT macro issue.
+
+- 2026-09-20 whole-repository Pro answer for dcaa42eb is complete: REVISE H1/M1.
+  H1 Claude's approval showed only a tool name despite returning the original input;
+  M1 an install check that recovered `completed=true` reopened the offer and retained
+  the parent updating guard. Both are confirmed in the current owners. Corrections
+  preserve the existing request/installation layout. Affected bridge, Rust and
+  frontend tests plus architecture, build and Clippy checks pass. A provider full
+  test run passed 281/282; its one HTTP-cancellation timing failure passed alone
+  on rerun. Signed isolated 0.1.60 starts and its room/add-agent path was operated;
+  the exact approval/install-recovery UI paths were not exercised in the package.
+  Final bridge resource is rebuilt and matches source in the signed package;
+  inspect and push correction, submit the next
+  unrestricted whole-repository review, then stop after visible submission.
+
+- At 22:25 KST 2026-09-20, unrestricted whole-repository Pro re-review is posted
+  in the existing in-app conversation for dcaa42ebc236513dc1aca3935d10080501b05092.
+  Both complete source snapshots (2708 files), manifest, full prompt and active
+  Pro generation are visible. Corrections and affected verification precede this
+  submission. Stop after confirming submission per the user; do not wait for this
+  next answer or claim final approval. Branch: codex/recovery-and-sonnet.
+
+- 2026-09-20 acceptance: signed 0.1.59 verifies actual Claude Sonnet 5 Low,
+  two completed turns across Stop/Resume with the same native session, then Stop.
+  The original Attachment Fixture generation 4 is recovered through the real
+  previous-boot boundary, not a database reset. Requested header icon/tab changes
+  pass packaged verification. Pro H1 deleted-vote rollback is reproduced in Rust
+  and corrected; current Homebrew Node loader dependency loss is reproduced and
+  corrected at SDK host binding. Affected tests and mandatory gates pass. Freeze
+  and submit the whole repository for Pro re-review, then stop per user instruction.
+
+- 2026-09-20: completed whole-repository Pro answer for 722b506e is read
+  (46m10s, REVISE H1). A deleted vote tombstone fails historical context
+  validation and rolls back the next assigned message. Correct the shared visible
+  payload owner, preserving deletion privacy and non-deleted vote validation;
+  verify actual API-context persistence before requesting unrestricted re-review.
+
+- 2026-09-20: integrate retained recovery correction onto windows-runtime-fixes
+  f2f08703. User authorizes Claude Sonnet verification in addition to the earlier
+  Opus low request. Only requested frontend edits: always use the people icon for
+  the member-panel toggle and remove the redundant room-connection-info tab button.
+  Other frontend changes are prohibited; alternate API harness work is deferred.
+  Finish affected verification and retained-session recovery before full re-review.
+
+- Latest user correction2026-09-16 supersedes the submission stop below: resolve
+  the retained Attachment Fixture continuation/stop recovery failure, complete
+  affected verification, and only then submit the corrected whole-repository review.
+  Investigation is active; neither recovery nor completion is claimed. Preserve
+  the exact failed session and its custody evidence; do not reset its database state.
+
 - At00:33 KST2026-09-16, unrestricted whole-repository Pro re-review is visibly
   submitted in the existing in-app conversation at722b506ef7c0df1507a86e6efe6912872ff647e8,
   with both full source snapshots (2690 files). Complete prompt, attachment and

@@ -3,8 +3,12 @@ import { afterEach, expect, it, vi } from "vitest";
 import { useManagedAiInvites } from "./useManagedAiInvites";
 
 const api = vi.hoisted(() => ({ create: vi.fn(), friend: vi.fn() }));
-vi.mock("../api/connectorInvite", () => ({ createConnectorInvite: api.create }));
+vi.mock("../api/connectorInvite", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../api/connectorInvite")>(),
+  createConnectorInvite: api.create,
+}));
 vi.mock("../api/attendeeInvite", async (importOriginal) => ({ ...await importOriginal<typeof import("../api/attendeeInvite")>(), createFriendAttendeeInvite: api.friend }));
+const LOCAL = "http://127.0.0.1:41955";
 afterEach(() => { vi.useRealTimers(); api.create.mockReset(); api.friend.mockReset(); });
 
 it("retries uncertain creation with the same identity and guards copying by refreshed origin and expiry", async () => {
@@ -14,8 +18,8 @@ it("retries uncertain creation with the same identity and guards copying by refr
   const copied: string[] = [];
   const publishStatus = vi.fn();
   const hook = renderHook(() => useManagedAiInvites({
-    roomDockId: "general", publicOrigin: origin, resolveManager: () => authority,
-    captureOriginRefresh: () => async () => ({ publicOrigin: origin, isCurrent: () => true }),
+    roomDockId: "general", publicOrigin: origin, localOrigin: LOCAL, resolveManager: () => authority,
+    captureOriginRefresh: () => async () => ({ publicOrigin: origin, localOrigin: LOCAL, isCurrent: () => true }),
     copyText: async (text, prepare) => { const guard = await prepare(); guard(); copied.push(text); return true; },
     publishStatus,
   }));
@@ -31,6 +35,9 @@ it("retries uncertain creation with the same identity and guards copying by refr
   expect(api.create.mock.calls[0][1]).toEqual(api.create.mock.calls[1][1]);
   await act(() => hook.result.current.copy("invite"));
   expect(copied).toHaveLength(1);
+  expect(copied[0]).toContain("assemble room connector-mcp");
+  expect(copied[0]).toContain(`${origin}/join?token=private`);
+  expect(copied[0]).not.toMatch(/^https:\/\/public\.example\.test\/join\?token=private$/);
   origin = "https://changed.example.test";
   await act(() => hook.result.current.copy("invite"));
   expect(copied).toHaveLength(1);
@@ -44,8 +51,8 @@ it("blocks a retired creation after ticket acquisition and before dispatch", asy
   const publishStatus = vi.fn();
   const authority = { server_id: "server", authority_lineage_id: "lineage", room_id: "general", room_uid: "uid" };
   const hook = renderHook(() => useManagedAiInvites({
-    roomDockId: "general", publicOrigin: "https://public.example.test", resolveManager: () => authority,
-    captureOriginRefresh: () => async () => ({ publicOrigin: "https://public.example.test", isCurrent: () => current }),
+    roomDockId: "general", publicOrigin: "https://public.example.test", localOrigin: LOCAL, resolveManager: () => authority,
+    captureOriginRefresh: () => async () => ({ publicOrigin: "https://public.example.test", localOrigin: LOCAL, isCurrent: () => current }),
     copyText: vi.fn(), publishStatus,
   }));
   api.create.mockImplementationOnce(async (_authority, _request, guard) => { current = false; guard(); });
@@ -59,8 +66,8 @@ it("retains distinct retry receipts for each AI friend and copies the full atten
   const authority = { server_id: "server", authority_lineage_id: "lineage", room_id: "general", room_uid: "uid" };
   const origin = "https://public.example.test";
   const copied: string[] = [];
-  const hook = renderHook(() => useManagedAiInvites({ roomDockId: "general", publicOrigin: origin, resolveManager: () => authority,
-    captureOriginRefresh: () => async () => ({ publicOrigin: origin, isCurrent: () => true }), publishStatus: vi.fn(),
+  const hook = renderHook(() => useManagedAiInvites({ roomDockId: "general", publicOrigin: origin, localOrigin: LOCAL, resolveManager: () => authority,
+    captureOriginRefresh: () => async () => ({ publicOrigin: origin, localOrigin: LOCAL, isCurrent: () => true }), publishStatus: vi.fn(),
     copyText: async (text, prepare) => { (await prepare())(); copied.push(text); return true; } }));
   api.friend.mockRejectedValue(new Error("response lost"));
   await act(() => hook.result.current.create("friend-a"));
@@ -79,4 +86,46 @@ it("retains distinct retry receipts for each AI friend and copies the full atten
   await act(() => hook.result.current.copy("invite-a"));
   expect(copied[0]).toContain("assemble room attend --provider codex");
   expect(copied[0]).toContain(`${origin}/join?token=fixture`);
+});
+
+it("creates a connector invite on this machine's loopback origin while public access is closed", async () => {
+  const authority = { server_id: "server", authority_lineage_id: "lineage", room_id: "general", room_uid: "uid" };
+  let publicOrigin = "";
+  const copied: string[] = [];
+  const publishStatus = vi.fn();
+  const hook = renderHook(() => useManagedAiInvites({ roomDockId: "general", publicOrigin, localOrigin: LOCAL, resolveManager: () => authority,
+    captureOriginRefresh: () => async () => ({ publicOrigin, localOrigin: LOCAL, isCurrent: () => true }), publishStatus,
+    copyText: async (text, prepare) => { (await prepare())(); copied.push(text); return true; } }));
+  api.create.mockImplementationOnce(async (_authority, request, guard) => {
+    guard();
+    return { authority, origin: LOCAL, reach: request.reach, expiresAtMs: Date.now() + 60_000,
+      result: { request_id: request.request_id, room_uid: "uid", invite_id: "local-invite", expires_at: new Date(Date.now() + 60_000).toISOString(), join_url: `${LOCAL}/join?token=private` } };
+  });
+
+  await act(() => hook.result.current.create());
+
+  expect(api.create.mock.calls[0][1].reach).toBe("local");
+  expect(hook.result.current.invites).toEqual([expect.objectContaining({ key: "local-invite", local: true, copyable: true })]);
+  expect(publishStatus).toHaveBeenLastCalledWith(expect.stringContaining("이 PC 전용"));
+  await act(() => hook.result.current.copy("local-invite"));
+  expect(copied).toHaveLength(1);
+  expect(copied[0]).toContain("assemble room connector-mcp");
+  expect(copied[0]).toContain(`${LOCAL}/join?token=private`);
+  expect(copied[0]).not.toBe(`${LOCAL}/join?token=private`);
+
+  // Opening public access later does not invalidate a link that still resolves on this machine.
+  publicOrigin = "https://public.example.test";
+  hook.rerender();
+  expect(hook.result.current.invites[0].copyable).toBe(true);
+});
+
+it("still requires public access for an AI friend packet", async () => {
+  const authority = { server_id: "server", authority_lineage_id: "lineage", room_id: "general", room_uid: "uid" };
+  const hook = renderHook(() => useManagedAiInvites({ roomDockId: "general", publicOrigin: "", localOrigin: LOCAL, resolveManager: () => authority,
+    captureOriginRefresh: () => async () => ({ publicOrigin: "", localOrigin: LOCAL, isCurrent: () => true }), publishStatus: vi.fn(), copyText: vi.fn() }));
+
+  await act(() => hook.result.current.create("friend-a"));
+
+  expect(api.friend).not.toHaveBeenCalled();
+  expect(api.create).not.toHaveBeenCalled();
 });

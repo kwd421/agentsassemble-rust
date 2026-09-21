@@ -4,7 +4,6 @@ import CreateChannelModal from "../views/components/CreateChannelModal";
 import CustomChannelView from "../views/CustomChannelView";
 import { isCustomChannelId } from "../lib/customChannelId";
 import GuestIdentityRecoveryPanel from "../views/components/GuestIdentityRecoveryPanel";
-import RoomManagementModal from "../views/components/RoomManagementModal";
 import { lazy, Suspense, useLayoutEffect, useRef, useState } from "react";
 import {
   Bell,
@@ -18,6 +17,7 @@ import {
 import { CHANNEL_SECTIONS, DeferredViewFallback } from "./appModel";
 import type { AppController } from "./useAppController";
 import AppOverlays from "./AppOverlays";
+import { KnownChannels } from "../views/components/DiscordText";
 import SideChatDock from "../views/components/SideChatDock";
 import LobbyView from "../views/LobbyView";
 import { RoomSocketProvider } from "../RoomSocketContext";
@@ -64,7 +64,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     openChannelMenu, openCrossChannelSearchResult, openMobileProfileFromPanel, openMobileRoomInfo,
     openMobileSidebar, openRoomMenu, openRoomSettings, pendingMessageSearchTarget,
     roomAppearances, roomDirectorySyncIssue, roomHttpAuthority, roomMenu, roomMessageSearch,
-    roomLifecycle, pairedRoomLifecycle, roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
+    roomLifecycle, roomSettings, roomSocket, rooms, scopedAgents, scopedMentionables,
     saveAgentAvatar, scopedOnlineCount, selectRoom, sendAgentConfigure, sendAgentProfileUpdate, sendAgentControl,
     sendParticipantMute, sendParticipantRemove, serverProductSurface, setAdminOpen, setChannelNotifications,
     setChannelSearchQuery, setLeaveRoomTargetId,
@@ -119,8 +119,10 @@ export default function AppView({ controller }: { controller: AppController }) {
     return { ...channelHeaderActions(channelId), persistentRail, sideChatOpen,
       onToggleSideChat: canOpenSideChat ? () => setSideChatOpen(!sideChatOpen) : undefined };
   }
+  const channelNames = visibleChannels.map((item) => item.label);
   return (
     <RoomSocketProvider socket={roomSocket}>
+    <KnownChannels names={channelNames}>
     <div
       className="dc-shell flex h-screen max-h-screen overflow-hidden text-text-primary"
       style={shellStyle}
@@ -149,7 +151,6 @@ export default function AppView({ controller }: { controller: AppController }) {
         onOpenAdmin={!guestLocked && isDesktopWebview() ? () => { setAdminOpen(true); setFriendsOpen(false); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onOpenFriends={roomLifecycle.enabled ? () => { setAdminOpen(false); setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onAddRoom={addFreshRoom}
-        onManageRooms={roomLifecycle.enabled ? roomLifecycle.show : pairedRoomLifecycle.enabled ? pairedRoomLifecycle.show : undefined}
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
         readReady={roomReadReady}
@@ -177,7 +178,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               disabled={!hasRoom}
               onClick={(event) => openRoomMenu(event, activeRoom)}
               onContextMenu={(event) => openRoomMenu(event, activeRoom)}
-              aria-label={`${activeRoom.label} 서버 메뉴 열기`}
+              aria-label={`${activeRoom.label} 방 메뉴 열기`}
             >
               <span className="truncate preserve-words">{activeRoom.label}</span>
               <ChevronDown size={16} />
@@ -205,8 +206,8 @@ export default function AppView({ controller }: { controller: AppController }) {
                     event.stopPropagation();
                     inviteRoom(activeRoom.id);
                   }}
-                  aria-label="서버에 초대하기"
-                  title="서버에 초대하기"
+                  aria-label="방에 초대하기"
+                  title="방에 초대하기"
                 >
                   <UserPlus size={20} />
                 </button>
@@ -380,10 +381,9 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
               <h1 id="empty-room-title">열려 있는 방이 없어요</h1>
-              <p>새 방을 만들거나 방 관리에서 보관한 방을 복원할 수 있어요.</p>
+              <p>새 방을 만들어 대화를 시작할 수 있어요.</p>
               <div className="flex flex-wrap gap-3" style={{ justifyContent: "center", marginTop: 20 }}>
                 {!guestLocked && <button type="button" className="dc-agent-create-primary" onClick={addFreshRoom}>새 방 만들기</button>}
-                {roomLifecycle.enabled && <button type="button" className="dc-agent-create-secondary" onClick={roomLifecycle.show}>방 관리</button>}
               </div>
             </section>
           ) : channel === "lobby" ? (
@@ -496,8 +496,6 @@ export default function AppView({ controller }: { controller: AppController }) {
           if (currentChannelScope.current !== channelScope) return;
           setFriendsOpen(false); goToChannel(created.id);
         }} />}
-      {roomLifecycle.open && <RoomManagementModal controller={roomLifecycle} />}
-      {pairedRoomLifecycle.open && <RoomManagementModal controller={pairedRoomLifecycle} />}
 
       {/* Right panel */}
       {roomInfoOpen && (
@@ -507,22 +505,9 @@ export default function AppView({ controller }: { controller: AppController }) {
           style={panelStyle}
           data-testid="room-right-panel"
         >
-          <div className="dc-right-panel-tabs" role="tablist" aria-label="우측 패널">
-            <button
-              type="button"
-              role="tab"
-              id="room-info-panel-tab"
-              data-active="true"
-              aria-selected="true"
-              aria-controls="room-info-panel"
-            >
-              방 연결 정보
-            </button>
-          </div>
           <section
             id="room-info-panel"
-            role="tabpanel"
-            aria-labelledby="room-info-panel-tab"
+            aria-label="방 연결 정보"
             className="min-h-0 flex-1"
             data-testid="room-info-panel"
           >
@@ -558,6 +543,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       </aside>}
       </div>
     </div>
+    </KnownChannels>
     </RoomSocketProvider>
   );
 }

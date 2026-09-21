@@ -108,6 +108,60 @@ fn escaped_descendant_entry() {
 }
 
 #[tokio::test]
+async fn stop_confirms_a_leader_that_exited_without_forking() {
+    let _serial = RUNTIME_TEST_LOCK.lock().await;
+    let directory =
+        tempfile::tempdir().unwrap_or_else(|error| panic!("create no-fork fixture: {error}"));
+    let release = directory.path().join("exit-authorized");
+    let script = format!(
+        "#!/bin/sh\nIFS= read -r initialize\nprintf '%s\\n' '{{\"id\":1,\"result\":{{}}}}'\nIFS= read -r initialized\nIFS= read -r thread\nprintf '%s\\n' '{{\"id\":2,\"result\":{{\"thread\":{{\"id\":\"thread-1\"}}}}}}'\nIFS= read -r name\nprintf '%s\\n' '{{\"id\":3,\"result\":{{}}}}'\nwhile [ ! -f {} ]; do :; done\nexit 0\n",
+        shell_quote(&release),
+    );
+    let session = fixture_session(directory.path(), &script).await;
+    let adapter = ProviderAdapter::new();
+    let started = adapter
+        .start(&session)
+        .await
+        .unwrap_or_else(|error| panic!("start no-fork fixture: {error}"));
+    std::fs::write(&release, b"exit")
+        .unwrap_or_else(|error| panic!("release exact leader: {error}"));
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while leader_is_alive(&adapter, &session).await {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap_or_else(|_| panic!("leader did not exit"));
+    adapter
+        .stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("confirm no-fork cleanup: {error}"));
+    let mut durable = session.clone();
+    durable.runtime_handle_id = started.runtime_handle_id.clone();
+    durable.runtime_owner_id = started.runtime_owner_id.clone();
+    durable.runtime_lease_token = started.runtime_lease_token.clone();
+    assert_eq!(
+        ProviderAdapter::new().observe(&durable).await,
+        ProviderRuntimeObservation::Gone
+    );
+    adapter
+        .release_confirmed_stop(
+            &session.public.room_id,
+            &session.public.session_id,
+            &started.runtime_handle_id,
+            &started.runtime_owner_id,
+            &started.runtime_lease_token,
+        )
+        .await;
+}
+
+#[tokio::test]
 async fn stop_kills_descendants_after_the_codex_leader_exits() {
     let _serial = RUNTIME_TEST_LOCK.lock().await;
     let directory =

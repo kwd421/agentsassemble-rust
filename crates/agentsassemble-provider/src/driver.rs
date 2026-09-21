@@ -103,7 +103,7 @@ impl From<RoomPortalError> for DriverError {
                 "room_observation_unconfirmed",
                 "The provider did not confirm reading the assigned room observation.",
             ),
-            RoomPortalError::OutcomeMissing | RoomPortalError::OutcomeInvalid => Self::new(
+            RoomPortalError::OutcomeInvalid => Self::new(
                 "room_portal_publication_missing",
                 "The provider did not stage a valid room publication or decline.",
             ),

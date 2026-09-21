@@ -253,6 +253,78 @@ impl ProviderAdapter {
         }
     }
 
+    /// Confirms that a Windows generation left by an earlier server process is gone.
+    ///
+    /// Windows keeps the provider Job in the server that started it, so a server killed
+    /// without a clean shutdown never records its cleanup receipt and the durable session stays
+    /// recovery-required with no way forward. The kernel closes that Job with its owner and
+    /// kill-on-close ends every member, and the same owner held the exclusive lease. An
+    /// unlocked `windows-active` lease for this exact handle and generation is therefore proof
+    /// that the runtime is gone, and this records the receipt the stop path needs.
+    ///
+    /// Only an explicit owner-requested stop calls this. A runtime owned by this supervisor,
+    /// a lease another process still holds, and every identity mismatch are refused.
+    ///
+    /// # Errors
+    ///
+    /// Returns an uncertain error when the loss is not proven, leaving authority unchanged.
+    pub async fn confirm_owner_loss(
+        &self,
+        session: &DurableAgentSession,
+    ) -> Result<(), ProviderAdapterError> {
+        let room_id = session.public.room_id.clone();
+        let session_id = session.public.session_id.clone();
+        let handle_id = session.runtime_handle_id.clone();
+        let owner_id = session.runtime_owner_id.clone();
+        let lease_token = session.runtime_lease_token.clone();
+        let refused = |message: &'static str| {
+            ProviderAdapterError::uncertain(
+                DriverError::new("runtime_owner_loss_unproven", message),
+                &handle_id,
+                &owner_id,
+            )
+        };
+        if self.existing_slot(&room_id, &session_id).await.is_some() {
+            return Err(refused("This supervisor still owns the provider runtime."));
+        }
+        #[cfg(windows)]
+        {
+            use crate::runtime_handle::{RuntimeHandlePlatform, parse_handle_id};
+
+            let Ok(handle) = parse_handle_id(&handle_id) else {
+                return Err(refused("The durable runtime handle is unreadable."));
+            };
+            if handle.platform != RuntimeHandlePlatform::Windows
+                || handle.launch_token != lease_token
+            {
+                return Err(refused(
+                    "The durable runtime handle is from another launch.",
+                ));
+            }
+            let confirmed = tokio::task::spawn_blocking(move || {
+                crate::runtime_lease::confirm_windows_owner_loss(
+                    &room_id,
+                    &session_id,
+                    &lease_token,
+                )
+            })
+            .await;
+            return match confirmed {
+                Ok(Ok(())) => Ok(()),
+                _ => Err(refused(
+                    "The provider runtime lease does not prove the previous owner is gone.",
+                )),
+            };
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = lease_token;
+            Err(refused(
+                "Owner-loss confirmation is a Windows-only recovery path.",
+            ))
+        }
+    }
+
     /// Stops only the exact handle and supervisor owner in a durable stop lease.
     ///
     /// # Errors

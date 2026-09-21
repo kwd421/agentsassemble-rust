@@ -4,8 +4,8 @@ use sqlx::{Sqlite, Transaction};
 use crate::{AgentTurnCommit, PersistenceError, agent_lifecycle::save_session};
 
 use super::{
-    assign_available_pending, complete_session_state, error_event, rejected, route_message,
-    session_state_event, turn_finished_event,
+    assign_available_pending, complete_session_state, error_event, rejected, route_declined_floor,
+    route_message, session_state_event, turn_finished_event,
 };
 
 pub(super) enum ProviderTurnDisposition<'a> {
@@ -55,6 +55,10 @@ impl ProviderTurnFinalization<'_> {
         };
         let input_event_id = session.input_up_to_event_id.clone();
         let input_seq = session.input_up_to_seq;
+        let declined_source_event_id =
+            matches!(self.disposition, ProviderTurnDisposition::Declined { .. })
+                .then(|| session.active_source_event_id.clone())
+                .filter(|id| !id.is_empty());
         let finished = turn_finished_event(
             transaction,
             session,
@@ -77,6 +81,14 @@ impl ProviderTurnFinalization<'_> {
             route_message(transaction, self.settings, event).await?;
         }
         events.extend([finished, state]);
+        // The declining agent held the ordered floor alone, so the message needs a next speaker
+        // or the exchange ends in silence.
+        if let Some(source_event_id) = declined_source_event_id
+            && let Some(source) =
+                load_room_event(transaction, &self.room.room_id, &source_event_id).await?
+        {
+            route_declined_floor(transaction, self.settings, &source).await?;
+        }
         let prepared = assign_available_pending(transaction, self.room, self.settings).await?;
         let mut next_assignments = Vec::with_capacity(prepared.len());
         for item in prepared {
@@ -88,4 +100,29 @@ impl ProviderTurnFinalization<'_> {
             next_assignments,
         })
     }
+}
+
+/// Reads back one stored room event, which a hand-off needs to route the original message.
+async fn load_room_event(
+    transaction: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    event_id: &str,
+) -> Result<Option<RoomEvent>, PersistenceError> {
+    let stored = sqlx::query_scalar::<_, String>(
+        "SELECT event_json FROM room_events WHERE room_id = ?          AND json_extract(event_json, '$.id') = ? LIMIT 1",
+    )
+    .bind(room_id)
+    .bind(event_id)
+    .fetch_optional(&mut **transaction)
+    .await?;
+    stored
+        .map(|json| {
+            serde_json::from_str(&json).map_err(|_| {
+                rejected(
+                    "stored_room_event_invalid",
+                    "A stored room event could not be read for the ordered floor.",
+                )
+            })
+        })
+        .transpose()
 }

@@ -47,6 +47,14 @@ import {
 
 type Screen = "choice" | "guest" | "recover" | "recovery-code";
 
+// Tauri commands reject with their native Result error string, not an Error, so a
+// native startup failure would otherwise reach the user without its cause.
+function failureMessage(reason: unknown, fallback: string): string {
+  if (reason instanceof Error) return reason.message;
+  if (typeof reason === "string" && reason.trim()) return `${fallback} (${reason})`;
+  return fallback;
+}
+
 async function saveLocalProfile(
   displayName: string,
   bootstrapRequestId: string
@@ -156,11 +164,7 @@ export default function StartupIdentityGate({
         }
       } catch (reason) {
         if (active) {
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "로컬 신원 권위를 확인하지 못했습니다."
-          );
+          setError(failureMessage(reason, "로컬 신원 권위를 확인하지 못했습니다."));
           setChecking(false);
         }
         return;
@@ -187,7 +191,7 @@ export default function StartupIdentityGate({
         return;
       }
       try {
-        setStatus("중앙 신원과 서버 목록을 확인하는 중");
+        setStatus("중앙 신원과 방 목록을 확인하는 중");
         await bootstrapCentral();
         const localAuthority = await saveLocalProfile(
           existing.person.display_name,
@@ -204,11 +208,7 @@ export default function StartupIdentityGate({
           return;
         }
         if (active) {
-          setError(
-            reason instanceof Error
-              ? reason.message
-              : "중앙 신원과 로컬 권위를 동기화하지 못했습니다."
-          );
+          setError(failureMessage(reason, "중앙 신원과 로컬 권위를 동기화하지 못했습니다."));
           setChecking(false);
         }
       }
@@ -244,11 +244,7 @@ export default function StartupIdentityGate({
         setCopied(false);
         setScreen("recovery-code");
       } else {
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "게스트 신원을 만들지 못했습니다."
-        );
+        setError(failureMessage(reason, "게스트 신원을 만들지 못했습니다."));
       }
     } finally {
       setBusy(false);
@@ -279,11 +275,7 @@ export default function StartupIdentityGate({
         setCopied(false);
         setScreen("recovery-code");
       } else {
-        setError(
-          reason instanceof Error
-            ? reason.message
-            : "게스트 신원을 복구하지 못했습니다."
-        );
+        setError(failureMessage(reason, "게스트 신원을 복구하지 못했습니다."));
       }
     } finally {
       setBusy(false);
@@ -312,9 +304,7 @@ export default function StartupIdentityGate({
           "name" in reason &&
           reason.name === "AbortError"
           ? "Google 로그인을 취소했습니다."
-          : reason instanceof Error
-          ? reason.message
-          : "Google 로그인을 완료하지 못했습니다."
+          : failureMessage(reason, "Google 로그인을 완료하지 못했습니다.")
       );
     } finally {
       if (googleAbortController.current === controller) {
@@ -345,7 +335,7 @@ export default function StartupIdentityGate({
       );
       await enterApplication(localAuthority);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "로컬 프로필을 저장하지 못했습니다.");
+      setError(failureMessage(reason, "로컬 프로필을 저장하지 못했습니다."));
     } finally {
       setBusy(false);
     }
@@ -423,8 +413,8 @@ export default function StartupIdentityGate({
           </h1>
           <p className="text-[13px] font-semibold leading-5 text-text-muted">
             {screen === "recovery-code"
-              ? "이 코드는 다른 기기에서 같은 게스트 신원과 서버 목록을 복구할 때 필요합니다. 중앙에는 코드 원문을 저장하지 않습니다."
-              : "Google 계정은 내 서버 목록을 기기 간 동기화할 때만 사용합니다. 방과 메시지는 각 서버에 그대로 남습니다."}
+              ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요합니다. 중앙에는 코드 원문을 저장하지 않습니다."
+              : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용합니다. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남습니다."}
           </p>
         </header>
 

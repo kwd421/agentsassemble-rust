@@ -13,6 +13,10 @@ use tokio::sync::{Semaphore, oneshot};
 
 #[path = "codex_executable.rs"]
 mod codex_executable;
+#[cfg(target_os = "macos")]
+#[path = "macho_host.rs"]
+mod macho_host;
+
 #[path = "cursor_executable.rs"]
 mod cursor_executable;
 #[cfg(unix)]
@@ -21,6 +25,10 @@ mod executable_staging;
 
 #[cfg(unix)]
 pub(crate) use codex_executable::codex_code_mode_host_path;
+#[cfg(windows)]
+use codex_executable::npm_cmd_shim_native;
+#[cfg(windows)]
+pub(crate) use codex_executable::npm_cmd_shim_script;
 pub(crate) use codex_executable::{
     bind_codex_executable, codex_executable_identity, resolve_codex_executable,
 };
@@ -237,6 +245,40 @@ pub(crate) async fn canonical_workspace(
     .await
 }
 
+/// Replaces an npm `.cmd` wrapper with the native executable it runs, when it runs one.
+///
+/// Node children cannot spawn `.cmd` files without a shell, so a launcher handed to a Node
+/// bridge must be the binary itself. Any other launcher is returned unchanged.
+pub(crate) async fn native_launcher(
+    launcher: (String, String),
+) -> Result<(String, String), FilesystemFailure> {
+    #[cfg(windows)]
+    {
+        run_bounded(move || {
+            let path = Path::new(&launcher.0);
+            let wrapper = path
+                .extension()
+                .is_some_and(|extension| extension.eq_ignore_ascii_case("cmd"));
+            let Some(target) = wrapper
+                .then(|| npm_cmd_shim_native(path))
+                .transpose()?
+                .flatten()
+            else {
+                return Ok(launcher);
+            };
+            let canonical = target.canonicalize()?;
+            let identity = executable_identity_sync(&canonical)?;
+            let encoded = canonical
+                .to_str()
+                .ok_or_else(|| io::Error::other("executable path is not UTF-8"))?;
+            Ok((encoded.to_owned(), identity))
+        })
+        .await
+    }
+    #[cfg(not(windows))]
+    Ok(launcher)
+}
+
 pub(crate) async fn executable_identity(path: String) -> Result<String, FilesystemFailure> {
     run_bounded(move || executable_identity_sync(Path::new(&path))).await
 }
@@ -268,6 +310,16 @@ pub(crate) async fn bind_executable_with_children(
     let mut executable = bind_executable(path, expected_identity).await?;
     executable.allows_child_processes = true;
     Ok(executable)
+}
+
+pub(crate) async fn bind_sdk_host(
+    path: String,
+    expected_identity: String,
+) -> Result<BoundExecutable, FilesystemFailure> {
+    #[cfg(target_os = "macos")]
+    return run_bounded(move || macho_host::bind(Path::new(&path), &expected_identity)).await;
+    #[cfg(not(target_os = "macos"))]
+    bind_executable_with_children(path, expected_identity).await
 }
 
 async fn run_bounded<T, F>(operation: F) -> Result<T, FilesystemFailure>

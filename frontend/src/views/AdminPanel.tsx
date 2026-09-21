@@ -24,12 +24,12 @@ export default function AdminPanel({ onClose }: { onClose: () => void }) {
     setResources(null); setError(false); setLoading(true); setRevision((value) => value + 1);
   };
   return (
-    <section className="ops-panel mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden" aria-label="서버 상태">
+    <section className="ops-panel mx-auto flex h-full min-h-0 w-full max-w-5xl flex-col overflow-hidden" aria-label="내 컴퓨터">
       <header className="flex shrink-0 items-center justify-between gap-3 border-b border-accent/14 px-5 py-4" style={{ padding: 24 }}>
-        <h1 className="flex items-center gap-3 text-[20px] font-black"><Activity size={20} />서버 상태</h1>
+        <h1 className="flex items-center gap-3 text-[20px] font-black"><Activity size={20} />내 컴퓨터</h1>
         <div className="flex gap-2">
           <button type="button" onClick={refresh} disabled={loading} className="ops-button grid h-10 w-10 place-items-center rounded-lg" style={{ width: 44, height: 44 }} aria-label="상태 새로고침"><RefreshCw size={18} /></button>
-          <button type="button" onClick={onClose} className="ops-button grid h-10 w-10 place-items-center rounded-lg" style={{ width: 44, height: 44 }} aria-label="서버 상태 닫기"><X size={18} /></button>
+          <button type="button" onClick={onClose} className="ops-button grid h-10 w-10 place-items-center rounded-lg" style={{ width: 44, height: 44 }} aria-label="내 컴퓨터 닫기"><X size={18} /></button>
         </div>
       </header>
       <div className="flex-1 space-y-5 overflow-y-auto px-5 py-5 chat-scroll" style={{ padding: 24 }}>

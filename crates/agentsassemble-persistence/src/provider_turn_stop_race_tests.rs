@@ -218,6 +218,73 @@ async fn runtime_gone_rejects_a_stop_intent_without_its_exact_reservation() {
 }
 
 #[tokio::test]
+async fn a_failed_session_whose_runtime_is_gone_can_still_be_stopped() {
+    let (store, principal, _directory) = fixture().await;
+    let mutation = store
+        .execute_message_with_turn(
+            &principal,
+            "stranded-stop-message",
+            "message.send",
+            &json!({"content":"@Terra fail with a lost runtime"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("assign: {error}"));
+    let assignment = &mutation.assignments[0];
+    let start = store
+        .authorize_provider_turn_start(
+            "general",
+            AGENT_ID,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize: {error}"));
+    store
+        .fail_agent_turn(
+            "general",
+            AGENT_ID,
+            super::authority(&start, "", None),
+            "provider_tool_call_invalid",
+            "Provider returned an invalid room-tool call.",
+            Some((
+                start.runtime_handle_id.as_str(),
+                start.runtime_owner_id.as_str(),
+                start.runtime_lease_token.as_str(),
+            )),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("record failure: {error}"));
+
+    // The provider conversation outlived the runtime that carried it, which is the state a
+    // stranded session is found in: no handle to shut down, yet a thread still marked active.
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = json_set(session_json, '$.provider_session_active', json('true')) WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("seed retained provider session: {error}"));
+
+    let payload = json!({"agent_id":AGENT_ID});
+    let plan = store
+        .prepare_agent_stop(TrustedPrincipal(&principal), "stop-stranded", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("prepare stop: {error}"));
+    assert!(matches!(plan, crate::AgentStopPlan::Finalize));
+    store
+        .finalize_agent_stop(&principal, "stop-stranded", &payload)
+        .await
+        .unwrap_or_else(|error| panic!("finalize: {error}"));
+    let stored = stored_session(&store).await;
+    assert_eq!(
+        stored.public.runtime_status,
+        agentsassemble_domain::AgentRuntimeStatus::Stopped
+    );
+    assert!(!stored.public.recovery_required);
+    assert!(!stored.public.provider_session_active);
+}
+
+#[tokio::test]
 async fn failed_turn_stop_uses_confirmed_exit_but_never_skips_retained_runtime() {
     for confirmed in [false, true] {
         let (store, principal, _directory) = fixture().await;

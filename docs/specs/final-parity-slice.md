@@ -5,6 +5,18 @@ range and exact `f776e2e` at C0/H0/M0/L0. Final acceptance is still pending.
 
 ## Definition and boundary
 
+2026-09-16 reopened recovery acceptance: retain the failed Attachment Fixture
+session and diagnose its answered-request continuation and unconfirmed Stop.
+The macOS guardian currently discards its pre-launch fork/exit observation when
+the provider has already exited. A complete no-fork history can prove that this
+leader left no descendants; use that existing authority before confirming cleanup.
+Forked or missing/error history must remain uncertain. No database reset, inferred
+absence from PIDs, gate exception, or replacement session counts as recovery of
+the retained failure. Verify no-fork exit cleanup and the existing forked/escaped
+negative cases, then the packaged request/continuation/Stop flow. Older generations
+whose guardian already lost its history require independent existing absence proof;
+do not manufacture a cleanup receipt for them.
+
 Close the retained product against original `d5046473010d1353a81ee38337360e6d98f7bd6f`
 and the completed Phase 1–8 contracts. The exposure inventory remains
 `docs/FRONTEND_BACKEND_GAPS.md`; measured runs and reviewer dispositions remain
@@ -622,3 +634,18 @@ show their own result in place, never the last result from another request. Pres
 secret masking, exact uncertain retry, server authority and reconnect disablement.
 Verify attribution, multiple requests, history eviction, terminal results, and the
 signed app's actual inline answer flow before unrestricted re-review.
+
+### SDK host loader custody (2026-09-20)
+
+Real Sonnet startup exposes a macOS host-binding defect: Homebrew Node 24.18.1
+loads @rpath/libnode.137.dylib through @loader_path/../lib; copying just Node
+breaks dyld before SDK startup. The SDK host binding owner must preserve declared
+loader-relative dependencies inside the same private staging lifetime. Parse Mach-O
+load commands with Goblin, resolve their source paths in loader order, verify copied
+bytes with the existing file-identity owner, and retain bounded private custody.
+Absolute system/package dependencies remain absolute. Do not switch to another Node,
+launch the mutable source path, rewrite signatures, or change authentication.
+Missing, conflicting, escaping, or unsupported dependencies fail binding; no retry
+fallback is added. Non-macOS binding stays unchanged. Acceptance: an actual staged
+host starts, Sonnet completes a room turn and normal Stop/Resume, and changed-companion
+or unsafe staging destinations fail without publishing a successful bind.

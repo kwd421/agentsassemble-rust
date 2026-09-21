@@ -246,6 +246,7 @@ pub(crate) fn login_failure(error: ProbeFailure) -> ProviderLoginError {
         ProbeFailure::Authentication
         | ProbeFailure::Malformed
         | ProbeFailure::Failed
+        | ProbeFailure::BridgeRuntimeMissing
         | ProbeFailure::CatalogTooLarge => ProviderLoginError::Failed,
     }
 }

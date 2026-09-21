@@ -81,6 +81,9 @@ pub(crate) fn message_has_visible_payload(event: &RoomEvent) -> Result<bool, Per
 }
 
 pub(crate) fn message_visible_text(event: &RoomEvent) -> Result<String, PersistenceError> {
+    if event.extra.get("message_deleted") == Some(&serde_json::Value::Bool(true)) {
+        return Ok(String::new());
+    }
     let content = clean_message(
         event.content.as_deref().unwrap_or_default(),
         MAX_MESSAGE_CHARACTERS,

@@ -61,6 +61,7 @@ static SPEC: RemoteOpenAiSpec = RemoteOpenAiSpec {
         context_limit: "The bounded LM Studio request context is too large.",
         rate_limited: "LM Studio rate-limited the request.",
         invalid_response: "LM Studio returned an invalid bounded response.",
+        output_truncated: "LM Studio stopped at the maximum response length.",
         invalid_tool_call: "LM Studio returned an invalid room-tool call.",
         api_unavailable: "The LM Studio API request did not complete.",
         session_mismatch: "LM Studio runtime authority does not match the Agent Session.",

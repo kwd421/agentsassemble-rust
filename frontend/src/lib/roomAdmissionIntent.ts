@@ -9,11 +9,13 @@ const CANONICAL_UUID_PATTERN =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 const SHA256_HEX_PATTERN = /^[0-9a-f]{64}$/;
 const NIL_UUID = "00000000-0000-0000-0000-000000000000";
-const MAX_STORED_INTENT_BYTES = 8 * 1024;
+const MAX_STORED_INTENT_BYTES = 2 * 1024 * 1024;
 const INTENT_UNAVAILABLE_MESSAGE =
   "이 브라우저에서는 입장 재시도 정보를 안전하게 보관할 수 없습니다.";
 const DEFINITIVE_INTENT_END_CODES = new Set([
   "admission_session_unavailable",
+  "attachment_too_large",
+  "avatar_invalid",
   "bad_request",
   "browser_credential_invalid",
   "idempotency_conflict",
@@ -153,7 +155,7 @@ function validStoredIntent(value: unknown): value is StoredRoomAdmissionIntent {
     source.displayName.trim().length > 0 &&
     source.displayName.length <= 128 &&
     typeof source.avatarImage === "string" &&
-    source.avatarImage.length <= 2048
+    source.avatarImage.length <= 1_900_000
   );
 }
 

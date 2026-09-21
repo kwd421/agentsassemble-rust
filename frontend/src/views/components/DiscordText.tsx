@@ -1,3 +1,4 @@
+import { createContext, useContext, useMemo, type ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { tokenizeDiscordText } from "../../lib/discordTextTokens";
@@ -12,6 +13,17 @@ type HastNode = {
 };
 
 export type MentionLabels = Readonly<Record<string, string>>;
+
+/// Channel names this room actually has, so ordinary text like "(#107)에서" stays text.
+const KnownChannelsContext = createContext<ReadonlySet<string>>(new Set());
+
+export function KnownChannels({ names, children }: { names: readonly string[]; children: ReactNode }) {
+  const known = useMemo(
+    () => new Set(names.map((name) => name.trim().toLocaleLowerCase()).filter(Boolean)),
+    [names]
+  );
+  return <KnownChannelsContext.Provider value={known}>{children}</KnownChannelsContext.Provider>;
+}
 
 const ROOM_REFERENCE_PATTERN = /(<@[^>\r\n]{1,80}>|@[^\s@#:`*~<>]+|#[^\s@#:`*~<>]+)/gu;
 
@@ -51,7 +63,11 @@ function linkPreviewsForText(text: string) {
     .filter((preview): preview is { url: string; host: string; title: string } => Boolean(preview));
 }
 
-function roomReferenceNodes(value: string, mentionLabels: MentionLabels): HastNode[] {
+function roomReferenceNodes(
+  value: string,
+  mentionLabels: MentionLabels,
+  knownChannels: ReadonlySet<string>
+): HastNode[] {
   const nodes: HastNode[] = [];
   let cursor = 0;
   for (const match of value.matchAll(ROOM_REFERENCE_PATTERN)) {
@@ -64,6 +80,11 @@ function roomReferenceNodes(value: string, mentionLabels: MentionLabels): HastNo
     const mentionLabel = structuredMention
       ? mentionLabels[mentionToken] || mentionToken
       : raw.slice(1);
+    if (!mention && !knownChannels.has(raw.slice(1).toLocaleLowerCase())) {
+      nodes.push({ type: "text", value: raw });
+      cursor = index + raw.length;
+      continue;
+    }
     nodes.push({
       type: "element",
       tagName: "span",
@@ -76,7 +97,10 @@ function roomReferenceNodes(value: string, mentionLabels: MentionLabels): HastNo
   return nodes.length ? nodes : [{ type: "text", value }];
 }
 
-function rehypeRoomReferences({ mentionLabels = {} }: { mentionLabels?: MentionLabels } = {}) {
+function rehypeRoomReferences({
+  mentionLabels = {},
+  knownChannels = new Set<string>(),
+}: { mentionLabels?: MentionLabels; knownChannels?: ReadonlySet<string> } = {}) {
   return (tree: HastNode) => {
     const visit = (node: HastNode, blocked = false) => {
       const nextBlocked = blocked || ["a", "code", "pre"].includes(node.tagName || "");
@@ -85,7 +109,7 @@ function rehypeRoomReferences({ mentionLabels = {} }: { mentionLabels?: MentionL
       node.children.forEach((child) => {
         if (child.type === "text" && child.value && ROOM_REFERENCE_PATTERN.test(child.value)) {
           ROOM_REFERENCE_PATTERN.lastIndex = 0;
-          nextChildren.push(...roomReferenceNodes(child.value, mentionLabels));
+          nextChildren.push(...roomReferenceNodes(child.value, mentionLabels, knownChannels));
         } else {
           ROOM_REFERENCE_PATTERN.lastIndex = 0;
           visit(child, nextBlocked);
@@ -105,13 +129,14 @@ export default function DiscordText({
   text: string;
   mentionLabels?: MentionLabels;
 }) {
+  const knownChannels = useContext(KnownChannelsContext);
   const previews = linkPreviewsForText(text);
   return (
     <>
       <div className="dc-markdown">
         <ReactMarkdown
           remarkPlugins={[[remarkGfm, { singleTilde: false }]]}
-          rehypePlugins={[[rehypeRoomReferences, { mentionLabels }]]}
+          rehypePlugins={[[rehypeRoomReferences, { mentionLabels, knownChannels }]]}
           skipHtml
           components={{
             img: ({ alt, src }) => (

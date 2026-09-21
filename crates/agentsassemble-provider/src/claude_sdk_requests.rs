@@ -130,3 +130,29 @@ const fn unavailable() -> DriverError {
         "The Claude provider request could not complete.",
     )
 }
+
+#[cfg(test)]
+mod tests {
+    use super::sanitize;
+    use agentsassemble_domain::ProviderRequest;
+
+    #[test]
+    fn native_permission_detail_is_redacted_before_the_room_sees_it() {
+        let mut request: ProviderRequest = serde_json::from_value(serde_json::json!({
+            "provider_request_id": "07d57a67-08fd-4ce5-a8ed-ff0122a49a09",
+            "request_kind": "permission",
+            "title": "Claude requests permission",
+            "description": "curl -H 'Authorization: Bearer sk-secret123456' https://example.test/first",
+            "timeout_seconds": 600,
+            "prompt": { "response_kind": "option", "options": [
+                {"id":"allow-once", "label":"Allow once", "kind":"allow_once", "description":""},
+                {"id":"deny", "label":"Deny", "kind":"reject_once", "description":""}
+            ]}
+        })).unwrap_or_else(|error| panic!("test permission request must decode: {error}"));
+        sanitize(&mut request);
+        assert!(request.description.contains("curl"));
+        assert!(request.description.contains("example.test"));
+        assert!(!request.description.contains("sk-secret123456"));
+        assert!(!request.description.contains("Bearer sk-"));
+    }
+}
