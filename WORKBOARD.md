@@ -7,8 +7,11 @@
   commits the canonical image with the profile and invite in one transaction;
   invite-only prejoin attachment upload is closed. Affected server and frontend
   regressions pass. Signed isolated package starts, retains its test room after
-  restart, and rejects unauthenticated attachment upload with 401. The exact
-  guest photo flow still awaits temporary public-access confirmation. Full
+  restart, and rejects unauthenticated attachment upload with 401. In the exact
+  packaged guest flow, selecting and confirming a photo left prejoin/profile
+  asset counts at 0/0 and invite use at 0; Join changed them to 0/1 and 1,
+  and the browser rendered the guest photo. The temporary public tunnel was
+  closed and the isolated app/data removed after verification. Full
   `make verify` passes with build-only `CARGO_PROFILE_DEV_DEBUG=line-tables-only`,
   `CARGO_PROFILE_TEST_DEBUG=0`, and `CARGO_PROFILE_TEST_BUILD_OVERRIDE_STRIP=none`
   to stay within the artifact gate and avoid the macOS 27 LINKEDIT macro issue.

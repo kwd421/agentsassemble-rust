@@ -7,8 +7,11 @@ consumes the invite and creates the profile. The earlier invite-only upload rout
 and client call no longer write before Join. Layout and other frontend controls
 remain unchanged. Frontend 157 files/914 tests, production build and mandatory
 workspace verification pass. The signed isolated package starts and its server
-rejects prejoin attachment upload with 401. Exact packaged guest photo selection
-and Join await temporary public-access confirmation.
+rejects prejoin attachment upload with 401. Exact packaged guest photo selection,
+crop confirmation and Join passed through a temporary public tunnel and the
+in-app browser: before Join, prejoin/profile asset counts were 0/0 and invite
+use was 0; after Join they were 0/1 and 1, with the photo rendered for the
+guest. The tunnel was closed and isolated app/data removed afterward.
 
 2026-09-20 whole-source review M1: the provider install check can return a prior
 completed installation after the start response was lost. The existing installation
