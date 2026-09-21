@@ -196,8 +196,12 @@ impl ClaudeSdkRuntime {
         if tail.is_empty() {
             return error;
         }
+        // Persisted diagnostics keep only their last characters, so the failure goes
+        // last and the stderr before it is bounded: a long stderr must not push the
+        // actual error out.
+        let tail = last_chars(&tail, STDERR_IN_ERROR_CHARS);
         DriverError {
-            message: format!("{} [bridge stderr] {tail}", error.message).into(),
+            message: format!("[bridge stderr] {tail} | {}", error.message).into(),
             code: error.code,
         }
     }
@@ -393,6 +397,21 @@ async fn stop_failed_child(child: &mut dyn ChildWrapper) -> Result<(), DriverErr
 pub(crate) struct StderrTail(Arc<Mutex<Vec<u8>>>);
 
 const STDERR_TAIL_BYTES: usize = 8 * 1024;
+/// How much of the retained stderr rides along in a turn error. The persisted form
+/// is cut to 512 characters from the end, and the error message has to fit after it.
+const STDERR_IN_ERROR_CHARS: usize = 320;
+
+fn last_chars(text: &str, limit: usize) -> &str {
+    let count = text.chars().count();
+    if count <= limit {
+        return text;
+    }
+    let start = text
+        .char_indices()
+        .nth(count - limit)
+        .map_or(0, |(index, _)| index);
+    &text[start..]
+}
 
 impl StderrTail {
     fn append(&self, bytes: &[u8]) {

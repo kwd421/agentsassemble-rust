@@ -269,12 +269,16 @@ impl SqliteStore {
         "provider_turn_recovery_required".clone_into(&mut session.public.last_error_code);
         // The recovery state is what the room acts on, but the failure that caused it
         // is the only thing that explains the quarantine later. Keep both.
+        // The cause can carry provider stderr, so it goes through the same redaction as
+        // every other persisted diagnostic before it is stored.
+        let cause = cause
+            .map(|cause| agentsassemble_domain::redact_persisted_diagnostic_text(cause, 400))
+            .filter(|cause| !cause.is_empty());
         session.public.last_error = match cause {
-            Some(cause) if !cause.trim().is_empty() => format!(
-                "The exact provider turn remains quarantined pending recovery. Cause: {}",
-                cause.trim()
+            Some(cause) => format!(
+                "The exact provider turn remains quarantined pending recovery. Cause: {cause}"
             ),
-            _ => "The exact provider turn remains quarantined pending recovery.".to_owned(),
+            None => "The exact provider turn remains quarantined pending recovery.".to_owned(),
         };
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;

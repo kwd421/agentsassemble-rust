@@ -216,7 +216,10 @@ async fn uncertain_provider_result_publishes_one_recovery_required_session_state
         .unwrap_or_else(|error| panic!("authorize uncertain provider turn: {error}"));
 
     let commit = store
-        .mark_provider_turn_recovery_required(&start, Some("provider_protocol_invalid: bridge said why"))
+        .mark_provider_turn_recovery_required(
+            &start,
+            Some(r"[bridge stderr] opened C:\Users\someone\secret.txt | provider_protocol_invalid: bridge said why"),
+        )
         .await
         .unwrap_or_else(|error| panic!("quarantine uncertain provider turn: {error}"));
     assert_eq!(commit.events.len(), 1);
@@ -246,6 +249,9 @@ async fn uncertain_provider_result_publishes_one_recovery_required_session_state
         "{}",
         session.public.last_error
     );
+    // Stderr can name local files; the cause is redacted like any persisted diagnostic.
+    assert!(!session.public.last_error.contains("someone"), "{}", session.public.last_error);
+    assert!(session.public.last_error.contains("[local path]"), "{}", session.public.last_error);
     assert_eq!(session.public.runtime_status, AgentRuntimeStatus::Busy);
     assert_eq!(session.public.active_turn_id, assignment.turn_id);
 
