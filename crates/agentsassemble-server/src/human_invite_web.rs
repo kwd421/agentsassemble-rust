@@ -30,6 +30,7 @@ use crate::{
 };
 
 const MAX_ADMISSION_BODY_BYTES: usize = 16 * 1024;
+const MAX_JOIN_BODY_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Deserialize)]
 struct PreflightRequest {
     invite_token: String,
@@ -149,7 +150,7 @@ async fn join(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<JoinResponse>, HumanInviteHttpError> {
-    let payload: JoinRequest = decode_json_body(request, MAX_ADMISSION_BODY_BYTES)
+    let payload: JoinRequest = decode_json_body(request, MAX_JOIN_BODY_BYTES)
         .await
         .map_err(HumanInviteHttpError::from_body)?;
     if payload.invite_token.trim().is_empty() {
@@ -350,6 +351,10 @@ impl HumanInviteHttpError {
                 "participant_type_invalid",
                 "Browser admission requires a human participant type.",
             ),
+            HumanAdmissionInputError::Avatar => Self::bad_request(
+                "avatar_invalid",
+                "Browser admission avatar must be a bounded PNG image.",
+            ),
         }
     }
 
@@ -411,6 +416,39 @@ impl From<HumanAdmissionRejection> for HumanInviteHttpError {
 impl From<PersistenceError> for HumanInviteHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(code.as_bytes(), b"attachment_too_large") =>
+            {
+                Self::new(
+                    StatusCode::PAYLOAD_TOO_LARGE,
+                    "attachment_too_large",
+                    "Admission avatar exceeds the supported size.",
+                )
+            }
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(
+                    code.as_bytes(),
+                    b"attachment_type_unsupported"
+                        | b"attachment_type_mismatch"
+                        | b"attachment_invalid_image"
+                        | b"attachment_image_limits"
+                ) =>
+            {
+                Self::new(
+                    StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                    "avatar_invalid",
+                    "Admission avatar is not a supported PNG image.",
+                )
+            }
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(code.as_bytes(), b"attachment_quota_reached") =>
+            {
+                Self::new(
+                    StatusCode::TOO_MANY_REQUESTS,
+                    "attachment_quota_reached",
+                    "Attachment storage limit was reached.",
+                )
+            }
             PersistenceError::CommandRejected { code, .. }
                 if matches!(code.as_bytes(), b"room_busy") =>
             {

@@ -1,12 +1,10 @@
 import { useState } from "react";
 import { ImagePlus, LogIn, RotateCcw } from "lucide-react";
-import { uploadLobbyAttachment } from "../../api";
+import { fileToBase64 } from "../../api/http";
 import type { OperatorPairingState } from "../../app/useRoomAdmission";
 import ImageCropper from "./ImageCropper";
 
 type GuestJoinProfilePanelProps = {
-  deviceToken: string;
-  inviteToken: string;
   displayName: string;
   avatarImage?: string;
   status?: string;
@@ -21,8 +19,6 @@ type GuestJoinProfilePanelProps = {
 };
 
 export default function GuestJoinProfilePanel({
-  deviceToken,
-  inviteToken,
   displayName,
   avatarImage,
   status = "",
@@ -37,21 +33,24 @@ export default function GuestJoinProfilePanel({
 }: GuestJoinProfilePanelProps) {
   const [cropFile, setCropFile] = useState<File | null>(null);
   const [uploadStatus, setUploadStatus] = useState("");
+  const [avatarPreparing, setAvatarPreparing] = useState(false);
   const avatarLabel = (displayName || "G").slice(0, 1).toUpperCase() || "G";
 
   async function handleCropped(file: File) {
-    setUploadStatus("프로필 사진 저장 중...");
+    if (avatarPreparing) return;
+    setAvatarPreparing(true);
+    setUploadStatus("프로필 사진 준비 중...");
     try {
-      const attachment = await uploadLobbyAttachment(file, {
-        inviteToken,
-        deviceToken,
-        purpose: "profile_avatar",
-      });
-      onAvatarImageChange(attachment.url);
+      if (file.type !== "image/png" || file.size > 1_400_000) {
+        throw new Error("프로필 사진이 너무 큽니다.");
+      }
+      onAvatarImageChange(`data:image/png;base64,${await fileToBase64(file)}`);
       setCropFile(null);
-      setUploadStatus("프로필 사진 저장됨");
+      setUploadStatus("입장할 때 사진이 저장됩니다.");
     } catch (error) {
-      setUploadStatus(error instanceof Error ? error.message : "프로필 사진 저장 실패");
+      setUploadStatus(error instanceof Error ? error.message : "프로필 사진 준비 실패");
+    } finally {
+      setAvatarPreparing(false);
     }
   }
 
@@ -140,7 +139,7 @@ export default function GuestJoinProfilePanel({
             <button
               type="button"
               className="dc-guest-join-button"
-              disabled={busy || !displayName.trim()}
+              disabled={busy || avatarPreparing || !displayName.trim()}
               onClick={onJoin}
             >
               <LogIn size={16} />

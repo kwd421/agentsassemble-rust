@@ -1,5 +1,15 @@
 # Frontend/backend exposure map
 
+2026-09-21 user-directed guest photo correction: the existing crop/preview
+control retains PNG bytes locally and the existing Join button sends them with
+admission. The server stores the canonical image in the same transaction that
+consumes the invite and creates the profile. The earlier invite-only upload route
+and client call no longer write before Join. Layout and other frontend controls
+remain unchanged. Frontend 157 files/914 tests, production build and mandatory
+workspace verification pass. The signed isolated package starts and its server
+rejects prejoin attachment upload with 401. Exact packaged guest photo selection
+and Join await temporary public-access confirmation.
+
 2026-09-20 whole-source review M1: the provider install check can return a prior
 completed installation after the start response was lost. The existing installation
 row now enters its original completion state, releases the parent updating guard and

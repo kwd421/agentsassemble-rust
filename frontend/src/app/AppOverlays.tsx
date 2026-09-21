@@ -20,7 +20,6 @@ export default function AppOverlays({ controller, companionInvites }: { controll
   const {
     activeRoom, agentCreateOpen,
     canonicalRoom, canControlActiveAgents, closeInviteModal, connectorJoinUrl,
-    deviceToken,
     generateInviteLink, guestAdmissionBusy, guestExpired,
     guestJoinRequested, guestJoinStatus, guestJoinToken, guestLocked,
     guestPreflightRetryable, guestJoinRetryable,
@@ -177,8 +176,6 @@ export default function AppOverlays({ controller, companionInvites }: { controll
           (!guestSession || guestPreflightRetryable || guestJoinRetryable) &&
           !guestExpired && (
           <GuestJoinProfilePanel
-            deviceToken={deviceToken}
-            inviteToken={guestJoinToken}
             pairing={operatorPairingPending}
             pairingState={operatorPairingState}
             retryMode={

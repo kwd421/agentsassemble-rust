@@ -2,6 +2,17 @@
 
 ## Active work
 
+- 2026-09-21 user-directed guest avatar correction: selecting/cropping a photo now
+  keeps it in the browser until the guest confirms Join. The admission request
+  commits the canonical image with the profile and invite in one transaction;
+  invite-only prejoin attachment upload is closed. Affected server and frontend
+  regressions pass. Signed isolated package starts, retains its test room after
+  restart, and rejects unauthenticated attachment upload with 401. The exact
+  guest photo flow still awaits temporary public-access confirmation. Full
+  `make verify` passes with build-only `CARGO_PROFILE_DEV_DEBUG=line-tables-only`,
+  `CARGO_PROFILE_TEST_DEBUG=0`, and `CARGO_PROFILE_TEST_BUILD_OVERRIDE_STRIP=none`
+  to stay within the artifact gate and avoid the macOS 27 LINKEDIT macro issue.
+
 - 2026-09-20 whole-repository Pro answer for dcaa42eb is complete: REVISE H1/M1.
   H1 Claude's approval showed only a tool name despite returning the original input;
   M1 an install check that recovered `completed=true` reopened the offer and retained

@@ -1,11 +1,9 @@
 use agentsassemble_domain::{InviteScope, LOCAL_OPERATOR_USER_ID, UserProfilePatch};
-use agentsassemble_persistence::{
-    HumanPrejoinAvatarAuthorization, HumanSessionAuthorization, PersistenceError,
-};
+use agentsassemble_persistence::{HumanSessionAuthorization, PersistenceError};
 use axum::{
     Json, Router, body,
     extract::{Path, Query, RawQuery, Request, State},
-    http::{HeaderMap, HeaderValue, Method, StatusCode, header},
+    http::{HeaderValue, Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
 use base64::{Engine as _, engine::general_purpose::STANDARD};
@@ -16,16 +14,12 @@ use tower_http::{cors::CorsLayer, set_header::SetResponseHeaderLayer};
 use crate::{
     AppState, ConsumedProfileTicket,
     http_api::{
-        BodyDecodeError, DEVICE_CREDENTIAL_HEADER, INVITE_CREDENTIAL_HEADER,
-        MAX_BASE64_UPLOAD_BODY_BYTES, PRIVATE_NO_STORE, bearer_credential, decode_json_body,
-        ensure_empty_body, exact_tauri_cors,
+        BodyDecodeError, DEVICE_CREDENTIAL_HEADER, MAX_BASE64_UPLOAD_BODY_BYTES, PRIVATE_NO_STORE,
+        bearer_credential, decode_json_body, ensure_empty_body, exact_tauri_cors,
     },
-    human_browser_credential::fingerprint_browser_credential,
-    human_invite_preflight::authenticated_invite_evidence,
     human_session_http_authority::{
         HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
     },
-    ingress_trust::single_header,
     room_session_http_authority::{
         RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
     },
@@ -86,7 +80,6 @@ fn profile_cors() -> CorsLayer {
         header::AUTHORIZATION,
         header::CONTENT_TYPE,
         DEVICE_CREDENTIAL_HEADER,
-        INVITE_CREDENTIAL_HEADER,
     ])
 }
 
@@ -141,31 +134,14 @@ async fn upload_attachment(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let (authority, prejoin_authority) = if request.headers().contains_key(header::AUTHORIZATION) {
-        (
-            Some(
-                resolve_attachment_upload_authority(
-                    &state,
-                    request.headers(),
-                    request.extensions().get(),
-                )
-                .await?,
-            ),
-            None,
-        )
-    } else {
-        (
-            None,
-            Some(authorize_prejoin_avatar_upload(&state, request.headers()).await?),
-        )
-    };
-    if authority.as_ref().is_some_and(|authority| {
-        matches!(
-            authority,
-            AttachmentUploadAuthority::Profile(ProfileAuthority::HumanSession(authorization))
-                if authorization.principal().invite_scope == InviteScope::ReadOnly
-        )
-    }) {
+    let authority =
+        resolve_attachment_upload_authority(&state, request.headers(), request.extensions().get())
+            .await?;
+    if matches!(
+        &authority,
+        AttachmentUploadAuthority::Profile(ProfileAuthority::HumanSession(authorization))
+            if authorization.principal().invite_scope == InviteScope::ReadOnly
+    ) {
         return Err(ProfileHttpError::new(
             StatusCode::FORBIDDEN,
             "session_read_only",
@@ -176,24 +152,16 @@ async fn upload_attachment(
         .await
         .map_err(ProfileHttpError::from_body)?;
     match (&authority, payload.purpose.trim()) {
-        (Some(AttachmentUploadAuthority::Appearance(_)), "room_appearance")
-        | (Some(AttachmentUploadAuthority::Profile(_)) | None, "profile_avatar") => {}
-        (Some(_), _) => {
+        (AttachmentUploadAuthority::Appearance(_), "room_appearance")
+        | (AttachmentUploadAuthority::Profile(_), "profile_avatar") => {}
+        (_, _) => {
             return Err(ProfileHttpError::bad_request(
                 "Attachment purpose does not match its authority.",
             ));
         }
-        (None, _) => {
-            return Err(ProfileHttpError::new(
-                StatusCode::UNAUTHORIZED,
-                "profile_authority_required",
-                "A profile upload authority is required.",
-            ));
-        }
     }
     let content = decode_attachment_content(&payload.data_base64)?;
-    let attachment =
-        store_uploaded_attachment(&state, authority, prejoin_authority, &payload, content).await?;
+    let attachment = store_uploaded_attachment(&state, authority, &payload, content).await?;
     Ok(Json(json!({"attachment": attachment})))
 }
 
@@ -252,13 +220,12 @@ fn decode_attachment_content(encoded: &str) -> Result<Vec<u8>, ProfileHttpError>
 
 async fn store_uploaded_attachment(
     state: &AppState,
-    authority: Option<AttachmentUploadAuthority>,
-    prejoin_authority: Option<HumanPrejoinAvatarAuthorization>,
+    authority: AttachmentUploadAuthority,
     payload: &AttachmentUpload,
     content: Vec<u8>,
 ) -> Result<serde_json::Value, ProfileHttpError> {
-    Ok(match (authority, prejoin_authority) {
-        (Some(AttachmentUploadAuthority::Appearance(manager)), None) => json!(
+    Ok(match authority {
+        AttachmentUploadAuthority::Appearance(manager) => json!(
             state
                 .store
                 .store_pending_room_appearance_asset(
@@ -269,23 +236,9 @@ async fn store_uploaded_attachment(
                 )
                 .await?
         ),
-        (Some(AttachmentUploadAuthority::Profile(profile)), None) => {
+        AttachmentUploadAuthority::Profile(profile) => {
             json!(store_profile_attachment(state, profile, payload, content).await?)
         }
-        (None, Some(prejoin_authorization)) => {
-            json!(
-                state
-                    .store
-                    .store_human_prejoin_avatar(
-                        &prejoin_authorization,
-                        &payload.filename,
-                        &payload.content_type,
-                        content,
-                    )
-                    .await?
-            )
-        }
-        _ => return Err(ProfileHttpError::internal()),
     })
 }
 
@@ -318,56 +271,6 @@ async fn store_profile_attachment(
                 .await?
         }
     })
-}
-
-async fn authorize_prejoin_avatar_upload(
-    state: &AppState,
-    headers: &HeaderMap,
-) -> Result<HumanPrejoinAvatarAuthorization, ProfileHttpError> {
-    let invite = required_prejoin_header(headers, &INVITE_CREDENTIAL_HEADER).ok_or_else(|| {
-        ProfileHttpError::new(
-            StatusCode::UNAUTHORIZED,
-            "invite_token_required",
-            "x-invite-token is required for a pre-join profile upload.",
-        )
-    })?;
-    let credential = authenticated_invite_evidence(&state.human_invite_credentials, invite)
-        .map_err(|_| {
-            ProfileHttpError::new(
-                StatusCode::FORBIDDEN,
-                "invite_invalid",
-                "Invite is invalid.",
-            )
-        })?;
-    let device = required_prejoin_header(headers, &DEVICE_CREDENTIAL_HEADER).ok_or_else(|| {
-        ProfileHttpError::new(
-            StatusCode::BAD_REQUEST,
-            "browser_credential_invalid",
-            "A canonical browser credential is required.",
-        )
-    })?;
-    let browser_credential_fingerprint =
-        fingerprint_browser_credential(device).ok_or_else(|| {
-            ProfileHttpError::new(
-                StatusCode::BAD_REQUEST,
-                "browser_credential_invalid",
-                "A canonical browser credential is required.",
-            )
-        })?;
-    state
-        .store
-        .authorize_human_prejoin_avatar(&credential, &browser_credential_fingerprint)
-        .await
-        .map_err(ProfileHttpError::from)
-}
-
-fn required_prejoin_header<'a>(
-    headers: &'a HeaderMap,
-    name: &header::HeaderName,
-) -> Option<&'a str> {
-    single_header(headers, name.clone())
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
 }
 
 async fn read_attachment(
