@@ -336,6 +336,81 @@ Tailwind 가 소스 문자열을 훑기 때문에 인라인 스타일 값 `"brea
 디자인이 의도 없이 바뀌는 것은 소스 diff 와 실제 화면 확인으로 본다. 빌드 산출물 해시는 소스
 diff 가 이미 보여 주는 것에 더해 주는 정보가 없었다.
 
+### 13. 클로드가 "복구 필요" 로 잠기는 경로 (`room_portal` · `runtime_turn.rs`)
+
+방에서 클로드에게 "못 쓰는 툴을 호출해보라" 고 하자 세션이 **복구 필요** 로 잠겼다. 재현은
+`roll_dice` 한 줄로 충분했다. 이 방은 `tool_mode` 가 일반 대화라 주사위 도구가 없다.
+
+원인은 턴 계약을 어긴 것이었다. 에이전트에게 주는 지시문은
+`room_turn_context.rs:378` 한 문장이다.
+
+> Call `read_discussion` before deciding. Then finish with exactly one terminal action
+> exposed by the room transport.
+
+여기서 "terminal action" 이 무엇인지 열거하지 않는다. 실제로 턴을 닫는 것은 `publish_message`,
+`decline_to_speak`, 투표 명령 세 가지뿐이고 (`room_portal_mcp.rs` 에서 `active.outcome` 을
+등록하는 곳), `roll_dice` 나 `read_discussion` 은 그냥 도구다. 클로드는 자기 턴에 대해 이렇게
+설명했다 — "roll_dice 호출 자체를 그 턴의 terminal action 으로 간주했고, 이미 완결된 action
+이었기 때문에 publish_message 로 별도 보고를 추가하지 않고 턴을 마쳤다."
+
+도구 거부 자체는 정상 동작이었다. `room_portal.rs:514` 가 문자열 오류를 돌려주고 턴은 살아
+있으며, 클로드도 거부당한 사실을 알고 있었다. 빠진 것은 그 뒤의 발행이다.
+
+방에 아무것도 등록되지 않은 채 턴이 끝나면 `finish_room_observation` 이
+`room_portal_publication_missing` 을 돌려주고, 호출부가 그것을
+`ProviderAdapterError::uncertain(...)` 으로 감싼다 (`runtime_turn.rs:442`). `uncertain()` 은
+`effect_uncertain: true` 를 하드코딩하므로 (`runtime.rs:107`) 드라이버 설정과 무관하게 격리
+대상이 된다. 서버는 `effect_uncertain && !runtime_stopped` 를 보고 턴을 격리한다
+(`provider_turn.rs:314`).
+
+이 경로는 클로드 전용이 아니다. `finish_room_observation` 은 claude · codex · cursor_acp ·
+grok_acp · opencode · remote_openai · managed_bridge_parent 가 모두 구현하고 같은
+`portal.finish_turn(request)` 을 부른다. 다만 API 드라이버는 앱이 도구 루프를 직접 돌려 종결
+동작까지 밀어붙일 수 있고, 외부 CLI 계열은 에이전트가 스스로 멈추면 붙잡을 방법이 없다.
+
+이번 브랜치에서는 원인 보존만 고쳤다 (14). 지시문에 종결 동작을 열거하는 것, 발행이 없는 턴을
+격리 대신 넘김으로 처리하는 것, `decline_to_speak` 의 부정적 어감을 `pass_turn` 으로 바꾸는 것은
+아직 하지 않았다. 방의 에이전트 넷(Terra · deepseek-flash · Sonnet 5 · grok-4.6)에게 이름을
+물었을 때 셋이 `pass_turn`, grok 은 `skip_turn` 을 골랐다. grok 의 근거는 이 방에서 "턴 넘기기"
+가 이미 발행 + 다음 에이전트 지정을 뜻한다는 것이었고, deepseek 과 Sonnet 은 `reason_code` 를
+유지한다면 `abstain` 이 스키마에 더 맞다고 덧붙였다.
+
+### 14. 격리된 턴이 아무 근거도 남기지 않음 (`claude_sdk_runtime.rs` · `provider_turn_execution.rs`)
+
+13 을 진단하려 했을 때 남아 있는 기록이 없었다. 세션의 `last_error` 는 "The exact provider turn
+remains quarantined pending recovery." 한 문장뿐이고, `runtime.stderr.log` 는 0 바이트였다.
+
+두 군데서 지워지고 있었다. 브리지의 stderr 는 파이프가 막히지 않도록 읽기만 하고 버려졌고
+(`drain_stderr`), 격리 시 `last_error` 와 `last_error_code` 가 복구 문구로 덮어써졌다
+(`provider_turn_execution.rs:267`).
+
+stderr 는 마지막 8 KiB 를 보관해 실패한 턴의 오류 메시지에 붙이고,
+`mark_provider_turn_recovery_required` 는 원인을 인자로 받아 복구 문구 뒤에 남기게 했다. 복구
+동작(phase · 오류 코드 · 중지 계획)은 바꾸지 않았다. 고친 뒤 재현하자 이렇게 남았다.
+
+```
+The exact provider turn remains quarantined pending recovery.
+Cause: room_portal_publication_missing: The provider did not stage a valid room publication or decline.
+```
+
+### 15. 재개한 세션이 며칠 전 메시지에 답함 (`agent_lifecycle.rs`)
+
+에이전트를 재개하자 사람이 아무 말도 하지 않았는데 턴이 시작됐고, 넷이 3 분 동안 서로 차례를
+넘기며 대화했다. `turn_started` 의 `source_event_id` 를 따라가니 **이틀 전** 이벤트였다.
+
+중지된 세션에는 새 메시지가 쌓이지 않는다. `route_session_is_eligible` 이 `Attached` 이고
+`provider_session_active` 인 세션만 대상으로 삼는다. 문제는 **중지 전에 답하지 못한 큐가 상한
+없이 보존**된다는 점이었다. 중지 경로가 `merged_turn_queue` 로 큐를 다시 만들어 넘기기 때문에,
+며칠 뒤 재개해도 그대로 남아 있었다.
+
+처음에는 중지할 때 큐를 비우려 했으나 테스트 두 개가 거부했다.
+`shutdown_never_assigns_work_to_an_already_stopped_runtime_in_either_order` 와
+`failed_turn_stop_uses_confirmed_exit_but_never_skips_retained_runtime` 이 각각 "앱을 종료해도
+답하지 못한 입력은 남아야 한다" 를 고정하고 있었다. 타당한 요구라 큐를 비우는 대신 나이 제한을
+두었다. `merged_turn_queue` 가 이미 각 이벤트를 불러 삭제 여부를 보고 있어, 같은 자리에서 한
+시간이 지난 입력을 버린다. 한 시간이라는 값에 근거는 없고, 짧은 재시작은 이어가고 하루 지난
+것은 버린다는 선만 그은 것이다.
+
 ## 이전 기록 정정
 
 이 문서의 첫 판은 "`message_attachment_save/secure_replace.rs` 가 같은 핸들 결함으로 Windows 에서
@@ -439,6 +514,14 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
   Claude Code 의 실제 업데이트 제안(2.1.274 → 2.1.276)이 그리드 아래 44px 행으로 표시되는 것까지
   봤다. 업데이트는 실행하지 않았으므로, 완료 후 행이 접히는 장면은 단위 테스트(3.2초 뒤 영역
   없음)로만 확인했다
+- 클로드 세션이 `roll_dice` 를 부르고 발행 없이 턴을 끝내 격리되는 것을 재현했고, 14 를 고친 뒤
+  같은 재현에서 `Cause: room_portal_publication_missing: …` 이 세션에 남는 것을 확인했다.
+  클로드 실제 턴 실행은 사용자가 이 목적으로 승인했다
+- 방의 에이전트 넷(Terra · deepseek-flash · Sonnet 5 · grok-4.6)에게 실제 턴으로 이름 후보를
+  물었다. 넷 다 한 번씩만 답했고 두 번째 차례는 `duplicate` 로 넘겼다. 이때 보낸 질문 본문이
+  cp949 로 기록돼 에이전트에게 깨진 채 도착했는데, 이는 질문을 만든 쪽 도구의 문제이고 앱의
+  인코딩은 정상이었다(같은 턴의 `room_view` 는 올바른 UTF-8). 두 에이전트가 이 사실을 정확히
+  신고했다
 
 실행하지 않은 것:
 
