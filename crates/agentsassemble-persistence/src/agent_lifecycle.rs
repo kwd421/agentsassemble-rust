@@ -381,6 +381,13 @@ pub(crate) fn require_valid_turn_authority(
     }
 }
 
+/// How long a room input waits for a session that is not running.
+///
+/// The queue outlives a stop so a restart keeps answering what it was addressed,
+/// but it used to outlive it without end: a session resumed days later opened by
+/// replying to a message the room had long moved past.
+const QUEUED_INPUT_MAX_AGE: chrono::Duration = chrono::Duration::hours(1);
+
 pub(crate) async fn merged_turn_queue(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
@@ -401,7 +408,9 @@ pub(crate) async fn merged_turn_queue(
         )
         .await?
         .ok_or_else(invalid_turn_queue)?;
-        if event.extra.get("message_deleted") != Some(&serde_json::Value::Bool(true)) {
+        let deleted = event.extra.get("message_deleted") == Some(&serde_json::Value::Bool(true));
+        let stale = Utc::now().signed_duration_since(event.created_at) > QUEUED_INPUT_MAX_AGE;
+        if !deleted && !stale {
             restored.push(input);
         }
     }
