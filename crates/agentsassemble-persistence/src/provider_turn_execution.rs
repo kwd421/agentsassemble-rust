@@ -212,6 +212,7 @@ impl SqliteStore {
     pub async fn mark_provider_turn_recovery_required(
         &self,
         authority: &ProviderTurnStartAuthority,
+        cause: Option<&str>,
     ) -> Result<AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let mut session =
@@ -266,8 +267,15 @@ impl SqliteStore {
         }
         session.public.recovery_required = true;
         "provider_turn_recovery_required".clone_into(&mut session.public.last_error_code);
-        "The exact provider turn remains quarantined pending recovery."
-            .clone_into(&mut session.public.last_error);
+        // The recovery state is what the room acts on, but the failure that caused it
+        // is the only thing that explains the quarantine later. Keep both.
+        session.public.last_error = match cause {
+            Some(cause) if !cause.trim().is_empty() => format!(
+                "The exact provider turn remains quarantined pending recovery. Cause: {}",
+                cause.trim()
+            ),
+            _ => "The exact provider turn remains quarantined pending recovery.".to_owned(),
+        };
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
         let state = session_state_event(&mut transaction, &session).await?;

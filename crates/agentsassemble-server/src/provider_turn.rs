@@ -313,7 +313,10 @@ async fn commit_provider_error(
         return Ok(empty_turn_commit());
     }
     if error.effect_uncertain && !error.runtime_stopped {
-        return store.mark_provider_turn_recovery_required(start).await;
+        let cause = format!("{}: {}", error.code, error.message);
+        return store
+            .mark_provider_turn_recovery_required(start, Some(&cause))
+            .await;
     }
     let confirmed_stop = error.runtime_stopped.then_some((
         error.runtime_handle_id.as_str(),

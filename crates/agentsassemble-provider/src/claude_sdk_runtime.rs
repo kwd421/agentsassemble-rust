@@ -1,4 +1,7 @@
-use std::path::Path;
+use std::{
+    path::Path,
+    sync::{Arc, Mutex},
+};
 #[cfg(windows)]
 use std::process::Stdio;
 
@@ -42,6 +45,7 @@ pub(crate) struct ClaudeSdkRuntime {
     _sdk_bundle: PrivateClaudeSdkBundle,
     client: Client,
     stderr_task: JoinHandle<()>,
+    stderr_tail: StderrTail,
     room_portal: RoomPortal,
 }
 
@@ -71,7 +75,8 @@ impl ClaudeSdkRuntime {
             Ok(started) => started,
             Err(error) => return Err(launch_cleanup::portal(&mut room_portal, error).await),
         };
-        let stderr_task = tokio::spawn(drain_stderr(pipes.stderr));
+        let stderr_tail = StderrTail::default();
+        let stderr_task = tokio::spawn(drain_stderr(pipes.stderr, stderr_tail.clone()));
         let (client, attachment) =
             match connect_client(pipes.stdin, pipes.stdout, session, &room_portal).await {
                 Ok(connected) => connected,
@@ -93,6 +98,7 @@ impl ClaudeSdkRuntime {
                 _sdk_bundle: sdk_bundle,
                 client,
                 stderr_task,
+                stderr_tail,
                 room_portal,
             },
             attachment,
@@ -140,7 +146,8 @@ impl ClaudeSdkRuntime {
             let failure = DriverLaunchError::safe(spawn_error());
             return Err(launch_cleanup::owned_and_portal(&mut room_portal, process, failure).await);
         };
-        let stderr_task = tokio::spawn(drain_stderr(stderr));
+        let stderr_tail = StderrTail::default();
+        let stderr_task = tokio::spawn(drain_stderr(stderr, stderr_tail.clone()));
         let (client, attachment) = match connect_client(stdin, stdout, session, &room_portal).await
         {
             Ok(connected) => connected,
@@ -162,6 +169,7 @@ impl ClaudeSdkRuntime {
                 _sdk_bundle: sdk_bundle,
                 client,
                 stderr_task,
+                stderr_tail,
                 room_portal,
             },
             attachment,
@@ -173,7 +181,25 @@ impl ClaudeSdkRuntime {
         session_id: &str,
         request: &ProviderTurnRequest,
     ) -> Result<ClaudeSdkTurn, DriverError> {
-        self.client.turn(session_id, request).await
+        self.client
+            .turn(session_id, request)
+            .await
+            .map_err(|error| self.explain(error))
+    }
+
+    /// Carries what the bridge reported on stderr into the failure.
+    ///
+    /// Without it the turn's own error is the only record, and a quarantined turn
+    /// replaces that with its recovery text before anyone reads it.
+    fn explain(&self, error: DriverError) -> DriverError {
+        let tail = self.stderr_tail.text();
+        if tail.is_empty() {
+            return error;
+        }
+        DriverError {
+            message: format!("{} [bridge stderr] {tail}", error.message).into(),
+            code: error.code,
+        }
     }
 
     pub(crate) fn is_alive(
@@ -357,12 +383,42 @@ async fn stop_failed_child(child: &mut dyn ChildWrapper) -> Result<(), DriverErr
         .map_err(|_| stop_error())
 }
 
-async fn drain_stderr(mut stderr: impl AsyncRead + Unpin) {
+/// The newest bytes the bridge wrote to stderr.
+///
+/// The pipe still has to be drained or the child blocks, but a turn that fails
+/// leaves no other trace of why: the session's `last_error` is replaced by the
+/// quarantine text when the turn is held for recovery. Keeping the tail is what
+/// makes that failure explainable afterwards.
+#[derive(Clone, Default)]
+pub(crate) struct StderrTail(Arc<Mutex<Vec<u8>>>);
+
+const STDERR_TAIL_BYTES: usize = 8 * 1024;
+
+impl StderrTail {
+    fn append(&self, bytes: &[u8]) {
+        let Ok(mut held) = self.0.lock() else { return };
+        held.extend_from_slice(bytes);
+        let excess = held.len().saturating_sub(STDERR_TAIL_BYTES);
+        if excess > 0 {
+            held.drain(..excess);
+        }
+    }
+
+    /// The retained tail as text, with partial UTF-8 at either edge replaced.
+    pub(crate) fn text(&self) -> String {
+        let Ok(held) = self.0.lock() else {
+            return String::new();
+        };
+        String::from_utf8_lossy(&held).trim().to_owned()
+    }
+}
+
+async fn drain_stderr(mut stderr: impl AsyncRead + Unpin, tail: StderrTail) {
     let mut buffer = [0_u8; 16 * 1024];
     loop {
         match stderr.read(&mut buffer).await {
             Ok(0) | Err(_) => return,
-            Ok(_) => {}
+            Ok(read) => tail.append(&buffer[..read]),
         }
     }
 }

@@ -216,7 +216,7 @@ async fn uncertain_provider_result_publishes_one_recovery_required_session_state
         .unwrap_or_else(|error| panic!("authorize uncertain provider turn: {error}"));
 
     let commit = store
-        .mark_provider_turn_recovery_required(&start)
+        .mark_provider_turn_recovery_required(&start, Some("provider_protocol_invalid: bridge said why"))
         .await
         .unwrap_or_else(|error| panic!("quarantine uncertain provider turn: {error}"));
     assert_eq!(commit.events.len(), 1);
@@ -235,6 +235,16 @@ async fn uncertain_provider_result_publishes_one_recovery_required_session_state
     assert_eq!(
         session.public.last_error_code,
         "provider_turn_recovery_required"
+    );
+    // The quarantine keeps the failure that caused it; otherwise the session
+    // reports only that it needs recovery and never why.
+    assert!(
+        session
+            .public
+            .last_error
+            .contains("provider_protocol_invalid: bridge said why"),
+        "{}",
+        session.public.last_error
     );
     assert_eq!(session.public.runtime_status, AgentRuntimeStatus::Busy);
     assert_eq!(session.public.active_turn_id, assignment.turn_id);
