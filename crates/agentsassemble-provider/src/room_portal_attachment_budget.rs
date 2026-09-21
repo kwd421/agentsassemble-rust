@@ -213,6 +213,7 @@ mod tests {
                 successful_tool_results: 0,
                 closing: false,
             }),
+            ..PortalState::default()
         }))
     }
 

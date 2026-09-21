@@ -121,12 +121,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
     )
     .await;
     assert_eq!(early.is_error, Some(true));
-    let early_decline = call_tool(
-        &client,
-        "pass_turn",
-        json!({"reason_code": "duplicate"}),
-    )
-    .await;
+    let early_decline = call_tool(&client, "pass_turn", json!({"reason_code": "duplicate"})).await;
     assert_eq!(early_decline.is_error, Some(true));
     assert!(portal.finish_observation("turn-1", 7).is_err());
     let read = call_tool(&client, "read_discussion", json!({})).await;
@@ -146,12 +141,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
     )
     .await;
     assert_ne!(published.is_error, Some(true));
-    let duplicate = call_tool(
-        &client,
-        "pass_turn",
-        json!({"reason_code": "duplicate"}),
-    )
-    .await;
+    let duplicate = call_tool(&client, "pass_turn", json!({"reason_code": "duplicate"})).await;
     assert_eq!(duplicate.is_error, Some(true));
     assert_eq!(
         portal

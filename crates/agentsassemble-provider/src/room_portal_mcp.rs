@@ -60,13 +60,16 @@ impl RoomPortalMcp {
             .await
             .map_err(|error| error.message)?;
         match result {
-            ProviderRoomToolResult::SearchMessages(page) => serde_json::to_string(&page),
-            ProviderRoomToolResult::MessageContext(context) => serde_json::to_string(&context),
+            ProviderRoomToolResult::SearchMessages(page) => {
+                Ok(crate::room_portal_render::search_page(&page))
+            }
+            ProviderRoomToolResult::MessageContext(context) => {
+                Ok(crate::room_portal_render::message_context(&context))
+            }
             ProviderRoomToolResult::Random(_) => {
-                return Err("The room tool owner returned a mismatched result.".to_owned());
+                Err("The room tool owner returned a mismatched result.".to_owned())
             }
         }
-        .map_err(|_| "The room tool result could not be encoded.".to_owned())
     }
 
     fn stage_vote(&self, payload: &serde_json::Value) -> Result<String, String> {
@@ -74,12 +77,14 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         let command = VoteCommand::from_payload(payload).map_err(|error| error.message)?;
         active.outcome = Some(StagedOutcome::Vote {
             receipt_generation: active.turn_generation,
             command,
         });
+        staged.notify_waiters();
         Ok("Staged a vote action for the shared room.".to_owned())
     }
 }
@@ -101,7 +106,9 @@ fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservatio
 
 #[tool_router]
 impl RoomPortalMcp {
-    #[tool(description = "Read the finalized messages in this turn's bounded shared-room view. Does not end the turn.")]
+    #[tool(
+        description = "Read the finalized messages in this turn's bounded shared-room view. Does not end the turn."
+    )]
     fn read_discussion(&self) -> Result<String, String> {
         let mut state = self
             .state
@@ -115,7 +122,9 @@ impl RoomPortalMcp {
         Ok(active.room_view.clone())
     }
 
-    #[tool(description = "Read one attachment listed in this exact room turn. Does not end the turn.")]
+    #[tool(
+        description = "Read one attachment listed in this exact room turn. Does not end the turn."
+    )]
     async fn read_attachment(
         &self,
         Parameters(input): Parameters<ReadAttachment>,
@@ -169,6 +178,7 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         let content = canonical_message(&input.content)
             .ok_or_else(|| "The room publication is invalid.".to_owned())?;
@@ -186,20 +196,19 @@ impl RoomPortalMcp {
             content,
             target_agent_id,
         });
+        staged.notify_waiters();
         Ok("Published to the shared room.".to_owned())
     }
 
     #[tool(
         description = "Pass this room turn without posting, giving one reason code: nothing_useful_to_add, not_addressed, or duplicate. This is the normal way to end a turn when you have nothing to post. Read the discussion first."
     )]
-    fn pass_turn(
-        &self,
-        Parameters(input): Parameters<PassTurn>,
-    ) -> Result<String, String> {
+    fn pass_turn(&self, Parameters(input): Parameters<PassTurn>) -> Result<String, String> {
         let mut state = self
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
+        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         if !valid_decline_reason(&input.reason_code) {
             return Err("The pass reason is unsupported.".to_owned());
@@ -208,6 +217,7 @@ impl RoomPortalMcp {
             receipt_generation: active.turn_generation,
             reason_code: input.reason_code,
         });
+        staged.notify_waiters();
         Ok("Passed this shared-room turn.".to_owned())
     }
 

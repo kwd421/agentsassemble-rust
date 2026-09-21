@@ -165,7 +165,10 @@ async fn a_room_input_older_than_its_queue_window_is_dropped_instead_of_answered
         .unwrap_or_else(|error| panic!("load runtime candidate: {error}"))
         .unwrap_or_else(|| panic!("runtime candidate is missing"));
     store
-        .apply_runtime_shutdown_reconciliation(&flash, &crate::RuntimeReconciliationObservation::Gone)
+        .apply_runtime_shutdown_reconciliation(
+            &flash,
+            &crate::RuntimeReconciliationObservation::Gone,
+        )
         .await
         .unwrap_or_else(|error| panic!("shut the waiting runtime down: {error}"));
 
@@ -178,7 +181,11 @@ async fn a_room_input_older_than_its_queue_window_is_dropped_instead_of_answered
     .unwrap_or_else(|error| panic!("load stopped session: {error}"));
     let stopped = serde_json::from_str::<DurableAgentSession>(&encoded)
         .unwrap_or_else(|error| panic!("decode stopped session: {error}"));
-    assert!(stopped.pending_inputs.is_empty(), "{:?}", stopped.pending_inputs);
+    assert!(
+        stopped.pending_inputs.is_empty(),
+        "{:?}",
+        stopped.pending_inputs
+    );
     assert!(stopped.inflight_inputs.is_empty());
 }
 

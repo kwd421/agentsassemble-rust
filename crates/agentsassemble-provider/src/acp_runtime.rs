@@ -16,7 +16,7 @@ use tokio::{
 use crate::process::sanitize_environment;
 use crate::{
     acp_client::{AcpClient, AcpClientConfiguration},
-    driver::{DriverError, ProviderTurnRequest},
+    driver::{DriverError, ProviderTurnCompleted, ProviderTurnRequest},
     filesystem::{BoundExecutable, bind_executable_with_children},
     launch_cleanup,
     launch_error::DriverLaunchError,
@@ -153,6 +153,18 @@ impl AcpRuntime {
             stderr_task,
             room_portal,
         })
+    }
+
+    /// Runs one prompt, ending it as soon as its room action is staged.
+    pub(crate) async fn prompt(
+        &mut self,
+        session_id: &str,
+        request: &ProviderTurnRequest,
+    ) -> Result<ProviderTurnCompleted, DriverError> {
+        let terminal = self.room_portal.terminal_watch();
+        self.client
+            .prompt(session_id, request, Some(terminal))
+            .await
     }
 
     pub(crate) fn room_portal_server(&self) -> McpServer {

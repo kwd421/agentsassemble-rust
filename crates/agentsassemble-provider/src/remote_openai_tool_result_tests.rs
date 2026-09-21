@@ -83,7 +83,7 @@ async fn attachment_results_reach_api_and_preserve_turn_completion() {
 }
 
 #[tokio::test]
-async fn oversized_search_result_reaches_api_as_explicit_tool_failure() {
+async fn search_over_huge_messages_reaches_api_as_previews_instead_of_failing() {
     let (ingress, mut commands) = ProviderRoomToolIngress::channel(1);
     let owner = tokio::spawn(async move {
         let mut command = commands
@@ -120,8 +120,13 @@ async fn oversized_search_result_reaches_api_as_explicit_tool_failure() {
     owner
         .await
         .unwrap_or_else(|error| panic!("search owner: {error}"));
-    let value: Value =
-        serde_json::from_str(&result).unwrap_or_else(|error| panic!("typed failure: {error}"));
-    assert_eq!(value["ok"], false);
-    assert_eq!(value["error"]["code"], "room_tool_result_too_large");
+    // Four 12,000-character messages used to push the result past the tool-result cap
+    // and fail the read. Search results are previews now, so the read succeeds and
+    // stays small; the cap itself is still exercised by the attachment cases above.
+    assert!(
+        result.starts_with("#1 Human [event message-1]: "),
+        "{result}"
+    );
+    assert_eq!(result.matches('…').count(), 4, "{result}");
+    assert!(result.len() < 8 * 1024, "{} bytes", result.len());
 }

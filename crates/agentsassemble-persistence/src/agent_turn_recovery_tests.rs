@@ -250,8 +250,16 @@ async fn uncertain_provider_result_publishes_one_recovery_required_session_state
         session.public.last_error
     );
     // Stderr can name local files; the cause is redacted like any persisted diagnostic.
-    assert!(!session.public.last_error.contains("someone"), "{}", session.public.last_error);
-    assert!(session.public.last_error.contains("[local path]"), "{}", session.public.last_error);
+    assert!(
+        !session.public.last_error.contains("someone"),
+        "{}",
+        session.public.last_error
+    );
+    assert!(
+        session.public.last_error.contains("[local path]"),
+        "{}",
+        session.public.last_error
+    );
     assert_eq!(session.public.runtime_status, AgentRuntimeStatus::Busy);
     assert_eq!(session.public.active_turn_id, assignment.turn_id);
 

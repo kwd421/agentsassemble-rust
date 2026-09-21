@@ -156,12 +156,7 @@ async fn terminal_first_rejects_late_random_tool() {
         .unwrap_or_else(|error| panic!("begin terminal-first observation: {error}"));
     let client = connect(&portal).await;
     let _ = call_tool(&client, "read_discussion", json!({})).await;
-    let declined = call_tool(
-        &client,
-        "pass_turn",
-        json!({"reason_code": "duplicate"}),
-    )
-    .await;
+    let declined = call_tool(&client, "pass_turn", json!({"reason_code": "duplicate"})).await;
     assert_ne!(declined.is_error, Some(true));
     let late_tool = call_tool(
         &client,

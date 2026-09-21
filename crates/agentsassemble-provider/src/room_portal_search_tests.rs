@@ -68,7 +68,10 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let result = pending_search
         .await
         .unwrap_or_else(|error| panic!("join search call: {error}"));
-    assert_eq!(tool_json::<RoomMessageSearchPage>(&result), page);
+    assert_eq!(
+        tool_text(&result),
+        crate::room_portal_render::search_page(&page)
+    );
 
     let context_client = client.clone();
     let pending_context = tokio::spawn(async move {
@@ -96,7 +99,10 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let result = pending_context
         .await
         .unwrap_or_else(|error| panic!("join context call: {error}"));
-    assert_eq!(tool_json::<RoomMessageContext>(&result), context);
+    assert_eq!(
+        tool_text(&result),
+        crate::room_portal_render::message_context(&context)
+    );
 
     let published = call_tool(
         client.as_ref(),
@@ -163,17 +169,15 @@ async fn establish_search_receipt(
     assert_ne!(read.is_error, Some(true));
 }
 
-fn tool_json<T: serde::de::DeserializeOwned>(result: &rmcp::model::CallToolResult) -> T {
-    let text = result
+fn tool_text(result: &rmcp::model::CallToolResult) -> String {
+    result
         .content
         .first()
         .and_then(|content| content.as_text())
         .map_or_else(
-            || panic!("room search tool returned no JSON"),
-            |content| content.text.as_str(),
-        );
-    serde_json::from_str(text)
-        .unwrap_or_else(|error| panic!("decode room search tool JSON: {error}"))
+            || panic!("room search tool returned no text"),
+            |content| content.text.clone(),
+        )
 }
 
 async fn call_tool(

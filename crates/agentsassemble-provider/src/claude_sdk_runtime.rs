@@ -1,9 +1,9 @@
+#[cfg(windows)]
+use std::process::Stdio;
 use std::{
     path::Path,
     sync::{Arc, Mutex},
 };
-#[cfg(windows)]
-use std::process::Stdio;
 
 use agentsassemble_domain::DurableAgentSession;
 #[cfg(windows)]
