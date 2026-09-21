@@ -130,7 +130,10 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
     assert!(first_assignment.room_view.contains("take the first turn"));
     assert!(first_assignment.provider_input.contains("read_discussion"));
     let provider_input = &first_assignment.provider_input;
-    assert!(provider_input.contains("one terminal action exposed by the room transport"));
+    // The instruction names the actions that end a turn, so an agent cannot take a
+    // read or randomness tool for its one terminal action.
+    assert!(provider_input.contains("`publish_message`, `pass_turn`, or one vote command"));
+    assert!(provider_input.contains("do not end your turn"));
     let replay = store
         .execute_message_with_turn(&principal, "message-1", "message.send", &first_payload)
         .await

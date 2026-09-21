@@ -55,8 +55,6 @@ pub enum RoomPortalError {
     Observation,
     #[error("the provider did not read the assigned room observation")]
     ReceiptMissing,
-    #[error("the provider did not stage exactly one terminal room action")]
-    OutcomeMissing,
     #[error("the provider staged an invalid terminal room action")]
     OutcomeInvalid,
     #[error("the room portal MCP server failed")]
@@ -371,11 +369,16 @@ impl RoomPortal {
         if receipt_generation != active.turn_generation {
             return Err(RoomPortalError::OutcomeInvalid);
         }
-        let result = match active
-            .outcome
-            .as_ref()
-            .ok_or(RoomPortalError::OutcomeMissing)?
-        {
+        // A turn that read the room and staged nothing did nothing the room can see.
+        // That is a pass the agent forgot to make, not an uncertain effect, so it
+        // ends like one instead of quarantining the session.
+        let Some(outcome) = active.outcome.as_ref() else {
+            state.active = None;
+            return Ok(ProviderTurnOutcome::Declined {
+                reason_code: NO_PUBLICATION_REASON.to_owned(),
+            });
+        };
+        let result = match outcome {
             StagedOutcome::Message {
                 receipt_generation: staged_generation,
                 content,
@@ -584,6 +587,10 @@ pub(super) fn canonical_message(value: &str) -> Option<String> {
     let value = agentsassemble_domain::clean_message(value, MAX_MESSAGE_CHARACTERS);
     agentsassemble_domain::has_visible_text(&value).then_some(value)
 }
+
+/// The pass reason the room records when an agent ended its turn without staging
+/// anything. Agents cannot choose it; `valid_decline_reason` keeps it off their menu.
+pub(crate) const NO_PUBLICATION_REASON: &str = "no_publication";
 
 pub(super) fn valid_decline_reason(value: &str) -> bool {
     matches!(

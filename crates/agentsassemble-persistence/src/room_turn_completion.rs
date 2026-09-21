@@ -188,9 +188,10 @@ pub(super) async fn decline(
         ..
     } = authority;
     validate_identifier(provider_turn_id, "provider_turn_invalid")?;
+    // `no_publication` is recorded by the room portal when a turn staged nothing.
     if !matches!(
         reason_code,
-        "nothing_useful_to_add" | "not_addressed" | "duplicate"
+        "nothing_useful_to_add" | "not_addressed" | "duplicate" | "no_publication"
     ) {
         return Err(rejected(
             "invalid_decline_reason",

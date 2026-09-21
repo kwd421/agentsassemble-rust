@@ -114,6 +114,7 @@ function declineReason(code?: string): string {
     not_addressed: "나를 부른 게 아님",
     nothing_useful_to_add: "덧붙일 말 없음",
     duplicate: "이미 나온 내용",
+    no_publication: "발언 없음",
   }[String(code || "")] || "이유 없음";
 }
 

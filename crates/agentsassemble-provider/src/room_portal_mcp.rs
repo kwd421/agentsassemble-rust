@@ -16,7 +16,7 @@ use crate::room_portal::{
     reserve_tabletop_tool, valid_decline_reason,
 };
 use crate::room_portal_tool_contract::{
-    CastVote, ChooseRandom, CreateVote, DeclineToSpeak, PublishMessage, ReadAttachment,
+    CastVote, ChooseRandom, CreateVote, PassTurn, PublishMessage, ReadAttachment,
     ReadMessageContext, RollDice, SearchMessages, VoteTarget,
 };
 
@@ -101,7 +101,7 @@ fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservatio
 
 #[tool_router]
 impl RoomPortalMcp {
-    #[tool(description = "Read the finalized messages in this turn's bounded shared-room view.")]
+    #[tool(description = "Read the finalized messages in this turn's bounded shared-room view. Does not end the turn.")]
     fn read_discussion(&self) -> Result<String, String> {
         let mut state = self
             .state
@@ -115,7 +115,7 @@ impl RoomPortalMcp {
         Ok(active.room_view.clone())
     }
 
-    #[tool(description = "Read one attachment listed in this exact room turn.")]
+    #[tool(description = "Read one attachment listed in this exact room turn. Does not end the turn.")]
     async fn read_attachment(
         &self,
         Parameters(input): Parameters<ReadAttachment>,
@@ -132,7 +132,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Search complete canonical lobby-message history for this exact room turn. Read the discussion first."
+        description = "Search complete canonical lobby-message history for this exact room turn. Does not end the turn. Read the discussion first."
     )]
     async fn search_messages(
         &self,
@@ -146,7 +146,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Read the bounded chronological lobby context around one search result event. Read the discussion first."
+        description = "Read the bounded chronological lobby context around one search result event. Does not end the turn. Read the discussion first."
     )]
     async fn read_message_context(
         &self,
@@ -190,11 +190,11 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "End this room turn without posting, using one supported reason code: nothing_useful_to_add, not_addressed, or duplicate. Read the discussion first."
+        description = "Pass this room turn without posting, giving one reason code: nothing_useful_to_add, not_addressed, or duplicate. This is the normal way to end a turn when you have nothing to post. Read the discussion first."
     )]
-    fn decline_to_speak(
+    fn pass_turn(
         &self,
-        Parameters(input): Parameters<DeclineToSpeak>,
+        Parameters(input): Parameters<PassTurn>,
     ) -> Result<String, String> {
         let mut state = self
             .state
@@ -202,13 +202,13 @@ impl RoomPortalMcp {
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
         let active = terminal_observation(&mut state)?;
         if !valid_decline_reason(&input.reason_code) {
-            return Err("The decline reason is unsupported.".to_owned());
+            return Err("The pass reason is unsupported.".to_owned());
         }
         active.outcome = Some(StagedOutcome::Declined {
             receipt_generation: active.turn_generation,
             reason_code: input.reason_code,
         });
-        Ok("Declined this shared-room turn.".to_owned())
+        Ok("Passed this shared-room turn.".to_owned())
     }
 
     #[tool(
@@ -249,7 +249,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Roll bounded server-owned dice in tabletop mode. Read the discussion first."
+        description = "Roll bounded server-owned dice in tabletop mode. Does not end the turn: publish or pass afterwards. Read the discussion first."
     )]
     async fn roll_dice(&self, Parameters(input): Parameters<RollDice>) -> Result<String, String> {
         let request = RoomRandomRequest::parse(
@@ -261,7 +261,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Choose one bounded option with server-owned randomness in tabletop mode. Read the discussion first."
+        description = "Choose one bounded option with server-owned randomness in tabletop mode. Does not end the turn: publish or pass afterwards. Read the discussion first."
     )]
     async fn choose_random(
         &self,

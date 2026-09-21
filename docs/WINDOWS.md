@@ -368,12 +368,34 @@ grok_acp · opencode · remote_openai · managed_bridge_parent 가 모두 구현
 `portal.finish_turn(request)` 을 부른다. 다만 API 드라이버는 앱이 도구 루프를 직접 돌려 종결
 동작까지 밀어붙일 수 있고, 외부 CLI 계열은 에이전트가 스스로 멈추면 붙잡을 방법이 없다.
 
-이번 브랜치에서는 원인 보존만 고쳤다 (14). 지시문에 종결 동작을 열거하는 것, 발행이 없는 턴을
-격리 대신 넘김으로 처리하는 것, `decline_to_speak` 의 부정적 어감을 `pass_turn` 으로 바꾸는 것은
-아직 하지 않았다. 방의 에이전트 넷(Terra · deepseek-flash · Sonnet 5 · grok-4.6)에게 이름을
-물었을 때 셋이 `pass_turn`, grok 은 `skip_turn` 을 골랐다. grok 의 근거는 이 방에서 "턴 넘기기"
-가 이미 발행 + 다음 에이전트 지정을 뜻한다는 것이었고, deepseek 과 Sonnet 은 `reason_code` 를
-유지한다면 `abstain` 이 스키마에 더 맞다고 덧붙였다.
+방의 에이전트 넷(Terra · deepseek-flash · Sonnet 5 · grok-4.6)에게 이름을 물었을 때 셋이
+`pass_turn`, grok 은 `skip_turn` 을 골랐다. grok 의 근거는 이 방에서 "턴 넘기기" 가 이미 발행 +
+다음 에이전트 지정을 뜻한다는 것이었고, deepseek 과 Sonnet 은 `reason_code` 를 유지한다면
+`abstain` 이 스키마에 더 맞다고 덧붙였다. grok 이 말한 겹침은 에이전트들이 쓰는 한국어 표현에서
+생기는 것이지 도구 스키마끼리는 구분되며, 화면이 이미 "차례 넘김" 이라고 부르고 있어 `pass_turn`
+으로 정했다.
+
+그래서 세 가지를 바꿨다.
+
+- **도구 이름** — `decline_to_speak` 를 `pass_turn` 으로 바꿨다. 설명도 "할 말이 없을 때 턴을
+  끝내는 보통의 방법" 이라고 적었다. 사유 코드(`nothing_useful_to_add` 등)는 그대로다.
+- **지시문과 도구 설명** — 지시문이 턴을 끝내는 동작을 `publish_message`, `pass_turn`, 투표
+  명령으로 명시하고, 읽기 · 검색 · 첨부 · 무작위 도구는 여러 번 써도 되며 턴을 끝내지 않는다고
+  적는다. 실패한 도구 뒤에도 발행이나 넘김이 필요하다는 것도 적었다. 읽기 · 무작위 도구 설명에는
+  "Does not end the turn" 을 붙였다. 이번 사고가 정확히 이 구분을 모델이 놓친 것이라서다.
+- **안전망** — `read_discussion` 은 했는데 아무것도 등록하지 않은 채 턴이 끝나면, 포털이 오류
+  대신 사유 `no_publication` 인 넘김을 돌려준다. 방에 보이는 효과가 없으니 불확실한 것이 아니고,
+  잠그지 않고 차례를 넘긴다. 화면의 차례 넘김 줄에는 "발언 없음" 으로 뜬다. `no_publication` 은
+  에이전트가 고를 수 있는 사유가 아니라 `valid_decline_reason` 에는 넣지 않고, 영속화 쪽 허용
+  목록에만 더했다. 방을 읽지도 않고 끝난 턴(`room_observation_unconfirmed`)과 형식이 잘못된
+  종결 동작은 그대로 오류로 둔다.
+
+이로써 `OutcomeMissing` 은 만들어지는 곳이 없어져 지웠다. 이 동작을 고정하던 테스트 셋
+(`room_portal_mcp`, `opencode`, `remote_openai` 포털 테스트)은 새 동작에 맞게 고쳤고, 지시문
+문구를 고정하던 `ordered_assignment_and_finalization_are_durable_and_exact` 는 종결 동작이
+열거되는지를 보도록 바꿨다.
+
+API 드라이버의 `room_tool_rejected` 사유가 버려지는 문제(세션 초반 기록)는 이번에 손대지 않았다.
 
 ### 14. 격리된 턴이 아무 근거도 남기지 않음 (`claude_sdk_runtime.rs` · `provider_turn_execution.rs`)
 
@@ -410,6 +432,23 @@ Cause: room_portal_publication_missing: The provider did not stage a valid room 
 두었다. `merged_turn_queue` 가 이미 각 이벤트를 불러 삭제 여부를 보고 있어, 같은 자리에서 한
 시간이 지난 입력을 버린다. 한 시간이라는 값에 근거는 없고, 짧은 재시작은 이어가고 하루 지난
 것은 버린다는 선만 그은 것이다.
+
+### 16. 자유 토론 모드에서 관찰된 실패 두 건 (원인 미확인)
+
+사용자가 방을 자유 토론(`conversation_mode: ambient`)으로 바꾸고 "가위바위보" 를 보내자 네
+에이전트가 동시에 턴을 받았다. deepseek 은 답했고, 두 세션이 실패해 복구 필요로 남았다.
+
+- **Sonnet 5** — 턴 시작 1 초 만에 `provider_protocol_invalid`. 14 에서 보존하게 된 stderr 꼬리에는
+  SDK 기동 경고 한 줄(`CLAUDE_SDK_CAN_USE_TOOL_SHADOWED`: 방 도구가 `allowedTools` 로 자동 승인돼
+  `canUseTool` 이 불리지 않는다는 내용)만 있었다. 이 경고는 기동할 때마다 찍히므로 이번 실패의
+  원인이라고 볼 근거는 없다. 브리지는 치명 오류를 stderr 가 아니라 stdout 프로토콜
+  (`claude_sdk_protocol_failed`)로 알리기 때문에, 이런 경우 stderr 꼬리는 원인을 담지 못한다.
+- **grok-4.6** — 약 56 초 뒤 `provider_turn_failed` ("The ACP provider request could not
+  complete.").
+
+둘 다 조사하지 않았다. 순서 모드에서는 같은 에이전트들이 정상적으로 돌았으므로 동시 실행과
+관련이 있을 수 있지만 확인한 사실은 아니다. 위 경고 자체는 방 도구의 권한 요청이 `canUseTool`
+을 거치지 않는다는 뜻이라, 별도로 확인할 가치가 있다.
 
 ## 이전 기록 정정
 
@@ -522,6 +561,9 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
   cp949 로 기록돼 에이전트에게 깨진 채 도착했는데, 이는 질문을 만든 쪽 도구의 문제이고 앱의
   인코딩은 정상이었다(같은 턴의 `room_view` 는 올바른 UTF-8). 두 에이전트가 이 사실을 정확히
   신고했다
+- 13 의 세 가지 변경 후 provider 테스트 183 통과(기존 실패 3 은 그대로), persistence 334
+  통과(기존 실패 5 는 그대로), 프론트엔드 914 통과. 발행 없이 끝난 턴이 `no_publication` 넘김이
+  되는 것은 실제 MCP 포털을 쓰는 `remote_openai` 포털 테스트로 확인했다
 
 실행하지 않은 것:
 
@@ -529,6 +571,8 @@ CSS 게이트가 고쳐졌으므로 설정 덮어쓰기 없이 실제 `beforeBui
   경로로 DeepSeek 가 실제로 동작했으므로 테스트 환경 쪽 문제일 가능성이 있지만 원인은 확인하지
   않았다
 - Codex · OpenCode 의 실제 턴
+- 13 의 변경을 패키지 앱에서 실제 턴으로 재현하는 것. 확인 시점에 방이 사용자가 바꾼 자유 토론
+  모드였고 클로드가 16 의 실패로 복구 필요 상태여서, 설정을 되돌리지 않고 테스트로만 확인했다
 - Codex 실제 업데이트 실행. 버튼이 제공되는 것까지만 확인했다
 - Claude 로그인. 계정 로그인은 사용자 몫이다
 - 서버 · persistence 크레이트 전체 테스트

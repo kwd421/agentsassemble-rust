@@ -127,7 +127,7 @@ fn room_request(session_id: &str) -> ProviderTurnRequest {
 }
 
 #[tokio::test]
-async fn portal_completion_preserves_read_and_publication_failure_codes() {
+async fn portal_completion_rejects_an_unread_turn_and_passes_an_unpublished_one() {
     let mut driver = RemoteOpenAiDriver::launch(
         &DEEPSEEK_SPEC,
         ProviderCredentialStore::isolated_test_store(),
@@ -158,14 +158,21 @@ async fn portal_completion_preserves_read_and_publication_failure_codes() {
         )
         .await
         .unwrap_or_else(|error| panic!("read through authenticated MCP: {error}"));
-    let Err(error) = driver.finish_room_observation(&request).await else {
-        panic!("accepted incomplete room observation");
-    };
-    assert_eq!(error.code, "room_portal_publication_missing");
+    // Reading without staging anything is a pass the room records, not a failure:
+    // nothing reached the room, so there is no uncertain effect to quarantine.
+    assert_eq!(
+        driver
+            .finish_room_observation(&request)
+            .await
+            .unwrap_or_else(|error| panic!("finish unpublished observation: {error}")),
+        crate::room_portal::ProviderTurnOutcome::Declined {
+            reason_code: "no_publication".to_owned(),
+        }
+    );
     driver
         .abort_room_observation()
         .await
-        .unwrap_or_else(|error| panic!("release failed observation: {error}"));
+        .unwrap_or_else(|error| panic!("release finished observation: {error}"));
     driver
         .stop()
         .await

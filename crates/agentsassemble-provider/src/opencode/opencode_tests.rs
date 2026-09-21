@@ -283,7 +283,7 @@ async fn assert_tool_only_portal_outcome(request: &crate::ProviderTurnRequest, d
         .await
         .unwrap_or_else(|error| panic!("connect MCP: {error}"));
     let terminal_tool = if decline {
-        ("decline_to_speak", json!({"reason_code": "duplicate"}))
+        ("pass_turn", json!({"reason_code": "duplicate"}))
     } else {
         (
             "publish_message",
@@ -299,12 +299,6 @@ async fn assert_tool_only_portal_outcome(request: &crate::ProviderTurnRequest, d
             .await
             .unwrap_or_else(|error| panic!("call room tool: {error}"));
         assert_ne!(result.is_error, Some(true));
-        if tool == "read_discussion" {
-            assert!(matches!(
-                portal.finish_turn(request),
-                Err(RoomPortalError::OutcomeMissing)
-            ));
-        }
     }
     assert_eq!(
         portal

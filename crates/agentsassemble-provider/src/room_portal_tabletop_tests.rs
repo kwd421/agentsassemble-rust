@@ -121,7 +121,7 @@ async fn assert_tabletop_tool_catalog(client: &RoomClient) {
             "choose_random".to_owned(),
             "close_vote".to_owned(),
             "create_vote".to_owned(),
-            "decline_to_speak".to_owned(),
+            "pass_turn".to_owned(),
             "publish_message".to_owned(),
             "read_attachment".to_owned(),
             "read_discussion".to_owned(),
@@ -158,7 +158,7 @@ async fn terminal_first_rejects_late_random_tool() {
     let _ = call_tool(&client, "read_discussion", json!({})).await;
     let declined = call_tool(
         &client,
-        "decline_to_speak",
+        "pass_turn",
         json!({"reason_code": "duplicate"}),
     )
     .await;
