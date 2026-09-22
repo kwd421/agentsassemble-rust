@@ -1,0 +1,53 @@
+.dc-custom-channel .dc-composer-bar {
+  grid-template-columns: minmax(0, 1fr) 36px;
+}
+
+.dc-channel-history-button {
+  display: block;
+  min-height: 44px;
+  margin: 0 auto 8px;
+  padding: 0 16px;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
+.dc-channel-history-button:hover:not(:disabled),
+.dc-channel-history-button:focus-visible {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+}
+
+.dc-channel-notice {
+  margin-bottom: 8px;
+  border: 1px solid var(--color-danger, #f87171);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.dc-channel-notice button {
+  margin-left: 8px;
+  font-weight: 700;
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .dc-custom-channel .dc-message-actions {
+    position: static;
+    grid-column: 2;
+    grid-row: 2;
+    display: inline-flex;
+    justify-self: start;
+    opacity: 1;
+    visibility: visible;
+    pointer-events: auto;
+    transform: none;
+  }
+
+  .dc-custom-channel .dc-message-action-button {
+    width: 44px;
+    height: 44px;
+  }
+}

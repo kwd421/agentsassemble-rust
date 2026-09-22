@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { CornerUpLeft, Hash, Pin, Send } from "lucide-react";
+import { Hash, Send } from "lucide-react";
 import { RoomSocketSayError } from "../roomSocketTypes";
 import type { MessagePinsAuthority, RoomChannel, RoomSearchResult } from "../api";
 import type { useChannelTranscript } from "../app/useChannelTranscript";
@@ -7,13 +7,14 @@ import type { CanonicalParticipantProfile } from "../lib/canonicalRoomProjection
 import type { Mentionable } from "../lib/mentionComposerModel";
 import { MAX_TEXT_CHAT_CHARACTERS } from "../types/generated/TEXT_CHAT_WIRE";
 import ChannelHeader, { type ChannelHeaderActions, type ChannelSearchScope } from "./components/ChannelHeader";
-import DiscordText from "./components/DiscordText";
-import { MessageReply, ReplyDraft } from "./components/MessageReply";
+import ChannelMessageRows from "./components/ChannelMessageRows";
+import MentionInput from "./components/MentionInput";
+import "./CustomChannelView.css";
+import { ReplyDraft } from "./components/MessageReply";
 import { useMessagePins } from "./useMessagePins";
 import type { RoomMessageSearchController } from "./useRoomMessageSearch";
 
 type Transcript = ReturnType<typeof useChannelTranscript>;
-const buttonStyle = { minWidth: 44, minHeight: 44 };
 
 export default function CustomChannelView({
   channel, channelId, roomId, roomUid, transcript, authority, messageSearch,
@@ -70,7 +71,7 @@ export default function CustomChannelView({
     } else if (transcript.following && atBottom) node.scrollTop = node.scrollHeight;
     const target = pendingFocus.current;
     if (target?.scope !== transcript.scope) return;
-    const element = Array.from(node.querySelectorAll<HTMLElement>("[data-channel-event-id]")).find((item) => item.dataset.channelEventId === target.id);
+    const element = Array.from(node.querySelectorAll<HTMLElement>("[data-room-event-id]")).find((item) => item.dataset.roomEventId === target.id);
     if (element) { pendingFocus.current = null; element.scrollIntoView({ block: "center" }); element.focus({ preventScroll: true }); }
   }, [transcript.events, transcript.loading, transcript.following, transcript.scope, atBottom, selected]);
   useEffect(() => {
@@ -124,7 +125,7 @@ export default function CustomChannelView({
     onSelect: () => result.channel_id === channelId ? void navigate(result.event_id) : onOpenCrossChannelSearchResult(result),
   }));
   const latestSeq = transcript.events.at(-1)?.seq;
-  return <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+  return <div className="dc-custom-channel flex min-h-0 min-w-0 flex-1 flex-col">
     <ChannelHeader icon={<Hash size={20} />} title={channel?.name ?? "채널 연결 중"} searchLabel={searchLabel}
       membersOpen={membersOpen} onToggleMembers={onToggleMembers} onOpenMobileSidebar={onOpenMobileSidebar} onOpenMobileInfo={onOpenMobileInfo}
       headerActions={{ ...headerActions, pinnedItems: pins.pinnedItems, pinsLoading: pins.pinsLoading, pinsError: pins.pinsError, latestReadCursor: latestSeq ? `seq:${latestSeq}` : "",
@@ -135,42 +136,51 @@ export default function CustomChannelView({
       onSearchScopeChange={onMessageSearchScopeChange} searchLoading={messageSearch.loading} searchError={messageSearch.error}
       onSearchQueryChange={messageSearch.updateQuery} searchHasMore={messageSearch.hasMore} searchLoadingMore={messageSearch.loadingMore}
       onLoadMoreSearch={() => void messageSearch.loadMore()} />
-    <div ref={scrollRef} className="chat-scroll" style={{ minHeight: 0, flex: 1, overflowY: "auto", padding: "16px 24px" }} aria-label="채널 메시지"
+    <div ref={scrollRef} className="relative min-h-0 flex-1 overflow-y-auto py-4 chat-scroll" style={{ overflowAnchor: "none" }} aria-label="채널 메시지"
       onScroll={(event) => { const node = event.currentTarget; setAtBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 24); }}>
-      {transcript.hasMore && <button type="button" className="ops-button" style={buttonStyle} disabled={transcript.loading} onClick={() => {
+      {transcript.hasMore && <button type="button" className="dc-channel-history-button" disabled={transcript.loading} onClick={() => {
         const node = scrollRef.current; if (node) restoreScroll.current = { height: node.scrollHeight, top: node.scrollTop };
         setAtBottom(false); void transcript.earlier();
       }}>이전 메시지</button>}
-      {!transcript.ready && !transcript.error && <p role="status">채널 연결과 기록을 기다리고 있어요.</p>}
-      {transcript.ready && transcript.events.length === 0 && <p className="text-text-muted">첫 메시지를 남겨보세요.</p>}
-      {transcript.events.map((event) => <article key={event.id} data-channel-event-id={event.id} data-search-target={selected?.scope === transcript.scope && selected.id === event.id} tabIndex={-1}
-        className="dc-channel-message" style={{ padding: "8px 0", overflowWrap: "anywhere" }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          <strong className="min-w-0 flex-1 preserve-words">{participantProfiles[event.actor.participant_id]?.displayName || event.display_name}</strong>
-          <time dateTime={event.created_at} style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{new Date(event.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</time>
-          {canPost && event.message_deleted !== true && <button type="button" className="ops-button" style={buttonStyle} aria-label="메시지에 답장" disabled={disabled}
-            onClick={() => { setDraft({ identity, value, replyTo: event.id }); inputRef.current?.focus(); }}><CornerUpLeft size={16} /></button>}
-          {canPin && authority && <button type="button" className="ops-button" style={{ ...buttonStyle, color: pinnedIds.has(event.id) ? "var(--color-accent)" : "var(--color-text-muted)" }} aria-label={pinnedIds.has(event.id) ? "고정 해제" : "메시지 고정"}
-            data-pinned={pinnedIds.has(event.id)} disabled={pins.pinsLoading || pins.pinBusyIds.size > 0} onClick={() => void pins.setPinned(event.id, !pinnedIds.has(event.id))}><Pin size={16} /></button>}
+      {!transcript.ready && !transcript.error && <p className="px-4 text-[13px] text-text-muted" role="status">채널 연결과 기록을 기다리고 있어요.</p>}
+      {transcript.ready && transcript.following && !transcript.hasMore && <section className="dc-channel-intro px-4 pb-5 pt-2">
+        <span className="dc-channel-intro-icon"><Hash size={26} /></span>
+        <h2 className="mt-3 text-[28px] font-black leading-tight text-text-primary preserve-words">{channel?.name}</h2>
+        <p className="mt-1 text-[14px] leading-relaxed text-text-muted">이 채널의 대화가 시작되는 곳이에요.</p>
+      </section>}
+      {transcript.ready && !transcript.following && <p className="px-4 pb-3 text-center text-[12px] text-text-muted">검색한 메시지 주변 기록</p>}
+      <ChannelMessageRows events={transcript.events} profiles={participantProfiles} mentionLabels={mentionLabels}
+        selectedId={selected?.scope === transcript.scope ? selected.id : undefined} pinnedIds={pinnedIds}
+        canReply={canPost} replyDisabled={disabled} canPin={Boolean(canPin && authority)}
+        pinDisabled={pins.pinsLoading || pins.pinBusyIds.size > 0}
+        onReply={(id) => { setDraft({ identity, value, replyTo: id }); inputRef.current?.focus(); }}
+        onTogglePin={(id) => void pins.setPinned(id, !pinnedIds.has(id))}
+        replySource={replySource} onNavigate={(id) => void navigate(id)} />
+    </div>
+    <div className="relative shrink-0 px-4 pb-5">
+      {(!transcript.following || !atBottom) && <div className="dc-old-history-notice" role="status">
+        <span>{transcript.newMessages ? "새 메시지가 있어요" : "오래된 메시지를 보고 있어요"}</span>
+        <button type="button" disabled={transcript.sending} onClick={() => {
+          pendingFocus.current = null; setSelected(null); setAtBottom(true);
+          if (!transcript.following) transcript.latest();
+          else if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        }} aria-label={transcript.newMessages ? "새 메시지 · 최신으로" : "최신 메시지"}>최근으로 이동하기</button>
+      </div>}
+      {transcript.error && <div role="alert" className="dc-channel-notice">{transcript.error} <button type="button" disabled={transcript.sending} onClick={transcript.latest}>다시 불러오기</button></div>}
+      <section className="dc-composer-shell">
+        {replyTo && <ReplyDraft source={replySource(replyTo)} onCancel={() => setDraft({ identity, value })} />}
+        {(error || pins.pinsError || tooLong) && <p role="alert" className="dc-channel-notice">{error || pins.pinsError || `메시지는 ${MAX_TEXT_CHAT_CHARACTERS}자까지 보낼 수 있어요.`}</p>}
+        {channel && transcript.ready && !canPost && <p className="dc-composer-readonly">이 채널에서는 보기만 할 수 있어요.</p>}
+        <div className="dc-composer-bar">
+          <MentionInput inputRef={inputRef} className="dc-composer-input" ariaLabel="채널 메시지 입력"
+            placeholder={!channel || !transcript.ready ? "채널 연결을 기다리고 있어요" : canPost ? `#${channel.name}에 메시지 보내기` : "이 채널에서는 보기만 할 수 있어요"}
+            value={value} disabled={disabled} maxLength={MAX_TEXT_CHAT_CHARACTERS * 2} mentionables={mentionables}
+            onChange={(text) => setDraft({ identity, value: text, replyTo })}
+            onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
+          <button type="button" className="dc-composer-button send" data-role="send" aria-label="채널 메시지 보내기" title="메시지 보내기"
+            disabled={disabled || !value.trim() || tooLong} onClick={() => void send()}><Send size={17} /></button>
         </div>
-        {typeof event.reply_to_event_id === "string" && <MessageReply source={replySource(event.reply_to_event_id)} onOpen={() => void navigate(String(event.reply_to_event_id))} />}
-        <DiscordText text={event.content || ""} mentionLabels={mentionLabels} />
-      </article>)}
+      </section>
     </div>
-    {(!transcript.following || !atBottom) && <button type="button" className="ops-button" style={{ ...buttonStyle, margin: "0 24px 12px" }} disabled={transcript.sending} onClick={() => {
-      pendingFocus.current = null; setSelected(null); setAtBottom(true);
-      if (!transcript.following) transcript.latest();
-      else if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }}>{transcript.newMessages ? "새 메시지 · 최신으로" : "최신 메시지"}</button>}
-    {transcript.error && <div role="alert" style={{ padding: "0 24px 12px" }}>{transcript.error} <button type="button" className="ops-button" style={buttonStyle} disabled={transcript.sending} onClick={transcript.latest}>다시 불러오기</button></div>}
-    {replyTo && <div className="px-6"><ReplyDraft source={replySource(replyTo)} onCancel={() => setDraft({ identity, value })} /></div>}
-    <div style={{ padding: "12px 24px 16px", flexShrink: 0, display: "flex", gap: 12, alignItems: "flex-end" }}>
-      <textarea ref={inputRef} className="ops-input" style={{ minHeight: 44, maxHeight: 120, minWidth: 0, flex: 1, resize: "vertical" }} rows={2}
-        aria-label="채널 메시지 입력" placeholder={!channel || !transcript.ready ? "채널 연결을 기다리고 있어요" : canPost ? "메시지 보내기" : "이 채널에서는 보기만 할 수 있어요"}
-        value={value} disabled={disabled} maxLength={MAX_TEXT_CHAT_CHARACTERS * 2} onChange={(event) => setDraft({ identity, value: event.target.value, replyTo })}
-        onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
-      <button type="button" className="ops-cta" style={buttonStyle} aria-label="채널 메시지 보내기" disabled={disabled || !value.trim() || tooLong} onClick={() => void send()}><Send size={18} /></button>
-    </div>
-    {(error || pins.pinsError || tooLong) && <p role="alert" style={{ padding: "0 24px 16px" }}>{error || pins.pinsError || `메시지는 ${MAX_TEXT_CHAT_CHARACTERS}자까지 보낼 수 있어요.`}</p>}
   </div>;
 }

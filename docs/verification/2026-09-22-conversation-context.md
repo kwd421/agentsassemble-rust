@@ -106,3 +106,47 @@ The tested reply, attachment, public-status and poll flows are behaviorally veri
 including actual desktop rendering, real native/external MCP use, canonical saved
 results and restart. This is not a claim of universal provider or public-network
 coverage. The known coverage limits above remain explicit.
+
+## 6. Shared text-channel UI follow-up
+
+The user requested that custom text channels use the existing general-channel UI,
+and clarified that this is shared-component wiring. `MessageRow` and
+`MessageActions` are extracted from the general renderer; both channels now use
+them. Custom channels reuse `MentionInput`, `MessageReply`, `ReplyDraft`, the
+existing date/author grouping and composer styles. `ChannelMessageRows` adapts
+canonical channel messages to that presentation. No server or storage contract
+changes, new channel feature or separate visual design are introduced.
+
+Existing owners retain send receipts, exact retries, scoped drafts, read-only
+permissions, pin authority and stale context-response rejection. Text channels
+retain their text-only composer. The creation dialog itself is unchanged.
+
+| Trigger | Observed result |
+| --- | --- |
+| Open existing `답장검증` | Shared avatar/name/time/body layout renders prior source C and reply D, with the same input styling as general. |
+| Create `공통UI검증` in `Codex 기능검증 0922` | Existing dialog creates/selects the channel; common channel introduction and input appear immediately. |
+| Send `공통 UI 확인 — 기본 채널과 같은 메시지 행입니다.` | Message appears once with the current profile/avatar; receipt clears and refocuses the input. |
+| Choose Reply, type `@`, choose self by Enter, then send | Existing mention candidates appear; selection does not send prematurely. The next Enter sends the reply with the source preview and rendered self mention. |
+| Pin the source and open the header's pin list | Button changes to unpin; the persisted source appears in the list. |
+| Open the pin, return to latest, then open the reply source | Both routes retrieve the channel context, focus/highlight the source and expose the shared latest-history return control. |
+| Reopen general | Existing image, text attachment, closed poll and human/native replies render through the shared row. |
+
+Execution: rebuilt Windows desktop with embedded production assets and the real
+existing runtime, using native UI interaction. The named test channel and its two
+messages remain for inspection. The tested app was quit normally afterward.
+
+Automated evidence: 157 frontend files / 918 tests pass, including failed-send
+draft retention, exact uncertain retry, reconnect/room/channel receipt races,
+read-only controls, older pin context, modal acknowledgement and existing lobby
+regressions. TypeScript/Vite and the desktop build pass. Architecture (Python UTF-8
+mode), source-growth, artifact and whitespace gates pass. The initial architecture
+invocation hit the Windows cp949 decoder; rerunning in UTF-8 mode passes without
+changing the gate. The final retry-button disabled-state preservation was also
+included in the production/desktop builds. The bundle remains about 999 kB
+uncompressed / 300 kB gzip; the existing large-chunk warning remains. There are no
+new subscriptions, timers or backend calls for presentation; grouping is linear
+in the loaded channel transcript.
+
+Limits: mobile widths below the desktop's 900 px minimum were not manually
+exercised. No new provider or external-network execution was needed for this
+frontend-only follow-up; earlier backend/provider evidence remains historical.

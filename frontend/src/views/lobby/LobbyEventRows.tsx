@@ -10,12 +10,9 @@ import {
   FileText,
   Globe,
   LoaderCircle,
-  Pin,
-  CornerUpLeft,
   Search,
   Terminal,
   Wrench,
-  Zap,
 } from "lucide-react";
 
 import type { LobbyEvent } from "../../api";
@@ -27,53 +24,8 @@ import LobbyAttachments from "../components/LobbyAttachments";
 import ProviderLogo from "../components/ProviderLogo";
 import MessageMutationControls from "./MessageMutationControls";
 import { MessageReply, type ReplySource } from "../components/MessageReply";
+import MessageRow, { MessageActions, MessageAvatar, messageTimeLabel } from "../components/MessageRow";
 
-
-function timeLabel(iso: string): string {
-  try {
-    return new Date(iso).toLocaleTimeString("ko-KR", {
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return "--:--";
-  }
-}
-
-
-function MessageAvatar({
-  avatarImage,
-  providerKind,
-  show = true,
-  system = false,
-}: {
-  avatarImage?: string;
-  providerKind?: string;
-  show?: boolean;
-  system?: boolean;
-}) {
-  return (
-    <span
-      className={show ? `dc-message-avatar mt-0.5 ${system ? "system" : "agent"}` : ""}
-      data-has-image={Boolean(show && avatarImage && !system)}
-      aria-hidden="true"
-    >
-      {show ? (
-        avatarImage && !system ? (
-          <img className="dc-message-avatar-image" src={avatarImage} alt="" />
-        ) : system ? (
-          <Zap size={16} />
-        ) : (
-          <ProviderLogo
-            providerKind={providerKind}
-            size={40}
-            fallback={<Bot size={16} />}
-          />
-        )
-      ) : null}
-    </span>
-  );
-}
 
 
 function isReasoningEvent(event: LobbyEvent) {
@@ -259,7 +211,7 @@ export function LobbyThinkingGroup({
               {name}
             </span>
             <span className="shrink-0 text-[11px] text-text-muted">
-              {timeLabel(header?.created_at || "")}
+              {messageTimeLabel(header?.created_at || "")}
             </span>
           </p>
         )}
@@ -465,56 +417,14 @@ export function LobbyMessageRow({
     event.kind === "flow_event" ||
     isVoteTransitionKind(event.kind);
   return (
-    <div
-      className={`dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 ${
-        showHeader ? "py-1.5" : "py-0.5"
-      }`}
-      data-room-event-id={event.id}
-      data-role={event.role || undefined}
-      tabIndex={0}
-    >
-      <MessageAvatar
-        avatarImage={event.avatar_image_url}
-        providerKind={providerKind || event.provider_kind}
-        show={showHeader}
-        system={systemLike}
-      />
-      <div className="dc-message-actions" aria-label="메시지 작업">
-        {onReply && <button type="button" className="dc-message-action-button" aria-label="메시지에 답장" title="답장" onClick={onReply}><CornerUpLeft size={15} /></button>}
-        {canPin && onTogglePin && (
-          <button
-            type="button"
-            className="dc-message-action-button"
-            aria-label={pinned ? "메시지 고정 해제" : "메시지 고정"}
-            title={pinned ? "고정 해제" : "메시지 고정"}
-            aria-pressed={pinned}
-            onClick={onTogglePin}
-          >
-            <Pin size={14} fill={pinned ? "currentColor" : "none"} />
-          </button>
-        )}
-        {onEdit && onDelete && (
-          <MessageMutationControls
-            event={event}
-            canEdit={canEdit}
-            canDelete={canDelete}
-            onEdit={onEdit}
-            onDelete={onDelete}
-          />
-        )}
-      </div>
-      <div className="min-w-0">
-        {!event.message_deleted && replySource && <MessageReply source={replySource} onOpen={onOpenReply} />}
-        {showHeader && (
-          <p className="flex items-baseline gap-2">
-            <span className="dc-message-author truncate text-[15px] font-semibold text-text-primary preserve-words">
-              {event.name || "Room"}
-            </span>
-            <span className="shrink-0 text-[11px] text-text-muted">
-              {timeLabel(event.created_at)}
-            </span>
-          </p>
-        )}
+    <MessageRow eventId={event.id} author={event.name} createdAt={event.created_at}
+      avatarImage={event.avatar_image_url} providerKind={providerKind || event.provider_kind}
+      role={event.role} showHeader={showHeader} system={systemLike}
+      actions={<MessageActions onReply={onReply} pinned={pinned} onTogglePin={canPin ? onTogglePin : undefined}>
+        {onEdit && onDelete && <MessageMutationControls event={event} canEdit={canEdit} canDelete={canDelete}
+          onEdit={onEdit} onDelete={onDelete} />}
+      </MessageActions>}
+      reply={!event.message_deleted && replySource ? <MessageReply source={replySource} onOpen={onOpenReply} /> : undefined}>
         {requestCard ? requestCard : voteCard ? (
           voteCard
         ) : event.message_deleted ? (
@@ -533,7 +443,6 @@ export function LobbyMessageRow({
             scheduler={messageAttachmentReadScheduler}
           />
         )}
-      </div>
-    </div>
+    </MessageRow>
   );
 }

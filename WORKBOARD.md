@@ -2,6 +2,14 @@
 
 ## Active work
 
+- 2026-09-22: connect custom text channels to the existing general-channel UI.
+  Extract the general message row/actions into shared components and reuse its
+  mention input, reply preview, grouping and composer styles. Keep channel
+  authority, drafts, retry and context navigation in their existing owners.
+  Frontend 918 tests, production/desktop builds and structure/artifact gates pass.
+  Actual desktop creation, send, mention, reply, pin and source navigation pass;
+  evidence: `docs/verification/2026-09-22-conversation-context.md` section 6.
+
 - 2026-09-22: implement user-requested conversation improvements: optional message
   replies, external MCP attachment read/upload, and public conversation/poll state.
   Commit each feature and finish with real desktop/MCP execution. Contract and
