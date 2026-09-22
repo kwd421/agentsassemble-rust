@@ -110,7 +110,9 @@ pub(crate) fn valid_observation_attachments(
         && attachment_ids.iter().all(|attachment_id| {
             is_message_attachment_id(attachment_id) && room_view.contains(attachment_id)
         })
-        && attachment_ids.is_empty() != has_ingress
+        // Any earlier room attachment may be read, so a turn can carry the read path
+        // without listing any attachment itself.
+        && (has_ingress || attachment_ids.is_empty())
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

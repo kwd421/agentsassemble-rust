@@ -3,7 +3,9 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use agentsassemble_domain::{MAX_ATTACHMENT_BYTES, MAX_MESSAGE_ATTACHMENTS_PER_EVENT};
+use agentsassemble_domain::{
+    MAX_ATTACHMENT_BYTES, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, is_message_attachment_id,
+};
 use uuid::Uuid;
 
 use super::PortalState;
@@ -61,10 +63,7 @@ impl AttachmentReadReservation {
         }
         let result = match successful_size {
             Some(size) if !active.closing => {
-                let byte_limit = active
-                    .attachment_ids
-                    .len()
-                    .min(MAX_MESSAGE_ATTACHMENTS_PER_EVENT)
+                let byte_limit = MAX_MESSAGE_ATTACHMENTS_PER_EVENT
                     .checked_mul(MAX_ATTACHMENT_BYTES)
                     .and_then(|limit| limit.checked_mul(ATTEMPTS_PER_ATTACHMENT))
                     .ok_or_else(|| "The room attachment byte limit is invalid.".to_owned())?;
@@ -122,8 +121,9 @@ pub(crate) fn reserve_attachment_read(
         .active
         .as_mut()
         .ok_or_else(|| "No active room observation.".to_owned())?;
-    if active.closing || active.outcome.is_some() || !active.attachment_ids.contains(attachment_id)
-    {
+    // Which earlier room attachments exist is the room owner's to check; the turn only
+    // bounds how many it reads.
+    if active.closing || active.outcome.is_some() || !is_message_attachment_id(attachment_id) {
         return Err("The attachment is not available to this room turn.".to_owned());
     }
     let ingress = active
@@ -138,12 +138,10 @@ pub(crate) fn reserve_attachment_read(
     {
         return Err("The attachment is already being read.".to_owned());
     }
-    let attachment_limit = active
-        .attachment_ids
-        .len()
-        .min(MAX_MESSAGE_ATTACHMENTS_PER_EVENT);
-    if attachment_limit == 0 {
-        return Err("This turn has no room attachments.".to_owned());
+    if !active.attachment_reads.attempts_by_id.contains_key(attachment_id)
+        && active.attachment_reads.attempts_by_id.len() >= MAX_MESSAGE_ATTACHMENTS_PER_EVENT
+    {
+        return Err("This turn reached its room-attachment read limit.".to_owned());
     }
     let attempts = active
         .attachment_reads

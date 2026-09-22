@@ -121,7 +121,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Read an attachment listed in this turn. Does not end your turn."
+        description = "Read a room attachment by its ID, as listed in the room view or around a search result. Does not end your turn."
     )]
     async fn read_attachment(
         &self,

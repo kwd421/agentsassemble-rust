@@ -286,6 +286,76 @@ async fn provider_reads_an_attachment_shown_before_the_message_that_asks_about_i
 }
 
 #[tokio::test]
+async fn provider_reads_an_older_attachment_outside_its_room_view() {
+    let (store, principal, _directory) = super::fixture().await;
+    let attachment = store
+        .store_message_attachment(&principal, "old.txt", "text/plain", b"old".to_vec())
+        .await
+        .unwrap_or_else(|error| panic!("store older attachment: {error}"));
+    let first = store
+        .execute_message_with_turn(
+            &principal,
+            "older-attachment",
+            "message.send",
+            &json!({"content": "@Terra keep this", "attachment_ids": [attachment.id]}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("send older attachment: {error}"));
+    let first_turn = first
+        .assignments
+        .first()
+        .unwrap_or_else(|| panic!("the attachment message must assign Terra"));
+    let first_start = super::running_authority(&store, first_turn, "provider-turn-old-1").await;
+    store
+        .complete_agent_turn(
+            "general",
+            super::AGENT_ID,
+            super::authority(&first_start, "provider-turn-old-1", None),
+            "Kept.",
+            "",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("finish first turn: {error}"));
+    let later = store
+        .execute_message_with_turn(
+            &principal,
+            "ask-about-older",
+            "message.send",
+            &json!({"content": "@Terra what was in that file?"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("ask about the older file: {error}"));
+    let assignment = later
+        .assignments
+        .first()
+        .unwrap_or_else(|| panic!("the question must assign Terra"));
+    assert!(!assignment.room_view.contains(&attachment.id));
+
+    store
+        .authorize_provider_turn_start(
+            &assignment.session.public.room_id,
+            &assignment.session.public.session_id,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize later turn: {error}"));
+    let authority = ProviderAttachmentReadAuthority {
+        room_id: &assignment.session.public.room_id,
+        session_id: &assignment.session.public.session_id,
+        turn_id: &assignment.turn_id,
+        input_up_to_seq: assignment.session.input_up_to_seq,
+        turn_generation: assignment.turn_generation,
+        execution_id: &assignment.execution_id,
+    };
+    let read = store
+        .bound_provider_message_attachment(authority, &attachment.id)
+        .await
+        .unwrap_or_else(|error| panic!("read the older attachment: {error}"));
+    assert_eq!(read.content, b"old");
+}
+
+#[tokio::test]
 async fn expired_attachment_rejects_without_cleanup_or_message() {
     let (store, principal, _directory) = super::fixture().await;
     let attachment = store

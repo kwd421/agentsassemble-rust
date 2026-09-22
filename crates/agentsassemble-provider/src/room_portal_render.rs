@@ -8,7 +8,9 @@
 
 use std::fmt::Write as _;
 
-use agentsassemble_domain::{RoomMessageContext, RoomMessageSearchPage};
+use agentsassemble_domain::{
+    RoomEvent, RoomMessageContext, RoomMessageSearchPage, is_message_attachment_id,
+};
 
 /// A search result is a pointer to a message, so its content is a preview.
 const RESULT_PREVIEW_CHARS: usize = 300;
@@ -59,20 +61,45 @@ pub(crate) fn message_context(context: &RoomMessageContext) -> String {
         } else {
             ""
         };
-        let _ = writeln!(
-            out,
-            "#{} {}{}: {}",
-            event.seq,
-            author,
-            marker,
+        let attachments = attachment_lines(event);
+        let body = if body.trim().is_empty() && !attachments.is_empty() {
+            "(attachments only)".to_owned()
+        } else {
             clip(body.trim(), CONTEXT_MESSAGE_CHARS)
-        );
+        };
+        let _ = writeln!(out, "#{} {}{}: {}", event.seq, author, marker, body);
+        for line in attachments {
+            let _ = writeln!(out, "{line}");
+        }
     }
     if out.is_empty() {
         return "No messages around that result.".to_owned();
     }
     out.truncate(out.trim_end().len());
     out
+}
+
+/// The same attachment lines the room view shows, so `read_attachment` can follow them.
+fn attachment_lines(event: &RoomEvent) -> Vec<String> {
+    let Some(attachments) = event.extra.get("attachments").and_then(|value| value.as_array())
+    else {
+        return Vec::new();
+    };
+    attachments
+        .iter()
+        .filter_map(|attachment| {
+            let id = attachment.get("id")?.as_str()?;
+            if !is_message_attachment_id(id) {
+                return None;
+            }
+            Some(format!(
+                "  - Attachment `{id}`: {} ({}; {} bytes)",
+                attachment.get("filename")?.as_str()?,
+                attachment.get("content_type")?.as_str()?,
+                attachment.get("size")?.as_u64()?
+            ))
+        })
+        .collect()
 }
 
 fn single_line(text: &str) -> String {
@@ -155,6 +182,29 @@ mod tests {
 
         assert_eq!(text, "#4 Human: rock\n#5 grok <- the result: paper");
         assert!(!text.contains("a-long-session-identifier"));
+    }
+
+    #[test]
+    fn context_lists_attachments_so_they_can_be_read() {
+        let mut photo = message("c", 6, "Human", "");
+        photo.extra.insert(
+            "attachments".to_owned(),
+            serde_json::json!([{
+                "id": "ma_11111111111111111111111111111111", "filename": "cat.png",
+                "content_type": "image/png", "size": 42, "is_image": true
+            }]),
+        );
+        let text = message_context(&RoomMessageContext {
+            channel_id: "lobby".to_owned(),
+            event_id: "c".to_owned(),
+            events: vec![photo],
+        });
+
+        assert_eq!(
+            text,
+            "#6 Human <- the result: (attachments only)
+  - Attachment `ma_11111111111111111111111111111111`: cat.png (image/png; 42 bytes)"
+        );
     }
 
     #[test]

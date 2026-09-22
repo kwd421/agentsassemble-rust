@@ -157,7 +157,7 @@ fn provider_request(
         input_up_to_seq: assignment.session.input_up_to_seq,
         view: assignment.room_view.clone(),
         attachment_ids: assignment.attachment_ids.clone(),
-        attachment_ingress: (!assignment.attachment_ids.is_empty()).then_some(ingress.attachments),
+        attachment_ingress: Some(ingress.attachments),
         allowed_agent_ids: assignment.room_agent_ids.clone(),
         tabletop_tools: assignment.tabletop_tools,
         room_tool_ingress: Some(ingress.tools),

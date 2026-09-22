@@ -445,26 +445,8 @@ pub(crate) async fn bound_provider_attachment_in(
     {
         return Err(stale_provider_turn());
     }
-    // The assignment fixed which attachments this turn may read when it was prepared.
-    let assignment_json = sqlx::query_scalar::<_, String>(
-        "SELECT assignment_json FROM provider_turn_executions WHERE room_id = ? AND session_id = ? AND turn_generation = ? AND execution_id = ?",
-    )
-    .bind(authority.room_id)
-    .bind(authority.session_id)
-    .bind(i64::try_from(authority.turn_generation).map_err(|_| stale_provider_turn())?)
-    .bind(authority.execution_id)
-    .fetch_optional(&mut **transaction)
-    .await?
-    .ok_or_else(stale_provider_turn)?;
-    let assignment: crate::provider_turn_execution::ProviderTurnAssignmentEnvelope =
-        serde_json::from_str(&assignment_json)?;
-    if !assignment
-        .attachment_ids
-        .iter()
-        .any(|candidate| candidate == attachment_id)
-    {
-        return Err(message_attachment_missing());
-    }
+    // An agent in the room may read any attachment of a current message posted up to its
+    // turn's input, as it can read those messages themselves.
     let event_seq = sqlx::query_scalar::<_, i64>(
         "SELECT event_seq FROM room_message_attachments WHERE attachment_id = ? AND room_id = ? AND state = 'bound'",
     )
