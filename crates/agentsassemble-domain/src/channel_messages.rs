@@ -46,6 +46,9 @@ impl ChannelHistoryRequest {
 pub struct ChannelMessageSend {
     pub channel_id: String,
     pub content: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub reply_to_event_id: Option<String>,
 }
 
 impl ChannelMessageSend {
@@ -67,6 +70,8 @@ impl ChannelMessageSend {
             ));
         }
         command.content = clean_message(&command.content, MAX_TEXT_CHAT_CHARACTERS);
+        command.reply_to_event_id =
+            crate::command::parse_reply_to_event_id(payload.get("reply_to_event_id"))?;
         if !has_visible_text(&command.content) {
             return Err(CommandRejection::new(
                 "empty",
@@ -98,6 +103,11 @@ pub fn prepare_channel_message_event(
         BTreeMap::from([("channel_id".to_owned(), json!(command.channel_id))]),
     )?;
     CHANNEL_MESSAGE_EVENT_TYPE.clone_into(&mut event.event_type);
+    if let Some(id) = &command.reply_to_event_id {
+        event
+            .extra
+            .insert("reply_to_event_id".to_owned(), json!(id));
+    }
     Ok(event)
 }
 

@@ -91,6 +91,7 @@ async fn deletion_removes_only_pending_ordered_and_ambient_inputs_atomically() {
             authority(&start, "delete-queue-provider-turn", None),
             "The active provider turn still completes once.",
             "",
+            None,
         )
         .await
         .unwrap_or_else(|error| panic!("complete provider turn after deletions: {error}"));

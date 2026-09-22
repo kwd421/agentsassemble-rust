@@ -161,6 +161,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             authority(&first_start, "provider-turn-1", None),
             "First provider final",
             "",
+            Some(&first.outcome.event.id),
         )
         .await
         .unwrap_or_else(|error| panic!("complete first provider turn: {error}"));
@@ -174,6 +175,10 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             "turn_state",
             "agent_session_state",
         ]
+    );
+    assert_eq!(
+        committed.events[0].extra["reply_to_event_id"],
+        first.outcome.event.id
     );
     message_search_index_tests::assert_projection(&store, &first, &second, &committed).await;
     let next = committed
@@ -207,6 +212,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
             authority(&first_start, "provider-turn-stale", None),
             "must not publish",
             "",
+            None,
         )
         .await
     else {
@@ -246,6 +252,7 @@ async fn completed_turn_keeps_the_attached_provider_session_identity() {
             ),
             "Native session attached",
             "",
+            None,
         )
         .await
         .unwrap_or_else(|error| panic!("commit first provider final: {error}"));
@@ -279,6 +286,7 @@ async fn completed_turn_keeps_the_attached_provider_session_identity() {
             ),
             "must roll back",
             "",
+            None,
         )
         .await
     else {

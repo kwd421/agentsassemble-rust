@@ -30,6 +30,23 @@ vi.mock("../../api", async (importOriginal) => {
 });
 
 describe("LobbyComposer", () => {
+  it("sends the selected reply and does not reuse its uncertain request after changing the source", async () => {
+    const retry = vi.fn().mockResolvedValue(undefined);
+    const uncertain = new RoomSocketSayError("uncertain", "uncertain", retry);
+    const say = vi.fn().mockRejectedValueOnce(uncertain).mockResolvedValue({ events: [] });
+    const socket = { ready: () => true, say } as unknown as RoomSocketHandle;
+    const onReplySent = vi.fn();
+    const view = (id: string) => <RoomSocketProvider socket={socket}><LobbyComposer meetingId="room-a" onPosted={vi.fn()} replyTo={{eventId:id, author:"Host", text:"source"}} onReplySent={onReplySent} /></RoomSocketProvider>;
+    const { rerender } = render(view("first"));
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "reply" } });
+    fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
+    await screen.findByText("uncertain");
+    rerender(view("second"));
+    fireEvent.click(screen.getByLabelText("같은 요청 다시 보내기"));
+    await waitFor(() => expect(onReplySent).toHaveBeenCalledWith("second"));
+    expect(retry).not.toHaveBeenCalled();
+    expect(say).toHaveBeenLastCalledWith(expect.objectContaining({ message: "reply", replyToEventId: "second" }));
+  });
   afterEach(() => cleanup());
 
   beforeEach(() => {

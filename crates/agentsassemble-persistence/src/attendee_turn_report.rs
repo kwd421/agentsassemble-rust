@@ -32,6 +32,8 @@ pub enum AttendeeTurnOutcome {
     Message {
         content: String,
         target_agent_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reply_to_event_id: Option<String>,
     },
     Vote {
         payload: Value,
@@ -160,9 +162,18 @@ async fn apply_report(
         AttendeeTurnOutcome::Message {
             content,
             target_agent_id,
+            reply_to_event_id,
         } => {
-            completion::complete_message(tx, room, session_id, authority, content, target_agent_id)
-                .await
+            completion::complete_message(
+                tx,
+                room,
+                session_id,
+                authority,
+                content,
+                target_agent_id,
+                reply_to_event_id.as_deref(),
+            )
+            .await
         }
         AttendeeTurnOutcome::Vote { payload } => {
             let command = VoteCommand::from_payload(payload).map_err(super::support::rejection)?;

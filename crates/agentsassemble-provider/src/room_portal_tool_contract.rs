@@ -57,6 +57,9 @@ pub(crate) fn is_replay_unsafe_provider_tool(name: &str) -> bool {
 #[serde(deny_unknown_fields)]
 pub(super) struct PublishMessage {
     pub(super) content: String,
+    /// Optionally reply to an earlier lobby event UUID from discussion or context.
+    #[serde(default)]
+    pub(super) reply_to_event_id: Option<String>,
     #[serde(default)]
     pub(super) next_agent_id: String,
 }

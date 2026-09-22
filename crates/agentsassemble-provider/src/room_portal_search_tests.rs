@@ -113,6 +113,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
         ProviderTurnOutcome::Message {
             content: "found it".to_owned(),
             target_agent_id: String::new(),
+            reply_to_event_id: None,
         }
     );
     let client =

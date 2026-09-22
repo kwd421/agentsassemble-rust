@@ -790,6 +790,7 @@ fn completed(
         outcome: ProviderTurnOutcome::Message {
             content,
             target_agent_id: String::new(),
+            reply_to_event_id: None,
         },
     }
 }

@@ -218,6 +218,7 @@ impl AcpClient {
                 ProviderTurnOutcome::Message {
                     content: output,
                     target_agent_id: String::new(),
+                    reply_to_event_id: None,
                 }
             }
             StopReason::Refusal => ProviderTurnOutcome::Declined {

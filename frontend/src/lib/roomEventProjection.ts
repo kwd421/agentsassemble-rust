@@ -52,6 +52,7 @@ type TimelineRoomEvent = Pick<
   category?: string;
   edited_at?: string;
   message_deleted?: boolean;
+  reply_to_event_id?: string;
   metadata?: { source_event_id?: string };
   phase?: string;
   provider_kind?: string;
@@ -298,8 +299,10 @@ export function projectRoomEventsToTimeline(
           : existing?.attachments,
         edited_at: String(event.edited_at || existing?.edited_at || "") || undefined,
         message_deleted: event.message_deleted === true,
+        reply_to_event_id: event.reply_to_event_id,
       };
       if (projected.message_deleted) {
+        projected.reply_to_event_id = undefined;
         projected.message = "삭제된 메시지입니다";
         projected.attachments = [];
         if (messageKind === "vote") deletedVoteIds.add(String(event.id));
@@ -344,6 +347,7 @@ export function projectRoomEventsToTimeline(
             message: "삭제된 메시지입니다",
             attachments: [],
             message_deleted: true,
+            reply_to_event_id: undefined,
           }
         : {
             ...existing,

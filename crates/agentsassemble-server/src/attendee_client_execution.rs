@@ -178,9 +178,11 @@ impl AttendeeExecution {
                     ProviderTurnOutcome::Message {
                         content,
                         target_agent_id,
+                        reply_to_event_id,
                     } => AttendeeTurnOutcome::Message {
                         content,
                         target_agent_id,
+                        reply_to_event_id,
                     },
                     ProviderTurnOutcome::Declined { reason_code } => {
                         AttendeeTurnOutcome::Declined { reason_code }

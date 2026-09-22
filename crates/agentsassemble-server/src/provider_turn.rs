@@ -245,6 +245,7 @@ async fn commit_completed_provider_result(
         ProviderTurnOutcome::Message {
             content,
             target_agent_id,
+            reply_to_event_id,
         } => {
             store
                 .complete_agent_turn(
@@ -253,6 +254,7 @@ async fn commit_completed_provider_result(
                     turn_authority(start, result),
                     content,
                     target_agent_id,
+                    reply_to_event_id.as_deref(),
                 )
                 .await
         }

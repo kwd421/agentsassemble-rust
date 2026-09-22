@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Hash, Pin, Send } from "lucide-react";
+import { CornerUpLeft, Hash, Pin, Send } from "lucide-react";
 import { RoomSocketSayError } from "../roomSocketTypes";
 import type { MessagePinsAuthority, RoomChannel, RoomSearchResult } from "../api";
 import type { useChannelTranscript } from "../app/useChannelTranscript";
@@ -8,6 +8,7 @@ import type { Mentionable } from "../lib/mentionComposerModel";
 import { MAX_TEXT_CHAT_CHARACTERS } from "../types/generated/TEXT_CHAT_WIRE";
 import ChannelHeader, { type ChannelHeaderActions, type ChannelSearchScope } from "./components/ChannelHeader";
 import DiscordText from "./components/DiscordText";
+import { MessageReply, ReplyDraft } from "./components/MessageReply";
 import { useMessagePins } from "./useMessagePins";
 import type { RoomMessageSearchController } from "./useRoomMessageSearch";
 
@@ -37,7 +38,7 @@ export default function CustomChannelView({
   const scopeRef = useRef(transcript.scope); scopeRef.current = transcript.scope;
   const mounted = useRef(true);
   useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
-  const [draft, setDraft] = useState<{ identity: string; value: string; retry?: RoomSocketSayError["retry"] }>({ identity, value: "" });
+  const [draft, setDraft] = useState<{ identity: string; value: string; replyTo?: string; retry?: RoomSocketSayError["retry"] }>({ identity, value: "" });
   const [sendError, setSendError] = useState({ identity, message: "" });
   const [selected, setSelected] = useState<{ scope: object; id: string } | null>(null);
   const pendingFocus = useRef<typeof selected>(null);
@@ -50,6 +51,12 @@ export default function CustomChannelView({
   const pinnedIds = useMemo(() => new Set(pins.pinnedItems.map((pin) => pin.event_id)), [pins.pinnedItems]);
   const mentionLabels = useMemo(() => Object.fromEntries(mentionables.map(({ token, label }) => [token, label])), [mentionables]);
   const value = draft.identity === identity ? draft.value : "";
+  const replyTo = draft.identity === identity ? draft.replyTo : undefined;
+  function replySource(eventId: string) {
+    const source = transcript.events.find((event) => event.id === eventId);
+    return { eventId, author: source ? participantProfiles[source.actor.participant_id]?.displayName || source.display_name || undefined : undefined,
+      text: source?.content || undefined, deleted: source?.message_deleted === true };
+  }
   const error = sendError.identity === identity ? sendError.message : "";
   const tooLong = [...value].length > MAX_TEXT_CHAT_CHARACTERS;
   const disabled = !channel || !canPost || !transcript.ready || transcript.sending;
@@ -94,7 +101,8 @@ export default function CustomChannelView({
     if (disabled || !value.trim() || tooLong) return;
     setSendError({ identity, message: "" });
     try {
-      if (draft.retry) await transcript.send(value, draft.retry);
+      if (replyTo) await transcript.send(value, draft.retry, replyTo);
+      else if (draft.retry) await transcript.send(value, draft.retry);
       else await transcript.send(value);
       if (!mounted.current || selectionRef.current !== selection) return;
       setDraft({ identity, value: "" }); focusAfterSend.current = true;
@@ -140,9 +148,12 @@ export default function CustomChannelView({
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
           <strong className="min-w-0 flex-1 preserve-words">{participantProfiles[event.actor.participant_id]?.displayName || event.display_name}</strong>
           <time dateTime={event.created_at} style={{ fontSize: 11, color: "var(--color-text-muted)" }}>{new Date(event.created_at).toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit" })}</time>
+          {canPost && event.message_deleted !== true && <button type="button" className="ops-button" style={buttonStyle} aria-label="메시지에 답장" disabled={disabled}
+            onClick={() => { setDraft({ identity, value, replyTo: event.id }); inputRef.current?.focus(); }}><CornerUpLeft size={16} /></button>}
           {canPin && authority && <button type="button" className="ops-button" style={{ ...buttonStyle, color: pinnedIds.has(event.id) ? "var(--color-accent)" : "var(--color-text-muted)" }} aria-label={pinnedIds.has(event.id) ? "고정 해제" : "메시지 고정"}
             data-pinned={pinnedIds.has(event.id)} disabled={pins.pinsLoading || pins.pinBusyIds.size > 0} onClick={() => void pins.setPinned(event.id, !pinnedIds.has(event.id))}><Pin size={16} /></button>}
         </div>
+        {typeof event.reply_to_event_id === "string" && <MessageReply source={replySource(event.reply_to_event_id)} onOpen={() => void navigate(String(event.reply_to_event_id))} />}
         <DiscordText text={event.content || ""} mentionLabels={mentionLabels} />
       </article>)}
     </div>
@@ -152,10 +163,11 @@ export default function CustomChannelView({
       else if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }}>{transcript.newMessages ? "새 메시지 · 최신으로" : "최신 메시지"}</button>}
     {transcript.error && <div role="alert" style={{ padding: "0 24px 12px" }}>{transcript.error} <button type="button" className="ops-button" style={buttonStyle} disabled={transcript.sending} onClick={transcript.latest}>다시 불러오기</button></div>}
+    {replyTo && <div className="px-6"><ReplyDraft source={replySource(replyTo)} onCancel={() => setDraft({ identity, value })} /></div>}
     <div style={{ padding: "12px 24px 16px", flexShrink: 0, display: "flex", gap: 12, alignItems: "flex-end" }}>
       <textarea ref={inputRef} className="ops-input" style={{ minHeight: 44, maxHeight: 120, minWidth: 0, flex: 1, resize: "vertical" }} rows={2}
         aria-label="채널 메시지 입력" placeholder={!channel || !transcript.ready ? "채널 연결을 기다리고 있어요" : canPost ? "메시지 보내기" : "이 채널에서는 보기만 할 수 있어요"}
-        value={value} disabled={disabled} maxLength={MAX_TEXT_CHAT_CHARACTERS * 2} onChange={(event) => setDraft({ identity, value: event.target.value })}
+        value={value} disabled={disabled} maxLength={MAX_TEXT_CHAT_CHARACTERS * 2} onChange={(event) => setDraft({ identity, value: event.target.value, replyTo })}
         onKeyDown={(event) => { if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing) { event.preventDefault(); void send(); } }} />
       <button type="button" className="ops-cta" style={buttonStyle} aria-label="채널 메시지 보내기" disabled={disabled || !value.trim() || tooLong} onClick={() => void send()}><Send size={18} /></button>
     </div>

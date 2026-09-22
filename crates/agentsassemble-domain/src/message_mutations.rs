@@ -172,6 +172,7 @@ pub fn prepare_deleted_message(
     let mut deleted = target.clone();
     deleted.content = Some(String::new());
     deleted.extra.remove("target_agent_id");
+    deleted.extra.remove("reply_to_event_id");
     deleted.extra.insert("attachments".to_owned(), json!([]));
     deleted
         .extra

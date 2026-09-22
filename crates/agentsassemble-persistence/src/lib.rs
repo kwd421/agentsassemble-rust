@@ -123,6 +123,7 @@ mod human_session_authority;
 mod message_attachments;
 mod message_mutations;
 mod message_pins;
+mod message_replies;
 mod message_search;
 mod message_search_index;
 mod private_fs;

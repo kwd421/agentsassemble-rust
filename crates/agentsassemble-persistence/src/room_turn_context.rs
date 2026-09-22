@@ -107,7 +107,8 @@ fn readable_attachment_ids(
     inflight: &[&PendingRoomEvent],
     context: &[RoomEvent],
 ) -> Result<Vec<String>, PersistenceError> {
-    let mut ids = message_attachment_ids_from_events(inflight.iter().map(|pending| &pending.event))?;
+    let mut ids =
+        message_attachment_ids_from_events(inflight.iter().map(|pending| &pending.event))?;
     for id in message_attachment_ids_from_events(context.iter().rev())? {
         if ids.len() >= MAX_MESSAGE_ATTACHMENTS_PER_EVENT {
             break;
@@ -344,12 +345,13 @@ fn render_room_view<'a>(
             continue;
         }
         lines.push(format!(
-            "#{} {}: {}",
+            "#{} {} [event {}]: {}",
             event.seq,
             event
                 .display_name
                 .as_deref()
                 .unwrap_or(&event.actor.participant_id),
+            event.id,
             if has_visible_text(&event_text) {
                 event_text.as_str()
             } else {
@@ -362,6 +364,15 @@ fn render_room_view<'a>(
                 attachment.id, attachment.filename, attachment.content_type, attachment.size
             )
         }));
+        if let Some(id) = event
+            .extra
+            .get("reply_to_event_id")
+            .and_then(serde_json::Value::as_str)
+        {
+            lines.push(format!(
+                "  - Reply to event `{id}` (read_message_context opens the source)."
+            ));
+        }
     }
     Ok(lines.join("\n"))
 }

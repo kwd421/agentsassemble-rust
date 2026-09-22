@@ -11,6 +11,7 @@ import {
   Globe,
   LoaderCircle,
   Pin,
+  CornerUpLeft,
   Search,
   Terminal,
   Wrench,
@@ -25,6 +26,7 @@ import DiscordText, { type MentionLabels } from "../components/DiscordText";
 import LobbyAttachments from "../components/LobbyAttachments";
 import ProviderLogo from "../components/ProviderLogo";
 import MessageMutationControls from "./MessageMutationControls";
+import { MessageReply, type ReplySource } from "../components/MessageReply";
 
 
 function timeLabel(iso: string): string {
@@ -436,6 +438,9 @@ export function LobbyMessageRow({
   canDelete = false,
   onEdit,
   onDelete,
+  onReply,
+  replySource,
+  onOpenReply,
 }: {
   event: LobbyEvent;
   providerKind?: string;
@@ -451,6 +456,9 @@ export function LobbyMessageRow({
   canDelete?: boolean;
   onEdit?: (content: string) => Promise<void>;
   onDelete?: () => Promise<void>;
+  onReply?: () => void;
+  replySource?: ReplySource;
+  onOpenReply?: () => void;
 }) {
   const systemLike =
     event.kind === "system" ||
@@ -472,6 +480,7 @@ export function LobbyMessageRow({
         system={systemLike}
       />
       <div className="dc-message-actions" aria-label="메시지 작업">
+        {onReply && <button type="button" className="dc-message-action-button" aria-label="메시지에 답장" title="답장" onClick={onReply}><CornerUpLeft size={15} /></button>}
         {canPin && onTogglePin && (
           <button
             type="button"
@@ -495,6 +504,7 @@ export function LobbyMessageRow({
         )}
       </div>
       <div className="min-w-0">
+        {!event.message_deleted && replySource && <MessageReply source={replySource} onOpen={onOpenReply} />}
         {showHeader && (
           <p className="flex items-baseline gap-2">
             <span className="dc-message-author truncate text-[15px] font-semibold text-text-primary preserve-words">

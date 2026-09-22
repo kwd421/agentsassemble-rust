@@ -547,6 +547,7 @@ fn finish_turn(driver: &mut CodexDriver) -> Result<ProviderTurnCompleted, Driver
         outcome: ProviderTurnOutcome::Message {
             content,
             target_agent_id: String::new(),
+            reply_to_event_id: None,
         },
     };
     driver.turn_state.completed = Some(CompletedTurn {

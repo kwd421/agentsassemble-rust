@@ -6,7 +6,8 @@ import { isCustomChannelId } from "./customChannelId";
 
 /** Channel-specific fields atop the public room-event envelope. */
 export function channelMessageFieldsAreValid(event: RoomEvent): boolean {
-  assertExactKeys(event, ["v", "id", "seq", "created_at", "room_id", "type", "actor", "participant_id", "participant_type", "actor_id", "actor_type", "display_name", "content", "message_kind", "channel_id"], "channel message", ["message_deleted"]);
+  assertExactKeys(event, ["v", "id", "seq", "created_at", "room_id", "type", "actor", "participant_id", "participant_type", "actor_id", "actor_type", "display_name", "content", "message_kind", "channel_id"], "channel message", ["message_deleted", "reply_to_event_id"]);
+  if (event.reply_to_event_id !== undefined && (typeof event.reply_to_event_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(event.reply_to_event_id))) return false;
   const deleted = event.message_deleted === true;
   return (event.message_deleted === undefined || deleted) && event.type === CHANNEL_MESSAGE_EVENT_TYPE && isCustomChannelId(event.channel_id) &&
     event.participant_id === event.actor.participant_id && event.actor_id === event.participant_id &&

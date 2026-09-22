@@ -38,6 +38,8 @@ pub enum ProviderTurnOutcome {
     Message {
         content: String,
         target_agent_id: String,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        reply_to_event_id: Option<String>,
     },
     Declined {
         reason_code: String,
@@ -91,6 +93,7 @@ pub(super) enum StagedOutcome {
         receipt_generation: Uuid,
         content: String,
         target_agent_id: String,
+        reply_to_event_id: Option<String>,
     },
     Declined {
         receipt_generation: Uuid,
@@ -383,6 +386,7 @@ impl RoomPortal {
                 receipt_generation: staged_generation,
                 content,
                 target_agent_id,
+                reply_to_event_id,
             } if *staged_generation == receipt_generation
                 && canonical_message(content).is_some()
                 && (target_agent_id.is_empty()
@@ -391,6 +395,7 @@ impl RoomPortal {
                 ProviderTurnOutcome::Message {
                     content: canonical_message(content).ok_or(RoomPortalError::OutcomeInvalid)?,
                     target_agent_id: target_agent_id.clone(),
+                    reply_to_event_id: reply_to_event_id.clone(),
                 }
             }
             StagedOutcome::Declined {

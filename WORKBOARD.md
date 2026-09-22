@@ -2,6 +2,12 @@
 
 ## Active work
 
+- 2026-09-22: implement user-requested conversation improvements: optional message
+  replies, external MCP attachment read/upload, and public conversation/poll state.
+  Commit each feature and finish with real desktop/MCP execution. Contract and
+  acceptance: `docs/specs/conversation-context-slice.md`. Base `6f7707e`; push only
+  `codex/recovery-and-sonnet`. Implementation and verification are in progress.
+
 - 2026-09-21 user-directed guest avatar correction: selecting/cropping a photo now
   keeps it in the browser until the guest confirms Join. The admission request
   commits the canonical image with the profile and invite in one transaction;

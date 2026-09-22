@@ -51,14 +51,18 @@ impl SqliteStore {
             tx.commit().await?;
             return Ok(outcome);
         }
-        let event = prepare_channel_message_event(
-            &principal,
-            &participant,
-            &command,
-            next_sequence(&mut tx, &principal.room_id).await?,
-            Utc::now(),
+        let sequence = next_sequence(&mut tx, &principal.room_id).await?;
+        crate::message_replies::validate_reply_target(
+            &mut tx,
+            &principal.room_id,
+            &command.channel_id,
+            command.reply_to_event_id.as_deref(),
+            sequence,
         )
-        .map_err(rejection)?;
+        .await?;
+        let event =
+            prepare_channel_message_event(&principal, &participant, &command, sequence, Utc::now())
+                .map_err(rejection)?;
         insert_event(&mut tx, &event).await?;
         let result =
             json!({"channel_id": command.channel_id, "event": event, "event_seq": event.seq});

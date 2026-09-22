@@ -130,11 +130,15 @@ impl ConnectorMcp {
 
     #[tool(description = "Post a public message to the room as this participant.")]
     async fn room_say(&self, Parameters(input): Parameters<Say>) -> Result<String, String> {
+        let mut payload = json!({"content": input.content});
+        if let Some(id) = input.reply_to_event_id {
+            payload["reply_to_event_id"] = json!(id);
+        }
         self.command(
             &input.connection_id,
             &input.request_id,
             RoomAction::MessageSend,
-            json!({"content": input.content}),
+            payload,
         )
         .await
     }
@@ -204,7 +208,9 @@ impl ConnectorMcp {
         )
     }
 
-    #[tool(description = "Roll dice with server-side randomness (when tabletop tools are enabled).")]
+    #[tool(
+        description = "Roll dice with server-side randomness (when tabletop tools are enabled)."
+    )]
     async fn room_roll_dice(&self, Parameters(input): Parameters<Roll>) -> Result<String, String> {
         self.command(
             &input.connection_id,

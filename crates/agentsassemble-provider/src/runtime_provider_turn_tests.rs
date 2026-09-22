@@ -12,6 +12,7 @@ fn assert_message(completed: &super::ProviderTurnCompleted, expected: &str) {
         ProviderTurnOutcome::Message {
             content: expected.to_owned(),
             target_agent_id: String::new(),
+            reply_to_event_id: None,
         }
     );
 }

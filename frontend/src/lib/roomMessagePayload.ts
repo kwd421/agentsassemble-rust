@@ -42,7 +42,9 @@ export function roomMessagePayload(request: RoomSayRequest): Record<string, unkn
   const kind = request.kind || "message";
   switch (kind) {
     case "message":
-      return withAttachments({ content: request.message }, request);
+      return withAttachments({ content: request.message,
+        ...(request.replyToEventId ? { reply_to_event_id: request.replyToEventId } : {}),
+      }, request);
     case "vote":
       return withAttachments({
         kind,

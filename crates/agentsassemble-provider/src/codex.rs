@@ -620,7 +620,10 @@ fn thread_start_params(session: &DurableAgentSession) -> Result<Value, DriverErr
 /// Resumes the Agent Session's thread on its current model: a model changed in the app
 /// applies to the same conversation. The thread's turns are not needed here, and a long
 /// thread with images would make the response line huge.
-fn thread_resume_params(session: &DurableAgentSession, thread_id: &str) -> Result<Value, DriverError> {
+fn thread_resume_params(
+    session: &DurableAgentSession,
+    thread_id: &str,
+) -> Result<Value, DriverError> {
     if session.public.model.is_empty() {
         return Err(invalid_runtime_profile());
     }

@@ -386,7 +386,10 @@ async fn assert_unlisted_and_malformed_ids(
         .recv()
         .await
         .unwrap_or_else(|| panic!("an earlier attachment is asked of the room owner"));
-    assert_eq!(command.attachment_id(), "ma_44444444444444444444444444444444");
+    assert_eq!(
+        command.attachment_id(),
+        "ma_44444444444444444444444444444444"
+    );
     command.complete(Err(crate::room_attachment::ProviderAttachmentReadError {
         code: "message_attachment_missing".into(),
         message: "The message attachment is unavailable.".to_owned(),

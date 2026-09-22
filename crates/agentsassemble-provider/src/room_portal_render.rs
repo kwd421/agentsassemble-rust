@@ -67,7 +67,18 @@ pub(crate) fn message_context(context: &RoomMessageContext) -> String {
         } else {
             clip(body.trim(), CONTEXT_MESSAGE_CHARS)
         };
-        let _ = writeln!(out, "#{} {}{}: {}", event.seq, author, marker, body);
+        let _ = writeln!(
+            out,
+            "#{} {}{} [event {}]: {}",
+            event.seq, author, marker, event.id, body
+        );
+        if let Some(id) = event
+            .extra
+            .get("reply_to_event_id")
+            .and_then(serde_json::Value::as_str)
+        {
+            let _ = writeln!(out, "  - Reply to event `{id}`");
+        }
         for line in attachments {
             let _ = writeln!(out, "{line}");
         }
@@ -81,7 +92,10 @@ pub(crate) fn message_context(context: &RoomMessageContext) -> String {
 
 /// The same attachment lines the room view shows, so `read_attachment` can follow them.
 fn attachment_lines(event: &RoomEvent) -> Vec<String> {
-    let Some(attachments) = event.extra.get("attachments").and_then(|value| value.as_array())
+    let Some(attachments) = event
+        .extra
+        .get("attachments")
+        .and_then(|value| value.as_array())
     else {
         return Vec::new();
     };
@@ -180,7 +194,10 @@ mod tests {
             ],
         });
 
-        assert_eq!(text, "#4 Human: rock\n#5 grok <- the result: paper");
+        assert_eq!(
+            text,
+            "#4 Human [event a]: rock\n#5 grok <- the result [event b]: paper"
+        );
         assert!(!text.contains("a-long-session-identifier"));
     }
 
@@ -202,7 +219,7 @@ mod tests {
 
         assert_eq!(
             text,
-            "#6 Human <- the result: (attachments only)
+            "#6 Human <- the result [event c]: (attachments only)
   - Attachment `ma_11111111111111111111111111111111`: cat.png (image/png; 42 bytes)"
         );
     }

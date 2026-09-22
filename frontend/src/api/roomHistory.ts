@@ -40,6 +40,7 @@ export interface LobbyEvent {
   provider_request_state?: string;
   id: string;
   record_id?: string;
+  reply_to_event_id?: string;
   seq?: number;
   kind: string;
   name: string;

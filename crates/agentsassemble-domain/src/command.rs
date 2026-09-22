@@ -37,6 +37,7 @@ impl CommandRejection {
 pub struct MessageSend {
     pub content: String,
     pub attachment_ids: Vec<String>,
+    pub reply_to_event_id: Option<String>,
 }
 
 impl MessageSend {
@@ -50,13 +51,16 @@ impl MessageSend {
             .as_object()
             .ok_or_else(|| CommandRejection::new("bad_request", "payload must be an object."))?;
         if !object.contains_key("content")
-            || object
-                .keys()
-                .any(|key| !matches!(key.as_str(), "content" | "attachment_ids"))
+            || object.keys().any(|key| {
+                !matches!(
+                    key.as_str(),
+                    "content" | "attachment_ids" | "reply_to_event_id"
+                )
+            })
         {
             return Err(CommandRejection::new(
                 "bad_request",
-                "message.send accepts exactly content and optional attachment_ids fields.",
+                "message.send accepts content, optional attachment_ids and reply_to_event_id.",
             ));
         }
         let raw = object["content"].as_str().ok_or_else(|| {
@@ -73,8 +77,27 @@ impl MessageSend {
         Ok(Self {
             content,
             attachment_ids,
+            reply_to_event_id: parse_reply_to_event_id(object.get("reply_to_event_id"))?,
         })
     }
+}
+
+pub(crate) fn parse_reply_to_event_id(
+    value: Option<&Value>,
+) -> Result<Option<String>, CommandRejection> {
+    let Some(value) = value else {
+        return Ok(None);
+    };
+    let id = value
+        .as_str()
+        .filter(|id| Uuid::parse_str(id).is_ok_and(|parsed| parsed.to_string() == *id))
+        .ok_or_else(|| {
+            CommandRejection::new(
+                "bad_request",
+                "Reply target must be a canonical event UUID.",
+            )
+        })?;
+    Ok(Some(id.to_owned()))
 }
 
 pub(crate) fn parse_attachment_ids(value: Option<&Value>) -> Result<Vec<String>, CommandRejection> {
@@ -139,7 +162,11 @@ pub fn prepare_message_event(
         now,
         command.content.clone(),
         "message",
-        BTreeMap::new(),
+        command
+            .reply_to_event_id
+            .as_ref()
+            .map(|id| BTreeMap::from([("reply_to_event_id".to_owned(), Value::String(id.clone()))]))
+            .unwrap_or_default(),
     )
 }
 

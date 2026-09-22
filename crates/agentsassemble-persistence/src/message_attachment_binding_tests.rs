@@ -247,6 +247,7 @@ async fn provider_reads_an_attachment_shown_before_the_message_that_asks_about_i
             super::authority(&flash_start, "provider-turn-flash", None),
             "A text file.",
             "",
+            None,
         )
         .await
         .unwrap_or_else(|error| panic!("finish Flash turn: {error}"));
@@ -313,6 +314,7 @@ async fn provider_reads_an_older_attachment_outside_its_room_view() {
             super::authority(&first_start, "provider-turn-old-1", None),
             "Kept.",
             "",
+            None,
         )
         .await
         .unwrap_or_else(|error| panic!("finish first turn: {error}"));
@@ -601,6 +603,7 @@ async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
             super::authority(&started, "held-native", None),
             "held complete",
             "",
+            None,
         )
         .await?;
     let first = &committed.next_assignments[0];
@@ -618,6 +621,7 @@ async fn queued_attachment_messages_keep_whole_events_within_turn_budget()
             super::authority(&started, "first-attachments", None),
             "first complete",
             "",
+            None,
         )
         .await?;
     let second = &committed.next_assignments[0];

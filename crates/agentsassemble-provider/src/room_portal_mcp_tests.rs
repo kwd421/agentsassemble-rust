@@ -137,7 +137,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
     let published = call_tool(
         &client,
         "publish_message",
-        json!({"content": "  canonical reply  ", "next_agent_id": "unknown"}),
+        json!({"content": "  canonical reply  ", "next_agent_id": "unknown", "reply_to_event_id":"11111111-1111-4111-8111-111111111111"}),
     )
     .await;
     assert_ne!(published.is_error, Some(true));
@@ -150,6 +150,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
         ProviderTurnOutcome::Message {
             content: "canonical reply".to_owned(),
             target_agent_id: String::new(),
+            reply_to_event_id: Some("11111111-1111-4111-8111-111111111111".to_owned()),
         }
     );
     let _ = client.cancel().await;

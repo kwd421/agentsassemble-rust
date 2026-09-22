@@ -35,6 +35,7 @@ export interface RoomSocketHandlers {
 
 export interface RoomSayRequest {
   message: string;
+  replyToEventId?: string;
   attachments?: LobbyAttachmentRef[];
   kind?: "message" | "vote" | "vote_cast" | "vote_withdraw" | "vote_close";
   voteId?: string;

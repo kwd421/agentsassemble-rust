@@ -466,6 +466,7 @@ impl OpenCodeDriver {
             outcome: ProviderTurnOutcome::Message {
                 content: message.content,
                 target_agent_id: String::new(),
+                reply_to_event_id: None,
             },
         })
     }

@@ -215,6 +215,7 @@ impl SqliteStore {
         authority: ProviderTurnAuthority<'_>,
         content: &str,
         target_agent_id: &str,
+        reply_to_event_id: Option<&str>,
     ) -> Result<AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let commit = completion::complete_message(
@@ -224,6 +225,7 @@ impl SqliteStore {
             authority,
             content,
             target_agent_id,
+            reply_to_event_id,
         )
         .await?;
         transaction.commit().await?;
@@ -399,6 +401,14 @@ async fn prepare_human_message_event(
         return Ok((event, route_to_floor));
     }
     let command = MessageSend::from_payload(payload).map_err(rejection)?;
+    crate::message_replies::validate_reply_target(
+        transaction,
+        &principal.room_id,
+        "lobby",
+        command.reply_to_event_id.as_deref(),
+        sequence,
+    )
+    .await?;
     let attachments = prepare_message_attachment_bindings(
         transaction,
         principal,

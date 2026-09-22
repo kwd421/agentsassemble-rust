@@ -138,9 +138,7 @@ impl RoomPortalMcp {
         Ok(result)
     }
 
-    #[tool(
-        description = "Search the room's full message history. Does not end your turn."
-    )]
+    #[tool(description = "Search the room's full message history. Does not end your turn.")]
     async fn search_messages(
         &self,
         Parameters(input): Parameters<SearchMessages>,
@@ -152,9 +150,7 @@ impl RoomPortalMcp {
         .await
     }
 
-    #[tool(
-        description = "Read the messages around one search result. Does not end your turn."
-    )]
+    #[tool(description = "Read the messages around one search result. Does not end your turn.")]
     async fn read_message_context(
         &self,
         Parameters(input): Parameters<ReadMessageContext>,
@@ -179,6 +175,11 @@ impl RoomPortalMcp {
         let active = terminal_observation(&mut state)?;
         let content = canonical_message(&input.content)
             .ok_or_else(|| "The room publication is invalid.".to_owned())?;
+        if input.reply_to_event_id.as_ref().is_some_and(|id| {
+            uuid::Uuid::parse_str(id).map_or(true, |parsed| parsed.to_string() != *id)
+        }) {
+            return Err("Reply target must be an event UUID from the room.".to_owned());
+        }
         let target_agent_id = if active
             .authority
             .allowed_agent_ids
@@ -192,6 +193,7 @@ impl RoomPortalMcp {
             receipt_generation: active.turn_generation,
             content,
             target_agent_id,
+            reply_to_event_id: input.reply_to_event_id,
         });
         Ok("Published to the shared room.".to_owned())
     }
@@ -215,9 +217,7 @@ impl RoomPortalMcp {
         Ok("Passed this shared-room turn.".to_owned())
     }
 
-    #[tool(
-        description = "Create a single-choice room poll. Ends your turn."
-    )]
+    #[tool(description = "Create a single-choice room poll. Ends your turn.")]
     fn create_vote(&self, Parameters(input): Parameters<CreateVote>) -> Result<String, String> {
         self.stage_vote(&json!({
             "kind": "vote",
@@ -227,9 +227,7 @@ impl RoomPortalMcp {
         }))
     }
 
-    #[tool(
-        description = "Cast or replace your ballot in a room poll. Ends your turn."
-    )]
+    #[tool(description = "Cast or replace your ballot in a room poll. Ends your turn.")]
     fn cast_vote(&self, Parameters(input): Parameters<CastVote>) -> Result<String, String> {
         self.stage_vote(&json!({
             "kind": "vote_cast",
@@ -238,16 +236,12 @@ impl RoomPortalMcp {
         }))
     }
 
-    #[tool(
-        description = "Withdraw your ballot from a room poll. Ends your turn."
-    )]
+    #[tool(description = "Withdraw your ballot from a room poll. Ends your turn.")]
     fn withdraw_vote(&self, Parameters(input): Parameters<VoteTarget>) -> Result<String, String> {
         self.stage_vote(&json!({"kind": "vote_withdraw", "vote_id": input.vote_id}))
     }
 
-    #[tool(
-        description = "Close a poll you created. Ends your turn."
-    )]
+    #[tool(description = "Close a poll you created. Ends your turn.")]
     fn close_vote(&self, Parameters(input): Parameters<VoteTarget>) -> Result<String, String> {
         self.stage_vote(&json!({"kind": "vote_close", "vote_id": input.vote_id}))
     }

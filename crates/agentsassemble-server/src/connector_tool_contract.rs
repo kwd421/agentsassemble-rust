@@ -67,6 +67,9 @@ pub(super) struct Say {
     /// Generate a UUID before the first call; retain it unchanged for retries of this intent.
     pub(super) request_id: String,
     pub(super) content: String,
+    /// Optional event UUID of an earlier lobby message to reply to.
+    #[serde(default)]
+    pub(super) reply_to_event_id: Option<String>,
     #[serde(default)]
     pub(super) connection_id: String,
 }

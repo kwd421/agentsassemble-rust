@@ -101,13 +101,14 @@ export function useChannelTranscript({ roomId, roomUid, channelId, socket, conne
     owner.window = { events, following: false, hasMore: false, newMessages: false };
     publish(owner, "");
   }, [current, publish]);
-  const send = useCallback(async (content: string, retry?: RoomSocketSayError["retry"]) => {
+  const send = useCallback(async (content: string, retry?: RoomSocketSayError["retry"], replyToEventId?: string) => {
     const owner = ownerRef.current;
     if (!owner || !current(owner) || !owner.window || pendingSend.current === sendIdentity || !socket?.ready()) throw new Error("채널 연결이 완료된 뒤 보내 주세요.");
     pendingSend.current = sendIdentity; setSendingIdentity(sendIdentity);
     try {
       if (retry) await retry();
-      else await socket.command("channel.message.send", { channel_id: channelId, content });
+      else await socket.command("channel.message.send", { channel_id: channelId, content,
+        ...(replyToEventId ? { reply_to_event_id: replyToEventId } : {}), });
       // A history reload cannot invalidate the canonical transport's successful receipt.
       // The canonical stream supplies ordered durable messages, including this ACK's event.
     } finally {

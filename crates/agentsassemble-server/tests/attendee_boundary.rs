@@ -292,6 +292,7 @@ async fn publish_external_result(
         outcome: agentsassemble_persistence::AttendeeTurnOutcome::Message {
             content: "External queue result".to_owned(),
             target_agent_id: String::new(),
+            reply_to_event_id: None,
         },
     };
     let result = rooms

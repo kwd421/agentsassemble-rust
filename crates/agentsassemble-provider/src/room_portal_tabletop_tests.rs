@@ -97,6 +97,7 @@ async fn reservation_first_orders_random_tool_before_terminal_action() {
         ProviderTurnOutcome::Message {
             content: "after the roll".to_owned(),
             target_agent_id: String::new(),
+            reply_to_event_id: None,
         }
     );
 

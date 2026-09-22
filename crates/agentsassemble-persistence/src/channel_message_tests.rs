@@ -4,6 +4,122 @@ use agentsassemble_domain::{
     AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope, RoomSettings, public_settings,
 };
 
+#[tokio::test]
+async fn replies_preserve_identity_on_retry_and_reject_unavailable_sources_atomically() {
+    let (store, principal, _directory) = fixture().await;
+    let source = checked(
+        store
+            .execute_message_with_turn(
+                &principal,
+                "source",
+                "message.send",
+                &json!({"content":"source"}),
+            )
+            .await,
+    )
+    .outcome
+    .event;
+    let reply = json!({"content":"reply", "reply_to_event_id":source.id});
+    let first = checked(
+        store
+            .execute_message_with_turn(&principal, "reply", "message.send", &reply)
+            .await,
+    )
+    .outcome;
+    assert_eq!(first.event.extra["reply_to_event_id"], source.id);
+    checked(
+        store
+            .execute_message_mutation(
+                &principal,
+                "delete-source",
+                "message.delete",
+                &json!({"event_id":source.id}),
+            )
+            .await,
+    );
+    let replay = checked(
+        store
+            .execute_message_with_turn(&principal, "reply", "message.send", &reply)
+            .await,
+    )
+    .outcome;
+    assert!(replay.deduplicated);
+    assert_eq!(first.event.id, replay.event.id);
+    let count: i64 = checked(
+        sqlx::query_scalar("SELECT COUNT(*) FROM room_events")
+            .fetch_one(&store.pool)
+            .await,
+    );
+    for target in [
+        source.id,
+        uuid::Uuid::new_v4().to_string(),
+        "not-a-uuid".into(),
+    ] {
+        assert!(
+            store
+                .execute_message_with_turn(
+                    &principal,
+                    &uuid::Uuid::new_v4().to_string(),
+                    "message.send",
+                    &json!({"content":"invalid reply", "reply_to_event_id":target})
+                )
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(
+        count,
+        checked(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events")
+                .fetch_one(&store.pool)
+                .await
+        )
+    );
+
+    let source = checked(
+        store
+            .execute_channel_message(
+                TrustedPrincipal(&principal),
+                "channel-source",
+                &json!({"channel_id":"c0123456789ab", "content":"channel source"}),
+            )
+            .await,
+    )
+    .event;
+    let reply = json!({"channel_id":"c0123456789ab", "content":"channel reply", "reply_to_event_id":source.id});
+    let first = checked(
+        store
+            .execute_channel_message(TrustedPrincipal(&principal), "channel-reply", &reply)
+            .await,
+    );
+    assert_eq!(first.event.extra["reply_to_event_id"], source.id);
+    assert!(
+        checked(
+            store
+                .execute_channel_message(TrustedPrincipal(&principal), "channel-reply", &reply)
+                .await
+        )
+        .deduplicated
+    );
+    assert!(store.execute_channel_message(TrustedPrincipal(&principal), "other-channel", &json!({"channel_id":"c0123456789ac", "content":"wrong channel", "reply_to_event_id":source.id})).await.is_err());
+    assert!(
+        store
+            .execute_message_with_turn(
+                &principal,
+                "wrong-lobby",
+                "message.send",
+                &json!({"content":"wrong lobby", "reply_to_event_id":source.id})
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        checked(page(&store, &principal, "c0123456789ac", 0, 80).await)
+            .events
+            .is_empty()
+    );
+}
+
 fn checked<T, E: std::fmt::Debug>(value: Result<T, E>) -> T {
     value.unwrap_or_else(|error| panic!("channel fixture: {error:?}"))
 }

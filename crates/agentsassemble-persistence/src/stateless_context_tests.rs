@@ -33,6 +33,7 @@ async fn api_turns_preserve_creation_context_after_store_reopen() {
             authority(&first_start, "api-provider-turn-1", None),
             "Understood.",
             "",
+            None,
         )
         .await
         .unwrap_or_else(|error| panic!("complete first API turn: {error}"));
@@ -88,6 +89,7 @@ async fn deleted_vote_does_not_block_the_next_api_message() {
             authority(&start, "context-poll-turn", None),
             "Poll received.",
             "",
+            None,
         )
         .await
         .unwrap_or_else(|_| panic!("finish poll turn"));

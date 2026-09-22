@@ -338,6 +338,7 @@ impl ProviderDriver for ClaudeAgentSdkDriver {
                 outcome: ProviderTurnOutcome::Message {
                     content: turn.content,
                     target_agent_id: String::new(),
+                    reply_to_event_id: None,
                 },
             })
         })

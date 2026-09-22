@@ -167,6 +167,14 @@ export default function LobbyView({
     roomId: activeRoom.meetingId, roomUid, channelId: "lobby", authority: messagePinsAuthority,
   });
   const [pendingMessageTarget, setPendingMessageTarget] = useState("");
+  const replyScope = `${roomUid}/${activeRoom.meetingId}/${viewerParticipantId}`;
+  const [replyTarget, setReplyTarget] = useState({ scope: "", id: "" });
+  const replyId = replyTarget.scope === replyScope ? replyTarget.id : "";
+  const replySource = (id: string) => {
+    const source = visibleEvents.find((event) => (event.record_id || event.id) === id);
+    return { eventId: id, author: source?.name, text: source?.message || source?.vote_question ||
+      (source?.attachments?.length ? "첨부파일 메시지" : undefined), deleted: source?.message_deleted };
+  };
   const localMessageSearch = useRoomMessageSearch({
     roomId: activeRoom.meetingId,
     channelId: "lobby",
@@ -579,6 +587,16 @@ export default function LobbyView({
                 key={row.key}
                 event={event}
                 mentionLabels={mentionLabels}
+                onReply={canPostMessages && !event.message_deleted && ["message", "vote"].includes(event.kind) && event.flow_action !== "message_delta"
+                  ? () => setReplyTarget({ scope: replyScope, id: event.record_id || event.id }) : undefined}
+                replySource={event.reply_to_event_id ? replySource(event.reply_to_event_id) : undefined}
+                onOpenReply={() => {
+                  const id = event.reply_to_event_id;
+                  if (!id) return;
+                  const source = visibleEvents.find((item) => (item.record_id || item.id) === id);
+                  if (source) { suppressAutomaticHistoryLoad(); jumpToEvent(source.id); }
+                  else void navigateToSearchResult(id).catch((error: unknown) => messageSearch.setError(error instanceof Error ? error.message : "답장 원문을 열지 못했습니다."));
+                }}
                 providerKind={
                   event.provider_kind ||
                   providerKindByParticipant.get(event.actor_id || "")
@@ -668,6 +686,9 @@ export default function LobbyView({
         )}
         <LobbyComposer
           meetingId={activeRoom.meetingId}
+          replyTo={replyId ? replySource(replyId) : undefined}
+          onCancelReply={() => setReplyTarget({ scope: replyScope, id: "" })}
+          onReplySent={(id) => setReplyTarget((current) => current.scope === replyScope && current.id === id ? { scope: replyScope, id: "" } : current)}
           onPosted={handleLobbyPosted}
           submitMessage={submitMessage}
           mentionables={mentionables}

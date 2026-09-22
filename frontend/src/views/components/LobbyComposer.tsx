@@ -30,6 +30,7 @@ import type { RoomPostingMode } from "../../lib/roomGuestPosting";
 import type { Mentionable } from "../../lib/mentionComposerModel";
 import { parseVoteCommand } from "../../lib/votePoll";
 import MentionInput from "./MentionInput";
+import { ReplyDraft, type ReplySource } from "./MessageReply";
 import ComposerCommandMenu, {
   matchingComposerCommands,
   type ComposerCommand,
@@ -51,6 +52,7 @@ type LobbyComposerDraft = {
   message: string;
   pendingAttachments: LobbyAttachmentRef[];
   retry?: () => Promise<unknown>;
+  retryReplyToEventId?: string;
 };
 
 type LocalAttachmentPreview = {
@@ -109,6 +111,9 @@ export default function LobbyComposer({
   roomDeviceToken = "",
   postingMode = "host",
   onGuestSessionExpired,
+  replyTo,
+  onCancelReply,
+  onReplySent,
 }: {
   meetingId: string;
   onPosted: (events: LobbyEvent[]) => void;
@@ -119,9 +124,13 @@ export default function LobbyComposer({
   roomDeviceToken?: string;
   postingMode?: RoomPostingMode;
   onGuestSessionExpired?: () => void;
+  replyTo?: ReplySource;
+  onCancelReply?: () => void;
+  onReplySent?: (eventId: string) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  useEffect(() => { if (replyTo) inputRef.current?.focus(); }, [replyTo?.eventId]);
   const restoreFocusAfterSubmitRef = useRef(false);
   const activeUploadOperation = useRef<AttachmentUploadOperation | null>(null);
   const commandListId = useId();
@@ -363,6 +372,7 @@ export default function LobbyComposer({
     const draftMessage = message;
     const draftAttachments = pendingAttachments;
     const trimmed = draftMessage.trim();
+    let replyToEventId = replyTo?.eventId;
     if (!trimmed && draftAttachments.length === 0) return;
     if (trimmed.toLocaleLowerCase() === "/vote") {
       setError("");
@@ -380,16 +390,18 @@ export default function LobbyComposer({
       }
       // "/vote 질문 | 옵션1 | 옵션2" opens a poll card instead of a message.
       const voteCommand = parseVoteCommand(trimmed);
+      if (voteCommand) replyToEventId = undefined;
       const sayRequest = {
         message: voteCommand ? "" : trimmed,
         attachments: draftAttachments,
         kind: voteCommand ? ("vote" as const) : ("message" as const),
         voteQuestion: voteCommand?.question || "",
         voteOptions: voteCommand?.options || [],
+        replyToEventId,
       };
-      const payload = activeDraft.retry
+      const payload = activeDraft.retry && activeDraft.retryReplyToEventId === sayRequest.replyToEventId
         ? (await activeDraft.retry(), { events: [] })
-        : submitMessage && sayRequest.kind === "message" && sayRequest.attachments.length === 0
+        : submitMessage && !sayRequest.replyToEventId && sayRequest.kind === "message" && sayRequest.attachments.length === 0
           ? { events: await submitMessage(sayRequest.message) }
           : roomSocket?.ready()
             ? await roomSocket.say(sayRequest)
@@ -402,6 +414,7 @@ export default function LobbyComposer({
       const cleared = lobbySubmitSuccessDraft<LobbyAttachmentRef>();
       setMessage(cleared.message);
       setPendingAttachments(cleared.pendingAttachments);
+      if (sayRequest.replyToEventId) onReplySent?.(sayRequest.replyToEventId);
       onPosted(payload.events || (payload.event ? [payload.event] : []));
     } catch (errorValue) {
       if (
@@ -421,7 +434,8 @@ export default function LobbyComposer({
           message: restored.message,
           pendingAttachments: restored.pendingAttachments,
           retry: errorValue instanceof RoomSocketSayError && errorValue.retry
-            ? errorValue.retry : activeDraft.retry,
+            ? errorValue.retry : activeDraft.retryReplyToEventId === replyToEventId ? activeDraft.retry : undefined,
+          retryReplyToEventId: replyToEventId,
         },
       }));
       setError(restored.error);
@@ -514,6 +528,7 @@ export default function LobbyComposer({
   return (
     <>
       <section className="dc-composer-shell">
+      {replyTo && onCancelReply && <ReplyDraft source={replyTo} onCancel={onCancelReply} />}
       {shownError && (
         <p className="mb-2 flex items-start gap-2 rounded border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] font-semibold text-danger preserve-words">
           <span className="min-w-0 flex-1">{shownError}</span>

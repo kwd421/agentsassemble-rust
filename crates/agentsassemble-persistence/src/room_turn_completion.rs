@@ -28,6 +28,7 @@ pub(super) async fn complete_message(
     authority: ProviderTurnAuthority<'_>,
     content: &str,
     target_agent_id: &str,
+    reply_to_event_id: Option<&str>,
 ) -> Result<AgentTurnCommit, PersistenceError> {
     let ProviderTurnAuthority {
         turn_id,
@@ -56,15 +57,22 @@ pub(super) async fn complete_message(
     validate_input_cursor(transaction, &session).await?;
     validate_publication_target(transaction, &session, target_agent_id).await?;
     apply_provider_session_transition(&mut session, provider_session_id)?;
-    let source_event_id = session.active_source_event_id.clone();
+    crate::message_replies::validate_reply_target(
+        transaction,
+        room_id,
+        "lobby",
+        reply_to_event_id,
+        session.input_up_to_seq.saturating_add(1),
+    )
+    .await?;
     let final_event = agent_final_event(
         transaction,
         &session,
         turn_id,
         provider_turn_id,
-        &source_event_id,
         content,
         target_agent_id,
+        reply_to_event_id,
     )
     .await?;
     let commit = ProviderTurnFinalization {

@@ -320,9 +320,9 @@ pub(super) async fn agent_final_event(
     session: &DurableAgentSession,
     turn_id: &str,
     provider_turn_id: &str,
-    source_event_id: &str,
     content: String,
     target_agent_id: &str,
+    reply_to_event_id: Option<&str>,
 ) -> Result<RoomEvent, PersistenceError> {
     session.inflight_inputs.first().ok_or_else(|| {
         rejected(
@@ -330,7 +330,7 @@ pub(super) async fn agent_final_event(
             "Active provider turn has no canonical input provenance.",
         )
     })?;
-    let event = RoomEvent {
+    let mut event = RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),
         seq: next_sequence(transaction, &session.public.room_id).await?,
@@ -352,11 +352,19 @@ pub(super) async fn agent_final_event(
             ("session_id".to_owned(), json!(session.public.session_id)),
             ("turn_id".to_owned(), json!(turn_id)),
             ("provider_turn_id".to_owned(), json!(provider_turn_id)),
-            ("source_event_id".to_owned(), json!(source_event_id)),
+            (
+                "source_event_id".to_owned(),
+                json!(session.active_source_event_id),
+            ),
             ("target_agent_id".to_owned(), json!(target_agent_id)),
             ("message_source".to_owned(), json!("room_portal")),
         ]),
     };
+    if let Some(id) = reply_to_event_id {
+        event
+            .extra
+            .insert("reply_to_event_id".to_owned(), json!(id));
+    }
     insert_event(transaction, &event).await?;
     Ok(event)
 }

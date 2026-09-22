@@ -138,7 +138,10 @@ pub(crate) fn reserve_attachment_read(
     {
         return Err("The attachment is already being read.".to_owned());
     }
-    if !active.attachment_reads.attempts_by_id.contains_key(attachment_id)
+    if !active
+        .attachment_reads
+        .attempts_by_id
+        .contains_key(attachment_id)
         && active.attachment_reads.attempts_by_id.len() >= MAX_MESSAGE_ATTACHMENTS_PER_EVENT
     {
         return Err("This turn reached its room-attachment read limit.".to_owned());
