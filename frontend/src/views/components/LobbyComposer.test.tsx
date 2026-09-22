@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   render,
@@ -176,6 +177,30 @@ describe("LobbyComposer", () => {
     fireEvent.click(screen.getByLabelText("map.png 첨부 제거"));
     await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview-map.png"));
     expect(container.querySelector("img[src='blob:preview-map.png']")).toBeNull();
+  });
+
+  it("clears an attachment error on its own and on request", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    onTestFinished(() => {
+      vi.useRealTimers();
+    });
+    const tooLarge = "메시지 첨부는 1바이트 이상 10MiB 이하여야 합니다.";
+    apiMocks.uploadLobbyAttachment.mockRejectedValue(new Error(tooLarge));
+    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="host" />);
+    const pick = () =>
+      fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
+        target: { files: [new File(["x"], "big.mov", { type: "video/quicktime" })] },
+      });
+
+    pick();
+    expect(await screen.findByText(tooLarge)).toBeTruthy();
+    await act(() => vi.advanceTimersByTimeAsync(5000));
+    expect(screen.queryByText(tooLarge)).toBeNull();
+
+    pick();
+    expect(await screen.findByText(tooLarge)).toBeTruthy();
+    fireEvent.click(screen.getByLabelText("알림 닫기"));
+    expect(screen.queryByText(tooLarge)).toBeNull();
   });
 
   it("attaches a pasted image and leaves a text paste to the input", async () => {

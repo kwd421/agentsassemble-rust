@@ -79,6 +79,8 @@ function requireCurrentAttachmentUpload(
   }
 }
 
+const ATTACHMENT_ERROR_MS = 5000;
+
 const EMPTY_LOBBY_COMPOSER_DRAFT: LobbyComposerDraft = {
   message: "",
   pendingAttachments: [],
@@ -128,6 +130,15 @@ export default function LobbyComposer({
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState("");
+  // Attachment problems (too large, too many, upload failed) are a passing notice:
+  // they clear on their own, unlike a send failure that the draft depends on.
+  const [attachmentError, setAttachmentError] = useState("");
+  const shownError = error || attachmentError;
+  useEffect(() => {
+    if (!attachmentError) return undefined;
+    const timer = window.setTimeout(() => setAttachmentError(""), ATTACHMENT_ERROR_MS);
+    return () => window.clearTimeout(timer);
+  }, [attachmentError]);
   const [accessoryNotice, setAccessoryNotice] = useState("");
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [voteDialogOpen, setVoteDialogOpen] = useState(false);
@@ -280,7 +291,7 @@ export default function LobbyComposer({
     event.preventDefault();
     if (disabled || busy || uploading) return;
     if (!canUploadAttachments) {
-      setError("이 방에서는 파일을 첨부할 수 없어요.");
+      setAttachmentError("이 방에서는 파일을 첨부할 수 없어요.");
       return;
     }
     void uploadFiles(pasted);
@@ -294,10 +305,10 @@ export default function LobbyComposer({
       selected
     );
     if (filesToUpload.length === 0) {
-      setError(selectionError || MAX_ATTACHMENTS_MESSAGE);
+      setAttachmentError(selectionError || MAX_ATTACHMENTS_MESSAGE);
       return;
     }
-    setError(selectionError);
+    setAttachmentError(selectionError);
 
     const operation: AttachmentUploadOperation = {
       controller: new AbortController(),
@@ -330,7 +341,7 @@ export default function LobbyComposer({
         activeUploadOperation.current === operation &&
         !operation.controller.signal.aborted
       ) {
-        setError(errorValue instanceof Error ? errorValue.message : "첨부 업로드 실패");
+        setAttachmentError(errorValue instanceof Error ? errorValue.message : "첨부 업로드 실패");
       }
     } finally {
       if (activeUploadOperation.current === operation) {
@@ -503,9 +514,20 @@ export default function LobbyComposer({
   return (
     <>
       <section className="dc-composer-shell">
-      {error && (
-        <p className="mb-2 rounded border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] font-semibold text-danger preserve-words">
-          {error}
+      {shownError && (
+        <p className="mb-2 flex items-start gap-2 rounded border border-danger/30 bg-danger/10 px-3 py-2 text-[12px] font-semibold text-danger preserve-words">
+          <span className="min-w-0 flex-1">{shownError}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setError("");
+              setAttachmentError("");
+            }}
+            className="grid h-4 w-4 shrink-0 place-items-center rounded text-danger/80 hover:text-danger"
+            aria-label="알림 닫기"
+          >
+            <X size={12} />
+          </button>
         </p>
       )}
       {disabledReason && (
