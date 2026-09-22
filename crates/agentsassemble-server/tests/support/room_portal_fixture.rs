@@ -19,6 +19,31 @@ pub(super) fn script(
     release_second: &Path,
     first_status: &str,
 ) -> String {
+    // `room_action`: the first turn reports its room tool call as completed, the driver
+    // interrupts it (the published message ends the room turn), and it ends `interrupted`.
+    let (first_ending, second_id) = if first_status == "room_action" {
+        (
+            format!(
+                r#"printf '%s\n' '{{"jsonrpc":"2.0","method":"item/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-1","item":{{"type":"mcpToolCall","id":"call-1","server":"agentsassemble_room","tool":"publish_message","status":"completed","arguments":{{}}}}}}}}'
+IFS= read -r interrupt
+printf '%s\n' "$interrupt" >> {log}
+printf '%s\n' '{{"jsonrpc":"2.0","id":5,"result":{{}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-1","status":"interrupted","items":[]}}}}}}'
+"#,
+                log = quote(transcript),
+            ),
+            6,
+        )
+    } else {
+        (
+            format!(
+                r#"printf '%s\n' '{{"jsonrpc":"2.0","method":"agent_message/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-1","text":"ignored first assistant final"}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-1","status":"{first_status}","items":[]}}}}}}'
+"#
+            ),
+            5,
+        )
+    };
     format!(
         r#"#!/bin/sh
 umask 077
@@ -84,13 +109,11 @@ esac
 printf '1' > {seen}
 while [ ! -f {release_first} ]; do :; done
 printf '%s\n' '{{"jsonrpc":"2.0","id":4,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}'
-printf '%s\n' '{{"jsonrpc":"2.0","method":"agent_message/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-1","text":"ignored first assistant final"}}}}'
-printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-1","status":"{first_status}","items":[]}}}}}}'
-IFS= read -r turn_two
+{first_ending}IFS= read -r turn_two
 printf '%s\n' "$turn_two" >> {log}
 printf '2' > {seen}
 while [ ! -f {release_second} ]; do :; done
-printf '%s\n' '{{"jsonrpc":"2.0","id":5,"result":{{"turn":{{"id":"provider-turn-2"}}}}}}'
+printf '%s\n' '{{"jsonrpc":"2.0","id":{second_id},"result":{{"turn":{{"id":"provider-turn-2"}}}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"agent_message/completed","params":{{"threadId":"thread-1","turnId":"provider-turn-2","text":"ignored second assistant final"}}}}'
 printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-2","status":"completed","items":[]}}}}}}'
 IFS= read -r forever

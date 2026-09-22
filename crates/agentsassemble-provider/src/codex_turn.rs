@@ -40,6 +40,9 @@ struct ActiveTurn {
     delta_chars: usize,
     final_content: Option<String>,
     last_progress: Instant,
+    /// Set once the room action that ends the turn is staged and `turn/interrupt` is sent,
+    /// so the model is not called again only to write a closing line nobody reads.
+    ending_after_room_action: bool,
 }
 
 struct CompletedTurn {
@@ -194,6 +197,7 @@ async fn start_turn(
         delta_chars: 0,
         final_content: None,
         last_progress: Instant::now(),
+        ending_after_room_action: false,
     });
     Ok(())
 }
@@ -264,8 +268,10 @@ async fn read_turn(
             .ok_or_else(turn_unconfirmed)?;
         active.last_progress = Instant::now();
         if method == "turn/completed" {
+            let ended_by_us = active.ending_after_room_action;
             return match terminal_status(&message) {
                 Ok("completed") => finish_turn(driver),
+                Ok("interrupted") if ended_by_us => finish_turn(driver),
                 Ok(_) => poison(driver, turn_failed()),
                 Err(error) => poison(driver, error),
             };
@@ -297,6 +303,50 @@ async fn read_turn(
             | "permissions/request_approval" => return poison(driver, approval_required()),
             _ => {}
         }
+        end_after_room_action(driver, thread_id, &message).await?;
+    }
+}
+
+/// Interrupts the provider turn once the room action that ends it is staged.
+///
+/// Checked when a room tool call completes: that is when Codex would call the model
+/// again with the tool result. Checking between notifications, never while one is being
+/// read, keeps the stream whole. The turn then completes as `interrupted` and is finished like a normal one;
+/// the room turn's result comes from the portal, not from the provider's text.
+async fn end_after_room_action(
+    driver: &mut CodexDriver,
+    thread_id: &str,
+    message: &Value,
+) -> Result<(), DriverError> {
+    if message.get("method").and_then(Value::as_str) != Some("item/completed")
+        || !completed_room_tool_call(message)
+    {
+        return Ok(());
+    }
+    let provider_turn_id = match driver.turn_state.active.as_ref() {
+        Some(active)
+            if !active.ending_after_room_action
+                && active.request.room_observation.is_some()
+                && driver.room_portal.terminal_watch().is_staged() =>
+        {
+            active.provider_turn_id.clone()
+        }
+        _ => return Ok(()),
+    };
+    if let Some(active) = driver.turn_state.active.as_mut() {
+        active.ending_after_room_action = true;
+    }
+    match driver
+        .request(
+            "turn/interrupt",
+            json!({"threadId": thread_id, "turnId": provider_turn_id}),
+        )
+        .await
+    {
+        // The turn may have finished on its own first; its `turn/completed` is still read.
+        Ok(_) => Ok(()),
+        Err(error) if error.code == "provider_request_rejected" => Ok(()),
+        Err(error) => poison(driver, error),
     }
 }
 
@@ -524,6 +574,12 @@ fn append_bounded_delta(active: &mut ActiveTurn, delta: &str) {
     let bounded = normalized.chars().take(remaining).collect::<String>();
     active.delta_chars += bounded.chars().count();
     active.delta_content.push_str(&bounded);
+}
+
+fn completed_room_tool_call(message: &Value) -> bool {
+    nested(message, &["params", "item", "type"]).and_then(Value::as_str) == Some("mcpToolCall")
+        && nested(message, &["params", "item", "server"]).and_then(Value::as_str)
+            == Some("agentsassemble_room")
 }
 
 fn completed_agent_message(message: &Value) -> bool {

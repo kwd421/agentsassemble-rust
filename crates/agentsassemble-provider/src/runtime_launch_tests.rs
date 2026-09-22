@@ -455,6 +455,8 @@ async fn post_spawn_pre_anchor_cancellation_requires_the_guardian_receipt() {
 #[cfg(target_os = "linux")]
 async fn post_ready_failure_is_safe_only_after_exact_guardian_receipt() {
     let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    let directory = tempfile::tempdir()
+        .unwrap_or_else(|error| panic!("create post-ready failure fixture: {error}"));
     let suffix = uuid::Uuid::new_v4().to_string();
     let room_id = format!("launch-cleanup-room-{suffix}");
     let session_id = format!("launch-cleanup-session-{suffix}");

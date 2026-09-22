@@ -129,6 +129,7 @@ while read -r command; do :; done
     let (client, _) = connect_client(pipes.stdin, pipes.stdout, &session, &portal)
         .await
         .unwrap_or_else(|error| panic!("connect fixture: {error:?}"));
+    let stderr_tail = StderrTail::default();
     ClaudeSdkRuntime {
         process_group,
         _node_guard: shell,
@@ -136,7 +137,8 @@ while read -r command; do :; done
         _private_claude: None,
         _sdk_bundle: crate::claude_sdk_assets::fixture_bundle(),
         client,
-        stderr_task: tokio::spawn(drain_stderr(pipes.stderr)),
+        stderr_task: tokio::spawn(drain_stderr(pipes.stderr, stderr_tail.clone())),
+        stderr_tail,
         room_portal: portal,
     }
 }

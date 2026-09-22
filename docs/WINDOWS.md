@@ -514,12 +514,29 @@ grok 은 방에서 쓰지 않는 자체 툴 28 개의 설명(약 6만 자)을 �
 호출이 없었고, 메시지는 바로 올라갔으며 세션은 대기로 돌아왔다. 같은 세션의 **두 번째 턴은 돌려보지
 않았다.**
 
-**안 한 것.** Claude 와 Codex 는 아직 마지막 호출이 남아 있다. Codex 는 `turn/interrupt` 로 구현해
-단위 테스트까지 통과시켰으나, 가짜 app-server 경계 테스트(`agent_session_boundary`)와 실제 턴을
-돌리지 못해 커밋하지 않고 되돌렸다. 알림을 읽는 도중에 끊으면 스트림이 깨지므로, 알림 사이에서
-`TerminalWatch` 의 등록 여부를 확인하는 방식이어야 한다. Claude 는 종결 툴 뒤에 멈추게 하는 훅이
-필요하고, 그 결과 메시지가 브리지의 `validResult`(subtype · terminal_reason 등)를 통과하는지 실제
-턴으로 확인해야 한다.
+**고친 것 3 — Codex 도 종결 툴 뒤에 끝낸다 (`codex_turn.rs`).** Codex app-server 가 방 툴 호출 완료를
+알리면(`item/completed`, item `type: "mcpToolCall"`, `server: "agentsassemble_room"` — 설치된 Codex 의
+`codex app-server generate-json-schema` 로 확인) 그 시점에 `TerminalWatch::is_staged()` 를 보고, 등록돼
+있으면 `turn/interrupt` 를 보낸다. 알림 하나를 다 읽은 뒤에만 확인하므로 스트림이 깨지지 않는다. 턴은
+`interrupted` 로 끝나며, 우리가 끊은 경우에만 정상 종료로 처리한다(그 외 `interrupted` 는 전처럼 실패).
+턴이 먼저 스스로 끝나 `turn/interrupt` 가 거절되면(`provider_request_rejected`) 무시하고 `turn/completed`
+를 읽는다. 참고: Codex 는 중단된 턴 뒤 기록에 "이전 턴은 일부러 중단됐다" 는 짧은 developer 메시지를
+남긴다.
+
+검증: 2026-09-22 실제 Terra(gpt-5.6-terra) 턴 **두 번**(00:28, 00:29 UTC). 둘 다 rollout 에
+`read_discussion` → `publish_message` → 약 20~40 ms 뒤 `turn_aborted: interrupted` 로, 세 번째 모델 호출이
+없었다. 메시지는 방에 한 번씩 올라갔고 세션은 대기로 돌아왔다. 두 번째 턴도 정상이었다. 가짜
+app-server 경계 테스트 `a_staged_room_action_ends_the_codex_turn_without_another_model_call` 를
+추가했으나 **실행하지 못했다**: unix 전용인데, WSL(Ubuntu 24.04, Rust 1.98.1)에서는 이 테스트뿐 아니라
+기존 room 경계 테스트도 provider 시작 단계에서 `provider_leader_exited` → `runtime_authority_uncertain`
+로 멈춘다(가짜 스크립트가 실행되지 않음, 원인 미확인). 또 WSL 기본 환경에서는 `tagged_runtime_exists` 가
+root 프로세스의 `/proc` 를 못 읽어 lease 관찰이 `Unknown` 이 되므로
+`unshare --user --map-current-user -p -f --mount-proc` 안에서 돌려야 한다. unix 전용 provider 테스트는
+컴파일조차 안 되고 있었다(`claude_sdk_runtime_tests.rs` 의 `StderrTail` 누락 두 곳, `runtime_launch_tests.rs`
+의 `directory` 누락) — 고쳤다.
+
+**안 한 것.** Claude 는 아직 마지막 호출이 남아 있다. 종결 툴 뒤에 멈추게 하는 훅이 필요하고, 그 결과
+메시지가 브리지의 `validResult`(subtype · terminal_reason 등)를 통과하는지 실제 턴으로 확인해야 한다.
 
 **열린 문제 — grok 이 켜진 상태의 앱 종료 (첫 종료 시도 뒤 16:22:49 에야 꺼짐, 정상 아님).** 경과:
 

@@ -229,7 +229,7 @@ impl TerminalWatch {
         }
     }
 
-    fn is_staged(&self) -> bool {
+    pub(crate) fn is_staged(&self) -> bool {
         self.state.lock().is_ok_and(|state| {
             state
                 .active
