@@ -105,7 +105,7 @@ fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservatio
 #[tool_router]
 impl RoomPortalMcp {
     #[tool(
-        description = "Read the finalized messages in this turn's bounded shared-room view. Does not end the turn."
+        description = "Read the recent messages in the room. Other room tools work after this. Does not end your turn."
     )]
     fn read_discussion(&self) -> Result<String, String> {
         let mut state = self
@@ -121,7 +121,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Read one attachment listed in this exact room turn. Does not end the turn."
+        description = "Read an attachment listed in this turn. Does not end your turn."
     )]
     async fn read_attachment(
         &self,
@@ -139,7 +139,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Search complete canonical lobby-message history for this exact room turn. Does not end the turn. Read the discussion first."
+        description = "Search the room's full message history. Does not end your turn."
     )]
     async fn search_messages(
         &self,
@@ -153,7 +153,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Read the bounded chronological lobby context around one search result event. Does not end the turn. Read the discussion first."
+        description = "Read the messages around one search result. Does not end your turn."
     )]
     async fn read_message_context(
         &self,
@@ -166,7 +166,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Publish one substantive message to the shared room, optionally handing the floor to one exact agent ID. Read the discussion first."
+        description = "Post a message to the room, optionally handing the floor to one agent by its ID. Ends your turn."
     )]
     fn publish_message(
         &self,
@@ -197,7 +197,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Pass this room turn without posting, giving one reason code: nothing_useful_to_add, not_addressed, or duplicate. This is the normal way to end a turn when you have nothing to post. Read the discussion first."
+        description = "Pass this turn without posting. Takes one reason code: nothing_useful_to_add, not_addressed, or duplicate. Ends your turn."
     )]
     fn pass_turn(&self, Parameters(input): Parameters<PassTurn>) -> Result<String, String> {
         let mut state = self
@@ -216,7 +216,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Create one bounded single-choice room poll and end this turn. Read the discussion first."
+        description = "Create a single-choice room poll. Ends your turn."
     )]
     fn create_vote(&self, Parameters(input): Parameters<CreateVote>) -> Result<String, String> {
         self.stage_vote(&json!({
@@ -228,7 +228,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Cast or replace this Agent Session's ballot and end this turn. Read the discussion first."
+        description = "Cast or replace your ballot in a room poll. Ends your turn."
     )]
     fn cast_vote(&self, Parameters(input): Parameters<CastVote>) -> Result<String, String> {
         self.stage_vote(&json!({
@@ -239,21 +239,21 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Withdraw this Agent Session's ballot and end this turn. Read the discussion first."
+        description = "Withdraw your ballot from a room poll. Ends your turn."
     )]
     fn withdraw_vote(&self, Parameters(input): Parameters<VoteTarget>) -> Result<String, String> {
         self.stage_vote(&json!({"kind": "vote_withdraw", "vote_id": input.vote_id}))
     }
 
     #[tool(
-        description = "Close a poll created by this Agent Session and end this turn. Read the discussion first."
+        description = "Close a poll you created. Ends your turn."
     )]
     fn close_vote(&self, Parameters(input): Parameters<VoteTarget>) -> Result<String, String> {
         self.stage_vote(&json!({"kind": "vote_close", "vote_id": input.vote_id}))
     }
 
     #[tool(
-        description = "Roll bounded server-owned dice in tabletop mode. Does not end the turn: publish or pass afterwards. Read the discussion first."
+        description = "Roll dice with server-side randomness (tabletop mode). Does not end your turn."
     )]
     async fn roll_dice(&self, Parameters(input): Parameters<RollDice>) -> Result<String, String> {
         let request = RoomRandomRequest::parse(
@@ -265,7 +265,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Choose one bounded option with server-owned randomness in tabletop mode. Does not end the turn: publish or pass afterwards. Read the discussion first."
+        description = "Pick one of the given options with server-side randomness (tabletop mode). Does not end your turn."
     )]
     async fn choose_random(
         &self,

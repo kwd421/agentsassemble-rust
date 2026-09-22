@@ -524,6 +524,14 @@ aborted, they may have partially executed.` 를 넣어, 모델이 지난 발행�
 하네스 기본 동작대로 남는다. 마무리 문장을 막는 지시("더 쓰지 말라")도 넣지 않았다. 다시 시도한다면
 강제 종료가 아닌 방법이어야 한다.
 
+**방 지시문과 툴 설명은 기능 설명만 한다(2026-09-22, 사용자 결정).** 앱 컨셉은 디스코드처럼 사람과
+에이전트가 자유롭게 대화하는 곳이고, 에이전트에게 "이렇게 행동하라" 는 제약을 주지 않는다. 설명만 보고
+쓰는 법을 알아채는 것도 에이전트 능력의 일부로 본다. 그래서 `room_turn_context.rs` 의 턴 지시문에서
+"먼저 읽어라", "정확히 하나로 끝내라", "방 요청을 충족하는 것을 골라라" 같은 명령을 빼고, 각 툴이 무엇을
+하고 어느 것이 턴을 끝내는지만 적었다. `room_portal_mcp.rs` 의 툴 설명도 같다("Read the discussion
+first" 대신 `read_discussion` 설명에 "다른 방 툴은 이것 뒤에 동작한다" — 포털이 실제로 강제하는 조건이라
+사실로 적음). 실제 Terra 턴 1 회(01:24 UTC): 읽기 → 발행 → 스스로 종료, 마지막 호출 출력 4 토큰.
+
 **테스트 환경 메모.** 가짜 app-server 경계 테스트(`agent_session_boundary`)는 unix 전용이다.
 WSL(Ubuntu 24.04, Rust 1.98.1)에서는 기존 room 경계 테스트도 provider 시작 단계에서
 `provider_leader_exited` → `runtime_authority_uncertain` 로 멈춘다(가짜 스크립트가 실행되지 않음, 원인
