@@ -61,8 +61,7 @@ pub(super) async fn prepare_room_input(
     )
     .await?;
     let delivery_kind = inflight[0].input.delivery_kind;
-    let attachment_ids =
-        message_attachment_ids_from_events(inflight.iter().map(|pending| &pending.event))?;
+    let attachment_ids = readable_attachment_ids(&inflight, &context)?;
     let rendered_context = render_room_view(room, session, &room_agent_ids, &context)?;
     let persona_context = if let Some(card) =
         selected_persona_card(transaction, session.public.persona_card_id.as_ref()).await?
@@ -99,6 +98,25 @@ pub(super) async fn prepare_room_input(
         input_up_to_seq: source.event.seq,
         room_agent_ids,
     })
+}
+
+/// Attachments the turn may read: those of the messages that started it, then those of
+/// the other messages shown in its room view, newest first, up to the per-turn limit. A
+/// message that only asks about an attachment posted just before it must still reach it.
+fn readable_attachment_ids(
+    inflight: &[&PendingRoomEvent],
+    context: &[RoomEvent],
+) -> Result<Vec<String>, PersistenceError> {
+    let mut ids = message_attachment_ids_from_events(inflight.iter().map(|pending| &pending.event))?;
+    for id in message_attachment_ids_from_events(context.iter().rev())? {
+        if ids.len() >= MAX_MESSAGE_ATTACHMENTS_PER_EVENT {
+            break;
+        }
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
 }
 
 async fn load_room_agent_ids(

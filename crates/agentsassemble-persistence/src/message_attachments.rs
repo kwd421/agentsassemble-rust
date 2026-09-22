@@ -21,7 +21,7 @@ use crate::{
     authority::load_active_participant,
     provider_turn_execution::load_execution_in,
     raster_assets::{is_safe_raster_content_type, validate_preserved_safe_raster},
-    room_turns::support::{load_event, load_participant},
+    room_turns::support::load_participant,
     room_user_identity::resolve_room_user_identity,
     turn_authority::active_turn_authority,
 };
@@ -445,18 +445,35 @@ pub(crate) async fn bound_provider_attachment_in(
     {
         return Err(stale_provider_turn());
     }
-    let mut inflight_events = Vec::with_capacity(session.inflight_inputs.len());
-    for input in &session.inflight_inputs {
-        inflight_events.push(
-            load_event(transaction, authority.room_id, &input.event_id)
-                .await?
-                .ok_or_else(message_attachment_missing)?,
-        );
-    }
-    if !message_attachment_ids_from_events(inflight_events.iter())?
+    // The assignment fixed which attachments this turn may read when it was prepared.
+    let assignment_json = sqlx::query_scalar::<_, String>(
+        "SELECT assignment_json FROM provider_turn_executions WHERE room_id = ? AND session_id = ? AND turn_generation = ? AND execution_id = ?",
+    )
+    .bind(authority.room_id)
+    .bind(authority.session_id)
+    .bind(i64::try_from(authority.turn_generation).map_err(|_| stale_provider_turn())?)
+    .bind(authority.execution_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    .ok_or_else(stale_provider_turn)?;
+    let assignment: crate::provider_turn_execution::ProviderTurnAssignmentEnvelope =
+        serde_json::from_str(&assignment_json)?;
+    if !assignment
+        .attachment_ids
         .iter()
         .any(|candidate| candidate == attachment_id)
     {
+        return Err(message_attachment_missing());
+    }
+    let event_seq = sqlx::query_scalar::<_, i64>(
+        "SELECT event_seq FROM room_message_attachments WHERE attachment_id = ? AND room_id = ? AND state = 'bound'",
+    )
+    .bind(attachment_id)
+    .bind(authority.room_id)
+    .fetch_optional(&mut **transaction)
+    .await?
+    .ok_or_else(message_attachment_missing)?;
+    if event_seq > session.input_up_to_seq {
         return Err(message_attachment_missing());
     }
     let attachment =

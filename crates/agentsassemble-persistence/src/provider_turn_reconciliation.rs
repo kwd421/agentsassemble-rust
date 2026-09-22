@@ -670,7 +670,7 @@ async fn validate_assignment_envelope(
             .any(|input| input.delivery_kind != assignment.delivery_kind)
         || !is_provider_input(&assignment.provider_input)
         || !is_room_observation_view(&assignment.room_view)
-        || assignment.attachment_ids != expected_attachment_ids
+        || !readable_attachments_match(&assignment.attachment_ids, &expected_attachment_ids)
         || assignment.room_agent_ids.len() > MAX_ROOM_OBSERVATION_AGENT_IDS
         || unique_agent_ids.len() != assignment.room_agent_ids.len()
         || assignment
@@ -681,6 +681,18 @@ async fn validate_assignment_envelope(
         return Err(invalid_reconciliation());
     }
     Ok(())
+}
+
+/// A prepared turn may read the attachments of the messages that started it and of other
+/// messages shown in its room view, within the per-turn limit.
+fn readable_attachments_match(assigned: &[String], started_by: &[String]) -> bool {
+    let unique = assigned.iter().collect::<HashSet<_>>();
+    unique.len() == assigned.len()
+        && assigned.len() <= agentsassemble_domain::MAX_MESSAGE_ATTACHMENTS_PER_EVENT
+        && assigned
+            .iter()
+            .all(|id| agentsassemble_domain::is_message_attachment_id(id))
+        && started_by.iter().all(|id| unique.contains(id))
 }
 
 fn validate_candidate(

@@ -194,6 +194,98 @@ async fn provider_read_revalidates_exact_turn_and_inflight_reference() {
 }
 
 #[tokio::test]
+async fn provider_reads_an_attachment_shown_before_the_message_that_asks_about_it() {
+    let (store, principal, _directory) = super::fixture().await;
+    let now = chrono::Utc::now();
+    let flash = super::participant(
+        super::SECOND_AGENT_ID,
+        "Flash",
+        "agent",
+        agentsassemble_domain::ParticipantRole::Agent,
+        now,
+    );
+    let mut flash_session = super::attached_session(now);
+    super::SECOND_AGENT_ID.clone_into(&mut flash_session.public.session_id);
+    super::SECOND_AGENT_ID.clone_into(&mut flash_session.public.participant_id);
+    "Flash".clone_into(&mut flash_session.public.display_name);
+    "provider-thread-2".clone_into(&mut flash_session.provider_session_id);
+    "owned-runtime-2".clone_into(&mut flash_session.runtime_handle_id);
+    super::insert_agent(&store, &flash, &flash_session).await;
+    let attachment = store
+        .store_message_attachment(&principal, "photo.txt", "text/plain", b"photo".to_vec())
+        .await
+        .unwrap_or_else(|error| panic!("store earlier attachment: {error}"));
+    // The attachment goes to another agent's turn; Terra only sees it in its room view.
+    let for_flash = store
+        .execute_message_with_turn(
+            &principal,
+            "attachment-for-flash",
+            "message.send",
+            &json!({"content": "@Flash what is this?", "attachment_ids": [attachment.id]}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("send attachment message: {error}"));
+    let flash_turn = for_flash
+        .assignments
+        .first()
+        .unwrap_or_else(|| panic!("the attachment message must assign Flash"));
+    assert_eq!(flash_turn.session.public.session_id, super::SECOND_AGENT_ID);
+    let asked = store
+        .execute_message_with_turn(
+            &principal,
+            "ask-terra",
+            "message.send",
+            &json!({"content": "@Terra can you see that file?"}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("ask Terra: {error}"));
+    let flash_start = super::running_authority(&store, flash_turn, "provider-turn-flash").await;
+    let finished = store
+        .complete_agent_turn(
+            "general",
+            super::SECOND_AGENT_ID,
+            super::authority(&flash_start, "provider-turn-flash", None),
+            "A text file.",
+            "",
+        )
+        .await
+        .unwrap_or_else(|error| panic!("finish Flash turn: {error}"));
+    let assignment = asked
+        .assignments
+        .iter()
+        .chain(finished.next_assignments.iter())
+        .find(|assignment| assignment.session.public.session_id == super::AGENT_ID)
+        .unwrap_or_else(|| panic!("the question must assign Terra"));
+    assert!(assignment.room_view.contains(&attachment.id));
+    assert_eq!(assignment.attachment_ids, [attachment.id.clone()]);
+
+    store
+        .authorize_provider_turn_start(
+            &assignment.session.public.room_id,
+            &assignment.session.public.session_id,
+            assignment.turn_generation,
+            &assignment.turn_id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("authorize Terra turn: {error}"));
+    let read = store
+        .bound_provider_message_attachment(
+            ProviderAttachmentReadAuthority {
+                room_id: &assignment.session.public.room_id,
+                session_id: &assignment.session.public.session_id,
+                turn_id: &assignment.turn_id,
+                input_up_to_seq: assignment.session.input_up_to_seq,
+                turn_generation: assignment.turn_generation,
+                execution_id: &assignment.execution_id,
+            },
+            &attachment.id,
+        )
+        .await
+        .unwrap_or_else(|error| panic!("read the earlier attachment: {error}"));
+    assert_eq!(read.content, b"photo");
+}
+
+#[tokio::test]
 async fn expired_attachment_rejects_without_cleanup_or_message() {
     let (store, principal, _directory) = super::fixture().await;
     let attachment = store
