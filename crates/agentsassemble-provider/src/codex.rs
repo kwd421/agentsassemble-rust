@@ -294,7 +294,7 @@ impl CodexDriver {
             });
         }
         let (method, params) = match durable_id {
-            Some(thread_id) => ("thread/resume", json!({"threadId": thread_id})),
+            Some(thread_id) => ("thread/resume", thread_resume_params(session, thread_id)?),
             None => ("thread/start", thread_start_params(session)?),
         };
         let response = match self.request(method, params).await {
@@ -614,6 +614,20 @@ fn thread_start_params(session: &DurableAgentSession) -> Result<Value, DriverErr
         "sandbox": sandbox,
         "historyMode": "legacy",
         "ephemeral": false,
+    }))
+}
+
+/// Resumes the Agent Session's thread on its current model: a model changed in the app
+/// applies to the same conversation. The thread's turns are not needed here, and a long
+/// thread with images would make the response line huge.
+fn thread_resume_params(session: &DurableAgentSession, thread_id: &str) -> Result<Value, DriverError> {
+    if session.public.model.is_empty() {
+        return Err(invalid_runtime_profile());
+    }
+    Ok(json!({
+        "threadId": thread_id,
+        "model": session.public.model,
+        "excludeTurns": true,
     }))
 }
 

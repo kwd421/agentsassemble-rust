@@ -145,33 +145,7 @@ async fn exact_turn_mcp_read_returns_one_bounded_attachment() {
     assert!(commands.try_recv().is_err());
 
     assert_response_validation_and_generic_resource(&client, &mut commands).await;
-    // An ID outside the room view goes to the room owner, which decides whether it exists.
-    let missing = tokio::spawn(call_tool(
-        client.clone(),
-        "read_attachment",
-        json!({"attachment_id": "ma_44444444444444444444444444444444"}),
-    ));
-    let command = commands
-        .recv()
-        .await
-        .unwrap_or_else(|| panic!("an earlier attachment is asked of the room owner"));
-    assert_eq!(command.attachment_id(), "ma_44444444444444444444444444444444");
-    command.complete(Err(crate::room_attachment::ProviderAttachmentReadError {
-        code: "message_attachment_missing".into(),
-        message: "The message attachment is unavailable.".to_owned(),
-    }));
-    let missing = missing
-        .await
-        .unwrap_or_else(|error| panic!("join missing attachment read: {error}"));
-    assert_eq!(missing.is_error, Some(true));
-    let malformed = call_tool(
-        client.clone(),
-        "read_attachment",
-        json!({"attachment_id": "not-an-attachment"}),
-    )
-    .await;
-    assert_eq!(malformed.is_error, Some(true));
-    assert!(commands.try_recv().is_err());
+    assert_unlisted_and_malformed_ids(&client, &mut commands).await;
     let client = Arc::try_unwrap(client)
         .unwrap_or_else(|_| panic!("attachment client references must be released"));
     let _ = client.cancel().await;
@@ -395,4 +369,38 @@ async fn call_tool(
         .call_tool(CallToolRequestParams::new(name).with_arguments(arguments))
         .await
         .unwrap_or_else(|error| panic!("call {name}: {error}"))
+}
+
+/// An ID outside the room view goes to the room owner, which decides whether it exists;
+/// a malformed ID never leaves the portal.
+async fn assert_unlisted_and_malformed_ids(
+    client: &Arc<RoomClient>,
+    commands: &mut tokio::sync::mpsc::Receiver<ProviderAttachmentReadCommand>,
+) {
+    let missing = tokio::spawn(call_tool(
+        client.clone(),
+        "read_attachment",
+        json!({"attachment_id": "ma_44444444444444444444444444444444"}),
+    ));
+    let command = commands
+        .recv()
+        .await
+        .unwrap_or_else(|| panic!("an earlier attachment is asked of the room owner"));
+    assert_eq!(command.attachment_id(), "ma_44444444444444444444444444444444");
+    command.complete(Err(crate::room_attachment::ProviderAttachmentReadError {
+        code: "message_attachment_missing".into(),
+        message: "The message attachment is unavailable.".to_owned(),
+    }));
+    let missing = missing
+        .await
+        .unwrap_or_else(|error| panic!("join missing attachment read: {error}"));
+    assert_eq!(missing.is_error, Some(true));
+    let malformed = call_tool(
+        client.clone(),
+        "read_attachment",
+        json!({"attachment_id": "not-an-attachment"}),
+    )
+    .await;
+    assert_eq!(malformed.is_error, Some(true));
+    assert!(commands.try_recv().is_err());
 }

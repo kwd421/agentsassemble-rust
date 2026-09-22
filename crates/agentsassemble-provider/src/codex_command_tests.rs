@@ -2,12 +2,25 @@ use agentsassemble_domain::DurableAgentSession;
 
 use super::{
     MAX_PENDING_NOTIFICATION_BYTES, MAX_PENDING_NOTIFICATIONS, command_arguments,
-    is_room_portal_approval, next_notification_budget,
+    is_room_portal_approval, next_notification_budget, thread_resume_params,
 };
 use crate::{
     room_portal::{ROOM_PORTAL_TOKEN_ENV_PREFIX, RoomPortal},
     test_support::durable_session,
 };
+
+#[test]
+fn resume_carries_the_sessions_current_model() {
+    let mut session = codex_session_fixture();
+    "gpt-6-astra".clone_into(&mut session.public.model);
+    let params = thread_resume_params(&session, "thread-1")
+        .unwrap_or_else(|error| panic!("build resume params: {error}"));
+
+    assert_eq!(
+        params,
+        serde_json::json!({"threadId": "thread-1", "model": "gpt-6-astra", "excludeTurns": true})
+    );
+}
 
 #[tokio::test]
 async fn command_uses_app_server_and_process_local_profile_settings() {

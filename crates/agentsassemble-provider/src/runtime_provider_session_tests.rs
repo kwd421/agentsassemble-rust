@@ -58,6 +58,8 @@ async fn codex_thread_starts_once_then_resumes_its_durable_identity() {
     assert_eq!(requests[3]["params"]["threadId"], "thread-1");
     assert_eq!(requests[6]["method"], "thread/resume");
     assert_eq!(requests[6]["params"]["threadId"], "thread-1");
+    assert_eq!(requests[6]["params"]["model"], "gpt-5.6-terra");
+    assert_eq!(requests[6]["params"]["excludeTurns"], true);
     stop_and_release(&resumed_adapter, &durable, &resumed).await;
 }
 
