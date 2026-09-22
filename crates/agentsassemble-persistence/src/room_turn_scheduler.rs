@@ -96,14 +96,13 @@ pub(super) async fn assign_available_pending(
         if participant.status != ParticipantStatus::Joined || participant.muted {
             continue;
         }
-        let valid = valid_pending_inputs(transaction, &session).await?;
-        let Some(first) = valid.first() else {
+        let sequences = pending_input_sequences(transaction, &session).await?;
+        let Some(&sequence) = sequences.first() else {
             if session.schedule_requested {
                 empty_schedule_requests.push(session);
             }
             continue;
         };
-        let sequence = event_sequence(transaction, &room.room_id, &first.event_id).await?;
         candidates.push((sequence, session));
     }
     if settings.conversation_mode == "ordered" && any_active {
@@ -152,7 +151,16 @@ pub(super) async fn route_declined_floor(
         return Ok(());
     }
     let held = floor_holders(transaction, &event.room_id, &event.id).await?;
-    let sessions = route_sessions(transaction, event).await?;
+    let mut sessions = route_sessions(transaction, event).await?;
+    // A delayed decline can concern history already covered by another turn,
+    // including a newer observation still in flight after a room-mode change.
+    sessions.retain(|(session, _)| {
+        event.seq
+            > session
+                .public
+                .last_provider_sync_seq
+                .max(session.input_up_to_seq)
+    });
     for (session_id, delivery_kind) in
         ordered_targets(transaction, settings, event, &sessions, &held).await?
     {
@@ -320,10 +328,17 @@ async fn queue_input(
         };
         return Err(rejected(code, message));
     }
-    session.pending_inputs.push(QueuedRoomInput {
-        event_id: event.id.clone(),
-        delivery_kind,
-    });
+    // Validate stored order before inserting a late source event. Sorting the
+    // stored queue here would hide invalid authority rather than prevent it.
+    let sequences = pending_input_sequences(transaction, &session).await?;
+    let position = sequences.partition_point(|sequence| *sequence < event.seq);
+    session.pending_inputs.insert(
+        position,
+        QueuedRoomInput {
+            event_id: event.id.clone(),
+            delivery_kind,
+        },
+    );
     session.public.updated_at = Utc::now();
     save_session(transaction, &session).await
 }
@@ -412,12 +427,15 @@ async fn recent_agent_speaking_state(
     Ok((counts, previous))
 }
 
-async fn valid_pending_inputs(
+async fn pending_input_sequences(
     transaction: &mut Transaction<'_, Sqlite>,
     session: &DurableAgentSession,
-) -> Result<Vec<QueuedRoomInput>, PersistenceError> {
+) -> Result<Vec<i64>, PersistenceError> {
     let mut seen = HashSet::new();
-    let mut previous_seq = session.public.last_provider_sync_seq;
+    let mut previous_seq = session
+        .public
+        .last_provider_sync_seq
+        .max(session.input_up_to_seq);
     let mut valid = Vec::with_capacity(session.pending_inputs.len());
     for input in &session.pending_inputs {
         if input.event_id.is_empty() || !seen.insert(&input.event_id) {
@@ -440,7 +458,7 @@ async fn valid_pending_inputs(
             ));
         }
         previous_seq = event.seq;
-        valid.push(input.clone());
+        valid.push(event.seq);
     }
     Ok(valid)
 }
@@ -533,15 +551,4 @@ async fn prepare_assignment(
         },
         events: vec![started, state, session_event],
     })
-}
-
-async fn event_sequence(
-    transaction: &mut Transaction<'_, Sqlite>,
-    room_id: &str,
-    event_id: &str,
-) -> Result<i64, PersistenceError> {
-    load_event(transaction, room_id, event_id)
-        .await?
-        .map(|event| event.seq)
-        .ok_or_else(|| rejected("room_event_missing", "Queued room input is missing."))
 }

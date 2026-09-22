@@ -1,6 +1,4 @@
-use agentsassemble_domain::{
-    LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID, QueuedRoomInput,
-};
+use agentsassemble_domain::{LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID};
 use serde_json::json;
 use sqlx::Row;
 
@@ -469,7 +467,7 @@ async fn bound_read_requires_the_canonical_message_reference() {
 #[tokio::test]
 async fn routing_failure_rolls_back_message_and_attachment_binding() {
     let (store, principal, _directory) = super::fixture().await;
-    store
+    let active = store
         .execute_message_with_turn(
             &principal,
             "binding-active",
@@ -478,14 +476,7 @@ async fn routing_failure_rolls_back_message_and_attachment_binding() {
         )
         .await
         .unwrap_or_else(|error| panic!("start active turn: {error}"));
-    let mut session = super::stored_session(&store).await;
-    session.pending_inputs = (0..crate::turn_queue::MAX_QUEUED_EVENT_IDS - 2)
-        .map(|index| QueuedRoomInput {
-            event_id: format!("binding-queued-{index}"),
-            delivery_kind: agentsassemble_domain::RoomInputDeliveryKind::OrderedObservation,
-        })
-        .collect();
-    super::save_stored_session(&store, &session).await;
+    super::room_turn_test_fixture::fill_pending_queue(&store, &active.outcome.event).await;
     store
         .execute_message_with_turn(
             &principal,

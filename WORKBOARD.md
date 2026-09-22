@@ -2,6 +2,16 @@
 
 ## Active work
 
+- 2026-09-22: DeepSeek's persistent typing state is traced to an ordered-floor
+  queue-order rejection that rolls back turn completion; the same failure is
+  reproduced with the persistence fixture. Diagnosis, proposed correction and
+  acceptance are recorded in `docs/verification/2026-09-22-conversation-context.md`
+  section 8. The user now authorizes correction: preserve chronological pending
+  inputs and cursor boundaries, expose completion failures through existing
+  recovery, and verify retained-result retry without another model call.
+  Implement and commit each correction separately; verify the packaged flow with
+  isolated data while preserving the user's existing room and history.
+
 - 2026-09-22: completed the user-requested live feedback conversation with
   Grok 4.7, GPT-6 Astra and DeepSeek Flash; Codex participated through Room
   Connector MCP. Suggestions, model corrections, participant/event ID distinction,

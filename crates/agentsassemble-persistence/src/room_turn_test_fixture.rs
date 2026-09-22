@@ -5,6 +5,41 @@ use agentsassemble_domain::{
 };
 use chrono::{DateTime, Utc};
 
+pub(super) async fn fill_pending_queue(
+    store: &crate::SqliteStore,
+    source: &agentsassemble_domain::RoomEvent,
+) {
+    let mut session = super::stored_session(store).await;
+    let mut transaction = store
+        .pool
+        .begin()
+        .await
+        .unwrap_or_else(|error| panic!("begin queue fixture: {error}"));
+    for _ in 0..crate::turn_queue::MAX_QUEUED_EVENT_IDS - 2 {
+        let mut event = source.clone();
+        event.id = uuid::Uuid::new_v4().to_string();
+        event.seq = crate::room_event_sequence::next_sequence(&mut transaction, &event.room_id)
+            .await
+            .unwrap_or_else(|error| panic!("allocate queue fixture sequence: {error}"));
+        crate::room_turns::support::insert_event(&mut transaction, &event)
+            .await
+            .unwrap_or_else(|error| panic!("insert queue fixture event: {error}"));
+        session
+            .pending_inputs
+            .push(agentsassemble_domain::QueuedRoomInput {
+                event_id: event.id,
+                delivery_kind: agentsassemble_domain::RoomInputDeliveryKind::OrderedObservation,
+            });
+    }
+    crate::agent_lifecycle::save_session(&mut transaction, &session)
+        .await
+        .unwrap_or_else(|error| panic!("save queue fixture: {error}"));
+    transaction
+        .commit()
+        .await
+        .unwrap_or_else(|error| panic!("commit queue fixture: {error}"));
+}
+
 pub(super) fn attached_session(now: DateTime<Utc>) -> DurableAgentSession {
     DurableAgentSession {
         public: AgentSession {

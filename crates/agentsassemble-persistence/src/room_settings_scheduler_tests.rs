@@ -170,6 +170,202 @@ async fn a_declined_ordered_turn_hands_the_floor_to_the_next_agent() {
     assert!(ended.next_assignments.is_empty());
 }
 
+#[tokio::test]
+async fn delayed_decline_merges_older_input_before_newer_pending_message() {
+    let (store, principal, _directory) = fixture().await;
+    insert_second_agent(&store).await;
+    let first = send_message(&store, &principal, "older", "@Terra older message").await;
+    let later = send_message(&store, &principal, "newer", "@Flash newer message").await;
+    assert!(later.assignments.is_empty());
+    let committed = decline_assignment(
+        &store,
+        &first.assignments[0],
+        "decline-older",
+        "nothing_useful_to_add",
+    )
+    .await;
+    assert_eq!(committed.next_assignments.len(), 1);
+    let next = &committed.next_assignments[0];
+    assert_eq!(next.session.public.session_id, SECOND_AGENT_ID);
+    assert_eq!(next.session.input_up_to_seq, later.outcome.event.seq);
+    assert_eq!(
+        next.session
+            .inflight_inputs
+            .iter()
+            .map(|input| input.event_id.as_str())
+            .collect::<Vec<_>>(),
+        [
+            first.outcome.event.id.as_str(),
+            later.outcome.event.id.as_str()
+        ],
+    );
+    let older_position = next
+        .room_view
+        .find("@Terra older message")
+        .unwrap_or_else(|| panic!("older input missing from observation"));
+    let newer_position = next
+        .room_view
+        .find("@Flash newer message")
+        .unwrap_or_else(|| panic!("newer input missing from observation"));
+    assert!(older_position < newer_position);
+    let terra = stored_session(&store, super::AGENT_ID).await;
+    assert_eq!(
+        terra.public.runtime_status,
+        agentsassemble_domain::AgentRuntimeStatus::Idle
+    );
+    assert_eq!(terra.public.last_provider_sync_seq, first.outcome.event.seq);
+
+    let continued = decline_assignment(&store, next, "decline-both", "nothing_useful_to_add").await;
+    assert_eq!(continued.next_assignments.len(), 1);
+    let ended = decline_assignment(
+        &store,
+        &continued.next_assignments[0],
+        "decline-newer",
+        "nothing_useful_to_add",
+    )
+    .await;
+    assert!(ended.next_assignments.is_empty());
+    for session_id in [super::AGENT_ID, SECOND_AGENT_ID] {
+        let session = stored_session(&store, session_id).await;
+        assert_eq!(
+            session.public.runtime_status,
+            agentsassemble_domain::AgentRuntimeStatus::Idle
+        );
+        assert_eq!(
+            session.public.last_provider_sync_seq,
+            later.outcome.event.seq
+        );
+        assert!(session.pending_inputs.is_empty());
+        assert!(session.inflight_inputs.is_empty());
+    }
+}
+
+#[tokio::test]
+async fn delayed_decline_excludes_already_completed_observation() {
+    decline_after_newer_observation(true).await;
+}
+
+#[tokio::test]
+async fn delayed_decline_excludes_observation_still_in_flight() {
+    decline_after_newer_observation(false).await;
+}
+
+async fn decline_after_newer_observation(complete_newer_first: bool) {
+    let (store, principal, _directory) = fixture().await;
+    insert_second_agent(&store).await;
+    let first = send_message(&store, &principal, "older", "@Terra older message").await;
+    let revision = public_settings(&RoomSettings::defaults("General"))
+        .unwrap_or_else(|error| panic!("read default settings: {error}"))
+        .settings_revision;
+    let ambient = update_mode(&store, &principal, "ambient", &revision, "ambient")
+        .await
+        .unwrap_or_else(|error| panic!("enable ambient mode: {error}"));
+    let later = send_message(&store, &principal, "newer", "newer shared context").await;
+    assert_eq!(later.assignments.len(), 1);
+    let second = &later.assignments[0];
+    assert_eq!(second.session.public.session_id, SECOND_AGENT_ID);
+    assert!(second.room_view.contains("@Terra older message"));
+    if complete_newer_first {
+        let done = decline_assignment(&store, second, "newer-done", "nothing_useful_to_add").await;
+        assert!(done.next_assignments.is_empty());
+    }
+    let revision = ambient
+        .result
+        .pointer("/room_settings/settings_revision")
+        .and_then(serde_json::Value::as_str)
+        .unwrap_or_else(|| panic!("ambient settings revision missing"));
+    update_mode(&store, &principal, "ordered", revision, "ordered")
+        .await
+        .unwrap_or_else(|error| panic!("restore ordered mode: {error}"));
+    let done = decline_assignment(
+        &store,
+        &first.assignments[0],
+        "older-done",
+        "nothing_useful_to_add",
+    )
+    .await;
+    let flash = stored_session(&store, SECOND_AGENT_ID).await;
+    assert!(
+        flash.pending_inputs.is_empty(),
+        "old source is already within Flash's observation"
+    );
+    let terra_next = if complete_newer_first {
+        assert_eq!(flash.public.last_provider_sync_seq, later.outcome.event.seq);
+        assert_eq!(done.next_assignments.len(), 1);
+        done.next_assignments[0].clone()
+    } else {
+        assert!(done.next_assignments.is_empty());
+        let finished =
+            decline_assignment(&store, second, "newer-done", "nothing_useful_to_add").await;
+        assert_eq!(finished.next_assignments.len(), 1);
+        finished.next_assignments[0].clone()
+    };
+    assert_eq!(terra_next.session.public.session_id, super::AGENT_ID);
+    assert_eq!(terra_next.session.input_up_to_seq, later.outcome.event.seq);
+    let ended = decline_assignment(
+        &store,
+        &terra_next,
+        "terra-newer-done",
+        "nothing_useful_to_add",
+    )
+    .await;
+    assert!(ended.next_assignments.is_empty());
+}
+
+#[tokio::test]
+async fn enqueue_rejects_preexisting_nonchronological_pending_authority() {
+    let (store, principal, _directory) = fixture().await;
+    insert_second_agent(&store).await;
+    start_ordered_turn(&store, &principal).await;
+    send_message(&store, &principal, "one", "@Flash first pending message").await;
+    send_message(&store, &principal, "two", "@Flash second pending message").await;
+    let mut corrupted = stored_session(&store, SECOND_AGENT_ID).await;
+    corrupted.pending_inputs.reverse();
+    sqlx::query(
+        "UPDATE agent_sessions SET session_json = ? WHERE room_id = 'general' AND session_id = ?",
+    )
+    .bind(
+        serde_json::to_string(&corrupted)
+            .unwrap_or_else(|error| panic!("encode corrupt queue fixture: {error}")),
+    )
+    .bind(SECOND_AGENT_ID)
+    .execute(&store.pool)
+    .await
+    .unwrap_or_else(|error| panic!("store corrupt queue fixture: {error}"));
+    let error = store
+        .execute_message_with_turn(
+            &principal,
+            "three",
+            "message.send",
+            &json!({"content": "@Flash next message"}),
+        )
+        .await
+        .err()
+        .unwrap_or_else(|| panic!("corrupt stored authority must be rejected"));
+    assert_rejection_code(&error, "queued_room_event_invalid");
+    assert_eq!(
+        stored_session(&store, SECOND_AGENT_ID).await.pending_inputs,
+        corrupted.pending_inputs
+    );
+}
+
+async fn send_message(
+    store: &SqliteStore,
+    principal: &agentsassemble_domain::AuthenticatedPrincipal,
+    request_id: &str,
+    content: &str,
+) -> crate::RoomCommandMutation {
+    store
+        .execute_message_with_turn(
+            principal,
+            request_id,
+            "message.send",
+            &json!({"content": content}),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("send {request_id}: {error}"))
+}
+
 async fn decline_assignment(
     store: &SqliteStore,
     assignment: &crate::AgentTurnAssignment,

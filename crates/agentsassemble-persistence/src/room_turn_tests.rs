@@ -1,7 +1,7 @@
 use agentsassemble_domain::{
     AgentRuntimeStatus, AgentSessionStatus, AuthenticatedPrincipal, CapabilitySet, ClientKind,
     DurableAgentSession, InviteScope, LOCAL_OPERATOR_PARTICIPANT_ID, Participant, ParticipantRole,
-    QueuedRoomInput, RoomInputDeliveryKind,
+    QueuedRoomInput,
 };
 use chrono::Utc;
 use serde_json::json;
@@ -55,14 +55,7 @@ async fn ordered_floor_queue_limit_rejects_the_source_message_atomically() {
         .unwrap_or_else(|error| panic!("start active turn: {error}"));
     assert_eq!(active.assignments.len(), 1);
 
-    let mut session = stored_session(&store).await;
-    session.pending_inputs = (0..super::super::turn_queue::MAX_QUEUED_EVENT_IDS - 2)
-        .map(|index| QueuedRoomInput {
-            event_id: format!("queued-event-{index}"),
-            delivery_kind: RoomInputDeliveryKind::OrderedObservation,
-        })
-        .collect();
-    save_stored_session(&store, &session).await;
+    room_turn_test_fixture::fill_pending_queue(&store, &active.outcome.event).await;
 
     store
         .execute_message_with_turn(

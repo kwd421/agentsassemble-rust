@@ -269,3 +269,173 @@ still appeared joined in a later public snapshot. A second, persistent helper
 completed the discussion and received a committed leave receipt. The earlier
 participant row was not deleted, and no cleanup of that lost connection is claimed.
 These execution issues are retained observations, not fixes included in this push.
+
+## 8. Persistent DeepSeek typing: diagnosis and authorized correction
+
+The diagnosis was initially documented without changing product code. The user
+subsequently authorized the correction. Verification below must be updated with
+actual execution evidence before fixed behavior or acceptance is claimed.
+Investigated revision: `f0e1b136368e96fb731a15967dbae2f176b23b65`.
+
+### Observed sequence and cause
+
+The affected session is `deepseek-2506c415-2e00-54d5-be8b-0415030094a3` in the
+same room as section 7. Times below are KST on 2026-09-22.
+
+| Time | Durable event or runtime evidence |
+| --- | --- |
+| 17:35:00.918 | Codex's closing message #1305 arrives while DeepSeek is responding to #1299. |
+| 17:35:05.910–.912 | DeepSeek posts #1306; #1307 completes `turn-88979a7abd85`, and #1308 records idle. |
+| 17:35:06.011–31.498 | Terra's assigned observation includes #1299 and #1305, with input boundary #1305; it declines with `nothing_useful_to_add`. |
+| 17:35:31.635 | #1314 starts DeepSeek's `turn-8f2821f5b727`, generation 42, with input boundary #1305; #1316 records busy. |
+| 17:35:35.364 | Runtime stderr reports that the returned provider result could not be committed: `queued_room_event_invalid`, "Queued room input does not match canonical room turn authority." |
+| 17:55:42.093 | #1318 records the operator Stop as interrupted; #1320 records stopped. This clears the symptom, not its cause. |
+
+The first answer completed normally. The subsequent turn also returned a result:
+generation 42 has a provider turn ID, which this API path records in
+`provider_turn.rs::commit_completed_provider_result` after receiving completion.
+There are no provider requests for that generation. The approximately 20 minutes
+of busy state must not be attributed to continued model generation or API latency.
+
+`room_turn_scheduler.rs::queue_input` appends inputs, while
+`valid_pending_inputs` requires strictly increasing event sequences. After an
+ordered turn declines, the server may enqueue the original source event ID for
+another eligible session. The reconstructed incident path is that Grok already
+has newer #1306 queued when older #1305 is appended, producing newer-before-older
+ordering in pending input IDs. `room_turn_finalization.rs` performs completion and
+next assignment in one transaction; the queue rejection rolls back the idle state
+and completion event as well. `provider_turn.rs::handle_provider_result` logs the
+commit failure without recording a public error/recovery transition. The frontend
+derives typing from the remaining canonical busy state.
+
+The final provider tool-call payload was not retained. The detailed handoff path
+is reconstructed from public events, the exact rejection site and the isolated
+reproduction below; it is not a claim to have inspected private provider reasoning.
+
+### Cursor, observation and turn selection: clarification from code and stored assignments
+
+This describes app-managed provider sessions. External Room Connector tools use
+a separate read/wait contract; their `room_read` is a current public snapshot, not
+the provider session's assigned `read_discussion` view described below.
+
+Messages remain in the shared room history. A participant does not forward a
+private copy of a message to another AI. In this room's ordered mode, the server
+selects the next eligible session. `pass_turn` accepts only a reason code; it does
+not let the passing AI name the next participant. The optional `next_agent_id` on
+`publish_message` is a separate contract.
+
+The actual path is more specific than either "forward one message" or "always
+read all new messages after the cursor":
+
+- `room_turn_context.rs::prepare_room_input` selects a bounded chronological
+  prefix of pending inputs. Its last event sets `input_up_to_seq`. Pending event
+  IDs are required observation inputs and determine that boundary; they are not
+  merely wakeup flags unrelated to what the AI reads.
+- `load_context` builds a bounded shared-history view through that boundary.
+  Native/live CLI sessions start after `last_provider_sync_seq`. API sessions,
+  including this DeepSeek session, replay bounded history after
+  `bootstrap_cutoff_seq` to provide context for the stateless API driver. Own
+  messages may therefore appear in the API context. Size limits still apply.
+- `prepare_assignment` stores the resulting `room_view`; `provider_request`
+  copies it into the turn observation. `room_portal_mcp.rs::read_discussion`
+  returns that prepared view and records a turn-local read receipt. It does not
+  query the latest database messages or advance the durable cursor on each call.
+- `room_turns.rs::complete_session_state` advances `last_seen_seq` and
+  `last_provider_sync_seq` to the assigned input boundary on successful turn
+  completion or decline. This is not the sequence of the AI's outgoing answer.
+  A rolled-back completion does not advance these cursors.
+
+The offline database contains assignment snapshots that corroborate these
+distinctions. DeepSeek's completed generation 41 read through #1299 and posted
+#1306; its committed cursor became 1299. Its next observation, generation 42,
+ended at #1305 and replayed earlier context. Its cursor remained 1299 after the
+failed completion. After the operator stopped DeepSeek, Grok's next stored
+observation included both #1305 and #1306 in chronological order, through input
+boundary #1306, from its previous cursor 1293. Terra's following observation
+contained #1306 from its previous cursor 1305.
+
+Thus the confirmed rejection concerns server pending-input authority and the
+completion transaction. It is not evidence that an AI actually received or read
+chat messages in reverse order. The rejected transaction did not commit a next
+assignment. The exact live pending list and final DeepSeek tool payload are not
+retained; the specific append path remains reconstructed as stated above.
+
+### Reproduction and evidence limits
+
+With the app closed by the user, the real database was read using SQLite
+`mode=ro` and `query_only=ON`. It was not modified or reset, and the app was not
+reopened. Existing persistence fixtures reproduced the failure by starting an
+older message for Terra, queuing a newer message for Flash, and completing Terra
+with `nothing_useful_to_add`, which makes the server append the older source
+event ID to Flash's pending input list.
+
+The temporary test `diagnostic_decline_handoff_after_newer_queued_message`
+failed at decline completion with the same `queued_room_event_invalid` message
+(0 passed, 1 failed, 345 filtered out; 0.08 s). Windows TEMP/TMP used the existing
+private verification directory. An initial run with default TEMP failed directory
+authority validation before the scenario and is not reproduction evidence.
+The diagnostic test was removed afterward; its patch and expanded incident notes
+remain locally under `aa/temp agents`. This proves the defect, not a correction.
+
+### Correction contract and acceptance (implementation in progress)
+
+The persistence scheduler owns chronological pending inputs and read boundaries;
+the existing provider execution/reconciliation owners retain exact results and
+expose unresolved completion. Keep shared history, input bounds, cursor advancement
+on committed completion, ordered/ambient semantics, runtime fences and atomic
+publication intact. No storage migration, new queue, model retry, UI timer or
+change to the external connector protocol is in scope. Tests use isolated stores;
+the user's existing room history is preserved.
+
+Acceptance matrix (all rows initially unverified for the correction):
+
+| Trigger | Required state, side effect and visible result | Verification |
+| --- | --- | --- |
+| Older ordered decline arrives after a newer pending input | One chronological observation, monotonic input cursor, one completion; chain ends without a repeated observed input or stuck typing | Persistence regression and packaged flow |
+| Decline targets a message within another session's completed or in-flight observation | Already-covered session is excluded; no stale pending input; remaining turns finish | Persistence mode-transition regressions |
+| Stored queue authority is invalid | Reject without silently sorting or discarding stored authority | Persistence regression |
+| Returned provider result cannot commit | Exact result retained; public recovery state explains failure and suppresses typing | Server integration and existing frontend projection tests |
+| Existing reconciler retries the retained result after the blocking condition clears | Same execution/result commits once without provider I/O; cursor advances and recovery clears | Server integration, including stale/interrupt fences |
+
+Fully verified means the relevant automated paths and actual packaged normal
+flow pass. Fault injection proves the failure/recovery path only at the layers
+actually exercised; it does not claim a real provider or UI fault-injection run.
+
+- Correct delayed handoff insertion at the existing server/persistence queue
+  owner so canonical message order is preserved. Preserve duplicate prevention,
+  cursor monotonicity and the semantics of inputs already observed or processed;
+  do not silently discard invalid stored authority or introduce a second queue.
+- Handle completion-commit failures through the existing error/recovery owners
+  so unresolved completion is visible instead of leaving an unexplained busy
+  state. Preserve the exact returned result and execution identity; verify retry
+  when the provider turn is already marked running, without regenerating the
+  response. The exact transition remains to be designed and verified.
+- Add the reproduced delayed-handoff case as a regression, then verify ordered
+  delivery, one completion, next-participant execution, duplicate/already-observed
+  handling and preservation of normal ambient scheduling. Exercise commit failure
+  and recovery to prove visible failure, retained results and no duplicate output.
+- Verify the resulting public session state through the existing frontend
+  projection and typing tests. A UI timer that merely hides typing is not the fix.
+  Keep changes independently verified and committed under the project workflow;
+  the authorized correction will be exercised in an isolated desktop run.
+
+### Correction 1: chronological pending inputs
+
+The scheduler now validates existing pending authority and inserts a newly routed
+event at its canonical sequence position. Delayed declines exclude sessions whose
+committed cursor or current in-flight observation already covers the source.
+Selection still belongs to the existing ordered-floor owner. The same sequence
+validation serves insertion and assignment; no stored queue is silently repaired.
+The bounded queue remains 256 inputs. Insertion checks at most that many stored
+events; assignment reuses the validated first sequence without an extra lookup.
+
+Execution-verified: all 349 persistence tests pass, including four new regressions
+for late insertion, completed/in-flight cursor coverage, and rejection of corrupt
+stored order. The late-insertion test completes the subsequent decline chain and
+checks both sessions are idle, queues empty and cursors at the newer message.
+The two existing capacity/attachment rollback tests now seed real chronological
+room events instead of references to nonexistent messages; their original
+overflow and atomic rollback assertions are preserved. Server recovery and
+packaged verification remain pending for the next correction.
+Persistence all-target/all-feature Clippy, workspace formatting, architecture,
+source-growth, artifact and diff gates pass; the 19 Python gate tests pass on WSL.
