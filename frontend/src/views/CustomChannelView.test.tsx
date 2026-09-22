@@ -51,6 +51,27 @@ it("pins exact channel messages and opens older pins through their concrete cont
   expect(options.transcript.showContext).toHaveBeenCalledWith([older]);
 });
 
+it.each(["reply", "pin"])("focuses a loaded %s source without leaving the latest transcript", async (route) => {
+  const options = props();
+  const source = channelMessage(3);
+  options.transcript.events = [source, { ...channelMessage(4), reply_to_event_id: source.id }];
+  options.transcript.hasMore = false;
+  api.read.mockResolvedValue([{ event_id: source.id, channel_id: channelId, seq: 3,
+    pinned_at: source.created_at, created_at: source.created_at, author: "Host", content: "message 3", attachment_filenames: [] }]);
+  vi.mocked(options.messageSearch.readContext).mockResolvedValue({ channel_id: channelId, event_id: source.id, events: options.transcript.events });
+  render(<CustomChannelView {...options} />);
+  if (route === "reply") fireEvent.click(screen.getByRole("button", { name: "답장 원문 보기" }));
+  else {
+    fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
+    fireEvent.click(await screen.findByRole("button", { name: /Host.*message 3/ }));
+  }
+  expect(document.activeElement?.getAttribute("data-room-event-id")).toBe(source.id);
+  expect(options.messageSearch.readContext).not.toHaveBeenCalled();
+  expect(options.transcript.showContext).not.toHaveBeenCalled();
+  expect(screen.queryByText("오래된 메시지를 보고 있어요")).toBeNull();
+  expect(screen.queryByRole("button", { name: "최신 메시지" })).toBeNull();
+});
+
 it("keeps read-only controls disabled and offers explicit older/latest navigation", async () => {
   const options = props();
   options.canPost = false; options.canPin = false;

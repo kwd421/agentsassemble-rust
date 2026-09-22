@@ -128,8 +128,8 @@ retain their text-only composer. The creation dialog itself is unchanged.
 | Send `공통 UI 확인 — 기본 채널과 같은 메시지 행입니다.` | Message appears once with the current profile/avatar; receipt clears and refocuses the input. |
 | Choose Reply, type `@`, choose self by Enter, then send | Existing mention candidates appear; selection does not send prematurely. The next Enter sends the reply with the source preview and rendered self mention. |
 | Pin the source and open the header's pin list | Button changes to unpin; the persisted source appears in the list. |
-| Open the pin, return to latest, then open the reply source | Both routes retrieve the channel context, focus/highlight the source and expose the shared latest-history return control. |
-| Reopen general | Existing image, text attachment, closed poll and human/native replies render through the shared row. |
+| Open a loaded pin, then the reply source | Both routes focus/highlight the existing source without leaving the current transcript. With only two visible messages, no old-history notice or latest-return button appears. The initially observed false notice was corrected as described below. |
+| Inspect general | Existing image, text attachment, closed poll and human/native replies render through the shared row. |
 
 Execution: rebuilt Windows desktop with embedded production assets and the real
 existing runtime, using native UI interaction. The named test channel and its two
@@ -150,3 +150,22 @@ in the loaded channel transcript.
 Limits: mobile widths below the desktop's 900 px minimum were not manually
 exercised. No new provider or external-network execution was needed for this
 frontend-only follow-up; earlier backend/provider evidence remains historical.
+
+### Two-message navigation correction
+
+The user correctly identified a failed acceptance case in the first UI run: both
+messages fit on screen, yet clicking their reply/pin source displayed the
+old-history notice and latest-return button. The initial run incorrectly treated
+that notice as expected. Custom-channel navigation unconditionally fetched context,
+replaced the live transcript with a non-following window, and set `atBottom=false`.
+This did not prove that any newer message existed.
+
+Custom-channel loaded-source navigation now matches general: focus/highlight the
+existing row and derive bottom position from the actual scroll geometry. Only
+absent sources require a context fetch; explicit search retains its canonical
+context lookup and stale-response guard. No substitute explanatory banner was
+added. Two regressions cover loaded reply and pin navigation. The affected five
+test files / 68 tests pass, and production/desktop builds pass. In the rebuilt app,
+the exact two-message `답장검증` reply and two-message `공통UI검증` pin were clicked:
+the source highlights, both messages stay visible, and neither the old-history
+notice nor latest-return button appears.

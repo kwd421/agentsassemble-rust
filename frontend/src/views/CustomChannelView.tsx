@@ -72,15 +72,24 @@ export default function CustomChannelView({
     const target = pendingFocus.current;
     if (target?.scope !== transcript.scope) return;
     const element = Array.from(node.querySelectorAll<HTMLElement>("[data-room-event-id]")).find((item) => item.dataset.roomEventId === target.id);
-    if (element) { pendingFocus.current = null; element.scrollIntoView({ block: "center" }); element.focus({ preventScroll: true }); }
+    if (element) {
+      pendingFocus.current = null;
+      element.scrollIntoView({ block: "center" }); element.focus({ preventScroll: true });
+      setAtBottom(node.scrollHeight - node.scrollTop - node.clientHeight < 24);
+    }
   }, [transcript.events, transcript.loading, transcript.following, transcript.scope, atBottom, selected]);
   useEffect(() => {
     if (!transcript.sending && focusAfterSend.current) { focusAfterSend.current = false; inputRef.current?.focus(); }
   }, [transcript.sending, value]);
 
-  async function navigate(eventId: string) {
+  async function navigate(eventId: string, requireContext = false) {
     if (!channel || !transcript.scope.connected) { setSendError({ identity, message: "채널 연결이 완료된 뒤 메시지를 열어 주세요." }); return; }
     const scope = transcript.scope;
+    if (!requireContext && transcript.events.some((event) => event.id === eventId)) {
+      const target = { scope, id: eventId };
+      pendingFocus.current = target; setSelected(target);
+      return;
+    }
     try {
       const context = await messageSearch.readContext(eventId, channelId);
       if (!context || !mounted.current || scopeRef.current !== scope) return;
@@ -94,7 +103,7 @@ export default function CustomChannelView({
   useEffect(() => {
     if (!pendingSearchTargetEventId || !channel || !transcript.scope.connected) return;
     let active = true;
-    void navigate(pendingSearchTargetEventId).finally(() => { if (active) onSearchTargetHandled?.(); });
+    void navigate(pendingSearchTargetEventId, true).finally(() => { if (active) onSearchTargetHandled?.(); });
     return () => { active = false; };
   }, [pendingSearchTargetEventId, transcript.scope, channel?.id]);
 
@@ -122,7 +131,7 @@ export default function CustomChannelView({
     avatarImage: participantProfiles[result.participant_id]?.avatarImageUrl,
     body: result.content || result.attachment_filenames.join(", "),
     meta: `${messageSearchScope === "all" ? `#${messageSearchChannelLabels[result.channel_id] || result.channel_id} · ` : ""}${new Date(result.created_at).toLocaleString("ko-KR")}`,
-    onSelect: () => result.channel_id === channelId ? void navigate(result.event_id) : onOpenCrossChannelSearchResult(result),
+    onSelect: () => result.channel_id === channelId ? void navigate(result.event_id, true) : onOpenCrossChannelSearchResult(result),
   }));
   const latestSeq = transcript.events.at(-1)?.seq;
   return <div className="dc-custom-channel flex min-h-0 min-w-0 flex-1 flex-col">

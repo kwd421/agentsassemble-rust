@@ -9,6 +9,9 @@
   Frontend 918 tests, production/desktop builds and structure/artifact gates pass.
   Actual desktop creation, send, mention, reply, pin and source navigation pass;
   evidence: `docs/verification/2026-09-22-conversation-context.md` section 6.
+  User-caught two-message false history notice corrected: loaded reply/pin sources
+  now focus in place, preserving the current transcript. Both exact two-message
+  desktop cases and affected navigation regressions pass.
 
 - 2026-09-22: implement user-requested conversation improvements: optional message
   replies, external MCP attachment read/upload, and public conversation/poll state.
