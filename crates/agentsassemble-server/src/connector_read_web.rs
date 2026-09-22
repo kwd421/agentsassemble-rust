@@ -194,7 +194,7 @@ pub(super) async fn wait(
     }
 }
 
-async fn authorize_read(
+pub(super) async fn authorize_read(
     state: &AppState,
     request: Request,
     requested_events: usize,

@@ -63,7 +63,7 @@ pub async fn serve_remote(port: u16, allowed_servers: Vec<String>) -> anyhow::Re
                 format!("http://{address}"),
                 format!("http://localhost:{}", address.port()),
             ])
-            .with_max_request_body_bytes(64 * 1024)
+            .with_max_request_body_bytes(crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES)
             .with_cancellation_token(cancellation.child_token()),
     );
     let app = axum::Router::new().nest_service("/mcp", service);

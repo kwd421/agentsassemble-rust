@@ -122,7 +122,7 @@ pub use provider_request_ingress::{ProviderRequestCommand, ProviderRequestIngres
 pub use registration::{registered_provider_id, registered_provider_kind};
 pub use room_attachment::{
     ProviderAttachment, ProviderAttachmentReadCommand, ProviderAttachmentReadError,
-    ProviderAttachmentReadIngress,
+    ProviderAttachmentReadIngress, attachment_tool_result,
 };
 pub use room_portal::{
     ProviderRoomToolCommand, ProviderRoomToolError, ProviderRoomToolIngress,

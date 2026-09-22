@@ -353,7 +353,7 @@ async fn inspect_complete(
         .and_then(parse_canonical_timestamp)?;
     if uuid::Uuid::parse_str(&marker.authority_lineage_id).is_err()
         || uuid::Uuid::parse_str(&marker.request_id).is_err()
-        || marker.schema_revision != crate::schema_version::CURRENT_SCHEMA_VERSION
+        || !(70..=crate::schema_version::CURRENT_SCHEMA_VERSION).contains(&marker.schema_revision)
         || marker.user_id != LOCAL_OPERATOR_USER_ID
         || marker.participant_id != LOCAL_OPERATOR_PARTICIPANT_ID
         || !valid_digest(&marker.initialization_digest)
@@ -437,7 +437,7 @@ async fn empty_marker_is_consistent(
 ) -> Result<bool, PersistenceError> {
     if uuid::Uuid::parse_str(&marker.authority_lineage_id).is_err()
         || parse_canonical_timestamp(&marker.created_at).is_err()
-        || marker.schema_revision != crate::schema_version::CURRENT_SCHEMA_VERSION
+        || !(70..=crate::schema_version::CURRENT_SCHEMA_VERSION).contains(&marker.schema_revision)
         || !marker.request_id.is_empty()
         || !marker.initialization_digest.is_empty()
         || !marker.user_id.is_empty()

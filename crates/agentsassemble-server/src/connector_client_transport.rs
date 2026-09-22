@@ -5,7 +5,8 @@ use serde_json::Value;
 use url::Url;
 
 // A finite canonical 200-event catch-up, including four-byte Unicode and event metadata.
-const RESPONSE_LIMIT: usize = 200 * (agentsassemble_domain::MAX_MESSAGE_CHARACTERS * 4 + 8192);
+pub(super) const RESPONSE_LIMIT: usize =
+    200 * (agentsassemble_domain::MAX_MESSAGE_CHARACTERS * 4 + 8192);
 
 pub(crate) fn normalize_server(value: &str) -> Result<Url, ConnectorClientError> {
     room_client_transport::normalize_server(value).map_err(invite_error)
@@ -23,8 +24,11 @@ fn invite_error(error: JoinUrlError) -> ConnectorClientError {
     })
 }
 
-pub(super) async fn read_response(request: RequestBuilder) -> Result<Value, ConnectorClientError> {
-    let (status, value) = room_client_transport::read_json_response(request, RESPONSE_LIMIT)
+pub(super) async fn read_response(
+    request: RequestBuilder,
+    limit: usize,
+) -> Result<Value, ConnectorClientError> {
+    let (status, value) = room_client_transport::read_json_response(request, limit)
         .await
         .map_err(|error| {
             ConnectorClientError::local(match error {

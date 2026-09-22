@@ -213,6 +213,49 @@ impl RoomConnectorClient {
         self.get("read", &[], &session.bearer, false).await
     }
 
+    /// Reads a published attachment through the current room session.
+    ///
+    /// # Errors
+    /// Reports revoked authority, unavailable attachments or bounded transport errors.
+    pub async fn read_attachment(
+        &self,
+        attachment_id: &str,
+    ) -> Result<agentsassemble_provider::ProviderAttachment, ConnectorClientError> {
+        let session = self.session().await?;
+        let request = self
+            .http
+            .get(self.endpoint("attachment"))
+            .bearer_auth(&session.bearer)
+            .query(&[("attachment_id", attachment_id)])
+            .timeout(COMMAND_TIMEOUT);
+        let value = tokio::select! {
+            () = self.cancellation.cancelled() => return Err(ConnectorClientError::local("connector_closed")),
+            response = read_response(request, crate::http_api::MAX_BASE64_UPLOAD_BODY_BYTES) => response?,
+        };
+        serde_json::from_value(value)
+            .map_err(|_| ConnectorClientError::local("invalid_attachment_response"))
+    }
+
+    /// Creates a private pending attachment; a later message binds its returned ID.
+    ///
+    /// # Errors
+    /// Reports rejected input or transport uncertainty. An uncertain upload must not be
+    /// treated as published; unbound bytes expire under the normal pending-upload policy.
+    pub async fn upload_attachment(
+        &self,
+        filename: &str,
+        content_type: &str,
+        data_base64: &str,
+    ) -> Result<Value, ConnectorClientError> {
+        if data_base64.len() > crate::http_api::MAX_BASE64_ENCODED_BYTES {
+            return Err(ConnectorClientError::local("attachment_too_large"));
+        }
+        let session = self.session().await?;
+        self.request(self.http.post(self.endpoint("upload")).bearer_auth(&session.bearer)
+            .json(&json!({"filename":filename,"content_type":content_type,"data_base64":data_base64}))
+            .timeout(COMMAND_TIMEOUT)).await
+    }
+
     /// Explicitly replaces wait observation with a successfully read current snapshot.
     ///
     /// # Errors
@@ -459,7 +502,7 @@ impl RoomConnectorClient {
     async fn request(&self, request: RequestBuilder) -> Result<Value, ConnectorClientError> {
         tokio::select! {
             () = self.cancellation.cancelled() => Err(ConnectorClientError::local("connector_closed")),
-            response = read_response(request) => response,
+            response = read_response(request, transport::RESPONSE_LIMIT) => response,
         }
     }
 }

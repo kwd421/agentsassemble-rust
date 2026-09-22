@@ -27,6 +27,8 @@ use crate::{
 };
 
 const PENDING_ATTACHMENT_TTL: Duration = Duration::hours(1);
+#[path = "connector_attachments.rs"]
+pub(crate) mod connector;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 pub struct MessageAttachmentMetadata {
@@ -160,6 +162,9 @@ pub(crate) async fn prepare_message_attachment_bindings(
     attachment_ids: &[String],
     now: i64,
 ) -> Result<Vec<MessageAttachmentMetadata>, PersistenceError> {
+    if principal.client_kind == ClientKind::RoomConnector {
+        return connector::prepare(transaction, principal, attachment_ids, now).await;
+    }
     let mut attachments = Vec::with_capacity(attachment_ids.len());
     for attachment_id in attachment_ids {
         let row = sqlx::query(
@@ -200,6 +205,9 @@ pub(crate) async fn bind_message_attachments(
     event_seq: i64,
     now: i64,
 ) -> Result<(), PersistenceError> {
+    if principal.client_kind == ClientKind::RoomConnector {
+        return connector::bind(transaction, principal, attachment_ids, event_seq, now).await;
+    }
     for attachment_id in attachment_ids {
         let result = sqlx::query(
             "UPDATE room_message_attachments SET pending_owner_user_id = NULL, event_seq = ?, state = 'bound', expires_at = NULL WHERE attachment_id = ? AND room_id = ? AND pending_owner_user_id = ? AND event_seq IS NULL AND state = 'pending' AND expires_at > ?",
@@ -312,25 +320,22 @@ impl SqliteStore {
         Ok(metadata)
     }
 
-    /// Stores one pending message attachment after exact human-session revalidation.
+    /// Stores one pending message attachment after exact session revalidation.
     ///
     /// # Errors
     ///
     /// Fails closed when the resolved room-session authorization no longer matches its durable
     /// session, the current participant is muted or read-only, or validation and storage fail.
-    pub async fn store_room_session_message_attachment(
+    pub async fn store_authorized_message_attachment(
         &self,
-        authorization: &RoomSessionAuthorization,
+        authority: crate::RoomMutationAuthority<'_>,
         filename: &str,
         content_type: &str,
         content: Vec<u8>,
     ) -> Result<MessageAttachmentMetadata, PersistenceError> {
         let prepared = prepare_message_attachment(filename, content_type, content).await?;
         let mut transaction = self.pool.begin().await?;
-        let principal = authorization
-            .mutation_authority()
-            .resolve(&mut transaction)
-            .await?;
+        let principal = authority.resolve(&mut transaction).await?;
         require_current_message_writer(&mut transaction, &principal).await?;
         let metadata = store_pending_in_transaction(&mut transaction, &principal, prepared).await?;
         transaction.commit().await?;
@@ -360,25 +365,22 @@ impl SqliteStore {
         Ok(attachment)
     }
 
-    /// Reads one bound attachment through exact current room-session provenance.
+    /// Reads one bound attachment through exact current room authority.
     ///
     /// # Errors
     ///
     /// Fails closed for expired or changed session authority, absent history permission,
     /// unreferenced bytes, or corrupt state.
-    pub async fn bound_room_session_message_attachment(
+    pub async fn bound_authorized_message_attachment(
         &self,
-        authorization: &RoomSessionAuthorization,
+        authority: crate::RoomMutationAuthority<'_>,
         attachment_id: &str,
     ) -> Result<MessageAttachment, PersistenceError> {
         if !is_message_attachment_id(attachment_id) {
             return Err(message_attachment_missing());
         }
         let mut transaction = self.pool.begin().await?;
-        let principal = authorization
-            .mutation_authority()
-            .resolve(&mut transaction)
-            .await?;
+        let principal = authority.resolve(&mut transaction).await?;
         if !principal.capabilities.room_history {
             return Err(rejected(
                 "permission_denied",
@@ -614,6 +616,10 @@ async fn store_pending_in_transaction(
     let now = Utc::now();
     let created_at = now.timestamp();
     let expires_at = (now + PENDING_ATTACHMENT_TTL).timestamp();
+    sqlx::query("DELETE FROM room_connector_uploads WHERE expires_at <= ?")
+        .bind(created_at)
+        .execute(&mut **transaction)
+        .await?;
     sqlx::query("DELETE FROM room_message_attachments WHERE state = 'pending' AND expires_at <= ?")
         .bind(created_at)
         .execute(&mut **transaction)
@@ -621,6 +627,17 @@ async fn store_pending_in_transaction(
     enforce_storage_replacement(transaction, None, prepared.size).await?;
 
     let attachment_id = format!("{MESSAGE_ATTACHMENT_ID_PREFIX}{}", Uuid::new_v4().simple());
+    if principal.client_kind == ClientKind::RoomConnector {
+        return connector::store(
+            transaction,
+            principal,
+            prepared,
+            &attachment_id,
+            created_at,
+            expires_at,
+        )
+        .await;
+    }
     sqlx::query(
         "INSERT INTO room_message_attachments(attachment_id, room_id, pending_owner_user_id, event_seq, filename, content_type, content, size, is_safe_image, created_at, state, expires_at) VALUES (?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, 'pending', ?)",
     )

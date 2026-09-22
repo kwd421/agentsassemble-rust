@@ -70,6 +70,9 @@ pub(super) struct Say {
     /// Optional event UUID of an earlier lobby message to reply to.
     #[serde(default)]
     pub(super) reply_to_event_id: Option<String>,
+    /// IDs returned by room_upload_attachment; binds your own pending uploads.
+    #[serde(default)]
+    pub(super) attachment_ids: Vec<String>,
     #[serde(default)]
     pub(super) connection_id: String,
 }
@@ -143,4 +146,23 @@ pub(super) struct Choose {
 
 fn all_channels() -> String {
     "all".to_owned()
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct AttachmentRead {
+    pub(super) attachment_id: String,
+    #[serde(default)]
+    pub(super) connection_id: String,
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct AttachmentUpload {
+    pub(super) filename: String,
+    pub(super) content_type: String,
+    /// Base64 file bytes, bounded by the room's 10 MiB attachment limit.
+    pub(super) data_base64: String,
+    #[serde(default)]
+    pub(super) connection_id: String,
 }

@@ -379,8 +379,8 @@ async fn human_session_message_upload_revalidates_write_scope_and_mute_state() {
         .unwrap_or_else(|error| panic!("authorize read-only message upload: {error}"));
     assert_rejected_code(
         read_only_store
-            .store_room_session_message_attachment(
-                &crate::RoomSessionAuthorization::Human(read_only.clone()),
+            .store_authorized_message_attachment(
+                crate::RoomSessionAuthorization::Human(read_only.clone()).mutation_authority(),
                 "denied.txt",
                 "text/plain",
                 b"denied".to_vec(),
@@ -395,8 +395,8 @@ async fn human_session_message_upload_revalidates_write_scope_and_mute_state() {
         .await
         .unwrap_or_else(|error| panic!("authorize writable message upload: {error}"));
     let stored = store
-        .store_room_session_message_attachment(
-            &crate::RoomSessionAuthorization::Human(authorization.clone()),
+        .store_authorized_message_attachment(
+            crate::RoomSessionAuthorization::Human(authorization.clone()).mutation_authority(),
             "guest.txt",
             "text/plain",
             b"guest attachment".to_vec(),
@@ -406,8 +406,8 @@ async fn human_session_message_upload_revalidates_write_scope_and_mute_state() {
     set_participant_muted(&store, true).await;
     assert_rejected_code(
         store
-            .store_room_session_message_attachment(
-                &crate::RoomSessionAuthorization::Human(authorization.clone()),
+            .store_authorized_message_attachment(
+                crate::RoomSessionAuthorization::Human(authorization.clone()).mutation_authority(),
                 "muted.txt",
                 "text/plain",
                 b"muted".to_vec(),

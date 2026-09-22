@@ -21,6 +21,8 @@ use serde_json::{Value, json};
 use tower_http::set_header::SetResponseHeaderLayer;
 use uuid::Uuid;
 
+#[path = "connector_attachment_web.rs"]
+mod attachments;
 #[path = "connector_read_web.rs"]
 mod read;
 
@@ -47,6 +49,8 @@ registered_routes! {
         same_origin_public "/api/room-connector/search" => get(read::search),
         same_origin_public "/api/room-connector/context" => get(read::context),
         same_origin_public "/api/room-connector/vote" => get(read::vote),
+        same_origin_public "/api/room-connector/attachment" => get(attachments::read),
+        same_origin_public "/api/room-connector/upload" => post(attachments::upload),
         same_origin_public "/api/room-connector/join" => post(join),
         same_origin_public "/api/room-connector/command" => post(command),
     }

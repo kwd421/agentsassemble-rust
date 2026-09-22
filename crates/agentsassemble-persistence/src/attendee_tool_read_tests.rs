@@ -22,16 +22,16 @@ async fn attendee_attachment_read_is_bound_to_prestart_input_and_current_connect
         .authorize_human_session(&session_fingerprint(&store).await)
         .await?;
     let attachment = store
-        .store_room_session_message_attachment(
-            &RoomSessionAuthorization::Human(human.clone()),
+        .store_authorized_message_attachment(
+            RoomSessionAuthorization::Human(human.clone()).mutation_authority(),
             "input.txt",
             "text/plain",
             b"exact external input".to_vec(),
         )
         .await?;
     let pending = store
-        .store_room_session_message_attachment(
-            &RoomSessionAuthorization::Human(human.clone()),
+        .store_authorized_message_attachment(
+            RoomSessionAuthorization::Human(human.clone()).mutation_authority(),
             "private.txt",
             "text/plain",
             b"not published".to_vec(),

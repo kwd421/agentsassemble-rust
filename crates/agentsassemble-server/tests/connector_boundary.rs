@@ -210,5 +210,7 @@ mod resync;
 #[path = "connector_boundary/mcp_leave_retry.rs"]
 mod mcp_leave_retry;
 
+#[path = "connector_boundary/attachments.rs"]
+mod attachments;
 #[path = "connector_boundary/join_read_retry.rs"]
 mod join_read_retry;

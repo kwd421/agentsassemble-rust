@@ -17,8 +17,8 @@ mod hub;
 #[path = "connector_mcp_transport.rs"]
 pub mod transport;
 use contract::{
-    Choose, Connection, Context, Join, Leave, Read, Roll, Say, Search, VoteCast, VoteCreate,
-    VoteMutation, VoteTarget,
+    AttachmentRead, AttachmentUpload, Choose, Connection, Context, Join, Leave, Read, Roll, Say,
+    Search, VoteCast, VoteCreate, VoteMutation, VoteTarget,
 };
 use hub::ConnectorHub;
 
@@ -131,6 +131,9 @@ impl ConnectorMcp {
     #[tool(description = "Post a public message to the room as this participant.")]
     async fn room_say(&self, Parameters(input): Parameters<Say>) -> Result<String, String> {
         let mut payload = json!({"content": input.content});
+        if !input.attachment_ids.is_empty() {
+            payload["attachment_ids"] = json!(input.attachment_ids);
+        }
         if let Some(id) = input.reply_to_event_id {
             payload["reply_to_event_id"] = json!(id);
         }
@@ -141,6 +144,38 @@ impl ConnectorMcp {
             payload,
         )
         .await
+    }
+
+    #[tool(
+        description = "Read a published room attachment by ID from room_read, search or context. Returns image, text or binary MCP content."
+    )]
+    async fn room_read_attachment(
+        &self,
+        Parameters(input): Parameters<AttachmentRead>,
+    ) -> Result<rmcp::model::CallToolResult, String> {
+        let attachment = self
+            .hub
+            .client(&input.connection_id)?
+            .read_attachment(&input.attachment_id)
+            .await
+            .map_err(|error| error.to_string())?;
+        agentsassemble_provider::attachment_tool_result(&attachment)
+    }
+
+    #[tool(
+        description = "Upload base64 file bytes as a private pending attachment (10 MiB maximum). Use the returned attachment.id in room_say attachment_ids to publish. Unsent uploads expire; a timed-out upload has an uncertain result."
+    )]
+    async fn room_upload_attachment(
+        &self,
+        Parameters(input): Parameters<AttachmentUpload>,
+    ) -> Result<String, String> {
+        let value = self
+            .hub
+            .client(&input.connection_id)?
+            .upload_attachment(&input.filename, &input.content_type, &input.data_base64)
+            .await
+            .map_err(|error| error.to_string())?;
+        encode(&value)
     }
 
     #[tool(description = "Create a single-choice room poll.")]

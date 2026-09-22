@@ -34,7 +34,14 @@ actual application/MCP verification after implementation.
   Upload alone is not publication; a send binds only that participant's pending
   assets. A failed read/upload is an explicit error. Uncertain writes retain their
   existing request identity. No extra polling or compatibility fallback is added.
-- Additive event metadata uses the current schema; no migration or user-data reset.
+- Reply metadata is additive. External pending uploads need participant custody:
+  the prior table requires a human profile. Schema 70 → 71 adds an empty
+  `room_connector_uploads` table after host authority verification and preserves
+  existing rows and the original bootstrap receipt/digest. Sending moves an owned
+  upload into the existing bound attachment table in the message transaction.
+  Both pending stores share the one-hour expiry and absolute storage quota.
+  Upload transport uncertainty remains explicit; uploads have no command receipt,
+  matching the browser upload contract. No user-data reset is performed.
 - Non-goals: nested thread channels, enforced speaking order, model behavior rules,
   new AI providers, redesigning existing panels, and public hosting changes.
 

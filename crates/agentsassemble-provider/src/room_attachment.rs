@@ -48,9 +48,11 @@ struct ProviderAttachmentDescriptor {
     is_image: bool,
 }
 
-pub(crate) fn attachment_tool_result(
-    attachment: &ProviderAttachment,
-) -> Result<CallToolResult, String> {
+/// Encodes a validated room attachment as MCP text, image or binary content.
+///
+/// # Errors
+/// Rejects malformed metadata or inconsistent byte lengths.
+pub fn attachment_tool_result(attachment: &ProviderAttachment) -> Result<CallToolResult, String> {
     if !attachment.is_valid() {
         return Err("The room attachment response is invalid.".to_owned());
     }

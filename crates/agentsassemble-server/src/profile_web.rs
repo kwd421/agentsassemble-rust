@@ -42,10 +42,10 @@ struct AttachmentUpload {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-struct EncodedAttachmentUpload {
-    filename: String,
-    content_type: String,
-    data_base64: String,
+pub(crate) struct EncodedAttachmentUpload {
+    pub(crate) filename: String,
+    pub(crate) content_type: String,
+    pub(crate) data_base64: String,
 }
 
 #[derive(Deserialize)]
@@ -196,8 +196,8 @@ async fn upload_message_attachment(
         RoomSessionHttpAuthority::Session(authorization) => {
             state
                 .store
-                .store_room_session_message_attachment(
-                    &authorization,
+                .store_authorized_message_attachment(
+                    authorization.mutation_authority(),
                     &payload.filename,
                     &payload.content_type,
                     content,
@@ -312,7 +312,10 @@ async fn read_attachment(
             RoomSessionHttpAuthority::Session(authorization) => {
                 state
                     .store
-                    .bound_room_session_message_attachment(&authorization, &attachment_id)
+                    .bound_authorized_message_attachment(
+                        authorization.mutation_authority(),
+                        &attachment_id,
+                    )
                     .await?
             }
         };
