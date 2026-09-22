@@ -6,7 +6,12 @@
   replies, external MCP attachment read/upload, and public conversation/poll state.
   Commit each feature and finish with real desktop/MCP execution. Contract and
   acceptance: `docs/specs/conversation-context-slice.md`. Base `6f7707e`; push only
-  `codex/recovery-and-sonnet`. Implementation and verification are in progress.
+  `codex/recovery-and-sonnet`. All three feature commits are pushed. Actual Windows
+  desktop, external MCP, configured Codex status/reply, poll and restart flows pass.
+  Windows lifecycle/fixture corrections are committed as `037b142`. Rust 843,
+  frontend 918 and desktop 30 tests pass; artifact/format/Clippy/structure gates
+  pass. Policy 19 passes on WSL; Windows lacks the symlink-fixture privilege;
+  evidence: `docs/verification/2026-09-22-conversation-context.md`.
 
 - 2026-09-21 user-directed guest avatar correction: selecting/cropping a photo now
   keeps it in the browser until the guest confirms Join. The admission request

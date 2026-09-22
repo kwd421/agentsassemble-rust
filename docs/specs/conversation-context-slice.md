@@ -1,7 +1,7 @@
 # Conversation context and external attachments
 
-Status: implementation in progress, 2026-09-22. User requests feature commits and
-actual application/MCP verification after implementation.
+Status: implemented and verified for the tested flows, 2026-09-22.
+Feature commits and actual desktop/MCP/Codex execution are recorded below.
 
 ## Contract
 
@@ -72,4 +72,7 @@ checks are recorded here as they complete.
 ## Evidence
 
 - Baseline: clean `6f7707e`, equal to `origin/codex/recovery-and-sonnet`.
-- No implementation or new-flow verification claimed yet.
+- Feature commits: replies `56f9d74`, attachments `e8e2427`, status `1500619`.
+- Actual Windows desktop/MCP/Codex and restart verification: see
+  `../verification/2026-09-22-conversation-context.md` for the matrix, corrections,
+  exact evidence and coverage limits.
