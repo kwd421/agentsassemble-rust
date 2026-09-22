@@ -439,3 +439,32 @@ overflow and atomic rollback assertions are preserved. Server recovery and
 packaged verification remain pending for the next correction.
 Persistence all-target/all-feature Clippy, workspace formatting, architecture,
 source-growth, artifact and diff gates pass; the 19 Python gate tests pass on WSL.
+
+
+### Verification prerequisite: Unix execution and cleanup
+
+The first Linux integration attempts could not launch the existing Codex fixture.
+A temporary local diagnostic exposed `ETXTBSY` (Text file busy): the private
+executable copy and its code-mode companion retained writable descriptors.
+Linux refuses to execute such files even when their mode is read/execute only.
+The staging owner now reopens each verified object read-only, checks that it is
+the same file object, and drops the writable descriptor before execution.
+Content verification, private staging and lifetime guards remain intact.
+The temporary diagnostic was removed; no provider output was added to logging.
+All nine Codex executable-binding tests pass on WSL, including a new regression
+that executes both staged files while their guards remain held. The existing
+Unix process-test predicate also uses `Result::is_ok_and` for Rust 1.98 Clippy.
+
+Linux cleanup also treated `waitpid`'s `ECHILD` (no remaining children) as an
+error. The reaping owner now accepts that terminal condition, while the separate
+process-group, tagged-process and lifetime absence checks remain mandatory.
+The existing `codex_code_mode_host_stays_in_the_guardian_process_group` test
+passes through startup, Stop, descendant absence and supervisor shutdown.
+The endpoint-validation test passes too. The adjacent failed-companion test
+still fails with `provider_protocol_timeout` and uncertain cleanup; this change
+does not claim to resolve that separate startup-failure path.
+
+Native Linux fixtures run in an isolated PID/mount namespace with fresh `/tmp`
+and root inside the namespace. The ordinary WSL user cannot inspect descriptors
+of two same-user system processes, and the existing custody check correctly
+fails closed there. No custody validation or host permissions were relaxed.

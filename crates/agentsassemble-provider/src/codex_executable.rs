@@ -330,7 +330,10 @@ fn stage_codex_bundle(
     Ok(BoundExecutable {
         file: executable,
         launch_path,
-        companion_files: vec![staged_companion],
+        companion_files: vec![super::reopen_staged_read_only(
+            staged_companion,
+            &companion_path,
+        )?],
         allows_child_processes: true,
         _staging: Some(staging),
         #[cfg(any(target_os = "linux", target_os = "android"))]
@@ -555,6 +558,34 @@ mod tests {
             .canonicalize()
             .unwrap_or_else(|error| panic!("canonicalize bundle executable: {error}"));
         assert!(super::codex_executable_identity_sync(&executable).is_err());
+    }
+
+    #[cfg(unix)]
+    #[tokio::test]
+    async fn staged_bundle_executes_provider_and_companion_with_guards_held() -> std::io::Result<()>
+    {
+        let root = tempfile::tempdir()?;
+        let executable = root.path().join("codex");
+        let companion = root.path().join(super::codex_code_mode_host_name());
+        make_executable(&executable, b"#!/bin/sh\nprintf 'provider-ok'\n");
+        make_executable(&companion, b"#!/bin/sh\nprintf 'companion-ok'\n");
+        let executable = executable.canonicalize()?;
+        let identity = super::codex_executable_identity_sync(&executable)?;
+        let bound =
+            super::bind_codex_executable(executable.to_string_lossy().into_owned(), identity)
+                .await
+                .unwrap_or_else(|error| panic!("bind executable bundle: {error:?}"));
+        let staged_companion = super::codex_code_mode_host_path(&bound)?
+            .unwrap_or_else(|| panic!("staged companion missing"));
+        for (path, expected) in [
+            (Path::new(bound.launch_path()), b"provider-ok".as_slice()),
+            (staged_companion.as_path(), b"companion-ok".as_slice()),
+        ] {
+            let output = std::process::Command::new(path).output()?;
+            assert!(output.status.success());
+            assert_eq!(output.stdout, expected);
+        }
+        Ok(())
     }
 
     #[cfg(unix)]

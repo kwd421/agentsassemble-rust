@@ -546,7 +546,23 @@ fn stage_private_executable(
         .to_str()
         .ok_or_else(|| io::Error::other("staged executable path is not UTF-8"))?
         .to_owned();
-    Ok((staged, launch_path, staging))
+    Ok((
+        reopen_staged_read_only(staged, &staged_path)?,
+        launch_path,
+        staging,
+    ))
+}
+
+#[cfg(unix)]
+fn reopen_staged_read_only(staged: File, path: &Path) -> io::Result<File> {
+    // Linux rejects exec while any process retains a writable descriptor. Keep
+    // the verified object alive through a read-only descriptor of the same file.
+    let writer = Handle::from_file(staged)?;
+    let reader = File::open(path)?;
+    if writer != Handle::from_file(reader.try_clone()?)? {
+        return Err(io::Error::other("staged executable object changed"));
+    }
+    Ok(reader)
 }
 
 #[cfg(unix)]

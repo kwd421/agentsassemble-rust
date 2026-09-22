@@ -84,8 +84,7 @@ async fn cancelled_probe_tree_is_killed_reaped_and_joinable() {
     let cancel_after_descendant = async {
         for _ in 0..100 {
             if std::fs::read_to_string(&pid_path)
-                .ok()
-                .is_some_and(|value| value.trim().parse::<i32>().is_ok())
+                .is_ok_and(|value| value.trim().parse::<i32>().is_ok())
             {
                 cancel.cancel();
                 return;

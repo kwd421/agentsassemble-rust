@@ -104,8 +104,15 @@ impl CapturedRuntimeProcesses {
 
 #[cfg(target_os = "linux")]
 fn reap_exited_children() -> io::Result<()> {
-    while rustix::process::wait(rustix::process::WaitOptions::NOHANG)?.is_some() {}
-    Ok(())
+    loop {
+        match rustix::process::wait(rustix::process::WaitOptions::NOHANG) {
+            Ok(Some(_)) => {}
+            // No children left is successful reaping, before the separate
+            // process-group, tagged-process and lifetime absence checks.
+            Ok(None) | Err(rustix::io::Errno::CHILD) => return Ok(()),
+            Err(error) => return Err(error.into()),
+        }
+    }
 }
 
 #[cfg(target_os = "linux")]
