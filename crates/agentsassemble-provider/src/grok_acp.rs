@@ -111,7 +111,11 @@ impl ProviderDriver for GrokAcpDriver {
         session: &'a DurableAgentSession,
         request: &'a ProviderTurnRequest,
     ) -> DriverFuture<'a, Result<ProviderTurnCompleted, DriverError>> {
-        Box::pin(self.runtime.prompt(&session.public.session_id, request))
+        Box::pin(
+            self.runtime
+                .client
+                .prompt(&session.public.session_id, request),
+        )
     }
 
     fn interrupt_turn<'a>(

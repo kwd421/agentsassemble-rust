@@ -200,94 +200,6 @@ impl Drop for RoomToolReservation {
 #[derive(Debug, Default)]
 pub(super) struct PortalState {
     pub(super) active: Option<ActiveObservation>,
-    /// Raised when the active observation stages its terminal action.
-    pub(super) terminal_staged: Arc<tokio::sync::Notify>,
-}
-
-/// Lets a driver end its provider's turn as soon as the turn-ending action is staged.
-///
-/// A harness keeps its own model loop: after the terminal tool returns it asks the
-/// model once more for closing text, which the room discards. That call resends the
-/// whole transcript, so ending the turn here saves a full model round trip.
-#[derive(Clone)]
-pub(crate) struct TerminalWatch {
-    state: Arc<Mutex<PortalState>>,
-    notify: Arc<tokio::sync::Notify>,
-}
-
-impl TerminalWatch {
-    /// Resolves once the current observation holds a staged terminal action.
-    pub(crate) async fn staged(&self) {
-        loop {
-            let notified = self.notify.notified();
-            tokio::pin!(notified);
-            notified.as_mut().enable();
-            if self.is_staged() {
-                return;
-            }
-            notified.await;
-        }
-    }
-
-    pub(crate) fn is_staged(&self) -> bool {
-        self.state.lock().is_ok_and(|state| {
-            state
-                .active
-                .as_ref()
-                .is_some_and(|active| active.outcome.is_some())
-        })
-    }
-}
-
-#[cfg(test)]
-impl TerminalWatch {
-    /// A watch over an observation that has read the room but staged nothing yet.
-    pub(crate) fn for_tests() -> Self {
-        let turn_generation = Uuid::new_v4();
-        let state = PortalState {
-            active: Some(ActiveObservation {
-                authority: TurnAuthority {
-                    session_id: "agent-1".to_owned(),
-                    turn_id: "turn-1".to_owned(),
-                    input_up_to_seq: 1,
-                    durable_turn_generation: 1,
-                    execution_id: "00000000-0000-4000-8000-000000000001".to_owned(),
-                    allowed_agent_ids: Vec::new(),
-                },
-                room_view: String::new(),
-                attachment_ids: HashSet::new(),
-                attachment_ingress: None,
-                attachment_reads: AttachmentReadBudget::default(),
-                turn_generation,
-                receipt_generation: Some(turn_generation),
-                outcome: None,
-                tabletop_tools: false,
-                tool_ingress: None,
-                tool_reservations: BTreeMap::new(),
-                successful_tool_results: 0,
-                closing: false,
-            }),
-            ..PortalState::default()
-        };
-        let notify = Arc::clone(&state.terminal_staged);
-        Self {
-            state: Arc::new(Mutex::new(state)),
-            notify,
-        }
-    }
-
-    /// Stages a pass the way the `pass_turn` tool would.
-    pub(crate) fn stage_for_tests(&self) {
-        if let Ok(mut state) = self.state.lock()
-            && let Some(active) = state.active.as_mut()
-        {
-            active.outcome = Some(StagedOutcome::Declined {
-                receipt_generation: active.turn_generation,
-                reason_code: "nothing_useful_to_add".to_owned(),
-            });
-        }
-        self.notify.notify_waiters();
-    }
 }
 
 pub(crate) struct RoomPortal {
@@ -297,18 +209,6 @@ pub(crate) struct RoomPortal {
 }
 
 impl RoomPortal {
-    pub(crate) fn terminal_watch(&self) -> TerminalWatch {
-        let notify = self
-            .state
-            .lock()
-            .map(|state| Arc::clone(&state.terminal_staged))
-            .unwrap_or_default();
-        TerminalWatch {
-            state: Arc::clone(&self.state),
-            notify,
-        }
-    }
-
     pub(crate) async fn create() -> Result<Self, RoomPortalError> {
         let state = Arc::new(Mutex::new(PortalState::default()));
         let server = PortalServer::start(state.clone()).await?;

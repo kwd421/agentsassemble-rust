@@ -77,14 +77,12 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
-        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         let command = VoteCommand::from_payload(payload).map_err(|error| error.message)?;
         active.outcome = Some(StagedOutcome::Vote {
             receipt_generation: active.turn_generation,
             command,
         });
-        staged.notify_waiters();
         Ok("Staged a vote action for the shared room.".to_owned())
     }
 }
@@ -178,7 +176,6 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
-        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         let content = canonical_message(&input.content)
             .ok_or_else(|| "The room publication is invalid.".to_owned())?;
@@ -196,7 +193,6 @@ impl RoomPortalMcp {
             content,
             target_agent_id,
         });
-        staged.notify_waiters();
         Ok("Published to the shared room.".to_owned())
     }
 
@@ -208,7 +204,6 @@ impl RoomPortalMcp {
             .state
             .lock()
             .map_err(|_| "The shared room authority is unavailable.".to_owned())?;
-        let staged = Arc::clone(&state.terminal_staged);
         let active = terminal_observation(&mut state)?;
         if !valid_decline_reason(&input.reason_code) {
             return Err("The pass reason is unsupported.".to_owned());
@@ -217,7 +212,6 @@ impl RoomPortalMcp {
             receipt_generation: active.turn_generation,
             reason_code: input.reason_code,
         });
-        staged.notify_waiters();
         Ok("Passed this shared-room turn.".to_owned())
     }
 

@@ -31,7 +31,7 @@ use tokio_util::{
 use crate::{
     driver::{DriverError, ProviderTurnCompleted, ProviderTurnRequest},
     launch_error::DriverLaunchError,
-    room_portal::{ProviderTurnOutcome, TerminalWatch},
+    room_portal::ProviderTurnOutcome,
 };
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
@@ -201,25 +201,11 @@ impl AcpClient {
         &mut self,
         session_id: &str,
         request: &ProviderTurnRequest,
-        terminal: Option<TerminalWatch>,
     ) -> Result<ProviderTurnCompleted, DriverError> {
         let turn_id = &request.turn_id;
         let room_observation = request.room_observation.is_some();
         self.start_turn(session_id, request)?;
-        let stop_reason = match terminal.filter(|_| room_observation) {
-            Some(terminal) => {
-                let finished = tokio::select! {
-                    biased;
-                    reason = self.await_turn(turn_id) => Some(reason?),
-                    () = terminal.staged() => None,
-                };
-                match finished {
-                    Some(reason) => reason,
-                    None => self.end_after_terminal_action(turn_id).await?,
-                }
-            }
-            None => self.await_turn(turn_id).await?,
-        };
+        let stop_reason = self.await_turn(turn_id).await?;
         self.finish_requests().await?;
         let output = self.take_output(turn_id)?;
         let Some(session_id) = self.attached_session_id.as_ref().map(ToString::to_string) else {
@@ -251,38 +237,6 @@ impl AcpClient {
             provider_session_id: Some(session_id),
             outcome,
         })
-    }
-
-    /// Ends a turn whose room action is already staged, without the closing model call.
-    ///
-    /// The room outcome comes from the portal, not from this turn's text, so the
-    /// provider has nothing left to contribute. Whether it confirms the cancellation or
-    /// had just finished on its own, the turn ended normally.
-    async fn end_after_terminal_action(
-        &mut self,
-        turn_id: &str,
-    ) -> Result<StopReason, DriverError> {
-        let Some(session_id) = self.attached_session_id.clone() else {
-            return self.poison(protocol_error());
-        };
-        {
-            let state = self.state.lock().map_err(|_| protocol_error())?;
-            if let Some(turn) = &state.request_turn {
-                turn.cancel();
-            }
-        }
-        if self
-            .connection
-            .send_notification(CancelNotification::new(session_id))
-            .is_err()
-        {
-            return self.poison(protocol_error());
-        }
-        match tokio::time::timeout(PROTOCOL_TIMEOUT, self.await_turn(turn_id)).await {
-            Ok(Ok(StopReason::Cancelled | StopReason::EndTurn)) => Ok(StopReason::EndTurn),
-            Ok(Err(error)) => Err(error),
-            Ok(Ok(_)) | Err(_) => self.poison(protocol_error()),
-        }
     }
 
     pub(super) async fn cancel(&mut self, turn_id: &str) -> Result<(), DriverError> {

@@ -470,7 +470,7 @@ Terra)은 그 턴 직전 약 1 시간 46 분 동안 쉬고 있었다는 공통�
 위 SDK 경고는 방 도구의 권한 요청이 `canUseTool` 을 거치지 않는다는 뜻이라, 별도로 확인할
 가치가 있다.
 
-### 17. 하네스 턴의 토큰 낭비 두 가지 (`room_portal_render.rs` · `acp_client.rs`)
+### 17. 하네스 턴의 토큰 낭비 (`room_portal_render.rs`)
 
 **측정.** 2026-09-21 05:53–06:11 UTC(자유 토론 모드 가위바위보, 네 에이전트 동시)의 모델 호출을
 각 프로그램이 남긴 사용량 기록으로 셌다. 출처: Claude 는
@@ -505,38 +505,32 @@ grok 은 방에서 쓰지 않는 자체 툴 28 개의 설명(약 6만 자)을 �
 넷을 검색하면 예전처럼 `room_tool_result_too_large` 로 실패하지 않고 미리보기로 성공한다(크기 상한
 자체는 첨부 테스트가 여전히 검증한다).
 
-**고친 것 2 — 종결 툴 뒤의 마지막 호출 (ACP 만).** 하네스는 툴 결과를 받으면 모델을 한 번 더
+**시도했다가 되돌린 것 — 종결 툴 뒤의 마지막 호출 끊기.** 하네스는 툴 결과를 받으면 모델을 한 번 더
 부른다. 발행·넘김 뒤 그 호출로 쓰는 마무리 문장은 방에 올라가지 않는다(방 턴은 포털 결과로
 대체된다). grok 기준 그 호출의 입력이 약 6.8만 토큰(대부분 캐시)이었다. API 드라이버
-(`remote_openai`)는 원래 종결 툴에서 바로 끝냈다. 포털이 종결 동작 등록을 알리게 했고
-(`TerminalWatch`), ACP 클라이언트(grok · Cursor)는 그 신호에서 `session/cancel` 을 보내고 취소 또는
-정상 종료를 정상 턴 종료로 처리한다. 실제 grok 턴 **한 번**에서 읽기 → 발행 → 취소로 끝나 세 번째
-호출이 없었고, 메시지는 바로 올라갔으며 세션은 대기로 돌아왔다. 같은 세션의 **두 번째 턴은 돌려보지
-않았다.**
+(`remote_openai`)는 원래 종결 툴에서 바로 끝낸다(우리가 루프를 쥐고 있어서 끊을 필요가 없다).
 
-**고친 것 3 — Codex 도 종결 툴 뒤에 끝낸다 (`codex_turn.rs`).** Codex app-server 가 방 툴 호출 완료를
-알리면(`item/completed`, item `type: "mcpToolCall"`, `server: "agentsassemble_room"` — 설치된 Codex 의
-`codex app-server generate-json-schema` 로 확인) 그 시점에 `TerminalWatch::is_staged()` 를 보고, 등록돼
-있으면 `turn/interrupt` 를 보낸다. 알림 하나를 다 읽은 뒤에만 확인하므로 스트림이 깨지지 않는다. 턴은
-`interrupted` 로 끝나며, 우리가 끊은 경우에만 정상 종료로 처리한다(그 외 `interrupted` 는 전처럼 실패).
-턴이 먼저 스스로 끝나 `turn/interrupt` 가 거절되면(`provider_request_rejected`) 무시하고 `turn/completed`
-를 읽는다. 참고: Codex 는 중단된 턴 뒤 기록에 "이전 턴은 일부러 중단됐다" 는 짧은 developer 메시지를
-남긴다.
+하네스에서는 툴 쪽에서 "여기서 턴 끝" 을 알릴 방법이 없어, 포털이 종결 동작 등록을 알리고
+(`TerminalWatch`) 드라이버가 턴을 강제로 끊게 했었다: ACP(grok · Cursor)는 `session/cancel`
+(`ad02e7a`), Codex 는 방 툴 호출 완료 알림(`item/completed`, `mcpToolCall`, `server:
+"agentsassemble_room"`) 뒤 `turn/interrupt`(`c74ad78`). 실제 grok 턴 1 회, Terra 턴 2 회에서 세 번째
+호출 없이 끝나는 것을 확인했다.
 
-검증: 2026-09-22 실제 Terra(gpt-5.6-terra) 턴 **두 번**(00:28, 00:29 UTC). 둘 다 rollout 에
-`read_discussion` → `publish_message` → 약 20~40 ms 뒤 `turn_aborted: interrupted` 로, 세 번째 모델 호출이
-없었다. 메시지는 방에 한 번씩 올라갔고 세션은 대기로 돌아왔다. 두 번째 턴도 정상이었다. 가짜
-app-server 경계 테스트 `a_staged_room_action_ends_the_codex_turn_without_another_model_call` 를
-추가했으나 **실행하지 못했다**: unix 전용인데, WSL(Ubuntu 24.04, Rust 1.98.1)에서는 이 테스트뿐 아니라
-기존 room 경계 테스트도 provider 시작 단계에서 `provider_leader_exited` → `runtime_authority_uncertain`
-로 멈춘다(가짜 스크립트가 실행되지 않음, 원인 미확인). 또 WSL 기본 환경에서는 `tagged_runtime_exists` 가
-root 프로세스의 `/proc` 를 못 읽어 lease 관찰이 `Unknown` 이 되므로
-`unshare --user --map-current-user -p -f --mount-proc` 안에서 돌려야 한다. unix 전용 provider 테스트는
-컴파일조차 안 되고 있었다(`claude_sdk_runtime_tests.rs` 의 `StderrTail` 누락 두 곳, `runtime_launch_tests.rs`
-의 `directory` 누락) — 고쳤다.
+**되돌렸다(2026-09-22, 사용자 결정).** 강제 종료는 모델 쪽에서 "끊긴 턴" 으로 남는다. Codex 는 다음
+턴 기록에 `<turn_aborted> The previous turn was interrupted on purpose. … If any tools/commands were
+aborted, they may have partially executed.` 를 넣어, 모델이 지난 발행이 실패했다고 의심해 다시 올릴
+여지가 생긴다(2 회 확인에서는 없었다). 사용자는 앱이 에이전트를 속박하지 않고 자유롭게 두기를
+원한다. 그래서 `TerminalWatch`, ACP 조기 취소, Codex 조기 interrupt 를 모두 제거했고, 마지막 호출은
+하네스 기본 동작대로 남는다. 마무리 문장을 막는 지시("더 쓰지 말라")도 넣지 않았다. 다시 시도한다면
+강제 종료가 아닌 방법이어야 한다.
 
-**안 한 것.** Claude 는 아직 마지막 호출이 남아 있다. 종결 툴 뒤에 멈추게 하는 훅이 필요하고, 그 결과
-메시지가 브리지의 `validResult`(subtype · terminal_reason 등)를 통과하는지 실제 턴으로 확인해야 한다.
+**테스트 환경 메모.** 가짜 app-server 경계 테스트(`agent_session_boundary`)는 unix 전용이다.
+WSL(Ubuntu 24.04, Rust 1.98.1)에서는 기존 room 경계 테스트도 provider 시작 단계에서
+`provider_leader_exited` → `runtime_authority_uncertain` 로 멈춘다(가짜 스크립트가 실행되지 않음, 원인
+미확인). 또 WSL 기본 환경에서는 `tagged_runtime_exists` 가 root 프로세스의 `/proc` 를 못 읽어 lease
+관찰이 `Unknown` 이 되므로 `unshare --user --map-current-user -p -f --mount-proc` 안에서 돌려야 한다.
+unix 전용 provider 테스트는 컴파일조차 안 되고 있었다(`claude_sdk_runtime_tests.rs` 의 `StderrTail` 누락
+두 곳, `runtime_launch_tests.rs` 의 `directory` 누락) — 고쳤다.
 
 **열린 문제 — grok 이 켜진 상태의 앱 종료 (첫 종료 시도 뒤 16:22:49 에야 꺼짐, 정상 아님).** 경과:
 

@@ -1,5 +1,6 @@
 use std::sync::Arc;
 
+use crate::room_portal_render::{message_context, search_page};
 use agentsassemble_domain::{RoomMessageContext, RoomMessageSearchPage, RoomMessageSearchResult};
 use rmcp::{
     ServiceExt,
@@ -68,10 +69,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let result = pending_search
         .await
         .unwrap_or_else(|error| panic!("join search call: {error}"));
-    assert_eq!(
-        tool_text(&result),
-        crate::room_portal_render::search_page(&page)
-    );
+    assert_eq!(tool_text(&result), search_page(&page));
 
     let context_client = client.clone();
     let pending_context = tokio::spawn(async move {
@@ -99,10 +97,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let result = pending_context
         .await
         .unwrap_or_else(|error| panic!("join context call: {error}"));
-    assert_eq!(
-        tool_text(&result),
-        crate::room_portal_render::message_context(&context)
-    );
+    assert_eq!(tool_text(&result), message_context(&context));
 
     let published = call_tool(
         client.as_ref(),

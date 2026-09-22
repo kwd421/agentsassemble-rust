@@ -277,12 +277,6 @@ async fn room_turns_publish_provider_finals_without_blocking_room_commands() {
 
 #[cfg(unix)]
 #[tokio::test]
-async fn a_staged_room_action_ends_the_codex_turn_without_another_model_call() {
-    verify_room_turn_publication("room_action").await;
-}
-
-#[cfg(unix)]
-#[tokio::test]
 async fn failed_or_interrupted_codex_turn_discards_tentative_room_publication() {
     for status in ["failed", "interrupted"] {
         verify_room_turn_publication(status).await;
@@ -322,8 +316,7 @@ async fn verify_room_turn_publication(first_status: &str) {
     let mut socket = connect(&server.base_url, &server.state).await;
     subscribe(&mut socket).await;
     let snapshot = receive_json(&mut socket).await;
-    let succeeds = matches!(first_status, "completed" | "room_action");
-    let attachment_ids = if succeeds {
+    let attachment_ids = if first_status == "completed" {
         managed_tools::prepare(&server, &mut socket, &snapshot).await
     } else {
         Vec::new()
@@ -366,7 +359,7 @@ async fn verify_room_turn_publication(first_status: &str) {
     room_portal_fixture::wait_for_turn(&turn_seen, "1").await;
     let endpoint = room_portal_fixture::wait_for_value(&portal_endpoint, "endpoint").await;
     let token = room_portal_fixture::wait_for_value(&portal_token, "token").await;
-    if !succeeds {
+    if first_status != "completed" {
         room_portal_fixture::publish(&endpoint, &token, "must not publish").await;
         std::fs::write(&release_first, b"release")
             .unwrap_or_else(|error| panic!("release unsuccessful room turn: {error}"));
@@ -467,16 +460,6 @@ async fn verify_room_turn_publication(first_status: &str) {
         .filter(|request| request["method"] == "turn/start")
         .collect::<Vec<_>>();
     assert_eq!(turns.len(), 2);
-    let interrupts = requests
-        .iter()
-        .filter(|request| request["method"] == "turn/interrupt")
-        .collect::<Vec<_>>();
-    if first_status == "room_action" {
-        assert_eq!(interrupts.len(), 1, "{requests:?}");
-        assert_eq!(interrupts[0]["params"]["turnId"], "provider-turn-1");
-    } else {
-        assert!(interrupts.is_empty(), "{requests:?}");
-    }
     assert!(
         turns[0]["params"]["input"][0]["text"]
             .as_str()

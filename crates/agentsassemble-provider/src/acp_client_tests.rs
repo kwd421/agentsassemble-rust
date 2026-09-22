@@ -40,7 +40,7 @@ async fn typed_acp_session_selects_the_exact_model_and_collects_one_turn() {
     assert!(!attached.reused);
 
     let turn = client
-        .prompt("room-session", &turn("turn-1", "Hello", false), None)
+        .prompt("room-session", &turn("turn-1", "Hello", false))
         .await
         .unwrap_or_else(|error| panic!("complete ACP prompt: {error}"));
     assert_eq!(turn.turn_id, "turn-1");
@@ -77,7 +77,6 @@ async fn tool_only_completion_is_reserved_for_room_publication_validation() {
             .prompt(
                 "room-session",
                 &turn("tool-turn", "Tool only", room_observation),
-                None,
             )
             .await;
         if room_observation {
@@ -113,7 +112,7 @@ async fn cancellation_waits_for_the_exact_acp_cancelled_receipt() {
         .await
         .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
     let request = turn("turn-cancel", "Wait", false);
-    let mut pending = Box::pin(client.prompt("room-session", &request, None));
+    let mut pending = Box::pin(client.prompt("room-session", &request));
     tokio::select! {
         biased;
         _result = &mut pending => panic!("fixture completed before cancellation"),
@@ -124,46 +123,6 @@ async fn cancellation_waits_for_the_exact_acp_cancelled_receipt() {
         .cancel("turn-cancel")
         .await
         .unwrap_or_else(|error| panic!("confirm ACP cancellation: {error}"));
-    assert!(!client.requires_restart());
-    client.shutdown().await;
-    fixture
-        .await
-        .unwrap_or_else(|error| panic!("join ACP fixture: {error}"));
-}
-
-#[tokio::test]
-async fn a_staged_room_action_ends_the_turn_without_waiting_for_closing_text() {
-    // The fixture holds the prompt open until it is cancelled, like an agent that
-    // would otherwise go on to write a closing line after its terminal tool.
-    let (mut client, fixture, prompt_seen) = fixture(true, AcpPermissionPolicy::Reject).await;
-    client
-        .attach(
-            "/tmp",
-            "",
-            mcp_server(),
-            &[("model".into(), "gpt-5.6-sol-high-fast".into())],
-        )
-        .await
-        .unwrap_or_else(|error| panic!("attach ACP session: {error}"));
-    let request = turn("turn-staged", "Wait", true);
-    let watch = crate::room_portal::TerminalWatch::for_tests();
-    let completed = {
-        let prompt = client.prompt("room-session", &request, Some(watch.clone()));
-        tokio::pin!(prompt);
-        tokio::select! {
-            biased;
-            result = &mut prompt => panic!("the turn ended before its room action: {result:?}"),
-            seen = prompt_seen => seen.unwrap_or_else(|_| panic!("observe fixture prompt")),
-        }
-        watch.stage_for_tests();
-        tokio::time::timeout(std::time::Duration::from_secs(5), prompt)
-            .await
-            .unwrap_or_else(|_| panic!("the staged action did not end the turn"))
-            .unwrap_or_else(|error| {
-                panic!("a turn cut short after its room action must succeed: {error}")
-            })
-    };
-    assert_eq!(completed.turn_id, "turn-staged");
     assert!(!client.requires_restart());
     client.shutdown().await;
     fixture
@@ -200,7 +159,7 @@ async fn native_permission_uses_exact_owner_and_waits_for_delivery_receipt_or_ca
             false,
         );
         request.request_ingress = Some(ingress);
-        let mut prompt = Box::pin(client.prompt("room-session", &request, None));
+        let mut prompt = Box::pin(client.prompt("room-session", &request));
         if reject {
             prompt
                 .await
