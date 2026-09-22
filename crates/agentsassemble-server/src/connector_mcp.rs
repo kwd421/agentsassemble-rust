@@ -72,7 +72,7 @@ fn encode(value: &Value) -> Result<String, String> {
 #[tool_router]
 impl ConnectorMcp {
     #[tool(
-        description = "Join the current AI conversation using the complete unchanged AgentsAssemble /join?token= URL. Remote MCP first returns status connection_prepared without entering the room: retain its private connection_id, then call room_join again with that ID and the same invite and name. Reuse that ID on every retry. Do not fetch the URL or launch a provider."
+        description = "Join an AgentsAssemble room with the full invite URL (/join?token=...), as this conversation. The first call returns connection_prepared with a private connection_id and does not enter the room yet; calling room_join again with that ID and the same invite and name enters it. The same ID works for retries. The URL itself does not need to be opened."
     )]
     async fn room_join(&self, Parameters(input): Parameters<Join>) -> Result<String, String> {
         encode(
@@ -84,7 +84,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Read the bounded current room context and finalized public messages. After connector_resync_required, set resync true to explicitly replace pending wait observations with this snapshot; older messages remain searchable. Ordinary reads do not consume pending observations."
+        description = "Read the current room and its recent public messages. With resync true (after connector_resync_required) this snapshot replaces pending wait observations; older messages remain searchable. Ordinary reads leave pending observations in place."
     )]
     async fn room_read(&self, Parameters(input): Parameters<Read>) -> Result<String, String> {
         let client = self.hub.client(&input.connection_id)?;
@@ -97,7 +97,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Search readable room history. Pass next_cursor unchanged for another page."
+        description = "Search the room history. next_cursor, passed back unchanged, returns the next page."
     )]
     async fn room_search_messages(
         &self,
@@ -113,7 +113,7 @@ impl ConnectorMcp {
         )
     }
 
-    #[tool(description = "Read bounded surrounding messages for an exact room search result.")]
+    #[tool(description = "Read the messages around one search result.")]
     async fn room_read_message_context(
         &self,
         Parameters(input): Parameters<Context>,
@@ -128,7 +128,7 @@ impl ConnectorMcp {
         )
     }
 
-    #[tool(description = "Send a substantive public room contribution as this participant.")]
+    #[tool(description = "Post a public message to the room as this participant.")]
     async fn room_say(&self, Parameters(input): Parameters<Say>) -> Result<String, String> {
         self.command(
             &input.connection_id,
@@ -139,7 +139,7 @@ impl ConnectorMcp {
         .await
     }
 
-    #[tool(description = "Create a bounded single-choice room poll.")]
+    #[tool(description = "Create a single-choice room poll.")]
     async fn room_vote_create(
         &self,
         Parameters(input): Parameters<VoteCreate>,
@@ -147,7 +147,7 @@ impl ConnectorMcp {
         self.command(&input.connection_id, &input.request_id, RoomAction::MessageSend, json!({"kind":"vote", "vote_question":input.question, "vote_options":input.options, "vote_duration_seconds":input.duration_seconds})).await
     }
 
-    #[tool(description = "Cast or replace this participant's ballot.")]
+    #[tool(description = "Cast or replace your ballot in a room poll.")]
     async fn room_vote_cast(
         &self,
         Parameters(input): Parameters<VoteCast>,
@@ -161,7 +161,7 @@ impl ConnectorMcp {
         .await
     }
 
-    #[tool(description = "Withdraw this participant's ballot.")]
+    #[tool(description = "Withdraw your ballot from a room poll.")]
     async fn room_vote_withdraw(
         &self,
         Parameters(input): Parameters<VoteMutation>,
@@ -175,7 +175,7 @@ impl ConnectorMcp {
         .await
     }
 
-    #[tool(description = "Close a poll created by this participant.")]
+    #[tool(description = "Close a poll you created.")]
     async fn room_vote_close(
         &self,
         Parameters(input): Parameters<VoteMutation>,
@@ -189,7 +189,7 @@ impl ConnectorMcp {
         .await
     }
 
-    #[tool(description = "Read the canonical summary of a room poll.")]
+    #[tool(description = "Read the current summary of a room poll.")]
     async fn room_vote_summary(
         &self,
         Parameters(input): Parameters<VoteTarget>,
@@ -204,7 +204,7 @@ impl ConnectorMcp {
         )
     }
 
-    #[tool(description = "Roll bounded server-owned dice when tabletop tools are enabled.")]
+    #[tool(description = "Roll dice with server-side randomness (when tabletop tools are enabled).")]
     async fn room_roll_dice(&self, Parameters(input): Parameters<Roll>) -> Result<String, String> {
         self.command(
             &input.connection_id,
@@ -215,7 +215,7 @@ impl ConnectorMcp {
         .await
     }
 
-    #[tool(description = "Choose one bounded option using server-owned room randomness.")]
+    #[tool(description = "Pick one of the given options with server-side randomness.")]
     async fn room_choose_random(
         &self,
         Parameters(input): Parameters<Choose>,
@@ -230,7 +230,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Wait for another participant's public message without a model deadline. Other tools may run concurrently. On connector_resync_required, call room_read with resync true before waiting again."
+        description = "Wait for another participant's public message, with no model deadline. Other tools can run meanwhile. After connector_resync_required, room_read with resync true refreshes the view before the next wait."
     )]
     async fn room_wait_next(
         &self,
@@ -247,7 +247,7 @@ impl ConnectorMcp {
     }
 
     #[tool(
-        description = "Leave this room and close active access after server confirmation. Keep connection_id for retries if the response is lost. After receiving the successful result, call again with that exact connection_id and release_receipt true to release retained receipt capacity."
+        description = "Leave the room; access closes once the server confirms. The same connection_id works for a retry if the response is lost. After a successful leave, calling again with that connection_id and release_receipt true releases the retained receipt capacity."
     )]
     async fn room_leave(&self, Parameters(input): Parameters<Leave>) -> Result<String, String> {
         encode(
@@ -284,7 +284,7 @@ impl ServerHandler for ConnectorMcp {
 
     fn get_info(&self) -> ServerInfo {
         ServerInfo::new(ServerCapabilities::builder().enable_tools().build()).with_instructions(
-            "Use room_join with the user's complete invite URL, then room_read. This connects the current conversation; do not launch another model or delegate. Pass connection_id unchanged to later tools and keep it private. Contribute with room_say, then room_wait_next."
+            "Tools for taking part in an AgentsAssemble room from this conversation. room_join takes the user's invite URL and makes this conversation itself a participant; room_read shows the room, room_say posts, room_wait_next waits for others. connection_id is private and is passed unchanged to later tools."
         )
     }
 }

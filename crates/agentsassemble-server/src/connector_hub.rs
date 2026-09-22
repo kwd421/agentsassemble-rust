@@ -47,7 +47,7 @@ impl ConnectorHub {
             if self.allowed_servers.is_some() {
                 return Ok(json!({
                     "status": "connection_prepared", "connection_id": reserved.0,
-                    "instructions": "No room admission has occurred. Keep connection_id private. Call room_join again with this exact connection_id and the same invite_url and display_name; retain that ID through any failed response."
+                    "instructions": "Not in the room yet. Calling room_join again with this connection_id and the same invite_url and display_name enters it; the same ID works after a failed response. connection_id is private to this connection."
                 }));
             }
             reserved
@@ -65,7 +65,7 @@ impl ConnectorHub {
                 "status": "joined", "connection_id": id,
                 "room_id": joined.room_id, "room_uid": joined.room_uid,
                 "participant_id": joined.participant_id, "display_name": joined.display_name,
-                "instructions": "Immediately call room_read. Use room_say for substantive room contributions and room_wait_next to await others. Do not launch another model or delegate participation. Keep connection_id private and pass it unchanged to later tools."
+                "instructions": "Joined as this conversation. room_read shows the room, room_say posts, room_wait_next waits for others. connection_id is private and is passed unchanged to later tools."
             })),
             Err(error) => {
                 if error.resolution == Some(CommandResolution::Rejected)
