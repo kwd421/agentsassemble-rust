@@ -127,6 +127,7 @@ async fn assert_tabletop_tool_catalog(client: &RoomClient) {
             "read_attachment".to_owned(),
             "read_discussion".to_owned(),
             "read_message_context".to_owned(),
+            "read_room_status".to_owned(),
             "roll_dice".to_owned(),
             "search_messages".to_owned(),
             "withdraw_vote".to_owned(),

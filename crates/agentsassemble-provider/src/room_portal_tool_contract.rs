@@ -2,6 +2,7 @@ use rmcp::schemars;
 use serde::Deserialize;
 
 pub(crate) const READ_DISCUSSION_TOOL: &str = "read_discussion";
+pub(crate) const READ_ROOM_STATUS_TOOL: &str = "read_room_status";
 pub(crate) const READ_ATTACHMENT_TOOL: &str = "read_attachment";
 pub(crate) const SEARCH_MESSAGES_TOOL: &str = "search_messages";
 pub(crate) const READ_MESSAGE_CONTEXT_TOOL: &str = "read_message_context";
@@ -14,7 +15,8 @@ pub(crate) const CLOSE_VOTE_TOOL: &str = "close_vote";
 pub(crate) const ROLL_DICE_TOOL: &str = "roll_dice";
 pub(crate) const CHOOSE_RANDOM_TOOL: &str = "choose_random";
 
-pub(crate) const PROVIDER_ROOM_TOOL_NAMES: [&str; 12] = [
+pub(crate) const PROVIDER_ROOM_TOOL_NAMES: [&str; 13] = [
+    READ_ROOM_STATUS_TOOL,
     READ_DISCUSSION_TOOL,
     READ_ATTACHMENT_TOOL,
     SEARCH_MESSAGES_TOOL,
@@ -110,6 +112,14 @@ pub(super) struct SearchMessages {
 #[serde(deny_unknown_fields)]
 pub(super) struct ReadMessageContext {
     pub(super) event_id: String,
+}
+
+#[derive(Debug, Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct ReadRoomStatus {
+    /// Zero starts at the newest polls; use `next_before_seq` for another page.
+    #[serde(default)]
+    pub(super) before_seq: i64,
 }
 
 #[derive(Debug, Deserialize, schemars::JsonSchema)]

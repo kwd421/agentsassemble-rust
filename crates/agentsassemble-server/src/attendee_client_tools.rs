@@ -31,6 +31,15 @@ impl AttendeeToolCall {
             return Err(error);
         }
         let request = match command.request() {
+            ProviderRoomToolRequest::ReadRoomStatus { before_seq } => {
+                Request::Read(AttendeeToolReadRequest {
+                    turn_generation: command.turn_generation(),
+                    execution_id: command.execution_id().to_owned(),
+                    tool: AttendeeToolRead::ConversationStatus {
+                        before_seq: *before_seq,
+                    },
+                })
+            }
             ProviderRoomToolRequest::Random(random) => Request::Random(AttendeeRandomRequest {
                 request_id: Uuid::new_v4(),
                 turn_generation: command.turn_generation(),
@@ -78,6 +87,10 @@ impl AttendeeToolCall {
                 .map(ProviderRoomToolResult::Random),
             Request::Read(request) => {
                 match (&request.tool, client.read_tool(connection, request).await?) {
+                    (
+                        AttendeeToolRead::ConversationStatus { .. },
+                        AttendeeToolReadResponse::ConversationStatus { result },
+                    ) => Ok(ProviderRoomToolResult::ConversationStatus(result)),
                     (
                         AttendeeToolRead::SearchMessages { .. },
                         AttendeeToolReadResponse::SearchMessages { result },

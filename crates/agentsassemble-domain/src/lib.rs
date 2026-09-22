@@ -10,6 +10,8 @@ mod asset;
 mod canonical_json;
 mod channel_messages;
 mod command;
+mod conversation_status;
+pub use conversation_status::{AgentActivity, ConversationStatus};
 #[cfg(unix)]
 pub mod cursor_package;
 mod diagnostic;

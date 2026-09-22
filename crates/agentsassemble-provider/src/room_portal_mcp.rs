@@ -17,7 +17,7 @@ use crate::room_portal::{
 };
 use crate::room_portal_tool_contract::{
     CastVote, ChooseRandom, CreateVote, PassTurn, PublishMessage, ReadAttachment,
-    ReadMessageContext, RollDice, SearchMessages, VoteTarget,
+    ReadMessageContext, ReadRoomStatus, RollDice, SearchMessages, VoteTarget,
 };
 
 #[derive(Debug, Clone)]
@@ -60,6 +60,8 @@ impl RoomPortalMcp {
             .await
             .map_err(|error| error.message)?;
         match result {
+            ProviderRoomToolResult::ConversationStatus(status) => serde_json::to_string(&status)
+                .map_err(|_| "The room status could not be encoded.".to_owned()),
             ProviderRoomToolResult::SearchMessages(page) => {
                 Ok(crate::room_portal_render::search_page(&page))
             }
@@ -104,6 +106,19 @@ fn terminal_observation(state: &mut PortalState) -> Result<&mut ActiveObservatio
 
 #[tool_router]
 impl RoomPortalMcp {
+    #[tool(
+        description = "Read current agent activity and open polls with your own choices. Optional observation; does not end your turn. Follow a nonzero next_before_seq even when the poll page is empty."
+    )]
+    async fn read_room_status(
+        &self,
+        Parameters(input): Parameters<ReadRoomStatus>,
+    ) -> Result<String, String> {
+        self.execute_room_read(ProviderRoomToolRequest::ReadRoomStatus {
+            before_seq: input.before_seq,
+        })
+        .await
+    }
+
     #[tool(
         description = "Read the recent messages in the room. Other room tools work after this. Does not end your turn."
     )]

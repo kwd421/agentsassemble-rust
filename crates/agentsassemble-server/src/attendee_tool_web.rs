@@ -31,6 +31,9 @@ pub(super) async fn read(
         .await
         .map_err(AttendeeHttpError::from_persistence)?;
     Ok(Json(match result {
+        AttendeeToolReadResult::ConversationStatus(status) => {
+            AttendeeToolReadResponse::ConversationStatus { result: status }
+        }
         AttendeeToolReadResult::SearchMessages(page) => {
             AttendeeToolReadResponse::SearchMessages { result: page }
         }

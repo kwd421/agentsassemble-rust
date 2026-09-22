@@ -70,7 +70,7 @@ pub(super) struct Say {
     /// Optional event UUID of an earlier lobby message to reply to.
     #[serde(default)]
     pub(super) reply_to_event_id: Option<String>,
-    /// IDs returned by room_upload_attachment; binds your own pending uploads.
+    /// IDs returned by `room_upload_attachment`; binds your own pending uploads.
     #[serde(default)]
     pub(super) attachment_ids: Vec<String>,
     #[serde(default)]
@@ -146,6 +146,16 @@ pub(super) struct Choose {
 
 fn all_channels() -> String {
     "all".to_owned()
+}
+
+#[derive(Deserialize, schemars::JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub(super) struct Status {
+    /// Zero for the latest page; otherwise the previous `next_before_seq`.
+    #[serde(default)]
+    pub(super) before_seq: i64,
+    #[serde(default)]
+    pub(super) connection_id: String,
 }
 
 #[derive(Deserialize, schemars::JsonSchema)]

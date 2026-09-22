@@ -82,6 +82,7 @@ async fn connector_wait_search_and_vote_read_use_current_public_room_authority()
         .json()
         .await?;
     assert_eq!(summary["vote_id"], vote_id);
+    verify_status(&client, &server.base_url, &writer, &reader, vote_id).await?;
     let invalid = client
         .get(format!("{}/api/room-connector/wait", server.base_url))
         .bearer_auth(&reader)
@@ -136,6 +137,63 @@ async fn verify_search(client: &Client, base: &str, bearer: &str) -> TestResult 
             .ok_or("context missing")?
             .iter()
             .any(|row| row["content"] == "Wait boundary proof")
+    );
+    Ok(())
+}
+
+async fn verify_status(
+    client: &Client,
+    base: &str,
+    writer: &str,
+    reader: &str,
+    vote_id: &str,
+) -> TestResult {
+    send(
+        client,
+        base,
+        writer,
+        json!({"kind":"vote_cast", "vote_id":vote_id, "vote_choice":"Yes"}),
+    )
+    .await?;
+    for (bearer, own_choice) in [(writer, "Yes"), (reader, "")] {
+        let status: Value = client
+            .get(format!("{base}/api/room-connector/status"))
+            .bearer_auth(bearer)
+            .send()
+            .await?
+            .error_for_status()?
+            .json()
+            .await?;
+        assert_eq!(status["open_votes"][0]["vote_id"], vote_id);
+        assert_eq!(status["open_votes"][0]["own_choice"], own_choice);
+        assert_eq!(status["next_before_seq"], 0);
+        assert!(status["agents"].is_array());
+        assert!(status.get("settings").is_none());
+    }
+    send(
+        client,
+        base,
+        writer,
+        json!({"kind":"vote_close", "vote_id":vote_id}),
+    )
+    .await?;
+    let status: Value = client
+        .get(format!("{base}/api/room-connector/status"))
+        .bearer_auth(reader)
+        .send()
+        .await?
+        .error_for_status()?
+        .json()
+        .await?;
+    assert_eq!(status["open_votes"], json!([]));
+    assert_eq!(
+        client
+            .get(format!("{base}/api/room-connector/status?before_seq=-1"))
+            .bearer_auth(reader)
+            .send()
+            .await?
+            .status(),
+        403
     );
     Ok(())
 }

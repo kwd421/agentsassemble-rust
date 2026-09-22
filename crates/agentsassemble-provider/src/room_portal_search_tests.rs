@@ -99,6 +99,8 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
         .unwrap_or_else(|error| panic!("join context call: {error}"));
     assert_eq!(tool_text(&result), message_context(&context));
 
+    verify_status_tool(&client, &mut commands).await;
+
     let published = call_tool(
         client.as_ref(),
         "publish_message",
@@ -119,6 +121,44 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
     let client =
         Arc::try_unwrap(client).unwrap_or_else(|_| panic!("release search client references"));
     let _ = client.cancel().await;
+}
+
+async fn verify_status_tool(
+    client: &Arc<RoomClient>,
+    commands: &mut tokio::sync::mpsc::Receiver<ProviderRoomToolCommand>,
+) {
+    let status_client = client.clone();
+    let pending_status = tokio::spawn(async move {
+        call_tool(status_client.as_ref(), "read_room_status", json!({})).await
+    });
+    let mut command = commands
+        .recv()
+        .await
+        .unwrap_or_else(|| panic!("receive status command"));
+    assert_eq!(
+        command.request(),
+        &ProviderRoomToolRequest::ReadRoomStatus { before_seq: 0 }
+    );
+    command
+        .begin_execution()
+        .await
+        .unwrap_or_else(|error| panic!("begin status: {error}"));
+    let status = agentsassemble_domain::ConversationStatus {
+        observed_at: "2026-09-22T00:00:00Z".into(),
+        agents: Vec::new(),
+        open_votes: Vec::new(),
+        next_before_seq: 0,
+    };
+    command.complete(Ok(ProviderRoomToolResult::ConversationStatus(
+        status.clone(),
+    )));
+    let result = pending_status
+        .await
+        .unwrap_or_else(|error| panic!("join status call: {error}"));
+    assert_eq!(
+        tool_text(&result),
+        serde_json::to_string(&status).unwrap_or_else(|error| panic!("encode status: {error}"))
+    );
 }
 
 fn begin_search_observation(portal: &RoomPortal, ingress: ProviderRoomToolIngress) {

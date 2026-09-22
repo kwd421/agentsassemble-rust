@@ -362,7 +362,7 @@ pub(crate) async fn context_authorized_in(
     })
 }
 
-async fn provider_search_principal(
+pub(crate) async fn provider_search_principal(
     transaction: &mut Transaction<'_, Sqlite>,
     authority: ProviderMessageSearchAuthority<'_>,
 ) -> Result<AuthenticatedPrincipal, PersistenceError> {

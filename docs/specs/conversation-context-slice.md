@@ -17,9 +17,12 @@ actual application/MCP verification after implementation.
   transactional message binding remain authoritative. MCP returns actual image/text
   content using the existing provider attachment representation. No arbitrary URL
   fetching, local file access by remote MCP, or authentication bypass is introduced.
-- The connector's room view includes bounded public activity and active poll state,
+- Optional `room_status` and native `read_room_status` tools expose bounded public activity and active poll state,
   including the caller's ballot. Existing UI typing/tool details are reused.
   Information does not force an agent to speak, wait, or terminate early.
+  Twenty poll candidates are examined per page, with an exclusive sequence cursor
+  across expired polls. Both native and attendee reads revalidate the exact active
+  turn. Reads never create events or change scheduling.
 
 ## Ownership and failure semantics
 

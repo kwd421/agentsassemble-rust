@@ -109,6 +109,7 @@ async fn loopback_mcp_requires_a_same_turn_read_before_commit() {
             "read_attachment".to_owned(),
             "read_discussion".to_owned(),
             "read_message_context".to_owned(),
+            "read_room_status".to_owned(),
             "roll_dice".to_owned(),
             "search_messages".to_owned(),
             "withdraw_vote".to_owned(),

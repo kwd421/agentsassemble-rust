@@ -6,6 +6,9 @@ use serde::{Deserialize, Serialize};
 #[derive(Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AttendeeToolReadResponse {
+    ConversationStatus {
+        result: agentsassemble_domain::ConversationStatus,
+    },
     SearchMessages {
         result: RoomMessageSearchPage,
     },

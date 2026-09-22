@@ -97,6 +97,43 @@ async fn read_vote_summary(
     build_vote_summary(stored, own_choice, Utc::now())
 }
 
+// Both callers have revalidated room or exact provider-turn authority in this transaction.
+// Bound the work, including expired polls; the cursor continues across an empty page.
+pub(crate) async fn open_vote_page(
+    tx: &mut Transaction<'_, Sqlite>,
+    principal: &AuthenticatedPrincipal,
+    before_seq: i64,
+) -> Result<(Vec<VoteSummary>, i64), PersistenceError> {
+    if before_seq < 0 {
+        return Err(rejected(
+            "bad_request",
+            "Vote page cursor cannot be negative.",
+        ));
+    }
+    let rows = sqlx::query("SELECT vote_id, poll_seq FROM room_vote_states WHERE room_id = ? AND manual_close_seq IS NULL AND poll_seq < ? ORDER BY poll_seq DESC LIMIT 21")
+        .bind(&principal.room_id).bind(if before_seq == 0 { i64::MAX } else { before_seq }).fetch_all(&mut **tx).await?;
+    let next = if rows.len() > 20 {
+        rows[19].get("poll_seq")
+    } else {
+        0
+    };
+    let now = Utc::now();
+    let mut summaries = Vec::new();
+    for row in rows.into_iter().take(20) {
+        let stored = load_vote(tx, &principal.room_id, row.get("vote_id")).await?;
+        let choice = load_ballot(tx, &principal.participant_id, &stored)
+            .await?
+            .map_or_else(String::new, |index| {
+                stored.definition.options[index].clone()
+            });
+        let summary = build_vote_summary(stored, choice, now)?;
+        if !summary.closed {
+            summaries.push(summary);
+        }
+    }
+    Ok((summaries, next))
+}
+
 pub(crate) async fn apply_vote_command(
     transaction: &mut Transaction<'_, Sqlite>,
     principal: &AuthenticatedPrincipal,

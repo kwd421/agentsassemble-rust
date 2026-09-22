@@ -397,6 +397,39 @@ async fn fixture() -> (SqliteStore, AuthenticatedPrincipal) {
     (store, principal)
 }
 
+#[tokio::test]
+async fn status_cursor_crosses_expired_polls_without_writes() {
+    let (store, principal) = fixture().await;
+    let oldest = command(
+        &store,
+        &principal,
+        &uuid::Uuid::new_v4().to_string(),
+        json!({"kind":"vote", "vote_question":"Still open?", "vote_options":["A","B"]}),
+    )
+    .await;
+    for _ in 0..20 {
+        let poll = command(&store, &principal, &uuid::Uuid::new_v4().to_string(),
+            json!({"kind":"vote", "vote_question":"Expired?", "vote_options":["A","B"], "vote_duration_seconds":30})).await;
+        expire_vote(&store, &poll.outcome.event.id).await;
+    }
+    let before = persisted_write_counts(&store).await;
+    let authority = crate::RoomMutationAuthority::TrustedPrincipal(&principal);
+    let first = store
+        .conversation_status(authority, 0)
+        .await
+        .unwrap_or_else(|error| panic!("first status: {error}"));
+    assert!(first.open_votes.is_empty());
+    assert!(first.next_before_seq > 0);
+    let second = store
+        .conversation_status(authority, first.next_before_seq)
+        .await
+        .unwrap_or_else(|error| panic!("next status: {error}"));
+    assert_eq!(second.open_votes.len(), 1);
+    assert_eq!(second.open_votes[0].vote_id, oldest.outcome.event.id);
+    assert_eq!(second.next_before_seq, 0);
+    assert_eq!(persisted_write_counts(&store).await, before);
+}
+
 async fn add_human(store: &SqliteStore, id: &str, display_name: &str) -> AuthenticatedPrincipal {
     let now = Utc::now();
     let participant = Participant {

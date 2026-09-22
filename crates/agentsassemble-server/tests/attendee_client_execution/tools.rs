@@ -50,6 +50,16 @@ pub(super) async fn verify(
         )
         .await;
         call(&client, "roll_dice", json!({"notation":"2d6+1"})).await;
+        let status = call(&client, "read_room_status", json!({})).await;
+        let status: Value =
+            serde_json::from_str(status.content[0].as_text().map_or("", |text| &text.text))
+                .unwrap_or_else(|error| panic!("room status: {error}"));
+        assert!(
+            status["agents"]
+                .as_array()
+                .is_some_and(|agents| !agents.is_empty())
+        );
+        assert!(status["open_votes"].is_array());
         let attachment = call(
             &client,
             "read_attachment",
@@ -64,7 +74,7 @@ pub(super) async fn verify(
         );
         let _ = client.cancel().await;
     });
-    for index in 0..3 {
+    for index in 0..4 {
         let command = tokio::time::timeout(Duration::from_secs(10), receiver.recv())
             .await?
             .ok_or("native tool request missing")?;

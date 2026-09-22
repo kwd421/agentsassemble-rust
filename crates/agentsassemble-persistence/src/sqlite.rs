@@ -390,7 +390,7 @@ async fn load_snapshot_participants(
         .collect::<Result<Vec<_>, _>>()?)
 }
 
-async fn load_agent_sessions(
+pub(crate) async fn load_agent_sessions(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
 ) -> Result<Vec<AgentSession>, PersistenceError> {

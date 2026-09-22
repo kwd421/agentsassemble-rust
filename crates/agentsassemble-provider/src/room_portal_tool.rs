@@ -20,6 +20,7 @@ pub struct ProviderRoomToolIngress {
 
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolRequest {
+    ReadRoomStatus { before_seq: i64 },
     Random(RoomRandomRequest),
     SearchMessages { query: String, cursor: String },
     ReadMessageContext { event_id: String },
@@ -27,6 +28,7 @@ pub enum ProviderRoomToolRequest {
 
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub enum ProviderRoomToolResult {
+    ConversationStatus(agentsassemble_domain::ConversationStatus),
     Random(RoomRandomResult),
     SearchMessages(RoomMessageSearchPage),
     MessageContext(RoomMessageContext),
@@ -172,6 +174,9 @@ fn response_matches(request: &ProviderRoomToolRequest, result: &ProviderRoomTool
     matches!(
         (request, result),
         (
+            ProviderRoomToolRequest::ReadRoomStatus { .. },
+            ProviderRoomToolResult::ConversationStatus(_)
+        ) | (
             ProviderRoomToolRequest::Random(_),
             ProviderRoomToolResult::Random(_)
         ) | (

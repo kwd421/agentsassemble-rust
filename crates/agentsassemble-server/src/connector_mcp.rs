@@ -84,6 +84,23 @@ impl ConnectorMcp {
     }
 
     #[tool(
+        description = "Read current public agent activity and open polls with your own choices. Observational only. Follow next_before_seq to see older open polls, including after an empty page."
+    )]
+    async fn room_status(
+        &self,
+        Parameters(input): Parameters<contract::Status>,
+    ) -> Result<String, String> {
+        encode(
+            &self
+                .hub
+                .client(&input.connection_id)?
+                .status(input.before_seq)
+                .await
+                .map_err(|error| error.code)?,
+        )
+    }
+
+    #[tool(
         description = "Read the current room and its recent public messages. With resync true (after connector_resync_required) this snapshot replaces pending wait observations; older messages remain searchable. Ordinary reads leave pending observations in place."
     )]
     async fn room_read(&self, Parameters(input): Parameters<Read>) -> Result<String, String> {

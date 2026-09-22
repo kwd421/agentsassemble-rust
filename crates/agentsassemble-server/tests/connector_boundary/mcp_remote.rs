@@ -28,7 +28,7 @@ async fn remote_http_requires_private_custody_before_admission_and_retains_uncer
     let first = ().serve(StreamableHttpClientTransport::from_uri(endpoint.clone())).await?;
     let second = ().serve(StreamableHttpClientTransport::from_uri(endpoint)).await?;
     let tools = first.list_all_tools().await?;
-    assert_eq!(tools.len(), 16);
+    assert_eq!(tools.len(), 17);
     rejected(
         &first,
         "room_join",

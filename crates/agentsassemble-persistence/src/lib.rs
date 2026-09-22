@@ -116,6 +116,7 @@ pub use session_bearer::{
     HUMAN_SESSION_BEARER_CHARS, HUMAN_SESSION_BEARER_PREFIX, OPERATOR_SESSION_BEARER_CHARS,
     OPERATOR_SESSION_BEARER_PREFIX,
 };
+mod conversation_status;
 mod human_invite_preflight;
 mod human_invites;
 mod human_prejoin_attachments;

@@ -38,6 +38,30 @@ pub(super) struct Vote {
     vote_id: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(super) struct StatusQuery {
+    #[serde(default)]
+    before_seq: i64,
+}
+
+pub(super) async fn status(
+    State(state): State<AppState>,
+    Query(query): Query<StatusQuery>,
+    request: Request,
+) -> Result<Json<Value>, ConnectorHttpError> {
+    let authorization = authorize_read(&state, request, 20).await?;
+    let status = state
+        .store
+        .conversation_status(
+            RoomMutationAuthority::ConnectorSession(&authorization),
+            query.before_seq,
+        )
+        .await
+        .map_err(ConnectorHttpError::from_persistence)?;
+    Ok(Json(json!(status)))
+}
+
 pub(super) async fn snapshot(
     State(state): State<AppState>,
     Query(cursor): Query<Cursor>,

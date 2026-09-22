@@ -18,6 +18,15 @@ pub(crate) async fn handle_provider_room_tool(
         return None;
     }
     match command.request().clone() {
+        ProviderRoomToolRequest::ReadRoomStatus { before_seq } => {
+            let result = store
+                .provider_conversation_status(authority(room_id, &command), before_seq)
+                .await
+                .map(ProviderRoomToolResult::ConversationStatus)
+                .map_err(public_tool_error);
+            command.complete(result);
+            None
+        }
         ProviderRoomToolRequest::Random(request) => {
             crate::room_random_runtime::handle_provider_room_random(
                 store,

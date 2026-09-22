@@ -12,7 +12,7 @@ async fn packaged_connector_cli_exposes_current_conversation_tools()
     let server = human_invite::start(store.clone()).await;
     let (mut child, client) = start_cli().await?;
     let tools = client.list_all_tools().await?;
-    assert_eq!(tools.len(), 16);
+    assert_eq!(tools.len(), 17);
     assert!(tools.iter().any(|tool| tool.name == "room_wait_next"));
     let mut links = Vec::new();
     for _ in 0..2 {
@@ -44,32 +44,10 @@ async fn packaged_connector_cli_exposes_current_conversation_tools()
     assert_eq!(joined["participant_id"], repeated["participant_id"]);
     assert_eq!(joined["connection_id"], repeated["connection_id"]);
     assert_eq!(joined["status"], "joined");
-    let upload = call(&client, "room_upload_attachment", json!({"filename":"proof.txt", "content_type":"text/plain", "data_base64":"TUNQIGF0dGFjaG1lbnQgcHJvb2Y="})).await;
-    let sent = call(
-        &client,
-        "room_say",
-        json!({"content":"", "attachment_ids":[upload["attachment"]["id"]]}),
-    )
-    .await;
-    assert_eq!(
-        sent["result"]["event"]["attachments"][0]["filename"],
-        "proof.txt"
-    );
-    let read = client
-        .call_tool(
-            CallToolRequestParams::new("room_read_attachment").with_arguments(
-                json!({"attachment_id":upload["attachment"]["id"]})
-                    .as_object()
-                    .ok_or("args")?
-                    .clone(),
-            ),
-        )
-        .await?;
-    assert_ne!(read.is_error, Some(true));
-    assert_eq!(
-        read.content[0].as_text().ok_or("attachment text")?.text,
-        "MCP attachment proof"
-    );
+    let status = call(&client, "room_status", json!({})).await;
+    assert!(status["agents"].is_array());
+    assert!(status["open_votes"].is_array());
+    verify_attachment(&client).await?;
     let blocked = client
         .call_tool(
             CallToolRequestParams::new("room_join").with_arguments(
@@ -126,6 +104,38 @@ async fn packaged_connector_cli_exposes_current_conversation_tools()
     let status = tokio::time::timeout(Duration::from_secs(5), child.wait()).await??;
     assert!(status.success());
     server.stop().await;
+    Ok(())
+}
+
+async fn verify_attachment(
+    client: &RunningService<RoleClient, ()>,
+) -> Result<(), Box<dyn std::error::Error>> {
+    let upload = call(client, "room_upload_attachment", json!({"filename":"proof.txt", "content_type":"text/plain", "data_base64":"TUNQIGF0dGFjaG1lbnQgcHJvb2Y="})).await;
+    let sent = call(
+        client,
+        "room_say",
+        json!({"content":"", "attachment_ids":[upload["attachment"]["id"]]}),
+    )
+    .await;
+    assert_eq!(
+        sent["result"]["event"]["attachments"][0]["filename"],
+        "proof.txt"
+    );
+    let read = client
+        .call_tool(
+            CallToolRequestParams::new("room_read_attachment").with_arguments(
+                json!({"attachment_id":upload["attachment"]["id"]})
+                    .as_object()
+                    .ok_or("args")?
+                    .clone(),
+            ),
+        )
+        .await?;
+    assert_ne!(read.is_error, Some(true));
+    assert_eq!(
+        read.content[0].as_text().ok_or("attachment text")?.text,
+        "MCP attachment proof"
+    );
     Ok(())
 }
 

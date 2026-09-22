@@ -21,12 +21,14 @@ pub struct AttendeeToolReadRequest {
 #[derive(Clone, Serialize, Deserialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum AttendeeToolRead {
+    ConversationStatus { before_seq: i64 },
     SearchMessages { query: String, cursor: String },
     MessageContext { event_id: String },
     Attachment { attachment_id: String },
 }
 
 pub enum AttendeeToolReadResult {
+    ConversationStatus(agentsassemble_domain::ConversationStatus),
     SearchMessages(RoomMessageSearchPage),
     MessageContext(RoomMessageContext),
     Attachment(MessageAttachment),
@@ -58,6 +60,11 @@ impl SqliteStore {
         let participant = load_participant(&mut tx, &owner.room_id, &owner.participant_id).await?;
         let principal = provider_room_principal(&session, &participant, InviteScope::ReadOnly)?;
         let result = match &request.tool {
+            AttendeeToolRead::ConversationStatus { before_seq } => {
+                AttendeeToolReadResult::ConversationStatus(
+                    crate::conversation_status::read_in(&mut tx, &principal, *before_seq).await?,
+                )
+            }
             AttendeeToolRead::SearchMessages { query, cursor } => {
                 AttendeeToolReadResult::SearchMessages(
                     crate::message_search::search_authorized_in(

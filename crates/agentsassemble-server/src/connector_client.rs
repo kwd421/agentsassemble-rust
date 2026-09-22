@@ -213,6 +213,21 @@ impl RoomConnectorClient {
         self.get("read", &[], &session.bearer, false).await
     }
 
+    /// Reads current public activity and open polls, including this participant's ballots.
+    ///
+    /// # Errors
+    /// Reports stale authority, invalid cursors or transport failure.
+    pub async fn status(&self, before_seq: i64) -> Result<Value, ConnectorClientError> {
+        let session = self.session().await?;
+        self.get(
+            "status",
+            &[("before_seq", before_seq.to_string())],
+            &session.bearer,
+            false,
+        )
+        .await
+    }
+
     /// Reads a published attachment through the current room session.
     ///
     /// # Errors

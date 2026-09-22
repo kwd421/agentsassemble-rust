@@ -45,11 +45,7 @@ async fn provider_search_revalidates_the_exact_active_turn_without_writing() {
             .await,
         "message_missing",
     );
-    let events_before =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events WHERE room_id = 'general'")
-            .fetch_one(&store.pool)
-            .await
-            .unwrap_or_else(|error| panic!("count events before provider search: {error}"));
+    let events_before = event_count(&store).await;
 
     let page = store
         .search_provider_lobby_messages(authority, "ALPHA-0830", "")
@@ -86,11 +82,14 @@ async fn provider_search_revalidates_the_exact_active_turn_without_writing() {
             .iter()
             .all(|result| result.event_id != transition_id)
     );
-    let events_after =
-        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM room_events WHERE room_id = 'general'")
-            .fetch_one(&store.pool)
-            .await
-            .unwrap_or_else(|error| panic!("count events after provider search: {error}"));
+    verify_status(
+        &store,
+        authority,
+        &poll_id,
+        &assignment.session.public.participant_id,
+    )
+    .await;
+    let events_after = event_count(&store).await;
     assert_eq!(events_after, events_before);
 
     let stale = ProviderMessageSearchAuthority {
@@ -98,10 +97,42 @@ async fn provider_search_revalidates_the_exact_active_turn_without_writing() {
         ..authority
     };
     assert_rejection_code(
+        store.provider_conversation_status(stale, 0).await,
+        "stale_provider_turn",
+    );
+    assert_rejection_code(
         store
             .search_provider_lobby_messages(stale, "ALPHA-0830", "")
             .await,
         "stale_provider_turn",
+    );
+}
+
+async fn event_count(store: &SqliteStore) -> i64 {
+    sqlx::query_scalar("SELECT COUNT(*) FROM room_events WHERE room_id = 'general'")
+        .fetch_one(&store.pool)
+        .await
+        .unwrap_or_else(|error| panic!("count room events: {error}"))
+}
+
+async fn verify_status(
+    store: &SqliteStore,
+    authority: ProviderMessageSearchAuthority<'_>,
+    poll_id: &str,
+    participant_id: &str,
+) {
+    let status = store
+        .provider_conversation_status(authority, 0)
+        .await
+        .unwrap_or_else(|error| panic!("read provider status: {error}"));
+    assert_eq!(status.open_votes.len(), 1);
+    assert_eq!(status.open_votes[0].vote_id, poll_id);
+    assert_eq!(status.open_votes[0].own_choice, "");
+    assert!(
+        status
+            .agents
+            .iter()
+            .any(|agent| agent.participant_id == participant_id)
     );
 }
 

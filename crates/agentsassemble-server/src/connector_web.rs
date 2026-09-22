@@ -49,6 +49,7 @@ registered_routes! {
         same_origin_public "/api/room-connector/search" => get(read::search),
         same_origin_public "/api/room-connector/context" => get(read::context),
         same_origin_public "/api/room-connector/vote" => get(read::vote),
+        same_origin_public "/api/room-connector/status" => get(read::status),
         same_origin_public "/api/room-connector/attachment" => get(attachments::read),
         same_origin_public "/api/room-connector/upload" => post(attachments::upload),
         same_origin_public "/api/room-connector/join" => post(join),
