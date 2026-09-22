@@ -657,7 +657,7 @@ export default function LobbyView({
       </div>
 
       {/* Composer */}
-      <div className="shrink-0 px-4 pb-5">
+      <div className="relative shrink-0 px-4 pb-5">
         {!pinnedToLatest && visibleEvents.length > 0 && (
           <div className="dc-old-history-notice" role="status">
             <span>오래된 메시지를 보고 있어요</span>

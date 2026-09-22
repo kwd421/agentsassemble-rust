@@ -1,11 +1,17 @@
 
 .dc-old-history-notice {
+  /* Floats over the feed above the composer, so only the box covers messages. */
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  z-index: 5;
+  transform: translateX(-50%);
   display: flex;
-  width: fit-content;
+  width: max-content;
   max-width: calc(100% - 24px);
   align-items: center;
   gap: 14px;
-  margin: 0 auto 10px;
+  margin: 0 0 10px;
   border: 1px solid var(--color-line);
   border-radius: 8px;
   background: var(--color-panel);
