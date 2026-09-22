@@ -169,3 +169,16 @@ test files / 68 tests pass, and production/desktop builds pass. In the rebuilt a
 the exact two-message `답장검증` reply and two-message `공통UI검증` pin were clicked:
 the source highlights, both messages stay visible, and neither the old-history
 notice nor latest-return button appears.
+
+### Participant status-dot correction
+
+The desktop right panel is the same `RoomConnectionPanel`/`MemberList` instance
+outside both channel branches. It receives room-scoped participants and sessions;
+custom text channels do not have a separate membership panel. The participant
+label correctly mapped `joined` to `참여 중`, but `statusDotClass` omitted both
+`joined` and `attached` from its green states. It now reuses `isActivePresence`,
+the existing owner of that classification. Busy pulse, idle, error and stopped
+states retain their existing colors. The canonical joined-member regression now
+also asserts the green dot. The same affected 68-test run and rebuilt desktop
+cover this correction: general, `답장검증` and `공통UI검증` show the same green dot
+for the joined human and gray dot for the stopped native Codex session.

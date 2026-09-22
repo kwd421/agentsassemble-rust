@@ -38,7 +38,7 @@ export function isActive(agent: LiveAgent) {
 
 export function statusDotClass(status: string) {
   if (status === "working" || status === "running") return "bg-online live-pulse";
-  if (status === "online" || status === "ready") return "bg-online";
+  if (isActivePresence(status)) return "bg-online";
   if (status === "idle") return "bg-idle";
   if (status === "error") return "bg-danger";
   return "bg-offline";

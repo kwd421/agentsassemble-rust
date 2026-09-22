@@ -12,6 +12,9 @@
   User-caught two-message false history notice corrected: loaded reply/pin sources
   now focus in place, preserving the current transcript. Both exact two-message
   desktop cases and affected navigation regressions pass.
+  Shared participant dot mapping now uses the existing active-presence owner;
+  joined humans show green in both general and custom channels. Rebuilt desktop
+  verification and all 68 affected tests pass.
 
 - 2026-09-22: implement user-requested conversation improvements: optional message
   replies, external MCP attachment read/upload, and public conversation/poll state.
