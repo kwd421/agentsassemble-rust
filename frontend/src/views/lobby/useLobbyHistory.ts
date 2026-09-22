@@ -136,6 +136,10 @@ export function useLobbyHistory({
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
   const pinnedToLatestRef = useRef(true);
+  // The feed's scroll position as last observed. Under a pinned feed, a scroll event that
+  // has not moved up from it is content growing (an image preview loading) or the browser
+  // clamping after a resize, not the reader scrolling up.
+  const lastScrollTopRef = useRef(0);
   const historyReadyRef = useRef(false);
   const historyRoomRef = useRef(activeRoom.id);
   const initialBackfillFailedRoomRef = useRef("");
@@ -208,6 +212,11 @@ export function useLobbyHistory({
     setPinnedToLatest(nextPinned);
   }, []);
 
+  const pinFeedToBottom = useCallback((element: HTMLDivElement) => {
+    element.scrollTop = element.scrollHeight;
+    lastScrollTopRef.current = element.scrollTop;
+  }, []);
+
   const retireHistoryPageRequest = useCallback(() => {
     anchorRestorationEpochRef.current += 1;
     loadingHistoryRequestRef.current = null;
@@ -226,14 +235,13 @@ export function useLobbyHistory({
     setHasMoreHistory(canonicalHasMoreHistory);
     const element = scrollRef.current;
     if (!element) return;
-    window.requestAnimationFrame(() => {
-      element.scrollTop = element.scrollHeight;
-    });
     updatePinnedToLatest(true);
+    window.requestAnimationFrame(() => pinFeedToBottom(element));
   }, [
     canonicalEvents,
     canonicalHasMoreHistory,
     canonicalOldestSeq,
+    pinFeedToBottom,
     retireHistoryPageRequest,
     updatePinnedToLatest,
   ]);
@@ -334,7 +342,19 @@ export function useLobbyHistory({
         updatePinnedToLatest(false);
         return;
       }
-      updatePinnedToLatest(feedIsNearBottom(event.currentTarget));
+      const element = event.currentTarget;
+      const previousScrollTop = lastScrollTopRef.current;
+      lastScrollTopRef.current = element.scrollTop;
+      if (
+        pinnedToLatestRef.current &&
+        !feedIsNearBottom(element) &&
+        previousScrollTop > 0 &&
+        element.scrollTop >= previousScrollTop - 1
+      ) {
+        pinFeedToBottom(element);
+        return;
+      }
+      updatePinnedToLatest(feedIsNearBottom(element));
       if (
         Date.now() >= historyLoadSuppressedUntilRef.current
         && event.currentTarget.scrollTop <= HISTORY_TOP_THRESHOLD
@@ -342,8 +362,41 @@ export function useLobbyHistory({
         loadOlderHistory(event.currentTarget.scrollTop);
       }
     },
-    [loadOlderHistory, updatePinnedToLatest]
+    [loadOlderHistory, pinFeedToBottom, updatePinnedToLatest]
   );
+
+  // Messages grow after they render (image previews load, cards expand) without a scroll
+  // event; keep a pinned feed at the bottom through that.
+  useEffect(() => {
+    const element = scrollRef.current;
+    if (!element || typeof ResizeObserver !== "function") return undefined;
+    const keepPinned = () => {
+      if (
+        !pinnedToLatestRef.current ||
+        historyWindowActiveRef.current ||
+        prependAnchorRef.current
+      ) {
+        return;
+      }
+      if (feedIsNearBottom(element)) {
+        lastScrollTopRef.current = element.scrollTop;
+      } else {
+        pinFeedToBottom(element);
+      }
+    };
+    const resize = new ResizeObserver(keepPinned);
+    const observeChildren = () => {
+      resize.disconnect();
+      for (const child of Array.from(element.children)) resize.observe(child);
+    };
+    observeChildren();
+    const children = new MutationObserver(observeChildren);
+    children.observe(element, { childList: true });
+    return () => {
+      resize.disconnect();
+      children.disconnect();
+    };
+  }, [activeRoom.id, loaded, pinFeedToBottom]);
 
   useLayoutEffect(() => {
     const element = scrollRef.current;
@@ -382,9 +435,9 @@ export function useLobbyHistory({
       return;
     }
     if (pinnedToLatestRef.current) {
-      element.scrollTop = element.scrollHeight;
+      pinFeedToBottom(element);
     }
-  }, [activeRoom.id, loaded, typingIndicators, visibleEvents]);
+  }, [activeRoom.id, loaded, pinFeedToBottom, typingIndicators, visibleEvents]);
 
   useEffect(() => {
     if (!loaded || !hasMoreHistory || loadingOlder) return;
