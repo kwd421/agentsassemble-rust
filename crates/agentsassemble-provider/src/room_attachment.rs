@@ -99,6 +99,12 @@ fn attachment_uri(attachment_id: &str) -> String {
     format!("agentsassemble://room-attachment/{attachment_id}")
 }
 
+/// The longest protocol line a harness may send while a room turn runs. Harnesses echo a
+/// tool result back in their own notifications, so a `read_attachment` result carries the
+/// whole attachment base64-encoded, plus its envelope.
+pub(crate) const MAX_HARNESS_LINE_BYTES: usize =
+    agentsassemble_domain::MAX_ATTACHMENT_BYTES.div_ceil(3) * 4 + 4 * 1024 * 1024;
+
 pub(crate) fn valid_observation_attachments(
     room_view: &str,
     attachment_ids: &[String],

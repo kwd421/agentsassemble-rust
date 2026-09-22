@@ -35,7 +35,7 @@ use crate::{
 };
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
+const MAX_PROTOCOL_LINE_BYTES: usize = crate::room_attachment::MAX_HARNESS_LINE_BYTES;
 const MAX_RESPONSE_BYTES: usize = 128 * 1024;
 type ProtocolReady = (ConnectionTo<Agent>, AgentCapabilities, Option<String>);
 

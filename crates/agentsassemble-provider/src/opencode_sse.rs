@@ -6,7 +6,7 @@ use thiserror::Error;
 use crate::{loopback_http::LoopbackStream, opencode_protocol::observed_model};
 
 const MAX_EVENT_STREAM_BYTES: usize = 8 * 1024 * 1024;
-const MAX_EVENT_LINE_BYTES: usize = 512 * 1024;
+const MAX_EVENT_LINE_BYTES: usize = crate::room_attachment::MAX_HARNESS_LINE_BYTES;
 const MAX_EVENTS: usize = 8_192;
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]

@@ -30,9 +30,10 @@ use crate::{
 };
 
 const PROTOCOL_TIMEOUT: Duration = Duration::from_secs(10);
-const MAX_PROTOCOL_LINE_BYTES: usize = 256 * 1024;
+const MAX_PROTOCOL_LINE_BYTES: usize = crate::room_attachment::MAX_HARNESS_LINE_BYTES;
 const MAX_PENDING_NOTIFICATIONS: usize = 256;
-const MAX_PENDING_NOTIFICATION_BYTES: usize = 2 * 1024 * 1024;
+// Room for one attachment-sized notification queued behind a pending request.
+const MAX_PENDING_NOTIFICATION_BYTES: usize = 2 * MAX_PROTOCOL_LINE_BYTES;
 struct PendingRequest {
     id: u64,
     method: String,
