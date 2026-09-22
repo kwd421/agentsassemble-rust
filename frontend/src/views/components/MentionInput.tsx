@@ -5,6 +5,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
   type KeyboardEvent,
   type RefObject,
 } from "react";
@@ -23,6 +24,7 @@ type MentionInputProps = {
   mentionables?: Mentionable[];
   inputRef?: RefObject<HTMLTextAreaElement | null>;
   onKeyDown?: (event: KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (event: ClipboardEvent<HTMLTextAreaElement>) => void;
   className?: string;
   placeholder?: string;
   disabled?: boolean;
@@ -39,6 +41,7 @@ export default function MentionInput({
   mentionables = [],
   inputRef,
   onKeyDown,
+  onPaste,
   className,
   placeholder,
   disabled,
@@ -201,6 +204,7 @@ export default function MentionInput({
         value={value}
         onChange={handleInputChange}
         onKeyDown={handleMentionKeyDown}
+        onPaste={onPaste}
         onKeyUp={syncMentionCursor}
         onClick={syncMentionCursor}
         onSelect={syncMentionCursor}

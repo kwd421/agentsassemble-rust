@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ClipboardEvent,
   type KeyboardEvent,
 } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -51,6 +52,18 @@ type LobbyComposerDraft = {
   pendingAttachments: LobbyAttachmentRef[];
   retry?: () => Promise<unknown>;
 };
+
+type LocalAttachmentPreview = {
+  kind: "image" | "video";
+  url: string;
+};
+
+function localPreviewKind(contentType: string): LocalAttachmentPreview["kind"] | null {
+  if (typeof URL.createObjectURL !== "function") return null;
+  if (contentType.startsWith("image/")) return "image";
+  if (contentType.startsWith("video/")) return "video";
+  return null;
+}
 
 type AttachmentUploadOperation = {
   controller: AbortController;
@@ -136,6 +149,34 @@ export default function LobbyComposer({
     !busy &&
     matchingCommands.length > 0 &&
     dismissedCommandMessage !== message;
+  // Thumbnails of attachments that are uploaded but not sent yet, made from the local
+  // file so nothing is read back from the server.
+  const [localPreviews, setLocalPreviews] = useState<Record<string, LocalAttachmentPreview>>({});
+  const localPreviewsRef = useRef(localPreviews);
+  localPreviewsRef.current = localPreviews;
+  useEffect(() => {
+    const pending = new Set(
+      Object.values(draftsByRoom).flatMap((draft) =>
+        draft.pendingAttachments.map((attachment) => attachment.id)
+      )
+    );
+    const stale = Object.keys(localPreviews).filter((id) => !pending.has(id));
+    if (stale.length === 0) return;
+    for (const id of stale) URL.revokeObjectURL(localPreviews[id].url);
+    setLocalPreviews((current) => {
+      const next = { ...current };
+      for (const id of stale) delete next[id];
+      return next;
+    });
+  }, [draftsByRoom, localPreviews]);
+  useEffect(
+    () => () => {
+      for (const preview of Object.values(localPreviewsRef.current)) {
+        URL.revokeObjectURL(preview.url);
+      }
+    },
+    []
+  );
   const closeVoteDialog = useCallback(() => { voteRetry.current = null; setVoteDialogOpen(false); }, []);
 
   function setMessage(nextMessage: string) {
@@ -228,6 +269,24 @@ export default function LobbyComposer({
     if (disabled || !canUploadAttachments) return;
     const selected = Array.from(event.currentTarget.files || []);
     event.currentTarget.value = "";
+    await uploadFiles(selected);
+  }
+
+  function handlePaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    const pasted = Array.from(event.clipboardData.files);
+    if (pasted.length === 0) return;
+    // Files on the clipboard (a copied image or screenshot) become attachments; the
+    // text of a paste that carries no file is left to the textarea.
+    event.preventDefault();
+    if (disabled || busy || uploading) return;
+    if (!canUploadAttachments) {
+      setError("이 방에서는 파일을 첨부할 수 없어요.");
+      return;
+    }
+    void uploadFiles(pasted);
+  }
+
+  async function uploadFiles(selected: File[]) {
     if (!selected.length) return;
 
     const { accepted: filesToUpload, error: selectionError } = selectLobbyAttachmentFiles(
@@ -247,19 +306,22 @@ export default function LobbyComposer({
     setUploading(true);
     try {
       const uploaded: LobbyAttachmentRef[] = [];
+      const previews: Record<string, LocalAttachmentPreview> = {};
       for (const file of filesToUpload) {
-        uploaded.push(
-          await uploadLobbyAttachment(file, {
-            roomId: meetingId,
-            sessionToken: roomSessionToken,
-            deviceToken: roomDeviceToken,
-            signal: operation.controller.signal,
-            beforeDispatch: () =>
-              requireCurrentAttachmentUpload(operation, activeUploadOperation.current),
-          })
-        );
+        const attachment = await uploadLobbyAttachment(file, {
+          roomId: meetingId,
+          sessionToken: roomSessionToken,
+          deviceToken: roomDeviceToken,
+          signal: operation.controller.signal,
+          beforeDispatch: () =>
+            requireCurrentAttachmentUpload(operation, activeUploadOperation.current),
+        });
+        uploaded.push(attachment);
+        const kind = localPreviewKind(file.type);
+        if (kind) previews[attachment.id] = { kind, url: URL.createObjectURL(file) };
       }
       requireCurrentAttachmentUpload(operation, activeUploadOperation.current);
+      setLocalPreviews((current) => ({ ...current, ...previews }));
       setPendingAttachments((current) =>
         [...current, ...uploaded].slice(0, MAX_ATTACHMENTS_PER_EVENT)
       );
@@ -459,23 +521,47 @@ export default function LobbyComposer({
 
       {pendingAttachments.length > 0 && (
         <div className="mb-2 flex flex-wrap gap-2">
-          {pendingAttachments.map((attachment) => (
-            <span
-              key={attachment.id}
-              className="dc-composer-attachment inline-flex max-w-full items-center gap-2 px-3 py-1.5 text-[12px] font-bold text-text-secondary"
-            >
-              <span className="min-w-0 truncate preserve-words">{attachment.filename}</span>
-              <button
-                type="button"
-                onClick={() => removePendingAttachment(attachment.id)}
-                disabled={busy || uploading}
-                className="grid h-5 w-5 shrink-0 place-items-center rounded border border-line/70 text-text-muted hover:border-danger/45 hover:text-danger"
-                aria-label={`${attachment.filename} 첨부 제거`}
+          {pendingAttachments.map((attachment) => {
+            const preview = localPreviews[attachment.id];
+            return (
+              <span
+                key={attachment.id}
+                className={`dc-composer-attachment inline-flex max-w-full text-[12px] font-bold text-text-secondary ${
+                  preview ? "w-40 flex-col items-stretch gap-1.5 p-1.5" : "items-center gap-2 px-3 py-1.5"
+                }`}
               >
-                <X size={12} />
-              </button>
-            </span>
-          ))}
+                {preview?.kind === "image" && (
+                  <img
+                    src={preview.url}
+                    alt=""
+                    className="h-32 w-full rounded-[3px] bg-black/30 object-contain"
+                  />
+                )}
+                {preview?.kind === "video" && (
+                  <video
+                    src={preview.url}
+                    muted
+                    playsInline
+                    preload="metadata"
+                    aria-hidden="true"
+                    className="h-32 w-full rounded-[3px] bg-black/30 object-contain"
+                  />
+                )}
+                <span className={`flex min-w-0 items-center gap-2 ${preview ? "px-0.5" : ""}`}>
+                  <span className="min-w-0 flex-1 truncate preserve-words">{attachment.filename}</span>
+                  <button
+                    type="button"
+                    onClick={() => removePendingAttachment(attachment.id)}
+                    disabled={busy || uploading}
+                    className="grid h-5 w-5 shrink-0 place-items-center rounded border border-line/70 text-text-muted hover:border-danger/45 hover:text-danger"
+                    aria-label={`${attachment.filename} 첨부 제거`}
+                  >
+                    <X size={12} />
+                  </button>
+                </span>
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -494,6 +580,7 @@ export default function LobbyComposer({
           value={message}
           onChange={updateMessage}
           onKeyDown={handleKeyDown}
+          onPaste={handlePaste}
           className="dc-composer-input"
           placeholder={disabledReason || (uploading ? "첨부 업로드 중..." : "메시지 입력")}
           disabled={busy || disabled}

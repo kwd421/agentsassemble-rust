@@ -7,7 +7,7 @@ import {
   within,
 } from "@testing-library/react";
 import { useLayoutEffect } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 
 import { RoomSocketProvider } from "../../RoomSocketContext";
 import {
@@ -131,6 +131,79 @@ describe("LobbyComposer", () => {
       )
     );
     expect(await screen.findByText("map.png")).toBeTruthy();
+  });
+
+  it("shows a local preview of an image or video before it is sent", async () => {
+    const createObjectURL = vi.fn((file: File) => `blob:preview-${file.name}`);
+    const revokeObjectURL = vi.fn();
+    const original = { createObjectURL: URL.createObjectURL, revokeObjectURL: URL.revokeObjectURL };
+    Object.assign(URL, { createObjectURL, revokeObjectURL });
+    onTestFinished(() => {
+      Object.assign(URL, original);
+    });
+    const attachment = (id: string, filename: string, contentType: string) => ({
+      id,
+      filename,
+      content_type: contentType,
+      size: 3,
+      is_image: contentType.startsWith("image/"),
+      url: `/api/rooms/room-a/attachments/${id}`,
+      download_url: `/api/rooms/room-a/attachments/${id}/download`,
+    });
+    apiMocks.uploadLobbyAttachment
+      .mockResolvedValueOnce(attachment("attachment-a", "map.png", "image/png"))
+      .mockResolvedValueOnce(attachment("attachment-b", "clip.mp4", "video/mp4"))
+      .mockResolvedValueOnce(attachment("attachment-c", "notes.txt", "text/plain"));
+    const { container } = render(
+      <LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="host" />
+    );
+
+    fireEvent.change(screen.getByLabelText("채팅 첨부 선택"), {
+      target: {
+        files: [
+          new File(["map"], "map.png", { type: "image/png" }),
+          new File(["mp4"], "clip.mp4", { type: "video/mp4" }),
+          new File(["txt"], "notes.txt", { type: "text/plain" }),
+        ],
+      },
+    });
+
+    expect(await screen.findByText("notes.txt")).toBeTruthy();
+    expect(container.querySelector("img[src='blob:preview-map.png']")).toBeTruthy();
+    expect(container.querySelector("video[src='blob:preview-clip.mp4']")).toBeTruthy();
+    expect(createObjectURL).toHaveBeenCalledTimes(2);
+
+    fireEvent.click(screen.getByLabelText("map.png 첨부 제거"));
+    await waitFor(() => expect(revokeObjectURL).toHaveBeenCalledWith("blob:preview-map.png"));
+    expect(container.querySelector("img[src='blob:preview-map.png']")).toBeNull();
+  });
+
+  it("attaches a pasted image and leaves a text paste to the input", async () => {
+    apiMocks.uploadLobbyAttachment.mockResolvedValue({
+      id: "attachment-a",
+      filename: "image.png",
+      content_type: "image/png",
+      size: 3,
+      is_image: true,
+      url: "/api/rooms/room-a/attachments/attachment-a",
+      download_url: "/api/rooms/room-a/attachments/attachment-a/download",
+    });
+    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="host" />);
+    const input = screen.getByLabelText("채팅 입력");
+
+    fireEvent.paste(input, { clipboardData: { files: [], getData: () => "plain text" } });
+    expect(apiMocks.uploadLobbyAttachment).not.toHaveBeenCalled();
+
+    const image = new File(["png"], "image.png", { type: "image/png" });
+    fireEvent.paste(input, { clipboardData: { files: [image], getData: () => "" } });
+
+    await waitFor(() =>
+      expect(apiMocks.uploadLobbyAttachment).toHaveBeenCalledWith(
+        image,
+        expect.objectContaining({ roomId: "room-a" })
+      )
+    );
+    expect(await screen.findByText("image.png")).toBeTruthy();
   });
 
   it.each([
