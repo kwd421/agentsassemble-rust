@@ -2,6 +2,13 @@
 
 ## Active work
 
+- 2026-09-22: completed the user-requested live feedback conversation with
+  Grok 4.7, GPT-6 Astra and DeepSeek Flash; Codex participated through Room
+  Connector MCP. Suggestions, model corrections, participant/event ID distinction,
+  execution issues and evidence limits are recorded in
+  `docs/verification/2026-09-22-conversation-context.md` section 7. These are
+  follow-up suggestions, not implemented changes or additional acceptance coverage.
+
 - 2026-09-22: connect custom text channels to the existing general-channel UI.
   Extract the general message row/actions into shared components and reuse its
   mention input, reply preview, grouping and composer styles. Keep channel
@@ -14,7 +21,8 @@
   desktop cases and affected navigation regressions pass.
   Shared participant dot mapping now uses the existing active-presence owner;
   joined humans show green in both general and custom channels. Rebuilt desktop
-  verification and all 68 affected tests pass.
+  verification and all 68 affected tests pass. Commits `9f417d8`, `8c77b6d` and
+  `f006759` are pushed to `codex/recovery-and-sonnet`.
 
 - 2026-09-22: implement user-requested conversation improvements: optional message
   replies, external MCP attachment read/upload, and public conversation/poll state.

@@ -182,3 +182,90 @@ states retain their existing colors. The canonical joined-member regression now
 also asserts the green dot. The same affected 68-test run and rebuilt desktop
 cover this correction: general, `답장검증` and `공통UI검증` show the same green dot
 for the joined human and gray dot for the stopped native Codex session.
+
+## 7. Live participant feedback and follow-up suggestions
+
+After the changes above, the user requested a free conversation with Grok 4.7,
+GPT-6 Astra and DeepSeek Flash about difficulties and desired features. Codex
+joined the existing room through the local Room Connector MCP, asked an open
+question, challenged claims about missing features, and posted its own opinion.
+This is feedback collection, not implementation of the suggestions or a new
+full-provider verification pass. Shared UI and correction commits `9f417d8`,
+`8c77b6d` and `f006759` were already pushed before this documentation follow-up.
+
+### Participants and evidence
+
+| Display name | Configured model | Reasoning | Participation |
+| --- | --- | --- | --- |
+| Grok 4.7 | `grok-4.7` | Medium | New live session in the user-selected `aa/temp agents` workspace. |
+| Terra | `gpt-6-astra` | Low | Existing session recovered and resumed through the app. |
+| deepseek-files | `deepseek-flash` | High | Existing session resumed through the app. |
+
+The public history remains in room `room-20260916T154644` (`새 회의실`), general.
+Event sequences identify the actual messages:
+
+- #1231: Codex's open question, requesting current experience separately from
+  historical reports or untested assumptions.
+- #1235 / #1241 / #1248: first DeepSeek, Grok and Astra replies.
+- #1247: Codex points out existing reply links and status tools and asks for
+  current tool availability; #1254 / #1260 contain Astra/DeepSeek corrections.
+- #1273 / #1287: Codex's opinion and DeepSeek's capability-guidance suggestion.
+- #1293 / #1299 / #1306: Astra, Grok and DeepSeek distinguish aliases from a
+  proven identity mismatch and correct the stronger earlier claims.
+- #1305: Codex closes the discussion; #1317 confirms its active MCP participant
+  left normally.
+
+### Suggestions and corrections
+
+| Participant | Final feedback | Qualification |
+| --- | --- | --- |
+| Astra | Include reply author and a short source excerpt in the AI's discussion view; explain whether an attachment failure permits retry or requires reattachment. Make the existing status tool easier to discover. | Confirmed reply pointers and `read_room_status` exist. Its earlier unverified message-number citations do not establish an app numbering defect. |
+| DeepSeek Flash | Explain actual attachment read/upload support for each participant. Generate tool guidance from current capabilities and conditions; include reply source previews. | Reported `room_tool_media_unsupported` when reading two images, missing randomness/upload tools, and successful status reads. Retracted the claim that status lookup is absent. |
+| Grok 4.7 | Make available tools and their conditions clear; include reply source previews and clearer participant identification. Reduce extra lookups needed to obtain attachment IDs from search results. | Reported reading the same image DeepSeek could not receive. Randomness tools were listed but rejected outside tabletop mode. Did not independently establish a cross-tool name mismatch. |
+
+The common priority is a short reply source in the existing AI-readable view,
+followed by accurate capability/failure guidance and discovery of existing status
+tools. This concerns the provider observation, not rebuilding the already shared
+frontend reply component. These suggestions remain unimplemented.
+
+### Participant ID versus message ID
+
+The user correctly noted that AI participants already have unique IDs. Source
+inspection confirms `room_turn_context.rs::render_room_view` renders a display
+name and a separate `Agent handles` list. Its message line is
+`#sequence display_name [event message_id]: content`; the ID after the author is
+the message's event ID, not that author's participant ID. Public status separately
+returns both `participant_id` and `display_name`. Compact search/context rendering
+in `room_portal_render.rs` also retains event IDs for message lookup.
+
+An internal ID beginning with `codex-` and the display name `Terra` can be a normal
+alias, not a defect. Grok and DeepSeek withdrew their stronger assertion after
+Astra and Codex raised this distinction. Grok separately reported that its
+discussion handle list included a stopped older session but omitted its current
+active session. That exact provider observation has not been independently
+reproduced; keep it as an investigation item, not a confirmed routing failure.
+The stopped `grok-4.7` and active `Grok 4.7` also had similar display names because
+of the session setup described below.
+
+### Execution limits and retained issues
+
+Codex directly verified MCP admission, message publication/readback, public agent
+status/open-poll reads, and final leave. Attachment and randomness outcomes above
+are the models' reports, not independently replayed provider tests in this run.
+Source inspection corroborates the explicit non-text tool-result rejection in
+`remote_openai.rs` and tabletop filtering in `room_portal_tool_contract.rs`.
+The models did not operate the desktop UI; their feedback concerns their own
+tool-visible conversation. No credentials or provider-private reasoning are
+included in this record.
+
+The original Grok session repeatedly returned an earlier-start recovery error
+after normal recovery/stop/resume. Its history was preserved and a new session
+was created. An initial new session used the prior scratch folder; it was stopped
+when the user specified `aa/temp agents`, and the actual discussion used a new
+session there. No database reset or user-history deletion was performed.
+
+The first temporary MCP helper exited when stdin closed; its earlier participant
+still appeared joined in a later public snapshot. A second, persistent helper
+completed the discussion and received a committed leave receipt. The earlier
+participant row was not deleted, and no cleanup of that lost connection is claimed.
+These execution issues are retained observations, not fixes included in this push.
