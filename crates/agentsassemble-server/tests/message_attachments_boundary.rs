@@ -11,6 +11,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 use tokio::{
+    io::{AsyncReadExt, AsyncWriteExt},
     net::{TcpListener, TcpStream},
     task::JoinHandle,
 };
@@ -28,6 +29,33 @@ use support::{
 };
 
 const PNG_BASE64: &str = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg==";
+
+async fn assert_upload_rejected_before_body(base_url: &str, path: &str, bearer: &str) {
+    let authority = base_url
+        .strip_prefix("http://")
+        .unwrap_or_else(|| panic!("test server must use loopback HTTP"));
+    let mut socket = TcpStream::connect(authority)
+        .await
+        .unwrap_or_else(|error| panic!("connect header-only upload: {error}"));
+    // Withhold the body: a completed upload can race the early response with a
+    // Windows connection reset, and cannot prove authorization precedes body reads.
+    let content_length = 12 * 1024 * 1024;
+    socket
+        .write_all(
+            format!(
+                "POST /api/{path} HTTP/1.1\r\nHost: {authority}\r\nAuthorization: Bearer {bearer}\r\nContent-Type: application/json\r\nContent-Length: {content_length}\r\nConnection: close\r\n\r\n"
+            )
+            .as_bytes(),
+        )
+        .await
+        .unwrap_or_else(|error| panic!("write header-only upload: {error}"));
+    let mut response = Vec::new();
+    tokio::time::timeout(Duration::from_secs(2), socket.read_to_end(&mut response))
+        .await
+        .unwrap_or_else(|_| panic!("unauthorized upload waited for its declared body"))
+        .unwrap_or_else(|error| panic!("read header-only upload rejection: {error}"));
+    assert!(response.starts_with(b"HTTP/1.1 401 "));
+}
 
 struct LocalServer {
     base_url: String,
@@ -84,15 +112,7 @@ async fn assert_crossed_upload_rejected_before_body(client: &Client, server: &Lo
         .await
         .unwrap_or_else(|error| panic!("issue crossed upload ticket: {error}"))
         .ticket;
-    let rejected = client
-        .post(format!("{}/api/message-attachments", server.base_url))
-        .bearer_auth(&crossed)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body("x".repeat(12 * 1024 * 1024))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("reject crossed upload before body: {error}"));
-    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    assert_upload_rejected_before_body(&server.base_url, "message-attachments", &crossed).await;
     let crossed_replay = client
         .get(format!(
             "{}/api/room-settings?room_id=general",
@@ -114,15 +134,7 @@ async fn assert_crossed_upload_rejected_before_body(client: &Client, server: &Lo
         .await
         .unwrap_or_else(|error| panic!("issue retired-route upload ticket: {error}"))
         .ticket;
-    let retired_route = client
-        .post(format!("{}/api/attachments", server.base_url))
-        .bearer_auth(&retired)
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body("x".repeat(12 * 1024 * 1024))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("reject retired upload route before body: {error}"));
-    assert_eq!(retired_route.status(), StatusCode::UNAUTHORIZED);
+    assert_upload_rejected_before_body(&server.base_url, "attachments", &retired).await;
     let retired_replay = client
         .post(format!("{}/api/message-attachments", server.base_url))
         .bearer_auth(retired)
@@ -295,15 +307,8 @@ async fn human_session_tcp_upload_send_and_read_preserve_scope() {
         assert_eq!(retired.status(), StatusCode::NOT_FOUND);
     }
 
-    let malformed = client
-        .post(format!("{}/api/message-attachments", server.base_url))
-        .bearer_auth("aas1.malformed")
-        .header(reqwest::header::CONTENT_TYPE, "application/json")
-        .body("x".repeat(12 * 1024 * 1024))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("reject malformed session before body: {error}"));
-    assert_eq!(malformed.status(), StatusCode::UNAUTHORIZED);
+    assert_upload_rejected_before_body(&server.base_url, "message-attachments", "aas1.malformed")
+        .await;
 
     let attachment = upload(
         &client,

@@ -37,14 +37,14 @@ async fn replies_preserve_identity_on_retry_and_reject_unavailable_sources_atomi
             )
             .await,
     );
-    let replay = checked(
+    let repeated = checked(
         store
             .execute_message_with_turn(&principal, "reply", "message.send", &reply)
             .await,
     )
     .outcome;
-    assert!(replay.deduplicated);
-    assert_eq!(first.event.id, replay.event.id);
+    assert!(repeated.deduplicated);
+    assert_eq!(first.event.id, repeated.event.id);
     let count: i64 = checked(
         sqlx::query_scalar("SELECT COUNT(*) FROM room_events")
             .fetch_one(&store.pool)
@@ -75,7 +75,11 @@ async fn replies_preserve_identity_on_retry_and_reject_unavailable_sources_atomi
                 .await
         )
     );
+}
 
+#[tokio::test]
+async fn replies_stay_in_the_source_channel() {
+    let (store, principal, _directory) = fixture().await;
     let source = checked(
         store
             .execute_channel_message(

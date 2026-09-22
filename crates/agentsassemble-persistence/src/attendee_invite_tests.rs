@@ -131,7 +131,11 @@ async fn attendee_companion_limit_and_creation_replay_remain_under_live_human_au
         .create_companion_attendee_invite(&issuer, make(first_id), now + Duration::seconds(1))
         .await?;
     assert_eq!(first.invite_id, retry.invite_id);
-    assert_eq!(retry.expires_at, now + Duration::minutes(10));
+    assert_eq!(retry.expires_at, first.expires_at);
+    assert_eq!(
+        retry.expires_at.timestamp_micros(),
+        (now + Duration::minutes(10)).timestamp_micros()
+    );
     sqlx::query("UPDATE human_room_sessions SET state='ended' WHERE session_fingerprint=?")
         .bind(fingerprint.as_slice())
         .execute(&store.pool)

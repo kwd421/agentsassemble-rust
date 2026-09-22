@@ -34,10 +34,26 @@ impl Drop for Child {
 impl Child {
     pub(super) async fn wait(&mut self) -> Result<processkit::Outcome, DriverError> {
         let process = self.process.as_mut().ok_or_else(protocol_error)?;
-        processkit::wait_any(&mut [process])
+        let (_, outcome) = processkit::wait_any(&mut [process])
             .await
-            .map(|(_, outcome)| outcome)
-            .map_err(|_| protocol_error())
+            .map_err(|_| protocol_error())?;
+        // Windows can report leader exit before its Job (including conhost) drains.
+        // Keep the existing control deadline and return only positive whole-Job absence.
+        tokio::time::timeout(super::CONTROL_TIMEOUT, async {
+            while !self
+                .proof
+                .group()
+                .members()
+                .map_err(|_| protocol_error())?
+                .is_empty()
+            {
+                tokio::time::sleep(std::time::Duration::from_millis(10)).await;
+            }
+            Ok::<_, DriverError>(())
+        })
+        .await
+        .map_err(|_| protocol_error())??;
+        Ok(outcome)
     }
 
     pub(super) async fn kill(&mut self) -> Result<(), DriverError> {

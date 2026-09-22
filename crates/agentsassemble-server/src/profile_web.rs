@@ -281,15 +281,7 @@ async fn read_attachment(
     request: Request,
 ) -> Result<Response, ProfileHttpError> {
     if attachment_id.starts_with(agentsassemble_domain::MESSAGE_ATTACHMENT_ID_PREFIX) {
-        let inline_requested = match raw_query.as_deref() {
-            Some("view=1") => true,
-            Some("download=1") => false,
-            _ => {
-                return Err(ProfileHttpError::bad_request(
-                    "Message attachments require the exact view or download query.",
-                ));
-            }
-        };
+        let inline_requested = attachment_inline_query(raw_query.as_deref())?;
         let authority = resolve_message_attachment_read_authority(
             &state,
             request.headers(),
@@ -379,6 +371,16 @@ async fn read_attachment(
         attachment.content,
         query.contains_key("view") && !query.contains_key("download"),
     )
+}
+
+fn attachment_inline_query(query: Option<&str>) -> Result<bool, ProfileHttpError> {
+    match query {
+        Some("view=1") => Ok(true),
+        Some("download=1") => Ok(false),
+        _ => Err(ProfileHttpError::bad_request(
+            "Message attachments require the exact view or download query.",
+        )),
+    }
 }
 
 fn attachment_response(

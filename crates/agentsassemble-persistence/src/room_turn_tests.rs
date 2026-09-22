@@ -128,12 +128,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         .unwrap_or_else(|| panic!("first message must assign Terra"));
     assert_eq!(first_assignment.session.public.session_id, AGENT_ID);
     assert!(first_assignment.room_view.contains("take the first turn"));
-    assert!(first_assignment.provider_input.contains("read_discussion"));
-    let provider_input = &first_assignment.provider_input;
-    // The instruction only describes the room tools: which ones end a turn and which
-    // do not. What to do with them is left to the agent.
-    assert!(provider_input.contains("`publish_message` posts to the room"));
-    assert!(provider_input.contains("randomness tools do not end it"));
+    assert_turn_tool_instructions(&first_assignment.provider_input);
     let replay = store
         .execute_message_with_turn(&principal, "message-1", "message.send", &first_payload)
         .await
@@ -188,22 +183,13 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
     assert_ne!(next.turn_id, first_turn_id);
     assert!(next.room_view.contains("queue this while busy"));
 
-    let stored = stored_session(&store).await;
-    assert_eq!(stored.public.active_turn_id, next.turn_id);
-    assert_eq!(stored.public.turn_count, 1);
-    assert_eq!(
-        stored.public.last_provider_sync_event_id,
-        first.outcome.event.id
-    );
-    assert_eq!(
-        stored.public.last_provider_sync_seq,
-        first.outcome.event.seq
-    );
-    assert_eq!(stored.active_source_event_id, second.outcome.event.id);
-    assert_eq!(
-        input_ids(&stored.inflight_inputs),
-        [second.outcome.event.id]
-    );
+    assert_queued_turn(
+        &store,
+        &first.outcome.event,
+        &second.outcome.event,
+        &next.turn_id,
+    )
+    .await;
 
     let Err(stale) = store
         .complete_agent_turn(
@@ -219,6 +205,32 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         panic!("old turn authority must not publish twice");
     };
     assert_rejection_code(&stale, "stale_provider_turn");
+}
+
+async fn assert_queued_turn(
+    store: &SqliteStore,
+    first: &agentsassemble_domain::RoomEvent,
+    second: &agentsassemble_domain::RoomEvent,
+    next_turn: &str,
+) {
+    let stored = stored_session(store).await;
+    assert_eq!(stored.public.active_turn_id, next_turn);
+    assert_eq!(stored.public.turn_count, 1);
+    assert_eq!(stored.public.last_provider_sync_event_id, first.id);
+    assert_eq!(stored.public.last_provider_sync_seq, first.seq);
+    assert_eq!(stored.active_source_event_id, second.id);
+    assert_eq!(
+        input_ids(&stored.inflight_inputs),
+        std::slice::from_ref(&second.id)
+    );
+}
+
+fn assert_turn_tool_instructions(provider_input: &str) {
+    assert!(provider_input.contains("read_discussion"));
+    // The instruction only describes the room tools: which ones end a turn and which
+    // do not. What to do with them is left to the agent.
+    assert!(provider_input.contains("`publish_message` posts to the room"));
+    assert!(provider_input.contains("randomness tools do not end it"));
 }
 
 #[tokio::test]

@@ -9,7 +9,7 @@ use agentsassemble_persistence::{
     HumanSessionAuthorization, LocalRoomManagerAuthority, NewHumanInvite, PreparedHumanAdmission,
     RoomUserIdentity, SqliteStore,
 };
-use chrono::{Duration as ChronoDuration, Utc};
+use chrono::{Duration as ChronoDuration, SubsecRound, Utc};
 
 use crate::{
     TicketError, TicketStore,
@@ -524,7 +524,7 @@ impl HumanSessionFixture {
             )
             .await
             .unwrap_or_else(|error| panic!("authorize human session manager: {error}"));
-        let now = Utc::now();
+        let now = Utc::now().trunc_subsecs(6);
         let mut fingerprints = Vec::with_capacity(count);
         for index in 0..count {
             let marker = u8::try_from(index + 1)

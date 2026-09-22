@@ -258,7 +258,10 @@ async fn provider_reads_an_attachment_shown_before_the_message_that_asks_about_i
         .find(|assignment| assignment.session.public.session_id == super::AGENT_ID)
         .unwrap_or_else(|| panic!("the question must assign Terra"));
     assert!(assignment.room_view.contains(&attachment.id));
-    assert_eq!(assignment.attachment_ids, [attachment.id.clone()]);
+    assert_eq!(
+        assignment.attachment_ids,
+        std::slice::from_ref(&attachment.id)
+    );
 
     store
         .authorize_provider_turn_start(

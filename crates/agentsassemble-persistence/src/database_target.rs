@@ -193,7 +193,7 @@ fn acquire_writer_lease(database_path: &Path) -> Result<File, PersistenceError> 
     secure_file(&file, &lock_path).map_err(PersistenceError::WriterLease)?;
     match FileExt::try_lock_exclusive(&file) {
         Ok(()) => Ok(file),
-        Err(error) if error.kind() == io::ErrorKind::WouldBlock => {
+        Err(error) if error.raw_os_error() == fs2::lock_contended_error().raw_os_error() => {
             Err(PersistenceError::WriterAlreadyActive(lock_path))
         }
         Err(error) => Err(PersistenceError::WriterLease(error)),

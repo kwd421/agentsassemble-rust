@@ -43,9 +43,33 @@ impl RuntimeSupervisorCommand {
 pub(crate) fn command(executable: &std::path::Path) -> Result<RuntimeSupervisorCommand, String> {
     let desktop = std::env::current_exe()
         .map_err(|error| format!("cannot resolve desktop supervisor directory: {error}"))?;
-    command_for_desktop(executable, &desktop)
+    #[cfg(target_os = "macos")]
+    {
+        command_for_desktop(executable, &desktop)
+    }
+    #[cfg(not(target_os = "macos"))]
+    {
+        Ok(command_for_desktop(executable, &desktop))
+    }
 }
 
+#[cfg(not(target_os = "macos"))]
+fn command_for_desktop(
+    executable: &std::path::Path,
+    desktop: &std::path::Path,
+) -> RuntimeSupervisorCommand {
+    let helper = desktop.with_file_name(format!(
+        "agentsassemble-runtime-supervisor{}",
+        std::env::consts::EXE_SUFFIX
+    ));
+    let mut command = Command::new(helper);
+    command.arg(SUPERVISOR_FLAG).arg(executable);
+    #[cfg(unix)]
+    command.process_group(0);
+    RuntimeSupervisorCommand { command }
+}
+
+#[cfg(target_os = "macos")]
 fn command_for_desktop(
     executable: &std::path::Path,
     desktop: &std::path::Path,

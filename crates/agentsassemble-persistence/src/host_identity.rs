@@ -256,11 +256,11 @@ mod tests {
             .unwrap_or_else(|error| panic!("create source authority: {error}"));
         drop(store);
 
-        let private_key = key_path(source.path());
         #[cfg(unix)]
         {
             use std::os::unix::fs::PermissionsExt;
 
+            let private_key = key_path(source.path());
             let mode = private_key
                 .metadata()
                 .unwrap_or_else(|error| panic!("inspect host key permissions: {error}"))
@@ -287,6 +287,7 @@ mod tests {
         let store = SqliteStore::open_path(&database)
             .await
             .unwrap_or_else(|error| panic!("create authority: {error}"));
+        store.pool.close().await;
         drop(store);
         std::fs::remove_file(&database)
             .unwrap_or_else(|error| panic!("remove test database: {error}"));

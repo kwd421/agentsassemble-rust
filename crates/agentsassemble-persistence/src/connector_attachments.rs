@@ -1,5 +1,8 @@
 //! Pending external uploads are owned by a room participant, not a human profile.
-use super::*;
+use super::{
+    AuthenticatedPrincipal, MessageAttachmentMetadata, PersistenceError, PreparedMessageAttachment,
+    Row, Sqlite, Transaction, attachment_unavailable, invalid_attachment_state, metadata,
+};
 
 pub(crate) const DDL: &str = "CREATE TABLE room_connector_uploads (
     attachment_id TEXT PRIMARY KEY,

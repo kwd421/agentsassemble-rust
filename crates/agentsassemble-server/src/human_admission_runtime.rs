@@ -63,7 +63,7 @@ mod tests {
         HumanInviteCredentialEvidence, NewHumanInvite, PreparedHumanAdmission, SqliteStore,
     };
     use agentsassemble_provider::ProviderCatalogService;
-    use chrono::{DateTime, Utc};
+    use chrono::{DateTime, SubsecRound, Utc};
     use tokio::{sync::broadcast, time::timeout};
 
     use super::{HumanAdmissionCommand, handle_human_admission};
@@ -246,7 +246,7 @@ mod tests {
         (
             store,
             HumanInviteCredentialAuthority::from_persistent(&identity),
-            Utc::now(),
+            Utc::now().trunc_subsecs(6),
         )
     }
 

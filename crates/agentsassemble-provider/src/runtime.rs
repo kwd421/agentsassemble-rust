@@ -309,12 +309,12 @@ impl ProviderAdapter {
                 )
             })
             .await;
-            return match confirmed {
+            match confirmed {
                 Ok(Ok(())) => Ok(()),
                 _ => Err(refused(
                     "The provider runtime lease does not prove the previous owner is gone.",
                 )),
-            };
+            }
         }
         #[cfg(not(windows))]
         {

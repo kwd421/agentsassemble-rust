@@ -715,10 +715,10 @@ mod tests {
         .await
         .unwrap_or_else(|error| panic!("select exact workspace: {error}"));
         assert_eq!(
-            std::path::Path::new(&selected.workspace)
-                .file_name()
-                .and_then(std::ffi::OsStr::to_str),
-            Some(" workspace ")
+            std::path::Path::new(&selected.workspace),
+            spaced
+                .canonicalize()
+                .unwrap_or_else(|error| panic!("canonical spaced workspace: {error}"))
         );
 
         let mut control_character = payload.clone();

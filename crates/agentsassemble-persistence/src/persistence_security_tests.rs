@@ -66,11 +66,22 @@ async fn path_api_treats_query_characters_as_literal_filename_text() {
     let directory =
         tempfile::tempdir().unwrap_or_else(|error| panic!("create test directory: {error}"));
     let path = directory.path().join("authority?mode=memory");
-    let store = SqliteStore::open_path(&path)
-        .await
-        .unwrap_or_else(|error| panic!("open literal query-shaped filename: {error}"));
-    assert!(path.is_file());
-    assert!(store.was_created());
+    let result = SqliteStore::open_path(&path).await;
+    #[cfg(windows)]
+    {
+        // Windows forbids '?' in a filename; it must never become an in-memory URL.
+        assert!(
+            matches!(result, Err(PersistenceError::WriterLease(error)) if error.raw_os_error() == Some(123))
+        );
+        assert!(!path.exists());
+    }
+    #[cfg(not(windows))]
+    {
+        let store =
+            result.unwrap_or_else(|error| panic!("open literal query-shaped filename: {error}"));
+        assert!(path.is_file());
+        assert!(store.was_created());
+    }
 }
 
 #[cfg(unix)]
