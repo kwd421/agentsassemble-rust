@@ -204,7 +204,7 @@ pub(crate) async fn blocking_execution_exists(
 }
 
 impl SqliteStore {
-    /// Quarantines an exact provider turn whose external start result is uncertain.
+    /// Quarantines an exact turn with an uncertain start or an uncommitted result.
     ///
     /// # Errors
     ///
@@ -232,7 +232,9 @@ impl SqliteStore {
             || execution.runtime_lease_token != authority.runtime_lease_token
             || !matches!(
                 execution.phase,
-                ProviderTurnExecutionPhase::StartDispatching | ProviderTurnExecutionPhase::Running
+                ProviderTurnExecutionPhase::StartDispatching
+                    | ProviderTurnExecutionPhase::Running
+                    | ProviderTurnExecutionPhase::RecoveryRequired
             )
             || session.public.active_turn_id != authority.turn_id
             || session.turn_generation != authority.turn_generation
@@ -242,6 +244,17 @@ impl SqliteStore {
             || !active_turn_authority(&session).map_err(|_| invalid_execution())?
         {
             return Err(stale_execution());
+        }
+        if execution.phase == ProviderTurnExecutionPhase::RecoveryRequired {
+            if !session.public.recovery_required {
+                return Err(invalid_execution());
+            }
+            // Retrying the same retained result must not publish duplicate recovery
+            // events. Keep the first diagnostic until completion or operator recovery.
+            return Ok(AgentTurnCommit {
+                events: Vec::new(),
+                next_assignments: Vec::new(),
+            });
         }
         let updated = sqlx::query(
             "UPDATE provider_turn_executions SET phase = 'recovery_required', updated_at = ? \
@@ -519,7 +532,8 @@ pub(crate) async fn terminalize_ordinary_execution(
     let updated = sqlx::query(
         "UPDATE provider_turn_executions SET phase = ?, provider_turn_id = ?, updated_at = ? \
          WHERE room_id = ? AND session_id = ? AND turn_generation = ? AND execution_id = ? \
-         AND turn_id = ? AND phase IN ('start_dispatching', 'running') \
+         AND turn_id = ? AND (phase IN ('start_dispatching', 'running') \
+           OR (phase = 'recovery_required' AND provider_turn_id = ?)) \
          AND start_dispatch_nonce = ? AND runtime_handle_id = ? AND runtime_owner_id = ? \
          AND runtime_lease_token = ? AND NOT EXISTS (SELECT 1 FROM provider_turn_effects effect \
            WHERE effect.room_id = provider_turn_executions.room_id \
@@ -535,6 +549,7 @@ pub(crate) async fn terminalize_ordinary_execution(
     .bind(generation_i64(authority.turn_generation)?)
     .bind(authority.execution_id)
     .bind(authority.turn_id)
+    .bind(authority.provider_turn_id)
     .bind(authority.start_dispatch_nonce)
     .bind(authority.runtime_handle_id)
     .bind(authority.runtime_owner_id)

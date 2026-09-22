@@ -159,12 +159,14 @@ async fn reconcile_live_candidate(
         publish_commit(rooms, commit).await?;
         return Ok(());
     }
+    let retained_result = provider_adapter.retained_turn_result(&authority).await;
     if candidate.execution.phase == ProviderTurnExecutionPhase::RecoveryRequired
+        && !matches!(&retained_result, Some(Ok(_)))
         && provider_adapter.owns_exact_turn(&authority).await
     {
         return Ok(());
     }
-    if let Some(result) = provider_adapter.retained_turn_result(&authority).await {
+    if let Some(result) = retained_result {
         let start = start_authority(candidate)?;
         let commit = crate::provider_turn::commit_exact_provider_result(
             store,

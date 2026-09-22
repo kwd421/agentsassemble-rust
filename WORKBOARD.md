@@ -2,15 +2,20 @@
 
 ## Active work
 
-- 2026-09-22: DeepSeek's persistent typing state is traced to an ordered-floor
-  queue-order rejection that rolls back turn completion; the same failure is
-  reproduced with the persistence fixture. Diagnosis, proposed correction and
-  acceptance are recorded in `docs/verification/2026-09-22-conversation-context.md`
-  section 8. The user now authorizes correction: preserve chronological pending
-  inputs and cursor boundaries, expose completion failures through existing
-  recovery, and verify retained-result retry without another model call.
-  Implement and commit each correction separately; verify the packaged flow with
-  isolated data while preserving the user's existing room and history.
+- 2026-09-22: implemented the DeepSeek persistent-typing correction: chronological
+  pending inputs preserve observation boundaries, completion failures expose
+  existing recovery, and the existing reconciler commits the exact retained
+  result without another model call. Persistence 350, affected server 5, frontend
+  23 and the new managed failure/recovery integration pass. The actual isolated
+  Windows desktop completes four sequential DeepSeek turns and returns to idle;
+  original history is preserved. Unix executable-handle/reaping prerequisites
+  are a separate correction. Affected Clippy and structure/format gates pass.
+  Full-suite results remain incomplete: Windows fixture startup stalled, and
+  Linux managed-search/failed-companion tests fail before completion. The final
+  artifact gate is blocked by an oversized cache whose cleanup Cargo rejects
+  for missing CACHEDIR.TAG; automatic review also blocked isolated-data deletion.
+  Exact evidence and limits: `docs/verification/2026-09-22-conversation-context.md`
+  section 8. App closed; no full verification pass claimed.
 
 - 2026-09-22: completed the user-requested live feedback conversation with
   Grok 4.7, GPT-6 Astra and DeepSeek Flash; Codex participated through Room

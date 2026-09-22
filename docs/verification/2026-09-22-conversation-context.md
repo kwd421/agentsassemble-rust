@@ -377,7 +377,7 @@ authority validation before the scenario and is not reproduction evidence.
 The diagnostic test was removed afterward; its patch and expanded incident notes
 remain locally under `aa/temp agents`. This proves the defect, not a correction.
 
-### Correction contract and acceptance (implementation in progress)
+### Correction contract and acceptance
 
 The persistence scheduler owns chronological pending inputs and read boundaries;
 the existing provider execution/reconciliation owners retain exact results and
@@ -387,15 +387,15 @@ publication intact. No storage migration, new queue, model retry, UI timer or
 change to the external connector protocol is in scope. Tests use isolated stores;
 the user's existing room history is preserved.
 
-Acceptance matrix (all rows initially unverified for the correction):
+Acceptance matrix (correction implemented; verification boundaries below):
 
 | Trigger | Required state, side effect and visible result | Verification |
 | --- | --- | --- |
-| Older ordered decline arrives after a newer pending input | One chronological observation, monotonic input cursor, one completion; chain ends without a repeated observed input or stuck typing | Persistence regression and packaged flow |
-| Decline targets a message within another session's completed or in-flight observation | Already-covered session is excluded; no stale pending input; remaining turns finish | Persistence mode-transition regressions |
-| Stored queue authority is invalid | Reject without silently sorting or discarding stored authority | Persistence regression |
-| Returned provider result cannot commit | Exact result retained; public recovery state explains failure and suppresses typing | Server integration and existing frontend projection tests |
-| Existing reconciler retries the retained result after the blocking condition clears | Same execution/result commits once without provider I/O; cursor advances and recovery clears | Server integration, including stale/interrupt fences |
+| Older ordered decline arrives after a newer pending input | One chronological observation, monotonic input cursor, one completion; chain ends without a repeated observed input or stuck typing | Persistence regression passes; this overlap was not induced in the desktop |
+| Decline targets a message within another session's completed or in-flight observation | Already-covered session is excluded; no stale pending input; remaining turns finish | Persistence mode-transition regressions pass |
+| Stored queue authority is invalid | Reject without silently sorting or discarding stored authority | Persistence regression passes |
+| Returned provider result cannot commit | Exact result retained; public recovery state explains failure and suppresses typing | Managed server integration and existing frontend projection tests pass; no desktop fault injection |
+| Existing reconciler retries the retained result after the blocking condition clears | Same execution/result commits once without provider I/O; cursor advances and recovery clears | Managed server integration, exact-identity persistence regression and affected interrupt/reconciliation tests pass |
 
 Fully verified means the relevant automated paths and actual packaged normal
 flow pass. Fault injection proves the failure/recovery path only at the layers
@@ -409,7 +409,7 @@ actually exercised; it does not claim a real provider or UI fault-injection run.
   so unresolved completion is visible instead of leaving an unexplained busy
   state. Preserve the exact returned result and execution identity; verify retry
   when the provider turn is already marked running, without regenerating the
-  response. The exact transition remains to be designed and verified.
+  response. The implemented transition and evidence are recorded below.
 - Add the reproduced delayed-handoff case as a regression, then verify ordered
   delivery, one completion, next-participant execution, duplicate/already-observed
   handling and preservation of normal ambient scheduling. Exercise commit failure
@@ -417,7 +417,7 @@ actually exercised; it does not claim a real provider or UI fault-injection run.
 - Verify the resulting public session state through the existing frontend
   projection and typing tests. A UI timer that merely hides typing is not the fix.
   Keep changes independently verified and committed under the project workflow;
-  the authorized correction will be exercised in an isolated desktop run.
+  the isolated desktop verification is recorded below.
 
 ### Correction 1: chronological pending inputs
 
@@ -436,7 +436,7 @@ checks both sessions are idle, queues empty and cursors at the newer message.
 The two existing capacity/attachment rollback tests now seed real chronological
 room events instead of references to nonexistent messages; their original
 overflow and atomic rollback assertions are preserved. Server recovery and
-packaged verification remain pending for the next correction.
+actual desktop verification are recorded under Correction 2 below.
 Persistence all-target/all-feature Clippy, workspace formatting, architecture,
 source-growth, artifact and diff gates pass; the 19 Python gate tests pass on WSL.
 
@@ -468,3 +468,84 @@ Native Linux fixtures run in an isolated PID/mount namespace with fresh `/tmp`
 and root inside the namespace. The ordinary WSL user cannot inspect descriptors
 of two same-user system processes, and the existing custody check correctly
 fails closed there. No custody validation or host permissions were relaxed.
+
+### Correction 2: retained completion recovery
+
+If a successful typed provider result cannot commit, the server now records the
+existing `recovery_required` state for that exact execution. The public diagnostic
+identifies a completion-commit failure, and the existing frontend projection
+suppresses typing while showing recovery. Repeated failures keep the first
+diagnostic and do not publish duplicate recovery events or repeat the error log.
+Stale execution and interrupt handling retain their existing authority checks.
+
+The existing reconciler retries the adapter's retained successful result even
+while the execution is in recovery. Binding the same provider result ID is
+idempotent, and completion accepts recovery only with the exact provider ID,
+dispatch nonce, runtime owner, handle and lease. Recovery remains visible until
+the atomic completion transaction commits. Only then are cursors advanced, the
+result released and recovery cleared. The provider is not asked to generate
+another answer. This reuses the current in-memory retained-result lifetime; it
+does not add durable result storage or promise retry across process restarts.
+The provider-error branch is unchanged.
+
+Execution-verified evidence:
+
+- All 350 persistence tests pass. The new regression covers failure before and
+  after running identity is recorded, repeated quarantine, exact-identity retry,
+  rejection of a substituted result/dispatch, unchanged cursors until commit,
+  one terminal result and rejection of reopening a completed execution.
+- The new managed-server integration passes through real WebSocket commands,
+  Room Portal MCP, the native fixture provider, persistence and normal shutdown.
+  It stages a publication, mutes its target before completion to make the
+  transaction fail, observes public recovery with the result retained, then
+  unmutes the target. Reconciliation commits one message and one completion,
+  advances the cursor, clears recovery and releases the result. The provider
+  transcript contains exactly one `turn/start`. No production test hook or
+  direct SQL authority mutation is introduced.
+- The four server reconciliation tests and one interrupt-runtime test pass on
+  Windows. All 23 affected frontend typing/session-detail tests pass.
+- Affected persistence/provider/server all-target/all-feature Clippy passes on
+  Windows; provider/server Clippy also passes on Linux, including Unix fixtures.
+  Formatting, architecture, source-growth and diff gates pass; the 19 Python
+  policy tests pass on WSL. Existing source-size warnings remain unchanged.
+
+Actual Windows desktop verification used a separately identified Tauri debug
+application and isolated storage with the already configured DeepSeek Flash API.
+Four sequential turns completed: acknowledgement, short numerical answer, long
+answer and a follow-up acknowledgement. The UI showed responding/typing during
+generation and idle afterward, with participant status dots present. Public
+events recorded four `turn_finished` completions and idle turn counts 1 through
+4; final input cursor was 27, with no recovery or error. Runtime stderr was empty.
+Normal Quit left the test session stopped and no owned app/server process.
+The default-identifier desktop executable and sidecar were rebuilt afterward;
+the app remains closed. The user's original database was not opened or modified
+by this verification app.
+
+The UI run did not overlap inputs during an active turn or reproduce the
+original delayed decline. It verifies ordinary real-provider completion only;
+the exact ordering and forced completion-failure paths are covered at the
+persistence and managed-server layers above. Selected public evidence is kept
+locally in `aa/temp agents/2026-09-22-typing-fix-native-evidence.json`, without
+credentials or provider-private reasoning.
+
+### Remaining verification and cleanup limits
+
+- The broad Windows server suite did not complete. It stalled in existing
+  runtime-release fixture startup, before provider turn completion; its owned
+  test process was terminated after investigation. Three waiting tests later
+  reported success, but the process exited abnormally and there is no complete
+  suite result. This is not a full-server-suite pass.
+- The existing Linux `room_turns_publish_provider_finals_without_blocking_room_commands`
+  integration fails parsing the managed search page in `managed_tools.rs:55`,
+  before its first provider completion. The failed-companion timeout noted above
+  also remains unresolved. These broader paths were not changed to force a pass.
+- The final artifact-size gate fails: the Windows Cargo target occupies about
+  23.0 GB against the 18 GiB limit. The repository's authorized maintenance
+  command, `python -B scripts/prune_build_artifacts.py --clean`, was attempted
+  after builds stopped. Cargo refuses cleanup because this target lacks its
+  required `CACHEDIR.TAG`. The gate, cache authority and protection were not
+  weakened; the cache remains and the final artifact gate is not claimed green.
+- Automatic approval review rejected deletion of the two isolated test-data
+  directories under Local/Roaming `app.agentsassemble.rust.typing-verification`
+  with only the generic reason `blocked by policy`. They remain on disk. The
+  test app was normally closed and Computer Use reset; user data was preserved.

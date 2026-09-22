@@ -112,9 +112,13 @@ pub(crate) async fn mark_running_in(
         return Err(invalid_execution());
     }
     let updated = sqlx::query(
-        "UPDATE provider_turn_executions SET phase = 'running', provider_turn_id = ?, \
+        "UPDATE provider_turn_executions SET phase = CASE WHEN phase = 'recovery_required' \
+             THEN phase ELSE 'running' END, provider_turn_id = ?, \
              updated_at = ? WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
-             AND execution_id = ? AND turn_id = ? AND phase = 'start_dispatching' \
+             AND execution_id = ? AND turn_id = ? \
+             AND (phase = 'start_dispatching' \
+               OR (phase IN ('running', 'recovery_required') AND provider_turn_id = ?) \
+               OR (phase = 'recovery_required' AND provider_turn_id = '')) \
              AND start_dispatch_nonce = ? AND runtime_handle_id = ? \
              AND runtime_owner_id = ? AND runtime_lease_token = ?",
     )
@@ -125,6 +129,7 @@ pub(crate) async fn mark_running_in(
     .bind(generation_i64(authority.turn_generation)?)
     .bind(&authority.execution_id)
     .bind(&authority.turn_id)
+    .bind(provider_turn_id)
     .bind(&authority.start_dispatch_nonce)
     .bind(&authority.runtime_handle_id)
     .bind(&authority.runtime_owner_id)

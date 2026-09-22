@@ -228,7 +228,24 @@ pub(crate) async fn commit_exact_provider_result(
                 }
                 return Ok(empty_turn_commit());
             }
-            Err(error)
+            if matches!(&error, PersistenceError::CommandRejected { code, .. } if code == "stale_provider_turn")
+            {
+                return Err(error);
+            }
+            // The adapter retains the exact result until terminal commit. Expose
+            // the failed commit through existing recovery instead of leaving busy
+            // unexplained or asking the provider to generate another response.
+            let recovery = store
+                .mark_provider_turn_recovery_required(
+                    start,
+                    Some(&format!("provider_result_commit_failed: {error}")),
+                )
+                .await?;
+            if !recovery.events.is_empty() {
+                tracing::error!(%error, room_id = %start.room_id, session_id = %start.session_id,
+                    "retained provider result requires completion recovery");
+            }
+            Ok(recovery)
         }
     }
 }

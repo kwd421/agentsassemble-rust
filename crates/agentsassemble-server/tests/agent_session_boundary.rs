@@ -63,6 +63,10 @@ mod managed_tools;
 mod managed_failure;
 
 #[cfg(unix)]
+#[path = "agent_session_boundary/completion_recovery.rs"]
+mod completion_recovery;
+
+#[cfg(unix)]
 #[path = "agent_session_boundary/runtime_recovery.rs"]
 mod runtime_recovery;
 
