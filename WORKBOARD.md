@@ -2,6 +2,32 @@
 
 ## Active work
 
+- 2026-09-30 actual packaged Grok reproduction: normal start, same-session resume
+  and real OK publication succeed. Denying access only to the newly created test
+  session directory makes real Resume fail; persisted events change from
+  provider_protocol_invalid to runtime_start_recovered_gone within one second,
+  and the app visibly displays the overwritten generic error. Permissions restored.
+  Evidence and exact limits: `docs/verification/2026-09-30-runtime-status.md`.
+
+- 2026-09-30 direct runtime revalidation, per user instruction instead of external
+  review: retained-completion recovery and macOS companion failure-custody tests
+  pass. Managed-search failure is reproduced as a stale JSON-parsing test; updated
+  to the current compact text contract and the same integration passes. ACP
+  new/load cause loss and reconciliation error overwrite are reproduced and remain
+  unfixed. Long-idle and other-platform outcomes remain unverified. The older
+  2026-09-22 test status below is historical, not a current all-platform verdict.
+  Full disposition: `docs/verification/2026-09-30-runtime-status.md`.
+
+- 2026-09-30 user-authorized avatar consistency correction: preserve layout and
+  provider/system icons; use the human profile photo/initials consistently in
+  self profile, member list and general/custom messages. Profile storage remains
+  authoritative; expose its label through participant projection and profile-update
+  events, including existing memberships. No new polling or provider calls.
+  Frontend 922 and persistence 355 tests, mandatory gates and signed packaged
+  verification pass: existing general/custom messages, member and self avatars
+  match; UI -> XY profile edit updates all three. Exact scope and limits are in
+  docs/VERIFICATION.md. Existing test-only notes remain separate evidence.
+
 - 2026-09-22: implemented the DeepSeek persistent-typing correction: chronological
   pending inputs preserve observation boundaries, completion failures expose
   existing recovery, and the existing reconciler commits the exact retained

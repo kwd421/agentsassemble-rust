@@ -50,17 +50,31 @@ pub(super) async fn verify(endpoint: &str, token: &str, attachment_id: &str) {
     )
     .await;
     assert_ne!(search.is_error, Some(true));
-    let page: Value =
-        serde_json::from_str(search.content[0].as_text().map_or("", |text| &text.text))
-            .unwrap_or_else(|error| panic!("managed search page: {error}"));
-    assert_eq!(page["results"].as_array().map(Vec::len), Some(1));
+    let page = search.content[0]
+        .as_text()
+        .map_or("", |text| text.text.as_str());
+    let results: Vec<_> = page.lines().filter(|line| line.starts_with('#')).collect();
+    assert_eq!(results.len(), 1, "managed search page: {page}");
+    assert!(results[0].contains("answer the first room message"));
+    let event_id = results[0]
+        .split_once(" [event ")
+        .and_then(|(_, result)| result.split_once("]: "))
+        .map_or_else(
+            || panic!("managed search result must expose an event ID: {page}"),
+            |(event_id, _)| event_id,
+        );
     let context = room_portal_fixture::call_tool(
         &client,
         "read_message_context",
-        json!({"event_id":page["results"][0]["event_id"]}),
+        json!({"event_id":event_id}),
     )
     .await;
     assert_ne!(context.is_error, Some(true));
+    let context_text = context.content[0]
+        .as_text()
+        .map_or("", |text| text.text.as_str());
+    assert!(context_text.contains(&format!("<- the result [event {event_id}]")));
+    assert!(context_text.contains("answer the first room message"));
     let roll =
         room_portal_fixture::call_tool(&client, "roll_dice", json!({"notation":"2d6+1"})).await;
     assert_ne!(roll.is_error, Some(true));
