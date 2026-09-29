@@ -270,6 +270,36 @@ completed the discussion and received a committed leave receipt. The earlier
 participant row was not deleted, and no cleanup of that lost connection is claimed.
 These execution issues are retained observations, not fixes included in this push.
 
+### 2026-09-30 follow-up assessment at `7d888b36`
+
+The five follow-up suggestions were checked against current owners. This is an
+assessment, not implementation of the suggestions or a new live-provider run.
+
+| Item | Current evidence and disposition |
+| --- | --- |
+| Reply source preview | `room_turn_context.rs::render_room_view` supplies a reply event ID, without the source author/excerpt. A retained real Grok `read_discussion` result also contains only that pointer. The suggested preview is genuinely absent. Any implementation must resolve the current authorized source and include its text in the observation budget; never persist a copied quote across source edits/deletion. |
+| Attachment failure guidance | `remote_openai.rs::tool_result_text` already explains media unsupported and oversized output. The controlled API test below proves the model receives those failures and can finish the turn. Reuploading an unchanged image cannot fix the text-only transport. Separately, `is_error=true` discards MCP rejection detail and emits only `room_tool_rejected`; that is a code-confirmed information loss, not a reproduction of the original provider failure. Preserve only safe owner-provided error information when correcting it. |
+| Capability guidance | `read_room_status` exists in the MCP catalog. API catalog filtering already removes randomness tools outside tabletop mode. The observation introduction omits the status tool and mentions randomness without stating its condition in ordinary mode. Managed provider tools do not include the external connector's upload tool. Guidance can be made accurate without adding tools or implying all providers support media/upload. |
+| Search attachment IDs | The domain search result contains filenames only; `room_portal_render.rs::search_page` cannot render IDs. Context lookup already returns IDs. Removing that extra lookup requires projecting canonical attachment metadata through the search contract. `message_attachments.rs::bound_provider_attachment_in` independently validates room, active execution and input sequence; displaying an ID must not bypass those checks. |
+| Agent handles | `load_room_agent_ids` deliberately excludes the caller and retains non-kicked, unmuted stopped targets. The scheduler queues directly addressed messages for stopped sessions and assigns them after reactivation. The existing stopped-target test passes. Thus self exclusion and stopped-target presence do not establish a routing bug. The old Grok report's exact multi-agent observation remains unreproduced; the retained single-agent Grok result correctly says `You are: Grok Runtime Reproduction` and `Agent handles: none`. |
+
+Executed once each, with no new real-provider calls:
+
+- Provider `attachment_results_reach_api_and_preserve_turn_completion`: **pass**.
+  Six controlled cases cover delivered text, image/binary rejection and oversized
+  ASCII/Korean/escaped text. This proves the tested API round trips, not live
+  DeepSeek behavior. Log: `/tmp/aa-feedback-attachment-check.log`.
+- Persistence
+  `stopped_direct_target_keeps_every_message_and_assigns_only_the_visible_prefix`:
+  **pass**. Fifty-one directed messages queue without starting a stopped session;
+  reactivation assigns only the bounded visible prefix. Log:
+  `/tmp/aa-feedback-stopped-target-check.log`.
+
+No frontend or runtime product code changed in this assessment. Reply previews,
+search IDs and guidance improvements remain unimplemented; ordinary MCP rejection
+detail loss remains unfixed. Existing avatar/runtime-test changes were separately
+committed and pushed as `130c91ee` and `7d888b36`.
+
 ## 8. Persistent DeepSeek typing: diagnosis and authorized correction
 
 The diagnosis was initially documented without changing product code. The user

@@ -2,6 +2,15 @@
 
 ## Active work
 
+- 2026-09-30 follow-up assessment: checked all five model-feedback items against
+  current code, a retained real Grok discussion result and two focused passing
+  tests. Reply previews/search attachment IDs are absent; ordinary MCP rejection
+  detail is discarded. Media/size failures already reach the API model, status
+  tools exist, and stopped direct targets intentionally retain queued messages.
+  This assessment does not implement the suggestions or fix the rejection detail
+  loss. Exact evidence and disposition: section 7's 2026-09-30 follow-up assessment
+  in `docs/verification/2026-09-22-conversation-context.md`.
+
 - 2026-09-30 actual packaged Grok reproduction: normal start, same-session resume
   and real OK publication succeed. Denying access only to the newly created test
   session directory makes real Resume fail; persisted events change from
