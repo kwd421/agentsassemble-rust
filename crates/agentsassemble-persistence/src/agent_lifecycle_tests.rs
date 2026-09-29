@@ -60,6 +60,7 @@ async fn seed_agent(store: &SqliteStore, now: chrono::DateTime<Utc>, input_id: S
         participant_id: AGENT_ID.to_owned(),
         display_name: "Terra".to_owned(),
         avatar_image_url: String::new(),
+        avatar_label: None,
         participant_type: "agent".to_owned(),
         status: ParticipantStatus::Detached,
         role: ParticipantRole::Agent,

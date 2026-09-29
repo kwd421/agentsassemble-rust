@@ -29,6 +29,7 @@ export default function ChannelMessageRows({ events, profiles, mentionLabels, se
     const deleted = event.message_deleted === true;
     const replyId = typeof event.reply_to_event_id === "string" ? event.reply_to_event_id : undefined;
     return <MessageRow key={row.key} eventId={event.id} author={row.event.name} createdAt={event.created_at}
+        participantType={event.actor.participant_type} avatarLabel={profile?.avatarLabel}
         avatarImage={profile?.avatarImageUrl} providerKind={profile?.providerKind} role={profile?.role}
         showHeader={row.showHeader} selected={selectedId === event.id}
         actions={<MessageActions onReply={canReply && !deleted ? () => onReply(event.id) : undefined}

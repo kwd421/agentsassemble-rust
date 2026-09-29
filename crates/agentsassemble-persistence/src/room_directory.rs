@@ -173,6 +173,7 @@ async fn create_room_in_transaction(
         participant_id: LOCAL_OPERATOR_PARTICIPANT_ID.to_owned(),
         display_name: profile.display_name,
         avatar_image_url: profile.avatar_image_url,
+        avatar_label: Some(profile.avatar_label.clone()),
         participant_type: "human".to_owned(),
         status: ParticipantStatus::Joined,
         role: ParticipantRole::Human,

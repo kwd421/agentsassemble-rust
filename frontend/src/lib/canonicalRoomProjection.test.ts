@@ -104,6 +104,7 @@ describe("canonical participant event projection", () => {
     ).toEqual({
       "agent-one": {
         displayName: "Session identity",
+        participantType: "agent",
         avatarImageUrl: undefined,
         providerKind: "codex_live_session",
         role: "reviewer",

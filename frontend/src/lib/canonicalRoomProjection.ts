@@ -39,6 +39,8 @@ export const EMPTY_PROVIDER_CATALOG: ProviderCatalogSnapshot = {
 
 export type CanonicalParticipantProfile = {
   displayName?: string;
+  avatarLabel?: string;
+  participantType?: string;
   avatarImageUrl?: string;
   providerKind?: string;
   role?: string;
@@ -55,11 +57,15 @@ export function applyCanonicalParticipantProfiles(
       ...event,
       name: profile.displayName || event.name,
       avatar_image_url: profile.avatarImageUrl,
+      avatar_label: profile.avatarLabel,
+      actor_type: profile.participantType || event.actor_type,
       provider_kind: profile.providerKind || event.provider_kind,
       role: profile.role || event.role,
     };
     return next.name === event.name &&
       next.avatar_image_url === event.avatar_image_url &&
+      next.avatar_label === event.avatar_label &&
+      next.actor_type === event.actor_type &&
       next.provider_kind === event.provider_kind &&
       next.role === event.role
       ? event
@@ -77,6 +83,8 @@ export function canonicalParticipantProfiles(
     if (!participant.participant_id) return;
     profiles[participant.participant_id] = {
       displayName: participant.display_name,
+      avatarLabel: participant.avatar_label,
+      participantType: participant.participant_type,
       avatarImageUrl: resolveAttachmentReference(
         participant.avatar_image_url,
         displayResourceBase,
@@ -88,6 +96,7 @@ export function canonicalParticipantProfiles(
     if (!session.participant_id) return;
     profiles[session.participant_id] = {
       displayName: session.display_name,
+      participantType: "agent",
       avatarImageUrl: resolveAttachmentReference(session.avatar_image_url, displayResourceBase),
       providerKind: session.provider_kind,
       role: profiles[session.participant_id]?.role,
@@ -232,6 +241,7 @@ export function applyParticipantEvents(
         "avatar_image_url" in event
           ? String(event.avatar_image_url || "")
           : participant.avatar_image_url,
+      avatar_label: typeof event.avatar_label === "string" ? event.avatar_label : participant.avatar_label,
       updated_at: event.created_at || participant.updated_at,
     });
     changed = true;

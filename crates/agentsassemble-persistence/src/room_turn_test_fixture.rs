@@ -120,6 +120,7 @@ pub(super) fn participant(
         participant_id: id.to_owned(),
         display_name: name.to_owned(),
         avatar_image_url: String::new(),
+        avatar_label: None,
         participant_type: participant_type.to_owned(),
         status: ParticipantStatus::Joined,
         role,

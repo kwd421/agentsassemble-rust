@@ -436,6 +436,7 @@ mod tests {
             participant_id: id.to_owned(),
             display_name: id.to_owned(),
             avatar_image_url: String::new(),
+            avatar_label: None,
             participant_type: participant_type.to_owned(),
             status: ParticipantStatus::Joined,
             role: if participant_type == "agent" {

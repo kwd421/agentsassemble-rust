@@ -440,13 +440,15 @@ async fn join_participant(
             let joined = participant.status != ParticipantStatus::Joined;
             let changed = joined
                 || participant.display_name != profile.display_name
-                || participant.avatar_image_url != profile.avatar_image_url;
+                || participant.avatar_image_url != profile.avatar_image_url
+                || participant.avatar_label.as_deref() != Some(profile.avatar_label.as_str());
             if changed {
                 participant.status = ParticipantStatus::Joined;
                 participant.display_name.clone_from(&profile.display_name);
                 participant
                     .avatar_image_url
                     .clone_from(&profile.avatar_image_url);
+                participant.avatar_label = Some(profile.avatar_label.clone());
                 participant.updated_at = now;
             }
             (participant, joined, changed)
@@ -457,6 +459,7 @@ async fn join_participant(
                 participant_id: participant_id.to_owned(),
                 display_name: profile.display_name.clone(),
                 avatar_image_url: profile.avatar_image_url.clone(),
+                avatar_label: Some(profile.avatar_label.clone()),
                 participant_type: "human".to_owned(),
                 status: ParticipantStatus::Joined,
                 role: ParticipantRole::Human,

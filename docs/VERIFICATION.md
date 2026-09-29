@@ -11728,3 +11728,63 @@ The isolated profile and cache were moved to Trash. This package operation did n
 produce a native Claude permission prompt or a real installer recovery; those
 specific UI outcomes remain unverified in the signed app. Windows execution is
 also unverified.
+
+
+### Packaged macOS frontend manual verification (2026-09-29/30)
+
+Verified HEAD `68121f63a644c2ee97bea6ba7836224706cb493b` in a newly built,
+signed debug app with isolated identifier `app.agentsassemble.rust.ui20260929`.
+Used native Computer Use against the real packaged frontend and Rust server,
+not the mocked browser suite. Created a disposable guest and room through UI.
+
+Directly observed: main-chat send; Korean reply with original-message reference;
+text-file selection, pending attachment and attachment-only send; creation and
+send in `ui-check`, returning to `general` with its messages intact; sidechat
+send and retention when reopened; member/sidechat panel switching with persistent
+header buttons and people icon. At the captured 2880x1800 pixel window, a long
+Korean message wraps inside the main transcript and both composers remain visible.
+Codex model dropdown opens upward; provider submenu including the final GPT-5.5
+entry stays on screen; selecting GPT-6-Astra updates the model/name fields.
+Cancelled agent creation; no model inference or provider update was performed.
+
+Observed visual issue: the disposable human guest has UI initials in its own
+profile and a people icon in the member list, but a robot avatar in main chat.
+Recorded in FRONTEND_BACKEND_GAPS.md; no UI code changed.
+Smaller-window verification was not established: native edge drags did not resize
+the window. Windows, real provider conversation, attachment download and full
+product acceptance are not verified by this run.
+
+Separate automated results: frontend-check passed (157 files, 920 tests and
+production build); existing mocked Playwright suite passed 10 tests. These are
+not substitutes for the manual checks above. Normal Quit left the three recorded
+app/supervisor/server PIDs absent. Local screenshot evidence:
+`/tmp/aa-ui-20260929-evidence/chat-sidebar.png` (temporary, not committed).
+
+
+### Human avatar consistency correction (2026-09-30)
+
+User authorized correction of differing human avatars across existing surfaces.
+The canonical user profile remains the label/photo owner. Optional participant
+`avatar_label` is absent for agents and older stored events; current snapshots
+project the stored human profile label through the existing unique participant
+join, without rewriting historical events or migrating user data. New human
+memberships carry the label, and label-only profile edits publish the existing
+participant-update event transactionally. Frontend general/custom messages and
+member rows use human identity rather than editable room role for the avatar.
+No CSS, panel, button, or layout changes were made.
+
+Signed isolated macOS package reopened the prior verification room and existing
+messages: self profile, member row and general-message avatar all showed UI.
+Changed only avatar label to XY through User Settings -> Profile -> Save:
+all three visibly updated to XY without reload. Navigated to the existing
+ui-check channel; its prior message also showed XY beside the matching member
+and self avatars. Screenshots are retained locally at
+`/tmp/aa-avatar-20260930-evidence/general-label.png` and `channel-label.png`.
+Photo priority and agent/system icon preservation are covered by component tests;
+no new packaged photo-upload or Windows execution is claimed.
+
+Frontend 158 files/922 tests and production build pass; persistence 355 tests
+pass, including label-only event publication and pre-field membership snapshot.
+Workspace all-target/all-feature warning-denied Clippy, architecture/source growth,
+19 policy tests, format, diff and artifact checks pass. Package signature verifies.
+Normal Quit completes; disposable profile/app artifacts are moved to Trash.

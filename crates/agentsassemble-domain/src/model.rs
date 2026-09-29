@@ -77,6 +77,9 @@ pub struct Participant {
     pub participant_id: String,
     pub display_name: String,
     pub avatar_image_url: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub avatar_label: Option<String>,
     pub participant_type: String,
     pub status: ParticipantStatus,
     pub role: ParticipantRole,

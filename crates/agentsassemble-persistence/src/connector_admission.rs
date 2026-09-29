@@ -245,6 +245,7 @@ async fn insert_connector_participant(
         participant_id: format!("connector-{}", Uuid::new_v4().simple()),
         display_name: display_name.to_owned(),
         avatar_image_url: String::new(),
+        avatar_label: None,
         participant_type: "agent".to_owned(),
         status: ParticipantStatus::Joined,
         role: ParticipantRole::Agent,

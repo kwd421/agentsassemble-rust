@@ -1,5 +1,16 @@
 # Frontend/backend exposure map
 
+2026-09-29/30 packaged manual verification at `68121f63`: a newly created human
+Guest displays a robot avatar in the main transcript, while its own profile uses
+initials and the member list identifies it as a person. Reproduced in the isolated
+signed macOS app after ordinary message send. The initial verification made no UI changes. The subsequent user-authorized
+2026-09-30 correction projects the saved human avatar label alongside the photo
+and uses participant type, independent of room role, in shared member/message
+avatar rendering. Existing memberships read labels from canonical profiles;
+label-only edits publish participant updates. Layout and agent/system icons stay
+unchanged. Packaged correction verification is recorded in VERIFICATION.md. Model menu,
+right-panel layout and message-flow checks are recorded in VERIFICATION.md.
+
 2026-09-21 user-directed guest photo correction: the existing crop/preview
 control retains PNG bytes locally and the existing Join button sends them with
 admission. The server stores the canonical image in the same transaction that

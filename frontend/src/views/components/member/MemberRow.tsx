@@ -2,7 +2,7 @@ import { useRef } from "react";
 import type { MouseEvent as ReactMouseEvent, PointerEvent as ReactPointerEvent } from "react";
 import { VolumeX, Zap } from "lucide-react";
 import { agentSessionPresenceStatus } from "../AgentSessionDetails";
-import ProviderLogo from "../ProviderLogo";
+import ParticipantAvatarContent from "../ParticipantAvatarContent";
 import {
   isPrimaryActivationPointer,
   rowPointerMovedTooFar,
@@ -83,7 +83,10 @@ export default function MemberRow({
           {entry.avatarImage ? (
             <img className="dc-member-avatar-image" src={entry.avatarImage} alt="" />
           ) : (
-            <ProviderLogo
+            <ParticipantAvatarContent
+              participantType={entry.member?.participant_type}
+              displayName={entry.displayName}
+              avatarLabel={entry.member?.avatar_label}
               providerKind={entry.providerKind}
               size={32}
               fallback={<Icon size={15} />}

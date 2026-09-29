@@ -32,6 +32,7 @@ pub(crate) async fn insert_membership(
         participant_id: format!("attendee-{}", Uuid::new_v4().simple()),
         display_name: display_name.to_owned(),
         avatar_image_url: String::new(),
+        avatar_label: None,
         participant_type: "agent".to_owned(),
         status: ParticipantStatus::Joined,
         role: ParticipantRole::Agent,

@@ -428,6 +428,7 @@ async fn add_guest_participant(store: &SqliteStore, room_id: &str, display_name:
         participant_id: GUEST_PARTICIPANT_ID.to_owned(),
         display_name: display_name.to_owned(),
         avatar_image_url: String::new(),
+        avatar_label: None,
         participant_type: "human".to_owned(),
         status: ParticipantStatus::Joined,
         role: ParticipantRole::Human,

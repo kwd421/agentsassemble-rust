@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
-import { Bot, CornerUpLeft, Pin, Zap } from "lucide-react";
-import ProviderLogo from "./ProviderLogo";
+import { CornerUpLeft, Pin, Zap } from "lucide-react";
+import ParticipantAvatarContent from "./ParticipantAvatarContent";
 
 export function messageTimeLabel(iso: string): string {
   try {
@@ -10,7 +10,8 @@ export function messageTimeLabel(iso: string): string {
   }
 }
 
-export function MessageAvatar({ avatarImage, providerKind, show = true, system = false }: {
+export function MessageAvatar({ avatarImage, providerKind, participantType, avatarLabel, displayName, show = true, system = false }: {
+  participantType?: string; avatarLabel?: string; displayName?: string;
   avatarImage?: string; providerKind?: string; show?: boolean; system?: boolean;
 }) {
   return <span className={show ? `dc-message-avatar mt-0.5 ${system ? "system" : "agent"}` : ""}
@@ -18,7 +19,7 @@ export function MessageAvatar({ avatarImage, providerKind, show = true, system =
     {show && (avatarImage && !system
       ? <img className="dc-message-avatar-image" src={avatarImage} alt="" />
       : system ? <Zap size={16} />
-      : <ProviderLogo providerKind={providerKind} size={40} fallback={<Bot size={16} />} />)}
+      : <ParticipantAvatarContent participantType={participantType} displayName={displayName} avatarLabel={avatarLabel} providerKind={providerKind} size={40} />)}
   </span>;
 }
 
@@ -38,15 +39,16 @@ export function MessageActions({ onReply, replyDisabled, onTogglePin, pinned, pi
   </div>;
 }
 
-export default function MessageRow({ eventId, author, createdAt, avatarImage, providerKind, role,
+export default function MessageRow({ eventId, author, createdAt, avatarImage, providerKind, participantType, avatarLabel, role,
   showHeader = true, system = false, selected, actions, reply, children }: {
   eventId: string; author: string; createdAt: string; avatarImage?: string; providerKind?: string;
+  participantType?: string; avatarLabel?: string;
   role?: string; showHeader?: boolean; system?: boolean; selected?: boolean;
   actions?: ReactNode; reply?: ReactNode; children: ReactNode;
 }) {
   return <div className={`dc-message grid grid-cols-[40px_minmax(0,1fr)] gap-3 px-4 ${showHeader ? "py-1.5" : "py-0.5"}`}
     data-room-event-id={eventId} data-role={role || undefined} data-search-target={selected} tabIndex={0}>
-    <MessageAvatar avatarImage={avatarImage} providerKind={providerKind} show={showHeader} system={system} />
+    <MessageAvatar participantType={participantType} avatarLabel={avatarLabel} displayName={author} avatarImage={avatarImage} providerKind={providerKind} show={showHeader} system={system} />
     {actions}
     <div className="min-w-0">
       {reply}

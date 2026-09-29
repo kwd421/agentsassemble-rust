@@ -97,6 +97,7 @@ async fn create_agent_records(
         participant_id: draft.agent_id.clone(),
         display_name: draft.display_name.clone(),
         avatar_image_url: String::new(),
+        avatar_label: None,
         participant_type: "agent".to_owned(),
         status: ParticipantStatus::Detached,
         role: ParticipantRole::Agent,

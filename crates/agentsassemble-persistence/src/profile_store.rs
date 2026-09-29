@@ -220,6 +220,7 @@ async fn apply_profile_patch_in_transaction(
     }
     let events = if next.display_name != previous_display_name
         || next.avatar_image_url != previous_avatar_url
+        || next.avatar_label != profile.avatar_label
     {
         project_profile_into_rooms(transaction, identity, &next).await?
     } else {
@@ -347,7 +348,8 @@ pub(crate) async fn project_profile_into_rooms(
             || participant.status != ParticipantStatus::Joined
             || participant.participant_type != "human"
             || (participant.display_name == profile.display_name
-                && participant.avatar_image_url == profile.avatar_image_url)
+                && participant.avatar_image_url == profile.avatar_image_url
+                && participant.avatar_label.as_deref() == Some(profile.avatar_label.as_str()))
         {
             continue;
         }
@@ -355,6 +357,7 @@ pub(crate) async fn project_profile_into_rooms(
         participant
             .avatar_image_url
             .clone_from(&profile.avatar_image_url);
+        participant.avatar_label = Some(profile.avatar_label.clone());
         participant.updated_at = profile.updated_at;
         crate::participant_rows::save_participant_exact(
             transaction,
@@ -405,6 +408,7 @@ async fn participant_updated_event(
                 "avatar_image_url".to_owned(),
                 json!(profile.avatar_image_url),
             ),
+            ("avatar_label".to_owned(), json!(profile.avatar_label)),
             ("profile_revision".to_owned(), json!(profile.revision)),
         ]),
     })
@@ -530,6 +534,45 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn avatar_label_only_change_is_published_and_existing_snapshot_uses_profile() {
+        let (store, principal) = fixture().await;
+        let outcome = store
+            .update_user_profile(
+                &principal,
+                1,
+                UserProfilePatch {
+                    avatar_label: Some("XY".to_owned()),
+                    ..UserProfilePatch::default()
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("label update: {error}"));
+        assert_eq!(outcome.events.len(), 1);
+        assert_eq!(outcome.events[0].extra["avatar_label"], "XY");
+        let participant = store
+            .participant("general", &principal.participant_id)
+            .await
+            .unwrap_or_else(|error| panic!("participant: {error}"));
+        assert_eq!(participant.avatar_label.as_deref(), Some("XY"));
+        // Pre-field memberships have no label; the snapshot projects the saved profile.
+        sqlx::query("UPDATE participants SET participant_json = json_remove(participant_json, '$.avatar_label') WHERE participant_id = ?")
+            .bind(&principal.participant_id).execute(&store.pool).await
+            .unwrap_or_else(|error| panic!("legacy membership: {error}"));
+        let snapshot = store
+            .snapshot("general", 0, 100)
+            .await
+            .unwrap_or_else(|error| panic!("snapshot: {error}"));
+        assert_eq!(
+            snapshot
+                .participants
+                .iter()
+                .find(|p| p.participant_id == principal.participant_id)
+                .and_then(|p| p.avatar_label.as_deref()),
+            Some("XY")
+        );
+    }
+
+    #[tokio::test]
     async fn failed_projection_event_rolls_back_profile_and_membership() {
         let (store, principal) = fixture().await;
         let before = store
@@ -613,6 +656,7 @@ mod tests {
             participant_id: principal.participant_id.clone(),
             display_name: "stale-name".to_owned(),
             avatar_image_url: String::new(),
+            avatar_label: None,
             participant_type: "human".to_owned(),
             status: ParticipantStatus::Joined,
             role: ParticipantRole::Director,
@@ -626,6 +670,7 @@ mod tests {
             participant_id: "agent-owned-profile".to_owned(),
             display_name: "Independent Agent".to_owned(),
             avatar_image_url: "/agent/avatar.png".to_owned(),
+            avatar_label: None,
             participant_type: "agent".to_owned(),
             status: ParticipantStatus::Joined,
             role: ParticipantRole::Agent,
@@ -639,6 +684,7 @@ mod tests {
             participant_id: principal.participant_id.clone(),
             display_name: "historical-name".to_owned(),
             avatar_image_url: "/historical/avatar.png".to_owned(),
+            avatar_label: None,
             participant_type: "human".to_owned(),
             status: ParticipantStatus::Left,
             role: ParticipantRole::Human,

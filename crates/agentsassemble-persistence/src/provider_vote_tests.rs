@@ -158,6 +158,7 @@ async fn fill_current_ballots(store: &SqliteStore, vote_id: &str) {
             participant_id: participant_id.clone(),
             display_name: "Departed voter".to_owned(),
             avatar_image_url: String::new(),
+            avatar_label: None,
             participant_type: "human".to_owned(),
             status: ParticipantStatus::Left,
             role: ParticipantRole::Human,

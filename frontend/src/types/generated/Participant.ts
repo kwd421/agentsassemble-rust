@@ -2,4 +2,4 @@
 import type { ParticipantRole } from "./ParticipantRole.js";
 import type { ParticipantStatus } from "./ParticipantStatus.js";
 
-export type Participant = { room_id: string, participant_id: string, display_name: string, avatar_image_url: string, participant_type: string, status: ParticipantStatus, role: ParticipantRole, owner_id: string, muted: boolean, created_at: string, updated_at: string, };
+export type Participant = { room_id: string, participant_id: string, display_name: string, avatar_image_url: string, avatar_label?: string, participant_type: string, status: ParticipantStatus, role: ParticipantRole, owner_id: string, muted: boolean, created_at: string, updated_at: string, };

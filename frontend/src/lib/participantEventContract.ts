@@ -16,6 +16,7 @@ const GENERATED_PARTICIPANT_KEYS = [
   "participant_id",
   "display_name",
   "avatar_image_url",
+  "avatar_label",
   "participant_type",
   "status",
   "role",
@@ -205,16 +206,13 @@ function exactParticipant(
   missingMessage: string,
   invalidMessage: string,
 ): Record<string, unknown> {
-  const participant = exactEventRecord(
-    value,
-    PARTICIPANT_KEYS,
-    missingMessage,
-    invalidMessage,
-  );
+  const participant = strictRecord(value, missingMessage);
+  assertExactKeys(participant, PARTICIPANT_KEYS.filter((key) => key !== "avatar_label"), invalidMessage, ["avatar_label"]);
   if (
-    PARTICIPANT_KEYS.filter((key) => key !== "muted").some(
+    PARTICIPANT_KEYS.filter((key) => key !== "muted" && key !== "avatar_label").some(
       (key) => typeof participant[key] !== "string"
     ) ||
+    (participant.avatar_label !== undefined && typeof participant.avatar_label !== "string") ||
     typeof participant.muted !== "boolean" ||
     !isParticipantRole(participant.role) ||
     !PARTICIPANT_TYPES.includes(

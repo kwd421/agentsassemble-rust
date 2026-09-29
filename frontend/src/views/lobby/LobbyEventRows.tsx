@@ -419,6 +419,7 @@ export function LobbyMessageRow({
   return (
     <MessageRow eventId={event.id} author={event.name} createdAt={event.created_at}
       avatarImage={event.avatar_image_url} providerKind={providerKind || event.provider_kind}
+      participantType={event.actor_type} avatarLabel={event.avatar_label}
       role={event.role} showHeader={showHeader} system={systemLike}
       actions={<MessageActions onReply={onReply} pinned={pinned} onTogglePin={canPin ? onTogglePin : undefined}>
         {onEdit && onDelete && <MessageMutationControls event={event} canEdit={canEdit} canDelete={canDelete}
