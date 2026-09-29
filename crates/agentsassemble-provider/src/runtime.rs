@@ -231,6 +231,18 @@ impl ProviderAdapter {
         Self::with_factory(Arc::new(ProductionDriverFactory::with_guardian(executable)))
     }
 
+    /// Keeps external attendee provider state under its caller-owned lifetime.
+    #[doc(hidden)]
+    #[must_use]
+    pub fn for_attendee(executable: &Path, state_root: &Path) -> Self {
+        #[cfg(unix)]
+        let mut factory = ProductionDriverFactory::with_guardian(executable);
+        #[cfg(windows)]
+        let mut factory = ProductionDriverFactory::with_worker(executable);
+        factory.state_root = Some(state_root.to_path_buf());
+        Self::with_factory(Arc::new(factory))
+    }
+
     /// Binds the host binary that implements the private managed-worker entry.
     #[doc(hidden)]
     #[must_use]

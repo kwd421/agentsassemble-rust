@@ -79,6 +79,9 @@ async fn run_owned(
         .as_deref()
         .or_else(|| temporary.as_ref().map(tempfile::TempDir::path))
         .context("attendee_workspace_missing")?;
+    // Native providers need private state even when the user supplies a workspace.
+    // Keep that state alive through runtime stop and remote cleanup acknowledgment.
+    let provider_state = tempfile::tempdir()?;
     if cancellation.is_cancelled() {
         return Ok(());
     }
@@ -118,11 +121,8 @@ async fn run_owned(
                 &payload,
             )
             .await?;
-        #[cfg(unix)]
-        let adapter = ProviderAdapter::with_guardian_executable(&std::env::current_exe()?);
-        // The attendee owns its Windows worker and all native descendants through its lease Job.
-        #[cfg(not(unix))]
-        let adapter = ProviderAdapter::new();
+        let adapter =
+            ProviderAdapter::for_attendee(&std::env::current_exe()?, provider_state.path());
         runtime = Some(AttendeeRuntime::new(
             &joined,
             selection.into(),
@@ -142,6 +142,7 @@ async fn run_owned(
     };
     let cleanup = shutdown_attendee(client, runtime.as_mut(), stop).await;
     if let Err(error) = cleanup {
+        let _retained_provider_state = provider_state.keep();
         if let Some(temporary) = temporary {
             let _retained = temporary.keep();
         }

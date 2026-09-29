@@ -62,7 +62,9 @@ impl AttendeeRuntime {
             input_up_to_seq: delivery.input_up_to_seq,
             view: delivery.input.room_view.clone(),
             attachment_ids: delivery.input.attachment_ids.clone(),
-            attachment_ingress: (!delivery.input.attachment_ids.is_empty()).then_some(attachments),
+            // A later message may request an earlier visible attachment. The remote
+            // room owner validates its visibility against this exact turn authority.
+            attachment_ingress: Some(attachments),
             allowed_agent_ids: delivery.input.room_agent_ids.clone(),
             tabletop_tools: delivery.input.tabletop_tools,
             room_tool_ingress: Some(tools),

@@ -48,16 +48,18 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     let server = human_invite::start(store.clone()).await;
     let url = format!("{}/join?token={}", server.base_url, invite.invite_bearer);
     let mut client = RoomAttendeeClient::new(&url, "codex", "External Execution")?;
+    let (mut human, attachment_id) = send_input(&server, &store).await?;
     let mut runtime = prepare_runtime(&mut client, &catalog, directory.path())
         .await
         .map_err(|error| format!("initial local runtime: {error}"))?;
     let mut socket = ready_socket(&client, &mut runtime).await?;
-    let (mut human, attachment_id) = send_input(&server, &store).await?;
+    human.send_json(&json!({"op":"command", "request_id":"external-later-input", "action":"message.send", "payload":{"content":"Read the earlier attachment"}})).await;
     let Frame::Turn { assignment } =
         tokio::time::timeout(Duration::from_secs(10), socket.receive()).await??
     else {
         return Err("turn missing".into());
     };
+    assert!(assignment.input.attachment_ids.is_empty());
     let (tools, mut tools_rx) = ProviderRoomToolIngress::channel(4);
     let (attachments, mut attachments_rx) = ProviderAttachmentReadIngress::channel(4);
     let mut execution = runtime
@@ -93,7 +95,7 @@ async fn external_execution_reconnects_without_reentry_and_recovers_committed_re
     .await?;
     let view =
         room_portal_fixture::publish(&endpoint, &token, "Exactly one external execution").await;
-    assert!(view.contains("Reply through the external runtime"));
+    assert!(view.contains("Read the earlier attachment"));
     std::fs::write(first, b"go")?;
     tokio::time::timeout(Duration::from_secs(10), execution.complete()).await??;
     assert!(!execution.is_running());
@@ -272,5 +274,14 @@ async fn send_input(
         )
         .await?;
     human.send_json(&json!({"op":"command", "request_id":"external-execution-input", "action":"message.send", "payload":{"content":"Reply through the external runtime", "attachment_ids":[attachment.id]}})).await;
+    loop {
+        let frame = human
+            .receive_json_with_timeout(Duration::from_secs(2))
+            .await;
+        assert_ne!(frame["op"], "nack");
+        if frame["op"] == "ack" && frame["request_id"] == "external-execution-input" {
+            break;
+        }
+    }
     Ok((human, attachment.id))
 }

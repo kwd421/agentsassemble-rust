@@ -44,9 +44,10 @@ async fn verify_cleanup(publish_ready: bool) -> Result<(), Box<dyn std::error::E
         )
         .await?
         .into();
-    let adapter = ProviderAdapter::with_guardian_executable(std::path::Path::new(env!(
-        "CARGO_BIN_EXE_agentsassemble-server"
-    )));
+    let adapter = ProviderAdapter::for_attendee(
+        std::path::Path::new(env!("CARGO_BIN_EXE_assemble")),
+        directory.path(),
+    );
     let mut runtime = AttendeeRuntime::new(&joined, draft, adapter.clone(), None)?;
     let ready = runtime.start(None).await?;
     assert!(ready.retained_interrupt);

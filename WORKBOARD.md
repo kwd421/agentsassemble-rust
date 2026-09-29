@@ -2,6 +2,16 @@
 
 ## Active work
 
+- 2026-09-30 actual external-invite verification: isolated signed macOS package,
+  public tunnel and in-app browser verify human admission/avatar/message/attachment/
+  reload/leave and consumed/revoked-link rejection. Real Antigravity Connector and
+  Grok friend/companion join and publish. Correct reproduced attendee CLI missing
+  provider state and historical-attachment relay omission; actual corrected CLI
+  and two affected integrations pass, as do Clippy and mandatory source gates.
+  All attendee runtimes stop and public ingress closes. Windows execution and
+  installed CLI distribution remain unverified. Full evidence and limits:
+  `docs/verification/2026-09-30-external-invites.md`.
+
 - 2026-09-30 user-authorized feedback implementation: preserve public MCP
   rejection detail through API results; resolve bounded current reply author/excerpts;
   project search attachment IDs through strict consumers; clarify existing tool

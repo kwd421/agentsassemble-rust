@@ -53,10 +53,14 @@ fn main() -> anyhow::Result<()> {
     if let Some(code) = agentsassemble_provider::run_process_helper_if_requested() {
         std::process::exit(code);
     }
-    let cli = Cli::parse();
     let runtime = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
         .build()?;
+    if let Some(code) = runtime.block_on(agentsassemble_provider::run_managed_bridge_if_requested())
+    {
+        std::process::exit(code);
+    }
+    let cli = Cli::parse();
     let result = runtime.block_on(run(cli.command));
     // MCP and network tasks are joined by their transport owner. Tokio stdin uses
     // an OS-blocking read that cannot be cancelled; it must not prevent this
