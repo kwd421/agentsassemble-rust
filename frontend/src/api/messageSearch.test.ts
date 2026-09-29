@@ -40,6 +40,7 @@ function result(eventId = "event-1", seq = 7) {
     author: "Operator",
     content: "canonical message",
     attachment_filenames: [],
+    attachment_ids: [],
   };
 }
 
@@ -325,6 +326,18 @@ describe("lobby message-search HTTP authority", () => {
         vote_id: "event-poll",
       }],
     })).rejects.toThrow("응답 계약");
+  });
+
+  it("preserves canonical attachment IDs paired with filenames", async () => {
+    const id = "ma_00000000000000000000000000000001";
+    await expect(localSearchResponse({ results: [{ ...result(),
+      attachment_filenames: ["notes.txt"], attachment_ids: [id],
+    }], next_cursor: "" })).resolves.toMatchObject({ results: [{ attachment_ids: [id] }] });
+    for (const ids of [[], [id, id], ["invalid"]]) {
+      await expect(localSearchResponse({ results: [{ ...result(),
+        attachment_filenames: ["notes.txt"], attachment_ids: ids,
+      }], next_cursor: "" })).rejects.toThrow();
+    }
   });
 
   it("rejects malformed complete pages rather than projecting permissive defaults", async () => {

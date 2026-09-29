@@ -300,6 +300,44 @@ search IDs and guidance improvements remain unimplemented; ordinary MCP rejectio
 detail loss remains unfixed. Existing avatar/runtime-test changes were separately
 committed and pushed as `130c91ee` and `7d888b36`.
 
+### 2026-09-30 authorized implementation after assessment
+
+Implemented all four accepted follow-ups; the earlier assessment above describes
+its historical pre-change state.
+
+- API tool results retain the room owner's public rejection text in
+  `error.message`, with `room_tool_rejected` and the existing output bounds.
+  Transport exceptions and private provider failures are not forwarded. An empty
+  rejection remains an error result rather than aborting the conversation.
+- Assignment reads current same-room lobby reply sources in its existing SQLite
+  transaction. The room view contains author plus at most 200 source characters
+  (and a truncation marker), or an unavailable/deleted pointer. Selection counts
+  this text against the existing observation budget. No stored quote or migration;
+  at most 50 pending and 50 context candidates incur indexed source reads, with
+  each reply projected once per assignment. No background work is added.
+- Search projects `attachment_ids` from canonical event attachments in the same
+  order as filenames. Provider search text exposes IDs directly. The strict
+  frontend consumer requires matching counts and unique valid IDs without
+  altering the rendered UI. Attachment authorization remains unchanged.
+- Existing observation guidance names `read_room_status`, explains tabletop-only
+  randomness, managed upload absence and API media limitations, and distinguishes
+  other addressable agent handles from currently active participants.
+
+Verification: persistence 356 pass, including old reply sources after an edit or
+source deletion, author/excerpt bounds and canonical attachment IDs. Frontend
+search tests 19 and TypeScript pass. Final controlled API/MCP tool-result tests 3
+pass, including rejected reads followed by a successful terminal publication,
+media/size limitations and large search previews. No new real-provider execution
+or packaged UI validation is claimed; this change does not alter presentation.
+
+Logs: `/tmp/aa-feedback-rust.log`, `/tmp/aa-feedback-tool-results-final.log`,
+`/tmp/aa-feedback-frontend.log`. The new rejected-read fixture initially omitted
+its required observation attachment reference; corrected and the affected group
+passes. The initial broad provider run ended at 287 passed / 2 failed: that
+fixture and an OpenCode fixture startup timeout. The OpenCode isolated rerun passes (`/tmp/aa-feedback-opencode.log`). This is not evidence
+that all provider runtime paths or all platforms pass. Final affected all-target
+Clippy, architecture/source-growth/policy, artifact, formatting and diff gates pass.
+
 ## 8. Persistent DeepSeek typing: diagnosis and authorized correction
 
 The diagnosis was initially documented without changing product code. The user

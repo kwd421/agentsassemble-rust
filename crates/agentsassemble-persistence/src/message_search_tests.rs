@@ -93,6 +93,7 @@ async fn complete_search_paginates_and_preserves_unicode_short_and_attachment_ma
         attachment_result.results[0].attachment_filenames,
         ["evidence.txt"]
     );
+    assert_eq!(attachment_result.results[0].attachment_ids, [attachment.id]);
     assert!(search(&store, ".", "").await.results.is_empty());
 
     assert_rejection_code(

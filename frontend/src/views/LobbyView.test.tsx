@@ -148,6 +148,7 @@ function SearchBackedLobby({
               author: target.name,
               content: target.message,
               attachment_filenames: [],
+              attachment_ids: [],
             }]
           : [],
         setError: vi.fn(),

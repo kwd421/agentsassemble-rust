@@ -2,14 +2,13 @@
 
 ## Active work
 
-- 2026-09-30 follow-up assessment: checked all five model-feedback items against
-  current code, a retained real Grok discussion result and two focused passing
-  tests. Reply previews/search attachment IDs are absent; ordinary MCP rejection
-  detail is discarded. Media/size failures already reach the API model, status
-  tools exist, and stopped direct targets intentionally retain queued messages.
-  This assessment does not implement the suggestions or fix the rejection detail
-  loss. Exact evidence and disposition: section 7's 2026-09-30 follow-up assessment
-  in `docs/verification/2026-09-22-conversation-context.md`.
+- 2026-09-30 user-authorized feedback implementation: preserve public MCP
+  rejection detail through API results; resolve bounded current reply author/excerpts;
+  project search attachment IDs through strict consumers; clarify existing tool
+  conditions. No frontend presentation changes or stopped-target routing changes.
+  Persistence 356, focused API tool-result 3, frontend search 19 and type checks
+  pass. Final verification and broader provider-suite limits are recorded in
+  `docs/verification/2026-09-22-conversation-context.md` section 7.
 
 - 2026-09-30 actual packaged Grok reproduction: normal start, same-session resume
   and real OK publication succeed. Denying access only to the newly created test

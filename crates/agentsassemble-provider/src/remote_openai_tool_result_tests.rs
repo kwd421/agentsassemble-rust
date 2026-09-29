@@ -106,6 +106,7 @@ async fn search_over_huge_messages_reaches_api_as_previews_instead_of_failing() 
                         author: "Human".to_owned(),
                         content: "한".repeat(12_000),
                         attachment_filenames: vec![],
+                        attachment_ids: vec![],
                     })
                     .collect(),
                 next_cursor: String::new(),
@@ -129,4 +130,36 @@ async fn search_over_huge_messages_reaches_api_as_previews_instead_of_failing() 
     );
     assert_eq!(result.matches('…').count(), 4, "{result}");
     assert!(result.len() < 8 * 1024, "{} bytes", result.len());
+}
+
+#[tokio::test]
+async fn rejected_attachment_reason_reaches_api_and_turn_continues() {
+    let id = "ma_00000000000000000000000000000001";
+    let (ingress, mut commands) = ProviderAttachmentReadIngress::channel(1);
+    let owner = tokio::spawn(async move {
+        let command = commands
+            .recv()
+            .await
+            .unwrap_or_else(|| panic!("missing read"));
+        command.complete(Err(crate::room_attachment::ProviderAttachmentReadError {
+            code: "message_attachment_missing".into(),
+            message: "The attachment is unavailable in this room.".to_owned(),
+        }));
+    });
+    let mut observation = room_request("session")
+        .room_observation
+        .unwrap_or_else(|| panic!("observation"));
+    observation.view = format!("#1 Human: inspect {id}");
+    observation.attachment_ids = vec![id.to_owned()];
+    observation.attachment_ingress = Some(ingress);
+    let result =
+        delivered_result(observation, "read_attachment", json!({"attachment_id": id})).await;
+    owner.await.unwrap_or_else(|error| panic!("owner: {error}"));
+    let value: Value =
+        serde_json::from_str(&result).unwrap_or_else(|error| panic!("error result: {error}"));
+    assert_eq!(value["error"]["code"], "room_tool_rejected");
+    assert_eq!(
+        value["error"]["message"],
+        "The attachment is unavailable in this room."
+    );
 }

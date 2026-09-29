@@ -38,6 +38,8 @@ mod provider_turn_mute_tests;
 mod provider_turn_stop_race_tests;
 #[path = "provider_vote_tests.rs"]
 mod provider_vote_tests;
+#[path = "reply_observation_tests.rs"]
+mod reply_observation_tests;
 #[path = "shutdown_scheduler_tests.rs"]
 mod shutdown_scheduler_tests;
 #[path = "stateless_context_tests.rs"]
@@ -225,7 +227,9 @@ fn assert_turn_tool_instructions(provider_input: &str) {
     // The instruction only describes the room tools: which ones end a turn and which
     // do not. What to do with them is left to the agent.
     assert!(provider_input.contains("`publish_message` posts to the room"));
-    assert!(provider_input.contains("randomness tools do not end it"));
+    assert!(provider_input.contains("read_room_status"));
+    assert!(provider_input.contains("unavailable outside tabletop mode"));
+    assert!(provider_input.contains("do not upload attachments"));
 }
 
 #[tokio::test]

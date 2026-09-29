@@ -24,6 +24,8 @@ pub struct RoomMessageSearchResult {
     pub author: String,
     pub content: String,
     pub attachment_filenames: Vec<String>,
+    /// Canonical IDs in the same order as `attachment_filenames`.
+    pub attachment_ids: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

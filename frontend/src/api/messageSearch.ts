@@ -1,3 +1,4 @@
+import { messageAttachmentId } from "../lib/messageAttachmentId";
 import { isCustomChannelId, requireMessageChannelId } from "../lib/customChannelId";
 import { publicRoomEventIsValid } from "../lib/roomSocketValidation";
 import { CHANNEL_MESSAGE_EVENT_TYPE } from "../types/generated/TEXT_CHAT_WIRE";
@@ -45,6 +46,7 @@ export type RoomSearchResult = Readonly<{
   author: string;
   content: string;
   attachment_filenames: string[];
+  attachment_ids: string[];
 }>;
 
 export type RoomSearchPage = Readonly<{
@@ -69,6 +71,7 @@ const SEARCH_RESULT_KEYS = [
   "author",
   "content",
   "attachment_filenames",
+  "attachment_ids",
 ] as const;
 const CONTEXT_EVENT_KEYS = [
   "v",
@@ -180,11 +183,18 @@ function parseSearchResult(value: unknown, channelId: string): RoomSearchResult 
     (result.channel_id !== "lobby" && !isCustomChannelId(result.channel_id)) ||
     (channelId !== "all" && result.channel_id !== channelId) ||
     !Array.isArray(result.attachment_filenames) ||
-    result.attachment_filenames.length > MAX_MESSAGE_ATTACHMENTS_PER_EVENT
+    result.attachment_filenames.length > MAX_MESSAGE_ATTACHMENTS_PER_EVENT ||
+    !Array.isArray(result.attachment_ids) ||
+    result.attachment_ids.length !== result.attachment_filenames.length
   ) {
     invalidResponse();
   }
   const filenames = result.attachment_filenames.map(parseMessageAttachmentFilename);
+  const ids = result.attachment_ids.map((id: unknown) => {
+    if (typeof id !== "string") invalidResponse();
+    return messageAttachmentId(id);
+  });
+  if (new Set(ids).size !== ids.length) invalidResponse();
   if (!hasVisibleText(content) && filenames.length === 0) invalidResponse();
   return Object.freeze({
     event_id: eventId(result.event_id),
@@ -195,6 +205,7 @@ function parseSearchResult(value: unknown, channelId: string): RoomSearchResult 
     author: boundedString(result.author, MAX_MESSAGE_SEARCH_AUTHOR_CHARACTERS),
     content,
     attachment_filenames: filenames,
+    attachment_ids: ids,
   });
 }
 

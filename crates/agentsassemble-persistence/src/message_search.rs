@@ -264,6 +264,10 @@ fn project_page(
         let (event, created_at_nanos) = checked_event(&row, room_id)?;
         let message = searchable_room_message(&event)?.ok_or_else(invalid_state)?;
         last_cursor = Some((created_at_nanos, event.seq));
+        let attachment_ids = crate::message_attachments::message_attachments_from_event(&event)?
+            .into_iter()
+            .map(|attachment| attachment.id)
+            .collect();
         results.push(RoomMessageSearchResult {
             channel_id: message.channel_id,
             event_id: event.id,
@@ -275,6 +279,7 @@ fn project_page(
             author: message.author,
             content: message.content,
             attachment_filenames: message.attachment_filenames,
+            attachment_ids,
         });
     }
     let next_cursor = if has_more {

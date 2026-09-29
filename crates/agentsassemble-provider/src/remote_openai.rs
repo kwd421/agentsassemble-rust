@@ -718,9 +718,6 @@ fn tool_result_text(
     result: &CallToolResult,
     spec: &RemoteOpenAiSpec,
 ) -> Result<String, DriverError> {
-    if result.is_error == Some(true) {
-        return Ok("{\"ok\":false,\"error\":{\"code\":\"room_tool_rejected\"}}".to_owned());
-    }
     let mut text = String::new();
     for (index, content) in result.content.iter().enumerate() {
         let Some(part) = content.as_text() else {
@@ -747,6 +744,13 @@ fn tool_result_text(
             text.push('\n');
         }
         text.push_str(&part.text);
+    }
+    if result.is_error == Some(true) {
+        // Local MCP owners already expose public errors, never raw provider failures.
+        return Ok(json!({"ok": false, "error": {
+            "code": "room_tool_rejected", "message": text
+        }})
+        .to_string());
     }
     if text.is_empty() {
         return Err(provider_error(

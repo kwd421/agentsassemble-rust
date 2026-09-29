@@ -35,7 +35,13 @@ pub(crate) fn search_page(page: &RoomMessageSearchPage) -> String {
             let _ = write!(
                 out,
                 " (attachments: {})",
-                result.attachment_filenames.join(", ")
+                result
+                    .attachment_ids
+                    .iter()
+                    .zip(&result.attachment_filenames)
+                    .map(|(id, name)| format!("`{id}`: {name}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             );
         }
         out.push('\n');
@@ -165,6 +171,7 @@ mod tests {
                 author: "Human".to_owned(),
                 content: format!("line one\n\nline two {long}"),
                 attachment_filenames: vec!["notes.txt".to_owned()],
+                attachment_ids: vec!["ma_00000000000000000000000000000001".to_owned()],
             }],
             next_cursor: "cursor-2".to_owned(),
         });
@@ -177,7 +184,7 @@ mod tests {
             text.contains("…"),
             "a long message is previewed, not copied: {text}"
         );
-        assert!(text.contains("(attachments: notes.txt)"));
+        assert!(text.contains("(attachments: `ma_00000000000000000000000000000001`: notes.txt)"));
         assert!(text.contains("More results: cursor cursor-2"));
         assert!(!text.contains("participant-with-a-long-identifier"));
         assert!(!text.contains("2026-09-21T02:28"));

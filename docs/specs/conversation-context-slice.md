@@ -76,3 +76,23 @@ checks are recorded here as they complete.
 - Actual Windows desktop/MCP/Codex and restart verification: see
   `../verification/2026-09-22-conversation-context.md` for the matrix, corrections,
   exact evidence and coverage limits.
+
+## Authorized feedback follow-up (2026-09-30)
+
+Implement the verified observation gaps without changing frontend layout or
+stopped-target routing. Preserve bounded public MCP rejection text in API tool
+results so the model can correct its call. Existing public-error owners sanitize
+internal failures; do not forward raw transport exceptions or private data.
+Resolve reply author and a 200-character excerpt from the current same-room lobby
+source during assignment, within the transaction and observation character budget.
+Missing/deleted sources remain explicit unavailable pointers, never stored quotes.
+Search results add attachment IDs paired with their existing canonical filenames;
+read authorization remains with the attachment owner. Update strict consumers
+without changing presentation. Explain status reads, tabletop-only randomness and
+managed upload/media limitations at the existing observation owner.
+
+Acceptance: controlled MCP-to-API rejection survives to the next model request;
+search IDs match canonical attachments; reply previews reflect edits/deletions and
+remain bounded, including old sources outside incremental context. Verify affected
+Rust and frontend contract tests plus mandatory gates. No provider call, new retry,
+database migration or frontend redesign is required by these changes.

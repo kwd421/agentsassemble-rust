@@ -1,4 +1,4 @@
-use std::collections::{BTreeMap, HashSet};
+use std::collections::BTreeMap;
 
 use agentsassemble_domain::{
     DurableAgentSession, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_ROOM_OBSERVATION_AGENT_IDS,
@@ -39,30 +39,38 @@ pub(super) async fn prepare_room_input(
     validate_provider_cursor(transaction, session).await?;
     let room_agent_ids = load_room_agent_ids(transaction, room, session).await?;
     let pending = load_pending_events(transaction, session, pending_inputs).await?;
-    let inflight = bounded_pending_prefix(room, session, &room_agent_ids, &pending)?;
+    let mut reply_previews = BTreeMap::new();
+    for pending in pending.iter().take(MAX_CONTEXT_MESSAGES) {
+        load_reply_preview(
+            transaction,
+            &room.room_id,
+            &pending.event,
+            &mut reply_previews,
+        )
+        .await?;
+    }
+    let inflight =
+        bounded_pending_prefix(room, session, &room_agent_ids, &pending, &reply_previews)?;
     let Some(source) = inflight.last() else {
         return Err(rejected(
             "queued_room_event_invalid",
             "The ordered-floor assignment has no provider-visible source message.",
         ));
     };
-    let mandatory_ids = inflight
-        .iter()
-        .map(|pending| pending.event.id.as_str())
-        .collect::<HashSet<_>>();
     let context = load_context(
         transaction,
         room,
         session,
         source.event.seq,
-        &mandatory_ids,
         &inflight,
         &room_agent_ids,
+        &mut reply_previews,
     )
     .await?;
     let delivery_kind = inflight[0].input.delivery_kind;
     let attachment_ids = readable_attachment_ids(&inflight, &context)?;
-    let rendered_context = render_room_view(room, session, &room_agent_ids, &context)?;
+    let rendered_context =
+        render_room_view(room, session, &room_agent_ids, &context, &reply_previews)?;
     let persona_context = if let Some(card) =
         selected_persona_card(transaction, session.public.persona_card_id.as_ref()).await?
     {
@@ -199,6 +207,7 @@ fn bounded_pending_prefix<'a>(
     session: &DurableAgentSession,
     room_agent_ids: &[String],
     pending: &'a [PendingRoomEvent],
+    reply_previews: &BTreeMap<String, String>,
 ) -> Result<Vec<&'a PendingRoomEvent>, PersistenceError> {
     let mut selected = Vec::new();
     let Some(first) = pending.first() else {
@@ -225,6 +234,7 @@ fn bounded_pending_prefix<'a>(
             session,
             room_agent_ids,
             selected.iter().map(|value| &value.event),
+            reply_previews,
         )?
         .chars()
         .count()
@@ -248,9 +258,9 @@ async fn load_context(
     room: &Room,
     session: &DurableAgentSession,
     up_to_seq: i64,
-    mandatory_ids: &HashSet<&str>,
     mandatory: &[&PendingRoomEvent],
     room_agent_ids: &[String],
+    reply_previews: &mut BTreeMap<String, String>,
 ) -> Result<Vec<RoomEvent>, PersistenceError> {
     let replay_canonical_context = session.public.runtime_kind == "api";
     let context_floor = if replay_canonical_context {
@@ -282,11 +292,18 @@ async fn load_context(
         {
             continue;
         }
+        load_reply_preview(transaction, &room.room_id, &event, reply_previews).await?;
         let seq = event.seq;
         let previous = selected.insert(seq, event);
-        if render_room_view(room, session, room_agent_ids, selected.values())?
-            .chars()
-            .count()
+        if render_room_view(
+            room,
+            session,
+            room_agent_ids,
+            selected.values(),
+            reply_previews,
+        )?
+        .chars()
+        .count()
             > MAX_ROOM_VIEW_CHARACTERS
         {
             if let Some(previous) = previous {
@@ -296,9 +313,9 @@ async fn load_context(
             }
         }
     }
-    if mandatory_ids
+    if mandatory
         .iter()
-        .any(|event_id| !selected.values().any(|event| event.id == *event_id))
+        .any(|pending| !selected.values().any(|event| event.id == pending.event.id))
     {
         return Err(rejected(
             "provider_turn_input_invalid",
@@ -313,6 +330,7 @@ fn render_room_view<'a>(
     session: &DurableAgentSession,
     room_agent_ids: &[String],
     context: impl IntoIterator<Item = &'a RoomEvent>,
+    reply_previews: &BTreeMap<String, String>,
 ) -> Result<String, PersistenceError> {
     let mut context = context.into_iter().peekable();
     let mut lines = vec![
@@ -364,17 +382,57 @@ fn render_room_view<'a>(
                 attachment.id, attachment.filename, attachment.content_type, attachment.size
             )
         }));
-        if let Some(id) = event
-            .extra
-            .get("reply_to_event_id")
-            .and_then(serde_json::Value::as_str)
-        {
-            lines.push(format!(
-                "  - Reply to event `{id}` (read_message_context opens the source)."
-            ));
+        if let Some(preview) = reply_previews.get(&event.id) {
+            lines.push(preview.clone());
         }
     }
     Ok(lines.join("\n"))
+}
+
+// Projection only: resolve current source in the assignment transaction, never store a quote.
+async fn load_reply_preview(
+    tx: &mut Transaction<'_, Sqlite>,
+    room_id: &str,
+    event: &RoomEvent,
+    previews: &mut BTreeMap<String, String>,
+) -> Result<(), PersistenceError> {
+    let Some(id) = event
+        .extra
+        .get("reply_to_event_id")
+        .and_then(serde_json::Value::as_str)
+    else {
+        return Ok(());
+    };
+    if previews.contains_key(&event.id) {
+        return Ok(());
+    }
+    let source = load_event(tx, room_id, id).await?;
+    let preview = if let Some(source) =
+        source.filter(|source| source.is_current_lobby_message() && source.seq < event.seq)
+    {
+        let text = message_visible_text(&source)?;
+        let text = if has_visible_text(&text) {
+            text
+        } else {
+            "(attachments only)".to_owned()
+        };
+        let mut excerpt: String = text.chars().take(200).collect();
+        if text.chars().count() > 200 {
+            excerpt.push('…');
+        }
+        let author = source
+            .display_name
+            .as_deref()
+            .unwrap_or(&source.actor.participant_id);
+        format!(
+            "  - Reply to event `{id}` by {author}: {} (read_message_context opens the source).",
+            serde_json::to_string(&excerpt)?
+        )
+    } else {
+        format!("  - Reply to event `{id}`: source unavailable or deleted.")
+    };
+    previews.insert(event.id.clone(), preview);
+    Ok(())
 }
 
 fn render_recent_messages(context: &[RoomEvent]) -> Result<String, PersistenceError> {
@@ -404,10 +462,17 @@ fn render_observation_input(
     let mut sections = vec![
         format!("[{mode} shared-room observation]"),
         format!("You are {} in {}.", session.public.display_name, room.label),
-        "Room tools: `read_discussion` shows the room; the other room tools work after it. `publish_message` posts to the room, `pass_turn` passes without posting, and the vote commands create, answer or close polls; each of these ends your turn. Searching, reading attachments and randomness tools do not end it. Plain reply text is not shown in the room.".to_owned(),
+        "Room tools: `read_discussion` shows the room; the other room tools work after it. `publish_message` posts to the room, `pass_turn` passes without posting, and the vote commands create, answer or close polls; each of these ends your turn. `read_room_status` shows current agent activity and polls. Searching and reading attachments or status do not end your turn. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. Managed room tools do not upload attachments. Plain reply text is not shown in the room.".to_owned(),
     ];
     if tabletop_tools {
-        sections.push("`roll_dice` and `choose_random` produce server-side random results that are shown in the room.".to_owned());
+        sections.push("`roll_dice` and `choose_random` are available in this tabletop room; they produce server-side random results shown in the room and do not end your turn.".to_owned());
+    } else {
+        sections.push(
+            "`roll_dice` and `choose_random` are unavailable outside tabletop mode.".to_owned(),
+        );
+    }
+    if session.public.runtime_kind == "api" {
+        sections.push("This API transport accepts text attachment results, not image/binary results. Reuploading the same file does not change that limitation. A rejected tool returns an error; use its reason to correct the request rather than assume its content was read.".to_owned());
     }
     if !persona_context.is_empty() {
         sections.push(format!(

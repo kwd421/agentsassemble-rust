@@ -62,6 +62,7 @@ async fn search_tools_share_receipt_budget_and_terminal_ordering() {
             author: "Human".to_owned(),
             content: "ALPHA".to_owned(),
             attachment_filenames: Vec::new(),
+            attachment_ids: Vec::new(),
         }],
         next_cursor: String::new(),
     };

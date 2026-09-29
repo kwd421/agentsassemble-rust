@@ -30,6 +30,7 @@ const page: RoomSearchPage = {
     author: "Operator",
     content: "private room history",
     attachment_filenames: [],
+    attachment_ids: [],
   }],
   next_cursor: "",
 };
