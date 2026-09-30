@@ -37,6 +37,7 @@ mod runtime_startup;
 
 use tokio_util::sync::CancellationToken;
 use tracing_subscriber::EnvFilter;
+use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 const MAX_CONTROL_MESSAGE_BYTES: usize = 4 * 1024;
 const PUBLIC_URL_ENV: &str = "AGENTSASSEMBLE_PUBLIC_URL";
@@ -83,6 +84,13 @@ fn main() -> anyhow::Result<()> {
     tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env())
         .with_writer(std::io::stderr)
+        .finish()
+        // Transport dependencies trace whole MCP requests and WebSocket frames,
+        // including capabilities, private handles and conversation content.
+        // Target-specific RUST_LOG overrides must not expose those payloads.
+        .with(tracing_subscriber::filter::filter_fn(|metadata| {
+            !metadata.target().starts_with("rmcp") && !metadata.target().starts_with("tungstenite")
+        }))
         .init();
     let args = Args::parse();
     if args.runtime_preflight {
