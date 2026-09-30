@@ -201,6 +201,12 @@ mod mcp;
 #[path = "connector_boundary/mcp_remote.rs"]
 mod mcp_remote;
 
+#[path = "connector_boundary/mcp_hosted.rs"]
+mod mcp_hosted;
+
+#[path = "connector_boundary/mcp_hosted_wait.rs"]
+mod mcp_hosted_wait;
+
 #[path = "connector_boundary/leave_retry.rs"]
 mod leave_retry;
 

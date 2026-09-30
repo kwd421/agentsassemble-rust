@@ -95,6 +95,7 @@ mod connection_admission;
 pub mod connector_client;
 mod connector_invite_manager_web;
 pub mod connector_mcp;
+mod connector_mcp_web;
 mod connector_web;
 mod event_publication;
 mod friends_web;

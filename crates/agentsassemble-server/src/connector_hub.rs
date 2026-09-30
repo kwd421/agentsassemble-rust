@@ -10,7 +10,12 @@ use crate::connector_client::{RoomConnectorClient, transport::normalize_server};
 
 pub(super) struct ConnectorHub {
     allowed_servers: Option<Vec<Url>>,
+    owned_runtime: Option<HostedRuntime>,
     state: Mutex<HubState>,
+}
+struct HostedRuntime {
+    ingress: crate::public_ingress::PublicIngress,
+    store: agentsassemble_persistence::SqliteStore,
 }
 #[derive(Default)]
 struct HubState {
@@ -33,18 +38,77 @@ impl ConnectorHub {
             .transpose()?;
         Ok(Self {
             allowed_servers,
+            owned_runtime: None,
             state: Mutex::new(HubState::default()),
         })
     }
 
+    pub(super) fn hosted(
+        ingress: crate::public_ingress::PublicIngress,
+        store: agentsassemble_persistence::SqliteStore,
+    ) -> Self {
+        Self {
+            allowed_servers: None,
+            owned_runtime: Some(HostedRuntime { ingress, store }),
+            state: Mutex::new(HubState::default()),
+        }
+    }
+
+    fn remote(&self) -> bool {
+        self.allowed_servers.is_some() || self.owned_runtime.is_some()
+    }
+
+    pub(super) fn owns_runtime(&self) -> bool {
+        self.owned_runtime.is_some()
+    }
+
+    fn candidate(&self, invite: &str, name: &str) -> Result<RoomConnectorClient, String> {
+        let Some(runtime) = self.owned_runtime.as_ref() else {
+            return RoomConnectorClient::new(invite, name, self.allowed_servers.as_deref())
+                .map_err(|error| error.code);
+        };
+        let local = runtime
+            .ingress
+            .local_url()
+            .ok_or_else(|| "local_ingress_unavailable".to_owned())?;
+        let local = normalize_server(&local).map_err(|error| error.code)?;
+        let mut allowed = vec![local.clone()];
+        if let Some(ready) = runtime.ingress.ready_snapshot() {
+            allowed.push(normalize_server(&ready.public_url).map_err(|error| error.code)?);
+        }
+        RoomConnectorClient::new_hosted(invite, name, &allowed, local).map_err(|error| error.code)
+    }
+
     pub(super) async fn join(&self, invite: &str, name: &str, id: &str) -> Result<Value, String> {
-        let candidate = RoomConnectorClient::new(invite, name, self.allowed_servers.as_deref())
-            .map_err(|error| error.code)?;
+        let candidate = self.candidate(invite, name)?;
+        if id.is_empty()
+            && let Some(runtime) = &self.owned_runtime
+        {
+            // This public preparation step retains capacity. Require evidence of
+            // an issued capability before reserving it; admission still validates
+            // scope, expiry, revocation and retry identity in its transaction.
+            let (_, bearer) = crate::connector_client::transport::parse_invite(invite)
+                .map_err(|error| error.code)?;
+            let fingerprint = crate::http_api::purpose_credential_fingerprint(
+                &bearer,
+                agentsassemble_persistence::CONNECTOR_INVITE_PREFIX,
+            )
+            .ok_or_else(|| "invite_unavailable".to_owned())?;
+            if runtime
+                .store
+                .connector_admission_room_id(&fingerprint)
+                .await
+                .map_err(|_| "connector_invite_lookup_failed".to_owned())?
+                .is_none()
+            {
+                return Err("invite_unavailable".to_owned());
+            }
+        }
         let (id, client) = if id.is_empty() {
             let reserved = self.reserve(candidate)?;
             // Remote HTTP is stateless. Establish private retry custody before any
             // admission effect; an invitation and public name cannot select a client.
-            if self.allowed_servers.is_some() {
+            if self.remote() {
                 return Ok(json!({
                     "status": "connection_prepared", "connection_id": reserved.0,
                     "instructions": "Not in the room yet. Calling room_join again with this connection_id and the same invite_url and display_name enters it; the same ID works after a failed response. connection_id is private to this connection."
@@ -86,7 +150,7 @@ impl ConnectorHub {
         if state.closed {
             return Err("connector_closed".to_owned());
         }
-        if self.allowed_servers.is_none()
+        if !self.remote()
             && let Some((id, client)) = state.clients.iter().find(|(_, client)| {
                 !client.has_completed_leave()
                     && client.invitation_identity() == candidate.invitation_identity()
@@ -100,7 +164,7 @@ impl ConnectorHub {
         if state.clients.len() >= 128 {
             return Err("connector_capacity_release_receipt_required".to_owned());
         }
-        if self.allowed_servers.is_none()
+        if !self.remote()
             && state
                 .clients
                 .values()
@@ -132,7 +196,7 @@ impl ConnectorHub {
         if state.closed {
             return Err("connector_closed".to_owned());
         }
-        if id.is_empty() && self.allowed_servers.is_none() {
+        if id.is_empty() && !self.remote() {
             if for_leave && state.clients.len() > 1 {
                 return Err("connection_id_required".to_owned());
             }
@@ -183,7 +247,7 @@ impl ConnectorHub {
 
     fn remove(&self, id: &str, client: &Arc<RoomConnectorClient>) {
         let mut state = self.state.lock();
-        let key = if id.is_empty() && self.allowed_servers.is_none() {
+        let key = if id.is_empty() && !self.remote() {
             state
                 .clients
                 .iter()

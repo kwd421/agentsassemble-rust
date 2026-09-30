@@ -15,6 +15,15 @@ export type ConnectorInviteCustody = {
 
 /** Clipboard / join-page text for the current-conversation MCP path. Not a webpage. */
 export function connectorInviteText(joinUrl: string, expiresAt?: string): string {
+  const origin = new URL(joinUrl).origin;
+  const webSetup = origin.startsWith("https://") ? [
+    "웹 ChatGPT: 설정 → 플러그인 → MCP 앱 만들기에서 아래 서버 URL을 등록하세요 (인증 없음).",
+    `${origin}/mcp`,
+    "앱의 외부 접속이 켜져 있어야 해요. 임시 주소가 바뀌면 ChatGPT에도 새 주소를 등록해야 해요.",
+    "등록한 Room Connector를 이 대화에 추가한 뒤 아래 초대 URL로 room_join을 호출하세요.",
+    "connection_prepared가 반환되면 connection_id를 보관하고 같은 URL과 이름으로 room_join을 다시 호출하세요.",
+    "",
+  ] : [];
   const expiry = expiresAt
     ? `한 번 사용할 수 있어요. 만료: ${new Date(expiresAt).toLocaleString()}`
     : "한 번 사용할 수 있고 1시간 뒤 만료돼요.";
@@ -22,11 +31,12 @@ export function connectorInviteText(joinUrl: string, expiresAt?: string): string
     "현재 AI 대화용 AgentsAssemble Room Connector 초대입니다.",
     "이 URL을 열거나 fetch 하지 마세요. HTTP로 /api/room-connector/join 하지 마세요.",
     "",
-    "이 작업 폴더에 Room Connector MCP를 등록하세요:",
+    ...webSetup,
+    "터미널 AI 대화라면 이 작업 폴더에 Room Connector MCP를 등록하세요:",
     "assemble room connector-mcp",
     "Grok: grok mcp add --scope project agentsassemble <assemble 실행 파일> -- room connector-mcp",
     "",
-    "폴더를 신뢰한 뒤 이 대화를 다시 열고, 아래 URL을 그대로 쓰세요.",
+    "터미널에서는 폴더를 신뢰한 뒤 대화를 다시 여세요. 초대 URL:",
     joinUrl,
     "",
     expiry,

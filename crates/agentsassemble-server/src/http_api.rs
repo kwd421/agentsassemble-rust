@@ -45,8 +45,12 @@ pub(crate) fn bearer_credential(headers: &HeaderMap) -> Option<&str> {
 }
 
 pub(crate) fn purpose_bearer_fingerprint(headers: &HeaderMap, prefix: &str) -> Option<[u8; 32]> {
-    use sha2::{Digest as _, Sha256};
     let value = bearer_credential(headers)?;
+    purpose_credential_fingerprint(value, prefix)
+}
+
+pub(crate) fn purpose_credential_fingerprint(value: &str, prefix: &str) -> Option<[u8; 32]> {
+    use sha2::{Digest as _, Sha256};
     // Exact stored fingerprints own authorization; decoding the bearer adds no authority.
     (value.len() == prefix.len() + 43 && value.starts_with(prefix))
         .then(|| Sha256::digest(value.as_bytes()).into())

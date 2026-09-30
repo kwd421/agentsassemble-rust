@@ -2,6 +2,17 @@
 
 ## Active work
 
+- 2026-10-01 personal-server MCP preparation: the app-owned listener and public
+  ingress now serve `/mcp`; invitation UI derives web setup instructions. Actual
+  in-app-browser ChatGPT joins, reads, publishes, leaves and releases its receipt;
+  the host UI and stored events independently confirm the result. Correct reproduced
+  unauthenticated preparation, 30-second wait disconnect and transport payload
+  logging. Connector 17, frontend 923, desktop 36, Clippy and mandatory gates pass;
+  final signed-package logging/17-tool smoke passes. Test connections, ingress,
+  owned processes and isolated data are cleaned up. Initial ChatGPT registration
+  remains manual; persistent endpoint deployment remains unverified. Evidence:
+  `docs/verification/2026-10-01-web-mcp.md`.
+
 - 2026-09-30 actual external-invite verification: isolated signed macOS package,
   public tunnel and in-app browser verify human admission/avatar/message/attachment/
   reload/leave and consumed/revoked-link rejection. Real Antigravity Connector and

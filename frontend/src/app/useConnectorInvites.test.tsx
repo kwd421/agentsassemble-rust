@@ -36,6 +36,8 @@ it("retries uncertain creation with the same identity and guards copying by refr
   await act(() => hook.result.current.copy("invite"));
   expect(copied).toHaveLength(1);
   expect(copied[0]).toContain("assemble room connector-mcp");
+  expect(copied[0]).toContain(`${origin}/mcp`);
+  expect(copied[0]).toContain("connection_prepared");
   expect(copied[0]).toContain(`${origin}/join?token=private`);
   expect(copied[0]).not.toMatch(/^https:\/\/public\.example\.test\/join\?token=private$/);
   origin = "https://changed.example.test";
@@ -111,6 +113,7 @@ it("creates a connector invite on this machine's loopback origin while public ac
   expect(copied).toHaveLength(1);
   expect(copied[0]).toContain("assemble room connector-mcp");
   expect(copied[0]).toContain(`${LOCAL}/join?token=private`);
+  expect(copied[0]).not.toContain(`${LOCAL}/mcp`);
   expect(copied[0]).not.toBe(`${LOCAL}/join?token=private`);
 
   // Opening public access later does not invalidate a link that still resolves on this machine.

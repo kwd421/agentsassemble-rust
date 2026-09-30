@@ -780,6 +780,51 @@ owner cleaned the 18.97 GiB cache after builds stopped, as required by its exist
 
 ## Connector invitation management
 
+### App-owned MCP preparation (2026-10-01)
+
+The user requests automatic personal-server MCP preparation and an actual web
+ChatGPT experiment. The app's existing room listener will also serve `/mcp`;
+opening public access exposes both through the same managed ingress. No separate
+MCP executable, extra tunnel, arbitrary destination relay, common hosted room
+service, or provider credential is required. Local stdio and explicit standalone
+remote-MCP contracts remain available.
+
+The existing ingress owner remains authoritative for Host, Origin, proxy
+provenance, public readiness and shutdown. Hosted MCP accepts invitations only
+for this runtime's exact current public or local origin. After that check, its
+HTTP client reaches this runtime's loopback listener with the original invite
+capability; the public invitation identity still owns retry matching. Admission,
+read/write permissions, private connection handles, request UUIDs and terminal
+leave receipts retain their existing owners. MCP cannot acquire local manager
+authority or forward invitations to another computer.
+
+Public preparation must prove the invitation fingerprint exists in the existing
+store before retaining a private registry slot. This is issued-capability evidence,
+not admission; the original transaction still owns consumption, scope, expiry,
+revocation and exact retries. Missing/failed lookup cannot become preparation success.
+An admitted MCP wait must retain the enclosing HTTP connection's existing
+authenticated-wait lifetime after client session resolution; it must remain
+cancellable on disconnect, revocation, expiry and app shutdown. Non-wait tools and
+unjoined handles retain the ordinary connection deadline. Dependency tracing must
+not log MCP request/response or WebSocket frame payloads, even under verbose
+target-specific logging. Product-owned failure reporting remains available.
+
+The invitation UI derives the HTTP MCP address from current public ingress and
+provides web-ChatGPT registration instructions separately from local CLI setup.
+Public access remains explicitly controlled by the user. A rotating quick-tunnel
+address is identified as temporary; neither a room redirect link nor a successful
+temporary connection proves persistent ChatGPT setup across restart. The existing
+stable-entry redirector is not an HTTP MCP proxy. A fixed HTTPS endpoint or an
+authorized OpenAI tunnel remains a one-time external deployment dependency.
+
+Acceptance: start the packaged personal server, open public access, obtain the
+MCP address without a separate server command, register an isolated web ChatGPT
+test connection, join using a fresh app-issued invite, read and publish through
+actual tools, verify the response in the host UI, leave, and close the owned
+ingress/app. Verify unowned origins, invalid/missing private handles and ingress
+Host/Origin denial through actual HTTP. Distinguish app-owned preparation from
+the manual initial ChatGPT registration and unverified persistent deployment.
+
 The bundled manager now issues an exact connector-create ticket through the local
 control pipe. Its private HTTP endpoint revalidates current room-manager authority,
 requires ready public ingress and calls the existing one-hour, one-use creation

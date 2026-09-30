@@ -71,6 +71,7 @@ fn registered_routes(
         crate::operator_pairing_web::HTTP_ROUTES,
         crate::human_invite_web::HTTP_ROUTES,
         crate::connector_web::HTTP_ROUTES,
+        crate::connector_mcp_web::HTTP_ROUTES,
         crate::attendee_web::HTTP_ROUTES,
         crate::attendee_web::ENTRY_HTTP_ROUTES,
         crate::human_session_exchange_web::HTTP_ROUTES,

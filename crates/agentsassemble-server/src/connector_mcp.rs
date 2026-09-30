@@ -40,6 +40,16 @@ impl ConnectorMcp {
         })
     }
 
+    pub(crate) fn hosted(
+        ingress: crate::public_ingress::PublicIngress,
+        store: agentsassemble_persistence::SqliteStore,
+    ) -> Self {
+        Self {
+            hub: Arc::new(ConnectorHub::hosted(ingress, store)),
+            tool_router: Self::tool_router(),
+        }
+    }
+
     /// Cancels owned room transports without stopping any external provider process.
     pub fn close(&self) {
         self.hub.close();
@@ -293,12 +303,27 @@ impl ConnectorMcp {
     async fn room_wait_next(
         &self,
         Parameters(input): Parameters<Connection>,
+        context: rmcp::service::RequestContext<rmcp::RoleServer>,
     ) -> Result<String, String> {
+        let transport = context
+            .extensions
+            .get::<axum::http::request::Parts>()
+            .and_then(|parts| {
+                parts
+                    .extensions
+                    .get::<crate::http_admission::HttpConnectionAdmission>()
+            })
+            .cloned();
+        if self.hub.owns_runtime() && transport.is_none() {
+            return Err("http_connection_unavailable".to_owned());
+        }
         encode(
             &self
                 .hub
                 .client(&input.connection_id)?
-                .wait_next()
+                .wait_next_with_transport(|| {
+                    transport.map(|admission| admission.retain_authenticated_wait())
+                })
                 .await
                 .map_err(|error| error.code)?,
         )

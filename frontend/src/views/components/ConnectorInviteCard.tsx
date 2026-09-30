@@ -7,11 +7,16 @@ export type ConnectorInviteControls = {
   copy: (key: string) => void;
 };
 
-export function ConnectorInviteCard({ controls, disabled, localOnly }: { controls: ConnectorInviteControls; disabled: boolean; localOnly: boolean }) {
+export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }: { controls: ConnectorInviteControls; disabled: boolean; localOnly: boolean; mcpOrigin?: string }) {
   return <section className="dc-invite-card" aria-labelledby="connector-invite-heading">
     <div className="dc-invite-card-copy">
       <h3 id="connector-invite-heading">현재 AI 대화 초대</h3>
       <p>Room Connector MCP가 있는 AI 대화에 참가 안내를 전달해 주세요. 링크만 열면 입장되지 않아요. 한 번 사용할 수 있고 1시간 뒤 만료돼요.</p>
+      {mcpOrigin && <>
+        <p>웹 ChatGPT의 설정 → 플러그인 → MCP 앱 만들기에서 서버 URL로 등록해 주세요. 인증은 ‘인증 없음’을 선택해요.</p>
+        <code style={{ overflowWrap: "anywhere" }}>{mcpOrigin}/mcp</code>
+        <p>이 서버는 앱이 자동으로 준비해요. 등록한 Room Connector를 대화에 추가하고 참가 안내를 전달하면 돼요. 임시 주소가 바뀌면 새 주소로 다시 등록해야 해요.</p>
+      </>}
       {localOnly && <p>외부 접속이 꺼져 있어 이 PC에서 실행 중인 AI만 열 수 있는 링크를 만들어요. 앱을 다시 시작하면 이 링크는 더 이상 열리지 않아요.</p>}
     </div>
     <button type="button" className="dc-invite-copy-button" style={{ minHeight: 44 }}

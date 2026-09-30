@@ -130,6 +130,20 @@ impl RoomConnectorClient {
         })
     }
 
+    /// The hosted MCP owner has checked these exact origins against its ingress.
+    /// Preserve the public invitation fingerprint, but deliver the same capability
+    /// to this runtime's own listener instead of making a public-tunnel round trip.
+    pub(crate) fn new_hosted(
+        invite_url: &str,
+        display_name: &str,
+        allowed_origins: &[Url],
+        local_origin: Url,
+    ) -> Result<Self, ConnectorClientError> {
+        let mut client = Self::new(invite_url, display_name, Some(allowed_origins))?;
+        client.server = local_origin;
+        Ok(client)
+    }
+
     /// Identifies the exact invitation for a process-owned connection registry; not authorization.
     #[must_use]
     pub const fn invitation_identity(&self) -> [u8; 32] {
@@ -345,8 +359,19 @@ impl RoomConnectorClient {
     /// # Errors
     /// Reports disconnect, expiry, required resynchronization or transport failure.
     pub async fn wait_next(&self) -> Result<Value, ConnectorClientError> {
+        self.wait_next_with_transport(|| ()).await
+    }
+
+    // Retain an enclosing transport only after resolving the admitted session
+    // and acquiring its wait cursor. Prepared handles and queued waits do not
+    // acquire the authenticated HTTP lifetime.
+    pub(crate) async fn wait_next_with_transport<T: Send>(
+        &self,
+        retain: impl FnOnce() -> T + Send,
+    ) -> Result<Value, ConnectorClientError> {
         let session = self.session().await?;
         let mut cursor = session.wait_cursor.lock().await;
+        let _transport = retain();
         let response = self
             .get(
                 "wait",

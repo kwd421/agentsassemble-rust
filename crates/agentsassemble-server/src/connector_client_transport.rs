@@ -12,7 +12,7 @@ pub(crate) fn normalize_server(value: &str) -> Result<Url, ConnectorClientError>
     room_client_transport::normalize_server(value).map_err(invite_error)
 }
 
-pub(super) fn parse_invite(value: &str) -> Result<(Url, String), ConnectorClientError> {
+pub(crate) fn parse_invite(value: &str) -> Result<(Url, String), ConnectorClientError> {
     room_client_transport::parse_join_invite(value).map_err(invite_error)
 }
 

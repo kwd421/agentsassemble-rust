@@ -265,6 +265,18 @@ pub async fn start(store: SqliteStore) -> RunningServer {
 }
 
 pub async fn start_with_catalog(store: SqliteStore, catalog: ProviderCatalog) -> RunningServer {
+    start_configured(store, catalog, None).await
+}
+
+pub async fn start_with_public_mcp(store: SqliteStore, origin: &str, proxy: &str) -> RunningServer {
+    start_configured(store, ProviderCatalog::default(), Some((origin, proxy))).await
+}
+
+async fn start_configured(
+    store: SqliteStore,
+    catalog: ProviderCatalog,
+    public: Option<(&str, &str)>,
+) -> RunningServer {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .unwrap_or_else(|error| panic!("bind human invite runtime: {error}"));
@@ -273,13 +285,18 @@ pub async fn start_with_catalog(store: SqliteStore, catalog: ProviderCatalog) ->
         .unwrap_or_else(|error| panic!("read human invite address: {error}"));
     let cancellation = CancellationToken::new();
     let server_cancellation = cancellation.clone();
-    let state = AppState::local(
+    let mut state = AppState::local(
         store,
         TicketStore::new(Duration::from_secs(30), 4_096),
         ProviderCatalogService::fixed(catalog),
     )
     .await
     .unwrap_or_else(|error| panic!("build human invite app state: {error}"));
+    if let Some((origin, proxy)) = public {
+        state = state
+            .with_manual_public_ingress(address, origin, proxy)
+            .unwrap_or_else(|error| panic!("configure public MCP fixture: {error}"));
+    }
     let server_state = state.clone();
     let rooms = state.rooms.clone();
     let task = tokio::spawn(async move {
