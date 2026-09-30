@@ -10,7 +10,10 @@
   logging. Connector 17, frontend 923, desktop 36, Clippy and mandatory gates pass;
   final signed-package logging/17-tool smoke passes. Test connections, ingress,
   owned processes and isolated data are cleaned up. Initial ChatGPT registration
-  remains manual; persistent endpoint deployment remains unverified. Evidence:
+  remains manual; persistent endpoint deployment remains unverified. A subsequent
+  user-requested repeat creates a different room and a fresh web ChatGPT conversation;
+  it reads an undisclosed nonce, publishes it correctly, leaves and releases the
+  receipt. The previous room's stored events remain unchanged. Evidence:
   `docs/verification/2026-10-01-web-mcp.md`.
 
 - 2026-09-30 actual external-invite verification: isolated signed macOS package,
