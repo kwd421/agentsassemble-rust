@@ -13,6 +13,8 @@ import {
 import {
   bootstrapCentral,
   centralIdentityConfigured,
+  centralSessionLoggedOut,
+  type CentralPerson,
   clearPendingCentralRecoveryCode,
   createCentralGuest,
   isCentralAuthenticationError,
@@ -45,6 +47,8 @@ import {
   parseStrictRoomDirectory,
 } from "../../lib/roomDirectoryContract";
 
+import { responseError } from "../../api/http";
+
 type Screen = "choice" | "guest" | "recover" | "recovery-code";
 
 // Tauri commands reject with their native Result error string, not an Error, so a
@@ -57,17 +61,33 @@ function failureMessage(reason: unknown, fallback: string): string {
 
 async function saveLocalProfile(
   displayName: string,
-  bootstrapRequestId: string
+  bootstrapRequestId: string,
+  googlePerson?: CentralPerson
 ) {
   const name = displayName.trim();
   if (!name) return;
   const current = await requestDesktopBootstrapStatus();
-  const bootstrap =
+  let bootstrap =
     current.phase === "empty"
       ? await initializeDesktopBootstrap(bootstrapRequestId, name)
       : current;
   if (bootstrap.phase !== "complete" || !bootstrap.profile) {
     throw new Error("로컬 신원 권위를 안전하게 초기화하지 못했습니다.");
+  }
+  if (googlePerson?.identity_kind === "google" && googlePerson.avatar_url !== undefined && bootstrap.profile.revision === 1) {
+    const imported = await fetchDesktopOperatorRuntime("/api/user-profile", {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ expected_revision: 1, initial_google_profile: {
+        display_name: googlePerson.display_name,
+        picture_url: googlePerson.avatar_url || "",
+      } }),
+    });
+    if (!imported.ok) throw await responseError(imported);
+    bootstrap = await requestDesktopBootstrapStatus();
+    if (bootstrap.phase !== "complete" || !bootstrap.profile) {
+      throw new Error("Google 프로필의 저장된 로컬 권위를 확인하지 못했습니다.");
+    }
   }
   rememberGuestProfile({
     displayName: bootstrap.profile.display_name,
@@ -155,7 +175,15 @@ export default function StartupIdentityGate({
       try {
         await requestDesktopHostProductSurface();
         const bootstrap = await requestDesktopBootstrapStatus();
+        if (centralEnabled && centralSessionLoggedOut()) {
+          if (active) setChecking(false);
+          return;
+        }
         if (bootstrap.phase === "complete") {
+          const session = loadCentralSession();
+          if (session?.person.identity_kind === "google" && bootstrap.profile?.revision === 1 && session.person.avatar_url !== undefined) {
+            await saveLocalProfile(session.person.display_name, bootstrapRequestId.current, session.person);
+          }
           if (active) await enterApplication(bootstrap);
           return;
         }
@@ -192,10 +220,11 @@ export default function StartupIdentityGate({
       }
       try {
         setStatus("중앙 신원과 방 목록을 확인하는 중");
-        await bootstrapCentral();
+        const central = await bootstrapCentral();
         const localAuthority = await saveLocalProfile(
-          existing.person.display_name,
-          bootstrapRequestId.current
+          central?.person.display_name || existing.person.display_name,
+          bootstrapRequestId.current,
+          central?.person || existing.person
         );
         await registerLocalServer(deviceToken);
         if (active) await enterApplication(localAuthority);
@@ -292,7 +321,8 @@ export default function StartupIdentityGate({
       const session = await loginCentralGoogle(setStatus, controller.signal);
       const localAuthority = await saveLocalProfile(
         session.person.display_name,
-        bootstrapRequestId.current
+        bootstrapRequestId.current,
+        session.person
       );
       await registerLocalServer(deviceToken);
       await enterApplication(localAuthority);

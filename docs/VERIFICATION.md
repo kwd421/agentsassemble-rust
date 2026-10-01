@@ -11788,3 +11788,65 @@ pass, including label-only event publication and pre-field membership snapshot.
 Workspace all-target/all-feature warning-denied Clippy, architecture/source growth,
 19 policy tests, format, diff and artifact checks pass. Package signature verifies.
 Normal Quit completes; disposable profile/app artifacts are moved to Trash.
+
+
+## Google profile defaults and account logout (2026-10-01)
+
+User request: seed name/photo from Google once, retain later user edits, add logout
+in account settings. Contract: `docs/specs/identity-accounts-friends-slice.md` ->
+Google profile defaults and central logout. Central source owner remains the
+separate `/Users/seinel/Projects/AgentsAssemble/infra/identity-directory` Worker.
+Its previously deployed missing-client-secret correction remains live.
+
+Implemented changes request exactly `openid profile`, verify the existing stable
+Google subject, and fill first-import metadata. The additive
+`0004_google_profile.sql` adds nullable `persons.avatar_url`; existing identities
+remain unchanged until verified Google re-login. No email permission or secret
+rotation is added. Rust accepts only exact HTTPS Google photo origins, refuses
+redirects, bounds the body and deadline, and imports through canonical avatar
+storage. The profile revision guard preserves edits; concurrent user edits retain
+their authority and fail the stale import visibly.
+
+Verification: Worker 19 tests, frontend 925 tests, affected startup/logout 7 after
+final correction, native 36 tests, Google import 2 controlled tests, profile HTTP boundary 3 tests, frontend/native
+build, Rust architecture/source-growth/format gates and workspace Clippy pass.
+The central-owner test-quality gate passes. Its original working-tree architecture
+check is blocked by the pre-existing deleted
+`agentsassemble/application_transaction.py`. A clean shared clone containing only
+the authentication patch passes architecture/source-growth, regenerated-map and
+test-quality gates. Generated clone maps are retained there: their infrastructure
+inventory also differs from the existing map, so they are not copied over the
+owner's active cleanup. No gate was weakened and unrelated legacy work remains
+untouched; do not claim a clean release of that original working tree.
+
+A signed debug-only isolated `app.agentsassemble.googlecheck20261001` package uses
+only the previous test profile. In actual account settings the new logout button
+returns to startup and remains logged out after a normal quit/restart. Read-only D1 counts show its active Google session transitions
+from 1 to 0. The Windows waiting room remains open and its public entry returns
+HTTP 200. Screenshots and bounded evidence are under
+`/var/folders/h_/8rgwgf7j3fn_v3lxg2nl431h0000gn/T/aa-google-login-20261001-evrn5pg8/evidence`.
+No native-distribution/notarization or Windows execution claim is made.
+
+After explicit user approval, remote migration listing contained only
+`0004_google_profile.sql`; it applied successfully. The validated isolated
+central-owner checkout deployed Worker version
+`882fef18-e3a5-4968-9411-036fde165e6e`. Existing secrets remain unchanged.
+Actual Google re-login upgrades the existing account's initial name/photo; D1
+Google-person count stays 1 and initialized photo count becomes 1. The signed
+native package visibly displays the Google name and photo, stored through local
+canonical avatar assets. No new account is created.
+
+In the isolated native UI, change the name, avatar label and photo (repository app
+icon), save, logout, and re-login with the same Google account. The saved profile
+stays at revision 4 with an identical complete profile digest and avatar byte
+digest; the custom name/photo remain visible. Central first-import metadata also
+remains unchanged. A final settings logout returns to startup and the remote
+active Google session count is 0. Evidence includes `google-profile-imported.png`,
+`custom-profile-after-relogin.png`, before/after profile JSON and
+`google-profile-verified.json` in the evidence directory above. The test app quits
+normally; its isolated profile/cache/WebKit data move recoverably to
+`/Users/seinel/.Trash/aa-google-login-20261001/profile-verification-complete`.
+Computer Use resets; the Windows waiting host remains running. The default
+packaged app is untouched; the new signed debug package remains available for
+this work. Production Worker is updated, with no native-distribution/notarization
+or Windows execution claim.

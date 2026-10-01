@@ -9,7 +9,7 @@ describe("central Google handoff protocol", () => {
         handoff_id: "goh_current",
         authorization_url:
           "https://accounts.google.com/o/oauth2/v2/auth?" +
-          "client_id=desktop-client&response_type=code&scope=openid&" +
+          "client_id=desktop-client&response_type=code&scope=openid+profile&" +
           "state=state_current_native_handoff_1234567890&" +
           "nonce=nonce-current&code_challenge=challenge-current&" +
           "code_challenge_method=S256",

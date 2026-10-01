@@ -8,6 +8,7 @@ import StartupIdentityGate from "./StartupIdentityGate";
 
 const centralMocks = vi.hoisted(() => ({
   configured: false,
+  loggedOut: false,
   login: vi.fn(),
 }));
 const desktopMocks = vi.hoisted(() => ({
@@ -52,6 +53,7 @@ vi.mock("../../lib/deviceIdentity", () => ({
 }));
 vi.mock("../../lib/centralIdentity", () => ({
   centralIdentityConfigured: () => centralMocks.configured,
+  centralSessionLoggedOut: () => centralMocks.loggedOut,
   bootstrapCentral: vi.fn(),
   clearPendingCentralRecoveryCode: vi.fn(),
   createCentralGuest: vi.fn(),
@@ -66,6 +68,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   centralMocks.configured = false;
+  centralMocks.loggedOut = false;
   vi.clearAllMocks();
   desktopMocks.requestHostProductSurface.mockResolvedValue({
     revision: PRODUCT_SURFACE_REVISION,
@@ -75,6 +78,17 @@ afterEach(() => {
 });
 
 describe("StartupIdentityGate", () => {
+  it("does not reopen completed local authority after explicit central logout", async () => {
+    centralMocks.configured = true;
+    centralMocks.loggedOut = true;
+    desktopMocks.requestBootstrapStatus.mockResolvedValue({ phase: "complete", profile: desktopProfile });
+    const onComplete = vi.fn();
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    await screen.findByRole("button", { name: "Google로 계속" });
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
+  });
+
   it("initializes desktop authority before fetching the real empty room directory", async () => {
     desktopMocks.requestBootstrapStatus.mockResolvedValue({
       phase: "empty",

@@ -112,7 +112,7 @@ fn validate_authorization_url(url: &Url, redirect_uri: &str) -> Result<(), Strin
         || url.fragment().is_some()
         || value("redirect_uri") != Some(redirect_uri)
         || value("response_type") != Some("code")
-        || value("scope") != Some("openid")
+        || value("scope") != Some("openid profile")
         || value("code_challenge_method") != Some("S256")
         || challenge.len() != 43
         || !challenge
@@ -140,7 +140,7 @@ mod tests {
             ("client_id", "fixture-client"),
             ("nonce", "fixture-nonce"),
             ("response_type", "code"),
-            ("scope", "openid"),
+            ("scope", "openid profile"),
             ("code_challenge_method", "S256"),
             ("code_challenge", &"a".repeat(43)),
         ]);

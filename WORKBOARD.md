@@ -2,6 +2,16 @@
 
 ## Active work
 
+- 2026-10-01 user-requested Google profile defaults and account logout completed:
+  approved central migration and Worker deployment apply first-import name/photo.
+  Actual signed package login imports the existing Google account's name/photo;
+  custom name, avatar label and photo bytes survive logout/re-login unchanged.
+  Settings logout revokes the current central session and persists after restart.
+  Rust mandatory gates pass. A clean central-owner checkout containing only the authentication
+  patch passes structure and regenerated-map gates; its original working tree
+  still contains unrelated shim deletions. Evidence and remaining acceptance:
+  `docs/VERIFICATION.md` -> Google profile defaults and account logout.
+
 - 2026-10-01 Cursor follow-up completed: official CLI browser login restores the
   native 43-model catalog. Preserve ACP authentication rejection as login required
   instead of malformed model data. New signed isolated package verifies Auto's

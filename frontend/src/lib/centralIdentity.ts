@@ -24,6 +24,7 @@ export type CentralPerson = {
   person_id: string;
   display_name: string;
   identity_kind: "guest" | "google";
+  avatar_url?: string | null;
 };
 
 export type CentralSession = {
@@ -73,7 +74,9 @@ type StoredDevice = {
   publicJwk: JsonWebKey;
 };
 
-class CentralAuthError extends Error {}
+class CentralAuthError extends Error {
+  constructor(message: string, readonly code?: string) { super(message); }
+}
 
 let devicePromise: Promise<StoredDevice> | undefined;
 
@@ -252,6 +255,24 @@ export function clearCentralSession(): void {
   localStorage.removeItem(SERVERS_KEY);
 }
 
+export function centralSessionLoggedOut(): boolean {
+  return localStorage.getItem(SESSION_KEY) === "logged-out";
+}
+
+export async function logoutCentral(): Promise<void> {
+  const session = loadCentralSession();
+  if (session) {
+    try {
+      await signedRequest(session, "/v1/logout", "POST");
+    } catch (error) {
+      if (!(error instanceof CentralAuthError) || error.code !== "invalid_session") throw error;
+    }
+  }
+  clearCentralSession();
+  clearPendingCentralRecoveryCode();
+  localStorage.setItem(SESSION_KEY, "logged-out");
+}
+
 export function loadCentralServers(): CentralServer[] {
   try {
     const value = JSON.parse(
@@ -270,7 +291,7 @@ async function responsePayload<T>(response: Response): Promise<T> {
   if (!response.ok) {
     const message =
       payload.error?.message || `중앙 서버가 HTTP ${response.status}을 반환했습니다.`;
-    if (response.status === 401) throw new CentralAuthError(message);
+    if (response.status === 401) throw new CentralAuthError(message, payload.error?.code);
     throw new Error(message);
   }
   return payload;
@@ -338,7 +359,7 @@ export function parseCentralGoogleHandoff(value: unknown): CentralGoogleHandoff 
     authorizationUrl.password ||
     authorizationUrl.hash ||
     authorizationUrl.searchParams.get("response_type") !== "code" ||
-    authorizationUrl.searchParams.get("scope") !== "openid" ||
+    authorizationUrl.searchParams.get("scope") !== "openid profile" ||
     authorizationUrl.searchParams.get("state") !== result.state ||
     authorizationUrl.searchParams.get("code_challenge_method") !== "S256" ||
     !authorizationUrl.searchParams.get("client_id") ||

@@ -4,6 +4,8 @@ import { X, Camera, Headphones, Mic, MicOff, Palette, UserCircle } from "lucide-
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import GoogleAccountSettings from "./GoogleAccountSettings";
+import CentralAccountSettings from "./CentralAccountSettings";
+import { isDesktopWebview } from "../../lib/desktopBridge";
 import GuestRecoverySettings from "./GuestRecoverySettings";
 
 export type UserSettingsSection = "account" | "profile" | "voice" | "recovery";
@@ -137,7 +139,7 @@ export default function UserSettingsPanel({
                   </select>
                 </label>
               </div>
-              <GoogleAccountSettings identity={profileIdentity ?? {}} />
+              {isDesktopWebview() ? <CentralAccountSettings disabled={saving} /> : <GoogleAccountSettings identity={profileIdentity ?? {}} />}
             </>
           )}
 

@@ -89,6 +89,32 @@ cancellation is checked before exchange. A received completed exchange is persis
 immediately, with no later cleanup or abort check that can discard the issued session.
 Earlier failure/cancellation still attempts native retirement exactly once.
 
+### Google profile defaults and central logout (2026-10-01)
+
+User request: import Google's name/photo as initial profile defaults and expose
+logout in desktop account settings. Google subject remains the identity key;
+`openid profile` supplies display metadata, never account authority. The central
+Worker stores the first verified profile (including one upgrade of existing
+Google placeholders). No email scope or account merge is added. The local profile
+owner imports only a pristine revision, stores the photo through the existing
+bounded raster attachment pipeline, and preserves all later user edits. Remote
+photo reads require exact HTTPS Google image origins, no redirects, bounded bytes
+and a finite timeout; unavailable photos produce a visible retryable failure.
+
+Logout revokes only the current signed central session before persisting explicit
+logged-out presentation state and returning to startup. Failure retains the
+session and settings with a retry. Restart must remain on login; successful login
+replaces the logged-out state. Local operator authority, rooms, profile, device key
+and other devices' sessions are retained. This is central logout, not local server
+shutdown or an OS-user security boundary. Existing device/person binding prevents
+silently replacing the account. Browser room-account linking is unchanged.
+
+Acceptance: verified Google name/photo import; edited profile survives re-login;
+current central bearer is rejected after logout while another device remains valid;
+startup stays logged out across restart; failed logout is retryable. Verify affected
+Worker, native URL, profile and frontend contracts, mandatory gates and a signed
+isolated package while preserving the active Windows room.
+
 ### Local Google account binding and guest retirement
 
 On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,

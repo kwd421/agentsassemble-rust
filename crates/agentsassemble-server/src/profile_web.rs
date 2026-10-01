@@ -29,6 +29,7 @@ use crate::{
 };
 
 mod agent_avatar;
+mod google_profile;
 
 const MAX_PROFILE_BODY_BYTES: usize = 16 * 1024;
 
@@ -51,6 +52,7 @@ pub(crate) struct EncodedAttachmentUpload {
 #[derive(Deserialize)]
 struct ProfileUpdateRequest {
     expected_revision: i64,
+    initial_google_profile: Option<google_profile::InitialGoogleProfile>,
     #[serde(flatten)]
     patch: UserProfilePatch,
 }
@@ -108,6 +110,12 @@ async fn update_profile(
     let update: ProfileUpdateRequest = decode_json_body(request, MAX_PROFILE_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
+    if let Some(profile) = update.initial_google_profile {
+        if !matches!(authority, ProfileAuthority::LocalOperator) || update.expected_revision != 1 {
+            return Err(ProfileHttpError::unauthorized());
+        }
+        return google_profile::initialize(&state, profile).await;
+    }
     let outcome = match authority {
         ProfileAuthority::HumanSession(authorization) => {
             state
