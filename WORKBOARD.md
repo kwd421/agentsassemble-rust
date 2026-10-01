@@ -2,6 +2,11 @@
 
 ## Active work
 
+- 2026-10-02 user-requested Sites MCP registration created and verified owner-only.
+  Project linkage: `infra/sites-mcp/.openai/hosting.json`. No source version or
+  deployment exists; the native Rust MCP needs a compatible Sites runtime design
+  before publishing. Registration evidence: `infra/sites-mcp/README.md`.
+
 - 2026-10-02 cross-device central owner reopening correction complete locally:
   the Rust host publishes ready ingress under its durable key, the Worker issues
   and redeems short grants, and the selected host mints origin/device/room-bound
