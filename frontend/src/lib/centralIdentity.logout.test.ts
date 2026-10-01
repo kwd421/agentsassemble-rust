@@ -28,7 +28,7 @@ it("keeps a failed logout retryable and persists logout only after a signed revo
   expect(centralSessionLoggedOut()).toBe(true);
 });
 
-it("replaces an old logged-out account slot only after storage commits and keeps the new slot on retry", async () => {
+it.each(["logged-out", "expired-session"])("replaces a %s account slot only after storage commits and keeps the new slot on retry", async (state) => {
   vi.resetModules();
   const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
   let persisted: unknown = { deviceId: "old-guest-device", privateKey: pair.privateKey, publicJwk: await crypto.subtle.exportKey("jwk", pair.publicKey) };
@@ -46,13 +46,14 @@ it("replaces an old logged-out account slot only after storage commits and keeps
     } }, onsuccess() {} };
     queueMicrotask(() => open.onsuccess()); return open;
   } });
-  localStorage.setItem("agentsassemble.centralSession.v1", "logged-out");
+  localStorage.setItem("agentsassemble.centralSession.v1", state === "logged-out" ? state : JSON.stringify({ token: "expired-fixture-session", expires_at: 1, device_id: "old-guest-device", person: { person_id: "old-guest", display_name: "Guest", identity_kind: "guest" } }));
   const requests: Array<Record<string, unknown>> = [];
   vi.stubGlobal("fetch", vi.fn(async (_: string, init: RequestInit) => {
     requests.push(JSON.parse(String(init.body)));
     throw new Error("offline before login completed");
   }));
-  const { createCentralGuest, centralSessionLoggedOut } = await import("./centralIdentity");
+  const { createCentralGuest, centralSessionLoggedOut, loadCentralSession } = await import("./centralIdentity");
+  expect(loadCentralSession()).toBeNull();
   await expect(createCentralGuest("New account")).rejects.toThrow();
   expect(requests).toHaveLength(0);
   expect(centralSessionLoggedOut()).toBe(true);

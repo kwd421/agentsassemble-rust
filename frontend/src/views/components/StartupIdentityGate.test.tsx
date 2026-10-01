@@ -10,6 +10,8 @@ const centralMocks = vi.hoisted(() => ({
   configured: false,
   loggedOut: false,
   login: vi.fn(),
+  session: null as null | { person: { display_name: string } },
+  bootstrap: vi.fn(),
 }));
 const desktopMocks = vi.hoisted(() => ({
   fetchOperatorRuntime: vi.fn(),
@@ -41,6 +43,15 @@ const desktopProfile = {
   created_at: "2026-08-25T00:00:00.000000000Z",
   updated_at: "2026-08-25T00:00:00.000000000Z",
 };
+const completedBootstrap = {
+  phase: "complete",
+  authority_lineage_id: LINEAGE_ID,
+  server_id: SERVER_ID,
+  server_product_surface_revision: SERVER_SURFACE.revision,
+  server_product_surface_digest: SERVER_SURFACE.digest,
+  profile: desktopProfile,
+  deduplicated: false,
+};
 
 vi.mock("../../lib/desktopBridge", () => ({
   fetchDesktopOperatorRuntime: desktopMocks.fetchOperatorRuntime,
@@ -54,11 +65,11 @@ vi.mock("../../lib/deviceIdentity", () => ({
 vi.mock("../../lib/centralIdentity", () => ({
   centralIdentityConfigured: () => centralMocks.configured,
   centralSessionLoggedOut: () => centralMocks.loggedOut,
-  bootstrapCentral: vi.fn(),
+  bootstrapCentral: centralMocks.bootstrap,
   clearPendingCentralRecoveryCode: vi.fn(),
   createCentralGuest: vi.fn(),
   isCentralAuthenticationError: () => false,
-  loadCentralSession: () => null,
+  loadCentralSession: () => centralMocks.session,
   loadPendingCentralRecoveryCode: () => "",
   loginCentralGoogle: centralMocks.login,
   recoverCentralGuest: vi.fn(),
@@ -69,6 +80,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   centralMocks.configured = false;
   centralMocks.loggedOut = false;
+  centralMocks.session = null;
   vi.clearAllMocks();
   desktopMocks.requestHostProductSurface.mockResolvedValue({
     revision: PRODUCT_SURFACE_REVISION,
@@ -78,6 +90,51 @@ afterEach(() => {
 });
 
 describe("StartupIdentityGate", () => {
+  it("requires central login even when a saved local profile is complete", async () => {
+    centralMocks.configured = true;
+    desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+    desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
+    const onComplete = vi.fn();
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    await screen.findByRole("button", { name: "Google로 계속" });
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("keeps a completed local profile out of the app when central validation fails", async () => {
+    centralMocks.configured = true;
+    centralMocks.session = { person: { display_name: "Google name" } };
+    centralMocks.bootstrap.mockRejectedValue(new Error("central session was revoked"));
+    desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+    desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
+    const onComplete = vi.fn();
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    expect((await screen.findByRole("alert")).textContent).toContain("central session was revoked");
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("does not enter with a cached profile if the central session disappears during validation", async () => {
+    centralMocks.configured = true;
+    centralMocks.session = { person: { display_name: "Cached Google name" } };
+    centralMocks.bootstrap.mockResolvedValue(null);
+    desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+    desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
+    const onComplete = vi.fn();
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    await screen.findByRole("button", { name: "Google로 계속" });
+    expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("opens the saved room directory after central validation succeeds with an edited local profile", async () => {
+    centralMocks.configured = true;
+    centralMocks.session = { person: { display_name: "Google account name" } };
+    centralMocks.bootstrap.mockResolvedValue({ person: { person_id: "per_fixture", identity_kind: "google", display_name: "Google account name", avatar_url: null }, servers: [], server_time: 1 });
+    desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+    desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
+    const onComplete = vi.fn();
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+  });
+
   it("does not reopen completed local authority after explicit central logout", async () => {
     centralMocks.configured = true;
     centralMocks.loggedOut = true;

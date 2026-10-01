@@ -2,6 +2,16 @@
 
 ## Active work
 
+- 2026-10-01 follow-up after fast-forward to `67604759`: require live central
+  validation before opening an existing local profile, including revoked/missing
+  sessions. Distinguish the signed-in account name from the retained local profile
+  in settings; preserve explicit profile edits and local room authority. Frontend
+  932 tests, callback HTTP boundary, build, mandatory gates and Clippy pass. Signed
+  macOS revocation/recovery and actual Google logout/login/restart flows pass;
+  room/history/profile digests remain unchanged. Windows UI needs rebuilt-app
+  verification. Evidence: `docs/VERIFICATION.md` -> Central startup validation and
+  account display.
+
 - 2026-10-01 Windows guest logout -> existing Google login correction completed
   locally: fresh durable account slots and purpose-bound native host claims preserve
   old guest identities, endpoints and local rooms. Worker 21, frontend 927, native

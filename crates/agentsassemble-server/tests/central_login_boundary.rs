@@ -80,7 +80,10 @@ async fn native_return_before_bootstrap_requires_expected_state_and_local_ingres
     assert!(page.contains("로그인 완료"), "{page}");
     // The app-wide CSP allows only same-origin styles, so the page links its sheet.
     assert!(page.contains(r#"href="/central-login.css""#), "{page}");
-    assert!(!page.contains("<style") && !page.contains("style=\""), "{page}");
+    assert!(
+        !page.contains("<style") && !page.contains("style=\""),
+        "{page}"
+    );
     let style = client
         .get(format!("{}/central-login.css", server.base_url))
         .send()

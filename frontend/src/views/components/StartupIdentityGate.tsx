@@ -179,16 +179,11 @@ export default function StartupIdentityGate({
           if (active) setChecking(false);
           return;
         }
-        if (bootstrap.phase === "complete") {
-          const session = loadCentralSession();
-          if (session?.pending_account_switch) await registerLocalServer(deviceToken);
-          if (session?.person.identity_kind === "google" && bootstrap.profile?.revision === 1 && session.person.avatar_url !== undefined) {
-            await saveLocalProfile(session.person.display_name, bootstrapRequestId.current, session.person);
-          }
+        if (bootstrap.phase === "complete" && !centralEnabled) {
           if (active) await enterApplication(bootstrap);
           return;
         }
-        if (bootstrap.phase !== "empty") {
+        if (bootstrap.phase !== "empty" && bootstrap.phase !== "complete") {
           throw new Error("로컬 신원 권위에 명시적 복구가 필요합니다.");
         }
       } catch (reason) {
@@ -222,10 +217,14 @@ export default function StartupIdentityGate({
       try {
         setStatus("중앙 신원과 방 목록을 확인하는 중");
         const central = await bootstrapCentral();
+        if (!central) {
+          if (active) setChecking(false);
+          return;
+        }
         const localAuthority = await saveLocalProfile(
-          central?.person.display_name || existing.person.display_name,
+          central.person.display_name,
           bootstrapRequestId.current,
-          central?.person || existing.person
+          central.person
         );
         await registerLocalServer(deviceToken);
         if (active) await enterApplication(localAuthority);

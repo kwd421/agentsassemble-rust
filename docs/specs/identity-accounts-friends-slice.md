@@ -115,7 +115,7 @@ storage failures remain visible and login blocked. Existing logout markers from
 the previous build take the same transition. The old central guest/device records
 are preserved. A failed/cancelled login reuses the new slot until another logout.
 
-Only a session obtained after explicit logout requests a native host ownership
+Only a session obtained after logout or invalid/expired central authentication requests a native host ownership
 claim (`AA-HOST-CLAIM-1`), distinct from ordinary registration. Central device
 signature, verified native host signature for the exact destination account, and
 matching previously registered host key are required. The Worker consumes the
@@ -125,6 +125,17 @@ Enforce the existing 20-server bound inside the atomic update. Persist pending
 claim state until successful registration; startup retries unfinished claims with
 a fresh native proof. No identity merge, profile retirement, room ACL change,
 server key replacement or registration-conflict fallback is permitted.
+
+Follow-up startup contract: when central login is configured, a completed local
+profile never substitutes for a current central login. Validate the saved session
+through `/v1/bootstrap` before opening the room directory; a missing/revoked session
+requires login, and transport failures remain visible. Rejected or expired sessions
+retain the logged-out marker and renew the durable account slot at the next login
+so switching accounts cannot reuse the revoked account binding. A session removed during
+validation cannot use cached person data to enter. Refresh cached display metadata
+only for the same still-current token, and show the actual central account name
+separately from editable local profile fields. Preserve the existing explicit
+profile-edit contract and the latest callback-page styling.
 
 Acceptance: verified Google name/photo import; edited profile survives re-login;
 current central bearer is rejected after logout while another device remains valid;

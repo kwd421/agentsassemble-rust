@@ -11910,3 +11910,55 @@ Windows waiting host, invitation, tunnel and personal data are preserved. The
 repository artifact owner removes only the newly created obsolete nested Cargo
 cache; the root build and signed package remain available. No Windows installer,
 notarization or original legacy-tree release claim is made.
+
+
+## Central startup validation and account display (2026-10-01)
+
+User-requested follow-up starts from fast-forwarded `67604759`, preserving its
+styled Google callback pages. A completed local profile previously entered the app
+before central session validation. Two regressions using a complete, matching local
+bootstrap fixture fail against that original implementation, then pass with the
+correction. Startup now validates `/v1/bootstrap` before restoring an existing local
+profile; missing/rejected sessions require login, and transport failures remain
+visible. Invalid/expired sessions renew the durable account slot at the next login.
+Same-token response checks prevent stale validation from replacing or clearing a
+newer session, and missing authentication cannot silently skip server registration.
+Settings show the central account name separately from the editable local profile.
+Explicit profile edits and local room authority remain preserved.
+
+Verification: all frontend 932 tests pass, including missing/rejected/disappearing
+session startup regressions, successful validated startup, and transactional slot
+renewal after expiration. Frontend production build, workspace Clippy, callback HTTP
+boundary (including latest page/CSS), architecture/source-growth/policy/format/diff
+and artifact gates pass. The latest pulled callback test has only its required
+rustfmt correction. Two signed debug packages build and pass strict signature
+verification; no central Worker source change or deployment is needed.
+
+Controlled revocation uses the actual identity-directory Worker owner and its
+mature SQLite test boundary behind a loopback HTTP listener, with isolated data and
+normal signed requests. The signed macOS package creates a guest, a room and a
+message, then exits normally. Revoking that fixture session makes its restart show
+an expired-login error despite the complete local profile. Normal guest recovery
+enters the original room/message. Complete rooms/event/profile row counts and
+digests remain equal before and after this flow. This verifies induced revocation
+on macOS; it is not evidence of the reported Windows execution.
+
+A separate signed package uses the deployed production Worker. It creates a guest,
+room and message and saves an edited local name. After settings logout, actual
+browser sign-in to the approved existing Google account succeeds. Settings visibly
+show `Google 계정`, `로그인한 계정: Nel Le` and the retained `Saved Guest Profile`.
+The original room/message remain visible, and complete rooms/event/profile digests
+are identical. After quitting and restarting, the package visibly validates the
+central account before reopening that room; settings retain the same Google account
+and custom local name. This verification session is then logged out normally.
+Google profile defaults still import only under the existing first-import contract;
+this change does not create per-account local profiles or overwrite explicit edits.
+The user must rebuild/retry Windows; no Windows GUI or installer claim is made.
+
+Evidence: `/var/folders/h_/8rgwgf7j3fn_v3lxg2nl431h0000gn/T/aa-central-startup-20261001-cbpaarz4/evidence`.
+Both exact test apps and their runtimes exit normally; the fixture listener stops.
+Only this run's copied apps, isolated profile/cache/WebKit data and private recovery
+memos move to recoverable Trash at `/Users/seinel/.Trash/aa-central-startup-20261001`.
+The newly opened OAuth callback tab closes and Computer Use resets. Root build
+artifacts remain within the repository owner's limit for the next build. The
+existing Windows waiting host, invitation, ingress and personal data are preserved.

@@ -256,7 +256,7 @@ export function loadCentralSession(): CentralSession | null {
     ) as CentralSession | null;
     if (!parsed?.token || !parsed.device_id || !parsed.person?.person_id) return null;
     if (parsed.expires_at <= Math.floor(Date.now() / 1000)) {
-      localStorage.removeItem(SESSION_KEY);
+      clearCentralSession();
       return null;
     }
     return parsed;
@@ -266,7 +266,10 @@ export function loadCentralSession(): CentralSession | null {
 }
 
 export function clearCentralSession(): void {
-  if (!centralSessionLoggedOut()) localStorage.removeItem(SESSION_KEY);
+  if (!centralSessionLoggedOut()) {
+    localStorage.setItem(SESSION_KEY, "logged-out");
+    devicePromise = undefined;
+  }
   localStorage.removeItem(SERVERS_KEY);
 }
 
@@ -419,7 +422,7 @@ async function signedRequest<T>(
 ): Promise<T> {
   const device = await storedDevice();
   if (device.deviceId !== session.device_id) {
-    clearCentralSession();
+    if (loadCentralSession()?.token === session.token) clearCentralSession();
     throw new CentralAuthError(
       "이 기기의 중앙 로그인 키가 바뀌었습니다. 다시 로그인해 주세요."
     );
@@ -574,10 +577,13 @@ export async function bootstrapCentral(): Promise<CentralBootstrap | null> {
       "/v1/bootstrap",
       "GET"
     );
+    const current = loadCentralSession();
+    if (current?.token !== session.token) throw new CentralAuthError("중앙 로그인 상태가 바뀌었습니다. 다시 로그인해 주세요.");
+    localStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, person: payload.person }));
     localStorage.setItem(SERVERS_KEY, JSON.stringify(payload.servers || []));
     return payload;
   } catch (error) {
-    if (error instanceof CentralAuthError) clearCentralSession();
+    if (error instanceof CentralAuthError && loadCentralSession()?.token === session.token) clearCentralSession();
     throw error;
   }
 }
@@ -599,7 +605,7 @@ export async function fetchLocalServerInfo(): Promise<LocalServerInfo> {
 
 export async function registerLocalServer(deviceToken: string): Promise<void> {
   const session = loadCentralSession();
-  if (!session) return;
+  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
   const registrationRequest = {
     method: "POST",
     cache: "no-store",
