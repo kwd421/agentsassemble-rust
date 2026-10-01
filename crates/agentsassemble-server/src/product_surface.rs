@@ -76,6 +76,7 @@ fn registered_routes(
         crate::attendee_web::ENTRY_HTTP_ROUTES,
         crate::human_session_exchange_web::HTTP_ROUTES,
         crate::server_identity_web::HTTP_ROUTES,
+        crate::central_owner_web::HTTP_ROUTES,
     ]
     .into_iter()
     .flatten()

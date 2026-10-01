@@ -143,6 +143,50 @@ startup stays logged out across restart; failed logout is retryable. Verify affe
 Worker, native URL, profile and frontend contracts, mandatory gates and a signed
 isolated package while preserving the active Windows room.
 
+### Central owner server reopening (2026-10-01)
+
+After a current central session is validated, the desktop server chooser may reopen
+only a server whose current central relation is `owner`. Bookmarks remain discovery
+metadata and continue through their explicit invite or pairing authority. Selecting
+an owned server asks the central Worker for a five-minute, server-bound connect grant.
+The grant is bound to the issuing central session, person, device, server, exact
+published endpoint origin and endpoint generation. Logout, session/device/person
+revocation, owner transfer, endpoint replacement, lease expiry or server revocation
+invalidates it. The central bearer and device private key never leave the selecting
+device and are never sent to the remote room host.
+
+The selected host redeems the opaque grant directly with the fixed central Worker,
+signing the exact request with its durable Ed25519 host key. The Worker revalidates
+all mutable authority and the current endpoint lease before returning the authorized
+central person/device and grant expiry. Before any room directory is shown, the
+browser verifies the same-origin server challenge against the selected central
+record's server ID, public key and fingerprint. Redirects, userinfo, non-HTTPS public
+origins, substituted keys and stale generations are rejected.
+
+The host publishes its ready public ingress as a renewable central endpoint lease
+and publishes offline on owned shutdown. Endpoint generation is durable and strictly
+monotonic across restarts. Publication uses bounded requests and one cancellation-
+owned renewal task; failures remain visible and retry only while the runtime and the
+same ingress generation remain active. No central session token is stored by the
+host. An unavailable or unpublished ingress leaves the server visible but unopened.
+
+Grant redemption exposes a read-only room-directory projection and can mint one
+short operator session for an explicitly selected room. That session is bound to the
+requesting browser device, verified public origin and exact room incarnation, and
+cannot outlive the central grant. It reuses the existing room-session authorization,
+revocation and WebSocket owners without granting native lifecycle, profile, provider
+credential or cross-room authority. Failure before the durable room-session commit
+returns no credential; a committed response may be retried only with the same grant,
+device and room while both grant and room remain current.
+
+Acceptance requires owner-only issuance; host-signature, origin, generation, expiry,
+logout and ownership-transfer rejection; durable monotonic endpoint publication;
+wrong-key server-challenge rejection; directory read followed by one selected-room
+session; and unchanged local-room data on both machines. Verify Worker and Rust
+boundary tests, frontend startup/navigation tests, mandatory gates, a signed packaged
+Mac host plus Windows client flow, and a standard diff security scan. Do not use Deep
+Scan. Preserve the already-running Windows room and its owned children throughout.
+
 ### Local Google account binding and guest retirement
 
 On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,

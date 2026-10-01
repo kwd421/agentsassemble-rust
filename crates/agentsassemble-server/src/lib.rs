@@ -57,8 +57,10 @@ macro_rules! registered_routes {
 
 mod agent_create_runtime;
 mod app_state;
+mod central_directory;
 mod central_host_identity;
 mod central_login;
+mod central_owner_web;
 mod frontend_assets;
 mod frontend_document;
 pub mod frontend_release;
@@ -179,6 +181,7 @@ mod ticket_tests;
 mod web;
 
 pub use app_state::{AppState, AppStateBuildError};
+pub use central_directory::CentralDirectoryError;
 pub use central_host_identity::{CentralHostIdentity, HostIdentityError};
 pub use human_invite_credentials::{
     HumanInviteCredentialAuthority, HumanInviteCredentialDraft, HumanInviteCredentialError,

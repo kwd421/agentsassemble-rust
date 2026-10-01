@@ -25,6 +25,7 @@ use crate::{
     http_transport::serve_connection,
     ingress_trust::{LocalIngress, require_trusted_ingress},
     provider_turn_reconciliation_runtime::reconcile_provider_turn_ownership,
+    public_ingress::PublicIngress,
     reconcile_runtime_ownership,
     runtime_reconciliation::watch_runtime_reconciliation,
     ticket::{ConsumedSocketTicket, SocketTicketHint},
@@ -154,6 +155,10 @@ pub enum ServeError {
     Reconciliation(#[from] PersistenceError),
     #[error("public ingress cleanup failed")]
     PublicIngressCleanup,
+    #[error("central directory publication task failed: {0}")]
+    CentralDirectoryTask(tokio::task::JoinError),
+    #[error("central directory shutdown publication failed: {0}")]
+    CentralDirectoryShutdown(crate::central_directory::CentralDirectoryError),
 }
 
 #[derive(Debug, Deserialize)]
@@ -183,6 +188,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::runtime_restart_web::routes())
         .merge(crate::frontend_assets::routes())
         .merge(crate::server_identity_web::routes())
+        .merge(crate::central_owner_web::routes())
         .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())
         .merge(crate::human_invite_manager_web::routes())
@@ -381,19 +387,52 @@ async fn reconcile_before_network_admission(
     Ok(())
 }
 
+struct CentralDirectoryTask {
+    cancellation: CancellationToken,
+    owner: JoinHandle<Result<(), crate::central_directory::CentralDirectoryError>>,
+}
+
+impl CentralDirectoryTask {
+    fn spawn(state: &AppState, public_ingress: PublicIngress) -> Self {
+        let cancellation = CancellationToken::new();
+        let owner = tokio::spawn(state.central_directory.clone().run(
+            state.store.clone(),
+            public_ingress,
+            state.central_host_identity.clone(),
+            cancellation.clone(),
+        ));
+        Self {
+            cancellation,
+            owner,
+        }
+    }
+
+    async fn shutdown(self) -> Result<(), ServeError> {
+        self.cancellation.cancel();
+        self.owner
+            .await
+            .map_err(ServeError::CentralDirectoryTask)?
+            .map_err(ServeError::CentralDirectoryShutdown)
+    }
+}
+
+fn listener_ingress(listener: &TcpListener) -> Result<LocalIngress, std::io::Error> {
+    let address = listener.local_addr()?;
+    LocalIngress::from_listener(address).ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::AddrNotAvailable,
+            "the local runtime listener is not bound to loopback",
+        )
+    })
+}
+
 async fn serve_runtime(
     listener: TcpListener,
     state: AppState,
     cancellation: CancellationToken,
     ready: impl Future<Output = Result<(), std::io::Error>>,
 ) -> Result<(), ServeError> {
-    let listener_address = listener.local_addr()?;
-    let ingress = LocalIngress::from_listener(listener_address).ok_or_else(|| {
-        std::io::Error::new(
-            std::io::ErrorKind::AddrNotAvailable,
-            "the local runtime listener is not bound to loopback",
-        )
-    })?;
+    let ingress = listener_ingress(&listener)?;
     reconcile_before_network_admission(&state, &cancellation).await?;
     let rooms = state.rooms.clone();
     let provider_catalog = state.provider_catalog.clone();
@@ -402,6 +441,7 @@ async fn serve_runtime(
     let provider_usage = state.provider_usage.clone();
     let local_attendees = state.local_attendees.clone();
     let public_ingress = state.public_ingress();
+    let central_directory = CentralDirectoryTask::spawn(&state, public_ingress.clone());
     let connections = state.connections.clone();
     let connection_shutdown = state.shutdown.clone();
     let http_admission = HttpAdmission::default();
@@ -456,6 +496,7 @@ async fn serve_runtime(
         Some(outcome) => outcome,
         None => attendee_shutdown.await,
     };
+    let central_directory_shutdown = central_directory.shutdown().await;
     let ingress_shutdown = tokio::spawn(async move { public_ingress.shutdown().await });
     drain_connections(&connections, &connection_shutdown).await;
     http_admission.report_rejections();
@@ -486,6 +527,7 @@ async fn serve_runtime(
     provider_shutdown?;
     reconciliation_shutdown.map_err(ServeError::RuntimeReconciliationTask)?;
     ingress_shutdown?;
+    central_directory_shutdown?;
     result.map_err(ServeError::Io)
 }
 

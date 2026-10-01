@@ -269,7 +269,11 @@ async fn configure_startup_surface(
         }
     };
     Ok(if central_registration {
-        state.with_central_registration()
+        let state = state.with_central_registration();
+        match std::env::var("AGENTSASSEMBLE_CENTRAL_URL") {
+            Ok(url) if !url.trim().is_empty() => state.with_central_directory(&url)?,
+            _ => state,
+        }
     } else {
         state
     })

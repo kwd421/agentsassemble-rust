@@ -42,7 +42,11 @@ fn identity_cors() -> CorsLayer {
 }
 
 async fn server_info(State(state): State<AppState>) -> Json<ServerInfoEnvelope> {
-    Json(state.central_host_identity.server_info())
+    Json(
+        state
+            .central_host_identity
+            .server_info(state.central_directory.status()),
+    )
 }
 
 async fn issue_challenge(

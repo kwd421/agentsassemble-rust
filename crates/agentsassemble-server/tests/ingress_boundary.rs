@@ -105,7 +105,15 @@ async fn identity_probe_uses_the_persistent_key_and_exact_local_origin() {
         .unwrap_or_else(|error| panic!("decode server identity: {error}"));
     assert_eq!(info["protocol_version"], 1);
     assert_eq!(info["status"], "ready");
-    assert_eq!(info["central_directory"], json!({"enabled": false}));
+    assert_eq!(
+        info["central_directory"],
+        json!({
+            "enabled": false,
+            "registered_origin": "",
+            "last_success_at": 0,
+            "last_error": "",
+        })
+    );
 
     let challenge = "Q2hhbGxlbmdlX2Zvcl9waW5uaW5nXzAx";
     let proof_response = client

@@ -13,11 +13,12 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use thiserror::Error;
 
-use crate::ingress_trust::is_loopback_http_host;
+use crate::{central_directory::CentralDirectoryStatus, ingress_trust::is_loopback_http_host};
 
 const REGISTRATION_CONTEXT: &str = "AA-HOST-REGISTER-1";
 const REGISTRATION_NONCE_BYTES: usize = 18;
 const SERVER_CHALLENGE_CONTEXT: &str = "AA-SERVER-CHALLENGE-1";
+const HOST_REQUEST_CONTEXT: &str = "AA-HOST-1";
 
 #[derive(Debug, Error)]
 pub enum HostIdentityError {
@@ -64,6 +65,12 @@ pub struct HostRegistrationEnvelope {
     host_registration_proof: HostRegistrationProof,
 }
 
+pub(crate) struct HostRequestSignature {
+    pub(crate) timestamp: i64,
+    pub(crate) nonce: String,
+    pub(crate) signature: String,
+}
+
 #[derive(Serialize)]
 pub(crate) struct ServerInfoEnvelope {
     server_id: String,
@@ -72,11 +79,6 @@ pub(crate) struct ServerInfoEnvelope {
     protocol_version: u32,
     status: &'static str,
     central_directory: CentralDirectoryStatus,
-}
-
-#[derive(Serialize)]
-struct CentralDirectoryStatus {
-    enabled: bool,
 }
 
 #[derive(Serialize)]
@@ -137,14 +139,17 @@ impl CentralHostIdentity {
         &self.fingerprint
     }
 
-    pub(crate) fn server_info(&self) -> ServerInfoEnvelope {
+    pub(crate) fn server_info(
+        &self,
+        central_directory: CentralDirectoryStatus,
+    ) -> ServerInfoEnvelope {
         ServerInfoEnvelope {
             server_id: self.server_id.to_string(),
             host_public_key_jwk: self.public_jwk.clone(),
             host_key_fingerprint: self.fingerprint.to_string(),
             protocol_version: agentsassemble_protocol::PROTOCOL_VERSION,
             status: "ready",
-            central_directory: CentralDirectoryStatus { enabled: false },
+            central_directory,
         }
     }
 
@@ -177,6 +182,28 @@ impl CentralHostIdentity {
             challenge: challenge.to_owned(),
             issued_at,
             signature,
+        })
+    }
+
+    pub(crate) fn sign_host_request(
+        &self,
+        method: &str,
+        path: &str,
+        body: &[u8],
+    ) -> Result<HostRequestSignature, HostIdentityError> {
+        let timestamp = Utc::now().timestamp();
+        let mut nonce_bytes = [0_u8; REGISTRATION_NONCE_BYTES];
+        SystemRandom::new()
+            .fill(&mut nonce_bytes)
+            .map_err(|_| HostIdentityError::Entropy)?;
+        let nonce = URL_SAFE_NO_PAD.encode(nonce_bytes);
+        let body_hash = URL_SAFE_NO_PAD.encode(Sha256::digest(body));
+        let transcript =
+            format!("{HOST_REQUEST_CONTEXT}\n{method}\n{path}\n{timestamp}\n{nonce}\n{body_hash}");
+        Ok(HostRequestSignature {
+            timestamp,
+            nonce,
+            signature: URL_SAFE_NO_PAD.encode(self.key_pair.sign(transcript.as_bytes()).as_ref()),
         })
     }
 
@@ -267,11 +294,12 @@ fn canonical_jwk(jwk: &HostPublicJwk) -> Result<Vec<u8>, HostIdentityError> {
 mod tests {
     use agentsassemble_persistence::SqliteStore;
     use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
-    use ring::signature::{ED25519, UnparsedPublicKey};
+    use ring::signature::{ED25519, KeyPair as _, UnparsedPublicKey};
     use serde_json::Value;
+    use sha2::Digest as _;
 
     use super::{
-        CentralHostIdentity, REGISTRATION_CONTEXT, ServerChallengeError,
+        CentralHostIdentity, HOST_REQUEST_CONTEXT, REGISTRATION_CONTEXT, ServerChallengeError,
         normalize_server_identity_origin,
     };
 
@@ -411,6 +439,39 @@ mod tests {
         assert_ne!(
             first.host_registration_proof.nonce,
             second.host_registration_proof.nonce
+        );
+    }
+
+    #[tokio::test]
+    async fn host_request_signature_binds_method_path_and_exact_body() {
+        let store = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|error| panic!("open authority: {error}"));
+        let persistent = store
+            .host_identity()
+            .await
+            .unwrap_or_else(|error| panic!("load host identity: {error}"));
+        let identity = CentralHostIdentity::from_persistent(&persistent)
+            .unwrap_or_else(|error| panic!("derive host identity: {error}"));
+        let body = br#"{"generation":123}"#;
+        let signed = identity
+            .sign_host_request("PUT", "/v1/servers/server/endpoint", body)
+            .unwrap_or_else(|error| panic!("sign request: {error}"));
+        let body_hash = URL_SAFE_NO_PAD.encode(sha2::Sha256::digest(body));
+        let transcript = format!(
+            "{HOST_REQUEST_CONTEXT}\nPUT\n/v1/servers/server/endpoint\n{}\n{}\n{body_hash}",
+            signed.timestamp, signed.nonce
+        );
+        let signature = URL_SAFE_NO_PAD
+            .decode(signed.signature)
+            .unwrap_or_else(|error| panic!("decode signature: {error}"));
+        UnparsedPublicKey::new(&ED25519, identity.key_pair.public_key().as_ref())
+            .verify(transcript.as_bytes(), &signature)
+            .unwrap_or_else(|_| panic!("host request signature did not verify"));
+        assert!(
+            UnparsedPublicKey::new(&ED25519, identity.key_pair.public_key().as_ref())
+                .verify(transcript.replace("PUT", "DELETE").as_bytes(), &signature)
+                .is_err()
         );
     }
 }

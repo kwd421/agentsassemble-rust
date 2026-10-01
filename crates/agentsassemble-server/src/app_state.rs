@@ -44,6 +44,7 @@ pub struct AppState {
     pub(crate) provider_credentials: ProviderCredentialStore,
     pub human_invite_credentials: HumanInviteCredentialAuthority,
     pub(crate) central_host_identity: CentralHostIdentity,
+    pub(crate) central_directory: crate::central_directory::CentralDirectory,
     pub(crate) central_login: crate::central_login::CentralLoginBroker,
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
@@ -173,6 +174,7 @@ impl AppState {
             provider_credentials,
             human_invite_credentials,
             central_host_identity,
+            central_directory: crate::central_directory::CentralDirectory::disabled(),
             central_login: crate::central_login::CentralLoginBroker::default(),
             shutdown,
             connections: TaskTracker::new(),
@@ -203,6 +205,19 @@ impl AppState {
         self.central_registration_enabled = true;
         self.refresh_product_surface();
         self
+    }
+
+    /// Configures the fixed central directory used for host publication and grant redemption.
+    ///
+    /// # Errors
+    ///
+    /// Rejects a non-HTTPS public URL or a client that cannot be constructed.
+    pub fn with_central_directory(
+        mut self,
+        url: &str,
+    ) -> Result<Self, crate::central_directory::CentralDirectoryError> {
+        self.central_directory = crate::central_directory::CentralDirectory::configured(url)?;
+        Ok(self)
     }
 
     /// Enables one immutable, startup-configured HTTPS reverse-proxy boundary.

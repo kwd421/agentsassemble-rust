@@ -2,6 +2,13 @@
 
 ## Active work
 
+- 2026-10-01 cross-device central owner reopening in progress: publish the current
+  Rust host's ready ingress under its durable host key, issue/redeem a short central
+  owner connect grant without forwarding the central bearer, verify the selected
+  host challenge, and mint only an origin/device/room-bound short operator session.
+  Bookmarks retain invite/pairing admission. Contract and acceptance:
+  `docs/specs/identity-accounts-friends-slice.md` -> Central owner server reopening.
+
 - 2026-10-01 follow-up after fast-forward to `67604759`: require live central
   validation before opening an existing local profile, including revoked/missing
   sessions. Distinguish the signed-in account name from the retained local profile
