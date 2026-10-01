@@ -2,6 +2,17 @@
 
 ## Active work
 
+- 2026-10-01 user-requested minimum-reasoning real-provider verification: new
+  isolated macOS room confirms Grok 4.7 Low, Codex GPT-5.6-Terra Low and DeepSeek
+  Flash low/Thinking off read and publish correctly, then Stop/Resume/Stop.
+  Ordinary external Antigravity CLI 1.2.14 with Gemini 3.8 Flash Low and individual
+  MCP approvals joins, reads, publishes, leaves and releases its receipt. Its
+  headless MCP permission refusals are separate from the successful user flow.
+  Current installed Cursor fails before start at catalog lookup; earlier success
+  is historical. Gemini web officially supports custom MCP for eligible US
+  personal accounts, but the actual current account has no custom-app controls.
+  Evidence and limits: `docs/verification/2026-10-01-provider-low-reasoning.md`.
+
 - 2026-10-01 personal-server MCP preparation: the app-owned listener and public
   ingress now serve `/mcp`; invitation UI derives web setup instructions. Actual
   in-app-browser ChatGPT joins, reads, publishes, leaves and releases its receipt;
