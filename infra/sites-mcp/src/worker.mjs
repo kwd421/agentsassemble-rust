@@ -32,9 +32,8 @@ export default {
       return new Response("<!doctype html><html lang=\"ko\"><meta charset=\"utf-8\">"
         + "<meta name=\"viewport\" content=\"width=device-width,initial-scale=1\">"
         + "<title>AgentsAssemble MCP</title><main><h1>AgentsAssemble MCP</h1>"
-        + "<p>MCP 연결 주소: <code>/mcp</code></p>"
-        + "<p>방을 관리하는 AgentsAssemble 앱이 실행 중이어야 합니다. "
-        + "연결한 대화에 방 초대 링크를 전달하세요.</p></main></html>", {
+        + "<p>MCP 연결은 아직 준비 중이며 현재 사용할 수 없습니다.</p>"
+        + "<p>활성화와 실제 연결 검증이 완료되면 연결 안내를 제공합니다.</p></main></html>", {
         headers: { "content-type": "text/html; charset=utf-8", "cache-control": "private, no-store" },
       });
     }

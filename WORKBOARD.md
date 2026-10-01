@@ -6,12 +6,12 @@
   as a Worker artifact. The user clarified the deployment adapter is authorized.
   The private gateway and ownership contract are in `infra/sites-mcp/DEPLOYMENT.md`.
   Local tests and actual isolated-room prepare/join/read/say/wait-cancel/leave/release
-  pass; native storage confirms one publication. Sites publication is in progress.
-
-- 2026-10-02 user-requested Sites MCP registration created and verified owner-only.
-  Project linkage: `infra/sites-mcp/.openai/hosting.json`. No source version or
-  deployment exists; the native Rust MCP needs a compatible Sites runtime design
-  before publishing. Registration evidence: `infra/sites-mcp/README.md`.
+  pass; native storage confirms one publication. The private website is published,
+  but production MCP returns 404 and Sites reports that MCP is not declared. The
+  supported activation contract is missing from the exposed tools and official
+  documentation; rejected trial manifest fields are removed. Test upstream and
+  isolated host are cleaned up. Completion requires supported Sites activation
+  and actual production verification. Evidence: `infra/sites-mcp/DEPLOYMENT.md`.
 
 - 2026-10-02 cross-device central owner reopening correction complete locally:
   the Rust host publishes ready ingress under its durable key, the Worker issues

@@ -1,6 +1,6 @@
 # Private Sites MCP deployment candidate
 
-Status: implemented gateway; local verification passed; publication in progress.
+Status: gateway verified locally; private website published; hosted MCP blocked.
 Project: `appgprj_6abe7c7c2ba88191a5e241ef59dbef8a`.
 
 ## Runtime boundary and approval
@@ -65,3 +65,28 @@ by this design and must not be promised.
    wait semantics. Run affected checks and mandatory repository gates.
 7. Save and privately deploy the candidate, then verify the production endpoint.
    A saved version, deployment URL or tools/list response alone is not completion.
+
+## Verification and remaining dependency (2026-10-02)
+
+- Node contract tests: 4 pass. Actual Rust upstream in an isolated room: initialize,
+  17 tools, prepare, join, read, say, 32-second silent wait cancellation, leave and
+  receipt release pass. Native SQLite independently records exactly one message.
+- Actual workerd runtime: initialize and discovery of 17 tools pass. Architecture,
+  formatting, diff and artifact repository gates pass without exceptions.
+- Private Sites version 1 deployed successfully at
+  `https://agentsassemble-mcp.kwd421.chatgpt.site`; authenticated root GET returned
+  the gateway HTML. Unauthenticated MCP access was rejected. Authenticated MCP
+  initialization and GET `/mcp` returned HTTP 404, so production acceptance failed.
+- Deployment reported `has_mcp: false`. Connection provisioning explicitly refused
+  with "The published Site does not declare an MCP server. Enable MCP and republish it."
+- Neither the exposed Sites tools, the official Sites documentation nor the
+  public `openai/sites` starter/plugin source supplied the required MCP declaration
+  contract. Trial `mcp` and `mcp_server` hosting-manifest fields were both rejected
+  before saving with "Extra inputs are not permitted"; those fields are removed.
+  No alternate route, authentication bypass or invented provisioning ID is used.
+- The test upstream configuration is removed and its isolated host stopped. The
+  published website is explicitly marked as not ready. No user room is attached.
+
+Completion requires the supported Sites MCP declaration/activation contract,
+private redeployment and the production acceptance checks above. The current
+private website is not a usable hosted MCP server or an installed client plugin.

@@ -9,6 +9,11 @@ Registered on 2026-10-02 at the user's request.
 - Verification: `npm test`. No package install or third-party runtime dependency.
 - Runtime configuration: `MCP_UPSTREAM_URL`, one exact native HTTPS `/mcp` address.
 
+Current status: the private website is published, but Sites MCP activation is
+blocked. The production MCP endpoint returned 404 and connection provisioning
+reports that MCP is not declared. No test upstream remains configured. See
+`DEPLOYMENT.md` for verified evidence and the missing platform contract.
+
 Sites runs `src/worker.mjs`; the existing native MCP implementation at
 `crates/agentsassemble-server/src/connector_mcp_web.rs` retains its 17 tools,
 room authority, admission, private connection custody and shutdown semantics.

@@ -1,9 +1,5 @@
 {
   "project_id": "appgprj_6abe7c7c2ba88191a5e241ef59dbef8a",
   "d1": null,
-  "r2": null,
-  "mcp_server": {
-    "enabled": true,
-    "path": "/mcp"
-  }
+  "r2": null
 }
