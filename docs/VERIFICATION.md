@@ -11962,3 +11962,41 @@ memos move to recoverable Trash at `/Users/seinel/.Trash/aa-central-startup-2026
 The newly opened OAuth callback tab closes and Computer Use resets. Root build
 artifacts remain within the repository owner's limit for the next build. The
 existing Windows waiting host, invitation, ingress and personal data are preserved.
+
+## Central owner reopening review corrections (2026-10-02)
+
+Daybreak's completed review of Rust `ec0a0ec2` and the associated Worker change
+returned REJECT with no critical or high findings. Its two medium frontend findings
+were a remote Tauri WebView reload becoming a desktop login after the one-use
+connect fragment was consumed, and a dead end after the first challenge/directory
+network failure. A third medium finding requested real TCP boundary coverage for
+the central directory, room selection, redemption, publication and shutdown. The
+low Worker finding was a gap between validating owner/endpoint state and inserting
+a grant.
+
+The frontend now recognizes only bundled Tauri origins as desktop startup, restores
+an unexpired remote room session on reload, and offers an explicit retry while the
+in-memory grant remains valid. A trusted-ingress TCP integration test exercises
+signed online/offline publication, origin/device rejection, directory and selected
+room access, stale generations, Worker rejection, and shutdown. Worker grant
+insertion uses one conditional `INSERT ... SELECT` against current session, device,
+owner, server and endpoint state. A deterministic test changes an endpoint offline
+between initial lookup and insertion and expects conflict without a grant.
+
+Worker commit `86dde8e1` is pushed and deployed as version
+`5c95cde8-8da7-427d-8869-e36ecd0b8a92`; migration `0005_server_connect_grants.sql`
+has no remote pending migration and `/healthz` responds OK. Its 25 tests and check
+pass. Rust frontend focused tests (12), full frontend suite/build, 36 desktop tests,
+workspace tests with all features, workspace Clippy, architecture/source/format,
+diff and artifact gates pass. The full workspace tests and Clippy ran in separate
+clean build passes because a single combined `make verify` exhausted available
+Cargo build disk space; task-owned Cargo caches were pruned through the repository
+artifact owner between passes. No gate was weakened or bypassed.
+
+An isolated Developer ID signed macOS app and DMG build successfully; strict deep
+signature verification passes. The packaged app visibly reaches login and the
+guest recovery-code screen. The exact test app and runtime exited; its isolated
+profile and cache were moved to recoverable Trash, and Computer Use was reset.
+This does not verify remote WebView reload, an authenticated live grant exchange,
+or Mac-to-Windows room reopening. The review predates these corrections, so the
+corrected revision has no review approval. No new automated security scan was run.

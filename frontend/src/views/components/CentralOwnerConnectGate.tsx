@@ -26,6 +26,7 @@ export default function CentralOwnerConnectGate({
   const [busyRoom, setBusyRoom] = useState("");
   const [checking, setChecking] = useState(true);
   const [error, setError] = useState("");
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let active = true;
@@ -45,7 +46,18 @@ export default function CentralOwnerConnectGate({
     return () => {
       active = false;
     };
-  }, [connect, deviceToken]);
+  }, [connect, deviceToken, attempt]);
+
+  function retry() {
+    if (Math.floor(Date.now() / 1000) >= connect.expiresAt) {
+      setError("중앙 서버 접속권이 만료되었습니다. 계정 설정에서 서버를 다시 열어 주세요.");
+      return;
+    }
+    setRooms([]);
+    setError("");
+    setChecking(true);
+    setAttempt((previous) => previous + 1);
+  }
 
   async function enter(room: CentralOwnerRoom) {
     if (busyRoom) return;
@@ -91,9 +103,14 @@ export default function CentralOwnerConnectGate({
           </p>
         )}
         {error && (
-          <p role="alert" className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]">
-            {error}
-          </p>
+          <div className="grid gap-2">
+            <p role="alert" className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]">
+              {error}
+            </p>
+            <button type="button" disabled={checking || Math.floor(Date.now() / 1000) >= connect.expiresAt} onClick={retry} className="min-h-10 rounded-md bg-[#494d89] px-4 text-[12px] font-bold text-white disabled:opacity-50">
+              다시 시도
+            </button>
+          </div>
         )}
         {!checking && !error && rooms.length === 0 && (
           <p className="rounded-md bg-[#2b2d31] p-3 text-[12px] font-bold text-text-muted">

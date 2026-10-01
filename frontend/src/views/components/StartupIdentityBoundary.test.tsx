@@ -10,10 +10,15 @@ const deviceMocks = vi.hoisted(() => ({
   ),
   getOrCreateClientId: vi.fn(() => "client-1"),
 }));
-const boundaryMocks = vi.hoisted(() => ({ desktop: true }));
+const boundaryMocks = vi.hoisted(() => ({ desktop: true, bundled: true, session: null as { expiresAt: string } | null }));
 
 vi.mock("../../lib/desktopBridge", () => ({
   isDesktopWebview: () => boundaryMocks.desktop,
+  isBundledDesktopWebview: () => boundaryMocks.desktop && boundaryMocks.bundled,
+}));
+vi.mock("../../lib/roomGuestSession", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/roomGuestSession")>()),
+  loadRoomGuestSession: () => boundaryMocks.session,
 }));
 vi.mock("../../lib/deviceIdentity", () => ({
   getOrCreateBrowserCredential: deviceMocks.getOrCreateBrowserCredential,
@@ -37,6 +42,8 @@ afterEach(() => {
   deviceMocks.getOrCreateClientId.mockReset();
   deviceMocks.getOrCreateClientId.mockReturnValue("client-1");
   boundaryMocks.desktop = true;
+  boundaryMocks.bundled = true;
+  boundaryMocks.session = null;
   window.localStorage.clear();
   window.history.replaceState({}, "", "/");
 });
@@ -83,6 +90,21 @@ describe("StartupIdentityBoundary", () => {
       screen.getByRole("main", { name: "authoritative startup gate" })
     ).toBeTruthy();
     expect(screen.queryByRole("main", { name: "product" })).toBeNull();
+  });
+
+  it("restores a remote room session after navigation loses its one-use fragment", () => {
+    boundaryMocks.bundled = false;
+    boundaryMocks.session = { expiresAt: new Date(Date.now() + 60_000).toISOString() };
+    window.history.replaceState({}, "", "/app");
+
+    render(
+      <StartupIdentityBoundary>
+        {() => <main aria-label="product" />}
+      </StartupIdentityBoundary>
+    );
+
+    expect(screen.getByRole("main", { name: "product" })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: "authoritative startup gate" })).toBeNull();
   });
 
   it("keeps direct non-desktop startup unavailable without inventing profile authority", () => {

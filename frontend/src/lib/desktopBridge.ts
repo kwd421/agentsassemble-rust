@@ -28,6 +28,19 @@ export function isDesktopWebview(): boolean {
   return Boolean(tauriInternals());
 }
 
+export function isBundledDesktopWebview(): boolean {
+  if (!isDesktopWebview()) return false;
+  return isBundledDesktopOrigin(window.location.origin);
+}
+
+export function isBundledDesktopOrigin(origin: string): boolean {
+  return [
+    "tauri://localhost",
+    "http://tauri.localhost",
+    "https://tauri.localhost",
+  ].includes(origin);
+}
+
 export type DesktopRuntimeTicket = RoomRuntimeTicket;
 
 export interface DesktopBootstrapGrant {

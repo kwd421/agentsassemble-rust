@@ -4,7 +4,7 @@ import {
   getOrCreateBrowserCredential,
   getOrCreateClientId,
 } from "../../lib/deviceIdentity";
-import { isDesktopWebview } from "../../lib/desktopBridge";
+import { isBundledDesktopWebview } from "../../lib/desktopBridge";
 import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
 import { consumeCentralOwnerConnectFromUrl } from "../../lib/centralOwnerConnect";
 import {
@@ -34,7 +34,7 @@ export default function StartupIdentityBoundary({
 }) {
   const [centralOwnerConnect] = useState(consumeCentralOwnerConnectFromUrl);
   const [desktop] = useState(
-    () => isDesktopWebview() && !centralOwnerConnect
+    () => isBundledDesktopWebview() && !centralOwnerConnect
   );
   const [browserEntrance] = useState(
     () => !desktop && (Boolean(centralOwnerConnect) || browserEntranceHasAuthority())

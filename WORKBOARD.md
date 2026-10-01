@@ -2,12 +2,17 @@
 
 ## Active work
 
-- 2026-10-01 cross-device central owner reopening in progress: publish the current
-  Rust host's ready ingress under its durable host key, issue/redeem a short central
-  owner connect grant without forwarding the central bearer, verify the selected
-  host challenge, and mint only an origin/device/room-bound short operator session.
-  Bookmarks retain invite/pairing admission. Contract and acceptance:
-  `docs/specs/identity-accounts-friends-slice.md` -> Central owner server reopening.
+- 2026-10-02 cross-device central owner reopening correction complete locally:
+  the Rust host publishes ready ingress under its durable key, the Worker issues
+  and redeems short grants, and the selected host mints origin/device/room-bound
+  operator sessions. The completed Daybreak review requested corrections for remote
+  WebView reload, challenge retry, TCP boundary coverage, and Worker grant insertion;
+  all four are addressed. Worker correction is deployed; affected tests, mandatory
+  gates and signed macOS startup verification pass. Actual Mac-to-Windows reopening
+  and approval of the corrected revision remain pending. Bookmarks retain
+  invite/pairing admission. Contract, review and evidence:
+  `docs/specs/identity-accounts-friends-slice.md` -> Central owner server reopening;
+  `docs/VERIFICATION.md` -> Central owner reopening review corrections.
 
 - 2026-10-01 follow-up after fast-forward to `67604759`: require live central
   validation before opening an existing local profile, including revoked/missing
