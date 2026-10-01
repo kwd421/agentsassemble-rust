@@ -20,12 +20,14 @@ import {
   requestDesktopSideChatReadTicket,
   requestDesktopMessageAttachmentReadTicket,
   requestDesktopMessageAttachmentUploadTicket,
+  openDesktopCentralOwnedServer,
   saveDesktopMessageAttachment,
 } from "./desktopBridge";
 
 const hostCommands = [
   "choose_local_workspace",
   "host_product_surface",
+  "open_central_owned_server",
   "runtime_agent_avatar_upload_ticket",
   "runtime_appearance_bound_read_ticket",
   "runtime_appearance_pending_read_ticket",
@@ -55,6 +57,24 @@ describe("desktop exact-purpose HTTP bridge", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+  });
+
+  it("opens an owned server only through the registered native navigation command", async () => {
+    const invoke = vi
+      .fn()
+      .mockResolvedValueOnce({
+        revision: PRODUCT_SURFACE_REVISION,
+        digest: "2".repeat(64),
+        commands: hostCommands,
+      })
+      .mockResolvedValueOnce(undefined);
+    Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
+    const url = `https://room.example.test/app#central-owner=${"a".repeat(64)}`;
+
+    await requestDesktopHostProductSurface();
+    await openDesktopCentralOwnedServer(url);
+
+    expect(invoke).toHaveBeenNthCalledWith(2, "open_central_owned_server", { url });
   });
 
   it("starts selected model discovery through local IPC and only reads its result over loopback", async () => {

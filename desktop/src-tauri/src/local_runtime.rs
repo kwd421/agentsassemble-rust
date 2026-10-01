@@ -318,6 +318,10 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
         .arg(&frontend)
         .arg("--desktop-native-registration")
         .env("AGENTSASSEMBLE_PROVIDER_RUNTIME", &provider_runtime)
+        .env(
+            "AGENTSASSEMBLE_CENTRAL_URL",
+            env!("AGENTSASSEMBLE_CENTRAL_URL"),
+        )
         .env_remove("AGENTSASSEMBLE_HOST_TOKEN")
         .stdin(Stdio::piped())
         .stdout(Stdio::piped())

@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+import { centralOwnerServerUrl } from "../../lib/centralOwnerConnect";
 import StartupIdentityBoundary from "./StartupIdentityBoundary";
 
 const deviceMocks = vi.hoisted(() => ({
@@ -21,6 +22,11 @@ vi.mock("../../lib/deviceIdentity", () => ({
 vi.mock("./StartupIdentityGate", () => ({
   default: () => <main aria-label="authoritative startup gate" />,
 }));
+vi.mock("./CentralOwnerConnectGate", () => ({
+  default: ({ deviceToken }: { deviceToken: string }) => (
+    <main aria-label="central owner gate" data-device-token={deviceToken} />
+  ),
+}));
 
 afterEach(() => {
   cleanup();
@@ -36,6 +42,34 @@ afterEach(() => {
 });
 
 describe("StartupIdentityBoundary", () => {
+  it("treats central-owner navigation inside a desktop webview as remote browser admission", () => {
+    const payload = {
+      grantToken: `aacg1.${"a".repeat(43)}`,
+      serverId: "10000000-0000-4000-8000-000000000001",
+      generation: 7,
+      expiresAt: Math.floor(Date.now() / 1000) + 300,
+      hostPublicKeyX: "b".repeat(43),
+      hostKeyFingerprint: "c".repeat(43),
+    };
+    const hash = new URL(
+      centralOwnerServerUrl("https://room.example.test", payload)
+    ).hash;
+    window.history.replaceState({}, "", `/app${hash}`);
+
+    render(
+      <StartupIdentityBoundary>
+        {() => <main aria-label="product" />}
+      </StartupIdentityBoundary>
+    );
+
+    expect(screen.getByRole("main", { name: "central owner gate" })).toBeTruthy();
+    expect(
+      screen.getByRole("main", { name: "central owner gate" }).dataset.deviceToken
+    ).toBe("aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
+    expect(screen.queryByRole("main", { name: "authoritative startup gate" })).toBeNull();
+    expect(window.location.hash).toBe("");
+  });
+
   it("never lets a browser entrance bypass desktop bootstrap", () => {
     window.history.replaceState({}, "", "/join?token=invite-token");
 

@@ -15,12 +15,14 @@ import {
   centralIdentityConfigured,
   centralSessionLoggedOut,
   type CentralPerson,
+  type CentralServer,
   clearPendingCentralRecoveryCode,
   createCentralGuest,
   isCentralAuthenticationError,
   loadCentralSession,
   loadPendingCentralRecoveryCode,
   loginCentralGoogle,
+  openCentralOwnedServer,
   recoverCentralGuest,
   registerLocalServer,
 } from "../../lib/centralIdentity";
@@ -49,7 +51,7 @@ import {
 
 import { responseError } from "../../api/http";
 
-type Screen = "choice" | "guest" | "recover" | "recovery-code";
+type Screen = "choice" | "guest" | "recover" | "recovery-code" | "servers";
 
 // Tauri commands reject with their native Result error string, not an Error, so a
 // native startup failure would otherwise reach the user without its cause.
@@ -65,7 +67,7 @@ async function saveLocalProfile(
   googlePerson?: CentralPerson
 ) {
   const name = displayName.trim();
-  if (!name) return;
+  if (!name) throw new Error("로컬 표시 이름이 비어 있습니다.");
   const current = await requestDesktopBootstrapStatus();
   let bootstrap =
     current.phase === "empty"
@@ -108,6 +110,8 @@ export default function StartupIdentityGate({
   const [displayName, setDisplayName] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [issuedRecoveryCode, setIssuedRecoveryCode] = useState("");
+  const [centralServers, setCentralServers] = useState<CentralServer[]>([]);
+  const [localAuthority, setLocalAuthority] = useState<DesktopBootstrapGrant | null>(null);
   const [savedRecoveryCode, setSavedRecoveryCode] = useState(false);
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -161,12 +165,46 @@ export default function StartupIdentityGate({
     onComplete();
   }
 
+  async function finishCentralStartup(authority: DesktopBootstrapGrant) {
+    const refreshed = await bootstrapCentral();
+    if (!refreshed) throw new Error("중앙 로그인 상태가 사라졌습니다. 다시 로그인해 주세요.");
+    const remoteOwners = refreshed.servers.filter(
+      (server) =>
+        server.relation === "owner" &&
+        server.server_id !== authority.server_id &&
+        server.endpoint?.status === "likely_online" &&
+        server.endpoint.lease_expires_at > Math.floor(Date.now() / 1000)
+    );
+    if (remoteOwners.length === 0) {
+      await enterApplication(authority);
+      return;
+    }
+    setLocalAuthority(authority);
+    setCentralServers(remoteOwners);
+    setScreen("servers");
+    setChecking(false);
+  }
+
+  async function selectCentralServer(server?: CentralServer) {
+    if (busy || !localAuthority) return;
+    setBusy(true);
+    setError("");
+    try {
+      if (server) await openCentralOwnedServer(server);
+      else await enterApplication(localAuthority);
+    } catch (reason) {
+      setError(failureMessage(reason, "서버를 열지 못했습니다."));
+      setBusy(false);
+    }
+  }
+
   async function continueAfterRecoveryCode() {
     if (!savedRecoveryCode || busy) return;
     setBusy(true);
     clearPendingCentralRecoveryCode();
     await registerLocalServer(deviceToken);
-    await enterApplication();
+    const authority = await requestDesktopBootstrapStatus();
+    await finishCentralStartup(authority);
   }
 
   useEffect(() => {
@@ -227,7 +265,7 @@ export default function StartupIdentityGate({
           central.person
         );
         await registerLocalServer(deviceToken);
-        if (active) await enterApplication(localAuthority);
+        if (active) await finishCentralStartup(localAuthority);
       } catch (reason) {
         if (isCentralAuthenticationError(reason)) {
           if (active) {
@@ -325,7 +363,7 @@ export default function StartupIdentityGate({
         session.person
       );
       await registerLocalServer(deviceToken);
-      await enterApplication(localAuthority);
+      await finishCentralStartup(localAuthority);
     } catch (reason) {
       setChecking(false);
       setError(
@@ -439,11 +477,17 @@ export default function StartupIdentityGate({
             AgentsAssemble
           </span>
           <h1 className="text-2xl font-black text-text-primary">
-            {screen === "recovery-code" ? "복구 코드를 보관하세요" : "먼저 로그인해 주세요"}
+            {screen === "recovery-code"
+              ? "복구 코드를 보관하세요"
+              : screen === "servers"
+                ? "열 서버를 선택하세요"
+                : "먼저 로그인해 주세요"}
           </h1>
           <p className="text-[13px] font-semibold leading-5 text-text-muted">
             {screen === "recovery-code"
               ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요합니다. 중앙에는 코드 원문을 저장하지 않습니다."
+              : screen === "servers"
+                ? "이 기기의 방과 같은 Google 계정이 소유한 다른 온라인 서버를 선택할 수 있습니다."
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용합니다. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남습니다."}
           </p>
         </header>
@@ -493,6 +537,34 @@ export default function StartupIdentityGate({
               이미 복구 코드가 있습니다
             </button>
           </div>
+        )}
+
+        {screen === "servers" && (
+          <section className="grid gap-3 rounded-lg bg-[#1b1c20] p-4">
+            <button
+              type="button"
+              disabled={busy}
+              className="grid min-h-14 gap-1 rounded-md bg-[#2b2d31] px-4 py-3 text-left disabled:opacity-50"
+              onClick={() => void selectCentralServer()}
+            >
+              <span className="text-[13px] font-black text-text-primary">이 기기</span>
+              <span className="text-[11px] font-semibold text-text-muted">현재 Windows/Mac에 저장된 방</span>
+            </button>
+            {centralServers.map((server) => (
+              <button
+                key={server.server_id}
+                type="button"
+                disabled={busy}
+                className="grid min-h-14 gap-1 rounded-md bg-[#2b2d31] px-4 py-3 text-left disabled:opacity-50"
+                onClick={() => void selectCentralServer(server)}
+              >
+                <span className="text-[13px] font-black text-text-primary">
+                  {server.alias || "내 다른 기기"}
+                </span>
+                <span className="text-[11px] font-semibold text-[#8d96ff]">온라인 · 소유자 확인됨</span>
+              </button>
+            ))}
+          </section>
         )}
 
         {screen === "guest" && (

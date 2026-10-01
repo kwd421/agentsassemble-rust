@@ -10,6 +10,7 @@ const centralMocks = vi.hoisted(() => ({
   configured: false,
   loggedOut: false,
   login: vi.fn(),
+  openServer: vi.fn(),
   session: null as null | { person: { display_name: string } },
   bootstrap: vi.fn(),
 }));
@@ -72,6 +73,7 @@ vi.mock("../../lib/centralIdentity", () => ({
   loadCentralSession: () => centralMocks.session,
   loadPendingCentralRecoveryCode: () => "",
   loginCentralGoogle: centralMocks.login,
+  openCentralOwnedServer: centralMocks.openServer,
   recoverCentralGuest: vi.fn(),
   registerLocalServer: vi.fn(),
 }));
@@ -133,6 +135,54 @@ describe("StartupIdentityGate", () => {
     const onComplete = vi.fn();
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+  });
+
+  it("offers another online owned server and opens only the selected server", async () => {
+    const remoteServer = {
+      server_id: "30000000-0000-4000-8000-000000000099",
+      relation: "owner" as const,
+      alias: "Mac의 방",
+      host_public_key_jwk: {
+        kty: "OKP",
+        crv: "Ed25519",
+        x: "A".repeat(43),
+      },
+      host_key_fingerprint: "B".repeat(43),
+      endpoint: {
+        origin: "https://mac-room.example.test",
+        generation: 7,
+        lease_expires_at: Math.floor(Date.now() / 1000) + 600,
+        status: "likely_online" as const,
+      },
+    };
+    centralMocks.configured = true;
+    centralMocks.session = { person: { display_name: "Google account name" } };
+    centralMocks.bootstrap.mockResolvedValue({
+      person: {
+        person_id: "per_fixture",
+        identity_kind: "google",
+        display_name: "Google account name",
+        avatar_url: null,
+      },
+      servers: [remoteServer],
+      server_time: 1,
+    });
+    desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+    desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
+    const onComplete = vi.fn();
+
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+
+    const remoteButton = await screen.findByRole("button", { name: /Mac의 방/ });
+    expect(screen.getByRole("button", { name: /이 기기/ })).toBeTruthy();
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
+
+    await userEvent.click(remoteButton);
+
+    await vi.waitFor(() => expect(centralMocks.openServer).toHaveBeenCalledWith(remoteServer));
+    expect(onComplete).not.toHaveBeenCalled();
+    expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
   });
 
   it("does not reopen completed local authority after explicit central logout", async () => {

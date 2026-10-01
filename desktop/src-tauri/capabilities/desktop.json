@@ -9,6 +9,7 @@
     "allow-open-provider-setup-help",
     "allow-runtime-central-login",
     "allow-open-central-google-login",
+    "allow-open-central-owned-server",
     "allow-runtime-bootstrap-status",
     "allow-runtime-bootstrap-initialize",
     "allow-runtime-ticket",

@@ -3,6 +3,7 @@ desktop_commands! {
     open_provider_setup_help => "allow-open-provider-setup-help",
     runtime_central_login => "allow-runtime-central-login",
     open_central_google_login => "allow-open-central-google-login",
+    open_central_owned_server => "allow-open-central-owned-server",
     runtime_bootstrap_status => "allow-runtime-bootstrap-status",
     runtime_bootstrap_initialize => "allow-runtime-bootstrap-initialize",
     runtime_ticket => "allow-runtime-ticket",

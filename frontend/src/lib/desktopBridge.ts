@@ -830,6 +830,15 @@ export async function openDesktopCentralGoogleLogin(url: string): Promise<void> 
   await tauri.invoke("open_central_google_login", { url });
 }
 
+export async function openDesktopCentralOwnedServer(url: string): Promise<void> {
+  const tauri = tauriInternals();
+  if (!tauri) {
+    throw new Error("데스크톱 중앙 서버 열기를 사용할 수 없습니다.");
+  }
+  requireDesktopHostCommand("open_central_owned_server");
+  await tauri.invoke("open_central_owned_server", { url });
+}
+
 export async function cacheNativeRoomDirectory(rooms: unknown[]): Promise<void> {
   const tauri = tauriInternals();
   if (!tauri) return;

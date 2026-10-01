@@ -64,6 +64,27 @@ fn caller_is_bundled_ui(window: &WebviewWindow) -> Result<(), String> {
 }
 
 #[tauri::command]
+async fn open_central_owned_server(window: WebviewWindow, url: String) -> Result<(), String> {
+    caller_is_bundled_ui(&window)?;
+    let parsed = url::Url::parse(&url).map_err(|_| "central server URL is invalid".to_owned())?;
+    let fragment = parsed.fragment().unwrap_or_default();
+    if parsed.scheme() != "https"
+        || parsed.host_str().is_none()
+        || !parsed.username().is_empty()
+        || parsed.password().is_some()
+        || parsed.query().is_some()
+        || parsed.path() != "/app"
+        || !fragment.starts_with("central-owner=")
+        || fragment.len() > 16_384
+    {
+        return Err("central server URL is outside the owned-server boundary".to_owned());
+    }
+    window
+        .navigate(parsed)
+        .map_err(|error| format!("cannot open central server: {error}"))
+}
+
+#[tauri::command]
 async fn runtime_bootstrap_status(
     window: WebviewWindow,
     app: tauri::AppHandle,
@@ -579,7 +600,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 30);
+        assert_eq!(surface.commands.len(), 31);
         assert!(
             surface
                 .commands
@@ -597,6 +618,7 @@ mod tests {
             "runtime_attendee_invite_create_ticket",
             "runtime_central_login",
             "open_central_google_login",
+            "open_central_owned_server",
             "runtime_message_pins_read_ticket",
             "runtime_message_pins_write_ticket",
             "runtime_message_search_read_ticket",

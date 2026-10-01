@@ -6,6 +6,7 @@ import {
 } from "../../lib/deviceIdentity";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
+import { consumeCentralOwnerConnectFromUrl } from "../../lib/centralOwnerConnect";
 import {
   joinInviteTokenFromUrl,
   loadRoomGuestSession,
@@ -13,6 +14,7 @@ import {
   roomGuestSessionExpired,
 } from "../../lib/roomGuestSession";
 import StartupIdentityGate from "./StartupIdentityGate";
+import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
 
 function browserEntranceHasAuthority(): boolean {
   const url = window.location.href;
@@ -30,11 +32,14 @@ export default function StartupIdentityBoundary({
 }: {
   children: (identity: { deviceToken: string; clientId: string }) => ReactNode;
 }) {
-  const [desktop] = useState(isDesktopWebview);
-  const [browserEntrance] = useState(
-    () => !desktop && browserEntranceHasAuthority()
+  const [centralOwnerConnect] = useState(consumeCentralOwnerConnectFromUrl);
+  const [desktop] = useState(
+    () => isDesktopWebview() && !centralOwnerConnect
   );
-  const [ready, setReady] = useState(browserEntrance);
+  const [browserEntrance] = useState(
+    () => !desktop && (Boolean(centralOwnerConnect) || browserEntranceHasAuthority())
+  );
+  const [ready, setReady] = useState(browserEntrance && !centralOwnerConnect);
   const [browserIdentity] = useState(() => {
     if (!desktop && !browserEntrance) {
       return { deviceToken: "", clientId: "", error: "" };
@@ -57,7 +62,7 @@ export default function StartupIdentityBoundary({
     }
   });
 
-  if (!desktop && !ready) {
+  if (!desktop && !ready && !centralOwnerConnect) {
     return (
       <div className="fixed inset-0 z-[400] grid place-items-center bg-[#101114] p-5">
         <main
@@ -97,6 +102,16 @@ export default function StartupIdentityBoundary({
           </p>
         </main>
       </div>
+    );
+  }
+
+  if (centralOwnerConnect && !ready) {
+    return (
+      <CentralOwnerConnectGate
+        connect={centralOwnerConnect}
+        deviceToken={browserIdentity.deviceToken}
+        onComplete={() => setReady(true)}
+      />
     );
   }
 

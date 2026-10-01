@@ -4,8 +4,10 @@ import {
   fetchDesktopOperatorRuntime,
   isDesktopWebview,
   openDesktopCentralGoogleLogin,
+  openDesktopCentralOwnedServer,
 } from "./desktopBridge";
 import { encodeBase64Url } from "./base64Url";
+import { centralOwnerServerUrl } from "./centralOwnerConnect";
 import { verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
@@ -53,6 +55,14 @@ export type CentralBootstrap = {
   person: CentralPerson;
   servers: CentralServer[];
   server_time: number;
+};
+
+export type CentralConnectGrant = {
+  grant_token: string;
+  server_id: string;
+  origin: string;
+  generation: number;
+  expires_at: number;
 };
 
 export type CentralGuestResult = {
@@ -586,6 +596,47 @@ export async function bootstrapCentral(): Promise<CentralBootstrap | null> {
     if (error instanceof CentralAuthError && loadCentralSession()?.token === session.token) clearCentralSession();
     throw error;
   }
+}
+
+export async function openCentralOwnedServer(server: CentralServer): Promise<void> {
+  const session = loadCentralSession();
+  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (
+    server.relation !== "owner" ||
+    !server.endpoint ||
+    server.endpoint.status !== "likely_online" ||
+    server.endpoint.lease_expires_at <= Math.floor(Date.now() / 1000)
+  ) {
+    throw new Error("이 서버는 현재 중앙 계정으로 열 수 없습니다.");
+  }
+  const grant = await signedRequest<CentralConnectGrant>(
+    session,
+    `/v1/servers/${encodeURIComponent(server.server_id)}/connect-grants`,
+    "POST",
+    {}
+  );
+  const keys = Object.keys(grant as object).sort().join(",");
+  if (
+    keys !== "expires_at,generation,grant_token,origin,server_id" ||
+    grant.server_id !== server.server_id ||
+    grant.origin !== server.endpoint.origin ||
+    grant.generation !== server.endpoint.generation ||
+    !/^aacg1\.[A-Za-z0-9_-]{43}$/.test(grant.grant_token) ||
+    !Number.isSafeInteger(grant.expires_at) ||
+    grant.expires_at <= Math.floor(Date.now() / 1000)
+  ) {
+    throw new Error("중앙 서버 접속권 응답이 올바르지 않습니다.");
+  }
+  await openDesktopCentralOwnedServer(
+    centralOwnerServerUrl(grant.origin, {
+      grantToken: grant.grant_token,
+      serverId: grant.server_id,
+      generation: grant.generation,
+      expiresAt: grant.expires_at,
+      hostPublicKeyX: String(server.host_public_key_jwk.x || ""),
+      hostKeyFingerprint: server.host_key_fingerprint,
+    })
+  );
 }
 
 export type LocalServerInfo = {
