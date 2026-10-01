@@ -2,7 +2,7 @@ use crate::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_domain::{LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID};
 use chrono::{Duration, Utc};
 
-use super::{PAIRING_TTL, SESSION_TTL, revalidate_operator_session};
+use super::{CentralOwnerSessionRequest, PAIRING_TTL, SESSION_TTL, revalidate_operator_session};
 use crate::{LocalRoomManagerAuthority, PersistenceError, SqliteStore};
 
 const ORIGIN: &str = "https://room.example.test";
@@ -40,6 +40,80 @@ fn code<T>(result: Result<T, PersistenceError>) -> std::borrow::Cow<'static, str
         Err(error) => panic!("unexpected failure: {error}"),
         Ok(_) => panic!("unexpected success"),
     }
+}
+
+#[tokio::test]
+async fn central_owner_session_is_room_device_origin_and_grant_expiry_bound() {
+    let (store, manager) = fixture("sqlite::memory:").await;
+    let now = Utc::now();
+    let expires_at = now + Duration::minutes(4);
+    let request = CentralOwnerSessionRequest::new(
+        "general",
+        manager.room_uid,
+        &[7; 32],
+        &[8; 32],
+        ORIGIN,
+        expires_at,
+        now,
+    );
+    let first = store
+        .create_central_owner_session(&request)
+        .await
+        .unwrap_or_else(|error| panic!("central session: {error}"));
+    let replay = store
+        .create_central_owner_session(&request)
+        .await
+        .unwrap_or_else(|error| panic!("central replay: {error}"));
+    assert_eq!(first.session_bearer, replay.session_bearer);
+    assert_eq!(first.authorization.expires_at(), expires_at);
+    assert_eq!(
+        code(
+            store
+                .create_central_owner_session(&CentralOwnerSessionRequest::new(
+                    "general",
+                    manager.room_uid,
+                    &[7; 32],
+                    &[9; 32],
+                    ORIGIN,
+                    expires_at,
+                    now,
+                ))
+                .await
+        ),
+        "session_revoked"
+    );
+    assert_eq!(
+        code(
+            store
+                .create_central_owner_session(&CentralOwnerSessionRequest::new(
+                    "general",
+                    uuid::Uuid::new_v4(),
+                    &[6; 32],
+                    &[8; 32],
+                    ORIGIN,
+                    expires_at,
+                    now,
+                ))
+                .await
+        ),
+        "session_revoked"
+    );
+    assert_eq!(
+        code(
+            store
+                .create_central_owner_session(&CentralOwnerSessionRequest::new(
+                    "general",
+                    manager.room_uid,
+                    &[10; 32],
+                    &[8; 32],
+                    ORIGIN,
+                    now + Duration::minutes(6),
+                    now,
+                ))
+                .await
+        ),
+        "session_revoked"
+    );
 }
 
 #[tokio::test]

@@ -86,6 +86,7 @@ pub use authority::RoomMutationAuthority;
 mod room_session_authority;
 pub use room_session_authority::RoomSessionAuthorization;
 mod bootstrap;
+mod central_endpoint;
 mod channel_messages;
 mod command_admission;
 mod runtime_restart;
@@ -102,7 +103,8 @@ mod operator_pairing;
 mod room_channels;
 mod side_chat;
 pub use operator_pairing::{
-    OperatorPairing, OperatorPairingRedemption, OperatorSessionAuthorization,
+    CentralOwnerSessionRequest, OperatorPairing, OperatorPairingRedemption,
+    OperatorSessionAuthorization,
 };
 pub use side_chat::SideChatCommit;
 mod guest_identity_recovery;

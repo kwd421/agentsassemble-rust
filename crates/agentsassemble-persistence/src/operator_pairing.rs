@@ -90,6 +90,41 @@ pub struct OperatorPairingRedemption {
     pub authorization: OperatorSessionAuthorization,
 }
 
+/// Exact inputs for one centrally authorized room session.
+pub struct CentralOwnerSessionRequest<'a> {
+    room_id: &'a str,
+    room_incarnation: Uuid,
+    grant_fingerprint: &'a [u8; 32],
+    device_fingerprint: &'a [u8; 32],
+    target_origin: &'a str,
+    expires_at: DateTime<Utc>,
+    now: DateTime<Utc>,
+}
+
+impl<'a> CentralOwnerSessionRequest<'a> {
+    /// Captures the exact room incarnation and remote browser authority for one grant.
+    #[must_use]
+    pub const fn new(
+        room_id: &'a str,
+        room_incarnation: Uuid,
+        grant_fingerprint: &'a [u8; 32],
+        device_fingerprint: &'a [u8; 32],
+        target_origin: &'a str,
+        expires_at: DateTime<Utc>,
+        now: DateTime<Utc>,
+    ) -> Self {
+        Self {
+            room_id,
+            room_incarnation,
+            grant_fingerprint,
+            device_fingerprint,
+            target_origin,
+            expires_at,
+            now,
+        }
+    }
+}
+
 /// Persistence-issued provenance for one room-scoped operator session.
 #[derive(Clone)]
 pub struct OperatorSessionAuthorization {
@@ -118,6 +153,114 @@ impl OperatorSessionAuthorization {
 }
 
 impl SqliteStore {
+    /// Creates or replays one short room session authorized by a central-owner grant.
+    ///
+    /// # Errors
+    /// Rejects a stale room, foreign replay, excessive expiry, capacity, or storage failure.
+    pub async fn create_central_owner_session(
+        &self,
+        request: &CentralOwnerSessionRequest<'_>,
+    ) -> Result<OperatorPairingRedemption, PersistenceError> {
+        require_origin(request.target_origin)?;
+        if request.expires_at <= request.now
+            || request.expires_at > request.now + Duration::minutes(5)
+        {
+            return Err(unavailable());
+        }
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let (manager, principal) = resolve_local_room_manager(
+            &mut tx,
+            request.room_id,
+            agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+            agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+        )
+        .await?;
+        if manager.room_uid != request.room_incarnation {
+            return Err(unavailable());
+        }
+        let issued = derive_session_bearer(
+            self.host_key.session_hmac_key(),
+            request.grant_fingerprint,
+            SessionBearerPurpose::OperatorPairing,
+        );
+        if let Some(row) =
+            sqlx::query("SELECT * FROM operator_pairings WHERE token_fingerprint = ?")
+                .bind(request.grant_fingerprint.as_slice())
+                .fetch_optional(&mut *tx)
+                .await?
+        {
+            let record = PairingRecord::decode(&row)?;
+            record.require_origin_and_live(request.target_origin)?;
+            if record.manager != manager
+                || record.device_fingerprint.as_ref() != Some(request.device_fingerprint)
+                || record.session_fingerprint.as_ref() != Some(&issued.fingerprint)
+                || record.require_session(&issued.fingerprint, request.now)? != request.expires_at
+            {
+                return Err(unavailable());
+            }
+            tx.commit().await?;
+            return Ok(OperatorPairingRedemption {
+                session_bearer: issued.bearer,
+                authorization: OperatorSessionAuthorization {
+                    session_fingerprint: issued.fingerprint,
+                    device_fingerprint: *request.device_fingerprint,
+                    target_origin: request.target_origin.to_owned(),
+                    principal,
+                    expires_at: request.expires_at,
+                },
+            });
+        }
+        sqlx::query(
+            "DELETE FROM operator_pairings WHERE COALESCE(session_expires_at, expires_at) <= ?",
+        )
+        .bind(request.now.timestamp_micros())
+        .execute(&mut *tx)
+        .await?;
+        let (total, room): (i64, i64) =
+            sqlx::query_as("SELECT COUNT(*), COALESCE(SUM(room_id = ?), 0) FROM operator_pairings")
+                .bind(request.room_id)
+                .fetch_one(&mut *tx)
+                .await?;
+        if total >= MAX_PAIRINGS || room >= MAX_ROOM_PAIRINGS {
+            return Err(rejected(
+                "pairing_capacity",
+                "End an existing pairing or wait for expiry.",
+            ));
+        }
+        sqlx::query(concat!(
+            "INSERT INTO operator_pairings (pairing_id, token_fingerprint, room_id, room_uid, ",
+            "server_id, authority_lineage_id, user_id, participant_id, target_origin, expires_at, ",
+            "device_fingerprint, session_fingerprint, session_expires_at) ",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+        ))
+        .bind(Uuid::new_v4().to_string())
+        .bind(request.grant_fingerprint.as_slice())
+        .bind(&manager.manager.room_id)
+        .bind(manager.room_uid.to_string())
+        .bind(&manager.server_id)
+        .bind(&manager.authority_lineage_id)
+        .bind(&manager.manager.user_id)
+        .bind(&manager.manager.participant_id)
+        .bind(request.target_origin)
+        .bind(request.expires_at.timestamp_micros())
+        .bind(request.device_fingerprint.as_slice())
+        .bind(issued.fingerprint.as_slice())
+        .bind(request.expires_at.timestamp_micros())
+        .execute(&mut *tx)
+        .await?;
+        tx.commit().await?;
+        Ok(OperatorPairingRedemption {
+            session_bearer: issued.bearer,
+            authorization: OperatorSessionAuthorization {
+                session_fingerprint: issued.fingerprint,
+                device_fingerprint: *request.device_fingerprint,
+                target_origin: request.target_origin.to_owned(),
+                principal,
+                expires_at: request.expires_at,
+            },
+        })
+    }
+
     /// Creates a bounded grant for an exact local manager and ready ingress origin.
     ///
     /// # Errors
