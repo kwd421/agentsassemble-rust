@@ -104,10 +104,27 @@ and a finite timeout; unavailable photos produce a visible retryable failure.
 Logout revokes only the current signed central session before persisting explicit
 logged-out presentation state and returning to startup. Failure retains the
 session and settings with a retry. Restart must remain on login; successful login
-replaces the logged-out state. Local operator authority, rooms, profile, device key
-and other devices' sessions are retained. This is central logout, not local server
-shutdown or an OS-user security boundary. Existing device/person binding prevents
-silently replacing the account. Browser room-account linking is unchanged.
+replaces the logged-out state. Local operator authority, rooms, profile and other
+devices' sessions are retained. This is central logout, not local server shutdown
+or an OS-user security boundary. Browser room-account linking is unchanged.
+
+Correction for the reported Windows guest logout -> Google login flow: explicit
+logout makes the next login use a fresh durable central device slot. Commit removal
+of the previous local credential before persisting the fresh-slot logout marker;
+storage failures remain visible and login blocked. Existing logout markers from
+the previous build take the same transition. The old central guest/device records
+are preserved. A failed/cancelled login reuses the new slot until another logout.
+
+Only a session obtained after explicit logout requests a native host ownership
+claim (`AA-HOST-CLAIM-1`), distinct from ordinary registration. Central device
+signature, verified native host signature for the exact destination account, and
+matching previously registered host key are required. The Worker consumes the
+claim nonce once and atomically moves that server's central owner relation;
+preserve the previous account's bookmark, the endpoint and all local room data.
+Enforce the existing 20-server bound inside the atomic update. Persist pending
+claim state until successful registration; startup retries unfinished claims with
+a fresh native proof. No identity merge, profile retirement, room ACL change,
+server key replacement or registration-conflict fallback is permitted.
 
 Acceptance: verified Google name/photo import; edited profile survives re-login;
 current central bearer is rejected after logout while another device remains valid;

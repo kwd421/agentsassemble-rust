@@ -52,6 +52,8 @@ pub struct HostRegistrationProof {
     issued_at: i64,
     nonce: String,
     signature: String,
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    claim_ownership: bool,
 }
 
 #[derive(Serialize)]
@@ -186,6 +188,7 @@ impl CentralHostIdentity {
     pub fn registration_envelope(
         &self,
         owner_person_id: &str,
+        claim_ownership: bool,
     ) -> Result<HostRegistrationEnvelope, HostIdentityError> {
         let issued_at = Utc::now().timestamp();
         let mut nonce_bytes = [0_u8; REGISTRATION_NONCE_BYTES];
@@ -193,8 +196,13 @@ impl CentralHostIdentity {
             .fill(&mut nonce_bytes)
             .map_err(|_| HostIdentityError::Entropy)?;
         let nonce = URL_SAFE_NO_PAD.encode(nonce_bytes);
+        let context = if claim_ownership {
+            "AA-HOST-CLAIM-1"
+        } else {
+            REGISTRATION_CONTEXT
+        };
         let transcript = format!(
-            "{REGISTRATION_CONTEXT}\n{}\n{owner_person_id}\n{issued_at}\n{nonce}",
+            "{context}\n{}\n{owner_person_id}\n{issued_at}\n{nonce}",
             self.server_id
         );
         let signature = URL_SAFE_NO_PAD.encode(self.key_pair.sign(transcript.as_bytes()).as_ref());
@@ -207,6 +215,7 @@ impl CentralHostIdentity {
                 issued_at,
                 nonce,
                 signature,
+                claim_ownership,
             },
         })
     }
@@ -308,7 +317,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("derive host identity: {error}"));
         let owner = "per_central-owner_123456";
         let envelope = identity
-            .registration_envelope(owner)
+            .registration_envelope(owner, false)
             .unwrap_or_else(|error| panic!("create registration proof: {error}"));
 
         let public_key = URL_SAFE_NO_PAD
@@ -350,6 +359,32 @@ mod tests {
                 "server_id",
             ]
         );
+        let claimed = identity
+            .registration_envelope(owner, true)
+            .unwrap_or_else(|error| panic!("create ownership claim: {error}"));
+        let claim_transcript = format!(
+            "AA-HOST-CLAIM-1\n{}\n{owner}\n{}\n{}",
+            claimed.server_id,
+            claimed.host_registration_proof.issued_at,
+            claimed.host_registration_proof.nonce
+        );
+        let claim_signature = URL_SAFE_NO_PAD
+            .decode(&claimed.host_registration_proof.signature)
+            .unwrap_or_else(|error| panic!("decode claim signature: {error}"));
+        UnparsedPublicKey::new(&ED25519, &public_key)
+            .verify(claim_transcript.as_bytes(), &claim_signature)
+            .unwrap_or_else(|_| panic!("ownership claim did not verify"));
+        assert!(
+            UnparsedPublicKey::new(&ED25519, &public_key)
+                .verify(
+                    claim_transcript
+                        .replace("AA-HOST-CLAIM-1", REGISTRATION_CONTEXT)
+                        .as_bytes(),
+                    &claim_signature
+                )
+                .is_err()
+        );
+        assert!(claimed.host_registration_proof.claim_ownership);
     }
 
     #[tokio::test]
@@ -364,10 +399,10 @@ mod tests {
         let identity = CentralHostIdentity::from_persistent(&persistent)
             .unwrap_or_else(|error| panic!("derive host identity: {error}"));
         let first = identity
-            .registration_envelope("per_owner_12345678")
+            .registration_envelope("per_owner_12345678", false)
             .unwrap_or_else(|error| panic!("first proof: {error}"));
         let second = identity
-            .registration_envelope("per_owner_12345678")
+            .registration_envelope("per_owner_12345678", false)
             .unwrap_or_else(|error| panic!("second proof: {error}"));
 
         assert_eq!(first.server_id, second.server_id);

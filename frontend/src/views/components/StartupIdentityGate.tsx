@@ -181,6 +181,7 @@ export default function StartupIdentityGate({
         }
         if (bootstrap.phase === "complete") {
           const session = loadCentralSession();
+          if (session?.pending_account_switch) await registerLocalServer(deviceToken);
           if (session?.person.identity_kind === "google" && bootstrap.profile?.revision === 1 && session.person.avatar_url !== undefined) {
             await saveLocalProfile(session.person.display_name, bootstrapRequestId.current, session.person);
           }

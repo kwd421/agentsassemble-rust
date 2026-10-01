@@ -27,3 +27,39 @@ it("keeps a failed logout retryable and persists logout only after a signed revo
   expect(loadCentralSession()).toBeNull();
   expect(centralSessionLoggedOut()).toBe(true);
 });
+
+it("replaces an old logged-out account slot only after storage commits and keeps the new slot on retry", async () => {
+  vi.resetModules();
+  const pair = await crypto.subtle.generateKey({ name: "ECDSA", namedCurve: "P-256" }, false, ["sign", "verify"]);
+  let persisted: unknown = { deviceId: "old-guest-device", privateKey: pair.privateKey, publicJwk: await crypto.subtle.exportKey("jwk", pair.publicKey) };
+  let failDeletion = true;
+  vi.stubGlobal("indexedDB", { open: () => {
+    const open = { result: { close() {}, transaction: () => {
+      const tx = { oncomplete() {}, onabort() {}, onerror() {}, error: new Error("storage unavailable"), objectStore: () => ({
+        delete: () => { queueMicrotask(() => {
+          if (failDeletion) tx.onabort(); else { persisted = undefined; tx.oncomplete(); }
+        }); },
+        get: () => { const req = { result: persisted, onsuccess() {} }; queueMicrotask(() => req.onsuccess()); return req; },
+        put: (value: unknown) => { queueMicrotask(() => { persisted = value; tx.oncomplete(); }); },
+      }) };
+      return tx;
+    } }, onsuccess() {} };
+    queueMicrotask(() => open.onsuccess()); return open;
+  } });
+  localStorage.setItem("agentsassemble.centralSession.v1", "logged-out");
+  const requests: Array<Record<string, unknown>> = [];
+  vi.stubGlobal("fetch", vi.fn(async (_: string, init: RequestInit) => {
+    requests.push(JSON.parse(String(init.body)));
+    throw new Error("offline before login completed");
+  }));
+  const { createCentralGuest, centralSessionLoggedOut } = await import("./centralIdentity");
+  await expect(createCentralGuest("New account")).rejects.toThrow();
+  expect(requests).toHaveLength(0);
+  expect(centralSessionLoggedOut()).toBe(true);
+  failDeletion = false;
+  await expect(createCentralGuest("New account")).rejects.toThrow("offline");
+  await expect(createCentralGuest("New account")).rejects.toThrow("offline");
+  expect(requests[0].device_id).not.toBe("old-guest-device");
+  expect(requests[1].device_id).toBe(requests[0].device_id);
+  expect(centralSessionLoggedOut()).toBe(true);
+});

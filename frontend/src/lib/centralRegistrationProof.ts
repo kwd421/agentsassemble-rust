@@ -24,6 +24,7 @@ export type HostRegistrationEnvelope = {
     issued_at: number;
     nonce: string;
     signature: string;
+    claim_ownership?: true;
   };
 };
 
@@ -82,7 +83,8 @@ function exactPublicJwk(value: unknown, expectedX: string): HostPublicJwk {
 export async function verifyCentralRegistrationEnvelope(
   value: unknown,
   expectedOwnerPersonId: string,
-  binding: DesktopCentralRegistrationBinding
+  binding: DesktopCentralRegistrationBinding,
+  claimOwnership = false
 ): Promise<HostRegistrationEnvelope> {
   const envelope = exactObject(
     value,
@@ -117,11 +119,12 @@ export async function verifyCentralRegistrationEnvelope(
 
   const proof = exactObject(
     envelope.host_registration_proof,
-    ["owner_person_id", "issued_at", "nonce", "signature"],
+    ["owner_person_id", "issued_at", "nonce", "signature", ...(claimOwnership ? ["claim_ownership"] : [])],
     "호스트 등록 서명"
   );
   if (
     proof.owner_person_id !== expectedOwnerPersonId ||
+    (claimOwnership && proof.claim_ownership !== true) ||
     !Number.isSafeInteger(proof.issued_at) ||
     Number(proof.issued_at) < 1
   ) {
@@ -130,7 +133,7 @@ export async function verifyCentralRegistrationEnvelope(
   const publicKeyBytes = decodeBase64Url(jwk.x, 32, "호스트 공개키");
   const nonce = decodeBase64Url(proof.nonce, 18, "호스트 등록 nonce");
   const signature = decodeBase64Url(proof.signature, 64, "호스트 등록 서명");
-  const transcript = `${REGISTRATION_CONTEXT}\n${binding.server_id}\n${expectedOwnerPersonId}\n${proof.issued_at}\n${encodeBase64Url(nonce)}`;
+  const transcript = `${claimOwnership ? "AA-HOST-CLAIM-1" : REGISTRATION_CONTEXT}\n${binding.server_id}\n${expectedOwnerPersonId}\n${proof.issued_at}\n${encodeBase64Url(nonce)}`;
   const publicKey = await crypto.subtle.importKey(
     "raw",
     publicKeyBytes,

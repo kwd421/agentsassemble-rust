@@ -19,6 +19,8 @@ const MAX_REGISTRATION_BODY_BYTES: usize = 4 * 1024;
 #[serde(deny_unknown_fields)]
 struct RegistrationRequest {
     owner_person_id: String,
+    #[serde(default)]
+    claim_ownership: bool,
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -49,7 +51,7 @@ async fn issue_registration_proof(
     }
     state
         .central_host_identity
-        .registration_envelope(owner_person_id)
+        .registration_envelope(owner_person_id, payload.claim_ownership)
         .map(Json)
         .map_err(|error| RegistrationHttpError::from_identity(&error))
 }

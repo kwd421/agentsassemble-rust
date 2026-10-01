@@ -32,6 +32,7 @@ export type CentralSession = {
   expires_at: number;
   device_id: string;
   person: CentralPerson;
+  pending_account_switch?: boolean;
 };
 
 export type CentralServer = {
@@ -139,6 +140,18 @@ function openCredentialDb(): Promise<IDBDatabase> {
 async function loadOrCreateDevice(): Promise<StoredDevice> {
   const db = await openCredentialDb();
   try {
+    // Explicit logout starts a new account slot. Older logout builds left this
+    // marker with the previous account's permanent registration, so repair that
+    // transition before login as well. Keep login blocked across a crash.
+    if (localStorage.getItem(SESSION_KEY) === "logged-out") {
+      await new Promise<void>((resolve, reject) => {
+        const transaction = db.transaction(STORE_NAME, "readwrite");
+        transaction.objectStore(STORE_NAME).delete(DEVICE_KEY);
+        transaction.oncomplete = () => resolve();
+        transaction.onerror = transaction.onabort = () => reject(transaction.error || new Error("로그아웃한 기기 등록을 초기화하지 못했습니다."));
+      });
+      localStorage.setItem(SESSION_KEY, "logged-out:fresh-device");
+    }
     const existing = await new Promise<StoredDevice | undefined>((resolve, reject) => {
       const request = db
         .transaction(STORE_NAME, "readonly")
@@ -169,12 +182,10 @@ async function loadOrCreateDevice(): Promise<StoredDevice> {
       publicJwk,
     };
     await new Promise<void>((resolve, reject) => {
-      const request = db
-        .transaction(STORE_NAME, "readwrite")
-        .objectStore(STORE_NAME)
-        .put(created, DEVICE_KEY);
-      request.onsuccess = () => resolve();
-      request.onerror = () => reject(request.error);
+      const transaction = db.transaction(STORE_NAME, "readwrite");
+      transaction.objectStore(STORE_NAME).put(created, DEVICE_KEY);
+      transaction.oncomplete = () => resolve();
+      transaction.onerror = transaction.onabort = () => reject(transaction.error || new Error("기기 로그인 키를 저장하지 못했습니다."));
     });
     return created;
   } finally {
@@ -197,7 +208,11 @@ function saveSession(
     | CentralGuestResult
     | { person: CentralPerson; session: Omit<CentralSession, "person"> }
 ): CentralSession {
-  const session: CentralSession = { ...result.session, person: result.person };
+  const previous = loadCentralSession();
+  const session: CentralSession = { ...result.session, person: result.person,
+    ...(centralSessionLoggedOut() || (previous?.person.person_id === result.person.person_id && previous.pending_account_switch)
+      ? { pending_account_switch: true } : {}),
+  };
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }
@@ -251,12 +266,12 @@ export function loadCentralSession(): CentralSession | null {
 }
 
 export function clearCentralSession(): void {
-  localStorage.removeItem(SESSION_KEY);
+  if (!centralSessionLoggedOut()) localStorage.removeItem(SESSION_KEY);
   localStorage.removeItem(SERVERS_KEY);
 }
 
 export function centralSessionLoggedOut(): boolean {
-  return localStorage.getItem(SESSION_KEY) === "logged-out";
+  return ["logged-out", "logged-out:fresh-device"].includes(localStorage.getItem(SESSION_KEY) || "");
 }
 
 export async function logoutCentral(): Promise<void> {
@@ -271,6 +286,7 @@ export async function logoutCentral(): Promise<void> {
   clearCentralSession();
   clearPendingCentralRecoveryCode();
   localStorage.setItem(SESSION_KEY, "logged-out");
+  devicePromise = undefined;
 }
 
 export function loadCentralServers(): CentralServer[] {
@@ -591,7 +607,9 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
       "content-type": "application/json",
       ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }),
     },
-    body: JSON.stringify({ owner_person_id: session.person.person_id }),
+    body: JSON.stringify({ owner_person_id: session.person.person_id,
+      ...(session.pending_account_switch ? { claim_ownership: true } : {}),
+    }),
   } satisfies RequestInit;
   const desktop = isDesktopWebview();
   const registration = desktop
@@ -605,7 +623,8 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
     ? await verifyCentralRegistrationEnvelope(
         payload,
         session.person.person_id,
-        registration.binding
+        registration.binding,
+        session.pending_account_switch === true
       )
     : (payload as LocalServerInfo & {
         host_registration_proof: {
@@ -620,7 +639,13 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
     label: "이 기기",
     host_public_key_jwk: local.host_public_key_jwk,
     host_registration_proof: local.host_registration_proof,
+    ...(session.pending_account_switch ? { claim_ownership: true } : {}),
   });
+  const current = loadCentralSession();
+  if (current?.token === session.token && current.pending_account_switch) {
+    delete current.pending_account_switch;
+    localStorage.setItem(SESSION_KEY, JSON.stringify(current));
+  }
 }
 
 export async function waitForLocalDirectory(): Promise<void> {

@@ -15,7 +15,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-async function signedFixture(): Promise<{
+async function signedFixture(claimOwnership = false): Promise<{
   binding: DesktopCentralRegistrationBinding;
   envelope: HostRegistrationEnvelope;
 }> {
@@ -40,7 +40,7 @@ async function signedFixture(): Promise<{
   );
   const issuedAt = 1_788_000_000;
   const nonce = bytesToBase64Url(new Uint8Array(18).fill(7));
-  const transcript = `AA-HOST-REGISTER-1\n${SERVER_ID}\n${OWNER_ID}\n${issuedAt}\n${nonce}`;
+  const transcript = `${claimOwnership ? "AA-HOST-CLAIM-1" : "AA-HOST-REGISTER-1"}\n${SERVER_ID}\n${OWNER_ID}\n${issuedAt}\n${nonce}`;
   const signature = bytesToBase64Url(
     new Uint8Array(
       await crypto.subtle.sign(
@@ -65,12 +65,21 @@ async function signedFixture(): Promise<{
         issued_at: issuedAt,
         nonce,
         signature,
+        ...(claimOwnership ? { claim_ownership: true as const } : {}),
       },
     },
   };
 }
 
 describe("central registration proof authority", () => {
+  it("accepts only an explicitly requested purpose-bound ownership claim", async () => {
+    const claim = await signedFixture(true);
+    await expect(verifyCentralRegistrationEnvelope(claim.envelope, OWNER_ID, claim.binding, true)).resolves.toEqual(claim.envelope);
+    await expect(verifyCentralRegistrationEnvelope(claim.envelope, OWNER_ID, claim.binding)).rejects.toThrow();
+    const ordinary = await signedFixture();
+    ordinary.envelope.host_registration_proof.claim_ownership = true;
+    await expect(verifyCentralRegistrationEnvelope(ordinary.envelope, OWNER_ID, ordinary.binding, true)).rejects.toThrow();
+  });
   it("accepts the exact envelope signed by the native-bound host key", async () => {
     const fixture = await signedFixture();
     await expect(

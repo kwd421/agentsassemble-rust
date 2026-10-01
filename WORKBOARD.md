@@ -2,6 +2,15 @@
 
 ## Active work
 
+- 2026-10-01 Windows guest logout -> existing Google login correction completed
+  locally: fresh durable account slots and purpose-bound native host claims preserve
+  old guest identities, endpoints and local rooms. Worker 21, frontend 927, native
+  36 and affected signing/HTTP tests pass; mandatory source gates and Clippy pass.
+  Actual signed macOS guest -> logout -> restart -> existing Google login succeeds
+  against the deployed Worker with the original room/message retained. Windows UI
+  awaits the user's rebuilt-app retry. Evidence: `docs/VERIFICATION.md` ->
+  Guest logout to existing Google account.
+
 - 2026-10-01 user-requested Google profile defaults and account logout completed:
   approved central migration and Worker deployment apply first-import name/photo.
   Actual signed package login imports the existing Google account's name/photo;

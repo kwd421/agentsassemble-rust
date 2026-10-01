@@ -11850,3 +11850,63 @@ Computer Use resets; the Windows waiting host remains running. The default
 packaged app is untouched; the new signed debug package remains available for
 this work. Production Worker is updated, with no native-distribution/notarization
 or Windows execution claim.
+
+
+## Guest logout to existing Google account (2026-10-01)
+
+Reported flow: Windows guest logout followed by the same Google account already
+used on another computer returns `device_identity_conflict`. The central device ID
+is a permanently bound account slot, not a physical-machine identifier. The old
+logout implementation retained that slot. A controlled integration through the
+Worker routes reproduces the exact rejection with the old guest slot; a fresh slot
+resolves the existing Google person. Ordinary registration then correctly rejects
+moving the previously guest-owned local server, requiring a complete host claim.
+
+The client commits removal and creation of its durable login key before signing in.
+The old explicit-logout marker also follows this transition after an app update.
+Storage failure blocks login; network retry/cancellation retains the fresh key.
+Sessions obtained after logout persist a pending native claim until success and
+retry it on startup. The original local operator issues a distinct
+`AA-HOST-CLAIM-1` signature for the exact new central account. The Worker requires
+both the signed account request and original host-key proof, consumes a single-use
+nonce, and atomically changes the directory owner. Preserve the old guest account,
+its bookmark, endpoint, local room authority and all message history. A substituted
+key, replay or ordinary registration cannot perform that transition. No migration,
+secret rotation or identity merge is introduced.
+
+Verification: Worker 21 tests, full frontend 927 tests, focused logout/native/proof
+9 tests, native host-proof 3 tests and registration HTTP boundary 2 tests pass.
+A barrier at the public transactional database boundary makes concurrent claims
+race for the twentieth server; exactly one succeeds. A temporary controlled removal
+of the atomic count guard makes that regression fail with two successful claims;
+the original guard is restored. Frontend build, signed debug app build and strict
+signature verification pass. Main architecture/source-growth/format/diff/artifact
+gates, workspace Clippy and native checks pass. The first native suite run had
+35 passes and one existing staging-cleanup assertion failure at
+`runtime_executable_staging.rs:194`; that unchanged test passes alone, all 36 pass
+serially, and the complete normal native check rerun also passes 36. Its initial
+parallel failure remains recorded; no test or gate was changed to suppress it.
+The isolated central-owner checkout passes structure/source-growth, regenerated
+maps and test-quality checks. Original legacy-tree unrelated deletions and map
+inventory differences remain as disclosed in the preceding verification section.
+
+Validated Worker version `c528f44d-3c3c-476e-a649-5dd161749a1e` is deployed.
+An actual isolated signed `app.agentsassemble.accountswitch20261001` macOS app
+creates a guest, creates a room, sends a message, logs out in settings, quits and
+restarts still logged out, then signs in to the previously used Google account.
+The same room and message are visible after login; settings show Google account.
+The complete rooms-row digest and both original event-row digests remain identical.
+The initial unedited local profile imports the Google name/photo once, adding its
+normal profile-update event. Remote read-only evidence shows Google-person count
+remains one, the test server is Google-owned, and its prior guest bookmark remains.
+This verifies the equivalent packaged macOS flow and deployed authority; Windows
+UI execution is still unknown and requires the user's rebuilt Windows app retry.
+
+Evidence: `/var/folders/h_/8rgwgf7j3fn_v3lxg2nl431h0000gn/T/aa-account-switch-20261001-1kgks5mt/evidence`.
+The verification session logs out, its exact app and owned runtime exit normally,
+and its isolated profile/cache/WebKit data move to recoverable Trash under
+`/Users/seinel/.Trash/aa-account-switch-20261001`. Computer Use resets. The existing
+Windows waiting host, invitation, tunnel and personal data are preserved. The
+repository artifact owner removes only the newly created obsolete nested Cargo
+cache; the root build and signed package remain available. No Windows installer,
+notarization or original legacy-tree release claim is made.
