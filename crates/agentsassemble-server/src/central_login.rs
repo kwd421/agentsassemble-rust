@@ -147,6 +147,7 @@ registered_routes! {
     pub(crate) fn routes<AppState>() {
         private "/api/central-login/callback" => get(callback),
         private "/central-login-complete" => get(complete_page),
+        private "/central-login.css" => get(page_style),
     }
 }
 
@@ -169,7 +170,12 @@ async fn callback(
     } else {
         (
             StatusCode::BAD_REQUEST,
-            "This login return is invalid or expired.",
+            Html(result_page(
+                "failed",
+                FAILED_MARK,
+                "로그인을 마치지 못했어요",
+                "로그인 요청이 만료됐거나 올바르지 않아요. 앱에서 다시 시도해 주세요.",
+            )),
         )
             .into_response()
     };
@@ -177,8 +183,48 @@ async fn callback(
 }
 
 async fn complete_page() -> Response {
-    private_response(Html("<!doctype html><html lang=\"ko\"><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>AgentsAssemble</title><main><h1>앱으로 돌아가 주세요</h1><p>로그인 결과를 전달했습니다. 이 창을 닫아도 됩니다.</p></main></html>").into_response())
+    private_response(
+        Html(result_page(
+            "done",
+            DONE_MARK,
+            "로그인 완료",
+            "AgentsAssemble 앱으로 돌아가 주세요. 이 창은 닫아도 됩니다.",
+        ))
+        .into_response(),
+    )
 }
+
+// The app-wide CSP allows only same-origin styles, so the page links its sheet.
+async fn page_style() -> Response {
+    private_response(
+        (
+            [(header::CONTENT_TYPE, "text/css; charset=utf-8")],
+            PAGE_STYLE,
+        )
+            .into_response(),
+    )
+}
+
+const DONE_MARK: &str = r#"<path d="M6 12.5l4 4L18 8"/>"#;
+const FAILED_MARK: &str = r#"<path d="M12 7v6M12 16.5v.5"/>"#;
+
+fn result_page(result: &str, mark: &str, title: &str, body: &str) -> String {
+    format!(
+        r#"<!doctype html><html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>AgentsAssemble</title><link rel="stylesheet" href="/central-login.css"></head><body><main class="card" data-result="{result}"><div class="mark" aria-hidden="true"><svg viewBox="0 0 24 24">{mark}</svg></div><p class="app">AgentsAssemble</p><h1>{title}</h1><p>{body}</p></main></body></html>"#
+    )
+}
+
+const PAGE_STYLE: &str = r#"*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{display:grid;place-items:center;padding:16px;background:#1a1b20;color:#f2f3f5;font-family:"Pretendard Variable",Pretendard,"Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;word-break:keep-all}
+.card{width:min(400px,100%);padding:36px 32px 32px;border:1px solid rgba(255,255,255,.08);border-radius:12px;background:#202127;text-align:center;box-shadow:0 8px 24px rgb(0 0 0/24%)}
+.mark{display:grid;width:56px;height:56px;margin:0 auto 18px;place-items:center;border-radius:50%;background:#23a55a}
+[data-result=failed] .mark{background:#f23f42}
+.mark svg{width:30px;height:30px;fill:none;stroke:#fff;stroke-width:2.6;stroke-linecap:round;stroke-linejoin:round}
+.app{margin:0 0 6px;color:#949ba4;font-size:12px;font-weight:700;letter-spacing:.04em}
+h1{margin:0 0 10px;font-size:22px;font-weight:800}
+p{margin:0;color:#b5bac1;font-size:14px;line-height:1.6}
+"#;
 
 fn private_response(mut response: Response) -> Response {
     response.headers_mut().insert(
