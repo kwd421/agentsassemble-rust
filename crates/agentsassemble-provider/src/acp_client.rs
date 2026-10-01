@@ -320,7 +320,13 @@ impl AcpClient {
             )))
             .block_task()
             .await
-            .map_err(|_| protocol_error())
+            .map_err(|error| {
+                if error.code == agent_client_protocol::ErrorCode::AuthRequired {
+                    DriverError::new("authentication_required", "Provider login is required.")
+                } else {
+                    protocol_error()
+                }
+            })
     }
 
     pub(super) async fn shutdown(&mut self) {

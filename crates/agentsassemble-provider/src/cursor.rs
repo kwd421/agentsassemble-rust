@@ -73,7 +73,7 @@ pub(crate) async fn discover(
             .map_err(|_| ProbeFailure::Failed)?;
             let result = CursorCatalog::read(&mut client)
                 .await
-                .map_err(|_| ProbeFailure::Malformed);
+                .map_err(|error| catalog_failure(&error));
             client.shutdown().await;
             result
         },
@@ -82,6 +82,14 @@ pub(crate) async fn discover(
     match catalog {
         Ok(catalog) => ready_provider(provider, catalog.default_model.clone(), catalog.controls()),
         Err(failure) => failed_provider(provider, failure),
+    }
+}
+
+fn catalog_failure(error: &crate::driver::DriverError) -> ProbeFailure {
+    if error.code == "authentication_required" {
+        ProbeFailure::Authentication
+    } else {
+        ProbeFailure::Malformed
     }
 }
 
@@ -125,6 +133,58 @@ fn authentication_status(output: &str) -> Result<(), ProbeFailure> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[tokio::test]
+    async fn native_catalog_auth_rejection_survives_the_protocol_boundary() {
+        use serde_json::{Value, json};
+        use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+
+        for (code, expected) in [
+            (-32000, ProbeFailure::Authentication),
+            (-32603, ProbeFailure::Malformed),
+        ] {
+            let (input, peer_input) = tokio::io::duplex(4096);
+            let (mut peer_output, output) = tokio::io::duplex(4096);
+            let peer = tokio::spawn(async move {
+                let mut lines = BufReader::new(peer_input).lines();
+                while let Ok(Some(line)) = lines.next_line().await {
+                    let request: Value = serde_json::from_str(&line)
+                        .unwrap_or_else(|error| panic!("request: {error}"));
+                    let body = match request["method"].as_str() {
+                        Some("initialize") => json!({"result":{
+                            "protocolVersion":1,"agentCapabilities":{}
+                        }}),
+                        Some("cursor/list_available_models") => json!({"error":{
+                            "code":code,"message":"private provider detail",
+                            "data":{"private":"not public"}
+                        }}),
+                        other => panic!("unexpected request: {other:?}"),
+                    };
+                    let mut reply = body;
+                    reply["jsonrpc"] = json!("2.0");
+                    reply["id"] = request["id"].clone();
+                    peer_output
+                        .write_all(format!("{reply}\n").as_bytes())
+                        .await
+                        .unwrap_or_else(|error| panic!("reply: {error}"));
+                }
+            });
+            let mut client = AcpClient::connect(
+                input,
+                output,
+                client_configuration(AcpPermissionPolicy::Reject),
+            )
+            .await
+            .unwrap_or_else(|error| panic!("connect: {:?}", error.error));
+            let Err(error) = CursorCatalog::read(&mut client).await else {
+                panic!("rejected catalog must fail");
+            };
+            assert!(!error.to_string().contains("private"));
+            assert_eq!(catalog_failure(&error), expected);
+            client.shutdown().await;
+            peer.await.unwrap_or_else(|error| panic!("peer: {error}"));
+        }
+    }
 
     #[test]
     fn only_explicit_cursor_credential_state_requests_login() {

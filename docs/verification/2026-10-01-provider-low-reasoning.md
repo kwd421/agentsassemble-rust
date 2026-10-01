@@ -107,3 +107,96 @@ Use reset. Only this run's bundle, fresh isolated profile/cache/WebKit and priva
 verification files are moved to `~/.Trash/aa-providers-low-20261001`.
 The earlier verification profile in Trash and ordinary user data are unchanged.
 Sanitized evidence remains in `/tmp/aa-providers-20261001/evidence/`.
+
+## Cursor and Gemini follow-up
+
+User subsequently authorized fixing Cursor and researching remaining Gemini web
+routes. Base `66d370e8`; installed provider version is unchanged.
+
+### Cursor diagnosis and correction
+
+The native status command reported authenticated/token presence, but real ACP
+startup and `cursor/list_available_models` returned authentication required.
+Explicit `authenticate(cursor_login)` then waited for browser login: native logs
+confirm its saved-login check was false and it entered the browser-login flow.
+The CLI status result therefore was insufficient evidence of usable ACP auth.
+
+Completed the official `cursor-agent login` flow with the existing account. Native
+login exits 0, its web page says All set, and fresh ACP returns 43 real models,
+including `default` / Auto with no configurable model parameters. That fresh
+startup succeeds before an explicit authenticate request; adding unconditional
+ACP authentication/browser login is not necessary to repair this incident.
+The documentation's normal authenticate step alone was not the proven root cause.
+
+Corrected the response owner: ACP `AuthRequired` becomes a fixed, sanitized
+`authentication_required` driver failure, and Cursor discovery preserves it as
+login required. Other extension failures and malformed catalogs retain existing
+failure behavior. Provider error message/data are not forwarded. No synthesized
+catalog, compatibility fallback, credential extraction, auto-login, provider
+update, extra process, polling or retry was added; existing deadlines remain.
+A native-wire regression distinguishes auth rejection from internal failure and
+checks that private provider error text is not exposed.
+
+### Actual corrected packaged flow
+
+Built a fresh debug package with identifier `app.agentsassemble.cursorfix20261001`
+and Developer ID signature; strict/deep signature verification passes. This is
+macOS/same-computer evidence, without notarization or distribution claims. A fresh
+isolated guest creates `room-20261001T110430`; ordinary profiles are untouched.
+
+- Actual app discovery shows Auto normally. Native Auto has no reasoning control;
+  the UI correctly disables the control at Default. No Low override is invented.
+- Select Auto, room-read-only permission and an empty test workspace; Start reaches
+  idle. No provider installation update is accepted.
+- Host writes the test instruction at seq 6. Cursor requests `read_discussion` and
+  `publish_message`; each receives Allow once through the app's normal request UI.
+  No persistent/global grant is used.
+- Canonical seq 16 and the host UI agree on exactly
+  `CURSOR-AUTO-OK nonce=5f6c82 sum=97`; seq 17 completes the turn and returns idle.
+  The host message itself triggers this turn, so no undisclosed-input isolation
+  claim is made for this follow-up.
+- Stop at seq 19, Resume at seq 22 using the same native session, return idle,
+  then final Stop at seq 24. Final state: detached/stopped, one completed turn,
+  native session reused, no last error and no recovery requirement.
+
+Provider all-feature tests pass 290/290; the final wire regression is rechecked
+after lint corrections. Workspace all-target/all-feature warning-denied Clippy,
+architecture/source growth, 19 policy cases, format, diff and artifact gates pass.
+Frontend production compilation and the signed desktop package build pass; no
+unrelated frontend/full-server suite claim is made. The process snapshot at resumed
+idle is instantaneous evidence, not a performance benchmark. All ten app/provider
+processes in that snapshot, including native helpers, are absent after normal
+Stop and Quit; the native login process is also absent.
+
+Sanitized evidence: `/tmp/aa-cursor-fix-20261001/evidence/`, including
+`native-auth-catalog.json`, `cursor-auto-settings.png`, `cursor-auto-success.png`,
+`cursor-final-stopped.png`, `canonical-results.json`, process and cleanup receipts.
+The official login refresh is intentionally retained. Only this run's isolated
+bundle/profile/cache/WebKit/private files/empty test workspace are moved to
+`~/.Trash/aa-cursor-fix-20261001`. Native provider test conversations are retained.
+Public ingress is never opened, test browser tabs are closed, Computer Use reset.
+
+### Gemini web remaining routes
+
+In the actual account, `https://gemini.google.com/apps?hl=en` displays English but
+still has no custom-app/MCP URL field. Expanded sidebar has no Switch to Spark
+control. Keep Activity is already On; it is not the observed missing prerequisite.
+No account privacy, region, subscription or connected-app setting is changed.
+
+Current [custom-app help](https://support.google.com/gemini/answer/17209137) still
+requires age 18+, US, a personal account, Keep Activity and English. Registration
+is Settings -> Connected Apps -> Custom apps -> MCP URL. Current canonical help
+permits chats/tasks; older localized/search-cached wording says Spark tasks only.
+No documented alternate add-link or Gems configuration enables an arbitrary
+personal MCP endpoint for this current account. A URL pasted into a chat is not
+actual authenticated tool participation.
+
+[Current Spark help](https://support.google.com/gemini/answer/17094507) and
+[July rollout notes](https://support.google.com/gemini/answer/17171264?hl=en)
+describe broader country availability and Pro/Ultra access. That does not establish
+removal of the explicit US/English custom-MCP conditions. An upgrade is not a
+verified remedy for this account. Spark browser interaction is a different
+possible contract and is not exercised here; API/CLI support is also not web proof.
+Actual AgentsAssemble interoperability for a future eligible Gemini account
+remains unverified. Evidence: `gemini-check.json` and
+`gemini-english-connected-apps.png`; no Gemini model generation is performed.

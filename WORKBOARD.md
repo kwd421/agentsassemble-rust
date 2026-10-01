@@ -2,6 +2,17 @@
 
 ## Active work
 
+- 2026-10-01 Cursor follow-up completed: official CLI browser login restores the
+  native 43-model catalog. Preserve ACP authentication rejection as login required
+  instead of malformed model data. New signed isolated package verifies Auto's
+  real room read/publication with once-only approvals, Stop/Resume/Stop and native
+  session reuse. Provider 290 tests, wire regression, workspace Clippy and mandatory
+  structure/format/artifact gates pass. No provider update or catalog fallback.
+  Gemini's English URL still has no custom-MCP or Spark control; Keep Activity is
+  already On. Broader Spark availability does not establish custom-MCP eligibility.
+  Evidence, scope and cleanup: `docs/verification/2026-10-01-provider-low-reasoning.md`
+  -> Cursor and Gemini follow-up.
+
 - 2026-10-01 user-requested minimum-reasoning real-provider verification: new
   isolated macOS room confirms Grok 4.7 Low, Codex GPT-5.6-Terra Low and DeepSeek
   Flash low/Thinking off read and publish correctly, then Stop/Resume/Stop.
