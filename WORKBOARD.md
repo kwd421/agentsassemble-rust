@@ -2,6 +2,12 @@
 
 ## Active work
 
+- 2026-10-02 requested Sites MCP deployment: existing native MCP cannot be uploaded
+  as a Worker artifact. The user clarified the deployment adapter is authorized.
+  The private gateway and ownership contract are in `infra/sites-mcp/DEPLOYMENT.md`.
+  Local tests and actual isolated-room prepare/join/read/say/wait-cancel/leave/release
+  pass; native storage confirms one publication. Sites publication is in progress.
+
 - 2026-10-02 user-requested Sites MCP registration created and verified owner-only.
   Project linkage: `infra/sites-mcp/.openai/hosting.json`. No source version or
   deployment exists; the native Rust MCP needs a compatible Sites runtime design
