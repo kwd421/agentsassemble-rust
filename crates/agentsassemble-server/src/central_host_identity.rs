@@ -237,7 +237,12 @@ impl CentralHostIdentity {
             self.server_id
         );
         let signature = URL_SAFE_NO_PAD.encode(self.key_pair.sign(transcript.as_bytes()).as_ref());
-        let host_name = sysinfo::System::host_name()
+        // macOS hostnames may be supplied by router DNS; use its display name.
+        #[cfg(target_os = "macos")]
+        let host_name = whoami::devicename().ok();
+        #[cfg(not(target_os = "macos"))]
+        let host_name = sysinfo::System::host_name();
+        let host_name = host_name
             .map(|name| name.trim().to_owned())
             .filter(|name| {
                 !name.is_empty()
@@ -366,6 +371,21 @@ mod tests {
         let envelope = identity
             .registration_envelope(owner, false)
             .unwrap_or_else(|error| panic!("create registration proof: {error}"));
+
+        #[cfg(target_os = "macos")]
+        {
+            let configured_name = std::process::Command::new("/usr/sbin/scutil")
+                .args(["--get", "ComputerName"])
+                .output()
+                .unwrap_or_else(|error| panic!("read macOS computer name: {error}"));
+            assert!(configured_name.status.success());
+            assert_eq!(
+                envelope.host_name,
+                String::from_utf8(configured_name.stdout)
+                    .unwrap_or_else(|error| panic!("decode macOS computer name: {error}"))
+                    .trim()
+            );
+        }
 
         let public_key = URL_SAFE_NO_PAD
             .decode(&envelope.host_public_key_jwk.x)

@@ -2,6 +2,13 @@
 
 ## Active work
 
+- 2026-10-02 macOS default server names now read the System Configuration
+  computer display name instead of a router/DNS-derived hostname. Native identity
+  4 and registration TCP 2 tests, Clippy, mandatory gates and signed package build
+  pass. The installed app re-registers the same server and shows the corrected
+  name after restart; room, history and profile digests are unchanged. Evidence:
+  `docs/VERIFICATION.md` -> macOS computer display name.
+
 - 2026-10-02 server OS labels implemented and deployed: both choosers display
   host-reported macOS, Windows, Linux or other OS; missing metadata is explicit.
   Owner-only projection preserves the prior hostname privacy boundary. Affected

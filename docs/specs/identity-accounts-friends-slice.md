@@ -692,6 +692,15 @@ whole local phase after both supported Google findings were corrected; see the
 [completed review disposition](../VERIFICATION.md#phase-5-whole-phase-review-corrections-2026-09-08).
 # Central server names (2026-10-02)
 
+macOS name-source correction: use the System Configuration computer display name,
+not the network hostname, which can come from a router's reverse DNS response.
+The native host owns this read through `whoami::devicename`; missing/invalid names
+remain errors, without a hostname fallback. Other platforms retain their existing
+source. The registration schema, owner-only projection, durable custom alias and
+identity/room authority do not change. Verify the macOS envelope against `scutil
+--get ComputerName`, then re-register the existing signed app host and restart it;
+the server ID, room/message data and custom-alias precedence must remain intact.
+
 OS display extension: the private host registration envelope reports `host_os`
 (`macos`, `windows`, `linux`, `other`) from the compiled native runtime, never the
 viewer's browser. The directory persists this optional display metadata on the

@@ -12186,6 +12186,37 @@ this run's isolated Application Support/WebKit/cache directories were removed.
 The current signed package/build is retained; existing user data, provider processes
 and the earlier separate web-test server are preserved.
 
+## macOS computer display name (2026-10-02)
+
+The registration owner now reads macOS System Configuration's computer display
+name through `whoami::devicename`. The prior `sysinfo` hostname matched the local
+router's reverse-DNS response instead of `scutil --get ComputerName`. An assertion
+against that independent OS command failed on the old implementation and passes
+with the correction. Missing/invalid names still fail; there is no hostname
+fallback, system-setting mutation, registration-schema change or new polling.
+Other platforms retain their existing source.
+
+Native host identity 4 and registration TCP 2 tests pass, as do server all-target,
+all-feature Clippy, architecture/source-growth, formatting, diff and artifact
+gates (including 19 policy/artifact tests). The 518-line identity module still
+owns one signing/registration contract and its existing tests; the added OS read
+does not introduce a separate state or lifecycle. The library performs an in-process
+OS read at registration, with no new process or network lookup for the name.
+
+The signed macOS package was rebuilt, verified with strict/deep codesign checking
+and installed over the existing app. Opening the existing host retained its room
+and saved human message. After normal quit and restart, the chooser visibly showed
+the System Settings computer name with the same `0e2827be` server ID and macOS
+badge. Before/after row digests for rooms, room events and user profiles are equal;
+SQLite quick_check is OK. Existing central registration updates only the default
+label and preserves the separate custom alias; that unchanged owner path was
+inspected, without changing the user's alias for this check.
+
+The app and owned children exited normally and Computer Use was reset. Current
+user data and the updated installed/build packages are retained. No new external
+review or automated security scan was run; Windows/Linux execution was not part
+of this macOS-only correction.
+
 ## Central server operating systems (2026-10-02)
 
 The private native registration envelope reports the server runtime OS. The
