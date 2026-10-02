@@ -12052,3 +12052,29 @@ and empty, and the exact temporary workspace trust entry is removed while unrela
 settings remain. Only this run's generated host/workspace/probe artifacts are
 removed; the CLI's own conversation history is retained. No code, model defaults,
 global permission rules, personal room or existing waiting host is changed.
+
+The user then authorizes the approval path. A second fresh isolated native host and
+one-use invitation start with no configured MCP. The same Low model and effort read
+the URL, inspect CLI registration help/list, request the HTTP registration command
+and execute it after one-time approval. The real config contains an enabled local
+`agentsassemble` HTTP endpoint. The original conversation reports that newly added
+tools require a new session; it does not join or redeem the invitation. The test
+opens a fresh ordinary CLI conversation with the same invitation and join request.
+It loads the native tool definitions and requests `room_join` approvals.
+
+The first call omits the name (native default `External AI`); the second supplies
+`Antigravity`, which the server rejects as `connector_join_identity_conflict`.
+Without corrective prompting, the AI restores the original effective name and
+retries successfully with its prepared connection. Its own structured results
+confirm `connection_prepared`, `joined` and final `receipt_released`. After joining
+and reading, a follow-up asks for one verification message and normal departure.
+Native storage confirms exactly one `AGY-APPROVED-LINK-OK` message, four total events
+and the agent's `left` state. All tool requests are approved once; no persistent or
+global permission grant is used. This verifies registration after approval and
+participation after reopening, not uninterrupted admission in the original session.
+
+Both CLI conversations and the owned host exit normally. The test MCP registration
+is removed through the official CLI; MCP config and CLI settings are restored
+byte-for-byte, and `agy mcp list` again reports no configured servers. Only this
+run's generated host/workspace/probe artifacts are removed; native CLI conversation
+history remains. No product implementation change is needed for this verification.
