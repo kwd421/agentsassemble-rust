@@ -1,4 +1,4 @@
-import { useCallback, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 
 import {
   getOrCreateBrowserCredential,
@@ -64,6 +64,25 @@ export default function StartupIdentityBoundary({
   });
 
   const finishOwnerEntry = useCallback(() => setReady(true), []);
+
+  // The workspace and its room sessions share the grant's exact lifetime. Drop
+  // the mounted workspace at that boundary instead of presenting an expired
+  // owner as an invitation guest. Server-side checks remain authoritative.
+  useEffect(() => {
+    if (!centralOwnerConnect || !ready) return;
+    const expiresIn = centralOwnerConnect.expiresAt * 1000 - Date.now();
+    const checkExpiry = () => {
+      if (Date.now() >= centralOwnerConnect.expiresAt * 1000) setReady(false);
+    };
+    const timeout = window.setTimeout(checkExpiry, Math.max(0, expiresIn));
+    window.addEventListener("focus", checkExpiry);
+    document.addEventListener("visibilitychange", checkExpiry);
+    return () => {
+      window.clearTimeout(timeout);
+      window.removeEventListener("focus", checkExpiry);
+      document.removeEventListener("visibilitychange", checkExpiry);
+    };
+  }, [centralOwnerConnect, ready]);
 
   if (isCentralWebEntry()) return <StartupIdentityGate deviceToken="" onComplete={finishCentralEntry} />;
 

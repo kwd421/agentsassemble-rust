@@ -41,7 +41,7 @@ it("retries a failed challenge with the in-memory unexpired grant", async () => 
   };
 
   const onComplete = vi.fn();
-  render(<CentralOwnerConnectGate connect={connect} deviceToken="device-1" onComplete={onComplete} />);
+  const view = render(<CentralOwnerConnectGate connect={connect} deviceToken="device-1" onComplete={onComplete} />);
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("네트워크 연결 실패"));
   fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
   await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
@@ -49,4 +49,11 @@ it("retries a failed challenge with the in-memory unexpired grant", async () => 
   expect(mocks.verify).toHaveBeenCalledTimes(2);
   expect(mocks.rooms).toHaveBeenCalledOnce();
   expect(mocks.rooms).toHaveBeenCalledWith(connect, "device-1");
+  view.unmount();
+  render(<CentralOwnerConnectGate connect={{ ...connect, expiresAt: Math.floor(Date.now() / 1000) - 1 }} deviceToken="device-1" onComplete={onComplete} />);
+  expect(screen.getByRole("alert").textContent).toContain("접속이 만료");
+  expect(screen.queryByRole("button", { name: "다시 시도" })).toBeNull();
+  expect(mocks.verify).toHaveBeenCalledTimes(2);
+  expect(mocks.rooms).toHaveBeenCalledOnce();
+  expect(onComplete).toHaveBeenCalledOnce();
 });

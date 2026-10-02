@@ -12373,6 +12373,43 @@ builds finished; the release files and installed app were retained, user data
 untouched, and the final artifact gate passed (27 GiB free disk afterward).
 
 
+## Isolated remote owner workspace (2026-10-03)
+
+Scope: `a1099a6f`, `5455f24a`, `408a20ff` and the subsequent expiry presentation
+correction. This does not establish full app/web parity.
+
+- A separate Developer ID signed package (`app.agentsassemble.workspace20261003`,
+  verification version 0.1.5) uses a fresh schema 73 database. The installed 0.1.4
+  app and its schema 72 database were not replaced or migrated. No release was made.
+- Actual Chrome central-owner entry reaches the shared room shell, Nel Le owner
+  profile, friends entry and room creation control. Creating a second room succeeds;
+  storage has two rooms, one grant custody record and two central-owner sessions.
+  The Mac rail does not update while open, but both rooms appear after native
+  restart. This is an outstanding directory invalidation defect, not data loss.
+- At the unchanged five-minute deadline, the old build falls into an invitation
+  session error. The correction unmounts the owner workspace at that deadline and
+  returns to the existing connection gate with a server-list link. Existing boundary
+  and connection-gate tests cover loss of the mounted workspace and no retry or
+  challenge dispatch for an expired grant. Server validation and expiry are unchanged.
+- Final frontend verification: 164 files / 952 tests pass, frontend build and
+  architecture/source-growth gates pass, and 10 policy unit tests pass. The signed
+  package builds and passes strict/deep codesign verification. Earlier persistence
+  (358), affected HTTP boundaries (5) and workspace Clippy passed for the unchanged
+  Rust implementation. No automated security scan or delegated reviewer was started.
+- Chrome automation repeatedly reports disconnected debugger/deadline failures;
+  native AX control also loses the page subtree after reload. A fresh browser tab
+  does render the central server chooser, but final room switching, message entry,
+  reload, friends mutation and the corrected expiry screen were not established.
+  No test message was sent. These checks remain open, not passed by API evidence.
+- Both temporary public ingress runs were explicitly switched off in the native
+  invite dialog and the exact verification app exited normally. Existing user apps,
+  providers and data remain untouched. The isolated package/data are retained for
+  this active correction; the accidental root Vitest result cache was removed.
+
+Remaining: live directory synchronization, shared remote invitation management,
+empty-workspace friends/profile authority, lifecycle management and the rest of the
+acceptance matrix. Real Windows interaction remains unverified.
+
 ## Shared app/web startup and central owner profiles (2026-10-02)
 
 Scope: shared startup UI, standard web Google code exchange, public owner entry,

@@ -331,6 +331,12 @@ only this bounded grant in tab-scoped storage; reload rechecks host proof and
 central authority. Each room admission has a distinct idempotent session bound
 to its canonical room UID, with no lifetime extension.
 
+Real-flow correction (2026-10-03): when that exact lifetime ends, unmount the
+remote workspace and use the existing connection gate to explain expiry and offer
+the central server list. Do not leave the owner in an invitation-guest composer or
+retry an already expired grant. A single deadline and foreground checks derive
+from the same expiry; they neither refresh authority nor replace server checks.
+
 Connect these owners in buildable slices, then verify the whole flow: native and
 web observe the same stored records; ordinary pairing, wrong device/origin,
 expired/revoked authority and stale room incarnations are rejected without writes.

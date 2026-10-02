@@ -2,6 +2,17 @@
 
 ## Active work
 
+- 2026-10-03 isolated owner-workspace verification: actual Chrome opens the shared
+  room shell and creates a second room; the isolated signed Mac package sees both
+  after restart. Missing live directory invalidation remains open. Expiry left the
+  owner on an invitation-guest error; the existing connection gate now replaces the
+  workspace at the same grant deadline without extending authority. All 952 frontend
+  tests, mandatory architecture/source gates, frontend build and signed packaging
+  pass. Browser control repeatedly disconnected before final switch/reload/expiry
+  verification; those outcomes remain unverified. Both temporary public connections
+  were closed and the isolated app exited. No new scan, subagent or public release.
+  Evidence: `docs/VERIFICATION.md` -> Isolated remote owner workspace.
+
 - 2026-10-02 active correction: restore the same product behavior across app and
   web. Separate startup UI and environment-selected account settings do not satisfy
   the user's web-support request. Audit and correct all affected flows, not only

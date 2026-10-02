@@ -1,4 +1,4 @@
-import { cleanup, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { centralOwnerServerUrl } from "../../lib/centralOwnerConnect";
@@ -28,13 +28,16 @@ vi.mock("./StartupIdentityGate", () => ({
   default: () => <main aria-label="authoritative startup gate" />,
 }));
 vi.mock("./CentralOwnerConnectGate", () => ({
-  default: ({ deviceToken }: { deviceToken: string }) => (
-    <main aria-label="central owner gate" data-device-token={deviceToken} />
+  default: ({ deviceToken, onComplete }: { deviceToken: string; onComplete: () => void }) => (
+    <main aria-label="central owner gate" data-device-token={deviceToken}>
+      <button onClick={onComplete}>complete owner entry</button>
+    </main>
   ),
 }));
 
 afterEach(() => {
   cleanup();
+  vi.useRealTimers();
   vi.unstubAllEnvs();
   deviceMocks.getOrCreateBrowserCredential.mockReset();
   deviceMocks.getOrCreateBrowserCredential.mockReturnValue(
@@ -61,6 +64,7 @@ describe("StartupIdentityBoundary", () => {
     expect(deviceMocks.getOrCreateBrowserCredential).not.toHaveBeenCalled();
   });
   it("treats central-owner navigation inside a desktop webview as remote browser admission", () => {
+    vi.useFakeTimers();
     const payload = {
       grantToken: `aacg1.${"a".repeat(43)}`,
       serverId: "10000000-0000-4000-8000-000000000001",
@@ -86,6 +90,12 @@ describe("StartupIdentityBoundary", () => {
     ).toBe("aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA");
     expect(screen.queryByRole("main", { name: "authoritative startup gate" })).toBeNull();
     expect(window.location.hash).toBe("");
+    fireEvent.click(screen.getByRole("button", { name: "complete owner entry" }));
+    expect(screen.getByRole("main", { name: "product" })).toBeTruthy();
+    act(() => { vi.advanceTimersByTime(300_000); });
+    expect(screen.queryByRole("main", { name: "product" })).toBeNull();
+    expect(screen.getByRole("main", { name: "central owner gate" })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: "authoritative startup gate" })).toBeNull();
   });
 
   it("never lets a browser entrance bypass desktop bootstrap", () => {
