@@ -2,6 +2,18 @@
 
 ## Active work
 
+- 2026-10-03 Discord-style UI correction (user request): the invite dialog is one
+  480px Discord-sized link field with one primary action, collapsed link settings
+  and a one-line hosting status; the sidebar hides the default empty banner and
+  moves invite beside the room name; rail rooms show initials; the room menu
+  anchors below its header; member roles move from per-row selects to the row
+  context menu; user settings use a section sidebar and a save bar shown only
+  with changes. Invite issue/copy/revoke, tunnel rules, role authority and
+  moderation are unchanged. 952 frontend tests, build and architecture gates
+  pass; signed isolated Mac package verified visually. Friends view, room
+  settings copy and Escape dismissal of menus remain open. Evidence:
+  `docs/VERIFICATION.md` -> Discord-style UI correction.
+
 - 2026-10-03 server chooser and friends sizing correction: the native installation
   ID is read without starting/migrating a runtime and matched to the central list.
   The matching row shows "이 기기" and opens locally on explicit selection; the

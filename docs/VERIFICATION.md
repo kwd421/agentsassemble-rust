@@ -12587,3 +12587,34 @@ children exit and no public tunnel remains. Computer Use is reset. The isolated
 parity package/config and one-use signature-verification program are removed;
 production app data, release artifacts and rollback backups are retained. Unrelated
 untracked `.agents/` and `scripts/__pycache__/` remain untouched.
+
+## Discord-style UI correction (2026-10-03)
+
+Scope: user request to align retained room UI with the running Discord client.
+Discord publishes no client UI guide; the reference is the user's Discord app
+(read-only inspection of its invite modal, invite link settings and user settings).
+
+- Before/after screenshots use the same isolated package identity
+  (`app.agentsassemble.workspace20261003`, 0.1.5) and its existing data. The app
+  was normally quit, rebuilt with the Developer ID certificate used before, passed
+  deep strict signature verification and was reopened on this device's server.
+- Invite: people tab shows one link field whose button is `링크 만들기` until a
+  matching invite exists and `복사` after; options open from the settings button;
+  hosting is a bottom status line with the single applicable open/close control.
+  Invite URL text is still not rendered. AI tab without saved AI friends shows only
+  its hint. Device tab unchanged except row button styling.
+- Room shell: default banner hidden, header invite button, `채팅 채널`, rail
+  initials, header menu below the header. Member right-click opens role options
+  with the current role checked; no role was changed during verification.
+- User settings: sidebar navigation and full-height content; typing one handle
+  character shows the save bar; closing without saving leaves the handle unchanged
+  on reopen.
+- 164 files / 952 frontend tests, `tsc`/vite build, `make architecture-check` and
+  `git diff --check` pass. Packaging required
+  `CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_DEBUG=line-tables-only`: the release
+  `sqlx-macros` proc-macro dylib produced by the current linker fails `dlopen`
+  ("mis-aligned LINKEDIT string pool"); host build-override debug info avoids it
+  and does not affect shipped binaries. Root cause in the toolchain is unknown.
+- Escape did not dismiss the room header or member menus during this native run;
+  whether the key reached the webview is unknown. Friends view and room settings
+  copy were not changed. Mobile layout and Windows were not verified.

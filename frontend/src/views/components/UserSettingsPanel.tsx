@@ -1,5 +1,5 @@
 import { useEffect, useRef, type RefObject } from "react";
-import { X, Camera, Headphones, Mic, MicOff, Palette, UserCircle } from "lucide-react";
+import { X, Camera, Headphones, Mic, MicOff } from "lucide-react";
 
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
@@ -60,44 +60,50 @@ export default function UserSettingsPanel({
     draft.avatarImage,
     displayResourceBase
   );
+  const activeSectionLabel =
+    sections.find((section) => section.id === settingsSection)?.label || "사용자 설정";
   return (
-    <dialog ref={dialogRef} className="dc-profile-settings-modal" aria-label="사용자 설정"
-      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(620px, calc(100vw - 32px))", height: "min(720px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)", color: "var(--color-text-primary)" }}
+    <dialog ref={dialogRef} className="dc-profile-settings-modal dc-user-settings-dialog" aria-label="사용자 설정"
+      style={{ position: "fixed", inset: 0, margin: "auto", width: "min(980px, calc(100vw - 32px))", height: "min(760px, calc(100dvh - 32px))", maxHeight: "calc(100dvh - 32px)", padding: 0, color: "var(--color-text-primary)" }}
       onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
       onCancel={(event) => { event.preventDefault(); if (!saving) onClose(); }}
       onClick={(event) => { if (event.target === event.currentTarget && !saving) onClose(); }}>
-      <header className="dc-profile-settings-header" style={{ padding: "16px 24px" }}>
-        <h2>사용자 설정</h2>
-        <button type="button" className="dc-profile-settings-close" style={{ minWidth: 44, minHeight: 44 }} disabled={saving} aria-label="사용자 설정 닫기" onClick={onClose}><X size={18} /></button>
-      </header>
-    <div className="dc-user-settings-panel" aria-label="사용자 설정" style={{ gridTemplateRows: "minmax(0, 1fr) auto auto" }}>
-      <div className="dc-user-settings-shell" style={{ gridTemplateColumns: "minmax(0, 1fr)", gridTemplateRows: "auto minmax(0, 1fr)", gap: 20, padding: "20px 24px 0" }}>
-        <nav className="dc-user-settings-nav" aria-label="사용자 설정 섹션" style={{ display: "flex", flexWrap: "wrap", gap: 8, paddingBottom: 0 }}>
+    <div className="dc-user-settings-layout">
+      <aside className="dc-user-settings-sidebar">
+        <div className="dc-user-settings-me">
+          <span
+            className="dc-user-settings-me-avatar"
+            style={draftAvatarUrl ? { backgroundImage: `url(${draftAvatarUrl})` } : undefined}
+            aria-hidden
+          >
+            {draftAvatarUrl ? null : draft.avatarLabel}
+          </span>
+          <span className="dc-user-settings-me-name preserve-words">{draft.displayName}</span>
+        </div>
+        <nav className="dc-user-settings-nav" aria-label="사용자 설정 섹션">
           {sections.map((section) => (
             <button
               key={section.id}
-              style={{ minWidth: 44, minHeight: 44, padding: "8px 12px" }}
+              style={{ minWidth: 44, minHeight: 44 }}
               disabled={saving}
               type="button"
               aria-current={settingsSection === section.id ? "page" : undefined}
               onClick={() => onSectionChange(section.id)}
             >
               <span>{section.label}</span>
-
             </button>
           ))}
         </nav>
-
-        <section className="dc-user-settings-section" style={{ paddingRight: 4, paddingBottom: 24 }}>
+      </aside>
+      <div className="dc-user-settings-main">
+        <header className="dc-user-settings-main-head">
+          <h2>{activeSectionLabel}</h2>
+          <button type="button" className="dc-profile-settings-close" style={{ minWidth: 44, minHeight: 44 }} disabled={saving} aria-label="사용자 설정 닫기" onClick={onClose}><X size={18} /></button>
+        </header>
+        <section className="dc-user-settings-section">
           {settingsSection === "account" && (
             <>
-              <header>
-                <UserCircle size={18} />
-                <div>
-                  <h3>계정</h3>
-                  <p>이 서버에서 사용할 이름과 표시 상태를 바꿔요.</p>
-                </div>
-              </header>
+              <p className="dc-user-settings-lead">이 서버에서 사용할 이름과 표시 상태를 바꿔요.</p>
               <div className="dc-user-settings-grid">
                 <label>
                   표시 이름
@@ -151,13 +157,7 @@ export default function UserSettingsPanel({
 
           {settingsSection === "profile" && (
             <>
-              <header>
-                <Palette size={18} />
-                <div>
-                  <h3>프로필</h3>
-                  <p>프로필 카드의 배너와 상태 문구를 바꿔요.</p>
-                </div>
-              </header>
+              <p className="dc-user-settings-lead">프로필 카드의 배너와 상태 문구를 바꿔요.</p>
               <div className="dc-user-settings-grid">
                 <button
                   type="button"
@@ -242,13 +242,7 @@ export default function UserSettingsPanel({
 
           {settingsSection === "voice" && (
             <>
-              <header>
-                <Headphones size={18} />
-                <div>
-                  <h3>음성</h3>
-                  <p>실제 음성 연결은 아니고, 방 클라이언트의 표시 상태만 저장합니다.</p>
-                </div>
-              </header>
+              <p className="dc-user-settings-lead">실제 음성 연결은 아니고, 방 클라이언트의 표시 상태만 저장합니다.</p>
               <div className="dc-user-settings-toggles">
                 <button
                   type="button"
@@ -276,18 +270,20 @@ export default function UserSettingsPanel({
             <GuestRecoverySettings identity={profileIdentity} />
           )}
         </section>
+        {profileError && <p className="dc-user-settings-error" role="alert" style={{ position: "relative", inset: "auto", padding: "12px 32px", whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }}>{profileError}</p>}
+        {/* Discord's save bar: it appears only once there is something to save. */}
+        {settingsSection !== "recovery" && (changed || saving) && (
+          <div className="dc-user-settings-savebar" role="region" aria-label="저장하지 않은 변경 사항">
+            <span className="dc-user-settings-savebar-text">저장하지 않은 변경 사항이 있어요.</span>
+            <button type="button" onClick={onReset} style={{ minWidth: 44, minHeight: 44 }} disabled={saving || !changed}>
+              되돌리기
+            </button>
+            <button type="button" onClick={onSave} style={{ minWidth: 44, minHeight: 44 }} disabled={saving || !changed || !draft.displayName.trim()}>
+              {saving ? "저장 중" : "저장"}
+            </button>
+          </div>
+        )}
       </div>
-      <div>{profileError && <p className="dc-user-settings-error" role="alert" style={{ position: "relative", inset: "auto", padding: "12px 24px", whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }}>{profileError}</p>}</div>
-      {settingsSection !== "recovery" && (
-        <div className="dc-user-settings-actions" style={{ padding: "16px 24px", gap: 12 }}>
-          <button type="button" onClick={onReset} style={{ minWidth: 44, minHeight: 44 }} disabled={saving || !changed}>
-            되돌리기
-          </button>
-          <button type="button" onClick={onSave} style={{ minWidth: 44, minHeight: 44 }} disabled={saving || !changed || !draft.displayName.trim()}>
-            {saving ? "저장 중" : "저장"}
-          </button>
-        </div>
-      )}
     </div>
     </dialog>
   );
