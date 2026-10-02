@@ -241,6 +241,37 @@ Verify Worker HTTP/durable-state tests, frontend startup/session/navigation test
 production build and mandatory structure gates, then real Google/private-browser
 entry. Record unavailable host or Google-provider dependencies as unverified.
 
+### App and web behavior correction (2026-10-02)
+
+User requirement: use the existing product in both the app and browser. The browser
+entry implementation above proves only a subset of this requirement. Sharing the
+room view while replacing startup and account management is not full acceptance.
+This correction supersedes any interpretation that permits separate product flows
+merely because the entry point is a browser. Implementation remains pending.
+
+Reuse product UI and state transitions across entry points. Isolate native process,
+credential custody and browser-origin transport at their existing authority owners.
+Never move central credentials to a room host or grant native/operator capabilities
+to a browser to make the UI appear equivalent. Existing invitation and server-local
+account contracts remain reachable where applicable; a central-account user must
+not silently receive a different account-management flow based on environment.
+
+| Required flow | Current evidence / correction status | Acceptance evidence required |
+| --- | --- | --- |
+| Startup, Google login, cancel and retry | Separate startup components confirmed; Google button rendering defect reported | Shared product presentation and outcomes in packaged app and browser; actual Google return, cancellation and retry |
+| Guest start and recovery | Absent from central web entry; desktop entry exposes both | Preserve applicable guest/recovery paths and authority; verify successful, rejected and interrupted recovery in both entries |
+| Account settings and logout | Desktop central settings vs browser server-local Google binding confirmed | Correct account identity and management in both; logout/reload, revocation failure and retry preserve rooms/profile and other devices |
+| Profile name/photo and edits | Cross-entry behavior not yet verified | Same authorized profile on the same server, persisted edits after reload/re-entry, explicit account vs server-profile distinction |
+| Server listing, naming, selection and room history | Shared server-list component; full flow unverified | Same owned servers and stored history; online/offline, rename, expired grant and retry behavior |
+| Room permissions and local-device actions | Environment branches require audit | Same room role yields same authorized room operations; local host/provider operations retain their actual device owner |
+
+Use affected existing frontend/API tests for regression coverage and exercise the
+same scenarios through packaged and browser entry. Record each result and platform
+in `docs/VERIFICATION.md`; unavailable authentication/device dependencies stay
+unverified. No full-completion claim while required rows lack evidence or contain
+unapproved differences. A discovered shared cause expands this audit to its other
+affected flows; these rows are a minimum, not a ceiling on investigation.
+
 ### Local Google account binding and guest retirement
 
 On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,

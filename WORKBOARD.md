@@ -2,6 +2,13 @@
 
 ## Active work
 
+- 2026-10-02 active correction: restore the same product behavior across app and
+  web. Separate startup UI and environment-selected account settings do not satisfy
+  the user's web-support request. Audit and correct all affected flows, not only
+  the oversized Google button. Implementation and behavioral verification remain
+  open; prior browser login success does not establish product parity. Acceptance:
+  `docs/specs/identity-accounts-friends-slice.md` -> App and web behavior correction.
+
 - 2026-10-02 active: implement the user-approved official Tauri updater for macOS
   and Windows, including signed release delivery and owned-runtime shutdown before
   installation. Contract: `docs/specs/desktop-updates.md`.

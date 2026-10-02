@@ -53,6 +53,13 @@ bypasses, and client orchestration cannot replace a server-owned contract.
 Continue through implementation, affected verification, and correction until the
 active acceptance criteria are met or an actual authorization/dependency blocks work.
 
+Before implementation, record the user's required behavior and affected entry points
+in the existing contract; do not narrow them to what the chosen implementation supports.
+When one defect exposes a shared cause, inspect and correct its affected flows within
+the authorized scope without waiting for the user to enumerate them. App and web share
+product UI and semantics; isolate platform transport/capabilities instead of creating
+separate product flows. Unapproved behavior differences remain defects, not acceptance.
+
 ## Permissions and gates
 
 - Security takes priority. New fallbacks and compatibility shims require explicit
