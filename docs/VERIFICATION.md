@@ -12185,3 +12185,31 @@ verification app and its owned children exited, Computer Use was reset, and only
 this run's isolated Application Support/WebKit/cache directories were removed.
 The current signed package/build is retained; existing user data, provider processes
 and the earlier separate web-test server are preserved.
+
+## Central server names (2026-10-02)
+
+The default name now comes from the host OS through the private one-use
+registration envelope. The central owner alias remains a separate durable override.
+POST `/v1/servers/:id/name` checks ownership, active registration and the observed
+name in one SQL write; signed-device authentication/replay checks remain upstream.
+Migration 0006 clears only the historical automatically copied owner label.
+
+Worker 31 tests and syntax checks pass. The naming regression first failed on the
+old copied alias (`Mac Studio` instead of updated `Office Mac`), then passed with
+foreign-owner/bookmark, replay, stale edit, malformed name, revoked registration
+and logged-out-session rejection. Migration fixtures preserve custom/bookmark
+names. Both chooser UIs share the editor. Frontend 951 tests, production build,
+host identity 4 tests, registration TCP 2 tests, server all-target/all-feature
+Clippy, Rust format, architecture/source growth, policy/artifact 19 tests and
+artifact checks pass. Central-owner structure, growth and regenerated maps pass.
+
+The shared web bundle and Worker were deployed as
+`ce2cdd9f-fcd1-4154-964e-e5abf385fe3c`, with migration 0006 applied.
+A separately signed macOS package (`app.agentsassemble.servernames20261002`)
+registered a disposable guest host with its actual OS name. After normal quit,
+the chooser displayed that name while its host was offline. English and Korean
+renames saved successfully; restart retained the Korean name. No local host ran
+during rename and the local SQLite SHA-256 stayed unchanged. Existing user
+accounts, rooms, provider settings and the installed app were not changed.
+Windows, cross-device live room access and browser interactive rename are not
+established by these checks. Requested independent Daybreak review is pending.

@@ -8,7 +8,7 @@ import {
 } from "./desktopBridge";
 import { encodeBase64Url } from "./base64Url";
 import { centralOwnerServerUrl } from "./centralOwnerConnect";
-import { verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
+import { validateHostName, verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
 const SERVERS_KEY = "agentsassemble.centralServers.v1";
@@ -689,6 +689,7 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
         session.pending_account_switch === true
       )
     : (payload as LocalServerInfo & {
+        host_name: string;
         host_registration_proof: {
           owner_person_id: string;
           issued_at: number;
@@ -696,9 +697,10 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
           signature: string;
         };
       });
+  validateHostName(local.host_name);
   await signedRequest(session, "/v1/servers", "POST", {
     server_id: local.server_id,
-    label: "이 기기",
+    label: local.host_name,
     host_public_key_jwk: local.host_public_key_jwk,
     host_registration_proof: local.host_registration_proof,
     ...(session.pending_account_switch ? { claim_ownership: true } : {}),
@@ -726,4 +728,14 @@ export async function waitForLocalDirectory(): Promise<void> {
 
 export function isCentralAuthenticationError(error: unknown): boolean {
   return error instanceof CentralAuthError;
+}
+
+export async function renameCentralServer(server: CentralServer, name: string): Promise<void> {
+  const session = loadCentralSession();
+  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (server.relation !== "owner") throw new Error("서버 소유자만 이름을 바꿀 수 있습니다.");
+  await signedRequest(session, `/v1/servers/${encodeURIComponent(server.server_id)}/name`, "POST", {
+    name, expected_name: server.alias || server.server_id,
+  });
+  if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었습니다. 다시 확인해 주세요.");
 }

@@ -2,6 +2,11 @@
 
 ## Active work
 
+- 2026-10-02 server naming in progress: host computer default, durable owner rename
+  in both choosers, and legacy automatic-alias correction. Security boundaries,
+  local and packaged verification, then requested Daybreak review remain pending.
+  Contract: `docs/specs/identity-accounts-friends-slice.md` -> Central server names.
+
 - 2026-10-02 desktop client-first entry implemented: existing account servers appear
   before any local room runtime; hosting requires an explicit choice. Google return
   uses a separate bounded authentication process. Signed macOS Google login, restored

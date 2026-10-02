@@ -16,6 +16,7 @@ type HostPublicJwk = {
 };
 
 export type HostRegistrationEnvelope = {
+  host_name: string;
   server_id: string;
   host_public_key_jwk: HostPublicJwk;
   host_key_fingerprint: string;
@@ -90,6 +91,7 @@ export async function verifyCentralRegistrationEnvelope(
     value,
     [
       "server_id",
+      "host_name",
       "host_public_key_jwk",
       "host_key_fingerprint",
       "host_registration_proof",
@@ -102,6 +104,7 @@ export async function verifyCentralRegistrationEnvelope(
   ) {
     throw new Error("호스트 등록 증명이 native 권위와 일치하지 않습니다.");
   }
+  validateHostName(envelope.host_name);
   const jwk = exactPublicJwk(envelope.host_public_key_jwk, binding.host_public_key_x);
   const canonicalJwk = JSON.stringify({
     crv: jwk.crv,
@@ -152,4 +155,10 @@ export async function verifyCentralRegistrationEnvelope(
     throw new Error("호스트 등록 서명이 native 권위로 검증되지 않았습니다.");
   }
   return envelope as unknown as HostRegistrationEnvelope;
+}
+
+export function validateHostName(value: unknown): asserts value is string {
+  if (typeof value !== "string" || !value.trim() || value.length > 80 || /[\u0000-\u001f\u007f]/u.test(value)) {
+    throw new Error("컴퓨터 이름을 확인하지 못했습니다.");
+  }
 }

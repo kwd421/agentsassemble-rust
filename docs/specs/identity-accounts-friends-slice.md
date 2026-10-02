@@ -690,3 +690,25 @@ evidence and explicit unconfigured-Google/final-provider limits are recorded in
 No genuine Google authentication was simulated or claimed. Daybreak approved the
 whole local phase after both supported Google findings were corrected; see the
 [completed review disposition](../VERIFICATION.md#phase-5-whole-phase-review-corrections-2026-09-08).
+# Central server names (2026-10-02)
+
+The private registration envelope supplies the host OS name as display metadata;
+public server-info and identity signatures remain unchanged. Missing/invalid host
+names fail registration visibly. `servers.label` is the host default and
+`person_servers.alias` is the account-owned override. A one-time migration clears
+only the historical automatic owner alias `이 기기` when its host label also matches.
+Offline historical hosts cannot reveal their computer name until re-registration;
+the chooser retains their short server ID and allows the owner to name them now.
+
+Authenticated POST `/v1/servers/:id/name` stores a trimmed 1–80 UTF-16-unit name,
+rejecting controls and invalid types. A single SQL update checks current ownership,
+active registration and the displayed name observed by the editor; stale edits or
+unavailable/non-owned registrations fail without mutation. Registration and same-
+owner claims preserve explicit aliases. Names do not affect host keys, admission,
+endpoints, room authority or profile synchronization. Both desktop and web share
+the editor; failed saves retain input. No runtime starts to rename an offline host.
+
+Acceptance: default hostname, durable rename across registration/account reload,
+non-owner/revoked/replay/stale edit rejection, legacy-only migration, shared UI
+save/failure behavior, packaged user flow, mandatory gates and requested Daybreak
+review. This does not claim Windows or live remote-room verification.

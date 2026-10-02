@@ -26,9 +26,9 @@ it("requires live validation and exposes an owner grant failure without entering
   expect(await screen.findByRole("alert")).toHaveProperty("textContent", "session revoked");
   expect(screen.queryByText("My Mac")).toBeNull();
   fireEvent.click(screen.getByRole("button", { name: "다시 확인" }));
-  const open = await screen.findByRole("button", { name: /My Mac/ });
-  expect(screen.getByRole("button", { name: /My Windows/ })).toHaveProperty("disabled", true);
-  expect(screen.getByRole("button", { name: /Invited server/ })).toHaveProperty("disabled", true);
+  const open = await screen.findByRole("button", { name: "My Mac 서버 열기" });
+  expect(screen.getByRole("button", { name: "My Windows 서버 열기" })).toHaveProperty("disabled", true);
+  expect(screen.getByRole("button", { name: "Invited server 서버 열기" })).toHaveProperty("disabled", true);
   fireEvent.click(open);
   expect(await screen.findByRole("alert")).toHaveProperty("textContent", "host went offline");
   mocks.logout.mockResolvedValue(undefined);

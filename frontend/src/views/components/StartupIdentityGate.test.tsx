@@ -185,7 +185,7 @@ describe("StartupIdentityGate", () => {
 
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
 
-    const remoteButton = await screen.findByRole("button", { name: /Mac의 방/ });
+    const remoteButton = await screen.findByRole("button", { name: "Mac의 방 서버 열기" });
     expect(screen.getByRole("button", { name: /이 기기/ })).toBeTruthy();
     expect(onComplete).not.toHaveBeenCalled();
     expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
@@ -238,13 +238,13 @@ describe("StartupIdentityGate", () => {
     const account = { person: centralMocks.session.person, servers: [remote], server_time: 1 };
     centralMocks.bootstrap.mockResolvedValue(account);
     render(<StartupIdentityGate deviceToken="device-1" onComplete={vi.fn()} />);
-    const offline = await screen.findByRole("button", { name: /Main/ });
+    const offline = await screen.findByRole("button", { name: "Main 서버 열기" });
     expect((offline as HTMLButtonElement).disabled).toBe(true);
     const online = { ...remote, endpoint: { status: "likely_online", lease_expires_at: Date.now() / 1000 + 600 } };
     centralMocks.bootstrap.mockResolvedValue({ ...account, servers: [online] });
     await userEvent.click(screen.getByRole("button", { name: "서버 목록 새로고침" }));
     centralMocks.openServer.mockRejectedValueOnce(new Error("host unavailable"));
-    await userEvent.click(await screen.findByRole("button", { name: /Main/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "Main 서버 열기" }));
     expect((await screen.findByRole("alert")).textContent).toContain("host unavailable");
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
     expect(centralMocks.register).not.toHaveBeenCalled();

@@ -28,6 +28,8 @@ pub enum HostIdentityError {
     Json(#[source] serde_json::Error),
     #[error("host registration entropy source failed")]
     Entropy,
+    #[error("host computer name is unavailable or invalid")]
+    HostNameUnavailable,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -59,6 +61,7 @@ pub struct HostRegistrationProof {
 
 #[derive(Serialize)]
 pub struct HostRegistrationEnvelope {
+    host_name: String,
     server_id: String,
     host_public_key_jwk: HostPublicJwk,
     host_key_fingerprint: String,
@@ -233,7 +236,16 @@ impl CentralHostIdentity {
             self.server_id
         );
         let signature = URL_SAFE_NO_PAD.encode(self.key_pair.sign(transcript.as_bytes()).as_ref());
+        let host_name = sysinfo::System::host_name()
+            .map(|name| name.trim().to_owned())
+            .filter(|name| {
+                !name.is_empty()
+                    && name.encode_utf16().count() <= 80
+                    && !name.chars().any(char::is_control)
+            })
+            .ok_or(HostIdentityError::HostNameUnavailable)?;
         Ok(HostRegistrationEnvelope {
+            host_name,
             server_id: self.server_id.to_string(),
             host_public_key_jwk: self.public_jwk.clone(),
             host_key_fingerprint: self.fingerprint.to_string(),
@@ -382,6 +394,7 @@ mod tests {
             keys,
             [
                 "host_key_fingerprint",
+                "host_name",
                 "host_public_key_jwk",
                 "host_registration_proof",
                 "server_id",

@@ -1,3 +1,4 @@
+import CentralServerList from "./CentralServerList";
 import { useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -548,19 +549,7 @@ export default function StartupIdentityGate({
           <section className="grid gap-3 rounded-lg bg-[#1b1c20] p-4">
             <p className="text-[13px] text-text-secondary">{centralPerson?.display_name}님의 서버</p>
             {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. 이 기기에서 서버를 열어 시작할 수 있어요.</p>}
-            {centralServers.map((server) => {
-              const online = server.endpoint?.status === "likely_online" && server.endpoint.lease_expires_at > Date.now() / 1000;
-              return <button
-                key={server.server_id}
-                type="button"
-                disabled={busy || !online}
-                className="grid min-h-14 gap-1 rounded-md bg-[#2b2d31] px-4 py-3 text-left disabled:opacity-50"
-                onClick={() => void selectCentralServer(server)}
-              >
-                <span className="text-[13px] font-black text-text-primary">{server.alias || "내 서버"} · {server.server_id.slice(0, 8)}</span>
-                <span className="text-[11px] font-semibold text-[#8d96ff]">{online ? "서버 열기" : "오프라인 · 호스트에서 서버를 열어 주세요"}</span>
-              </button>;
-            })}
+            <CentralServerList key={centralPerson?.person_id} servers={centralServers} busy={busy} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void refreshServers()}>서버 목록 새로고침</button>
             <button type="button" className="grid min-h-14 gap-1 rounded-md bg-[#5865f2] px-4 py-3 text-left text-[13px] text-white disabled:opacity-50" disabled={busy} onClick={() => void selectCentralServer()}>
               <strong>이 기기에서 서버 열기</strong>

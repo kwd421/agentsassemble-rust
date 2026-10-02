@@ -1,3 +1,4 @@
+import CentralServerList from "./CentralServerList";
 import { useEffect, useRef, useState } from "react";
 import { bootstrapCentral, loadCentralSession, logoutCentral, openCentralOwnedServer, type CentralBootstrap, type CentralServer } from "../../lib/centralIdentity";
 import { prepareCentralWebGoogle } from "../../lib/centralWebGoogle";
@@ -101,13 +102,7 @@ export default function CentralWebIdentityGate() {
       </>}
       {account && <>
         {account.servers.length === 0 && <p>등록된 서버가 없습니다. 호스트 앱에서 같은 Google 계정으로 로그인하고 외부 접속을 열어 주세요.</p>}
-        {account.servers.map((server) => {
-          const online = server.relation === "owner" && server.endpoint?.status === "likely_online" && server.endpoint.lease_expires_at > Date.now() / 1000;
-          return <button type="button" key={server.server_id} className="ops-button grid gap-1 text-left" disabled={busy || !online} onClick={() => void open(server)}>
-            <strong>{server.alias || server.server_id}</strong>
-            <span>{server.relation !== "owner" ? "초대 링크로 접속해 주세요" : online ? "서버 열기" : "오프라인 · 호스트에서 외부 접속을 열어 주세요"}</span>
-          </button>;
-        })}
+        <CentralServerList key={account.person.person_id} servers={account.servers} busy={busy} onOpen={open} onRefresh={refresh} />
         <button type="button" className="ops-button" disabled={busy} onClick={() => void refresh()}>서버 목록 새로고침</button>
       </>}
       {loadCentralSession() && <button type="button" className="ops-button" disabled={busy} onClick={() => void logout()}>로그아웃</button>}
