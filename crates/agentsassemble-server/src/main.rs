@@ -25,6 +25,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 mod agent_avatar_control;
 mod appearance_control;
+mod central_login_only;
 mod chat_read_control;
 #[cfg(unix)]
 mod control_input;
@@ -50,6 +51,8 @@ struct Args {
     bind: SocketAddr,
     #[arg(long = agentsassemble_server::runtime_image::PREFLIGHT_ARGUMENT, hide = true)]
     runtime_preflight: bool,
+    #[arg(long, hide = true)]
+    central_login_only: bool,
     #[arg(long, default_value = ".agentsassemble-rust/runtime.sqlite3")]
     database: PathBuf,
     #[arg(long)]
@@ -101,6 +104,11 @@ fn main() -> anyhow::Result<()> {
             )?
         );
         return Ok(());
+    }
+    if args.central_login_only {
+        let result = runtime.block_on(central_login_only::run());
+        runtime.shutdown_timeout(Duration::from_secs(1));
+        return result;
     }
     let exit = runtime.block_on(runtime_startup::run(
         args,

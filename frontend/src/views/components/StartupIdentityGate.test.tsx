@@ -13,6 +13,10 @@ const centralMocks = vi.hoisted(() => ({
   openServer: vi.fn(),
   session: null as null | { person: { display_name: string } },
   bootstrap: vi.fn(),
+  register: vi.fn(),
+  create: vi.fn(),
+  recover: vi.fn(),
+  pending: "",
 }));
 const desktopMocks = vi.hoisted(() => ({
   fetchOperatorRuntime: vi.fn(),
@@ -68,14 +72,15 @@ vi.mock("../../lib/centralIdentity", () => ({
   centralSessionLoggedOut: () => centralMocks.loggedOut,
   bootstrapCentral: centralMocks.bootstrap,
   clearPendingCentralRecoveryCode: vi.fn(),
-  createCentralGuest: vi.fn(),
+  createCentralGuest: centralMocks.create,
   isCentralAuthenticationError: () => false,
   loadCentralSession: () => centralMocks.session,
-  loadPendingCentralRecoveryCode: () => "",
+  loadPendingCentralRecoveryCode: () => centralMocks.pending,
+  logoutCentral: vi.fn(),
   loginCentralGoogle: centralMocks.login,
   openCentralOwnedServer: centralMocks.openServer,
-  recoverCentralGuest: vi.fn(),
-  registerLocalServer: vi.fn(),
+  recoverCentralGuest: centralMocks.recover,
+  registerLocalServer: centralMocks.register,
 }));
 afterEach(() => {
   cleanup();
@@ -83,6 +88,7 @@ afterEach(() => {
   centralMocks.configured = false;
   centralMocks.loggedOut = false;
   centralMocks.session = null;
+  centralMocks.pending = "";
   vi.clearAllMocks();
   desktopMocks.requestHostProductSurface.mockResolvedValue({
     revision: PRODUCT_SURFACE_REVISION,
@@ -126,7 +132,7 @@ describe("StartupIdentityGate", () => {
     expect(onComplete).not.toHaveBeenCalled();
   });
 
-  it("opens the saved room directory after central validation succeeds with an edited local profile", async () => {
+  it("opens the saved local rooms only after explicit hosting with an edited profile", async () => {
     centralMocks.configured = true;
     centralMocks.session = { person: { display_name: "Google account name" } };
     centralMocks.bootstrap.mockResolvedValue({ person: { person_id: "per_fixture", identity_kind: "google", display_name: "Google account name", avatar_url: null }, servers: [], server_time: 1 });
@@ -134,7 +140,13 @@ describe("StartupIdentityGate", () => {
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
     const onComplete = vi.fn();
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    const host = await screen.findByRole("button", { name: /이 기기에서 서버 열기/ });
+    expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
+    expect(centralMocks.register).not.toHaveBeenCalled();
+    await userEvent.click(host);
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    expect(centralMocks.register).toHaveBeenCalledWith("device-1");
+    expect(desktopMocks.initializeBootstrap).not.toHaveBeenCalled();
   });
 
   it("offers another online owned server and opens only the selected server", async () => {
@@ -177,12 +189,65 @@ describe("StartupIdentityGate", () => {
     expect(screen.getByRole("button", { name: /이 기기/ })).toBeTruthy();
     expect(onComplete).not.toHaveBeenCalled();
     expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
+    expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
+    expect(centralMocks.register).not.toHaveBeenCalled();
 
     await userEvent.click(remoteButton);
 
     await vi.waitFor(() => expect(centralMocks.openServer).toHaveBeenCalledWith(remoteServer));
     expect(onComplete).not.toHaveBeenCalled();
     expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
+    expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
+    expect(centralMocks.register).not.toHaveBeenCalled();
+  });
+
+  it.each(["google", "guest", "recover", "pending"])("%s entry reaches the chooser without a room runtime", async (entry) => {
+    centralMocks.configured = true;
+    const person = { display_name: "Account" };
+    centralMocks.bootstrap.mockResolvedValue({ person, servers: [], server_time: 1 });
+    centralMocks.login.mockResolvedValue({ person });
+    centralMocks.create.mockResolvedValue({ person, recovery_code: "NEW-CODE" });
+    centralMocks.recover.mockResolvedValue({ person, recovery_code: "NEW-CODE" });
+    if (entry === "pending") centralMocks.pending = "NEW-CODE";
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={vi.fn()} />);
+    if (entry === "google") {
+      await userEvent.click(await screen.findByRole("button", { name: "Google로 계속" }));
+    } else {
+      if (entry === "guest") {
+        await userEvent.click(await screen.findByRole("button", { name: "새 게스트로 계속" }));
+        await userEvent.type(screen.getByRole("textbox", { name: "표시 이름" }), "Guest");
+        await userEvent.click(screen.getByRole("button", { name: "게스트 만들기" }));
+      } else if (entry === "recover") {
+        await userEvent.click(await screen.findByRole("button", { name: "이미 복구 코드가 있습니다" }));
+        await userEvent.type(screen.getByRole("textbox", { name: "게스트 복구 코드" }), "OLD-CODE");
+        await userEvent.click(screen.getByRole("button", { name: "같은 게스트로 로그인" }));
+      }
+      await userEvent.click(await screen.findByRole("checkbox"));
+      await userEvent.click(screen.getByRole("button", { name: "계속" }));
+    }
+    await screen.findByText(/등록된 서버가 없습니다/);
+    expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
+    expect(desktopMocks.initializeBootstrap).not.toHaveBeenCalled();
+    expect(centralMocks.register).not.toHaveBeenCalled();
+  });
+
+  it("retains offline hosts and remote errors without local fallback, and allows refresh", async () => {
+    centralMocks.configured = true;
+    centralMocks.session = { person: { display_name: "Account" } };
+    const remote = { server_id: "remote", relation: "owner", alias: "Main", endpoint: null };
+    const account = { person: centralMocks.session.person, servers: [remote], server_time: 1 };
+    centralMocks.bootstrap.mockResolvedValue(account);
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={vi.fn()} />);
+    const offline = await screen.findByRole("button", { name: /Main/ });
+    expect((offline as HTMLButtonElement).disabled).toBe(true);
+    const online = { ...remote, endpoint: { status: "likely_online", lease_expires_at: Date.now() / 1000 + 600 } };
+    centralMocks.bootstrap.mockResolvedValue({ ...account, servers: [online] });
+    await userEvent.click(screen.getByRole("button", { name: "서버 목록 새로고침" }));
+    centralMocks.openServer.mockRejectedValueOnce(new Error("host unavailable"));
+    await userEvent.click(await screen.findByRole("button", { name: /Main/ }));
+    expect((await screen.findByRole("alert")).textContent).toContain("host unavailable");
+    expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
+    expect(centralMocks.register).not.toHaveBeenCalled();
   });
 
   it("does not reopen completed local authority after explicit central logout", async () => {
@@ -194,6 +259,8 @@ describe("StartupIdentityGate", () => {
     await screen.findByRole("button", { name: "Google로 계속" });
     expect(onComplete).not.toHaveBeenCalled();
     expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
+    expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
+    expect(centralMocks.register).not.toHaveBeenCalled();
   });
 
   it("initializes desktop authority before fetching the real empty room directory", async () => {

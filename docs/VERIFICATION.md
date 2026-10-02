@@ -12122,3 +12122,66 @@ server is still open at http://127.0.0.1:63239 using only this task's data at
 `/tmp/aa-private-google-20261002-IGqdGH`; it now serves the updated frontend. It is
 not a substitute for an online Google-owned host. Completion still needs private
 Google authentication and an online owned host with external access enabled.
+
+
+## Desktop client-first entry (2026-10-02)
+
+Implemented account startup without eager room bootstrap or host registration.
+Desktop native Google OAuth now runs the existing callback broker in a separate,
+owned authentication-only sidecar. Its private control pipe rejects room/bootstrap/
+host-registration commands, and its exact-loopback HTTP surface contains only the
+callback and completion resources. Current central owner grants and the room runtime's
+callback contract remain unchanged. Offline or failed remote choices never start a
+local host; the explicit local-host button owns initialization/registration.
+
+Validation:
+- Frontend 163 files / 949 tests pass; the final chooser label/style correction also
+  passes all 16 startup tests and a production frontend build.
+- Desktop 36 tests and all-target/all-feature Clippy pass. Server all-target/all-feature
+  Clippy passes. Actual callback-only TCP/process tests (2), existing callback ingress
+  boundary (1), and purpose-bound central registration control test (1) pass.
+- The callback-only process rejects substituted Host/Origin/forwarded headers and
+  room/control surfaces, never creates storage, retires state before its completion
+  page drain, and exits on cancellation or parent loss. No payload diagnostic output.
+- Architecture, source growth, 19 policy/artifact tests, both Rust format checks,
+  diff check and artifact inventory pass. No blocking gate was changed. Startup UI
+  remains the existing cohesive account/selection state owner; no parallel authority
+  or new fallback was introduced.
+
+An isolated Developer ID signed debug package uses identifier
+`app.agentsassemble.clientfirst20261002`; strict deep signature verification passes.
+The first signing attempt encountered duplicate certificate names; selecting the
+exact existing certificate resolves signing without changing trust settings.
+The installed `/Applications/AgentsAssemble.app` and its user data are untouched.
+
+Actual packaged flow:
+1. Cold launch presents login with no runtime database/data directory and no owned
+   room process. Google login via the default Safari browser resolves the existing
+   Nel Le account and displays its four existing owned servers. The transient callback
+   process exits after completion; no room database or new host is created.
+2. Quit/restart restores that account's chooser without any room process or database.
+   Refresh and central logout succeed. All four original servers are offline, so
+   actual existing remote-room reopening remains unverified.
+3. A separate disposable guest account reaches recovery acknowledgement and an empty
+   server chooser, still without a room database. Only clicking the explicit local
+   host button creates the runtime database, registers this test host, imports the
+   test profile, and enters the real zero-room app view.
+4. After normal host shutdown, restarting returns to the chooser and leaves the
+   stopped SQLite files byte-identical. No room process starts. This test session
+   is logged out before cleanup. No real model provider or public ingress was started.
+
+Resource observation: before explicit hosting, the only owned persistent process is
+one desktop app (sample RSS 116720 KiB, CPU 0.0%; excludes WebKit helpers). The callback
+child exists only during Google authentication. Full-host database/provider runtime
+construction and host registration are absent on the client path. This is lifecycle
+proof, not a concurrent-user capacity benchmark.
+
+Limits: Windows packaged execution, an online existing remote host, and central
+profile synchronization across independent hosts remain unverified/not implemented
+by this slice. No new security scan, external reviewer or subagent was used.
+
+Cleanup: both test central sessions were revoked through normal logout. The exact
+verification app and its owned children exited, Computer Use was reset, and only
+this run's isolated Application Support/WebKit/cache directories were removed.
+The current signed package/build is retained; existing user data, provider processes
+and the earlier separate web-test server are preserved.

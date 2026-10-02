@@ -67,7 +67,7 @@ impl Fixture {
         }
         let output = capture_runtime_output(
             stdout.into_inner(),
-            tempfile::tempfile().unwrap_or_else(|e| panic!("log: {e}")),
+            Some(tempfile::tempfile().unwrap_or_else(|e| panic!("log: {e}"))),
         );
         let (stream, _) = listener.accept().unwrap_or_else(|e| panic!("accept: {e}"));
         let (actions, action_rx) = mpsc::channel();

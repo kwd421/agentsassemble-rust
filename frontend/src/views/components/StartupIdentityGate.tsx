@@ -22,6 +22,8 @@ import {
   loadCentralSession,
   loadPendingCentralRecoveryCode,
   loginCentralGoogle,
+  logoutCentral,
+  type CentralBootstrap,
   openCentralOwnedServer,
   recoverCentralGuest,
   registerLocalServer,
@@ -111,7 +113,7 @@ export default function StartupIdentityGate({
   const [recoveryInput, setRecoveryInput] = useState("");
   const [issuedRecoveryCode, setIssuedRecoveryCode] = useState("");
   const [centralServers, setCentralServers] = useState<CentralServer[]>([]);
-  const [localAuthority, setLocalAuthority] = useState<DesktopBootstrapGrant | null>(null);
+  const [centralPerson, setCentralPerson] = useState<CentralPerson | null>(null);
   const [savedRecoveryCode, setSavedRecoveryCode] = useState(false);
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -165,46 +167,67 @@ export default function StartupIdentityGate({
     onComplete();
   }
 
-  async function finishCentralStartup(authority: DesktopBootstrapGrant) {
-    const refreshed = await bootstrapCentral();
-    if (!refreshed) throw new Error("중앙 로그인 상태가 사라졌습니다. 다시 로그인해 주세요.");
-    const remoteOwners = refreshed.servers.filter(
-      (server) =>
-        server.relation === "owner" &&
-        server.server_id !== authority.server_id &&
-        server.endpoint?.status === "likely_online" &&
-        server.endpoint.lease_expires_at > Math.floor(Date.now() / 1000)
-    );
-    if (remoteOwners.length === 0) {
-      await enterApplication(authority);
-      return;
-    }
-    setLocalAuthority(authority);
-    setCentralServers(remoteOwners);
+  function showCentralServers(refreshed: CentralBootstrap) {
+    setCentralPerson(refreshed.person);
+    setCentralServers(refreshed.servers.filter((server) => server.relation === "owner"));
     setScreen("servers");
     setChecking(false);
   }
 
+  async function finishCentralStartup() {
+    const refreshed = await bootstrapCentral();
+    if (!refreshed) throw new Error("중앙 로그인 상태가 사라졌습니다. 다시 로그인해 주세요.");
+    showCentralServers(refreshed);
+  }
+
   async function selectCentralServer(server?: CentralServer) {
-    if (busy || !localAuthority) return;
+    if (busy || !centralPerson) return;
     setBusy(true);
     setError("");
     try {
       if (server) await openCentralOwnedServer(server);
-      else await enterApplication(localAuthority);
+      else {
+        // Local authority is touched only after the explicit hosting choice.
+        const current = await bootstrapCentral();
+        if (!current) throw new Error("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+        const authority = await saveLocalProfile(current.person.display_name, bootstrapRequestId.current, current.person);
+        await registerLocalServer(deviceToken);
+        await enterApplication(authority);
+      }
     } catch (reason) {
+      setChecking(false);
       setError(failureMessage(reason, "서버를 열지 못했습니다."));
+    } finally {
       setBusy(false);
     }
   }
 
+  async function refreshServers() {
+    if (busy) return;
+    setBusy(true); setError("");
+    try { await finishCentralStartup(); }
+    catch (reason) { setError(failureMessage(reason, "서버 목록을 불러오지 못했습니다.")); }
+    finally { setBusy(false); }
+  }
+
+  async function logout() {
+    if (busy) return;
+    setBusy(true); setError("");
+    try {
+      await logoutCentral();
+      setCentralPerson(null); setCentralServers([]); setScreen("choice");
+    } catch (reason) { setError(failureMessage(reason, "로그아웃하지 못했습니다.")); }
+    finally { setBusy(false); }
+  }
+
   async function continueAfterRecoveryCode() {
     if (!savedRecoveryCode || busy) return;
-    setBusy(true);
-    clearPendingCentralRecoveryCode();
-    await registerLocalServer(deviceToken);
-    const authority = await requestDesktopBootstrapStatus();
-    await finishCentralStartup(authority);
+    setBusy(true); setError("");
+    try {
+      await finishCentralStartup();
+      clearPendingCentralRecoveryCode();
+    } catch (reason) { setError(failureMessage(reason, "서버 목록을 불러오지 못했습니다.")); }
+    finally { setBusy(false); }
   }
 
   useEffect(() => {
@@ -212,17 +235,19 @@ export default function StartupIdentityGate({
     async function initialize() {
       try {
         await requestDesktopHostProductSurface();
-        const bootstrap = await requestDesktopBootstrapStatus();
         if (centralEnabled && centralSessionLoggedOut()) {
           if (active) setChecking(false);
           return;
         }
-        if (bootstrap.phase === "complete" && !centralEnabled) {
-          if (active) await enterApplication(bootstrap);
-          return;
-        }
-        if (bootstrap.phase !== "empty" && bootstrap.phase !== "complete") {
-          throw new Error("로컬 신원 권위에 명시적 복구가 필요합니다.");
+        if (!centralEnabled) {
+          const bootstrap = await requestDesktopBootstrapStatus();
+          if (bootstrap.phase === "complete") {
+            if (active) await enterApplication(bootstrap);
+            return;
+          }
+          if (bootstrap.phase !== "empty") {
+            throw new Error("로컬 신원 권위에 명시적 복구가 필요합니다.");
+          }
         }
       } catch (reason) {
         if (active) {
@@ -259,13 +284,7 @@ export default function StartupIdentityGate({
           if (active) setChecking(false);
           return;
         }
-        const localAuthority = await saveLocalProfile(
-          central.person.display_name,
-          bootstrapRequestId.current,
-          central.person
-        );
-        await registerLocalServer(deviceToken);
-        if (active) await finishCentralStartup(localAuthority);
+        if (active) showCentralServers(central);
       } catch (reason) {
         if (isCentralAuthenticationError(reason)) {
           if (active) {
@@ -294,11 +313,6 @@ export default function StartupIdentityGate({
     setStatus("복구 가능한 게스트 신원을 만드는 중");
     try {
       const result = await createCentralGuest(name);
-      await saveLocalProfile(
-        result.person.display_name || name,
-        bootstrapRequestId.current
-      );
-      await registerLocalServer(deviceToken);
       setIssuedRecoveryCode(result.recovery_code);
       setSavedRecoveryCode(false);
       setCopied(false);
@@ -325,11 +339,6 @@ export default function StartupIdentityGate({
     setStatus("게스트 신원을 복구하고 이전 코드를 폐기하는 중");
     try {
       const result = await recoverCentralGuest(recoveryInput);
-      await saveLocalProfile(
-        result.person.display_name || "Guest",
-        bootstrapRequestId.current
-      );
-      await registerLocalServer(deviceToken);
       setIssuedRecoveryCode(result.recovery_code);
       setSavedRecoveryCode(false);
       setCopied(false);
@@ -356,14 +365,8 @@ export default function StartupIdentityGate({
     setBusy(true);
     setError("");
     try {
-      const session = await loginCentralGoogle(setStatus, controller.signal);
-      const localAuthority = await saveLocalProfile(
-        session.person.display_name,
-        bootstrapRequestId.current,
-        session.person
-      );
-      await registerLocalServer(deviceToken);
-      await finishCentralStartup(localAuthority);
+      await loginCentralGoogle(setStatus, controller.signal);
+      await finishCentralStartup();
     } catch (reason) {
       setChecking(false);
       setError(
@@ -487,7 +490,7 @@ export default function StartupIdentityGate({
             {screen === "recovery-code"
               ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요합니다. 중앙에는 코드 원문을 저장하지 않습니다."
               : screen === "servers"
-                ? "이 기기의 방과 같은 Google 계정이 소유한 다른 온라인 서버를 선택할 수 있습니다."
+                ? "기존 서버를 열면 다른 컴퓨터에서도 같은 방을 사용할 수 있어요. 호스트가 켜져 있어야 합니다."
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용합니다. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남습니다."}
           </p>
         </header>
@@ -519,6 +522,7 @@ export default function StartupIdentityGate({
             <button
               type="button"
               className="flex min-h-12 items-center justify-center gap-2 rounded-md bg-[#2b2d31] px-4 text-[14px] font-black text-text-primary"
+              disabled={busy}
               onClick={() => {
                 setError("");
                 setScreen("guest");
@@ -529,6 +533,7 @@ export default function StartupIdentityGate({
             <button
               type="button"
               className="min-h-10 text-[12px] font-black text-[#aeb4ff]"
+              disabled={busy}
               onClick={() => {
                 setError("");
                 setScreen("recover");
@@ -541,29 +546,27 @@ export default function StartupIdentityGate({
 
         {screen === "servers" && (
           <section className="grid gap-3 rounded-lg bg-[#1b1c20] p-4">
-            <button
-              type="button"
-              disabled={busy}
-              className="grid min-h-14 gap-1 rounded-md bg-[#2b2d31] px-4 py-3 text-left disabled:opacity-50"
-              onClick={() => void selectCentralServer()}
-            >
-              <span className="text-[13px] font-black text-text-primary">이 기기</span>
-              <span className="text-[11px] font-semibold text-text-muted">현재 Windows/Mac에 저장된 방</span>
-            </button>
-            {centralServers.map((server) => (
-              <button
+            <p className="text-[13px] text-text-secondary">{centralPerson?.display_name}님의 서버</p>
+            {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. 이 기기에서 서버를 열어 시작할 수 있어요.</p>}
+            {centralServers.map((server) => {
+              const online = server.endpoint?.status === "likely_online" && server.endpoint.lease_expires_at > Date.now() / 1000;
+              return <button
                 key={server.server_id}
                 type="button"
-                disabled={busy}
+                disabled={busy || !online}
                 className="grid min-h-14 gap-1 rounded-md bg-[#2b2d31] px-4 py-3 text-left disabled:opacity-50"
                 onClick={() => void selectCentralServer(server)}
               >
-                <span className="text-[13px] font-black text-text-primary">
-                  {server.alias || "내 다른 기기"}
-                </span>
-                <span className="text-[11px] font-semibold text-[#8d96ff]">온라인 · 소유자 확인됨</span>
-              </button>
-            ))}
+                <span className="text-[13px] font-black text-text-primary">{server.alias || "내 서버"} · {server.server_id.slice(0, 8)}</span>
+                <span className="text-[11px] font-semibold text-[#8d96ff]">{online ? "서버 열기" : "오프라인 · 호스트에서 서버를 열어 주세요"}</span>
+              </button>;
+            })}
+            <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void refreshServers()}>서버 목록 새로고침</button>
+            <button type="button" className="grid min-h-14 gap-1 rounded-md bg-[#5865f2] px-4 py-3 text-left text-[13px] text-white disabled:opacity-50" disabled={busy} onClick={() => void selectCentralServer()}>
+              <strong>이 기기에서 서버 열기</strong>
+              <span className="text-[11px] text-white/80">이 컴퓨터의 기존 방을 열거나 새 서버를 만듭니다.</span>
+            </button>
+            <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}
 

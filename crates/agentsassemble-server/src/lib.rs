@@ -74,7 +74,7 @@ pub mod runtime_restart;
 pub mod runtime_restart_ipc;
 mod runtime_restart_web;
 pub mod runtime_version;
-pub use central_login::central_login_control;
+pub use central_login::{CentralLoginService, central_login_control};
 pub use google_accounts::{GoogleAccountError, GoogleAccountService};
 mod account_web;
 mod attendee_client;

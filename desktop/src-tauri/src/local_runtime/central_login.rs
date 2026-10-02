@@ -2,14 +2,15 @@ use agentsassemble_protocol::{
     CentralLoginAction, CentralLoginResult, LocalControlRequest, LocalControlResponse,
 };
 use serde::Serialize;
+use std::{env, process::Stdio};
 use tauri::AppHandle;
 use url::Url;
 use uuid::Uuid;
 
 use super::{
-    LocalRuntime,
+    LocalRuntime, RuntimeProcess, abort_startup, capture_runtime_output,
     control::{TicketFailure, request_control},
-    ensure_runtime, handle_ticket_result,
+    sidecar_executable, terminate_owned_runtime, validate_startup_record, wait_for_startup,
 };
 
 #[derive(Serialize)]
@@ -21,15 +22,31 @@ pub(crate) struct CentralLoginGrant {
 impl LocalRuntime {
     pub(crate) fn central_login(
         &self,
-        app: &AppHandle,
+        _app: &AppHandle,
         action: CentralLoginAction,
         state: &str,
     ) -> Result<CentralLoginGrant, String> {
         let mut process = self
-            .process
+            .login_process
             .lock()
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
-        let runtime = ensure_runtime(&mut process, app)?;
+        if action == CentralLoginAction::Start {
+            if let Some(runtime) = process.as_mut() {
+                if runtime
+                    .child
+                    .try_wait()
+                    .map_err(|_| "cannot inspect login process")?
+                    .is_none()
+                {
+                    return Err("Google login is already running".into());
+                }
+                if let Some(mut stopped) = process.take() {
+                    terminate_owned_runtime(&mut stopped);
+                }
+            }
+            *process = Some(start_login_process()?);
+        }
+        let runtime = process.as_mut().ok_or("Google login is not running")?;
         let redirect_uri = runtime
             .address
             .join("api/central-login/callback")
@@ -61,7 +78,15 @@ impl LocalRuntime {
                 )),
             },
         );
-        handle_ticket_result(&mut process, result)
+        let retire = action == CentralLoginAction::Cancel || result.is_err();
+        if retire && let Some(mut stopped) = process.take() {
+            terminate_owned_runtime(&mut stopped);
+        }
+        result.map_err(|error| match error {
+            TicketFailure::Rejected(message)
+            | TicketFailure::Unavailable(message)
+            | TicketFailure::Broken(message) => message,
+        })
     }
 
     pub(crate) fn open_central_google_login(
@@ -85,6 +110,46 @@ impl LocalRuntime {
         validate_authorization_url(&url, &grant.redirect_uri)?;
         open::that(url.as_str())
             .map_err(|_| "cannot open Google login in the system browser".into())
+    }
+}
+
+// This child uses the normal signed supervisor but never receives a database,
+// frontend, host registration or provider configuration. Control output is not logged.
+fn start_login_process() -> Result<RuntimeProcess, String> {
+    let desktop = env::current_exe().map_err(|error| error.to_string())?;
+    let executable = sidecar_executable(&desktop)?;
+    let mut command = crate::runtime_supervisor::command(&executable)?;
+    let mut child = command
+        .command_mut()
+        .arg("--central-login-only")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("cannot start Google login listener: {error}"))?;
+    let control = child.stdin.take();
+    let output = child
+        .stdout
+        .take()
+        .map(|stdout| capture_runtime_output(stdout, None));
+    let result = match output {
+        Some(output) if control.is_some() => wait_for_startup(&mut child, &output)
+            .and_then(|record| validate_startup_record(&record))
+            .map(|address| (output, address)),
+        _ => Err("cannot open Google login control pipe".into()),
+    };
+    match result {
+        Ok((output, address)) => Ok(RuntimeProcess {
+            child,
+            control,
+            output,
+            pending_response: None,
+            address,
+        }),
+        Err(error) => {
+            abort_startup(&mut child, control);
+            Err(error)
+        }
     }
 }
 

@@ -68,6 +68,7 @@ pub struct CentralRegistrationTicketGrant {
 #[derive(Default)]
 pub struct LocalRuntime {
     process: Mutex<Option<RuntimeProcess>>,
+    login_process: Mutex<Option<RuntimeProcess>>,
 }
 
 struct RuntimeProcess {
@@ -252,11 +253,12 @@ impl LocalRuntime {
     }
 
     pub fn stop(&self) {
-        let Ok(mut process) = self.process.lock() else {
-            return;
-        };
-        if let Some(mut runtime) = process.take() {
-            terminate_owned_runtime(&mut runtime);
+        for slot in [&self.login_process, &self.process] {
+            if let Ok(mut process) = slot.lock()
+                && let Some(mut runtime) = process.take()
+            {
+                terminate_owned_runtime(&mut runtime);
+            }
         }
     }
 }
@@ -345,7 +347,7 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
         abort_startup(&mut child, Some(control));
         return Err("cannot capture Rust runtime startup output".to_owned());
     };
-    let output = capture_runtime_output(stdout, stdout_log);
+    let output = capture_runtime_output(stdout, Some(stdout_log));
     let record = match wait_for_startup(&mut child, &output) {
         Ok(record) => record,
         Err(error) => {
@@ -495,7 +497,7 @@ pub(crate) fn make_private_file(_file: &File, path: &Path) -> std::io::Result<()
 
 fn capture_runtime_output(
     stdout: ChildStdout,
-    mut log: File,
+    mut log: Option<File>,
 ) -> mpsc::Receiver<Result<RuntimeOutput, String>> {
     let (sender, receiver) = mpsc::sync_channel(8);
     thread::spawn(move || {
@@ -507,7 +509,9 @@ fn capture_runtime_output(
                 Ok(_) => {
                     if !line.trim().is_empty() {
                         let parsed = parse_runtime_output(line.trim());
-                        if matches!(parsed, Ok(RuntimeOutput::Startup(_))) {
+                        if matches!(parsed, Ok(RuntimeOutput::Startup(_)))
+                            && let Some(log) = log.as_mut()
+                        {
                             let _ = log.write_all(line.as_bytes());
                             let _ = log.flush();
                         }

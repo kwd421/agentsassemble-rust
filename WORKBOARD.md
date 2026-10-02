@@ -2,6 +2,16 @@
 
 ## Active work
 
+- 2026-10-02 desktop client-first entry implemented: existing account servers appear
+  before any local room runtime; hosting requires an explicit choice. Google return
+  uses a separate bounded authentication process. Signed macOS Google login, restored
+  account, empty guest chooser, explicit local hosting and unchanged database on
+  client restart pass. Frontend 949, desktop 36 and affected native boundaries pass,
+  as do Clippy and mandatory gates. Existing hosts are offline; actual remote room
+  reopening and Windows execution remain unverified. Contract/evidence:
+  `docs/specs/identity-accounts-friends-slice.md` and `docs/VERIFICATION.md`
+  -> Desktop client-first entry.
+
 - 2026-10-02 browser central Google entry implemented and deployed at the fixed
   identity origin. Real ordinary Chrome login resolves Nel Le and shows four
   existing servers; reload and logout pass. All four hosts are offline, so room

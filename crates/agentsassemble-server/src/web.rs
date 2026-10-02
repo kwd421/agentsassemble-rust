@@ -157,7 +157,7 @@ struct TicketQuery {
 pub fn router(state: AppState) -> Router {
     let frontend_release = state.frontend.clone();
     let mut app = core_routes()
-        .merge(crate::central_login::routes())
+        .merge(crate::central_login::routes().with_state(crate::CentralLoginService::from(&state)))
         .merge(crate::room_directory_web::routes())
         .merge(crate::friends_web::routes())
         .merge(crate::room_preferences_web::routes())

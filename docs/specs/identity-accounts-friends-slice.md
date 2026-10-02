@@ -73,15 +73,15 @@ review remain deferred by user instruction; local fixtures do not prove those ru
 `StartupIdentityBoundary` admits the central login screen only in the desktop host;
 ordinary browser startup is unavailable without invite/pair/recovery authority.
 Central login precedes local profile bootstrap. Its transient start/poll/cancel
-therefore uses the existing private host-to-runtime control pipe, carrying no fake
-operator principal and granting no room/account authority. The existing runtime
-owns one bounded pending-return collection (16 entries, 10-minute expiry), and the
+therefore uses the private host-to-authentication-process control pipe, carrying no
+fake operator principal and granting no room/account authority. The authentication
+service owns one bounded pending-return collection (16 entries, 10-minute expiry), and the
 loopback-only HTTP callback accepts only an expected unguessable state. No public
 start/poll endpoint or new reusable credential is necessary. The native host derives
-the redirect URI from its exact running runtime and opens only the validated Google
+the redirect URI from its exact owned callback listener and opens only the validated Google
 authorization URL. The existing central service remains the OAuth/PKCE exchange
 owner. Completion/abort/failure retires transient state; expiry is checked on access,
-and runtime shutdown drops it without adding a polling task or persistence table.
+and process shutdown drops it without adding a polling task or persistence table.
 
 The client retires the transient native return before exchanging its captured code
 with the central service. Retirement failure remains visible and prevents exchange;
@@ -186,6 +186,33 @@ session; and unchanged local-room data on both machines. Verify Worker and Rust
 boundary tests, frontend startup/navigation tests, mandatory gates, a signed packaged
 Mac host plus Windows client flow, and a standard diff security scan. Do not use Deep
 Scan. Preserve the already-running Windows room and its owned children throughout.
+
+### Desktop client-first entry (2026-10-02)
+
+Account startup validates the central session and lists existing owned servers
+before starting any local room runtime. Online servers use the existing bound
+owner grant; offline servers remain visible with refresh and never cause implicit
+local hosting. Empty lists require an explicit hosting choice. Selecting "이
+기기에서 서버 열기" starts or initializes this installation's existing authority,
+preserves its rooms/profile, and registers it before entering. Local-only builds
+retain their existing local entry. No account/profile migration is part of this slice.
+
+Native Google login uses the bundled sidecar in an authentication-only mode with
+an ephemeral loopback callback and the existing private start/poll/cancel protocol.
+It must not open a database, construct room/provider state, publish an endpoint or
+accept any room control. The existing state-bound callback and central PKCE exchange
+remain authoritative. The desktop owns the separate child, starts it only for login,
+and joins it after cancellation/completion or app exit. The child also expires after
+ten minutes or parent-pipe loss; a bounded completion-page drain may precede exit.
+No bearer/code is written to disk or diagnostic logs.
+
+Acceptance: cold startup, restored login, guest creation/recovery and Google login
+reach the chooser without room bootstrap/registration. Remote choice never touches
+local authority, including offline and rejected grants. Explicit local choice alone
+preserves/initializes local data and registers the host. Verify callback-only TCP
+and private-control rejection, lifecycle cleanup, frontend regression tests,
+mandatory gates and an isolated signed package. Windows behavior needs separate
+real-device verification. No new scan, reviewer session or subagent is authorized.
 
 ### Browser central Google entry (2026-10-02)
 

@@ -105,28 +105,96 @@ impl CentralLoginBroker {
     }
 }
 
-/// Operates only on the runtime's private native control pipe, before profile bootstrap.
+/// Transient OAuth return authority, independent of room storage and providers.
+#[derive(Clone, Default)]
+pub struct CentralLoginService {
+    broker: CentralLoginBroker,
+    shutdown: tokio_util::sync::CancellationToken,
+}
+
+impl From<&AppState> for CentralLoginService {
+    fn from(state: &AppState) -> Self {
+        Self {
+            broker: state.central_login.clone(),
+            shutdown: state.shutdown.clone(),
+        }
+    }
+}
+
+impl CentralLoginService {
+    /// Operates only on the owned process's private control pipe.
+    pub async fn control(
+        &self,
+        request_id: String,
+        action: CentralLoginAction,
+        login_state: &str,
+    ) -> LocalControlResponse {
+        let result = if self.shutdown.is_cancelled() {
+            Err("runtime_stopping")
+        } else if let Ok(now) = unix_time() {
+            self.broker.control(action, login_state, now).await
+        } else {
+            Err("clock_unavailable")
+        };
+        match result {
+            Ok(result) => LocalControlResponse::CentralLoginOk { request_id, result },
+            Err(code) => LocalControlResponse::Error {
+                request_id,
+                code: code.into(),
+                message: "Google login return is unavailable.".into(),
+            },
+        }
+    }
+
+    /// Exposes only the callback and completion page, at the exact owned authority.
+    pub fn router(self, authority: String) -> axum::Router {
+        routes().with_state(self).layer(axum::middleware::from_fn(
+            move |request: axum::extract::Request, next: axum::middleware::Next| {
+                let authority = authority.clone();
+                async move {
+                    let hosts = request.headers().get_all(header::HOST);
+                    let mut hosts = hosts.iter();
+                    let valid = hosts
+                        .next()
+                        .is_some_and(|host| host.as_bytes() == authority.as_bytes())
+                        && hosts.next().is_none()
+                        && !request.headers().contains_key("forwarded")
+                        && !request
+                            .headers()
+                            .keys()
+                            .any(|key| key.as_str().starts_with("x-forwarded-"))
+                        && request
+                            .headers()
+                            .get_all(header::ORIGIN)
+                            .iter()
+                            .all(|origin| {
+                                origin.as_bytes() == format!("http://{authority}").as_bytes()
+                            });
+                    let mut response = if valid {
+                        next.run(request).await
+                    } else {
+                        StatusCode::BAD_REQUEST.into_response()
+                    };
+                    response.headers_mut().insert(
+                        header::CONTENT_SECURITY_POLICY,
+                        crate::security_headers::content_security_policy(false),
+                    );
+                    crate::security_headers::apply(private_response(response)).await
+                }
+            },
+        ))
+    }
+}
+
 pub async fn central_login_control(
     state: &AppState,
     request_id: String,
     action: CentralLoginAction,
     login_state: &str,
 ) -> LocalControlResponse {
-    let result = if state.shutdown.is_cancelled() {
-        Err("runtime_stopping")
-    } else if let Ok(now) = unix_time() {
-        state.central_login.control(action, login_state, now).await
-    } else {
-        Err("clock_unavailable")
-    };
-    match result {
-        Ok(result) => LocalControlResponse::CentralLoginOk { request_id, result },
-        Err(code) => LocalControlResponse::Error {
-            request_id,
-            code: code.into(),
-            message: "Google login return is unavailable.".into(),
-        },
-    }
+    CentralLoginService::from(state)
+        .control(request_id, action, login_state)
+        .await
 }
 
 fn unix_time() -> Result<u64, ()> {
@@ -144,7 +212,7 @@ struct Callback {
 }
 
 registered_routes! {
-    pub(crate) fn routes<AppState>() {
+    pub(crate) fn routes<CentralLoginService>() {
         private "/api/central-login/callback" => get(callback),
         private "/central-login-complete" => get(complete_page),
         private "/central-login.css" => get(page_style),
@@ -152,12 +220,12 @@ registered_routes! {
 }
 
 async fn callback(
-    State(state): State<AppState>,
+    State(state): State<CentralLoginService>,
     query: Result<Query<Callback>, axum::extract::rejection::QueryRejection>,
 ) -> Response {
     let accepted = match (query, unix_time()) {
         (Ok(Query(query)), Ok(now)) if !state.shutdown.is_cancelled() => {
-            state.central_login.complete(query, now).await.is_ok()
+            state.broker.complete(query, now).await.is_ok()
         }
         _ => false,
     };
