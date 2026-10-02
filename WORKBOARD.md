@@ -22,8 +22,10 @@
   sessions remain room-only. Schema 70/71 upgrades preserve existing rows and
   default previous sessions to no owner-profile authority. Chrome profile save,
   reload and Mac member/history projection pass; the original name is restored.
-  The Mac bottom user panel still retains its initial profile snapshot, so live
-  cross-device profile refresh remains active correction, alongside other parity rows.
+  The additional stale bottom-panel defect is corrected: committed profile revisions
+  refresh its authenticated snapshot without overwriting an open editor. Actual
+  Chrome-to-Mac and Mac-to-Chrome changes update the bottom panel, member list and
+  history without reload. Other acceptance rows remain open; this is not full parity.
 
 - 2026-10-02 active: implement the user-approved official Tauri updater for macOS
   and Windows, including signed release delivery and owned-runtime shutdown before

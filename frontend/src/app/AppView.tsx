@@ -324,6 +324,11 @@ export default function AppView({ controller }: { controller: AppController }) {
             hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
             guestProfile={guestPanelProfile}
             pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
+            publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
+              const value = event.profile_revision;
+              return event.type === "participant_updated" && event.participant_id === (guestSession?.agentId || "operator-local") && typeof value === "number" && Number.isSafeInteger(value)
+                ? Math.max(revision, value) : revision;
+            }, 0)}
             profileIdentity={{
               centralOwner: guestSession?.centralOwner === true,
               sessionToken: admittedSessionToken,

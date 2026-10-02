@@ -288,8 +288,13 @@ existing sessions defaulting to false. Packaged startup preserved the exact room
 history and profile rows through migration. Real Chrome reads/edits the same profile
 and retains it after reload; Mac room projections update. A further shared defect
 is confirmed: UserPanel only hydrates on identity change and ignores committed
-profile revisions. Correct that event-to-profile refresh without discarding an open
-editor draft or replacing transaction revision checks.
+profile revisions. Every changed profile revision now publishes through the existing participant
+projection event; only its existing public fields and revision are exposed. UserPanel
+fetches the authenticated profile when its revision lags. An open editor retains its
+draft and save revision; the existing conflict path remains authoritative. There is
+no polling or browser-owned replacement profile. The signed macOS package and Chrome now verify both directions without reload,
+including the bottom user panel, room member and timeline projections. The original
+name is restored. This closes the observed profile defect, not the other parity rows.
 
 Use affected existing frontend/API tests for regression coverage and exercise the
 same scenarios through packaged and browser entry. Record each result and platform

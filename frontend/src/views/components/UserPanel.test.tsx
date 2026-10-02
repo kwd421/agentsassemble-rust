@@ -147,6 +147,20 @@ describe("UserPanel", () => {
     await waitFor(() => expect(apiMocks.fetchUserProfile).toHaveBeenCalledWith({
       sessionToken: "human-session", deviceToken: "human-device",
     }));
+    const sharedProps = {
+      onlineCount: 1, agentCount: 0, hasBackendError: false,
+      profileIdentity: { sessionToken: "human-session", deviceToken: "human-device" },
+    };
+    apiMocks.fetchUserProfile.mockResolvedValue(snapshot({ ...DEFAULT_USER_PROFILE, displayName: "Other device" }, "", 2));
+    view.rerender(<UserPanel {...sharedProps} publishedProfileRevision={2} />);
+    await waitFor(() => expect(within(view.container).getByRole("button", { name: /Other device/ })).toBeTruthy());
+    fireEvent.click(within(view.container).getByRole("button", { name: "사용자 설정" }));
+    fireEvent.change(within(view.container).getByLabelText("표시 이름"), { target: { value: "Unsent draft" } });
+    apiMocks.fetchUserProfile.mockResolvedValue(snapshot({ ...DEFAULT_USER_PROFILE, displayName: "Newer device" }, "", 3));
+    view.rerender(<UserPanel {...sharedProps} publishedProfileRevision={3} />);
+    expect((within(view.container).getByLabelText("표시 이름") as HTMLInputElement).value).toBe("Unsent draft");
+    fireEvent.click(within(view.container).getByRole("button", { name: "사용자 설정 닫기" }));
+    await waitFor(() => expect(within(view.container).getByRole("button", { name: /Newer device/ })).toBeTruthy());
   });
 
   it("waits for guest admission before reading the server-owned profile", async () => {

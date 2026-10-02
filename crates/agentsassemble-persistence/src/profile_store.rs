@@ -241,7 +241,6 @@ async fn apply_profile_patch_in_transaction(
             "Profile revision does not match current authority.",
         ));
     }
-    let previous_display_name = profile.display_name.clone();
     let previous_avatar_url = profile.avatar_image_url.clone();
     if let Some(attachment_id) = avatar_attachment_id(&next.avatar_image_url) {
         authorize_profile_avatar(transaction, identity.user_id, attachment_id, now).await?;
@@ -256,14 +255,9 @@ async fn apply_profile_patch_in_transaction(
         )
         .await?;
     }
-    let events = if next.display_name != previous_display_name
-        || next.avatar_image_url != previous_avatar_url
-        || next.avatar_label != profile.avatar_label
-    {
-        project_profile_into_rooms(transaction, identity, &next).await?
-    } else {
-        Vec::new()
-    };
+    // Every committed profile revision invalidates other devices' private profile view.
+    // The public event contains only the existing participant projection and revision.
+    let events = project_profile_into_rooms(transaction, identity, &next).await?;
     Ok(ProfileUpdateOutcome {
         profile: next,
         events,
@@ -385,9 +379,6 @@ pub(crate) async fn project_profile_into_rooms(
         if room.status != RoomStatus::Active
             || participant.status != ParticipantStatus::Joined
             || participant.participant_type != "human"
-            || (participant.display_name == profile.display_name
-                && participant.avatar_image_url == profile.avatar_image_url
-                && participant.avatar_label.as_deref() == Some(profile.avatar_label.as_str()))
         {
             continue;
         }
@@ -587,6 +578,24 @@ mod tests {
             .unwrap_or_else(|error| panic!("label update: {error}"));
         assert_eq!(outcome.events.len(), 1);
         assert_eq!(outcome.events[0].extra["avatar_label"], "XY");
+        let status = store
+            .update_user_profile(
+                &principal,
+                outcome.profile.revision,
+                UserProfilePatch {
+                    custom_status: Some("Private status".to_owned()),
+                    ..UserProfilePatch::default()
+                },
+            )
+            .await
+            .unwrap_or_else(|error| panic!("status update: {error}"));
+        assert_eq!(status.events.len(), 1);
+        assert_eq!(
+            status.events[0].extra["profile_revision"],
+            status.profile.revision
+        );
+        assert!(!status.events[0].extra.contains_key("custom_status"));
+
         let participant = store
             .participant("general", &principal.participant_id)
             .await

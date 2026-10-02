@@ -36,6 +36,7 @@ export default function UserPanel({
   guestProfile,
   pairedRoomSession = false,
   profileIdentity = {},
+  publishedProfileRevision = 0,
   onGuestExit,
 }: {
   onlineCount: number;
@@ -50,6 +51,7 @@ export default function UserPanel({
   };
   pairedRoomSession?: boolean;
   profileIdentity?: UserProfileIdentity;
+  publishedProfileRevision?: number;
   onGuestExit?: () => void;
 }) {
   const initialGuestName = String(guestProfile?.displayName || "").trim();
@@ -144,6 +146,37 @@ export default function UserPanel({
     profileIdentity.deviceToken,
     profileIdentity.sessionToken,
   ]);
+
+  useEffect(() => {
+    // Let an open editor retain its draft and revision. Its save still detects
+    // concurrent writes; closing it refreshes from the committed server profile.
+    if (!profileHydrated || pairedRoomSession || guestProfile?.expired || saving ||
+        settingsOpen || profileOpen || avatarEditorOpen ||
+        publishedProfileRevision <= (profileSnapshot?.revision ?? 0)) return;
+    let current = true;
+    const generation = profileScopeGeneration.current;
+    const refresh = profileWriteTail.current.then(async () => {
+      if (!current || generation !== profileScopeGeneration.current) return;
+      try {
+        const loaded = await fetchUserProfile(profileIdentity);
+        if (!current || generation !== profileScopeGeneration.current) return;
+        if (loaded.revision > (profileSnapshotRef.current?.revision ?? 0)) {
+          profileSnapshotRef.current = loaded;
+          setProfileSnapshot(loaded);
+          setDraft(loaded.profile);
+        }
+        setProfileError("");
+      } catch (error) {
+        if (current && generation === profileScopeGeneration.current) {
+          setProfileError(error instanceof Error ? error.message : "프로필 변경을 확인하지 못했어요.");
+        }
+      }
+    });
+    profileWriteTail.current = refresh;
+    return () => { current = false; };
+  }, [publishedProfileRevision, profileSnapshot?.revision, profileHydrated,
+    pairedRoomSession, guestProfile?.expired, saving, settingsOpen, profileOpen,
+    avatarEditorOpen, profileIdentity.deviceToken, profileIdentity.sessionToken]);
 
   useEffect(() => {
     if (!profileOpen && !settingsOpen && !avatarEditorOpen) return;
