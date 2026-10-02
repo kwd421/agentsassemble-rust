@@ -247,7 +247,6 @@ describe("RoomConnectionPanel", () => {
     );
 
     expect(screen.getByText("호스트")).toBeTruthy();
-    expect(screen.getByText("참여 중")).toBeTruthy();
     expect(screen.getByText("호스트").closest(".dc-member")?.querySelector(".bg-online")).not.toBeNull();
     expect(screen.queryByText("나's 호스트")).toBeNull();
   });

@@ -9,6 +9,7 @@ import {
 } from "../../api";
 import {
   roomAppearanceStyle,
+  roomInitials,
   type RoomAppearance,
 } from "../../lib/roomAppearance";
 import type { RoomDockItem } from "../../lib/roomDockModel";
@@ -334,7 +335,7 @@ export default function RoomSettingsModal({
             <h3>외형</h3>
             <div className="dc-settings-preview" style={roomAppearanceStyle(appearance)}>
               <span className="dc-settings-preview-icon" data-has-image={Boolean(appearance.iconImage)}>
-                {appearance.iconImage ? "" : appearance.iconLabel || room.shortLabel}
+                {appearance.iconImage ? "" : appearance.iconLabel || roomInitials(room.label)}
               </span>
               <div>
                 <p className="font-black preserve-words">{room.label}</p>

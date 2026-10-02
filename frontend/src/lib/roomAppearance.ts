@@ -32,3 +32,16 @@ export function completeRoomAppearance(
     ...(appearance || {}),
   };
 }
+
+// A room without an icon image shows its initials, as Discord does for servers:
+// the first character of each word, at most three.
+export function roomInitials(label: string): string {
+  const initials = label
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .map((word) => Array.from(word)[0])
+    .slice(0, 3)
+    .join("");
+  return initials || "?";
+}

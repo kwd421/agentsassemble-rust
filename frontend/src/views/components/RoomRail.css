@@ -13,3 +13,12 @@
   border: 3px solid var(--color-server-rail);
   border-radius: 50%;
 }
+
+.dc-server-initials {
+  overflow: hidden;
+  max-width: 40px;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}

@@ -445,14 +445,15 @@ export function useAppController(deviceToken: string, clientId: string) {
     void selectRoom(rooms[0].id);
   }, [ownerWorkspace.connect, guestSession, rooms, roomDirectorySyncIssue]);
 
-  function openRoomMenu(event: ReactMouseEvent, room: RoomDockItem) {
+  // The room header anchors its menu below itself; the rail and context menus open at the pointer.
+  function openRoomMenu(event: ReactMouseEvent, room: RoomDockItem, anchor?: { x: number; y: number }) {
     event.preventDefault();
     event.stopPropagation();
     if (ownerWorkspace.connect && room.id !== activeRoomId) { void selectRoom(room.id); return; }
     setActiveRoomId(room.id);
     setAdminOpen(false);
     const position = roomRailMenuPosition(
-      { x: event.clientX, y: event.clientY },
+      anchor || { x: event.clientX, y: event.clientY },
       { width: window.innerWidth, height: window.innerHeight }
     );
     setRoomMenu({

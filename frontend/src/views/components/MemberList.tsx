@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
-import { Bot, Search, Volume2, VolumeX } from "lucide-react";
+import { Bot, Check, Search, Volume2, VolumeX } from "lucide-react";
 import type {
   LiveAgent,
   RoomAgentSession,
@@ -14,6 +14,7 @@ import type {
 import MemberDetailModal from "./member/MemberDetailModal";
 import ParticipantRemovalControls, { type ParticipantRemovalAction } from "./member/ParticipantRemovalControls";
 import MemberRow from "./member/MemberRow";
+import { ROLE_OPTIONS } from "./member/memberHelpers";
 import { buildMemberOwnerGroups } from "./member/memberOwnerGroups";
 import { useMemberEntries } from "./member/useMemberEntries";
 import type { MemberEntry, RoleId } from "./member/memberTypes";
@@ -99,14 +100,20 @@ export default function MemberList({
     [entries, query]
   );
 
+  const roleMenuAvailable = Boolean(canEditRoles && onRoleChange);
+
+  function canModerateEntry(entry: MemberEntry) {
+    return Boolean(
+      (canModerate || onParticipantRemove) &&
+      (onParticipantMute || onParticipantRemove) &&
+      !entry.owner &&
+      entry.meetingId
+    );
+  }
+
   function handleMemberContextMenu(entry: MemberEntry, event: ReactMouseEvent<HTMLElement>) {
-    // Room-owned moderation is shared by the overflow and context-menu entries.
-    if (
-      (!canModerate && !onParticipantRemove) ||
-      (!onParticipantMute && !onParticipantRemove) ||
-      entry.owner ||
-      !entry.meetingId
-    ) return;
+    // Room roles and moderation share one context menu, as Discord's member menu does.
+    if (!roleMenuAvailable && !canModerateEntry(entry)) return;
     event.preventDefault();
     const anchor = event.currentTarget.getBoundingClientRect();
     const x = event.clientX || anchor.right;
@@ -193,9 +200,8 @@ export default function MemberList({
                 <MemberRow
                   entry={group.person}
                   onOpenDetails={openMemberDetails}
-                  onRoleChange={handleRoleChange}
                   onContextMenu={handleMemberContextMenu}
-                  canManageParticipant={Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
+                  canManageParticipant={roleMenuAvailable || Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
                   canEditRoles={canEditRoles}
                 />
               ) : (
@@ -226,9 +232,8 @@ export default function MemberList({
                         key={entry.id}
                         entry={entry}
                         onOpenDetails={openMemberDetails}
-                        onRoleChange={handleRoleChange}
                         onContextMenu={handleMemberContextMenu}
-                        canManageParticipant={Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
+                        canManageParticipant={roleMenuAvailable || Boolean(onParticipantRemove || (canModerate && onParticipantMute))}
                         canEditRoles={canEditRoles}
                       />
                     ))}
@@ -282,7 +287,32 @@ export default function MemberList({
             style={{ top: memberMenu.y, left: memberMenu.x }}
             onKeyDown={(event) => { if (event.key === "Escape") setMemberMenu(null); }}
           >
-            {canModerate && onParticipantMute && (
+            {roleMenuAvailable && (
+              <div role="group" aria-label={`${memberMenu.entry.displayName} 역할`}>
+                <p className="dc-member-context-menu-label">역할</p>
+                {ROLE_OPTIONS.map((option) => (
+                  <button
+                    key={option.id}
+                    type="button"
+                    role="menuitemradio"
+                    aria-checked={memberMenu.entry.role === option.id}
+                    className="dc-member-context-menu-item"
+                    style={{ minHeight: 44 }}
+                    onClick={() => {
+                      const entry = memberMenu.entry;
+                      setMemberMenu(null);
+                      if (entry.role !== option.id) void handleRoleChange(entry.id, option.id);
+                    }}
+                  >
+                    <option.icon size={14} />
+                    <span className="flex-1">{option.label}</span>
+                    {memberMenu.entry.role === option.id && <Check size={14} aria-hidden />}
+                  </button>
+                ))}
+              </div>
+            )}
+            {roleMenuAvailable && canModerateEntry(memberMenu.entry) && <span className="dc-context-separator" aria-hidden />}
+            {canModerateEntry(memberMenu.entry) && canModerate && onParticipantMute && (
               <button
                 type="button"
                 role="menuitem"
@@ -295,7 +325,7 @@ export default function MemberList({
                 {memberMenu.entry.muted ? "뮤트 해제" : "뮤트"}
               </button>
             )}
-            {onParticipantRemove && <ParticipantRemovalControls
+            {canModerateEntry(memberMenu.entry) && onParticipantRemove && <ParticipantRemovalControls
               key={memberMenu.entry.id} participantId={memberMenu.entry.id} displayName={memberMenu.entry.displayName}
               onRemove={async (id, action) => { await onParticipantRemove(id, action); setMemberMenu(null); }}
             />}

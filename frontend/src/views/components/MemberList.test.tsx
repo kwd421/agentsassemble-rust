@@ -175,9 +175,8 @@ describe("MemberList component wiring", () => {
       />
     );
 
-    fireEvent.change(screen.getByRole("combobox", { name: "Agent One 역할" }), {
-      target: { value: "reviewer" },
-    });
+    fireEvent.contextMenu(screen.getByText("Agent One"));
+    fireEvent.click(screen.getByRole("menuitemradio", { name: "리뷰어" }));
 
     await waitFor(() =>
       expect(screen.getByRole("alert").textContent).toContain(
@@ -222,13 +221,13 @@ describe("MemberList component wiring", () => {
     );
 
     expect(
-      (screen.getByRole("combobox", { name: "Host 역할" }) as HTMLSelectElement).value
-    ).toBe("director");
+      within(screen.getByText("Host").closest(".dc-member") as HTMLElement).getByText("진행")
+    ).toBeTruthy();
     expect(
-      (screen.getByRole("combobox", {
-        name: "Implementation Coder 역할",
-      }) as HTMLSelectElement).value
-    ).toBe("reviewer");
+      within(
+        screen.getByText("Implementation Coder").closest(".dc-member") as HTMLElement
+      ).getByText("리뷰어")
+    ).toBeTruthy();
     expect(screen.getByText("Host").closest(".dc-owner-agent-list")).toBeNull();
     expect(
       screen.getByText("Implementation Coder").closest(".dc-owner-agent-list")
@@ -486,11 +485,7 @@ describe("MemberList component wiring", () => {
       "http://127.0.0.1:43123/api/agent-avatars/aa_0123456789abcdef0123456789abcdef"
     );
 
-    expect(
-      (screen.getByRole("combobox", {
-        name: "Session Makima 역할",
-      }) as HTMLSelectElement).value
-    ).toBe("reviewer");
+    expect(within(canonicalRow as HTMLElement).getByText("리뷰어")).toBeTruthy();
     expect(screen.queryByText("Stale Participant")).toBeNull();
   });
 

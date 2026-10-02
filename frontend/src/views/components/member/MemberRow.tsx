@@ -10,12 +10,11 @@ import {
   ROLE_OPTIONS,
   statusDotClass,
 } from "./memberHelpers";
-import type { MemberEntry, RoleId } from "./memberTypes";
+import type { MemberEntry } from "./memberTypes";
 
 export type MemberRowProps = {
   entry: MemberEntry;
   onOpenDetails: (entry: MemberEntry) => void;
-  onRoleChange: (memberId: string, role: RoleId) => void;
   onContextMenu: (entry: MemberEntry, event: ReactMouseEvent<HTMLElement>) => void;
   canEditRoles: boolean;
   canManageParticipant?: boolean;
@@ -24,17 +23,20 @@ export type MemberRowProps = {
 export default function MemberRow({
   entry,
   onOpenDetails,
-  onRoleChange,
   onContextMenu,
   canEditRoles, canManageParticipant,
 }: MemberRowProps) {
   const canOpenDetails = Boolean(entry.agent || entry.agentSession);
   const Icon = entry.icon;
   const pointerStartRef = useRef<{ x: number; y: number } | null>(null);
-  const roleLabel = ROLE_OPTIONS.find((option) => option.id === entry.role)?.label || "에이전트";
-  // Moderation opens from the row's context menu. A row without a profile button still
-  // takes focus, so the menu key and Shift+F10 reach it from the keyboard.
-  const manageable = Boolean(!entry.owner && entry.meetingId && canManageParticipant);
+  // Only an assigned room role is worth a tag; plain people and agents need none.
+  const assignedRole = ["director", "implementer", "reviewer"].includes(entry.role)
+    ? ROLE_OPTIONS.find((option) => option.id === entry.role)?.label
+    : undefined;
+  const isAgent = Boolean(entry.agent || entry.agentSession);
+  // Roles and moderation open from the row's context menu. A row without a profile
+  // button still takes focus, so the menu key and Shift+F10 reach it from the keyboard.
+  const manageable = Boolean(canManageParticipant && (canEditRoles || (!entry.owner && entry.meetingId)));
 
   function openDetails() {
     if (canOpenDetails) onOpenDetails(entry);
@@ -113,6 +115,7 @@ export default function MemberRow({
             {canOpenDetails ? <button type="button" className="truncate preserve-words cursor-pointer" style={{ maxWidth: "100%", textAlign: "left" }}
               aria-label={`${entry.displayName} 프로필 보기`} onClick={(event) => { event.stopPropagation(); openDetails(); }}>{entry.displayName}</button> : entry.displayName}
           </p>
+          {assignedRole && <span className="dc-member-role-tag">{assignedRole}</span>}
           {entry.owner && (
             // canEditRoles is only true for the room host's own view, so the
             // host sees HOST on themselves while guests see YOU on themselves.
@@ -159,33 +162,13 @@ export default function MemberRow({
               </span>
             )}
           </div>
-          {entry.statusLabel && (
+          {isAgent && entry.statusLabel && (
             <span
               className="dc-member-status-chip preserve-words"
               data-state={entry.active ? "active" : "idle"}
             >
               {entry.statusLabel}
             </span>
-          )}
-        </div>
-        <div className="dc-member-role-row">
-          {canEditRoles ? (
-            <select
-              className="dc-role-select"
-              value={entry.role}
-              aria-label={`${entry.displayName} 역할`}
-              onClick={(event) => event.stopPropagation()}
-              onKeyDown={(event) => event.stopPropagation()}
-              onChange={(event) => onRoleChange(entry.id, event.target.value as RoleId)}
-            >
-              {ROLE_OPTIONS.map((option) => (
-                <option key={option.id} value={option.id}>
-                  {option.label}
-                </option>
-              ))}
-            </select>
-          ) : (
-            <span className="dc-role-label">{roleLabel}</span>
           )}
         </div>
       </div>

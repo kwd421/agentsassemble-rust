@@ -201,43 +201,34 @@ export default function AppView({ controller }: { controller: AppController }) {
               className="dc-server-header-button"
               style={mobileViewport ? { height: 44 } : undefined}
               disabled={!hasRoom}
-              onClick={(event) => openRoomMenu(event, activeRoom)}
+              onClick={(event) => {
+                const header = event.currentTarget.getBoundingClientRect();
+                openRoomMenu(event, activeRoom, { x: header.left + 8, y: header.bottom + 4 });
+              }}
               onContextMenu={(event) => openRoomMenu(event, activeRoom)}
               aria-label={`${activeRoom.label} 방 메뉴 열기`}
             >
               <span className="truncate preserve-words">{activeRoom.label}</span>
               <ChevronDown size={16} />
             </button>
-            <div className="dc-sidebar-banner" style={mobileViewport ? { display: "none" } : undefined}>
-              <span
-                className="dc-sidebar-server-icon"
-                data-has-image={Boolean(activeAppearance.iconImage)}
+            {hasRoom && !guestLocked && !mobileViewport && (
+              <button
+                type="button"
+                className="dc-sidebar-invite-button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  inviteRoom(activeRoom.id);
+                }}
+                aria-label="방에 초대하기"
+                title="방에 초대하기"
               >
-                {activeAppearance.iconImage ? "" : activeAppearance.iconLabel || activeRoom.shortLabel}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-[10px] font-black uppercase tracking-wide text-white/70">
-                  Room
-                </p>
-                <p className="truncate text-[12px] font-semibold text-text-muted preserve-words">
-                  {activeRoom.topic}
-                </p>
-              </div>
-              {hasRoom && !guestLocked && (
-                <button
-                  type="button"
-                  className="dc-sidebar-invite-button"
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    inviteRoom(activeRoom.id);
-                  }}
-                  aria-label="방에 초대하기"
-                  title="방에 초대하기"
-                >
-                  <UserPlus size={20} />
-                </button>
-              )}
-            </div>
+                <UserPlus size={18} />
+              </button>
+            )}
+            {/* Like a Discord server banner, it appears only once the room has one. */}
+            {!mobileViewport && (activeAppearance.bannerImage || activeAppearance.bannerPreset !== "default") && (
+              <div className="dc-sidebar-banner" aria-hidden="true" />
+            )}
             {hasRoom && <div className="dc-mobile-channel-tools" aria-label="모바일 채널 도구">
               <label className="dc-mobile-channel-search">
                 <span className="sr-only">채널 검색</span>

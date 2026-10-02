@@ -14,7 +14,7 @@ it("uses the same saved human label in members and messages despite an agent-lik
   const updated = applyParticipantEvents([member], [{ v: 1, id: "update", seq: 1, created_at: member.created_at, room_id: member.room_id, actor: { participant_id: member.participant_id, participant_type: "human" }, type: "participant_updated", participant_id: member.participant_id, avatar_label: "ZZ" }]);
   const projected = applyCanonicalParticipantProfiles([event], canonicalParticipantProfiles([], updated, ""))[0];
   const { container } = render(<>
-    <MemberRow entry={{ id: member.participant_id, member: updated[0], displayName: "Human", detail: "", role: "director", owner: true, active: true, muted: false, meetingId: "general", icon: Bot }} onOpenDetails={() => {}} onRoleChange={() => {}} onContextMenu={() => {}} canEditRoles={false} />
+    <MemberRow entry={{ id: member.participant_id, member: updated[0], displayName: "Human", detail: "", role: "director", owner: true, active: true, muted: false, meetingId: "general", icon: Bot }} onOpenDetails={() => {}} onContextMenu={() => {}} canEditRoles={false} />
     <MessageRow eventId="m" author={projected.name} createdAt={projected.created_at} participantType={projected.actor_type} avatarLabel={projected.avatar_label}>hello</MessageRow>
   </>);
   expect(container.querySelector(".dc-member-avatar")?.textContent).toBe("ZZ");

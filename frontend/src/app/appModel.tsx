@@ -53,7 +53,7 @@ export const CHANNELS: ChannelConfig[] = [
 export const CHANNEL_SECTIONS: Array<{
   id: string;
   label: string;
-}> = [{ id: "conversation", label: "Text Channels" }];
+}> = [{ id: "conversation", label: "채팅 채널" }];
 
 const CHANNEL_NOTIFICATION_LABELS: Record<ChannelNotificationSetting, string> = {
   default: "서버 기본 알림",

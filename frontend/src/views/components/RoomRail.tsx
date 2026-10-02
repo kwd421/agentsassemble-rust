@@ -3,6 +3,7 @@ import { Activity, Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide
 import {
   completeRoomAppearance,
   roomAppearanceStyle,
+  roomInitials,
   type RoomAppearance,
 } from "../../lib/roomAppearance";
 import {
@@ -84,7 +85,6 @@ export default function RoomRail({
       {onOpenFriends && <button type="button" className="dc-server-btn" style={buttonStyle} aria-label="친구" title="친구" aria-pressed={friendsOpen} data-active={friendsOpen} onClick={onOpenFriends}><Users size={20} /></button>}
       <div className="dc-room-stack min-h-0 flex-1 overflow-y-auto chat-scroll" aria-label="방 목록">
         {rooms.map((room) => {
-          const Icon = room.icon;
           const active = !adminOpen && !friendsOpen && activeRoom.id === room.id;
           const disconnected = roomIsDisconnected(room);
           const roomAppearance = completeRoomAppearance(
@@ -108,7 +108,11 @@ export default function RoomRail({
               aria-label={`${room.label}${disconnected ? " · 연결이 끊긴 방" : ""}`}
               title={`${room.label} · ${disconnected ? "연결이 끊긴 방" : room.topic}`}
             >
-              {roomAppearance.iconImage ? null : <Icon size={18} aria-hidden />}
+              {roomAppearance.iconImage ? null : (
+                <span className="dc-server-initials" aria-hidden>
+                  {roomAppearance.iconLabel || roomInitials(room.label)}
+                </span>
+              )}
               {disconnected && <span className="dc-server-connection-dot" aria-hidden />}
               <span className="sr-only">{room.shortLabel}</span>
             </button>
