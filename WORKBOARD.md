@@ -2,6 +2,15 @@
 
 ## Active work
 
+- 2026-10-02 server OS labels implemented and deployed: both choosers display
+  host-reported macOS, Windows, Linux or other OS; missing metadata is explicit.
+  Owner-only projection preserves the prior hostname privacy boundary. Affected
+  frontend 24, Worker 33, native identity 4 and registration TCP 2 tests pass,
+  together with builds and mandatory gates. Signed macOS registration/restart
+  visibly retains the macOS badge while offline. Windows/Linux native UI and
+  interactive browser display remain unverified; no new external review claimed.
+  Evidence: `docs/VERIFICATION.md` -> Central server operating systems.
+
 - 2026-10-02 server naming completed and deployed: actual computer defaults,
   durable owner rename in both choosers, legacy alias correction, cross-owner
   hostname privacy and recoverable name edits. Frontend 952, Worker 32, affected

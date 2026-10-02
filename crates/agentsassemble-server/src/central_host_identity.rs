@@ -62,6 +62,7 @@ pub struct HostRegistrationProof {
 #[derive(Serialize)]
 pub struct HostRegistrationEnvelope {
     host_name: String,
+    host_os: &'static str,
     server_id: String,
     host_public_key_jwk: HostPublicJwk,
     host_key_fingerprint: String,
@@ -246,6 +247,12 @@ impl CentralHostIdentity {
             .ok_or(HostIdentityError::HostNameUnavailable)?;
         Ok(HostRegistrationEnvelope {
             host_name,
+            host_os: match std::env::consts::OS {
+                "macos" => "macos",
+                "windows" => "windows",
+                "linux" => "linux",
+                _ => "other",
+            },
             server_id: self.server_id.to_string(),
             host_public_key_jwk: self.public_jwk.clone(),
             host_key_fingerprint: self.fingerprint.to_string(),
@@ -395,6 +402,7 @@ mod tests {
             [
                 "host_key_fingerprint",
                 "host_name",
+                "host_os",
                 "host_public_key_jwk",
                 "host_registration_proof",
                 "server_id",

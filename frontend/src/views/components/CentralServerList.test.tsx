@@ -7,7 +7,7 @@ import { renameCentralServer, type CentralServer } from "../../lib/centralIdenti
 
 vi.mock("../../lib/centralIdentity", () => ({ renameCentralServer: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
-const host: CentralServer = { server_id: "server-0001", alias: "Mac Studio", relation: "owner", endpoint: null, host_public_key_jwk: {}, host_key_fingerprint: "test" };
+const host: CentralServer = { server_id: "server-0001", alias: "Mac Studio", host_os: "macos", relation: "owner", endpoint: null, host_public_key_jwk: {}, host_key_fingerprint: "test" };
 
 it("allows offline owner rename and displays the refreshed central name", async () => {
   const user = userEvent.setup();

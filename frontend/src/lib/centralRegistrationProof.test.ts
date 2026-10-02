@@ -58,6 +58,7 @@ async function signedFixture(claimOwnership = false): Promise<{
     },
     envelope: {
       host_name: "Test Mac",
+      host_os: "macos",
       server_id: SERVER_ID,
       host_public_key_jwk: jwk,
       host_key_fingerprint: fingerprint,

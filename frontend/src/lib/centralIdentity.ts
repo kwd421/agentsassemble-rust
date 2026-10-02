@@ -8,7 +8,7 @@ import {
 } from "./desktopBridge";
 import { encodeBase64Url } from "./base64Url";
 import { centralOwnerServerUrl } from "./centralOwnerConnect";
-import { validateHostName, verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
+import { type HostOs, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
 const SERVERS_KEY = "agentsassemble.centralServers.v1";
@@ -37,6 +37,7 @@ export type CentralServer = {
   server_id: string;
   relation: "owner" | "bookmark";
   alias: string;
+  host_os: HostOs | null;
   host_public_key_jwk: JsonWebKey;
   host_key_fingerprint: string;
   endpoint: null | {
@@ -701,6 +702,7 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
       )
     : (payload as LocalServerInfo & {
         host_name: string;
+        host_os: HostOs;
         host_registration_proof: {
           owner_person_id: string;
           issued_at: number;
@@ -709,9 +711,11 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
         };
       });
   validateHostName(local.host_name);
+  validateHostOs(local.host_os);
   await signedRequest(session, "/v1/servers", "POST", {
     server_id: local.server_id,
     label: local.host_name,
+    host_os: local.host_os,
     host_public_key_jwk: local.host_public_key_jwk,
     host_registration_proof: local.host_registration_proof,
     ...(session.pending_account_switch ? { claim_ownership: true } : {}),

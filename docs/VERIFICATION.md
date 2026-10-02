@@ -12186,6 +12186,34 @@ this run's isolated Application Support/WebKit/cache directories were removed.
 The current signed package/build is retained; existing user data, provider processes
 and the earlier separate web-test server are preserved.
 
+## Central server operating systems (2026-10-02)
+
+The private native registration envelope reports the server runtime OS. The
+device-signed registration stores one nullable allowlisted value; migration 0007
+adds metadata without rewriting existing servers. Omission retains known metadata,
+invalid explicit values fail, and bootstrap exposes it only to the current owner.
+Both chooser surfaces render the same OS badge, including explicit unknown state.
+OS versions, architecture and browser/hostname inference are not collected.
+
+Worker 33 tests and syntax checks pass. The new signed-request regression first
+failed against the old implementation and now verifies absent/retained values,
+malformed input, ordinary foreign-owner rejection, ownership transfer and previous
+owner privacy. Affected frontend 24, native host identity 4 and registration TCP 2
+tests pass. Production frontend and signed macOS package builds, server Clippy,
+architecture/source growth, format/diff and artifact gates pass; central-owner
+structure and generated maps also pass. Migration 0007 and the shared web bundle
+are deployed in Worker version `1681200f-5694-45b7-82f3-fb3e8e10c846`.
+
+The isolated signed package `app.agentsassemble.oscheck20261002` creates a disposable
+guest, explicitly opens its local host, then quits normally. After restart its
+chooser visibly shows the actual computer name, `macOS` and offline status. The
+accessibility tree includes both the OS description and macOS text. The test session
+is logged out and the exact app and children are quit before isolated data cleanup.
+The installed user app, existing server process and unrelated data are preserved.
+Windows/Linux native UI and interactive browser display are not verified here.
+The prior Daybreak approval below applies to its named revisions, not this extension;
+no new external review or automated security scan is claimed.
+
 ## Central server names (2026-10-02)
 
 The default name now comes from the host OS through the private one-use

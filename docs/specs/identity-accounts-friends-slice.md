@@ -692,6 +692,15 @@ whole local phase after both supported Google findings were corrected; see the
 [completed review disposition](../VERIFICATION.md#phase-5-whole-phase-review-corrections-2026-09-08).
 # Central server names (2026-10-02)
 
+OS display extension: the private host registration envelope reports `host_os`
+(`macos`, `windows`, `linux`, `other`) from the compiled native runtime, never the
+viewer's browser. The directory persists this optional display metadata on the
+existing signed registration/claim write. Existing rows remain NULL until a host
+reports it; an older registration that omits metadata preserves the last report.
+Only the current owner receives it in bootstrap, including while offline. Both
+choosers display an OS badge; missing information is explicitly unconfirmed.
+No OS version, architecture, hostname inference or public server-info change.
+
 The private registration envelope supplies the host OS name as display metadata;
 public server-info and identity signatures remain unchanged. Missing/invalid host
 names fail registration visibly. `servers.label` is the host default and
