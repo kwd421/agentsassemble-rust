@@ -2,6 +2,11 @@ name: Windows desktop release artifact
 
 "on":
   workflow_dispatch:
+    inputs:
+      source_ref:
+        description: Exact release source tag or commit
+        required: false
+        type: string
   push:
     tags: ["desktop-v*"]
 
@@ -18,9 +23,16 @@ jobs:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_ref || github.ref }}
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
         with:
           node-version: "22"
+      - uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        id: cargo-cache
+        with:
+          path: target
+          key: windows-desktop-${{ hashFiles('Cargo.lock', 'desktop/src-tauri/Cargo.lock') }}-${{ github.run_id }}
+          restore-keys: windows-desktop-${{ hashFiles('Cargo.lock', 'desktop/src-tauri/Cargo.lock') }}-
       - name: Install dependencies
         shell: pwsh
         run: |
@@ -47,7 +59,27 @@ jobs:
           npx tauri build --bundles nsis
           exit $LASTEXITCODE
       - name: Verify desktop contracts
-        run: cargo +stable test --locked --manifest-path desktop/src-tauri/Cargo.toml --target-dir target --release --lib
+        shell: pwsh
+        run: |
+          # Tauri embeds Common Controls v6 in the app, but Cargo's unit-test
+          # executable has no equivalent manifest and cannot load TaskDialogIndirect.
+          # Apply the app-owned manifest to the harness; never skip a failed test.
+          $buildLog = Join-Path $env:RUNNER_TEMP "desktop-test-build.jsonl"
+          cargo +stable test --locked --manifest-path desktop/src-tauri/Cargo.toml --target-dir target --release --lib --no-run --message-format=json | Set-Content $buildLog
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tests = @(Get-Content $buildLog | ForEach-Object { $_ | ConvertFrom-Json } | Where-Object { $_.reason -eq "compiler-artifact" -and $_.profile.test -and $_.executable })
+          if ($tests.Count -ne 1) { throw "Expected exactly one desktop unit-test executable" }
+          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} "Windows Kits\10\bin"
+          $mt = Get-ChildItem "$sdkRoot\*\x64\mt.exe" | Sort-Object FullName -Descending | Select-Object -First 1
+          if (-not $mt) { throw "Windows SDK manifest tool is missing" }
+          $manifest = Join-Path $env:RUNNER_TEMP "desktop-test.manifest"
+          & $mt.FullName "-inputresource:target\release\agentsassemble-desktop.exe;#1" "-out:$manifest"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (-not (Select-String -Path $manifest -Pattern "Microsoft.Windows.Common-Controls" -Quiet)) { throw "App manifest lacks Common Controls" }
+          & $mt.FullName "-manifest" $manifest "-outputresource:$($tests[0].executable);#1"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & $tests[0].executable
+          exit $LASTEXITCODE
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: windows-x86_64-updater
@@ -56,3 +88,8 @@ jobs:
             target/release/bundle/nsis/*.sig
           if-no-files-found: error
           retention-days: 14
+      - uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        if: always() && steps.cargo-cache.outputs.cache-hit != 'true'
+        with:
+          path: target
+          key: ${{ steps.cargo-cache.outputs.cache-primary-key }}
