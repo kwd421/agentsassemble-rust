@@ -24,6 +24,11 @@ notarization and Windows Authenticode signing.
 2. Push tag `desktop-v<VERSION>` at that commit. The Windows release workflow builds
    the current-user NSIS installer, runs desktop tests and uploads the installer
    with its version-bound `.sig`. A failed build/test does not publish a release.
+   To re-run a frozen release using a corrected workflow, dispatch this workflow
+   from the current branch with `source_ref=desktop-v<VERSION>`; checkout still
+   builds exactly that tag. Windows unit-test executables receive the packaged
+   app's manifest through the Windows SDK `mt.exe`, so native Common Controls
+   imports have the same declared dependency as the production app.
 3. On the Mac, use the existing Developer ID identity and updater key to build:
 
    ```sh

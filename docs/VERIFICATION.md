@@ -12306,3 +12306,118 @@ Both implementation repositories are pushed; the installed user app, pre-existin
 server process and unrelated working changes remain preserved. Task-only app data,
 Computer Use state and review scratch files are cleaned after completion; the
 latest signed verification build and shared Cargo artifacts are retained.
+
+
+## Official desktop updater (2026-10-02)
+
+User approved the official Tauri updater for macOS and Windows. Runtime changes
+are `e19c566f..4656f6fa`, release candidate `desktop-v0.1.3`. Native menus own
+check/download/install; no updater command or endpoint selection is exposed to
+local or remote WebViews. HTTPS and artifact/version signatures are mandatory.
+The updater checks at startup and every six hours, retains one verified download
+in memory when deferred, and asks before terminating owned room/login runtimes.
+Admission is closed under the same process locks before shutdown/replacement.
+
+Native desktop 40 tests, all-target/all-feature desktop Clippy, architecture and
+source-growth gates, 19 gate/artifact policy tests, formatting and diff checks pass.
+The official updater fixture accepts valid signed bytes, rejects modified bytes
+and rejects an altered advertised version. Runtime guard tests cover duplicate
+installation, failure recovery and refusal after unconfirmed shutdown. No new
+automated security scan, subagent or external review was started.
+
+Packaged Apple Silicon verification used an explicitly versioned test-source app
+0.1.0 and the signed 0.1.3 GitHub prerelease artifact. A temporary macOS-only
+validation manifest selected the exact candidate without enabling the production
+latest feed. Startup downloaded and verified the artifact; No retained the old
+app and allowed opening the existing room. The native menu then offered the ready
+0.1.3 update; Yes stopped the desktop and both recorded room/supervisor PIDs,
+replaced the bundle and spawned the new release executable. Installed executable
+SHA-256 matches the release artifact; strict/deep Developer ID codesign passes.
+Room (1 row), events (2 rows) and profile (1 row) digests exactly match baseline.
+The updater-enabled source's missing-feed error is visibly attached to its main
+window; an initially unparented rfd system alert was corrected in `0f1c8646`.
+
+The automatic relaunch spawned a live process and WebKit reported a visible
+window, but Computer Use returned noWindowsAvailable for that relaunched process.
+After stopping that exact test-owned client and opening the installed bundle
+again, Computer Use verified the existing Google identity, same server chooser,
+room and original message after explicitly reopening the local host.
+This distinguishes confirmed replacement/process restart from automatic-relaunch
+UI accessibility, which remains unverified.
+
+The first Windows workflow failed because sidecar metadata was compiled before
+frontend resources existed. `4656f6fa` builds frontend resources first. Earlier
+0.1.1/0.1.2 tags are unpublished attempts; no production feed pointed to them.
+Windows 0.1.3 compiled and produced its NSIS installer, but the raw Cargo test
+harness exited before running tests with STATUS_ENTRYPOINT_NOT_FOUND. Tauri's
+Windows build owner includes Common Controls v6 in the app manifest; the library
+test harness does not inherit it (tauri-apps/tauri#13419 describes the same mock
+runtime symptom). The corrected workflow extracts that exact app manifest with
+Windows SDK mt.exe and embeds it in the test executable before running all tests;
+it does not skip assertions or alter production binaries. Workflow `a98ac901`
+rebuilds the frozen `desktop-v0.1.3` source through its explicit source_ref input.
+The repeat Windows run `37004302736` completed successfully and its signed NSIS
+artifact was downloaded. Production feed publication remains pending.
+
+Updater signing keys remain outside the repository in a permission-restricted
+local file and the repository Actions secret. Apple notarization and Windows
+Authenticode are not configured; updater signatures are not OS signing proof.
+Current targets are darwin-aarch64 and windows-x86_64. Existing non-updater builds
+need one manual install. Real Windows interactive installation is not covered by
+CI compilation/tests. The LLVM 22/rustc 1.97.1 LINKEDIT build-host failure was
+resolved by disabling stripping of release build-time dependencies, documented
+in desktop/RELEASES.md; no runtime fallback was added.
+
+Artifact maintenance removed 20.4 GiB of regenerable Cargo output after local
+builds finished; the release files and installed app were retained, user data
+untouched, and the final artifact gate passed (27 GiB free disk afterward).
+
+
+## Shared app/web startup and central owner profiles (2026-10-02)
+
+Scope: shared startup UI, standard web Google code exchange, public owner entry,
+central-owner profile authority and live cross-device profile refresh. Root commits
+`ae5b1bf3`, `779118f7` and `5bf2d77d`; identity Worker
+commit `a265f71a`. This is scoped evidence, not full app/web parity or updater release
+completion.
+
+- Chrome and the signed macOS package render the same StartupIdentityGate. Actual
+  Google return resolves the existing Nel Le person and the same server. Chrome
+  redirects within Chrome; the native package uses the configured system browser
+  (Safari) and returns through the native callback. The previously downloaded Web
+  OAuth credential is reused; its value is neither logged nor committed.
+- `/pair` opens the remote-owner shell and shows the existing room/history. The
+  intentionally private `/app` remains forbidden. Central credentials stay at the
+  identity origin and are not transferred to the room host.
+- Schema 72 stores server-minted central-owner provenance. Existing rows default
+  false. The existing migration verification covers both schema 70 and 71, retaining
+  bootstrap, room and ordinary pairing authority. Before real startup a private
+  SQLite backup was made. After migration the exact room, event and profile hashes
+  matched the prior data. Verification profile edits then add ordinary profile
+  revisions/events; all original profile values are restored.
+- Existing TCP boundary checks exercise central-owner profile read, name/avatar
+  upload and save, stale-revision conflict, wrong-device rejection and ordinary
+  pairing profile denial. Persistence checks retain transaction-time revocation,
+  expiry, origin, device and provenance validation. No room-only pairing is promoted.
+- Real Chrome edits the owner's name and retains profile settings after reload.
+  A stale Mac bottom profile was discovered during the comparison. Its initial-only
+  hydration now consumes committed profile revision events. The public event keeps
+  existing participant fields plus revision; private profile fields still require
+  authenticated reads. An open editor retains its draft and save revision.
+- Final signed package: a Chrome name edit updates Mac's bottom profile, member list
+  and timeline without reload; restoring the original name from Mac updates the same
+  three Chrome surfaces without reload. The original room and message remain.
+- Existing frontend suite: 164 files / 952 tests pass. Persistence: 358 tests pass.
+  Affected central-owner, ordinary pairing and profile TCP checks pass. Clippy,
+  architecture/source-growth policy gates, frontend build, signed package build and
+  diff checks pass. The live check caught and corrected a flattened event-field
+  mapping that component tests did not cover; no UI completion was claimed from tests.
+- Every approved public validation connection is closed afterwards. No new agent,
+  security scan or test harness was started. Owner validation worktree changes were
+  byte-compared to pushed `a265f71a` and its disposable checkout removed.
+
+Remaining: complete the acceptance matrix's other account/guest recovery/server and
+room operation comparisons. Remote owner still uses a room-scoped workspace; broad
+server directory/create/invite/friend behavior is not established by these checks.
+Windows UI remains unverified. The published immutable 0.1.3 artifacts predate these
+changes; final release delivery and installed-app replacement remain separate work.

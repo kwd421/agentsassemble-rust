@@ -27,6 +27,11 @@
   Chrome-to-Mac and Mac-to-Chrome changes update the bottom panel, member list and
   history without reload. Other acceptance rows remain open; this is not full parity.
 
+- 2026-10-02 release continuation: package 0.1.4 for schema 72 and the verified
+  shared startup/profile fixes. Keep published 0.1.3 artifacts immutable. The
+  installed 0.1.3 must not be reopened against migrated data; its replacement and
+  both platform updater artifacts are active work. User data backup is retained.
+
 - 2026-10-02 active: implement the user-approved official Tauri updater for macOS
   and Windows, including signed release delivery and owned-runtime shutdown before
   installation. Contract: `docs/specs/desktop-updates.md`.

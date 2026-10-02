@@ -1,7 +1,7 @@
 # Desktop application updates
 
 The user approved Tauri's official updater for macOS and Windows (2026-10-02).
-Currently neither installed app checks for application updates. Provider CLI
+Before this change neither installed app checked for application updates. Provider CLI
 updates are separate and remain unchanged.
 
 The native desktop owns checking, downloading, signature verification and install.
