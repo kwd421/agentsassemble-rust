@@ -66,6 +66,8 @@ async fn central_owner_session_is_room_device_origin_and_grant_expiry_bound() {
         .unwrap_or_else(|error| panic!("central replay: {error}"));
     assert_eq!(first.session_bearer, replay.session_bearer);
     assert_eq!(first.authorization.expires_at(), expires_at);
+    verify_owner_profile_authority(&store, &manager, &first.authorization, now).await;
+
     assert_eq!(
         code(
             store
@@ -114,6 +116,83 @@ async fn central_owner_session_is_room_device_origin_and_grant_expiry_bound() {
         ),
         "session_revoked"
     );
+}
+
+async fn verify_owner_profile_authority(
+    store: &SqliteStore,
+    manager: &LocalRoomManagerAuthority,
+    authorization: &super::OperatorSessionAuthorization,
+    now: chrono::DateTime<Utc>,
+) {
+    assert!(authorization.is_central_owner());
+    let profile = store
+        .central_owner_profile(authorization)
+        .await
+        .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
+    let patch = agentsassemble_domain::UserProfilePatch {
+        display_name: Some("Owner from web".to_owned()),
+        ..Default::default()
+    };
+    let updated = store
+        .update_central_owner_profile(authorization, profile.revision, patch.clone())
+        .await
+        .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
+    assert_eq!(
+        updated.profile,
+        store
+            .local_operator_profile()
+            .await
+            .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"))
+    );
+    store
+        .create_operator_pairing(manager, &[20; 32], ORIGIN, now)
+        .await
+        .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
+    let ordinary = store
+        .redeem_operator_pairing(&[20; 32], &[21; 32], ORIGIN, now)
+        .await
+        .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
+    assert!(!ordinary.authorization.is_central_owner());
+    assert_eq!(
+        code(store.central_owner_profile(&ordinary.authorization).await),
+        "session_revoked"
+    );
+    assert_eq!(
+        code(
+            store
+                .update_central_owner_profile(
+                    &ordinary.authorization,
+                    updated.profile.revision,
+                    patch.clone()
+                )
+                .await
+        ),
+        "session_revoked"
+    );
+    for changed in [
+        "UPDATE operator_pairings SET revoked = 1 WHERE central_owner = 1",
+        "UPDATE operator_pairings SET session_expires_at = 946684800 WHERE central_owner = 1",
+        "UPDATE operator_pairings SET target_origin = 'https://other.example.test' WHERE central_owner = 1",
+        "UPDATE operator_pairings SET device_fingerprint = zeroblob(32) WHERE central_owner = 1",
+        "UPDATE operator_pairings SET central_owner = 0 WHERE central_owner = 1",
+    ] {
+        let mut tx = store
+            .pool
+            .begin()
+            .await
+            .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
+        sqlx::query(changed)
+            .execute(&mut *tx)
+            .await
+            .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
+        assert_eq!(
+            code(super::revalidate_central_owner_session(&mut tx, authorization).await),
+            "session_revoked"
+        );
+        tx.rollback()
+            .await
+            .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
+    }
 }
 
 #[tokio::test]

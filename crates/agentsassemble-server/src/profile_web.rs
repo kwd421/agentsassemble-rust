@@ -17,9 +17,6 @@ use crate::{
         BodyDecodeError, DEVICE_CREDENTIAL_HEADER, MAX_BASE64_UPLOAD_BODY_BYTES, PRIVATE_NO_STORE,
         bearer_credential, decode_json_body, ensure_empty_body, exact_tauri_cors,
     },
-    human_session_http_authority::{
-        HumanSessionBearerError, HumanSessionBearerResolution, resolve_human_session_bearer,
-    },
     room_session_http_authority::{
         RoomSessionBearerError, RoomSessionBearerResolution, resolve_room_session_bearer,
     },
@@ -89,7 +86,8 @@ async fn read_profile(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let authority = resolve_profile_authority(&state, request.headers()).await?;
+    let authority =
+        resolve_profile_authority(&state, request.headers(), request.extensions().get()).await?;
     ensure_empty_body(request, MAX_PROFILE_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
@@ -98,6 +96,9 @@ async fn read_profile(
             state.store.human_session_profile(&authorization).await?
         }
         ProfileAuthority::LocalOperator => state.store.local_operator_profile().await?,
+        ProfileAuthority::CentralOwner(session) => {
+            state.store.central_owner_profile(&session).await?
+        }
     };
     Ok(Json(json!({"profile": profile})))
 }
@@ -106,7 +107,8 @@ async fn update_profile(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, ProfileHttpError> {
-    let authority = resolve_profile_authority(&state, request.headers()).await?;
+    let authority =
+        resolve_profile_authority(&state, request.headers(), request.extensions().get()).await?;
     let update: ProfileUpdateRequest = decode_json_body(request, MAX_PROFILE_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
@@ -125,6 +127,12 @@ async fn update_profile(
                     update.expected_revision,
                     update.patch,
                 )
+                .await?
+        }
+        ProfileAuthority::CentralOwner(session) => {
+            state
+                .store
+                .update_central_owner_profile(&session, update.expected_revision, update.patch)
                 .await?
         }
         ProfileAuthority::LocalOperator => {
@@ -159,6 +167,17 @@ async fn upload_attachment(
     let payload: AttachmentUpload = decode_json_body(request, MAX_BASE64_UPLOAD_BODY_BYTES)
         .await
         .map_err(ProfileHttpError::from_body)?;
+    let authority = match authority {
+        AttachmentUploadAuthority::Operator(session)
+            if payload.purpose.trim() == "profile_avatar" && session.is_central_owner() =>
+        {
+            AttachmentUploadAuthority::Profile(ProfileAuthority::CentralOwner(*session))
+        }
+        AttachmentUploadAuthority::Operator(session) => AttachmentUploadAuthority::Appearance(
+            agentsassemble_persistence::RoomManagerAuthority::Operator(session),
+        ),
+        other => other,
+    };
     match (&authority, payload.purpose.trim()) {
         (AttachmentUploadAuthority::Appearance(_), "room_appearance")
         | (AttachmentUploadAuthority::Profile(_), "profile_avatar") => {}
@@ -233,6 +252,7 @@ async fn store_uploaded_attachment(
     content: Vec<u8>,
 ) -> Result<serde_json::Value, ProfileHttpError> {
     Ok(match authority {
+        AttachmentUploadAuthority::Operator(_) => return Err(ProfileHttpError::unauthorized()),
         AttachmentUploadAuthority::Appearance(manager) => json!(
             state
                 .store
@@ -262,6 +282,17 @@ async fn store_profile_attachment(
                 .store
                 .store_human_session_profile_attachment(
                     &authorization,
+                    &payload.filename,
+                    &payload.content_type,
+                    content,
+                )
+                .await?
+        }
+        ProfileAuthority::CentralOwner(session) => {
+            state
+                .store
+                .store_central_owner_profile_attachment(
+                    &session,
                     &payload.filename,
                     &payload.content_type,
                     content,
@@ -428,11 +459,13 @@ fn attachment_response(
 }
 
 enum ProfileAuthority {
+    CentralOwner(agentsassemble_persistence::OperatorSessionAuthorization),
     HumanSession(HumanSessionAuthorization),
     LocalOperator,
 }
 
 enum AttachmentUploadAuthority {
+    Operator(Box<agentsassemble_persistence::OperatorSessionAuthorization>),
     Profile(ProfileAuthority),
     Appearance(agentsassemble_persistence::RoomManagerAuthority),
 }
@@ -524,11 +557,7 @@ async fn resolve_attachment_upload_authority(
                     AttachmentUploadAuthority::Profile(ProfileAuthority::HumanSession(session))
                 }
                 agentsassemble_persistence::RoomSessionAuthorization::Operator(session) => {
-                    AttachmentUploadAuthority::Appearance(
-                        agentsassemble_persistence::RoomManagerAuthority::Operator(Box::new(
-                            session,
-                        )),
-                    )
+                    AttachmentUploadAuthority::Operator(Box::new(session))
                 }
             });
         }
@@ -556,15 +585,28 @@ async fn resolve_attachment_upload_authority(
 async fn resolve_profile_authority(
     state: &AppState,
     headers: &axum::http::HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
 ) -> Result<ProfileAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
-    match resolve_human_session_bearer(state, credential).await {
-        Ok(HumanSessionBearerResolution::Authorized(authorization)) => {
-            return Ok(ProfileAuthority::HumanSession(authorization));
+    match resolve_room_session_bearer(state, headers, origin, credential).await {
+        Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
+            return match *authorization {
+                agentsassemble_persistence::RoomSessionAuthorization::Human(session) => {
+                    Ok(ProfileAuthority::HumanSession(session))
+                }
+                agentsassemble_persistence::RoomSessionAuthorization::Operator(session)
+                    if session.is_central_owner() =>
+                {
+                    Ok(ProfileAuthority::CentralOwner(session))
+                }
+                agentsassemble_persistence::RoomSessionAuthorization::Operator(_) => {
+                    Err(ProfileHttpError::unauthorized())
+                }
+            };
         }
-        Ok(HumanSessionBearerResolution::Other) => {}
-        Err(HumanSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
-        Err(HumanSessionBearerError::Persistence(error)) => return Err(error.into()),
+        Ok(RoomSessionBearerResolution::Other) => {}
+        Err(RoomSessionBearerError::Invalid) => return Err(ProfileHttpError::unauthorized()),
+        Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
     }
     profile_authority(
         state

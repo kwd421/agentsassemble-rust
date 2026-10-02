@@ -17,6 +17,14 @@
   are still suppressed by ordinary pairing treatment and remain active work. The
   server must distinguish central-owner session provenance before exposing edits.
 
+- 2026-10-02 central owner profile correction: server-issued provenance now permits
+  the same owner profile/name/avatar API and shared settings. Ordinary pairing
+  sessions remain room-only. Schema 70/71 upgrades preserve existing rows and
+  default previous sessions to no owner-profile authority. Chrome profile save,
+  reload and Mac member/history projection pass; the original name is restored.
+  The Mac bottom user panel still retains its initial profile snapshot, so live
+  cross-device profile refresh remains active correction, alongside other parity rows.
+
 - 2026-10-02 active: implement the user-approved official Tauri updater for macOS
   and Windows, including signed release delivery and owned-runtime shutdown before
   installation. Contract: `docs/specs/desktop-updates.md`.

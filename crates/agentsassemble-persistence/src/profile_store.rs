@@ -47,6 +47,44 @@ impl<'a> ProfileIdentity<'a> {
 }
 
 impl SqliteStore {
+    /// Reads the host profile through a currently valid central-owner session.
+    ///
+    /// # Errors
+    /// Rejects ordinary pairings and stale room, device, origin or session authority.
+    pub async fn central_owner_profile(
+        &self,
+        authorization: &crate::OperatorSessionAuthorization,
+    ) -> Result<UserProfile, PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        crate::operator_pairing::revalidate_central_owner_session(&mut tx, authorization).await?;
+        let profile = load_profile(&mut tx, ProfileIdentity::local_operator()).await?;
+        tx.commit().await?;
+        Ok(profile)
+    }
+
+    /// Applies the existing host-profile mutation after transactional owner revalidation.
+    ///
+    /// # Errors
+    /// Rejects stale authority, revision conflicts and foreign avatar references.
+    pub async fn update_central_owner_profile(
+        &self,
+        authorization: &crate::OperatorSessionAuthorization,
+        expected_revision: i64,
+        patch: UserProfilePatch,
+    ) -> Result<ProfileUpdateOutcome, PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        crate::operator_pairing::revalidate_central_owner_session(&mut tx, authorization).await?;
+        let outcome = update_profile_in_transaction(
+            &mut tx,
+            ProfileIdentity::local_operator(),
+            expected_revision,
+            patch,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(outcome)
+    }
+
     /// Reads the authenticated human profile from its server-wide authority.
     ///
     /// # Errors

@@ -132,10 +132,17 @@ pub struct OperatorSessionAuthorization {
     device_fingerprint: [u8; 32],
     target_origin: String,
     principal: AuthenticatedPrincipal,
+    central_owner: bool,
     expires_at: DateTime<Utc>,
 }
 
 impl OperatorSessionAuthorization {
+    /// True only for provenance minted by verified central-owner admission.
+    #[must_use]
+    pub const fn is_central_owner(&self) -> bool {
+        self.central_owner
+    }
+
     #[must_use]
     pub const fn session_fingerprint(&self) -> &[u8; 32] {
         &self.session_fingerprint
@@ -183,6 +190,17 @@ impl SqliteStore {
             request.grant_fingerprint,
             SessionBearerPurpose::OperatorPairing,
         );
+        let redemption = OperatorPairingRedemption {
+            session_bearer: issued.bearer,
+            authorization: OperatorSessionAuthorization {
+                session_fingerprint: issued.fingerprint,
+                device_fingerprint: *request.device_fingerprint,
+                target_origin: request.target_origin.to_owned(),
+                principal,
+                central_owner: true,
+                expires_at: request.expires_at,
+            },
+        };
         if let Some(row) =
             sqlx::query("SELECT * FROM operator_pairings WHERE token_fingerprint = ?")
                 .bind(request.grant_fingerprint.as_slice())
@@ -191,7 +209,8 @@ impl SqliteStore {
         {
             let record = PairingRecord::decode(&row)?;
             record.require_origin_and_live(request.target_origin)?;
-            if record.manager != manager
+            if !record.central_owner
+                || record.manager != manager
                 || record.device_fingerprint.as_ref() != Some(request.device_fingerprint)
                 || record.session_fingerprint.as_ref() != Some(&issued.fingerprint)
                 || record.require_session(&issued.fingerprint, request.now)? != request.expires_at
@@ -199,16 +218,7 @@ impl SqliteStore {
                 return Err(unavailable());
             }
             tx.commit().await?;
-            return Ok(OperatorPairingRedemption {
-                session_bearer: issued.bearer,
-                authorization: OperatorSessionAuthorization {
-                    session_fingerprint: issued.fingerprint,
-                    device_fingerprint: *request.device_fingerprint,
-                    target_origin: request.target_origin.to_owned(),
-                    principal,
-                    expires_at: request.expires_at,
-                },
-            });
+            return Ok(redemption);
         }
         sqlx::query(
             "DELETE FROM operator_pairings WHERE COALESCE(session_expires_at, expires_at) <= ?",
@@ -230,8 +240,8 @@ impl SqliteStore {
         sqlx::query(concat!(
             "INSERT INTO operator_pairings (pairing_id, token_fingerprint, room_id, room_uid, ",
             "server_id, authority_lineage_id, user_id, participant_id, target_origin, expires_at, ",
-            "device_fingerprint, session_fingerprint, session_expires_at) ",
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"
+            "device_fingerprint, session_fingerprint, session_expires_at, central_owner) ",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)"
         ))
         .bind(Uuid::new_v4().to_string())
         .bind(request.grant_fingerprint.as_slice())
@@ -249,16 +259,7 @@ impl SqliteStore {
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
-        Ok(OperatorPairingRedemption {
-            session_bearer: issued.bearer,
-            authorization: OperatorSessionAuthorization {
-                session_fingerprint: issued.fingerprint,
-                device_fingerprint: *request.device_fingerprint,
-                target_origin: request.target_origin.to_owned(),
-                principal,
-                expires_at: request.expires_at,
-            },
-        })
+        Ok(redemption)
     }
 
     /// Creates a bounded grant for an exact local manager and ready ingress origin.
@@ -377,6 +378,7 @@ impl SqliteStore {
                 device_fingerprint: *device_fingerprint,
                 target_origin: target_origin.to_owned(),
                 principal,
+                central_owner: record.central_owner,
                 expires_at,
             },
         })
@@ -452,7 +454,19 @@ pub(crate) async fn revalidate_operator_session(
     .await?;
     if current.principal.room_id != expected.principal.room_id
         || current.expires_at != expected.expires_at
+        || current.central_owner != expected.central_owner
     {
+        return Err(unavailable());
+    }
+    Ok(current)
+}
+
+pub(crate) async fn revalidate_central_owner_session(
+    tx: &mut Transaction<'_, Sqlite>,
+    expected: &OperatorSessionAuthorization,
+) -> Result<OperatorSessionAuthorization, PersistenceError> {
+    let current = revalidate_operator_session(tx, expected, Utc::now()).await?;
+    if !current.is_central_owner() {
         return Err(unavailable());
     }
     Ok(current)
@@ -477,6 +491,7 @@ async fn resolve_operator_session(
         device_fingerprint: *device,
         target_origin: origin.to_owned(),
         principal,
+        central_owner: record.central_owner,
         expires_at,
     })
 }
@@ -510,6 +525,7 @@ async fn session_record(
 
 struct PairingRecord {
     pairing_id: String,
+    central_owner: bool,
     manager: LocalRoomManagerAuthority,
     target_origin: String,
     expires_at: DateTime<Utc>,
@@ -524,6 +540,7 @@ impl PairingRecord {
         let room_uid: String = row.try_get("room_uid")?;
         Ok(Self {
             pairing_id: row.try_get("pairing_id")?,
+            central_owner: row.try_get("central_owner")?,
             manager: LocalRoomManagerAuthority {
                 server_id: row.try_get("server_id")?,
                 authority_lineage_id: row.try_get("authority_lineage_id")?,

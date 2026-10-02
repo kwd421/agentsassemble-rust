@@ -35,6 +35,31 @@ pub struct ProfileAttachment {
 }
 
 impl SqliteStore {
+    /// Stores an owner avatar with the existing decoder/quota and transactional session check.
+    ///
+    /// # Errors
+    /// Rejects ordinary pairings, expired owner authority, invalid images or exhausted storage.
+    pub async fn store_central_owner_profile_attachment(
+        &self,
+        authorization: &crate::OperatorSessionAuthorization,
+        filename: &str,
+        content_type: &str,
+        content: Vec<u8>,
+    ) -> Result<ProfileAttachmentMetadata, PersistenceError> {
+        let (canonical, size) = prepare_raster(filename, content_type, content).await?;
+        let mut tx = self.pool.begin().await?;
+        crate::operator_pairing::revalidate_central_owner_session(&mut tx, authorization).await?;
+        let metadata = store_profile_attachment_in_transaction(
+            &mut tx,
+            ProfileIdentity::local_operator(),
+            canonical,
+            size,
+        )
+        .await?;
+        tx.commit().await?;
+        Ok(metadata)
+    }
+
     /// Stores one bounded, decoded, canonical static-raster avatar as a pending upload.
     ///
     /// # Errors

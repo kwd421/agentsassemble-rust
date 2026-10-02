@@ -35,6 +35,8 @@ export type RoomGuestSession = {
   // Pairing presentation only. Current server capabilities authorize room controls;
   // this stored field never grants durable account or profile authority.
   operator?: boolean;
+  // Presentation only; the server revalidates durable owner provenance per request.
+  centralOwner?: boolean;
 };
 
 const ROOM_GUEST_SESSION_STORAGE_KEY = "agentsassemble.roomGuestSession.v1";
@@ -135,6 +137,7 @@ function roomGuestSessionFromAdmissionPayload(
       server_product_surface: payload.server_product_surface,
     },
     operator: "operator" in payload && payload.operator,
+    ...("central_owner" in payload && payload.central_owner === true ? { centralOwner: true } : {}),
   };
 }
 
@@ -156,11 +159,13 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
         "operator",
       ],
       "저장된 방 세션",
-      ["avatarImage", "roomLabel", "roomTopic", "roomCreatedAt", "roomUid", "clientId"]
+      ["avatarImage", "roomLabel", "roomTopic", "roomCreatedAt", "roomUid", "clientId", "centralOwner"]
     );
     if (
       (record.inviteScope !== "room" && record.inviteScope !== "read_only") ||
-      typeof record.operator !== "boolean"
+      typeof record.operator !== "boolean" ||
+      (record.centralOwner !== undefined && typeof record.centralOwner !== "boolean") ||
+      (record.centralOwner === true && record.operator !== true)
     ) {
       return null;
     }
@@ -186,6 +191,7 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
       clientId: optionalString(record, "clientId", "저장된 방 세션"),
       serverSurface: parseRoomSessionSurface(record.serverSurface),
       operator: record.operator,
+      ...(record.centralOwner === true ? { centralOwner: true } : {}),
     };
   } catch {
     return null;

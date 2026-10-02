@@ -146,6 +146,7 @@ async fn room(
         "expires_at": redemption.authorization.expires_at(), "room_label": snapshot.room.label,
         "room_topic": snapshot.settings.topic, "room_created_at": snapshot.room.created_at,
         "owner_id": principal.principal_id, "stable_identity": true, "operator": true,
+        "central_owner": redemption.authorization.is_central_owner(),
         "server_id": bootstrap.server_id, "authority_lineage_id": bootstrap.authority_lineage_id,
         "server_product_surface": state.server_product_surface.as_ref(),
     })))

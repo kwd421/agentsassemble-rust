@@ -49,6 +49,7 @@ export type OperatorPairingRedeemResponse = AdmissionSessionBase & {
   owner_id: string;
   stable_identity: true;
   operator: true;
+  central_owner?: boolean;
 };
 
 export type GuestRecoveryRedeemResponse = AdmissionSessionBase & {
@@ -358,17 +359,20 @@ export function parseOperatorPairingRedeemResponse(
       "operator",
       ...SURFACE_KEYS,
     ],
-    label
+    label,
+    ["central_owner"]
   );
   if (payload.status !== "admitted" || payload.stable_identity !== true || payload.operator !== true) {
     throw new Error("운영자 연결 신원 상태가 올바르지 않습니다.");
   }
+  if (payload.central_owner !== undefined && typeof payload.central_owner !== "boolean") throw new Error("운영자 연결 권한이 올바르지 않습니다.");
   return {
     ...validateCommon(payload, label),
     status: "admitted",
     owner_id: requiredString(payload, "owner_id", label),
     stable_identity: true,
     operator: true,
+    ...(payload.central_owner === true ? { central_owner: true } : {}),
   };
 }
 

@@ -26,6 +26,7 @@ export interface UserProfile {
 }
 
 export type UserProfileIdentity = {
+  centralOwner?: boolean;
   sessionToken?: string;
   deviceToken?: string;
 };

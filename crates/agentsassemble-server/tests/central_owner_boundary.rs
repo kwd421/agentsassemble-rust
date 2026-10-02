@@ -337,6 +337,8 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
         .unwrap_or_else(|error| panic!("room admission JSON: {error:?}"));
     assert_eq!(admission["meeting_id"], "general");
     assert_eq!(admission["status"], "admitted");
+    assert_eq!(admission["central_owner"], true);
+    verify_owner_profile(client, address, &admission).await;
     verify_signed_call(&next_call(calls).await, public_key);
 
     worker_state.reject.store(true, Ordering::SeqCst);
@@ -351,6 +353,77 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
     .await;
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
     verify_signed_call(&next_call(calls).await, public_key);
+}
+
+async fn verify_owner_profile(client: &reqwest::Client, address: SocketAddr, admission: &Value) {
+    let session = admission["session_token"]
+        .as_str()
+        .unwrap_or_else(|| panic!("owner session missing"));
+    let authorized = |request: reqwest::RequestBuilder, device: &str| {
+        request
+            .header("host", "owner.example.test")
+            .header("x-forwarded-proto", "https")
+            .header("x-agentsassemble-proxy-token", SECRET)
+            .header("origin", ORIGIN)
+            .header("x-device-token", device)
+            .bearer_auth(session)
+    };
+    let profile_url = format!("http://{address}/api/user-profile");
+    let profile = authorized(client.get(&profile_url), DEVICE)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"));
+    assert_eq!(profile.status(), StatusCode::OK);
+    let profile: Value = profile
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"));
+    assert_eq!(profile["profile"]["display_name"], "Host");
+    let wrong_device = authorized(
+        client.get(&profile_url),
+        "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    )
+    .send()
+    .await
+    .unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"));
+    assert_eq!(wrong_device.status(), StatusCode::UNAUTHORIZED);
+    let upload = authorized(client.post(format!("http://{address}/api/attachments")), DEVICE)
+        .json(&json!({"purpose": "profile_avatar", "filename": "owner.png", "content_type": "image/png",
+            "data_base64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR4nGMQ0bD5DwACRAF4aig0hQAAAABJRU5ErkJggg=="}))
+        .send().await.unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"));
+    assert_eq!(upload.status(), StatusCode::OK);
+    let upload: Value = upload
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"));
+    let patch = json!({"expected_revision": profile["profile"]["revision"], "display_name": "Web owner",
+        "avatar_image_url": upload["attachment"]["url"]});
+    let updated = authorized(client.post(&profile_url), DEVICE)
+        .json(&patch)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"));
+    assert_eq!(updated.status(), StatusCode::OK);
+    let mut stale_patch = patch.clone();
+    stale_patch["display_name"] = json!("Stale writer");
+    let conflict = authorized(client.post(&profile_url), DEVICE)
+        .json(&stale_patch)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"));
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    let reread: Value = authorized(client.get(&profile_url), DEVICE)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("owner profile boundary: {error:?}"));
+    assert_eq!(reread["profile"]["display_name"], "Web owner");
+    assert_eq!(
+        reread["profile"]["avatar_image_url"],
+        upload["attachment"]["url"]
+    );
 }
 
 #[tokio::test]

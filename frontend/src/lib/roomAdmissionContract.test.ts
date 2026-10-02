@@ -117,6 +117,10 @@ describe("room admission response contracts", () => {
       operator: true,
     };
     expect(parseOperatorPairingRedeemResponse(pairing).operator).toBe(true);
+    expect(parseOperatorPairingRedeemResponse(pairing).central_owner).toBeUndefined();
+    expect(parseOperatorPairingRedeemResponse({ ...pairing, central_owner: true }).central_owner).toBe(true);
+    expect(() => parseOperatorPairingRedeemResponse({ ...pairing, central_owner: "true" })).toThrow();
+
     expect(() =>
       parseOperatorPairingRedeemResponse({ ...pairing, operator: false })
     ).toThrow(/운영자 연결 신원/);

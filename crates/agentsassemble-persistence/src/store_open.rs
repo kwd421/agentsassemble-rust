@@ -70,7 +70,7 @@ impl SqliteStore {
             store.initialize().await?;
         } else {
             store.host_identity().await?;
-            crate::schema_version::upgrade_connector_uploads(&store.pool).await?;
+            crate::schema_version::upgrade_schema(&store.pool).await?;
         }
         Ok(store)
     }

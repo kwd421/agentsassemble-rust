@@ -53,7 +53,7 @@ export default function UserSettingsPanel({
     const dialog = dialogRef.current; dialog?.showModal();
     return () => { dialog?.close(); returnFocusRef.current?.focus(); };
   }, [returnFocusRef]);
-  const sections = profileIdentity?.sessionToken
+  const sections = profileIdentity?.sessionToken && !profileIdentity.centralOwner
     ? USER_SETTINGS_SECTIONS
     : USER_SETTINGS_SECTIONS.filter((section) => section.id !== "recovery");
   const draftAvatarUrl = resolveAttachmentReference(
@@ -141,7 +141,7 @@ export default function UserSettingsPanel({
               </div>
               {centralIdentityConfigured() ? <>
                 <CentralAccountSettings disabled={saving} />
-                {profileIdentity?.sessionToken && <details className="mt-4">
+                {profileIdentity?.sessionToken && !profileIdentity.centralOwner && <details className="mt-4">
                   <summary>이 서버의 Google 계정 연결</summary>
                   <GoogleAccountSettings identity={profileIdentity} />
                 </details>}
