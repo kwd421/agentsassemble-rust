@@ -1,5 +1,5 @@
 use agentsassemble_persistence::{
-    CentralOwnerSessionRequest, LocalBootstrapPhase, PersistenceError,
+    CentralOwnerGrant, CentralOwnerSessionRequest, PersistenceError, ServerOwnerAuthority,
 };
 use axum::{
     Json, Router,
@@ -43,10 +43,21 @@ struct RoomRequest {
     room_uid: String,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct CreateRequest {
+    grant_token: String,
+    generation: i64,
+    request_id: String,
+    room_id: String,
+    label: String,
+}
+
 registered_routes! {
     fn central_owner_routes<AppState>() {
         same_origin_public "/api/central-owner/directory" => post(directory),
         same_origin_public "/api/central-owner/room" => post(room),
+        same_origin_public "/api/central-owner/rooms" => post(create),
     }
 }
 
@@ -68,30 +79,74 @@ async fn directory(
 ) -> Result<Json<Value>, CentralOwnerHttpError> {
     let origin = require_ready_origin(&state, request.headers())
         .map_err(|_| CentralOwnerHttpError::unauthorized())?;
-    device_fingerprint(request.headers()).ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let device =
+        device_fingerprint(request.headers()).ok_or_else(CentralOwnerHttpError::unauthorized)?;
     let body: DirectoryRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(CentralOwnerHttpError::body)?;
     let grant = redeem(&state, &body.grant_token, &origin, body.generation).await?;
-    let bootstrap = state.store.local_bootstrap_status().await?;
-    if bootstrap.phase != LocalBootstrapPhase::Complete {
-        return Err(CentralOwnerHttpError::unavailable());
-    }
-    let rooms = state.store.list_room_directory(false).await?;
+    let authority = grant_authority(&grant, &body.grant_token, device)?;
+    let (bootstrap, rooms) = state
+        .store
+        .list_room_directory_for_owner(&authority, true)
+        .await?;
+    let rooms = rooms
+        .iter()
+        .map(|room| crate::room_directory_web::room_payload(room, "agent_session"))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|_| CentralOwnerHttpError::unavailable())?;
     Ok(Json(json!({
         "server_id": bootstrap.server_id,
         "authority_lineage_id": bootstrap.authority_lineage_id,
-        "expires_at": grant.expires_at,
-        "rooms": rooms.into_iter().map(|summary| json!({
-            "room_id": summary.room.room_id,
-            "room_uid": summary.room.room_uid,
-            "label": summary.room.label,
-            "status": summary.room.status,
-            "created_at": summary.room.created_at,
-            "updated_at": summary.room.updated_at,
-            "topic": summary.settings.topic,
-        })).collect::<Vec<_>>(),
+        "server_product_surface": state.server_product_surface,
+        "rooms": rooms,
     })))
+}
+
+fn grant_authority(
+    grant: &RedeemedConnectGrant,
+    token: &str,
+    device: [u8; 32],
+) -> Result<ServerOwnerAuthority, PersistenceError> {
+    Ok(ServerOwnerAuthority::CentralGrant(
+        CentralOwnerGrant::verified(
+            grant.server_id.clone(),
+            grant.generation,
+            grant.expires_at,
+            Sha256::digest(token.as_bytes()).into(),
+            device,
+            grant.origin.clone(),
+        )?,
+    ))
+}
+
+async fn create(State(state): State<AppState>, request: Request) -> Response {
+    async fn execute(
+        state: &AppState,
+        request: Request,
+    ) -> Result<Response, CentralOwnerHttpError> {
+        let origin = require_ready_origin(state, request.headers())
+            .map_err(|_| CentralOwnerHttpError::unauthorized())?;
+        let device = device_fingerprint(request.headers())
+            .ok_or_else(CentralOwnerHttpError::unauthorized)?;
+        let body: CreateRequest = decode_json_body(request, MAX_BODY)
+            .await
+            .map_err(CentralOwnerHttpError::body)?;
+        let grant = redeem(state, &body.grant_token, &origin, body.generation).await?;
+        let authority = grant_authority(&grant, &body.grant_token, device)?;
+        Ok(crate::room_directory_web::create_room_for_owner(
+            state,
+            &authority,
+            crate::room_directory_web::CreateRoomRequest {
+                request_id: body.request_id,
+                room_id: body.room_id,
+                label: body.label,
+            },
+        )
+        .await
+        .into_response())
+    }
+    execute(&state, request).await.into_response()
 }
 
 async fn room(
@@ -108,11 +163,16 @@ async fn room(
     let grant = redeem(&state, &body.grant_token, &origin, body.generation).await?;
     let expires_at = DateTime::from_timestamp(grant.expires_at, 0)
         .ok_or_else(CentralOwnerHttpError::unauthorized)?;
-    let fingerprint: [u8; 32] = Sha256::digest(body.grant_token.as_bytes()).into();
     let room_incarnation = Uuid::parse_str(&body.room_uid)
         .ok()
         .filter(|value| value.to_string() == body.room_uid)
         .ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    // Each room has distinct custody, while retries of the same grant/room remain exact.
+    let mut hash = Sha256::new();
+    hash.update(b"agentsassemble.central-owner-room.v1\0");
+    hash.update(body.grant_token.as_bytes());
+    hash.update(room_incarnation.as_bytes());
+    let fingerprint: [u8; 32] = hash.finalize().into();
     let session_request = CentralOwnerSessionRequest::new(
         &body.room_id,
         room_incarnation,
@@ -124,7 +184,10 @@ async fn room(
     );
     let redemption = state
         .store
-        .create_central_owner_session(&session_request)
+        .create_central_owner_session(
+            &grant_authority(&grant, &body.grant_token, device)?,
+            &session_request,
+        )
         .await?;
     let principal = redemption.authorization.principal();
     let snapshot = state
@@ -145,6 +208,7 @@ async fn room(
         "client_type": "browser", "provider_kind": "manual", "connection_kind": "browser",
         "expires_at": redemption.authorization.expires_at(), "room_label": snapshot.room.label,
         "room_topic": snapshot.settings.topic, "room_created_at": snapshot.room.created_at,
+        "room_uid": snapshot.room.room_uid,
         "owner_id": principal.principal_id, "stable_identity": true, "operator": true,
         "central_owner": redemption.authorization.is_central_owner(),
         "server_id": bootstrap.server_id, "authority_lineage_id": bootstrap.authority_lineage_id,

@@ -5,6 +5,7 @@ use chrono::{Duration, Utc};
 use super::{CentralOwnerSessionRequest, PAIRING_TTL, SESSION_TTL, revalidate_operator_session};
 use crate::{LocalRoomManagerAuthority, PersistenceError, SqliteStore};
 
+const LOCAL: crate::ServerOwnerAuthority = crate::ServerOwnerAuthority::LocalOperator;
 const ORIGIN: &str = "https://room.example.test";
 
 async fn fixture(url: &str) -> (SqliteStore, LocalRoomManagerAuthority) {
@@ -57,11 +58,11 @@ async fn central_owner_session_is_room_device_origin_and_grant_expiry_bound() {
         now,
     );
     let first = store
-        .create_central_owner_session(&request)
+        .create_central_owner_session(&LOCAL, &request)
         .await
         .unwrap_or_else(|error| panic!("central session: {error}"));
     let replay = store
-        .create_central_owner_session(&request)
+        .create_central_owner_session(&LOCAL, &request)
         .await
         .unwrap_or_else(|error| panic!("central replay: {error}"));
     assert_eq!(first.session_bearer, replay.session_bearer);
@@ -71,15 +72,18 @@ async fn central_owner_session_is_room_device_origin_and_grant_expiry_bound() {
     assert_eq!(
         code(
             store
-                .create_central_owner_session(&CentralOwnerSessionRequest::new(
-                    "general",
-                    manager.room_uid,
-                    &[7; 32],
-                    &[9; 32],
-                    ORIGIN,
-                    expires_at,
-                    now,
-                ))
+                .create_central_owner_session(
+                    &LOCAL,
+                    &CentralOwnerSessionRequest::new(
+                        "general",
+                        manager.room_uid,
+                        &[7; 32],
+                        &[9; 32],
+                        ORIGIN,
+                        expires_at,
+                        now,
+                    )
+                )
                 .await
         ),
         "session_revoked"
@@ -87,15 +91,18 @@ async fn central_owner_session_is_room_device_origin_and_grant_expiry_bound() {
     assert_eq!(
         code(
             store
-                .create_central_owner_session(&CentralOwnerSessionRequest::new(
-                    "general",
-                    uuid::Uuid::new_v4(),
-                    &[6; 32],
-                    &[8; 32],
-                    ORIGIN,
-                    expires_at,
-                    now,
-                ))
+                .create_central_owner_session(
+                    &LOCAL,
+                    &CentralOwnerSessionRequest::new(
+                        "general",
+                        uuid::Uuid::new_v4(),
+                        &[6; 32],
+                        &[8; 32],
+                        ORIGIN,
+                        expires_at,
+                        now,
+                    )
+                )
                 .await
         ),
         "session_revoked"
@@ -103,15 +110,18 @@ async fn central_owner_session_is_room_device_origin_and_grant_expiry_bound() {
     assert_eq!(
         code(
             store
-                .create_central_owner_session(&CentralOwnerSessionRequest::new(
-                    "general",
-                    manager.room_uid,
-                    &[10; 32],
-                    &[8; 32],
-                    ORIGIN,
-                    now + Duration::minutes(6),
-                    now,
-                ))
+                .create_central_owner_session(
+                    &LOCAL,
+                    &CentralOwnerSessionRequest::new(
+                        "general",
+                        manager.room_uid,
+                        &[10; 32],
+                        &[8; 32],
+                        ORIGIN,
+                        now + Duration::minutes(6),
+                        now,
+                    )
+                )
                 .await
         ),
         "session_revoked"

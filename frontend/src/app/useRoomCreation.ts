@@ -19,6 +19,7 @@ type PendingRoomCreation = {
 
 type UseRoomCreationOptions = {
   guestLocked: boolean;
+  create?: typeof createRoom;
   captureRoomDirectoryContinuity: () => RoomDirectoryContinuity;
   validateRoomDirectoryContinuity: (continuity: RoomDirectoryContinuity) => void;
   refreshRoomDirectory: (
@@ -28,7 +29,7 @@ type UseRoomCreationOptions = {
     authority: RoomDirectoryAuthority,
     continuity: RoomDirectoryContinuity
   ) => Promise<RoomDirectoryVerificationResult>;
-  onCreated: (room: RoomDockItem) => void;
+  onCreated: (room: RoomDockItem) => void | Promise<void>;
 };
 
 type SubmitResult =
@@ -50,6 +51,7 @@ function errorMessage(error: unknown) {
 
 export function useRoomCreation({
   guestLocked,
+  create = createRoom,
   captureRoomDirectoryContinuity,
   validateRoomDirectoryContinuity,
   refreshRoomDirectory,
@@ -70,7 +72,7 @@ export function useRoomCreation({
         try {
           validateRoomDirectoryContinuity(continuity);
           const dispatchContinuity = continuity;
-          const response = await createRoom(
+          const response = await create(
             intent.requestId,
             intent.room.meetingId,
             intent.room.label,
@@ -103,7 +105,7 @@ export function useRoomCreation({
       }
       return { ok: false, continuity, error: lastError };
     },
-    [validateRoomDirectoryContinuity, verifyRoomDirectoryAuthority]
+    [create, validateRoomDirectoryContinuity, verifyRoomDirectoryAuthority]
   );
 
   const addFreshRoom = useCallback(async () => {
@@ -143,7 +145,7 @@ export function useRoomCreation({
       }
       validateRoomDirectoryContinuity(continuity);
       pendingRef.current = null;
-      onCreated(canonicalRoom);
+      await onCreated(canonicalRoom);
     } catch (error) {
       if (error instanceof RoomDirectoryOperationSuperseded) return;
       if (continuity) {

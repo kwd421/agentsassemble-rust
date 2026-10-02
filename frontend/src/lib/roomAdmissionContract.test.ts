@@ -118,7 +118,7 @@ describe("room admission response contracts", () => {
     };
     expect(parseOperatorPairingRedeemResponse(pairing).operator).toBe(true);
     expect(parseOperatorPairingRedeemResponse(pairing).central_owner).toBeUndefined();
-    expect(parseOperatorPairingRedeemResponse({ ...pairing, central_owner: true }).central_owner).toBe(true);
+    expect(parseOperatorPairingRedeemResponse({ ...pairing, central_owner: true, room_uid: "10000000-0000-4000-8000-000000000001" }).central_owner).toBe(true);
     expect(() => parseOperatorPairingRedeemResponse({ ...pairing, central_owner: "true" })).toThrow();
 
     expect(() =>

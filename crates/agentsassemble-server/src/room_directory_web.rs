@@ -29,11 +29,11 @@ struct DirectoryQuery {
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct CreateRoomRequest {
-    request_id: String,
-    room_id: String,
+pub(crate) struct CreateRoomRequest {
+    pub(crate) request_id: String,
+    pub(crate) room_id: String,
     #[serde(default)]
-    label: String,
+    pub(crate) label: String,
 }
 
 #[derive(Debug, Deserialize)]
@@ -232,6 +232,19 @@ async fn create_room(
     let payload: CreateRoomRequest = decode_json_body(request, MAX_DIRECTORY_BODY_BYTES)
         .await
         .map_err(DirectoryHttpError::from_body)?;
+    create_room_for_owner(
+        &state,
+        &agentsassemble_persistence::ServerOwnerAuthority::LocalOperator,
+        payload,
+    )
+    .await
+}
+
+pub(crate) async fn create_room_for_owner(
+    state: &AppState,
+    authority: &agentsassemble_persistence::ServerOwnerAuthority,
+    payload: CreateRoomRequest,
+) -> Result<Json<Value>, DirectoryHttpError> {
     let room_id = validate_room_id(&payload.room_id)
         .map_err(|error| DirectoryHttpError::bad_request(error.message))?;
     let label = clean_single_line(&payload.label, 128);
@@ -242,7 +255,7 @@ async fn create_room(
     };
     let commit = state
         .store
-        .create_room_for_local_operator(&payload.request_id, &room_id, label)
+        .create_room_for_owner(authority, &payload.request_id, &room_id, label)
         .await?;
     state.rooms.notify_committed_events(&commit.events).await;
     let room = room_identity_payload(&commit.room, &commit.settings, "frontend_room");
@@ -265,7 +278,10 @@ async fn consume_operator(
     Ok(())
 }
 
-fn room_payload(room: &StoredRoomSummary, origin: &str) -> Result<Value, DirectoryHttpError> {
+pub(crate) fn room_payload(
+    room: &StoredRoomSummary,
+    origin: &str,
+) -> Result<Value, DirectoryHttpError> {
     let mut settings = serde_json::to_value(public_settings(&room.settings)?)?;
     settings
         .as_object_mut()
@@ -309,7 +325,7 @@ const fn room_status(status: RoomStatus) -> &'static str {
 }
 
 #[derive(Debug)]
-struct DirectoryHttpError {
+pub(crate) struct DirectoryHttpError {
     status: StatusCode,
     code: std::borrow::Cow<'static, str>,
     message: String,
@@ -390,6 +406,7 @@ impl From<PersistenceError> for DirectoryHttpError {
                     | b"room_closed"
                     | b"runtime_cleanup_pending" => StatusCode::CONFLICT,
                     b"permission_denied" | b"session_revoked" => StatusCode::FORBIDDEN,
+                    b"central_connect_invalid" => StatusCode::UNAUTHORIZED,
                     _ => StatusCode::BAD_REQUEST,
                 };
                 Self {

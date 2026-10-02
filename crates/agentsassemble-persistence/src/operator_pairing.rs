@@ -166,6 +166,7 @@ impl SqliteStore {
     /// Rejects a stale room, foreign replay, excessive expiry, capacity, or storage failure.
     pub async fn create_central_owner_session(
         &self,
+        owner: &crate::ServerOwnerAuthority,
         request: &CentralOwnerSessionRequest<'_>,
     ) -> Result<OperatorPairingRedemption, PersistenceError> {
         require_origin(request.target_origin)?;
@@ -175,6 +176,7 @@ impl SqliteStore {
             return Err(unavailable());
         }
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        owner.revalidate(&mut tx).await?;
         let (manager, principal) = resolve_local_room_manager(
             &mut tx,
             request.room_id,

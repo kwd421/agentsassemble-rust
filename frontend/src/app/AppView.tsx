@@ -54,7 +54,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     channelSidebarWidth, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     deviceToken, exitGuestSurface,
     expireGuestSession, goToChannel,
-    guestExpired, guestLocked,
+    guestExpired, guestLocked, canCreateRoom,
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteRoom,
     loadCanonicalRoomHistory, lobbyPostingState, markChannelRead, channelReadReady,
@@ -142,6 +142,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         activeRoom={activeRoom}
         roomAppearances={roomAppearances}
         guestLocked={guestLocked}
+        canCreateRoom={canCreateRoom}
         adminOpen={adminOpen}
         menuRoom={menuRoom}
         roomMenu={roomMenu}
@@ -390,7 +391,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               <h1 id="empty-room-title">열려 있는 방이 없어요</h1>
               <p>새 방을 만들어 대화를 시작할 수 있어요.</p>
               <div className="flex flex-wrap gap-3" style={{ justifyContent: "center", marginTop: 20 }}>
-                {!guestLocked && <button type="button" className="dc-agent-create-primary" onClick={addFreshRoom}>새 방 만들기</button>}
+                {canCreateRoom && <button type="button" className="dc-agent-create-primary" onClick={addFreshRoom}>새 방 만들기</button>}
               </div>
             </section>
           ) : channel === "lobby" ? (

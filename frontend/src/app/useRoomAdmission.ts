@@ -4,6 +4,7 @@ import {
   preflightRoomInvite,
   redeemOperatorPairing,
   type GuestRecoveryRedeemResponse,
+  type OperatorPairingRedeemResponse,
 } from "../api";
 import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { loadRememberedGuestProfile, rememberGuestProfile } from "../lib/deviceIdentity";
@@ -347,6 +348,11 @@ export function useRoomAdmission({
     },
     [bindSessionSurface, clearInviteUrl, onRoomJoined, pendingGuestDisplayName]
   );
+
+  const acceptOwnerSession = useCallback(async (payload: OperatorPairingRedeemResponse) => {
+    const attempt = beginAdmissionAttempt();
+    return applyJoinedSession(roomGuestSessionFromPairingPayload(payload), "pairing", attempt.isCurrent);
+  }, [applyJoinedSession, beginAdmissionAttempt]);
 
   const acceptRecoveredSession = useCallback(
     async (payload: GuestRecoveryRedeemResponse) => {
@@ -742,6 +748,7 @@ export function useRoomAdmission({
     requestGuestJoin,
     retryOperatorPairing,
     acceptRecoveredSession,
+    acceptOwnerSession,
     expireGuestSession,
     clearGuestSession,
   };

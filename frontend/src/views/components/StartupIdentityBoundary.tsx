@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import {
   getOrCreateBrowserCredential,
@@ -6,7 +6,7 @@ import {
 } from "../../lib/deviceIdentity";
 import { isBundledDesktopWebview } from "../../lib/desktopBridge";
 import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
-import { consumeCentralOwnerConnectFromUrl } from "../../lib/centralOwnerConnect";
+import { consumeCentralOwnerConnectFromUrl, loadCentralOwnerWorkspace } from "../../lib/centralOwnerConnect";
 import {
   joinInviteTokenFromUrl,
   loadRoomGuestSession,
@@ -33,7 +33,7 @@ export default function StartupIdentityBoundary({
 }: {
   children: (identity: { deviceToken: string; clientId: string }) => ReactNode;
 }) {
-  const [centralOwnerConnect] = useState(consumeCentralOwnerConnectFromUrl);
+  const [centralOwnerConnect] = useState(() => consumeCentralOwnerConnectFromUrl() || loadCentralOwnerWorkspace());
   const [desktop] = useState(
     () => isBundledDesktopWebview() && !centralOwnerConnect
   );
@@ -62,6 +62,8 @@ export default function StartupIdentityBoundary({
       };
     }
   });
+
+  const finishOwnerEntry = useCallback(() => setReady(true), []);
 
   if (isCentralWebEntry()) return <StartupIdentityGate deviceToken="" onComplete={finishCentralEntry} />;
 
@@ -113,7 +115,7 @@ export default function StartupIdentityBoundary({
       <CentralOwnerConnectGate
         connect={centralOwnerConnect}
         deviceToken={browserIdentity.deviceToken}
-        onComplete={() => setReady(true)}
+        onComplete={finishOwnerEntry}
       />
     );
   }

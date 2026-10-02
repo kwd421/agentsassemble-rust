@@ -56,6 +56,8 @@ import { useDismissMenus } from "./useDismissMenus";
 import { useRoomAdmission } from "./useRoomAdmission";
 import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
 import { useRoomCreation } from "./useRoomCreation";
+import { persistCentralOwnerWorkspace } from "../lib/centralOwnerConnect";
+import { useCentralOwnerWorkspace } from "./useCentralOwnerWorkspace";
 import { useRoomDirectory } from "./useRoomDirectory";
 import { useRoomInviteController } from "./useRoomInviteController";
 import { useRoomMembers } from "./useRoomMembers";
@@ -66,6 +68,7 @@ import {
 import { useSidebarResize } from "./useSidebarResize";
 
 export function useAppController(deviceToken: string, clientId: string) {
+  const ownerWorkspace = useCentralOwnerWorkspace(deviceToken);
   const [operatorPairingToken, setOperatorPairingToken] = useState(
     consumeOperatorPairingTokenFromUrl
   );
@@ -83,7 +86,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   const [adminOpen, setAdminOpen] = useState(false);
   const [membersOpen, setMembersOpen] = useState(true);
   const startupHostEnabled =
-    startupIdentityReady &&
+    startupIdentityReady && !ownerWorkspace.connect &&
     !startupRoute.guestInvite &&
     !startupRoute.guestSession &&
     !startupRoute.guestJoinToken &&
@@ -92,7 +95,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     !guestRecoveryRequest;
   const {
     rooms, managementRooms,
-    replaceRooms,
+    replaceRooms, mergeFlowRoom,
     removeRoom,
     updateRoom,
     updateRoomByMeetingId,
@@ -106,6 +109,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   } = useRoomDirectory({
     initialRooms: startupRoute.startupRooms,
     hostEnabled: startupHostEnabled,
+    remoteOwner: ownerWorkspace.remoteDirectory,
   });
   const [activeRoomId, setActiveRoomId] = useState(() => startupRoute.activeRoomId);
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);
@@ -145,10 +149,11 @@ export function useAppController(deviceToken: string, clientId: string) {
     adjustSidebarWidthWithKeyboard,
   } = useSidebarResize();
   const onGuestRoomJoined = useCallback((room: RoomDockItem) => {
-    replaceRooms([room]);
+    if (ownerWorkspace.connect) mergeFlowRoom(room);
+    else replaceRooms([room]);
     setActiveRoomId(room.id);
     setChannel("lobby");
-  }, [replaceRooms]);
+  }, [replaceRooms, mergeFlowRoom, ownerWorkspace.connect]);
   const onGuestAdmissionReset = useCallback(() => {
     setChannel("lobby");
   }, []);
@@ -166,7 +171,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     pendingGuestAvatarImage,
     guestJoinStatus,
     guestAdmissionBusy,
-    guestLocked,
+    guestLocked: admissionGuestLocked,
     operatorPairingPending,
     operatorPairingState,
     guestReadOnly,
@@ -175,7 +180,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     setPendingGuestAvatarImage,
     requestGuestJoin,
     retryOperatorPairing,
-    acceptRecoveredSession,
+    acceptRecoveredSession, acceptOwnerSession,
     expireGuestSession,
     clearGuestSession,
   } = useRoomAdmission({
@@ -189,8 +194,10 @@ export function useAppController(deviceToken: string, clientId: string) {
     onRoomJoined: onGuestRoomJoined,
     onResetToLobby: onGuestAdmissionReset,
   });
+  const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
+  const canCreateRoom = startupHostEnabled || Boolean(ownerWorkspace.connect);
   const startupIdentityResolved =
-    startupIdentityReady ||
+    startupIdentityReady || Boolean(ownerWorkspace.connect) ||
     Boolean(
       startupRoute.guestInvite ||
         guestSession ||
@@ -206,7 +213,8 @@ export function useAppController(deviceToken: string, clientId: string) {
   const serverProductSurface =
     guestSession?.serverSurface.server_product_surface || hostServerProductSurface;
   const onRoomCreated = useCallback(
-    (room: RoomDockItem) => {
+    async (room: RoomDockItem) => {
+      if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
       setActiveRoomId(room.id);
       setAdminOpen(false);
       setChannel("lobby");
@@ -214,10 +222,11 @@ export function useAppController(deviceToken: string, clientId: string) {
       setChannelMenu(null);
       closeMobileOverlays();
     },
-    [closeMobileOverlays]
+    [closeMobileOverlays, ownerWorkspace.connect, ownerWorkspace.enter, acceptOwnerSession]
   );
   const { addFreshRoom } = useRoomCreation({
-    guestLocked,
+    guestLocked: !canCreateRoom,
+    create: ownerWorkspace.create,
     captureRoomDirectoryContinuity,
     validateRoomDirectoryContinuity,
     refreshRoomDirectory,
@@ -414,7 +423,15 @@ export function useAppController(deviceToken: string, clientId: string) {
     visibleChannels.find((item) => item.id === channel) ?? { id: channel, label: "채널 연결 중", icon: Hash };
   const channelSearchNeedle = channelSearchQuery.trim().toLowerCase();
 
-  function selectRoom(roomId: string) {
+  async function selectRoom(roomId: string) {
+    const room = rooms.find(item => item.id === roomId);
+    if (!room) return;
+    try {
+      if (ownerWorkspace.connect && !await ownerWorkspace.enter(room, acceptOwnerSession)) return;
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : "방을 열지 못했어요.");
+      return;
+    }
     setActiveRoomId(roomId);
     setAdminOpen(false);
     setChannel("lobby");
@@ -423,9 +440,15 @@ export function useAppController(deviceToken: string, clientId: string) {
     closeMobileOverlays();
   }
 
+  useEffect(() => {
+    if (!ownerWorkspace.connect || guestSession || !rooms.length || roomDirectorySyncIssue) return;
+    void selectRoom(rooms[0].id);
+  }, [ownerWorkspace.connect, guestSession, rooms, roomDirectorySyncIssue]);
+
   function openRoomMenu(event: ReactMouseEvent, room: RoomDockItem) {
     event.preventDefault();
     event.stopPropagation();
+    if (ownerWorkspace.connect && room.id !== activeRoomId) { void selectRoom(room.id); return; }
     setActiveRoomId(room.id);
     setAdminOpen(false);
     const position = roomRailMenuPosition(
@@ -512,6 +535,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   function exitGuestSurface() {
+    persistCentralOwnerWorkspace(null);
     clearGuestSession();
     const url = new URL(window.location.href);
     url.pathname = "/join";
@@ -637,7 +661,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     connectorJoinUrl: startupRoute.connectorJoinUrl,
     guestExpired, guestJoinRequested, guestJoinStatus, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
-    guestLocked, guestPanelProfile, guestRecoveryRequest, guestSession,
+    guestLocked, canCreateRoom, guestPanelProfile, guestRecoveryRequest, guestSession,
     handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteCopyStatus, inviteModalAppearance,
     inviteModalRoom, invitePublicUrl, inviteRoom,

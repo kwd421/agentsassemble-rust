@@ -35,6 +35,7 @@ struct WorkerState {
     calls: mpsc::UnboundedSender<WorkerCall>,
     generation: Arc<AtomicI64>,
     reject: Arc<AtomicBool>,
+    expires_at: i64,
 }
 
 struct WorkerCall {
@@ -105,7 +106,7 @@ async fn redeem(
             "status": "authorized", "server_id": server_id,
             "person_id": "person-owner", "device_id": "device-owner",
             "origin": ORIGIN, "generation": parsed["generation"],
-            "expires_at": chrono::Utc::now().timestamp() + 300,
+            "expires_at": state.expires_at,
         })),
     )
 }
@@ -184,6 +185,7 @@ async fn start_fixture() -> Fixture {
         calls: call_tx,
         generation: Arc::new(AtomicI64::new(0)),
         reject: Arc::new(AtomicBool::new(false)),
+        expires_at: chrono::Utc::now().timestamp() + 300,
     };
     let worker = Router::new()
         .route(
@@ -341,6 +343,7 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
     verify_owner_profile(client, address, &admission).await;
     verify_signed_call(&next_call(calls).await, public_key);
 
+    verify_owner_rooms(client, address, generation, calls, public_key, &admission).await;
     worker_state.reject.store(true, Ordering::SeqCst);
     let rejected = post(
         client,
@@ -353,6 +356,93 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
     .await;
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
     verify_signed_call(&next_call(calls).await, public_key);
+}
+
+async fn verify_owner_rooms(
+    client: &reqwest::Client,
+    address: SocketAddr,
+    generation: i64,
+    calls: &mut mpsc::UnboundedReceiver<WorkerCall>,
+    public_key: &[u8],
+    initial: &Value,
+) {
+    let create = json!({"grant_token": TOKEN, "generation": generation,
+        "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab", "room_id": "second", "label": "Second"});
+    let rejected = post(
+        client,
+        address,
+        "/api/central-owner/rooms",
+        create.clone(),
+        ORIGIN,
+        "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA",
+    )
+    .await;
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    verify_signed_call(&next_call(calls).await, public_key);
+    let mut room_uid = Value::Null;
+    for replay in [false, true] {
+        let response = post(
+            client,
+            address,
+            "/api/central-owner/rooms",
+            create.clone(),
+            ORIGIN,
+            DEVICE,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let result: Value = response
+            .json()
+            .await
+            .unwrap_or_else(|error| panic!("create: {error:?}"));
+        assert_eq!(result["deduplicated"], replay);
+        room_uid = result["room"]["room_uid"].clone();
+        verify_signed_call(&next_call(calls).await, public_key);
+    }
+    let mut conflicting = create.clone();
+    conflicting["label"] = json!("Changed");
+    let conflict = post(
+        client,
+        address,
+        "/api/central-owner/rooms",
+        conflicting,
+        ORIGIN,
+        DEVICE,
+    )
+    .await;
+    assert_eq!(conflict.status(), StatusCode::CONFLICT);
+    verify_signed_call(&next_call(calls).await, public_key);
+    for (room_id, uid, device, expected) in [
+        ("second", room_uid, DEVICE, StatusCode::OK),
+        (
+            "general",
+            initial["room_uid"].clone(),
+            DEVICE,
+            StatusCode::OK,
+        ),
+        (
+            "general",
+            initial["room_uid"].clone(),
+            "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA",
+            StatusCode::UNAUTHORIZED,
+        ),
+    ] {
+        let response = post(client, address, "/api/central-owner/room",
+            json!({"grant_token": TOKEN, "generation": generation, "room_id": room_id, "room_uid": uid}), ORIGIN, device).await;
+        assert_eq!(response.status(), expected);
+        if expected == StatusCode::OK {
+            let session: Value = response
+                .json()
+                .await
+                .unwrap_or_else(|error| panic!("room session: {error:?}"));
+            assert_eq!(session["room_uid"], uid);
+            assert_eq!(
+                session["session_token"] == initial["session_token"],
+                room_id == "general"
+            );
+        }
+        verify_signed_call(&next_call(calls).await, public_key);
+    }
 }
 
 async fn verify_owner_friends(client: &reqwest::Client, address: SocketAddr, session: &str) {
@@ -391,7 +481,7 @@ async fn verify_owner_friends(client: &reqwest::Client, address: SocketAddr, ses
     assert_eq!(listed["friends"], json!([saved]));
     let rejected = authorized(
         client.get(&friend_url),
-        "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA",
     )
     .send()
     .await
@@ -442,7 +532,7 @@ async fn verify_owner_profile(client: &reqwest::Client, address: SocketAddr, adm
     assert_eq!(profile["profile"]["display_name"], "Host");
     let wrong_device = authorized(
         client.get(&profile_url),
-        "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+        "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA",
     )
     .send()
     .await

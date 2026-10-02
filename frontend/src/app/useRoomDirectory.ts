@@ -2,6 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { fetchRooms } from "../api";
 import {
   mergeServerRoomsIntoDock,
+  roomFromServerRoom,
   persistableRoom,
   roomDockIdentity,
   type RoomDockItem,
@@ -28,6 +29,7 @@ import {
 type UseRoomDirectoryOptions = {
   initialRooms: RoomDockItem[];
   hostEnabled: boolean;
+  remoteOwner?: { serverId: string; fetchRooms: (beforeDispatch: () => void) => Promise<StrictRoomDirectory> };
 };
 
 type RoomDirectorySyncIssue = {
@@ -144,13 +146,15 @@ function managerAuthoritySnapshot(
 export function useRoomDirectory({
   initialRooms,
   hostEnabled,
+  remoteOwner,
 }: UseRoomDirectoryOptions) {
-  const initialIssue = hostEnabled ? UNCONFIRMED_ISSUE : null;
+  const directoryEnabled = hostEnabled || Boolean(remoteOwner);
+  const initialIssue = directoryEnabled ? UNCONFIRMED_ISSUE : null;
   const roomsRef = useRef<RoomDockItem[]>(initialRooms);
   const [managementRooms, setManagementRooms] = useState<StrictRoomDirectory["rooms"]>([]);
   const [rooms, setRooms] = useState<RoomDockItem[]>(initialRooms);
   const activeRef = useRef(false);
-  const hostEnabledRef = useRef(false);
+  const directoryEnabledRef = useRef(false);
   const continuityOwnerRef = useRef<object>({});
   const publicationEpochRef = useRef(0);
   const reservedHydrationEpochRef = useRef<number | null>(null);
@@ -178,7 +182,7 @@ export function useRoomDirectory({
   const isCurrentEpoch = useCallback(
     (epoch: number) =>
       activeRef.current &&
-      hostEnabledRef.current &&
+      directoryEnabledRef.current &&
       publicationEpochRef.current === epoch,
     []
   );
@@ -309,6 +313,10 @@ export function useRoomDirectory({
 
   const resolveTrustedRoomDirectoryAuthority = useCallback(
     async (actual: RoomDirectoryAuthority) => {
+      if (remoteOwner) {
+        if (actual.server_id !== remoteOwner.serverId) throw new Error("선택한 서버와 방 목록이 일치하지 않습니다.");
+        return { retainedAuthority: retainRoomDirectoryAuthority(actual, authorityRef.current), trustedSurface: null };
+      }
       if (isDesktopWebview()) {
         const bootstrap = await requestDesktopBootstrapStatus();
         if (bootstrap.phase !== "complete") {
@@ -331,7 +339,7 @@ export function useRoomDirectory({
         trustedSurface: null,
       };
     },
-    []
+    [remoteOwner]
   );
 
   const verifyRoomDirectoryAuthority = useCallback(
@@ -363,7 +371,9 @@ export function useRoomDirectory({
 
   const fetchVerifiedRoomDirectory = useCallback(
     async (epoch: number) => {
-      const payload = await fetchRooms(true, () => assertCurrentEpoch(epoch));
+      const payload = remoteOwner
+        ? await remoteOwner.fetchRooms(() => assertCurrentEpoch(epoch))
+        : await fetchRooms(true, () => assertCurrentEpoch(epoch));
       assertCurrentEpoch(epoch);
       const stagedTrust = await resolveTrustedRoomDirectoryAuthority(payload);
       assertCurrentEpoch(epoch);
@@ -378,18 +388,20 @@ export function useRoomDirectory({
       authorityRef.current = stagedTrust.retainedAuthority;
       return payload;
     },
-    [assertCurrentEpoch, isCurrentEpoch, resolveTrustedRoomDirectoryAuthority]
+    [assertCurrentEpoch, isCurrentEpoch, resolveTrustedRoomDirectoryAuthority, remoteOwner]
   );
 
   const publishDirectory = useCallback(
     (payload: StrictRoomDirectory, epoch: number) => {
-      const synchronized = mergeServerRoomsIntoDock(
+      const synchronized = remoteOwner
+        ? payload.rooms.map(room => roomFromServerRoom(room, { roomOrigin: "remote_server", serverOrigin: window.location.origin }, window.location.origin, payload.server_id)).filter((room): room is RoomDockItem => room !== null)
+        : mergeServerRoomsIntoDock(
         roomsRef.current,
         payload.rooms,
         window.location.origin,
         payload.server_id
       );
-      const snapshot = managerAuthoritySnapshot(synchronized, payload, epoch);
+      const snapshot = hostEnabled ? managerAuthoritySnapshot(synchronized, payload, epoch) : null;
       assertCurrentEpoch(epoch);
       roomsRef.current = synchronized;
       managerSnapshotRef.current = snapshot;
@@ -398,7 +410,7 @@ export function useRoomDirectory({
       publishSyncIssue(null);
       return synchronized;
     },
-    [assertCurrentEpoch, publishSyncIssue]
+    [assertCurrentEpoch, publishSyncIssue, hostEnabled, remoteOwner]
   );
 
   const refreshRoomDirectory = useCallback(
@@ -438,7 +450,7 @@ export function useRoomDirectory({
       !snapshot ||
       snapshot.epoch !== publicationEpochRef.current ||
       !activeRef.current ||
-      !hostEnabledRef.current ||
+      !directoryEnabledRef.current ||
       syncIssueRef.current ||
       !bound ||
       bound.server_id !== snapshot.authority.server_id ||
@@ -473,32 +485,33 @@ export function useRoomDirectory({
   );
 
   useEffect(() => {
+    if (remoteOwner) return;
     const persistedRooms = rooms.map(persistableRoom);
     if (hostEnabled) {
       persistRoomDockItems(persistedRooms);
       return;
     }
     syncNativeRoomDockItems(persistedRooms);
-  }, [hostEnabled, rooms]);
+  }, [hostEnabled, rooms, remoteOwner]);
 
   useLayoutEffect(() => {
     activeRef.current = true;
-    hostEnabledRef.current = hostEnabled;
+    directoryEnabledRef.current = directoryEnabled;
     publicationEpochRef.current += 1;
     managerSnapshotRef.current = null;
-    reservedHydrationEpochRef.current = hostEnabled
+    reservedHydrationEpochRef.current = directoryEnabled
       ? publicationEpochRef.current
       : null;
-    publishSyncIssue(hostEnabled ? UNCONFIRMED_ISSUE : null);
+    publishSyncIssue(directoryEnabled ? UNCONFIRMED_ISSUE : null);
     return () => {
       activeRef.current = false;
-      hostEnabledRef.current = false;
+      directoryEnabledRef.current = false;
       invalidateDirectory();
     };
-  }, [hostEnabled, invalidateDirectory, publishSyncIssue]);
+  }, [directoryEnabled, remoteOwner, invalidateDirectory, publishSyncIssue]);
 
   useEffect(() => {
-    if (!hostEnabled) return;
+    if (!directoryEnabled) return;
     const epoch = reservedHydrationEpochRef.current;
     reservedHydrationEpochRef.current = null;
     if (epoch === null || !isCurrentEpoch(epoch)) return;
@@ -535,7 +548,7 @@ export function useRoomDirectory({
   }, [
     assertCurrentEpoch,
     fetchVerifiedRoomDirectory,
-    hostEnabled,
+    directoryEnabled,
     isCurrentEpoch,
     publishDirectory,
     publishSyncIssue,

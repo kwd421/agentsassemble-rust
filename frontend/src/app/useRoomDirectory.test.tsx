@@ -166,15 +166,20 @@ describe("useRoomDirectory", () => {
       server_id: serverId,
       authority_lineage_id: lineageId,
     });
-    apiMocks.fetchRooms.mockResolvedValueOnce(verifiedDirectory("general"));
+    const remoteFetch = vi.fn().mockResolvedValue(verifiedDirectory("general"));
+    const remoteOwner = { serverId, fetchRooms: remoteFetch };
 
     const remote = renderHook(() =>
-      useRoomDirectory({ initialRooms: [remoteRoom], hostEnabled: true })
+      useRoomDirectory({ initialRooms: [remoteRoom], hostEnabled: false, remoteOwner })
     );
     await waitFor(() => expect(remote.result.current.syncIssue).toBeNull());
     expect(() =>
       remote.result.current.resolveManagerRoomAuthority(remoteRoom.id)
     ).toThrow("현재 확인된 로컬 방 관리자 권위가 없습니다.");
+    expect(remoteFetch).toHaveBeenCalledOnce();
+    expect(apiMocks.fetchRooms).not.toHaveBeenCalled();
+    expect(remote.result.current.rooms[0].roomOrigin).toBe("remote_server");
+    expect(remote.result.current.managerAuthorityCurrent).toBe(false);
     remote.unmount();
 
     const localRoom = makeRoom("local", { meetingId: "general" });

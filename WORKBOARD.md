@@ -34,6 +34,16 @@
   build, Clippy and mandatory gates pass. Packaged/browser integration follows
   room directory/create and invitation wiring; no whole-parity completion claimed.
 
+- 2026-10-03 owner directory/create/switch is wired into the shared room shell,
+  including the empty-room creation entry. Grant custody is origin/device/generation
+  bound in additive schema 73; per-room replay preserves exact expiry. Existing
+  central-owner and directory HTTP tests, 358 persistence tests and 46 focused UI
+  tests pass. Full UI run exposed one stale room-chooser assertion; the updated
+  existing empty-directory handoff/retry test passes. Clippy and mandatory gates
+  pass. Signed isolated packaging/real-flow checks are in progress; invitations
+  and remaining owner-workspace parity are still open. Installed 0.1.4 data is
+  untouched by this isolated verification build.
+
 - 2026-10-02 remaining app/web owner-workspace correction: room directory/create,
   invitations and friends still rely on native manager authority or guest-only
   presentation. Preserve private/native transport boundaries while extending their

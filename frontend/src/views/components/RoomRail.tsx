@@ -28,6 +28,7 @@ export default function RoomRail({
   activeRoom,
   roomAppearances,
   guestLocked,
+  canCreateRoom = !guestLocked,
   canManageActiveRoom = false,
   adminOpen,
   menuRoom,
@@ -50,6 +51,7 @@ export default function RoomRail({
   activeRoom: RoomDockItem;
   roomAppearances: Record<string, RoomAppearance>;
   guestLocked: boolean;
+  canCreateRoom?: boolean;
   canManageActiveRoom?: boolean;
   adminOpen: boolean;
   menuRoom?: RoomDockItem;
@@ -112,7 +114,7 @@ export default function RoomRail({
             </button>
           );
         })}
-        {!guestLocked && (
+        {canCreateRoom && (
           <button
             type="button"
             onClick={onAddRoom}
