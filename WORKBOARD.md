@@ -2,6 +2,14 @@
 
 ## Active work
 
+- 2026-10-02 AI-readable connector invitation implemented: existing `/join` links
+  serve setup/join guidance without JavaScript. Connected clients use `room_join`;
+  clients without MCP receive registration and session reopening instructions.
+  GET/HEAD preserve invitations and room state. Native HTTP/MCP, human entry,
+  origin/input boundaries, frontend build and mandatory gates pass. One source owns
+  copied and HTTP guidance. Updated packaged-app and individual AI link-reading
+  flows remain unverified. Evidence: `docs/VERIFICATION.md` -> AI-readable invitation.
+
 - 2026-10-02 requested Sites MCP deployment: existing native MCP cannot be uploaded
   as a Worker artifact. The user clarified the deployment adapter is authorized.
   The private gateway and ownership contract are in `infra/sites-mcp/DEPLOYMENT.md`.

@@ -1,6 +1,7 @@
 import { act, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
 import { useManagedAiInvites } from "./useManagedAiInvites";
+import { connectorInviteText } from "../api/connectorInvite";
 
 const api = vi.hoisted(() => ({ create: vi.fn(), friend: vi.fn() }));
 vi.mock("../api/connectorInvite", async (importOriginal) => ({
@@ -9,6 +10,10 @@ vi.mock("../api/connectorInvite", async (importOriginal) => ({
 }));
 vi.mock("../api/attendeeInvite", async (importOriginal) => ({ ...await importOriginal<typeof import("../api/attendeeInvite")>(), createFriendAttendeeInvite: api.friend }));
 const LOCAL = "http://127.0.0.1:41955";
+it("does not interpolate shell syntax into copied MCP setup commands", () => {
+  expect(() => connectorInviteText("https://commands$(id).example.test/join?token=private"))
+    .toThrow("MCP 등록 안내에 사용할 서버 주소");
+});
 afterEach(() => { vi.useRealTimers(); api.create.mockReset(); api.friend.mockReset(); });
 
 it("retries uncertain creation with the same identity and guards copying by refreshed origin and expiry", async () => {
@@ -113,7 +118,7 @@ it("creates a connector invite on this machine's loopback origin while public ac
   expect(copied).toHaveLength(1);
   expect(copied[0]).toContain("assemble room connector-mcp");
   expect(copied[0]).toContain(`${LOCAL}/join?token=private`);
-  expect(copied[0]).not.toContain(`${LOCAL}/mcp`);
+  expect(copied[0]).toContain(`${LOCAL}/mcp`);
   expect(copied[0]).not.toBe(`${LOCAL}/join?token=private`);
 
   // Opening public access later does not invalidate a link that still resolves on this machine.

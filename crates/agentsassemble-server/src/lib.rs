@@ -95,6 +95,7 @@ pub use attendee_client_shutdown::shutdown_attendee;
 mod central_registration_web;
 mod connection_admission;
 pub mod connector_client;
+mod connector_invite_document;
 mod connector_invite_manager_web;
 pub mod connector_mcp;
 mod connector_mcp_web;

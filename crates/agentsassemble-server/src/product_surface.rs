@@ -68,6 +68,7 @@ fn registered_routes(
         crate::public_ingress_web::HTTP_ROUTES,
         crate::human_invite_manager_web::HTTP_ROUTES,
         crate::connector_invite_manager_web::HTTP_ROUTES,
+        crate::connector_invite_document::HTTP_ROUTES,
         crate::operator_pairing_web::HTTP_ROUTES,
         crate::human_invite_web::HTTP_ROUTES,
         crate::connector_web::HTTP_ROUTES,

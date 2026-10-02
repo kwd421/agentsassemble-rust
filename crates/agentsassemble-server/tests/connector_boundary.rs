@@ -204,6 +204,9 @@ mod mcp_remote;
 #[path = "connector_boundary/mcp_hosted.rs"]
 mod mcp_hosted;
 
+#[path = "connector_boundary/invite_document.rs"]
+mod invite_document;
+
 #[path = "connector_boundary/mcp_hosted_wait.rs"]
 mod mcp_hosted_wait;
 

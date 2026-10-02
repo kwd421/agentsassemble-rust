@@ -12000,3 +12000,33 @@ profile and cache were moved to recoverable Trash, and Computer Use was reset.
 This does not verify remote WebView reload, an authenticated live grant exchange,
 or Mac-to-Windows room reopening. The review predates these corrections, so the
 corrected revision has no review approval. No new automated security scan was run.
+
+## AI-readable invitation (2026-10-02)
+
+Connector `/join?token=aaci1.…` and `/join/` now serve a script-free HTML document
+from the native server. Its shared instruction source also owns clipboard guidance:
+use the existing `room_join` tool when available, otherwise explain MCP registration
+and reopening the current AI session. This describes the client's choice; the server
+does not inspect another AI's tool inventory. Human and attendee invitations retain
+the frontend entry. Presentation checks token syntax only; actual room authority,
+expiry, one-use redemption and private connection custody remain with native MCP.
+
+Real TCP GET, HEAD and repeated GET return complete guidance without consuming the
+same one-use invitation or changing canonical room state. An actual rmcp HTTP client
+then lists all 17 tools, prepares and joins with that invitation, publishes exactly
+one stored message, leaves and releases its receipt. Authorized proxy requests use
+only their verified HTTPS origin. Forged Host/proxy credentials, duplicate tokens,
+extra query fields, script input, oversized tokens and shell metacharacters in an
+operator-configured origin are rejected. The document is private/no-store and
+noindex/nofollow/noarchive; existing CSP, no-referrer and nosniff protections apply.
+No room details, proxy credentials or participant session credentials are rendered.
+
+Verification passes: connector boundary 20 tests, server unit 112, control pipe 13,
+ingress boundary 6, runtime boundary 10, focused frontend invite/modal 16, frontend
+production build, server all-target/all-feature Clippy, architecture/source-growth,
+19 policy/artifact tests, format and diff gates. Existing source-size and frontend
+bundle-size warnings remain; no gate or trust policy is weakened. No real model,
+new review session or automated security scan was run. The Rust test binaries and
+frontend build contain this change; an updated signed package, Windows GUI and an
+individual AI fetching and obeying the invitation have not been verified. Existing
+installed/running apps need a new build before these links serve the document.

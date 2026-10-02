@@ -115,7 +115,12 @@ pub(crate) async fn require_trusted_ingress(mut request: Request, next: Next) ->
             return StatusCode::SERVICE_UNAVAILABLE.into_response();
         }
     }
-    if let Some(PublicIngressAuthorization::Authorized(origin)) = &public_authorization {
+    if local_trusted {
+        if let Some(host) = single_header(request.headers(), header::HOST) {
+            let origin = TrustedIngressOrigin(format!("http://{host}").into());
+            request.extensions_mut().insert(origin);
+        }
+    } else if let Some(PublicIngressAuthorization::Authorized(origin)) = &public_authorization {
         request.extensions_mut().insert(origin.clone());
     }
     if exact_exposure == Some(RouteExposure::IdentityProbePublic) {

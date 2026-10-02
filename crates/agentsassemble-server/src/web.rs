@@ -37,8 +37,6 @@ const ROOT_PATH: &str = "/";
 const APP_PREFIX: &str = "/app";
 const APP_ENTRY_PATH: &str = "/app/";
 const ASSETS_PREFIX: &str = "/assets";
-const JOIN_PATH: &str = "/join";
-const JOIN_SLASH_PATH: &str = "/join/";
 const JOIN_ASSETS_PREFIX: &str = "/join/assets";
 const PAIR_PATH: &str = "/pair";
 const PAIR_SLASH_PATH: &str = "/pair/";
@@ -63,7 +61,7 @@ const APP_ROUTE: StaticFrontendRoute = StaticFrontendRoute {
     surface: "/app/{*path}",
     exposure: crate::product_surface::RouteExposure::Private,
 };
-const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 9] = [
+const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 7] = [
     StaticFrontendRoute {
         mount: "/app/index.html",
         surface: "/app/index.html",
@@ -78,16 +76,6 @@ const FRONTEND_INDEX_ROUTES: [StaticFrontendRoute; 9] = [
         mount: APP_ENTRY_PATH,
         surface: APP_ENTRY_PATH,
         exposure: crate::product_surface::RouteExposure::Private,
-    },
-    StaticFrontendRoute {
-        mount: JOIN_PATH,
-        surface: JOIN_PATH,
-        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
-    },
-    StaticFrontendRoute {
-        mount: JOIN_SLASH_PATH,
-        surface: JOIN_SLASH_PATH,
-        exposure: crate::product_surface::RouteExposure::SameOriginPublic,
     },
     StaticFrontendRoute {
         mount: PAIR_PATH,
@@ -193,6 +181,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::human_session_exchange_web::routes())
         .merge(crate::human_invite_manager_web::routes())
         .merge(crate::connector_invite_manager_web::routes())
+        .merge(crate::connector_invite_document::routes())
         .merge(crate::operator_pairing_web::routes())
         .merge(crate::human_invite_web::routes())
         .merge(crate::connector_web::routes())
@@ -729,8 +718,6 @@ mod static_route_tests {
                 ("/app/index.html", RouteExposure::Private),
                 ("/app", RouteExposure::Private),
                 ("/app/", RouteExposure::Private),
-                ("/join", RouteExposure::SameOriginPublic),
-                ("/join/", RouteExposure::SameOriginPublic),
                 ("/pair", RouteExposure::SameOriginPublic),
                 ("/pair/", RouteExposure::SameOriginPublic),
                 ("/recover", RouteExposure::SameOriginPublic),

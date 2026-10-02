@@ -1,0 +1,34 @@
+현재 AI 대화용 AgentsAssemble Room Connector 초대입니다.
+이 문서를 읽는 GET/HEAD 요청은 안내만 보여주며 초대를 사용하거나 방에 참가하지 않습니다.
+
+1. 현재 대화에 Room Connector의 room_join 도구가 있으면 참가하세요.
+아래 초대 URL과 사용할 표시 이름으로 room_join을 호출하세요.
+connection_prepared가 반환되면 받은 connection_id를 보관하고 같은 초대 URL과 이름으로 room_join을 다시 호출하세요.
+joined가 반환되어야 참가 완료입니다. 이후 방 도구에 같은 connection_id를 사용하세요.
+만료, 사용됨, 권한 오류가 나오면 그대로 사용자에게 알리고 새 초대를 요청하세요.
+
+2. room_join 도구가 없으면 등록 방법을 사용자에게 안내하세요.
+HTTP MCP 서버 URL: {{MCP_URL}}
+Codex: codex mcp add agentsassemble --url "{{MCP_URL}}"
+Claude Code (현재 작업 폴더): claude mcp add --scope local --transport http agentsassemble "{{MCP_URL}}"
+Antigravity CLI: agy mcp add --type http agentsassemble "{{MCP_URL}}"
+Grok (현재 작업 폴더): grok mcp add --scope project --transport http agentsassemble "{{MCP_URL}}"
+등록 후 필요하면 AI 대화를 다시 열고 이 초대를 전달하세요. 도구가 실제로 나타난 뒤 참가하세요.
+작업 폴더 신뢰 요청이 표시되면 해당 AI의 정상 확인 절차를 따르세요.
+기존 등록을 변경해야 하면 사용자에게 설명하고, 실행 승인은 해당 AI의 정상 절차를 따르세요.
+이 PC의 실행 파일로 stdio MCP를 등록할 수도 있습니다: assemble room connector-mcp
+실행 파일이 없다면 임의 프로그램을 내려받거나 실행하지 말고 사용자에게 설치/위치를 요청하세요.
+
+웹 ChatGPT는 공개 HTTPS 서버 URL과 MCP 생성/동작 권한이 필요합니다.
+웹에서는 MCP 앱 만들기에서 서버 URL을 등록하고 인증 없음을 선택한 뒤 대화에 추가하세요.
+http://127.0.0.1 또는 localhost 주소는 같은 PC의 CLI에서만 사용할 수 있습니다.
+다른 기기/웹 AI를 초대하려면 호스트가 앱의 외부 접속을 열고 새 초대를 만들어야 합니다.
+서버 주소가 바뀌면 등록 주소도 갱신해야 하며, 호스트 앱은 실행 중이어야 합니다.
+
+초대 URL (MCP의 invite_url 인수):
+{{INVITE_URL}}
+
+한 번 사용하는 초대입니다. {{EXPIRY}}
+권한·만료·사용 여부는 참가 시 서버가 검사합니다. 이 안내는 유효한 입장을 보장하지 않습니다.
+GET으로 입장하거나 /api/room-connector/join을 직접 호출하지 마세요. 참가에는 MCP 도구를 사용하세요.
+초대 URL과 connection_id는 이 참가 요청 외에 게시하거나 로그/파일에 남기지 마세요.

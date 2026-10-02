@@ -4,6 +4,7 @@ import { parseLocalIngressOrigin, parsePublicIngressOrigin } from "../lib/public
 import type { CreateConnectorInviteRequest } from "../types/generated/CreateConnectorInviteRequest";
 import type { CreatedConnectorInvite } from "../types/generated/CreatedConnectorInvite";
 import type { InviteReach } from "../types/generated/InviteReach";
+import instructions from "./connectorInviteInstructions.txt?raw";
 
 export type ConnectorInviteCustody = {
   authority: DesktopManagerRoomAuthority;
@@ -13,34 +14,17 @@ export type ConnectorInviteCustody = {
   expiresAtMs: number;
 };
 
-/** Clipboard / join-page text for the current-conversation MCP path. Not a webpage. */
+/** One instruction source for the clipboard and server-rendered invitation document. */
 export function connectorInviteText(joinUrl: string, expiresAt?: string): string {
   const origin = new URL(joinUrl).origin;
-  const webSetup = origin.startsWith("https://") ? [
-    "웹 ChatGPT: 설정 → 플러그인 → MCP 앱 만들기에서 아래 서버 URL을 등록하세요 (인증 없음).",
-    `${origin}/mcp`,
-    "앱의 외부 접속이 켜져 있어야 해요. 임시 주소가 바뀌면 ChatGPT에도 새 주소를 등록해야 해요.",
-    "등록한 Room Connector를 이 대화에 추가한 뒤 아래 초대 URL로 room_join을 호출하세요.",
-    "connection_prepared가 반환되면 connection_id를 보관하고 같은 URL과 이름으로 room_join을 다시 호출하세요.",
-    "",
-  ] : [];
+  if (!/^[A-Za-z0-9:/._\[\]-]+$/.test(origin)) {
+    throw new Error("MCP 등록 안내에 사용할 서버 주소가 올바르지 않아요.");
+  }
   const expiry = expiresAt
-    ? `한 번 사용할 수 있어요. 만료: ${new Date(expiresAt).toLocaleString()}`
-    : "한 번 사용할 수 있고 1시간 뒤 만료돼요.";
-  return [
-    "현재 AI 대화용 AgentsAssemble Room Connector 초대입니다.",
-    "이 URL을 열거나 fetch 하지 마세요. HTTP로 /api/room-connector/join 하지 마세요.",
-    "",
-    ...webSetup,
-    "터미널 AI 대화라면 이 작업 폴더에 Room Connector MCP를 등록하세요:",
-    "assemble room connector-mcp",
-    "Grok: grok mcp add --scope project agentsassemble <assemble 실행 파일> -- room connector-mcp",
-    "",
-    "터미널에서는 폴더를 신뢰한 뒤 대화를 다시 여세요. 초대 URL:",
-    joinUrl,
-    "",
-    expiry,
-  ].join("\n");
+    ? `만료: ${new Date(expiresAt).toLocaleString()}`
+    : "만료 여부는 room_join에서 확인합니다.";
+  return instructions.replaceAll("{{MCP_URL}}", `${origin}/mcp`)
+    .replaceAll("{{INVITE_URL}}", joinUrl).replaceAll("{{EXPIRY}}", expiry);
 }
 
 export async function createConnectorInvite(
