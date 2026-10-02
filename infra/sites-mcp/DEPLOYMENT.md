@@ -90,3 +90,21 @@ by this design and must not be promised.
 Completion requires the supported Sites MCP declaration/activation contract,
 private redeployment and the production acceptance checks above. The current
 private website is not a usable hosted MCP server or an installed client plugin.
+
+## Activation research follow-up (2026-10-02)
+
+- OpenAI's [hosting guide](https://help.openai.com/en/articles/20001547-hosting-a-plugin-with-chatgpt-sites)
+  confirms MCP hosting on an existing Site, owner republication and a resulting
+  plugin installation/connection flow. It also describes gradual feature rollout.
+  It does not specify the deployment declaration format.
+- A fresh `get_site(include_mcp_connection=true)` still returns `INVALID_ARGUMENT`
+  with the undeclared-MCP error above. Runtime environment revision 2 has no entries
+  or configuration instructions. The exposed Sites actions have no MCP activation
+  mutation; this session has no Sites hosting skill in its local skill directories.
+- Rechecked official `openai/sites` source and latest npm packages:
+  `@openai/sites-vite-plugin` 0.2.0 and `@openai/create-sites` 0.3.0. No supported
+  MCP declaration contract was found in those sources or the official Sites guide.
+- These observations do not establish whether the failure is a rollout limitation,
+  missing deployment metadata or a platform defect. The supported activation
+  contract remains the external dependency; a changed route or successful ordinary
+  website deployment would not prove Sites-managed MCP/plugin provisioning.
