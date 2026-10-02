@@ -20,8 +20,11 @@ it("retires the native return if cancellation arrives while start is in flight",
 });
 
 it("attempts retirement after an uncertain native start and exposes the failure", async () => {
-  control.mockRejectedValueOnce(new Error("native start failed")).mockResolvedValueOnce({ result: { status: "cancelled" } });
-  await expect(loginCentralGoogle()).rejects.toThrow("native start failed");
+  control.mockRejectedValueOnce(new Error("native start failed")).mockRejectedValueOnce(new Error("Google login is not running"));
+  const failure = await loginCentralGoogle().catch((error: unknown) => error);
+  expect(failure).toBeInstanceOf(AggregateError);
+  expect((failure as Error).message).toContain("native start failed");
+  expect((failure as Error).message).toContain("Google login is not running");
   expect(control.mock.calls.map(([action]) => action)).toEqual(["start", "cancel"]);
 });
 

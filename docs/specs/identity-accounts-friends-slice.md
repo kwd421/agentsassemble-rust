@@ -702,8 +702,11 @@ the chooser retains their short server ID and allows the owner to name them now.
 
 Authenticated POST `/v1/servers/:id/name` stores a trimmed 1–80 UTF-16-unit name,
 rejecting controls and invalid types. A single SQL update checks current ownership,
-active registration and the displayed name observed by the editor; stale edits or
-unavailable/non-owned registrations fail without mutation. Registration and same-
+active registration and the displayed name observed by the editor; already-applied
+names are idempotent, while stale different-name edits and unavailable/non-owned
+registrations fail without mutation. Refreshed entries own the editor baseline.
+Only owners receive the current host default; bookmarks show their own alias or
+server ID. Unicode Cc characters are rejected. Registration and same-
 owner claims preserve explicit aliases. Names do not affect host keys, admission,
 endpoints, room authority or profile synchronization. Both desktop and web share
 the editor; failed saves retain input. No runtime starts to rename an offline host.

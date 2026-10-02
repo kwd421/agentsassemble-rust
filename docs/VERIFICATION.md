@@ -12213,3 +12213,25 @@ during rename and the local SQLite SHA-256 stayed unchanged. Existing user
 accounts, rooms, provider settings and the installed app were not changed.
 Windows, cross-device live room access and browser interactive rename are not
 established by these checks. Requested independent Daybreak review is pending.
+
+Daybreak Blue `xhigh` completed its single-session source review of Rust
+`3e79ad1b` (including client-first `36ac7667`) and Worker `bc8d3d7a`: REJECT,
+C0/H0/M3/L1. Corrections address all four supported findings: bootstrap no longer
+projects the live host label into another account's blank bookmark; repeating an
+already committed rename is idempotent while stale different-name writes still
+conflict; the editor uses its refreshed server entry for the CAS baseline; and
+native login preserves its primary failure together with a subsequent cleanup
+failure. Worker/frontend reject Unicode Cc characters consistently with Rust.
+
+Regression cases failed on the reviewed revisions (cross-owner hostname disclosure,
+409 after committed-save retry, stale editor after refresh, and cleanup masking
+startup failure). Restoring the old control regex also failed the C1 case before
+restoration. Corrected frontend 952 and Worker 32 tests pass; production build,
+mandatory gates and owner repository structure/maps pass. The actual packaged
+pre-correction host re-registration also retained the user-selected Korean name.
+The corrected signed package was exercised with a controlled missing bundled
+server: the real Google entry displayed both the original missing-runtime error
+and the subsequent no-login-process cleanup error, with no room process/database
+created. The held executable was restored and strict deep signature verification
+passed; the app was quit normally and isolated data removed. Corrected deployment:
+`81347df0-3d4c-4bfe-8afa-41407903da58`. Final independent re-review is pending.

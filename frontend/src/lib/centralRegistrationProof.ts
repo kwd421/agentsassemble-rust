@@ -158,7 +158,7 @@ export async function verifyCentralRegistrationEnvelope(
 }
 
 export function validateHostName(value: unknown): asserts value is string {
-  if (typeof value !== "string" || !value.trim() || value.length > 80 || /[\u0000-\u001f\u007f]/u.test(value)) {
+  if (typeof value !== "string" || !value.trim() || value.length > 80 || /\p{Cc}/u.test(value)) {
     throw new Error("컴퓨터 이름을 확인하지 못했습니다.");
   }
 }

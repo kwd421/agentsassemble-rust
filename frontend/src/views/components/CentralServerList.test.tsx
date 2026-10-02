@@ -38,3 +38,28 @@ it("retains failed edits and excludes bookmarks from owner controls", async () =
   expect((await screen.findByRole("alert")).textContent).toContain("목록이 바뀌었습니다");
   expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("보존할 입력");
 });
+
+it("uses the refreshed name when retrying a conflicting edit", async () => {
+  const user = userEvent.setup();
+  let stored = "Other device's new name";
+  vi.mocked(renameCentralServer).mockImplementation(async (server, name) => {
+    if (server.alias !== stored) throw new Error("목록이 바뀌었습니다");
+    stored = name;
+  });
+  function Harness() {
+    const [servers, setServers] = useState([host]);
+    const refresh = async () => { setServers([{ ...host, alias: stored }]); };
+    return <><CentralServerList servers={servers} busy={false} onOpen={async () => {}} onRefresh={refresh} />
+      <button onClick={() => void refresh()}>새로고침</button></>;
+  }
+  render(<Harness />);
+  await user.click(screen.getByRole("button", { name: /이름 변경/ }));
+  await user.clear(screen.getByRole("textbox"));
+  await user.type(screen.getByRole("textbox"), "My chosen name");
+  await user.click(screen.getByRole("button", { name: "이름 저장" }));
+  await screen.findByRole("alert");
+  await user.click(screen.getByRole("button", { name: "새로고침" }));
+  expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("My chosen name");
+  await user.click(screen.getByRole("button", { name: "이름 저장" }));
+  expect(await screen.findByRole("button", { name: "My chosen name 이름 변경" })).toBeTruthy();
+});

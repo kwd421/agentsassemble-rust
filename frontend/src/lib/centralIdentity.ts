@@ -516,6 +516,7 @@ export async function loginCentralGoogle(
   const verifier = randomUrlToken(32);
   const codeChallenge = await sha256(verifier);
   let retirementAttempted = false;
+  let failure: { reason: unknown } | undefined;
   try {
     const callback = await controlDesktopCentralLogin("start", state);
     throwIfGoogleLoginAborted(signal);
@@ -577,8 +578,18 @@ export async function loginCentralGoogle(
       return saveSession(exchanged);
     }
     throw new Error("Google 로그인 시간이 만료됐습니다. 다시 시도해 주세요.");
+  } catch (reason) {
+    failure = { reason };
+    throw reason;
   } finally {
-    if (!retirementAttempted) await controlDesktopCentralLogin("cancel", state);
+    if (!retirementAttempted) {
+      try { await controlDesktopCentralLogin("cancel", state); }
+      catch (cleanup) {
+        if (!failure) throw cleanup;
+        const describe = (reason: unknown) => reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "원인을 확인하지 못했습니다.";
+        throw new AggregateError([failure.reason, cleanup], `${describe(failure.reason)}\n로그인 정리 실패: ${describe(cleanup)}`);
+      }
+    }
   }
 }
 
