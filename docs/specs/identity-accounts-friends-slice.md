@@ -219,18 +219,19 @@ real-device verification. No new scan, reviewer session or subagent is authorize
 Browser startup without an invitation links to the fixed central identity origin.
 That origin serves the same frontend's account entry and owned-server chooser;
 room hosts never receive central bearers, signing keys or Google credentials.
-Google Identity Services returns a nonce-bound ID token to this central page.
-A ten-minute, one-use Worker handoff binds the device public key and a browser-held
-verifier before Google authentication. Completion checks the verifier, Google
-signature/audience/nonce and current account/device state using the same identity
-and session owners as desktop login. Only exact same-origin web requests may use
+The shared Google button opens standard authorization-code OAuth with PKCE and
+same-tab state. A ten-minute, one-use Worker handoff binds the device public key,
+exact central-root callback and browser-held verifier before authentication. The
+Worker exchanges the code using its existing Web client secret and checks Google
+signature/audience/nonce and current account/device state through the same handoff,
+identity and session owners as desktop login. Only exact same-origin web requests may use
 this flow. Desktop loopback OAuth and invitation admission remain unchanged.
 
 The browser validates the current central session before listing servers and uses
 existing owner connect grants, host challenge verification and room session minting.
 Offline servers remain visible but disabled; bookmarks require their existing
 invitation authority. Web startup cannot initialize a host, claim ownership or
-create rooms. Expired/revoked sessions, script failure and popup cancellation expose
+create rooms. Expired/revoked sessions, authorization failure and cancellation expose
 retryable UI. Logout revokes the central session and clears its local account slot.
 No schema migration, fallback, widened CORS or account merging is introduced.
 
@@ -247,7 +248,8 @@ User requirement: use the existing product in both the app and browser. The brow
 entry implementation above proves only a subset of this requirement. Sharing the
 room view while replacing startup and account management is not full acceptance.
 This correction supersedes any interpretation that permits separate product flows
-merely because the entry point is a browser. Implementation remains pending.
+merely because the entry point is a browser. Shared startup and account components
+are implemented; full behavioral verification remains open.
 
 Reuse product UI and state transitions across entry points. Isolate native process,
 credential custody and browser-origin transport at their existing authority owners.
@@ -258,12 +260,28 @@ not silently receive a different account-management flow based on environment.
 
 | Required flow | Current evidence / correction status | Acceptance evidence required |
 | --- | --- | --- |
-| Startup, Google login, cancel and retry | Separate startup components confirmed; Google button rendering defect reported | Shared product presentation and outcomes in packaged app and browser; actual Google return, cancellation and retry |
-| Guest start and recovery | Absent from central web entry; desktop entry exposes both | Preserve applicable guest/recovery paths and authority; verify successful, rejected and interrupted recovery in both entries |
-| Account settings and logout | Desktop central settings vs browser server-local Google binding confirmed | Correct account identity and management in both; logout/reload, revocation failure and retry preserve rooms/profile and other devices |
+| Startup, Google login, cancel and retry | Shared startup component; web-only Google widget removed | Shared product presentation and outcomes in packaged app and browser; actual Google return, cancellation and retry |
+| Guest start and recovery | Both entries now expose the same guest/recovery controls | Preserve applicable guest/recovery paths and authority; verify successful, rejected and interrupted recovery in both entries |
+| Account settings and logout | Common central account section; explicit server-local binding retained | Correct account identity and management in both; logout/reload, revocation failure and retry preserve rooms/profile and other devices |
 | Profile name/photo and edits | Cross-entry behavior not yet verified | Same authorized profile on the same server, persisted edits after reload/re-entry, explicit account vs server-profile distinction |
 | Server listing, naming, selection and room history | Shared server-list component; full flow unverified | Same owned servers and stored history; online/offline, rename, expired grant and retry behavior |
 | Room permissions and local-device actions | Environment branches require audit | Same room role yields same authorized room operations; local host/provider operations retain their actual device owner |
+
+Real-flow findings on 2026-10-02: both Chrome and the signed macOS package complete
+Google login as the existing person and render the shared server chooser. Remote
+owner navigation previously targeted private `/app` and returned 403; it now uses
+the existing public `/pair` shell. The private route remains denied. Chrome reaches
+the existing room and history, but the paired-session presentation still suppresses
+owner profile settings. This remains an open product defect.
+
+The central-owner correction must retain server-issued provenance in its durable
+session. Only a session minted after validated central owner redemption may read
+or edit the existing server-wide owner profile and avatar. Revalidate its exact
+room incarnation, origin, device, revocation and expiry in the profile transaction.
+Ordinary device pairings and existing rows remain room-only; a client flag cannot
+grant profile authority. This does not grant host filesystem/provider credential
+access, change central identity ownership, or merge accounts. Preserve edited
+profiles, revision conflicts, avatar quotas and existing profile projection events.
 
 Use affected existing frontend/API tests for regression coverage and exercise the
 same scenarios through packaged and browser entry. Record each result and platform

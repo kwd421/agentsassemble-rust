@@ -14,7 +14,6 @@ import {
   roomGuestSessionExpired,
 } from "../../lib/roomGuestSession";
 import { centralAccountEntryUrl, isCentralWebEntry } from "../../lib/centralIdentity";
-import CentralWebIdentityGate from "./CentralWebIdentityGate";
 import StartupIdentityGate from "./StartupIdentityGate";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
 
@@ -64,7 +63,7 @@ export default function StartupIdentityBoundary({
     }
   });
 
-  if (isCentralWebEntry()) return <CentralWebIdentityGate />;
+  if (isCentralWebEntry()) return <StartupIdentityGate deviceToken="" onComplete={finishCentralEntry} />;
 
   if (!desktop && !ready && !centralOwnerConnect) {
     return (
@@ -132,3 +131,6 @@ export default function StartupIdentityBoundary({
     />
   );
 }
+
+// Central entry navigates through a bound server grant, never local bootstrap.
+function finishCentralEntry() {}

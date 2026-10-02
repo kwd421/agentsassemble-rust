@@ -1,5 +1,7 @@
 import CentralServerList from "./CentralServerList";
-import { useEffect, useRef, useState } from "react";
+import CentralAccountSettings from "./CentralAccountSettings";
+import { startCentralWebGoogle, completeCentralWebGoogleReturn } from "../../lib/centralWebGoogle";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -14,6 +16,7 @@ import {
 import {
   bootstrapCentral,
   centralIdentityConfigured,
+  isCentralWebEntry,
   centralSessionLoggedOut,
   type CentralPerson,
   type CentralServer,
@@ -109,6 +112,7 @@ export default function StartupIdentityGate({
   onComplete: () => void;
 }) {
   const centralEnabled = centralIdentityConfigured();
+  const webEntry = isCentralWebEntry();
   const [screen, setScreen] = useState<Screen>("choice");
   const [displayName, setDisplayName] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
@@ -168,18 +172,18 @@ export default function StartupIdentityGate({
     onComplete();
   }
 
-  function showCentralServers(refreshed: CentralBootstrap) {
+  const showCentralServers = useCallback((refreshed: CentralBootstrap) => {
     setCentralPerson(refreshed.person);
     setCentralServers(refreshed.servers.filter((server) => server.relation === "owner"));
     setScreen("servers");
     setChecking(false);
-  }
+  }, []);
 
-  async function finishCentralStartup() {
+  const finishCentralStartup = useCallback(async () => {
     const refreshed = await bootstrapCentral();
     if (!refreshed) throw new Error("중앙 로그인 상태가 사라졌습니다. 다시 로그인해 주세요.");
     showCentralServers(refreshed);
-  }
+  }, [showCentralServers]);
 
   async function selectCentralServer(server?: CentralServer) {
     if (busy || !centralPerson) return;
@@ -188,6 +192,7 @@ export default function StartupIdentityGate({
     try {
       if (server) await openCentralOwnedServer(server);
       else {
+        if (webEntry) throw new Error("서버를 실행하려면 이 기기의 앱을 열어 주세요.");
         // Local authority is touched only after the explicit hosting choice.
         const current = await bootstrapCentral();
         if (!current) throw new Error("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
@@ -235,7 +240,8 @@ export default function StartupIdentityGate({
     let active = true;
     async function initialize() {
       try {
-        await requestDesktopHostProductSurface();
+        if (webEntry) await completeCentralWebGoogleReturn();
+        else await requestDesktopHostProductSurface();
         if (centralEnabled && centralSessionLoggedOut()) {
           if (active) setChecking(false);
           return;
@@ -304,7 +310,7 @@ export default function StartupIdentityGate({
     return () => {
       active = false;
     };
-  }, [centralEnabled, deviceToken, onComplete]);
+  }, [centralEnabled, deviceToken, onComplete, webEntry, showCentralServers]);
 
   async function createGuest() {
     const name = displayName.trim();
@@ -366,6 +372,11 @@ export default function StartupIdentityGate({
     setBusy(true);
     setError("");
     try {
+      if (webEntry) {
+        setStatus("Google 로그인 화면을 여는 중");
+        await startCentralWebGoogle(controller.signal);
+        return;
+      }
       await loginCentralGoogle(setStatus, controller.signal);
       await finishCentralStartup();
     } catch (reason) {
@@ -547,14 +558,15 @@ export default function StartupIdentityGate({
 
         {screen === "servers" && (
           <section className="grid gap-3 rounded-lg bg-[#1b1c20] p-4">
+            {webEntry && new URLSearchParams(window.location.search).get("account") === "settings" && <CentralAccountSettings disabled={busy} />}
             <p className="text-[13px] text-text-secondary">{centralPerson?.display_name}님의 서버</p>
-            {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. 이 기기에서 서버를 열어 시작할 수 있어요.</p>}
+            {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. 호스트 앱에서 같은 계정으로 서버를 열어 주세요.</p>}
             <CentralServerList key={centralPerson?.person_id} servers={centralServers} busy={busy} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void refreshServers()}>서버 목록 새로고침</button>
-            <button type="button" className="grid min-h-14 gap-1 rounded-md bg-[#5865f2] px-4 py-3 text-left text-[13px] text-white disabled:opacity-50" disabled={busy} onClick={() => void selectCentralServer()}>
+            {!webEntry && <button type="button" className="grid min-h-14 gap-1 rounded-md bg-[#5865f2] px-4 py-3 text-left text-[13px] text-white disabled:opacity-50" disabled={busy} onClick={() => void selectCentralServer()}>
               <strong>이 기기에서 서버 열기</strong>
               <span className="text-[11px] text-white/80">이 컴퓨터의 기존 방을 열거나 새 서버를 만듭니다.</span>
-            </button>
+            </button>}
             <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}
@@ -690,6 +702,7 @@ export default function StartupIdentityGate({
             className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
           >
             {error}
+            {screen === "choice" && loadCentralSession() && <button type="button" className="ops-button mt-2 block" disabled={busy} onClick={() => void refreshServers()}>다시 확인</button>}
           </p>
         )}
       </main>

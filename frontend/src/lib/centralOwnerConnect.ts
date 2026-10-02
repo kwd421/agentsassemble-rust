@@ -90,7 +90,9 @@ export function centralOwnerServerUrl(
   const encoded = encodeBase64Url(
     new TextEncoder().encode(JSON.stringify(connect))
   );
-  url.pathname = "/app";
+  // Remote owners enter through the existing public device-pairing shell.
+  // /app is intentionally private; authority still comes from the signed grant.
+  url.pathname = "/pair";
   url.hash = `${FRAGMENT_PREFIX}${encoded}`;
   return url.toString();
 }

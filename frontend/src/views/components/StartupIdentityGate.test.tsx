@@ -69,6 +69,7 @@ vi.mock("../../lib/deviceIdentity", () => ({
 }));
 vi.mock("../../lib/centralIdentity", () => ({
   centralIdentityConfigured: () => centralMocks.configured,
+  isCentralWebEntry: () => false,
   centralSessionLoggedOut: () => centralMocks.loggedOut,
   bootstrapCentral: centralMocks.bootstrap,
   clearPendingCentralRecoveryCode: vi.fn(),

@@ -9,6 +9,14 @@
   open; prior browser login success does not establish product parity. Acceptance:
   `docs/specs/identity-accounts-friends-slice.md` -> App and web behavior correction.
 
+- 2026-10-02 app/web correction progress: shared startup and standard Google code
+  exchange work in Chrome and the signed macOS package. The existing downloaded
+  Web OAuth credential is reused; no replacement credential was created. Remote
+  owner navigation now targets the existing public `/pair` shell instead of private
+  `/app`; real Chrome entry shows the existing room/history. Owner profile settings
+  are still suppressed by ordinary pairing treatment and remain active work. The
+  server must distinguish central-owner session provenance before exposing edits.
+
 - 2026-10-02 active: implement the user-approved official Tauri updater for macOS
   and Windows, including signed release delivery and owned-runtime shutdown before
   installation. Contract: `docs/specs/desktop-updates.md`.

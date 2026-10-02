@@ -5,7 +5,7 @@ import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import GoogleAccountSettings from "./GoogleAccountSettings";
 import CentralAccountSettings from "./CentralAccountSettings";
-import { isDesktopWebview } from "../../lib/desktopBridge";
+import { centralIdentityConfigured } from "../../lib/centralIdentity";
 import GuestRecoverySettings from "./GuestRecoverySettings";
 
 export type UserSettingsSection = "account" | "profile" | "voice" | "recovery";
@@ -139,7 +139,13 @@ export default function UserSettingsPanel({
                   </select>
                 </label>
               </div>
-              {isDesktopWebview() ? <CentralAccountSettings disabled={saving} /> : <GoogleAccountSettings identity={profileIdentity ?? {}} />}
+              {centralIdentityConfigured() ? <>
+                <CentralAccountSettings disabled={saving} />
+                {profileIdentity?.sessionToken && <details className="mt-4">
+                  <summary>이 서버의 Google 계정 연결</summary>
+                  <GoogleAccountSettings identity={profileIdentity} />
+                </details>}
+              </> : <GoogleAccountSettings identity={profileIdentity ?? {}} />}
             </>
           )}
 

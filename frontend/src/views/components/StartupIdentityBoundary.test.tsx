@@ -27,7 +27,6 @@ vi.mock("../../lib/deviceIdentity", () => ({
 vi.mock("./StartupIdentityGate", () => ({
   default: () => <main aria-label="authoritative startup gate" />,
 }));
-vi.mock("./CentralWebIdentityGate", () => ({ default: () => <main aria-label="central web account" /> }));
 vi.mock("./CentralOwnerConnectGate", () => ({
   default: ({ deviceToken }: { deviceToken: string }) => (
     <main aria-label="central owner gate" data-device-token={deviceToken} />
@@ -57,7 +56,7 @@ describe("StartupIdentityBoundary", () => {
     vi.stubEnv("VITE_AGENTSASSEMBLE_CENTRAL_URL", window.location.origin);
     const { default: WebBoundary } = await import("./StartupIdentityBoundary");
     render(<WebBoundary>{() => <main aria-label="product" />}</WebBoundary>);
-    expect(screen.getByRole("main", { name: "central web account" })).toBeTruthy();
+    expect(screen.getByRole("main", { name: "authoritative startup gate" })).toBeTruthy();
     expect(screen.queryByRole("main", { name: "product" })).toBeNull();
     expect(deviceMocks.getOrCreateBrowserCredential).not.toHaveBeenCalled();
   });

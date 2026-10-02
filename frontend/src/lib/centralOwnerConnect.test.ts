@@ -23,6 +23,7 @@ describe("central owner navigation secret", () => {
 
   it("round-trips only through an HTTPS fragment and consumes it from history", () => {
     const url = centralOwnerServerUrl("https://home.example.test", connect);
+    expect(new URL(url).pathname).toBe("/pair");
     expect(new URL(url).search).toBe("");
     expect(new URL(url).hash).toMatch(/^#central-owner=/);
     expect(centralOwnerConnectFromUrl(url)).toEqual(connect);
