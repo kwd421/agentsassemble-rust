@@ -2,7 +2,7 @@ import { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import { AttendeeFriendInviteCard, type AttendeeInviteControls } from "./AttendeeFriendInviteCard";
 import { ConnectorInviteCard, type ConnectorInviteControls } from "./ConnectorInviteCard";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Copy, Globe2, LoaderCircle, LockKeyhole, X } from "lucide-react";
+import { Copy, Settings, X } from "lucide-react";
 import type { PublicInviteStatus } from "../../api";
 import type {
   HumanInviteOptions,
@@ -30,6 +30,13 @@ function humanInviteStatus(invite: HumanInvitePresentation) {
 
 function humanInviteUseLabel(maxUses: number) {
   return maxUses === 0 ? "인원 제한 없음" : `${maxUses}명`;
+}
+
+const HUMAN_INVITE_TTL_LABELS: Record<number, string> = { 3600: "1시간", 86400: "24시간", 604800: "7일" };
+
+function humanInviteSummary(maxUses: number, ttlSeconds: number) {
+  const uses = maxUses === 0 ? "인원 제한 없이" : maxUses === 1 ? "1명만" : `${maxUses}명까지`;
+  return `${uses} 쓸 수 있고 ${HUMAN_INVITE_TTL_LABELS[ttlSeconds] || `${ttlSeconds}초`} 후 만료돼요.`;
 }
 
 export default function RoomInviteModal({
@@ -86,6 +93,7 @@ export default function RoomInviteModal({
   const [tab, setTab] = useState<InviteTabId>("people");
   const [friendDisplayName, setFriendDisplayName] = useState<string>();
   const [humanTtlSeconds, setHumanTtlSeconds] = useState(86400);
+  const [linkSettingsOpen, setLinkSettingsOpen] = useState(false);
   const [pendingPublicAction, setPendingPublicAction] =
     useState<PendingPublicAction | null>(null);
   const readOnlyInvite = inviteScope === "read_only";
@@ -106,6 +114,9 @@ export default function RoomInviteModal({
   const publicTunnelActive = Boolean(tunnelStatus?.running);
   const publicAccessControllable = Boolean(tunnelStatus?.available);
   const publicAccessBusy = publicAccessStarting || publicAccessStopping;
+  // One hosting control at a time: an open or opening tunnel offers only Stop.
+  const showStopTunnel =
+    publicAccessStarting || publicAccessStopping || publicTunnelActive || publicAccessRunning;
   function requestPublicAction(action: PendingPublicAction) {
     if (publicAccessRunning) {
       onGenerateSecureInvite(action.options, false);
@@ -133,21 +144,16 @@ export default function RoomInviteModal({
       <dialog
         ref={dialogRef}
         className="dc-invite-modal"
-        style={{ margin: "auto", padding: 24, maxHeight: "calc(100dvh - 32px)", color: "var(--color-text-primary)" }}
+        style={{ margin: "auto", maxHeight: "calc(100dvh - 32px)", color: "var(--color-text-primary)" }}
         onCancel={(event) => { event.preventDefault(); onClose(); }}
         aria-modal="true"
         aria-labelledby="room-invite-title"
         onClick={(event) => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }}
       >
-        <header className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <h2 id="room-invite-title" className="text-[18px] font-black text-text-primary preserve-words" style={{ overflowWrap: "anywhere" }}>
-              {roomLabel} 초대 및 연결
-            </h2>
-            <p className="mt-1 text-[13px] text-text-muted preserve-words">
-              사람과 AI를 초대하거나 내 다른 기기를 연결해요.
-            </p>
-          </div>
+        <header className="dc-invite-header">
+          <h2 id="room-invite-title" className="preserve-words">
+            {roomLabel}에 초대하기
+          </h2>
           <button
             type="button"
             className="dc-modal-close"
@@ -164,170 +170,115 @@ export default function RoomInviteModal({
           {copyStatus}
         </p>
 
-        <section
-          className="dc-invite-hosting"
-          data-state={publicAccessBusy ? "busy" : publicAccessRunning ? "public" : "local"}
-          aria-labelledby="room-hosting-heading"
-        >
-          <span className="dc-invite-hosting-icon" aria-hidden="true">
-            {publicAccessBusy ? (
-              <LoaderCircle className="dc-invite-hosting-spinner" size={22} />
-            ) : publicAccessRunning ? (
-              <Globe2 size={22} />
-            ) : (
-              <LockKeyhole size={22} />
-            )}
-          </span>
-          <div className="dc-invite-hosting-copy">
-            <div className="dc-invite-hosting-title-row">
-              <h3 id="room-hosting-heading">이 컴퓨터의 서버 공개</h3>
-              <span className="dc-invite-hosting-state">
-                {publicAccessStarting
-                  ? "공개 준비 중"
-                  : publicAccessStopping
-                    ? "외부 접속 닫는 중"
-                    : publicAccessRunning
-                      ? "외부 접속 열림"
-                      : "외부 접속 꺼짐"}
-              </span>
-            </div>
-            <p style={{ whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }}>
-              {publicAccessRunning
-                ? publicUrl || tunnelStatus?.public_url || "외부 주소가 연결되어 있어요."
-                : "외부 접속을 꺼도 이 컴퓨터에서는 계속 대화할 수 있어요."}
-            </p>
-            {tunnelStatus?.last_error && (
-              <span className="mt-1 text-[12px] font-bold text-offline preserve-words">
-                {tunnelStatus.last_error}
-              </span>
-            )}
+        {tabs.length > 1 && (
+          <div className="dc-invite-tabs" role="tablist" aria-label="초대 종류">
+            {tabs.map((entry) => (
+              <button
+                key={entry.id}
+                type="button"
+                role="tab"
+                id={`invite-tab-${entry.id}`}
+                aria-selected={tab === entry.id}
+                aria-controls={`invite-panel-${entry.id}`}
+                data-active={tab === entry.id}
+                onClick={() => setTab(entry.id)}
+              >
+                {entry.label}
+              </button>
+            ))}
           </div>
-          <div className="dc-invite-hosting-actions">
-            <button
-              type="button"
-              className="dc-invite-copy-button"
-              style={{ minWidth: 44, minHeight: 44 }}
-              disabled={
-                publicAccessBusy ||
-                publicAccessRunning ||
-                publicTunnelActive ||
-                !publicAccessControllable
-              }
-              onClick={onStartTunnel}
-            >
-              외부 접속 열기
-            </button>
-            <button
-              type="button"
-              className="dc-invite-copy-button"
-              style={{ minWidth: 44, minHeight: 44 }}
-              disabled={
-                publicAccessStopping ||
-                (!publicAccessStarting && !publicTunnelActive) ||
-                !publicAccessControllable
-              }
-              onClick={onStopTunnel}
-            >
-              외부 접속 끄기
-            </button>
-          </div>
-        </section>
-
-        <div className="dc-invite-tabs" role="tablist" aria-label="초대 종류">
-          {tabs.map((entry) => (
-            <button
-              key={entry.id}
-              type="button"
-              role="tab"
-              id={`invite-tab-${entry.id}`}
-              aria-selected={tab === entry.id}
-              aria-controls={`invite-panel-${entry.id}`}
-              data-active={tab === entry.id}
-              onClick={() => setTab(entry.id)}
-            >
-              {entry.label}
-            </button>
-          ))}
-        </div>
+        )}
 
         <div
           className="dc-invite-primary-grid"
           role="tabpanel"
           id={`invite-panel-${tab}`}
-          aria-labelledby={`invite-tab-${tab}`}
+          aria-labelledby={tabs.length > 1 ? `invite-tab-${tab}` : "room-invite-title"}
         >
-          {tab === "people" && <section className="dc-invite-card" aria-labelledby="human-invite-heading">
-            <div>
-              <h3 id="human-invite-heading">사람 초대</h3>
-              <p>
-                초대받은 사람은 브라우저에서 참가해요.
-                {readOnlyInvite ? " 이 방에서는 읽기 전용으로 참가합니다." : ""}
-              </p>
-            </div>
-            <div className="dc-invite-options">
-              <SavedFriendInvitePicker directory={friendsDirectory} onSelect={setFriendDisplayName} />
-              <label>
-                <span>초대 가능 인원</span>
-                <select
-                  style={{ minHeight: 44, appearance: "none" }}
-                  value={humanMaxUses}
-                  onChange={(event) => setHumanMaxUses(Number(event.currentTarget.value))}
-                >
-                  <option value={1}>1명 (권장)</option>
-                  <option value={5}>5명</option>
-                  <option value={0}>제한 없음</option>
-                </select>
-              </label>
-              <label>
-                <span>링크 유효시간</span>
-                <select
-                  style={{ minHeight: 44, appearance: "none" }}
-                  value={humanTtlSeconds}
-                  onChange={(event) => setHumanTtlSeconds(Number(event.currentTarget.value))}
-                >
-                  <option value={3600}>1시간</option>
-                  <option value={86400}>24시간 (권장)</option>
-                  <option value={604800}>7일</option>
-                </select>
-              </label>
-            </div>
-            <div className="dc-invite-link-row">
+          {tab === "people" && <section className="dc-invite-people" aria-label="사람 초대">
+            <SavedFriendInvitePicker directory={friendsDirectory} onSelect={setFriendDisplayName} />
+            <p className="dc-invite-lead">초대받은 사람은 브라우저에서 이 링크로 참가해요.</p>
+            <div className="dc-invite-link-field">
               <input
                 className="dc-invite-link-input"
-                value={secureInviteReady ? "보안 초대 링크 발급됨" : ""}
-                placeholder="공개 주소를 준비하면 링크가 표시됩니다"
+                value={secureInviteReady ? "초대 링크가 준비됐어요" : ""}
+                placeholder={publicAccessRunning ? "링크를 만들면 바로 복사할 수 있어요" : "링크를 만들 때 외부 접속을 함께 열어요"}
                 readOnly
                 aria-label="사람 초대 링크"
               />
+              {secureInviteReady && selectedHumanInvite ? (
+                <button
+                  type="button"
+                  className="dc-invite-copy-button"
+                  style={{ minWidth: 44, minHeight: 44 }}
+                  aria-label="현재 사람 초대 링크 복사"
+                  onClick={() => onCopyHumanInvite(selectedHumanInvite.key)}
+                >
+                  <Copy size={15} />
+                  복사
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  className="dc-invite-copy-button"
+                  style={{ minWidth: 44, minHeight: 44 }}
+                  aria-label="사람 초대 링크 생성"
+                  disabled={publicAccessBusy}
+                  onClick={() => requestPublicAction({ kind: "human", options: currentHumanOptions })}
+                >
+                  링크 만들기
+                </button>
+              )}
+            </div>
+            <div className="dc-invite-summary-row">
+              <p>
+                {humanInviteSummary(humanMaxUses, humanTtlSeconds)}
+                {readOnlyInvite ? " 읽기 전용으로 참가해요." : ""}
+              </p>
               <button
                 type="button"
-                className="dc-invite-copy-button"
-                style={{ minWidth: 44, minHeight: 44 }}
-                aria-label="사람 초대 링크 생성"
-                onClick={() => requestPublicAction({ kind: "human", options: currentHumanOptions })}
+                className="dc-invite-icon-button"
+                aria-label="링크 설정"
+                title="링크 설정"
+                aria-expanded={linkSettingsOpen}
+                aria-controls="human-invite-settings"
+                onClick={() => setLinkSettingsOpen((open) => !open)}
               >
-                생성
-              </button>
-              <button
-                type="button"
-                className="dc-invite-copy-button"
-                style={{ minWidth: 44, minHeight: 44 }}
-                aria-label="현재 사람 초대 링크 복사"
-                disabled={!secureInviteReady || !selectedHumanInvite}
-                onClick={() => {
-                  if (selectedHumanInvite) onCopyHumanInvite(selectedHumanInvite.key);
-                }}
-              >
-                <Copy size={15} />
-                복사
+                <Settings size={18} />
               </button>
             </div>
+            {linkSettingsOpen && (
+              <div className="dc-invite-options" id="human-invite-settings">
+                <label>
+                  <span>초대 가능 인원</span>
+                  <select
+                    style={{ minHeight: 44, appearance: "none" }}
+                    value={humanMaxUses}
+                    onChange={(event) => setHumanMaxUses(Number(event.currentTarget.value))}
+                  >
+                    <option value={1}>1명</option>
+                    <option value={5}>5명</option>
+                    <option value={0}>제한 없음</option>
+                  </select>
+                </label>
+                <label>
+                  <span>링크 유효시간</span>
+                  <select
+                    style={{ minHeight: 44, appearance: "none" }}
+                    value={humanTtlSeconds}
+                    onChange={(event) => setHumanTtlSeconds(Number(event.currentTarget.value))}
+                  >
+                    <option value={3600}>1시간</option>
+                    <option value={86400}>24시간</option>
+                    <option value={604800}>7일</option>
+                  </select>
+                </label>
+              </div>
+            )}
             {humanInvites.length > 0 && (
-              <div className="dc-invite-setup" aria-label="발급한 사람 초대">
-                <span className="text-[12px] font-black text-text-secondary">
-                  이 앱에서 발급한 링크
-                </span>
-                <div className="grid gap-2" role="list">
+              <div className="dc-invite-issued" aria-label="발급한 사람 초대">
+                <span className="dc-invite-issued-title">만든 링크</span>
+                <div className="grid gap-1" role="list">
                   {humanInvites.map((invite, index) => {
                     const revokeBusy = invite.revocation === "in_flight";
                     const revokeDead = invite.revocation === "dead";
@@ -345,18 +296,18 @@ export default function RoomInviteModal({
                         <span className="flex shrink-0 items-center gap-2">
                           <button
                             type="button"
-                            className="dc-invite-copy-button"
+                            className="dc-invite-row-button"
                             style={{ minWidth: 44, minHeight: 44 }}
                             aria-label={`사람 초대 ${index + 1} 링크 복사`}
                             disabled={!invite.copyUrl}
                             onClick={() => onCopyHumanInvite(invite.key)}
                           >
-                            <Copy size={14} />
                             복사
                           </button>
                           <button
                             type="button"
-                            className="dc-invite-copy-button"
+                            className="dc-invite-row-button"
+                            data-tone="danger"
                             style={{ minWidth: 44, minHeight: 44 }}
                             aria-label={`사람 초대 ${index + 1} 폐기`}
                             disabled={revokeBusy || revokeDead}
@@ -411,11 +362,11 @@ export default function RoomInviteModal({
                             : "연결 해제만 가능"}
                         </span>
                       </span>
-                      <button type="button" className="dc-invite-copy-button"
+                      <button type="button" className="dc-invite-row-button"
                         style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
                         aria-label={`기기 연결 ${index + 1} 링크 복사`}
                         disabled={!pairing.copyable} onClick={() => onCopyPairing(pairing.key)}>복사</button>
-                      <button type="button" className="dc-invite-copy-button"
+                      <button type="button" className="dc-invite-row-button" data-tone="danger"
                         style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
                         aria-label={`기기 연결 ${index + 1} 해제`}
                         disabled={pairing.state === "revoking" || pairing.state === "revoked"}
@@ -430,11 +381,58 @@ export default function RoomInviteModal({
           )}
         </div>
 
-        <p className="mt-3 text-[12px] text-text-muted preserve-words">
-          {readOnlyInvite
-            ? "이 방의 사람 초대는 읽기 전용 권한으로 발급됩니다."
-            : "초대 링크는 참가할 사람이나 AI 대화에만 전달해 주세요."}
-        </p>
+        <footer
+          className="dc-invite-hosting"
+          data-state={publicAccessBusy ? "busy" : publicAccessRunning ? "public" : "local"}
+          aria-labelledby="room-hosting-heading"
+        >
+          <span className="dc-invite-hosting-dot" aria-hidden="true" />
+          <div className="dc-invite-hosting-copy">
+            <h3 id="room-hosting-heading" className="sr-only">이 컴퓨터의 서버 공개</h3>
+            <p className="dc-invite-hosting-state">
+              {publicAccessStarting
+                ? "공개 준비 중"
+                : publicAccessStopping
+                  ? "외부 접속 닫는 중"
+                  : publicAccessRunning
+                    ? "외부 접속 열림"
+                    : "외부 접속 꺼짐"}
+            </p>
+            <p className="dc-invite-hosting-detail">
+              {publicAccessRunning
+                ? publicUrl || tunnelStatus?.public_url || "외부 주소가 연결되어 있어요."
+                : "이 컴퓨터에서는 계속 대화할 수 있어요."}
+            </p>
+            {tunnelStatus?.last_error && (
+              <p className="dc-invite-hosting-error preserve-words">{tunnelStatus.last_error}</p>
+            )}
+          </div>
+          {showStopTunnel ? (
+            <button
+              type="button"
+              className="dc-invite-row-button"
+              style={{ minWidth: 44, minHeight: 44 }}
+              disabled={
+                publicAccessStopping ||
+                (!publicAccessStarting && !publicTunnelActive) ||
+                !publicAccessControllable
+              }
+              onClick={onStopTunnel}
+            >
+              외부 접속 끄기
+            </button>
+          ) : (
+            <button
+              type="button"
+              className="dc-invite-row-button"
+              style={{ minWidth: 44, minHeight: 44 }}
+              disabled={publicAccessBusy || !publicAccessControllable}
+              onClick={onStartTunnel}
+            >
+              외부 접속 열기
+            </button>
+          )}
+        </footer>
         {pendingPublicAction && (
           <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>
               <h3 id="public-access-confirm-title">외부 접속을 열까요?</h3>

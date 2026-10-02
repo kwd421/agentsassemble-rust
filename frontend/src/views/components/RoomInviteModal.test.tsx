@@ -14,7 +14,7 @@ it("uses a saved human name for human admission while excluding AI contacts", as
   const friend = { friend_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", revision: 1, details, created_at: "2026-09-08T00:00:00Z", updated_at: "2026-09-08T00:00:00Z" };
   friendsApi.list.mockResolvedValueOnce([friend, { ...friend, friend_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb", details: { ...details, participant_type: "remote", display_name: "외부 에이전트" } }]);
   const { onGenerateSecureInvite } = renderInviteModal();
-  const select = screen.getByLabelText("사람 친구 초대");
+  const select = await screen.findByLabelText("받는 사람");
   await waitFor(() => expect((select as HTMLSelectElement).disabled).toBe(false));
   expect(screen.queryByRole("option", { name: "외부 에이전트 · friend" })).toBeNull();
   fireEvent.change(select, { target: { value: friend.friend_id } });
@@ -96,10 +96,7 @@ describe("RoomInviteModal", () => {
     });
 
     expect(screen.getByText("외부 접속 꺼짐")).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "외부 접속 열기" }) as HTMLButtonElement)
-        .disabled
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "외부 접속 열기" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "외부 접속 끄기" }));
     expect(onStopTunnel).toHaveBeenCalledOnce();
   });
@@ -112,10 +109,7 @@ describe("RoomInviteModal", () => {
     });
 
     expect(screen.getByText("공개 준비 중")).toBeTruthy();
-    expect(
-      (screen.getByRole("button", { name: "외부 접속 열기" }) as HTMLButtonElement)
-        .disabled
-    ).toBe(true);
+    expect(screen.queryByRole("button", { name: "외부 접속 열기" })).toBeNull();
     const stop = screen.getByRole("button", { name: "외부 접속 끄기" });
     expect((stop as HTMLButtonElement).disabled).toBe(false);
     fireEvent.click(stop);
@@ -138,6 +132,7 @@ describe("RoomInviteModal", () => {
   it("creates a human invite with the selected use limit and lifetime", () => {
     const { onGenerateSecureInvite } = renderInviteModal();
 
+    fireEvent.click(screen.getByRole("button", { name: "링크 설정" }));
     fireEvent.change(screen.getByLabelText("초대 가능 인원"), { target: { value: "5" } });
     fireEvent.change(screen.getByLabelText("링크 유효시간"), {
       target: { value: "604800" },
@@ -183,7 +178,7 @@ describe("RoomInviteModal", () => {
     });
 
     expect((screen.getByLabelText("사람 초대 링크") as HTMLInputElement).value).toBe(
-      "보안 초대 링크 발급됨"
+      "초대 링크가 준비됐어요"
     );
     expect(screen.queryByDisplayValue(current.copyUrl)).toBeNull();
     expect(document.body.innerHTML).not.toContain("aaj1_current");
@@ -201,6 +196,7 @@ describe("RoomInviteModal", () => {
     expect((deadRevoke as HTMLButtonElement).disabled).toBe(true);
     expect(deadRevoke.textContent).toBe("폐기됨");
 
+    fireEvent.click(screen.getByRole("button", { name: "링크 설정" }));
     fireEvent.change(screen.getByLabelText("초대 가능 인원"), {
       target: { value: "5" },
     });

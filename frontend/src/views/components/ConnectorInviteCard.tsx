@@ -29,7 +29,7 @@ export function ConnectorInviteCard({ controls, disabled, localOnly, mcpOrigin }
           <strong>외부 AI 초대 {controls.invites.length - index}{invite.local ? " · 이 PC 전용" : ""}</strong>
           <p>{invite.copyable ? `만료 ${new Date(invite.expiresAt).toLocaleTimeString()}` : "만료되었거나 현재 주소에서 사용할 수 없어요."}</p>
         </div>
-        <button type="button" className="dc-invite-copy-button" style={{ minWidth: 44, minHeight: 44 }}
+        <button type="button" className="dc-invite-row-button" style={{ minWidth: 44, minHeight: 44 }}
           disabled={!invite.copyable} onClick={() => controls.copy(invite.key)}>참가 안내 복사</button>
       </div>)}
     </div>}
