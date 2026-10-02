@@ -12443,6 +12443,43 @@ architecture/source gates and 19 policy/artifact unit tests pass. No server auth
 or credential behavior changes in this presentation correction. Revised Chrome
 presentation and Windows interaction remain unverified; published 0.1.4 is unchanged.
 
+Chooser and sizing correction (2026-10-03): the native command reads only the
+installation's public ID/name/OS with a five-second, 4 KiB bounded one-shot child.
+It uses the packaged sidecar, a fixed app-data database path, bundled-UI admission
+and read-only SQLite; no database creation, migration, host registration, room
+bootstrap, endpoint or credentials are involved. Registered rows match by exact
+ID, not computer name/OS. Explicitly choosing that row retains the existing native
+bootstrap/registration authority. The browser has no native-local row. Inspection
+failure remains visible and remote-server selection continues independently.
+
+The signed isolated package shows two identically named Mac entries but marks only
+its own `ec77a196` installation as "이 기기"; `0e2827be` stays offline/disabled.
+No separate hosting button remains. Selecting the local row opens the existing two
+rooms and `WEB-SECOND-ROOM-0054` history. The friend header uses the original
+`5px 10px` padding, with 312px sidebar and 360px profile defaults, original main/
+empty-panel spacing and category order. Actual online/all selection, add dialog
+and cancellation pass without creating a contact. The app remains open for the
+requested preview, with no public ingress. The installed 0.1.4 package/data and
+published release are unchanged. Revised Chrome presentation and Windows remain
+unverified; this does not establish full parity.
+
+Verification: full frontend suite 164 files / 952 passes, followed by affected
+checks after the final UI adjustments (20 friends/startup/web checks and 19
+startup/list checks). Existing persistence reopen test verifies absent-file
+noncreation and byte-preserving ID inspection; four host-registration/signature
+tests and all 40 native tests pass. Scoped server/persistence/protocol and desktop
+Clippy pass with warnings denied, along with mandatory architecture/source gates,
+19 policy/artifact unit tests, frontend build, signed packaging and strict/deep
+codesign verification. Actual sidecar inspection matches the isolated ID and leaves
+the database bytes unchanged (~1.06 seconds); an absent database is not created,
+corrupt data remains rejected/unchanged, and reading while the runtime is active
+also succeeds. No new test harness, automated security scan or subagent was added.
+A server-test build exhausted disk while linking unrelated integration binaries;
+the owner maintenance procedure removed 23.5 GiB of debug artifacts and 2.6 GiB of
+obsolete desktop cache after all builds stopped, retaining the active release
+artifacts. The affected server library tests subsequently pass; artifact-check
+retains the current cache under its bound.
+
 ## Shared app/web startup and central owner profiles (2026-10-02)
 
 Scope: shared startup UI, standard web Google code exchange, public owner entry,

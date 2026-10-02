@@ -281,6 +281,15 @@ impl ServerProductSurface {
     }
 }
 
+/// Read-only installation identity for the native server chooser; grants no authority.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(deny_unknown_fields)]
+pub struct HostDeviceInfo {
+    pub server_id: Option<String>,
+    pub host_name: String,
+    pub host_os: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 #[serde(deny_unknown_fields)]
 pub struct HostProductSurface {

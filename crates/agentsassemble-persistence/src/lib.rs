@@ -220,7 +220,7 @@ pub use agentsassemble_domain::{
 };
 pub use bootstrap::{LocalBootstrapCommit, LocalBootstrapPhase, LocalBootstrapStatus};
 pub use guest_identity_recovery::{GuestRecoveryCommit, GuestRecoveryRequest, GuestRecoveryResult};
-pub use host_identity::PersistentHostIdentity;
+pub use host_identity::{PersistentHostIdentity, inspect_server_id};
 pub use human_admission::{
     HumanAdmissionCommit, HumanAdmissionDecision, HumanAdmissionInput, HumanAdmissionInputError,
     HumanAdmissionRejection, HumanAdmissionResult, PreparedHumanAdmission,

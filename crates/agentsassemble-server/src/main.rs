@@ -53,6 +53,8 @@ struct Args {
     runtime_preflight: bool,
     #[arg(long, hide = true)]
     central_login_only: bool,
+    #[arg(long, hide = true)]
+    inspect_host_device: Option<PathBuf>,
     #[arg(long, default_value = ".agentsassemble-rust/runtime.sqlite3")]
     database: PathBuf,
     #[arg(long)]
@@ -103,6 +105,14 @@ fn main() -> anyhow::Result<()> {
                 &agentsassemble_server::runtime_image::RuntimePreflight::current()
             )?
         );
+        return Ok(());
+    }
+    if let Some(database) = &args.inspect_host_device {
+        let server_id =
+            runtime.block_on(agentsassemble_persistence::inspect_server_id(database))?;
+        let device = agentsassemble_server::host_device_info(server_id)?;
+        println!("{}", serde_json::to_string(&device)?);
+        runtime.shutdown_timeout(Duration::from_secs(1));
         return Ok(());
     }
     if args.central_login_only {

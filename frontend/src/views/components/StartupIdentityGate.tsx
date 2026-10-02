@@ -1,3 +1,4 @@
+import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import CentralServerList from "./CentralServerList";
 import CentralAccountSettings from "./CentralAccountSettings";
 import { startCentralWebGoogle, completeCentralWebGoogleReturn } from "../../lib/centralWebGoogle";
@@ -36,6 +37,7 @@ import {
   fetchDesktopOperatorRuntime,
   initializeDesktopBootstrap,
   requestDesktopHostProductSurface,
+  requestDesktopHostDeviceInfo,
   requestDesktopBootstrapStatus,
   type DesktopBootstrapGrant,
 } from "../../lib/desktopBridge";
@@ -117,6 +119,8 @@ export default function StartupIdentityGate({
   const [displayName, setDisplayName] = useState("");
   const [recoveryInput, setRecoveryInput] = useState("");
   const [issuedRecoveryCode, setIssuedRecoveryCode] = useState("");
+  const [localHostError, setLocalHostError] = useState("");
+  const [localHost, setLocalHost] = useState<HostDeviceInfo | null>(null);
   const [centralServers, setCentralServers] = useState<CentralServer[]>([]);
   const [centralPerson, setCentralPerson] = useState<CentralPerson | null>(null);
   const [savedRecoveryCode, setSavedRecoveryCode] = useState(false);
@@ -208,10 +212,21 @@ export default function StartupIdentityGate({
     }
   }
 
+  async function refreshLocalHost() {
+    if (webEntry) return;
+    try {
+      setLocalHost(await requestDesktopHostDeviceInfo());
+      setLocalHostError("");
+    } catch (reason) {
+      setLocalHost(null);
+      setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했습니다."));
+    }
+  }
+
   async function refreshServers() {
     if (busy) return;
     setBusy(true); setError("");
-    try { await finishCentralStartup(); }
+    try { await refreshLocalHost(); await finishCentralStartup(); }
     catch (reason) { setError(failureMessage(reason, "서버 목록을 불러오지 못했습니다.")); }
     finally { setBusy(false); }
   }
@@ -241,7 +256,17 @@ export default function StartupIdentityGate({
     async function initialize() {
       try {
         if (webEntry) await completeCentralWebGoogleReturn();
-        else await requestDesktopHostProductSurface();
+        else {
+          await requestDesktopHostProductSurface();
+          if (centralEnabled) {
+            try {
+              const device = await requestDesktopHostDeviceInfo();
+              if (active) { setLocalHost(device); setLocalHostError(""); }
+            } catch (reason) {
+              if (active) setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했습니다."));
+            }
+          }
+        }
         if (centralEnabled && centralSessionLoggedOut()) {
           if (active) setChecking(false);
           return;
@@ -560,13 +585,10 @@ export default function StartupIdentityGate({
           <section className="grid gap-3 rounded-lg bg-[#1b1c20] p-4">
             {webEntry && new URLSearchParams(window.location.search).get("account") === "settings" && <CentralAccountSettings disabled={busy} />}
             <p className="text-[13px] text-text-secondary">{centralPerson?.display_name}님의 서버</p>
-            {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. 호스트 앱에서 같은 계정으로 서버를 열어 주세요.</p>}
-            <CentralServerList key={centralPerson?.person_id} servers={centralServers} busy={busy} onOpen={selectCentralServer} onRefresh={refreshServers} />
+            {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
+            {localHostError && <p role="alert" className="text-sm text-red-300">이 기기 · {localHostError} 서버 목록 새로고침으로 다시 확인해 주세요.</p>}
+            <CentralServerList key={centralPerson?.person_id} servers={centralServers} busy={busy} localHost={localHost} onOpenLocal={!webEntry ? () => selectCentralServer() : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void refreshServers()}>서버 목록 새로고침</button>
-            {!webEntry && <button type="button" className="grid min-h-14 gap-1 rounded-md bg-[#5865f2] px-4 py-3 text-left text-[13px] text-white disabled:opacity-50" disabled={busy} onClick={() => void selectCentralServer()}>
-              <strong>이 기기에서 서버 열기</strong>
-              <span className="text-[11px] text-white/80">이 컴퓨터의 기존 방을 열거나 새 서버를 만듭니다.</span>
-            </button>}
             <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}

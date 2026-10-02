@@ -2,6 +2,19 @@
 
 ## Active work
 
+- 2026-10-03 server chooser and friends sizing correction: the native installation
+  ID is read without starting/migrating a runtime and matched to the central list.
+  The matching row shows "이 기기" and opens locally on explicit selection; the
+  separate bottom hosting button is removed. Unregistered installations use a
+  local row; inspection failure is explicit and does not block remote entry.
+  Original friend-tab padding, sidebar/profile widths, main/empty-panel spacing
+  and category order are restored. Signed isolated Mac verification passes the
+  chooser, existing room/history entry, compact tabs and add/cancel. Required
+  gates, affected checks and desktop Clippy pass. Browser/Windows verification
+  and overall parity remain open. The isolated app is retained open for preview;
+  public ingress remains off. Evidence: `docs/VERIFICATION.md` -> Isolated remote
+  owner workspace.
+
 - 2026-10-03 isolated owner-workspace verification: actual Chrome opens the shared
   room shell and creates a second room; the isolated signed Mac package sees both
   after restart. Missing live directory invalidation remains open. Expiry left the

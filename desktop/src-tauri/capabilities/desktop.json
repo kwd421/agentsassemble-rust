@@ -35,6 +35,7 @@
     "allow-runtime-central-registration-ticket",
     "allow-cache-selected-room-directory",
     "allow-choose-local-workspace",
+    "allow-host-device-info",
     "allow-host-product-surface"
   ]
 }

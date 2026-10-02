@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-host-device-info"
+description = "Enables the host_device_info command without any pre-configured scope."
+commands.allow = ["host_device_info"]
+
+[[permission]]
+identifier = "deny-host-device-info"
+description = "Denies the host_device_info command without any pre-configured scope."
+commands.deny = ["host_device_info"]

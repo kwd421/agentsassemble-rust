@@ -9,15 +9,21 @@ vi.mock("../../lib/centralIdentity", () => ({ renameCentralServer: vi.fn() }));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 const host: CentralServer = { server_id: "server-0001", alias: "Mac Studio", host_os: "macos", relation: "owner", endpoint: null, host_public_key_jwk: {}, host_key_fingerprint: "test" };
 
-it("allows offline owner rename and displays the refreshed central name", async () => {
+it("matches the local installation by ID, opens it explicitly and keeps rename", async () => {
   const user = userEvent.setup();
   vi.mocked(renameCentralServer).mockResolvedValue();
+  const openLocal = vi.fn().mockResolvedValue(undefined);
   function Harness() {
     const [servers, setServers] = useState([host]);
-    return <CentralServerList servers={servers} busy={false} onOpen={async () => { throw new Error("offline host must not open"); }} onRefresh={async () => { setServers([{ ...host, alias: "내 서버" }]); }} />;
+    return <CentralServerList servers={servers} busy={false} localHost={{ server_id: host.server_id, host_name: "Different computer name", host_os: "macos" }} onOpenLocal={openLocal} onOpen={async () => { throw new Error("offline host must not open"); }} onRefresh={async () => { setServers([{ ...host, alias: "내 서버" }]); }} />;
   }
   render(<Harness />);
-  expect((screen.getByRole("button", { name: "Mac Studio 서버 열기" }) as HTMLButtonElement).disabled).toBe(true);
+  expect((screen.getByRole("button", { name: "Mac Studio 서버 열기" }) as HTMLButtonElement).disabled).toBe(false);
+  expect(screen.getByText(/이 기기/, { selector: "strong" })).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "이 기기 서버 열기" })).toBeNull();
+  expect(openLocal).not.toHaveBeenCalled();
+  await user.click(screen.getByRole("button", { name: "Mac Studio 서버 열기" }));
+  expect(openLocal).toHaveBeenCalledOnce();
   await user.click(screen.getByRole("button", { name: /이름 변경/ }));
   await user.clear(screen.getByRole("textbox", { name: "서버 이름" }));
   await user.type(screen.getByRole("textbox", { name: "서버 이름" }), "내 서버");
@@ -30,6 +36,7 @@ it("retains failed edits and excludes bookmarks from owner controls", async () =
   const user = userEvent.setup();
   vi.mocked(renameCentralServer).mockRejectedValue(new Error("목록이 바뀌었습니다"));
   render(<CentralServerList servers={[host, { ...host, server_id: "bookmark-0002", relation: "bookmark", alias: "Friend" }]} busy={false} onOpen={async () => {}} onRefresh={async () => {}} />);
+  expect((screen.getByRole("button", { name: "Mac Studio 서버 열기" }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.queryByRole("button", { name: "Friend 이름 변경" })).toBeNull();
   await user.click(screen.getByRole("button", { name: /이름 변경/ }));
   await user.clear(screen.getByRole("textbox"));

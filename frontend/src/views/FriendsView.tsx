@@ -9,7 +9,7 @@ import { isActivePresence, presenceStatusLabel } from "../lib/presenceStatus";
 import type { RoomHttpAuthority } from "../api/roomHttpAuthority";
 
 const types: Record<FriendParticipantType, string> = {
-  human: "사람", subscription_ai: "구독형 AI", api: "API", local: "Local", remote: "외부 AI", unknown: "기타",
+  subscription_ai: "구독형 AI", api: "API", local: "Local", remote: "외부 AI", human: "사람", unknown: "기타",
 };
 const icons = { human: UserRound, subscription_ai: Bot, api: Cloud, local: Cpu, remote: Wifi, unknown: Users };
 const inputStyle = { width: "100%", minHeight: 44, padding: "8px 12px", boxSizing: "border-box" as const };

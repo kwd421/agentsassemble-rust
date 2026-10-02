@@ -2,6 +2,59 @@ use sqlx::Row;
 
 use crate::{PersistenceError, SqliteStore};
 
+/// Reads only an existing installation's public ID without creating or migrating it.
+///
+/// # Errors
+/// Rejects unsafe paths, unreadable databases and missing or inconsistent identity.
+pub async fn inspect_server_id(path: &std::path::Path) -> Result<Option<String>, PersistenceError> {
+    use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
+    let metadata = match path.symlink_metadata() {
+        Ok(metadata) => metadata,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+            if path
+                .parent()
+                .is_some_and(|parent| parent.join("central-directory/host-ed25519.pk8").exists())
+            {
+                return Err(PersistenceError::InvalidHostIdentity);
+            }
+            return Ok(None);
+        }
+        Err(error) => return Err(PersistenceError::WriterLease(error)),
+    };
+    if !metadata.is_file() || metadata.file_type().is_symlink() {
+        return Err(PersistenceError::UnsafeDatabasePath(
+            "installation database must be a regular file",
+        ));
+    }
+    let parent = path.parent().ok_or(PersistenceError::InvalidHostIdentity)?;
+    let file = std::fs::File::open(path).map_err(PersistenceError::WriterLease)?;
+    crate::database_target::validate_link_count(&file, &metadata)?;
+    if !crate::private_fs::validate_directory(parent).map_err(PersistenceError::WriterLease)?
+        || !crate::private_fs::validate_file(&file, path).map_err(PersistenceError::WriterLease)?
+    {
+        return Err(PersistenceError::UnsafeDatabasePath(
+            "installation database must remain private",
+        ));
+    }
+    let options = SqliteConnectOptions::new()
+        .filename(path)
+        .read_only(true)
+        .create_if_missing(false);
+    let mut connection = SqliteConnection::connect_with(&options).await?;
+    let row = sqlx::query("SELECT host.server_id, metadata.value AS expected_server_id
+        FROM runtime_host_identity AS host JOIN runtime_metadata AS metadata ON metadata.key = 'server_id'
+        WHERE host.singleton = 1").fetch_optional(&mut connection).await?
+        .ok_or(PersistenceError::InvalidHostIdentity)?;
+    let server_id: String = row.get("server_id");
+    if server_id != row.get::<String, _>("expected_server_id")
+        || uuid::Uuid::parse_str(&server_id).is_err()
+    {
+        return Err(PersistenceError::InvalidHostIdentity);
+    }
+    connection.close().await?;
+    Ok(Some(server_id))
+}
+
 /// Persistent private signing identity bound to one server authority.
 ///
 /// This type deliberately implements neither `Debug` nor serialization so the
@@ -117,6 +170,13 @@ mod tests {
     async fn host_identity_remains_bound_to_the_server_across_reopen() {
         let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
         let path = directory.path().join("runtime.sqlite3");
+        assert_eq!(
+            super::inspect_server_id(&path)
+                .await
+                .unwrap_or_else(|error| panic!("inspect absent: {error}")),
+            None
+        );
+        assert!(!path.exists());
         let first = SqliteStore::open_path(&path)
             .await
             .unwrap_or_else(|error| panic!("create authority: {error}"));
@@ -129,6 +189,18 @@ mod tests {
         let first_session_hmac_key = *first_identity.session_hmac_key();
         drop(first_identity);
         drop(first);
+
+        let before = std::fs::read(&path).unwrap_or_else(|error| panic!("read existing: {error}"));
+        assert_eq!(
+            super::inspect_server_id(&path)
+                .await
+                .unwrap_or_else(|error| panic!("inspect existing: {error}")),
+            Some(first_server_id.clone())
+        );
+        assert_eq!(
+            std::fs::read(&path).unwrap_or_else(|error| panic!("read inspected: {error}")),
+            before
+        );
 
         let reopened = SqliteStore::open_path(&path)
             .await

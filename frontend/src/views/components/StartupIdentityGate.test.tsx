@@ -23,6 +23,7 @@ const desktopMocks = vi.hoisted(() => ({
   initializeBootstrap: vi.fn(),
   requestBootstrapStatus: vi.fn(),
   requestHostProductSurface: vi.fn(),
+  requestHostDeviceInfo: vi.fn().mockResolvedValue({ server_id: null, host_name: "Test Mac", host_os: "macos" }),
 }));
 const SERVER_ID = "30000000-0000-4000-8000-000000000001";
 const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
@@ -63,6 +64,7 @@ vi.mock("../../lib/desktopBridge", () => ({
   initializeDesktopBootstrap: desktopMocks.initializeBootstrap,
   requestDesktopBootstrapStatus: desktopMocks.requestBootstrapStatus,
   requestDesktopHostProductSurface: desktopMocks.requestHostProductSurface,
+  requestDesktopHostDeviceInfo: desktopMocks.requestHostDeviceInfo,
 }));
 vi.mock("../../lib/deviceIdentity", () => ({
   rememberGuestProfile: vi.fn(),
@@ -141,7 +143,7 @@ describe("StartupIdentityGate", () => {
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
     const onComplete = vi.fn();
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
-    const host = await screen.findByRole("button", { name: /이 기기에서 서버 열기/ });
+    const host = await screen.findByRole("button", { name: /이 기기 서버 열기/ });
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
     expect(centralMocks.register).not.toHaveBeenCalled();
     await userEvent.click(host);
@@ -150,7 +152,7 @@ describe("StartupIdentityGate", () => {
     expect(desktopMocks.initializeBootstrap).not.toHaveBeenCalled();
   });
 
-  it("offers another online owned server and opens only the selected server", async () => {
+  it("opens the selected remote server even when local identity inspection fails", async () => {
     const remoteServer = {
       server_id: "30000000-0000-4000-8000-000000000099",
       relation: "owner" as const,
@@ -184,10 +186,12 @@ describe("StartupIdentityGate", () => {
     desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
     const onComplete = vi.fn();
 
+    desktopMocks.requestHostDeviceInfo.mockRejectedValueOnce(new Error("local database is unreadable"));
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
 
     const remoteButton = await screen.findByRole("button", { name: "Mac의 방 서버 열기" });
-    expect(screen.getByRole("button", { name: /이 기기/ })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /이 기기/ })).toBeNull();
+    expect(screen.getByRole("alert").textContent).toContain("local database is unreadable");
     expect(onComplete).not.toHaveBeenCalled();
     expect(desktopMocks.fetchOperatorRuntime).not.toHaveBeenCalled();
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();

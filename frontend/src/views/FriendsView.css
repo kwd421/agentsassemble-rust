@@ -1,5 +1,5 @@
 .dc-friends-workspace { display: flex; flex: 1; min-width: 0; min-height: 0; }
-.dc-home-sidebar { display: flex; flex-direction: column; width: 240px; flex-shrink: 0; background: var(--color-sidebar); }
+.dc-home-sidebar { display: flex; flex-direction: column; width: var(--dc-sidebar-width, 312px); flex-shrink: 0; background: var(--color-sidebar); }
 .dc-home-search { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 24px; border-bottom: 1px solid var(--color-panel-separator); }
 .dc-home-directory { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 12px; }
 .dc-home-nav-item { display: flex; width: 100%; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px; border-radius: 4px; color: var(--color-text-muted); text-align: left; }
@@ -10,17 +10,17 @@
 .dc-dm-row > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .dc-dm-row .dc-friend-avatar { width: 32px; height: 32px; }
 .dc-friends-page { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; background: var(--color-chat-bg); }
-.dc-friends-head { display: flex; min-height: 48px; flex-shrink: 0; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--color-panel-separator); padding: 0 24px; }
+.dc-friends-head { display: flex; min-height: 48px; flex-shrink: 0; align-items: center; flex-wrap: wrap; gap: 22px; border-bottom: 1px solid var(--color-panel-separator); padding: 0 18px; }
 .dc-friends-title { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 15px; font-weight: 800; }
 .dc-friends-tabs { display: flex; align-items: center; gap: 8px; }
-.dc-friends-tabs button { min-height: 44px; padding: 8px 12px; border-radius: 4px; color: var(--color-text-muted); font-size: 14px; font-weight: 700; }
+.dc-friends-tabs button { padding: 5px 10px; border-radius: 4px; color: var(--color-text-muted); font-size: 14px; font-weight: 700; }
 .dc-friends-tabs button:hover, .dc-friends-tabs button[aria-pressed="true"] { background: var(--color-sidebar-active); color: var(--color-text-primary); }
 .dc-friends-tabs .add-tab { background: var(--color-accent); color: #fff; }
 .dc-friends-tabs .add-tab:hover { background: var(--color-accent-hover); }
 .dc-friends-close { margin-left: auto; }
-.dc-friends-body { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr) 320px; }
-.dc-friends-main { min-height: 0; overflow-y: auto; padding: 24px; }
-.dc-friends-search { display: flex; min-height: 44px; align-items: center; gap: 10px; border-radius: 6px; background: #1e1f22; padding: 0 13px; color: var(--color-text-muted); }
+.dc-friends-body { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr) 360px; }
+.dc-friends-main { min-height: 0; overflow-y: auto; padding: 18px 30px 24px; }
+.dc-friends-search { display: flex; height: 42px; align-items: center; gap: 10px; border-radius: 6px; background: #1e1f22; padding: 0 13px; color: var(--color-text-muted); }
 .dc-friends-search input { min-width: 0; flex: 1; border: 0; background: transparent; color: var(--color-text-primary); }
 .dc-friend-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 12px; }
 .dc-friend-section-head h2, .dc-friends-activity > h2 { margin: 0; font-size: 15px; font-weight: 800; }
@@ -35,8 +35,8 @@
 .dc-friend-avatar[data-type="local"] { background: #23a55a; }
 .dc-friend-name { display: block; font-size: 15px; font-weight: 800; }
 .dc-friend-detail { display: block; font-size: 12px; color: var(--color-text-muted); }
-.dc-friends-activity { min-height: 0; overflow-y: auto; border-left: 1px solid var(--color-panel-separator); padding: 24px; }
-.dc-activity-card { margin-top: 20px; border-radius: 8px; background: #2b2d31; padding: 24px; text-align: center; }
+.dc-friends-activity { min-height: 0; overflow-y: auto; border-left: 1px solid var(--color-panel-separator); padding: 26px 22px; }
+.dc-activity-card { margin-top: 18px; border-radius: 8px; background: #2b2d31; padding: 26px 18px; text-align: center; }
 .dc-activity-card span { display: block; color: var(--color-text-muted); font-size: 13px; }
 .dc-friend-profile-card { margin-top: 20px; overflow: hidden; border-radius: 8px; background: var(--color-sidebar); }
 .dc-friend-profile-banner { height: 64px; background: var(--color-accent); }

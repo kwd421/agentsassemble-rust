@@ -20,6 +20,39 @@ const REGISTRATION_NONCE_BYTES: usize = 18;
 const SERVER_CHALLENGE_CONTEXT: &str = "AA-SERVER-CHALLENGE-1";
 const HOST_REQUEST_CONTEXT: &str = "AA-HOST-1";
 
+/// Projects the same computer name and OS used in host registration.
+///
+/// # Errors
+/// Rejects unavailable or invalid computer names.
+pub fn host_device_info(
+    server_id: Option<String>,
+) -> Result<agentsassemble_protocol::HostDeviceInfo, HostIdentityError> {
+    // macOS hostnames may be supplied by router DNS; use its display name.
+    #[cfg(target_os = "macos")]
+    let host_name = whoami::devicename().ok();
+    #[cfg(not(target_os = "macos"))]
+    let host_name = sysinfo::System::host_name();
+    let host_name = host_name
+        .map(|name| name.trim().to_owned())
+        .filter(|name| {
+            !name.is_empty()
+                && name.encode_utf16().count() <= 80
+                && !name.chars().any(char::is_control)
+        })
+        .ok_or(HostIdentityError::HostNameUnavailable)?;
+    Ok(agentsassemble_protocol::HostDeviceInfo {
+        server_id,
+        host_name,
+        host_os: match std::env::consts::OS {
+            "macos" => "macos",
+            "windows" => "windows",
+            "linux" => "linux",
+            _ => "other",
+        }
+        .to_owned(),
+    })
+}
+
 #[derive(Debug, Error)]
 pub enum HostIdentityError {
     #[error("persistent Ed25519 host private key is invalid")]
@@ -62,7 +95,7 @@ pub struct HostRegistrationProof {
 #[derive(Serialize)]
 pub struct HostRegistrationEnvelope {
     host_name: String,
-    host_os: &'static str,
+    host_os: String,
     server_id: String,
     host_public_key_jwk: HostPublicJwk,
     host_key_fingerprint: String,
@@ -237,27 +270,10 @@ impl CentralHostIdentity {
             self.server_id
         );
         let signature = URL_SAFE_NO_PAD.encode(self.key_pair.sign(transcript.as_bytes()).as_ref());
-        // macOS hostnames may be supplied by router DNS; use its display name.
-        #[cfg(target_os = "macos")]
-        let host_name = whoami::devicename().ok();
-        #[cfg(not(target_os = "macos"))]
-        let host_name = sysinfo::System::host_name();
-        let host_name = host_name
-            .map(|name| name.trim().to_owned())
-            .filter(|name| {
-                !name.is_empty()
-                    && name.encode_utf16().count() <= 80
-                    && !name.chars().any(char::is_control)
-            })
-            .ok_or(HostIdentityError::HostNameUnavailable)?;
+        let device = host_device_info(Some(self.server_id.to_string()))?;
         Ok(HostRegistrationEnvelope {
-            host_name,
-            host_os: match std::env::consts::OS {
-                "macos" => "macos",
-                "windows" => "windows",
-                "linux" => "linux",
-                _ => "other",
-            },
+            host_name: device.host_name,
+            host_os: device.host_os,
             server_id: self.server_id.to_string(),
             host_public_key_jwk: self.public_jwk.clone(),
             host_key_fingerprint: self.fingerprint.to_string(),

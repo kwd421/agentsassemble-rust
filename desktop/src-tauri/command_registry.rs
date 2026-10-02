@@ -29,5 +29,6 @@ desktop_commands! {
     runtime_central_registration_ticket => "allow-runtime-central-registration-ticket",
     cache_selected_room_directory => "allow-cache-selected-room-directory",
     choose_local_workspace => "allow-choose-local-workspace",
+    host_device_info => "allow-host-device-info",
     host_product_surface => "allow-host-product-surface",
 }

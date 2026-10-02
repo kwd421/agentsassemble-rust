@@ -615,7 +615,7 @@ fn abort_startup(child: &mut Child, control: Option<ChildStdin>) {
     runtime_supervisor::terminate_owned_supervisor(child);
 }
 
-fn sidecar_executable(desktop: &Path) -> Result<PathBuf, String> {
+pub(crate) fn sidecar_executable(desktop: &Path) -> Result<PathBuf, String> {
     let executable_name = if cfg!(windows) {
         "agentsassemble-server.exe"
     } else {

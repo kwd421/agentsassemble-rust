@@ -192,8 +192,15 @@ Scan. Preserve the already-running Windows room and its owned children throughou
 Account startup validates the central session and lists existing owned servers
 before starting any local room runtime. Online servers use the existing bound
 owner grant; offline servers remain visible with refresh and never cause implicit
-local hosting. Empty lists require an explicit hosting choice. Selecting "이
-기기에서 서버 열기" starts or initializes this installation's existing authority,
+local hosting. The native chooser reads only the public installation ID through a bounded,
+read-only sidecar command, without creating/migrating data or starting any room
+runtime. It matches registered rows by that ID, labels the matching row "이 기기",
+and opens it locally only on explicit selection. An unregistered installation
+appears as a local row in the same list; no separate bottom hosting button remains.
+Inspection failure is shown explicitly and disables local opening; it must not
+block validated remote-server entry. Refresh retries the read. The browser never
+infers a local host from a name, OS or endpoint. Selecting the
+local row starts or initializes this installation's existing authority,
 preserves its rooms/profile, and registers it before entering. Local-only builds
 retain their existing local entry. No account/profile migration is part of this slice.
 

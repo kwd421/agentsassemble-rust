@@ -34,7 +34,7 @@ uuid = { version = "1.24.1", features = ["v4"] }
 tauri-plugin-deep-link = "2.4.10"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-updater = "2.13.1"
-tokio = { version = "1.53.1", features = ["time", "sync"] }
+tokio = { version = "1.53.1", features = ["time", "sync", "process", "io-util"] }
 
 [target.'cfg(unix)'.dependencies]
 nix = { version = "0.31.2", features = ["process", "signal", "user"] }

@@ -1,4 +1,6 @@
 mod app_updates;
+mod host_device;
+use host_device::host_device_info;
 mod attendee_handoff;
 mod central_login;
 mod provider_setup;
@@ -614,7 +616,7 @@ mod tests {
     #[test]
     fn host_surface_is_the_registered_permission_intersection() {
         let surface = registered_host_product_surface();
-        assert_eq!(surface.commands.len(), 31);
+        assert_eq!(surface.commands.len(), 32);
         assert!(
             surface
                 .commands
@@ -628,6 +630,7 @@ mod tests {
                 .any(|command| command == "host_product_surface")
         );
         for expected in [
+            "host_device_info",
             "open_provider_setup_help",
             "runtime_attendee_invite_create_ticket",
             "runtime_central_login",

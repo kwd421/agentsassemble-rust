@@ -183,7 +183,7 @@ mod web;
 
 pub use app_state::{AppState, AppStateBuildError};
 pub use central_directory::CentralDirectoryError;
-pub use central_host_identity::{CentralHostIdentity, HostIdentityError};
+pub use central_host_identity::{CentralHostIdentity, HostIdentityError, host_device_info};
 pub use human_invite_credentials::{
     HumanInviteCredentialAuthority, HumanInviteCredentialDraft, HumanInviteCredentialError,
     IssuedHumanInviteCredentials, VerifiedHumanInviteClaims, VerifiedHumanInviteCredential,
