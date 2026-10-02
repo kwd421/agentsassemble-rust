@@ -40,6 +40,8 @@ jobs:
         run: |
           if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw "Missing updater signing key" }
           $env:CARGO_TARGET_DIR = Join-Path $env:GITHUB_WORKSPACE "target"
+          npm --prefix ../frontend run build
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npm run prepare:sidecar:release
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           npx tauri build --bundles nsis

@@ -48,7 +48,7 @@ notarization and Windows Authenticode signing.
    ```sh
    node scripts/release_manifest.mjs /path/to/latest.json \
      darwin-aarch64=/path/to/AgentsAssemble.app.tar.gz \
-     windows-x86_64=/path/to/AgentsAssemble_0.1.2_x64-setup.exe
+     windows-x86_64=/path/to/AgentsAssemble_0.1.3_x64-setup.exe
    ```
 
 5. Create a draft GitHub Release for that tag. Upload both artifacts, their `.sig`
