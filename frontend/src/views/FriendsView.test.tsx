@@ -37,7 +37,15 @@ it("keeps a failed creation draft and its ID for retry, then cancels an edit wit
   expect(api.list).toHaveBeenCalledWith(authority);
   expect(api.save.mock.calls[1][1]).toEqual(authority);
   expect(api.save).toHaveBeenCalledTimes(2);
-  expect(screen.getByText("새 친구")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "새 친구 프로필 보기" })).toBeTruthy();
+  const profile = screen.getByRole("complementary", { name: "친구 프로필" });
+  expect(within(profile).getByRole("heading", { name: "새 친구" })).toBeTruthy();
+  fireEvent.click(within(screen.getByRole("navigation", { name: "친구 분류" })).getByRole("button", { name: "API" }));
+  expect(screen.queryByRole("button", { name: "새 친구 프로필 보기" })).toBeNull();
+  expect(within(profile).queryByRole("heading", { name: "새 친구" })).toBeNull();
+  fireEvent.click(within(screen.getByRole("navigation", { name: "친구 분류" })).getByRole("button", { name: "사람" }));
+  fireEvent.change(screen.getByRole("searchbox", { name: "친구 검색" }), { target: { value: "없는 친구" } });
+  expect(screen.queryByRole("button", { name: "새 친구 프로필 보기" })).toBeNull();
 });
 
 it("requires a successful initial read and keeps failed deletion pending until a confirmed retry", async () => {
@@ -57,7 +65,7 @@ it("requires a successful initial read and keeps failed deletion pending until a
   let dialog = screen.getByRole("dialog", { name: "친구를 삭제할까요?" });
   fireEvent.click(within(dialog).getByRole("button", { name: "삭제" }));
   await screen.findByText("삭제 실패");
-  expect(screen.getByText("지울 친구")).toBeTruthy();
+  expect(screen.getByRole("button", { name: "지울 친구 프로필 보기" })).toBeTruthy();
   dialog = screen.getByRole("dialog", { name: "친구를 삭제할까요?" });
   fireEvent.click(within(dialog).getByRole("button", { name: "삭제" }));
   await waitFor(() => expect(screen.queryByText("지울 친구")).toBeNull());

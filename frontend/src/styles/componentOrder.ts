@@ -11,4 +11,5 @@ import "../views/components/member/MemberOwnership.css";
 import "../views/components/DisconnectedRoomView.css";
 import "../views/components/RoomInviteModal.css";
 import "../views/components/RoomRail.css";
+import "../views/FriendsView.css";
 import "../views/components/room/RoomLifecycle.css";

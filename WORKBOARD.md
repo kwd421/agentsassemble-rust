@@ -8,9 +8,16 @@
   owner on an invitation-guest error; the existing connection gate now replaces the
   workspace at the same grant deadline without extending authority. All 952 frontend
   tests, mandatory architecture/source gates, frontend build and signed packaging
-  pass. Browser control repeatedly disconnected before final switch/reload/expiry
-  verification; those outcomes remain unverified. Both temporary public connections
-  were closed and the isolated app exited. No new scan, subagent or public release.
+  pass. Subsequent native Chrome control verifies room switching, separated message
+  histories, reload, friend create/edit/delete, natural expiry and fresh-grant re-entry.
+  Chrome repaint after reload/expiry required opening/closing DevTools; cause unknown.
+  All temporary public connections are closed and the isolated app exited. The user
+  identified a friends presentation regression: the shared view was a simplified
+  replacement rather than the original home/category/list/profile composition.
+  The shared composition is corrected; signed Mac verification passes category,
+  profile selection, create, edit cancel, confirmed delete and return to the room.
+  The revised Chrome presentation still needs a fresh authorized ingress run.
+  No new scan or subagent.
   Evidence: `docs/VERIFICATION.md` -> Isolated remote owner workspace.
 
 - 2026-10-02 active correction: restore the same product behavior across app and

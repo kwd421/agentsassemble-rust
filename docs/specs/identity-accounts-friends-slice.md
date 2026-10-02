@@ -398,6 +398,19 @@ produce a connected view. The native startup central account remains separate.
 
 ### Saved friend directory boundary
 
+UI preservation correction (2026-10-03): the pre-cutover reachable friends surface
+has a home/category sidebar, online/all/add tabs, searchable contact rows and a
+selected-contact profile panel. Removal at `daadd8d4` and the simplified replacement
+at `d286225a` did not preserve that presentation. Restore this composition in the
+shared app/web view using the current durable directory owner. Preserve revisioned
+editing, confirmed deletion, retained failed drafts and explicit remote authority.
+The profile displays stored metadata, not inferred live presence or admission.
+Do not restore producerless candidate/DM code as a substitute for server contracts.
+Acceptance compares the existing layout source with the packaged view and checks
+category/search/selection plus existing save/cancel/delete flows. Account controls
+remain the shared UserPanel; room channels and the room roster do not occupy the
+friends surface. Browser functional checks alone do not establish visual fidelity.
+
 The retained `App.tsx` home/friends entry and room invite picker consume the original
 server-wide `/api/room-friends` address book. Its route supplies no live agent list;
 saved metadata does not establish presence. Rust keeps this local operator resource

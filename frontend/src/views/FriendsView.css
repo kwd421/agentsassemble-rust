@@ -1,0 +1,51 @@
+.dc-friends-workspace { display: flex; flex: 1; min-width: 0; min-height: 0; }
+.dc-home-sidebar { display: flex; flex-direction: column; width: 240px; flex-shrink: 0; background: var(--color-sidebar); }
+.dc-home-search { display: flex; align-items: center; gap: 10px; min-height: 48px; padding: 0 24px; border-bottom: 1px solid var(--color-panel-separator); }
+.dc-home-directory { flex: 1; min-height: 0; overflow-y: auto; padding: 16px 12px; }
+.dc-home-nav-item { display: flex; width: 100%; align-items: center; gap: 12px; min-height: 44px; padding: 8px 12px; border-radius: 4px; color: var(--color-text-muted); text-align: left; }
+.dc-home-nav-item:hover, .dc-home-nav-item[aria-pressed="true"], .dc-dm-row[aria-pressed="true"] { background: var(--color-sidebar-active); color: var(--color-text-primary); }
+.dc-dm-title { display: flex; align-items: center; justify-content: space-between; margin-top: 20px; padding-left: 12px; font-size: 12px; font-weight: 700; color: var(--color-text-muted); }
+.dc-dm-title button { display: grid; place-items: center; width: 44px; height: 44px; }
+.dc-dm-row { display: flex; width: 100%; min-height: 44px; align-items: center; gap: 12px; padding: 8px 12px; border-radius: 4px; text-align: left; }
+.dc-dm-row > span:last-child { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dc-dm-row .dc-friend-avatar { width: 32px; height: 32px; }
+.dc-friends-page { display: flex; min-width: 0; min-height: 0; flex: 1; flex-direction: column; background: var(--color-chat-bg); }
+.dc-friends-head { display: flex; min-height: 48px; flex-shrink: 0; align-items: center; flex-wrap: wrap; gap: 12px; border-bottom: 1px solid var(--color-panel-separator); padding: 0 24px; }
+.dc-friends-title { display: flex; align-items: center; gap: 9px; margin: 0; font-size: 15px; font-weight: 800; }
+.dc-friends-tabs { display: flex; align-items: center; gap: 8px; }
+.dc-friends-tabs button { min-height: 44px; padding: 8px 12px; border-radius: 4px; color: var(--color-text-muted); font-size: 14px; font-weight: 700; }
+.dc-friends-tabs button:hover, .dc-friends-tabs button[aria-pressed="true"] { background: var(--color-sidebar-active); color: var(--color-text-primary); }
+.dc-friends-tabs .add-tab { background: var(--color-accent); color: #fff; }
+.dc-friends-tabs .add-tab:hover { background: var(--color-accent-hover); }
+.dc-friends-close { margin-left: auto; }
+.dc-friends-body { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr) 320px; }
+.dc-friends-main { min-height: 0; overflow-y: auto; padding: 24px; }
+.dc-friends-search { display: flex; min-height: 44px; align-items: center; gap: 10px; border-radius: 6px; background: #1e1f22; padding: 0 13px; color: var(--color-text-muted); }
+.dc-friends-search input { min-width: 0; flex: 1; border: 0; background: transparent; color: var(--color-text-primary); }
+.dc-friend-section-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin: 20px 0 12px; }
+.dc-friend-section-head h2, .dc-friends-activity > h2 { margin: 0; font-size: 15px; font-weight: 800; }
+.dc-friend-empty { color: var(--color-text-muted); font-size: 13px; }
+.dc-friend-row { display: flex; min-height: 62px; align-items: center; gap: 12px; border-top: 1px solid var(--color-panel-border); padding: 10px 0; }
+.dc-friend-row[data-selected="true"] { background: rgba(255, 255, 255, .035); }
+.dc-friend-main-button { display: flex; min-width: 0; flex: 1; align-items: center; gap: 12px; min-height: 44px; border-radius: 5px; padding: 4px 6px; text-align: left; }
+.dc-friend-main-button > span:last-child { min-width: 0; overflow-wrap: anywhere; }
+.dc-friend-avatar { display: grid; width: 44px; height: 44px; flex-shrink: 0; place-items: center; border-radius: 50%; background: #4e5058; color: #fff; }
+.dc-friend-avatar[data-type="subscription_ai"] { background: var(--color-accent); }
+.dc-friend-avatar[data-type="human"] { background: #f23f42; }
+.dc-friend-avatar[data-type="local"] { background: #23a55a; }
+.dc-friend-name { display: block; font-size: 15px; font-weight: 800; }
+.dc-friend-detail { display: block; font-size: 12px; color: var(--color-text-muted); }
+.dc-friends-activity { min-height: 0; overflow-y: auto; border-left: 1px solid var(--color-panel-separator); padding: 24px; }
+.dc-activity-card { margin-top: 20px; border-radius: 8px; background: #2b2d31; padding: 24px; text-align: center; }
+.dc-activity-card span { display: block; color: var(--color-text-muted); font-size: 13px; }
+.dc-friend-profile-card { margin-top: 20px; overflow: hidden; border-radius: 8px; background: var(--color-sidebar); }
+.dc-friend-profile-banner { height: 64px; background: var(--color-accent); }
+.dc-friend-profile-body { padding: 0 20px 24px; overflow-wrap: anywhere; }
+.dc-friend-profile-body > .dc-friend-avatar { width: 64px; height: 64px; margin-top: -28px; position: relative; border: 5px solid var(--color-sidebar); }
+.dc-friend-profile-body h3 { margin: 12px 0 8px; font-size: 20px; font-weight: 800; }
+.dc-friend-profile-handle { margin: 0 0 20px; color: var(--color-text-muted); font-size: 13px; }
+.dc-friend-profile-facts { display: grid; gap: 16px; margin: 20px 0 0; }
+.dc-friend-profile-facts dt { font-size: 12px; color: var(--color-text-muted); }
+.dc-friend-profile-facts dd { margin: 4px 0 0; font-size: 13px; }
+@media (max-width: 1100px) { .dc-friends-body { grid-template-columns: minmax(0, 1fr); } .dc-friends-activity { border-left: 0; border-top: 1px solid var(--color-panel-separator); max-height: 45vh; } .dc-friends-body { overflow-y: auto; } .dc-friends-main, .dc-friends-activity { overflow-y: visible; } }
+@media (max-width: 700px) { .dc-friends-workspace { flex-direction: column; overflow-y: auto; } .dc-home-sidebar { width: auto; } .dc-home-search, .dc-dm-title, .dc-dm-row { display: none; } .dc-home-directory { display: flex; overflow-x: auto; flex-shrink: 0; padding: 8px 16px; } .dc-home-nav-item { width: auto; flex-shrink: 0; } .dc-friends-page { min-height: 360px; flex-shrink: 0; } .dc-friends-head { padding: 8px 16px; } .dc-friends-main, .dc-friends-activity { padding: 24px 16px; } }

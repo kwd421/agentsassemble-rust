@@ -12396,19 +12396,52 @@ correction. This does not establish full app/web parity.
   package builds and passes strict/deep codesign verification. Earlier persistence
   (358), affected HTTP boundaries (5) and workspace Clippy passed for the unchanged
   Rust implementation. No automated security scan or delegated reviewer was started.
-- Chrome automation repeatedly reports disconnected debugger/deadline failures;
-  native AX control also loses the page subtree after reload. A fresh browser tab
-  does render the central server chooser, but final room switching, message entry,
-  reload, friends mutation and the corrected expiry screen were not established.
-  No test message was sent. These checks remain open, not passed by API evidence.
+- Subsequent native Chrome control opens both rooms and sends distinct disposable
+  messages (`WEB-ROOM-CHECK-0054`, `WEB-SECOND-ROOM-0054`). Switching preserves
+  separate histories; the Mac sees the second-room message in the same active room.
+  Reload restores that room/session/message and allows switching back to the first.
+- Chrome creates a disposable friend, edits it to `BROWSER-FRIEND-EDIT`, and the
+  Mac observes each stored change after refreshing the directory. Fresh owner
+  re-entry retains it; confirmed deletion removes it in both entries. These checks
+  prove shared records and operations, not fidelity to the original friends design.
+- At the unchanged actual grant deadline (00:59:01 KST), Chrome renders the expiry
+  connection gate with only the central server-list link, no composer or expired
+  retry. Following that link and opening the same server with a fresh grant restores
+  the original room/message/friend records and owner controls.
+- Chrome CDP still reports disconnected debugger failures. Native Chrome sometimes
+  shows a blank/stale page or loses the AX subtree after reload/expiry; opening and
+  closing DevTools restores the current rendered page. Its console shows zero
+  messages. The cause remains unknown; seamless browser repaint is not established.
 - Both temporary public ingress runs were explicitly switched off in the native
-  invite dialog and the exact verification app exited normally. Existing user apps,
+  invite dialog and the exact verification app exited normally. A third run used
+  for the successful checks above is also stopped; no app/server/tunnel process
+  remains after normal Quit. Existing user apps,
   providers and data remain untouched. The isolated package/data are retained for
   this active correction; the accidental root Vitest result cache was removed.
 
 Remaining: live directory synchronization, shared remote invitation management,
 empty-workspace friends/profile authority, lifecycle management and the rest of the
 acceptance matrix. Real Windows interaction remains unverified.
+
+Friends presentation correction: inspection of the pre-removal `FriendsView`,
+`HomeSidebar` and `FriendProfileCard` confirms that `daadd8d4` removed the original
+composition and `d286225a` restored persistence with a simplified presentation.
+The remote transport change reused that replacement; app/web equivalence alone
+did not preserve the original design. The shared view now has a category sidebar,
+online/all/add header, searchable rows and selected-contact profile. It retains the
+current server-owned revision/edit/delete contract and stored-presence semantics.
+Room channels/roster no longer share this surface; the existing UserPanel mounts
+once in its friends sidebar and returns to the room sidebar when closed.
+
+The rebuilt Developer ID signed isolated package visibly verifies all three
+columns, empty state, contact creation, API/human category changes, selected profile,
+edit cancellation, confirmed disposable-contact deletion and return to the same
+room/history. The disposable contact is removed. Existing two FriendsView tests
+also check category/search/profile coherence and failed draft/deletion retries;
+the existing full suite remains 164 files / 952 passes. Frontend build, all mandatory
+architecture/source gates and 19 policy/artifact unit tests pass. No server authority
+or credential behavior changes in this presentation correction. Revised Chrome
+presentation and Windows interaction remain unverified; published 0.1.4 is unchanged.
 
 ## Shared app/web startup and central owner profiles (2026-10-02)
 

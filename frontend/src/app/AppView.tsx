@@ -120,6 +120,29 @@ export default function AppView({ controller }: { controller: AppController }) {
     return { ...channelHeaderActions(channelId), persistentRail, sideChatOpen,
       onToggleSideChat: canOpenSideChat ? () => setSideChatOpen(!sideChatOpen) : undefined };
   }
+  const friendsVisible = friendsOpen && canManageFriends;
+  const userArea = (
+    <footer className="dc-user-area shrink-0" style={{ zIndex: 30 }}>
+      <UserPanel
+        onlineCount={scopedOnlineCount}
+        agentCount={scopedAgents.length || 0}
+        hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
+        guestProfile={guestPanelProfile}
+        pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
+        publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
+          const value = event.profile_revision;
+          return event.type === "participant_updated" && event.participant_id === (guestSession?.agentId || "operator-local") && typeof value === "number" && Number.isSafeInteger(value)
+            ? Math.max(revision, value) : revision;
+        }, 0)}
+        profileIdentity={{
+          centralOwner: guestSession?.centralOwner === true,
+          sessionToken: admittedSessionToken,
+          deviceToken,
+        }}
+        onGuestExit={guestExpired ? exitGuestSurface : undefined}
+      />
+    </footer>
+  );
   const channelNames = visibleChannels.map((item) => item.label);
   return (
     <RoomSocketProvider socket={roomSocket}>
@@ -171,7 +194,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       <AppOverlays controller={controller} companionInvites={companionInvites} />
       {/* Channel sidebar */}
       <aside className="dc-sidebar flex shrink-0 flex-col" aria-label="채널 목록" inert={mobileViewport && !mobileSidebarOpen}
-        style={mobileViewport ? { left: MOBILE_ROOM_RAIL_WIDTH, width: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, minWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, maxWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)` } : undefined}>
+        style={friendsVisible ? { display: "none" } : mobileViewport ? { left: MOBILE_ROOM_RAIL_WIDTH, width: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, minWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)`, maxWidth: `calc(100vw - ${MOBILE_ROOM_RAIL_WIDTH}px)` } : undefined}>
           <header className="dc-sidebar-head shrink-0" data-tone={activeRoom.tone} style={mobileViewport ? { minHeight: 0 } : undefined}>
             <button
               type="button"
@@ -319,26 +342,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           )}
         </nav>
 
-        <footer className="dc-user-area shrink-0" style={{ zIndex: 30 }}>
-          <UserPanel
-            onlineCount={scopedOnlineCount}
-            agentCount={scopedAgents.length || 0}
-            hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
-            guestProfile={guestPanelProfile}
-            pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
-            publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
-              const value = event.profile_revision;
-              return event.type === "participant_updated" && event.participant_id === (guestSession?.agentId || "operator-local") && typeof value === "number" && Number.isSafeInteger(value)
-                ? Math.max(revision, value) : revision;
-            }, 0)}
-            profileIdentity={{
-              centralOwner: guestSession?.centralOwner === true,
-              sessionToken: admittedSessionToken,
-              deviceToken,
-            }}
-            onGuestExit={guestExpired ? exitGuestSurface : undefined}
-          />
-        </footer>
+        {!friendsVisible && userArea}
         <nav className="dc-mobile-bottom-nav" aria-label="모바일 하단 탐색">
           <button type="button" disabled={!hasRoom || !channelReadReady} onClick={() => markChannelRead(channel)}>
             <Bell size={19} />
@@ -359,6 +363,7 @@ export default function AppView({ controller }: { controller: AppController }) {
       />
       <div
         className="dc-sidebar-resizer"
+        style={friendsVisible ? { display: "none" } : undefined}
         role="separator"
         tabIndex={0}
         aria-label="좌측 패널 너비 조절"
@@ -372,10 +377,10 @@ export default function AppView({ controller }: { controller: AppController }) {
 
       <div style={{ display: "flex", position: "relative", flex: 1, minWidth: 0, minHeight: 0 }}>
       {/* Central channel column */}
-      <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" style={{ paddingTop: persistentRail ? 48 : 0 }} inert={mobileViewport && (mobileSidebarOpen || mobileRoomInfoOpen)}>
+      <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" style={{ paddingTop: persistentRail ? 48 : 0 }} inert={mobileViewport && (mobileSidebarOpen || (!friendsVisible && mobileRoomInfoOpen))}>
         <Suspense fallback={<DeferredViewFallback />}>
           {friendsOpen && canManageFriends ? (
-            <FriendsView authority={roomHttpAuthority} onClose={() => setFriendsOpen(false)} />
+            <FriendsView authority={roomHttpAuthority} userArea={userArea} onClose={() => setFriendsOpen(false)} />
           ) : guestExpired ? (
             <section className="dc-disconnected-room" role="status" style={{ padding: 24 }}>
               <h1>방 접속이 끝났어요</h1>
@@ -467,7 +472,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         </Suspense>
       </main>
 
-      {hasRoom && mobileRoomInfoOpen && (
+      {hasRoom && mobileRoomInfoOpen && !friendsVisible && (
         <MobileRoomInfoPanel
           companionInvites={companionInvites.available && !guestSession?.operator ? companionInvites : undefined}
           room={activeRoom}
@@ -506,7 +511,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         }} />}
 
       {/* Right panel */}
-      {roomInfoOpen && (
+      {roomInfoOpen && !friendsVisible && (
         <aside
           className="dc-members hidden shrink-0 xl:flex xl:flex-col"
           aria-label="방 연결 정보"
@@ -545,7 +550,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           </section>
         </aside>
       )}
-      {sideChatOpen && <aside aria-label="사이드챗 패널" style={{ ...panelStyle, flexShrink: 0, flexDirection: "column", borderLeft: "1px solid var(--color-panel-separator)", background: "var(--color-sidebar)" }}>
+      {sideChatOpen && !friendsVisible && <aside aria-label="사이드챗 패널" style={{ ...panelStyle, flexShrink: 0, flexDirection: "column", borderLeft: "1px solid var(--color-panel-separator)", background: "var(--color-sidebar)" }}>
         <SideChatDock open onOpenChange={setSideChatOpen}
           chat={controller.sideChat} socket={roomSocket} canPost={canPostHumanMessage} mentionables={scopedMentionables} />
       </aside>}
