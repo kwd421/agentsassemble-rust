@@ -8,6 +8,11 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "central_owner_grants",
+        ddl: crate::server_owner_authority::GRANT_DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_connector_uploads",
         ddl: crate::message_attachments::connector::DDL,
         infrastructure: false,

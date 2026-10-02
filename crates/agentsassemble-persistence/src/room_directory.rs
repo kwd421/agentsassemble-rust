@@ -59,34 +59,24 @@ impl SqliteStore {
         &self,
         include_archived: bool,
     ) -> Result<Vec<StoredRoomSummary>, PersistenceError> {
-        let rows = sqlx::query("SELECT room_id, room_json, settings_json, EXISTS(SELECT 1 FROM room_runtime_cleanup cleanup WHERE cleanup.room_id = rooms.room_id) AS cleanup_pending, EXISTS(SELECT 1 FROM room_delete_results deletion WHERE deletion.room_id = rooms.room_id AND deletion.state = 'pending') AS deletion_pending FROM rooms")
-            .fetch_all(&self.pool)
-            .await?;
-        let mut rooms = Vec::with_capacity(rows.len());
-        for row in rows {
-            let row_room_id = row.get::<String, _>("room_id");
-            let room: Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
-            let settings: RoomSettings = serde_json::from_str(row.get::<&str, _>("settings_json"))?;
-            if room.room_id != row_room_id {
-                return Err(invalid_room_state());
-            }
-            if include_archived || room.status != RoomStatus::Archived {
-                rooms.push(StoredRoomSummary {
-                    room,
-                    settings,
-                    cleanup_pending: row.get("cleanup_pending"),
-                    deletion_pending: row.get("deletion_pending"),
-                });
-            }
-        }
-        rooms.sort_by(|left, right| {
-            right
-                .room
-                .updated_at
-                .cmp(&left.room.updated_at)
-                .then_with(|| left.room.room_id.cmp(&right.room.room_id))
-        });
-        Ok(rooms)
+        let mut connection = self.pool.acquire().await?;
+        read_room_directory(&mut connection, include_archived).await
+    }
+
+    /// Reads the directory and its authority in one revalidated owner transaction.
+    ///
+    /// # Errors
+    /// Rejects expired or revoked ownership and invalid directory state.
+    pub async fn list_room_directory_for_owner(
+        &self,
+        owner: &crate::ServerOwnerAuthority,
+        include_archived: bool,
+    ) -> Result<(crate::LocalBootstrapStatus, Vec<StoredRoomSummary>), PersistenceError> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let authority = owner.revalidate(&mut transaction).await?;
+        let rooms = read_room_directory(&mut transaction, include_archived).await?;
+        transaction.commit().await?;
+        Ok((authority, rooms))
     }
 
     /// Creates one room idempotently under the local server operator.
@@ -103,6 +93,26 @@ impl SqliteStore {
         room_id: &str,
         label: &str,
     ) -> Result<RoomCreateCommit, PersistenceError> {
+        self.create_room_for_owner(
+            &crate::ServerOwnerAuthority::LocalOperator,
+            request_id,
+            room_id,
+            label,
+        )
+        .await
+    }
+
+    /// Creates a canonical room after revalidating server ownership in its transaction.
+    ///
+    /// # Errors
+    /// Rejects stale owner authority, conflicting request replay and invalid room data.
+    pub async fn create_room_for_owner(
+        &self,
+        owner: &crate::ServerOwnerAuthority,
+        request_id: &str,
+        room_id: &str,
+        label: &str,
+    ) -> Result<RoomCreateCommit, PersistenceError> {
         if Uuid::parse_str(request_id).is_err() {
             return Err(rejected(
                 "room_create_request_invalid",
@@ -111,8 +121,7 @@ impl SqliteStore {
         }
         let payload_hash = canonical_payload_hash(&json!({"room_id": room_id, "label": label}));
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let authority =
-            crate::bootstrap::require_complete_bootstrap_in_transaction(&mut transaction).await?;
+        let authority = owner.revalidate(&mut transaction).await?;
         let commit = create_room_in_transaction(
             &mut transaction,
             request_id,
@@ -125,6 +134,40 @@ impl SqliteStore {
         transaction.commit().await?;
         Ok(commit)
     }
+}
+
+async fn read_room_directory(
+    connection: &mut SqliteConnection,
+    include_archived: bool,
+) -> Result<Vec<StoredRoomSummary>, PersistenceError> {
+    let rows = sqlx::query("SELECT room_id, room_json, settings_json, EXISTS(SELECT 1 FROM room_runtime_cleanup cleanup WHERE cleanup.room_id = rooms.room_id) AS cleanup_pending, EXISTS(SELECT 1 FROM room_delete_results deletion WHERE deletion.room_id = rooms.room_id AND deletion.state = 'pending') AS deletion_pending FROM rooms")
+            .fetch_all(connection)
+            .await?;
+    let mut rooms = Vec::with_capacity(rows.len());
+    for row in rows {
+        let row_room_id = row.get::<String, _>("room_id");
+        let room: Room = serde_json::from_str(row.get::<&str, _>("room_json"))?;
+        let settings: RoomSettings = serde_json::from_str(row.get::<&str, _>("settings_json"))?;
+        if room.room_id != row_room_id {
+            return Err(invalid_room_state());
+        }
+        if include_archived || room.status != RoomStatus::Archived {
+            rooms.push(StoredRoomSummary {
+                room,
+                settings,
+                cleanup_pending: row.get("cleanup_pending"),
+                deletion_pending: row.get("deletion_pending"),
+            });
+        }
+    }
+    rooms.sort_by(|left, right| {
+        right
+            .room
+            .updated_at
+            .cmp(&left.room.updated_at)
+            .then_with(|| left.room.room_id.cmp(&right.room.room_id))
+    });
+    Ok(rooms)
 }
 
 async fn create_room_in_transaction(

@@ -320,6 +320,17 @@ room-generation binding. Shared UI receives explicit transport authority; hiding
 controls is never authorization, and a remote failure never retries with local
 operator privileges. Credentials stay out of projections, logs and URLs.
 
+Directory/create and room admission reuse the existing five-minute central grant.
+The host redeems it against the configured central authority for each request;
+storage binds its fingerprint to the first browser device, origin, endpoint
+generation and exact expiry in the transaction. Schema 73 adds this bounded
+custody table without changing existing room/profile/session rows. New grants
+clean expired custody; at most 128 live grants are retained. No bearer is stored
+in that table, and no polling or extra process is introduced. The browser keeps
+only this bounded grant in tab-scoped storage; reload rechecks host proof and
+central authority. Each room admission has a distinct idempotent session bound
+to its canonical room UID, with no lifetime extension.
+
 Connect these owners in buildable slices, then verify the whole flow: native and
 web observe the same stored records; ordinary pairing, wrong device/origin,
 expired/revoked authority and stale room incarnations are rejected without writes.

@@ -1,5 +1,5 @@
 mod server_owner_authority;
-pub use server_owner_authority::ServerOwnerAuthority;
+pub use server_owner_authority::{CentralOwnerGrant, ServerOwnerAuthority};
 mod attendee_interrupt;
 #[cfg(test)]
 mod attendee_interrupt_tests;

@@ -2,7 +2,7 @@ use sqlx::{Row, SqlitePool};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 72;
+pub const CURRENT_SCHEMA_VERSION: i64 = 73;
 
 pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let stored = sqlx::query("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
@@ -56,6 +56,14 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .execute(&mut *tx)
             .await?;
     }
+    if matches!(version.as_str(), "70" | "71" | "72") {
+        sqlx::query(crate::server_owner_authority::GRANT_DDL)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '73' WHERE key = 'schema_version'")
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -68,7 +76,7 @@ mod tests {
     #[tokio::test]
     async fn supported_upgrade_preserves_bootstrap_room_and_pairing_authority()
     -> Result<(), Box<dyn std::error::Error>> {
-        for previous in [70, 71] {
+        for previous in [70, 71, 72] {
             let directory = tempfile::tempdir()?;
             let path = directory.path().join("runtime.sqlite3");
             let store = SqliteStore::open_path(&path).await?;
@@ -110,7 +118,12 @@ mod tests {
                     .execute(&store.pool)
                     .await?;
             }
-            sqlx::query("ALTER TABLE operator_pairings DROP COLUMN central_owner")
+            if previous < 72 {
+                sqlx::query("ALTER TABLE operator_pairings DROP COLUMN central_owner")
+                    .execute(&store.pool)
+                    .await?;
+            }
+            sqlx::query("DROP TABLE central_owner_grants")
                 .execute(&store.pool)
                 .await?;
             sqlx::query("UPDATE runtime_metadata SET value = ? WHERE key = 'schema_version'")
