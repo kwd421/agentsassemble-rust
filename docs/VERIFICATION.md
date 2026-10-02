@@ -12030,3 +12030,25 @@ new review session or automated security scan was run. The Rust test binaries an
 frontend build contain this change; an updated signed package, Windows GUI and an
 individual AI fetching and obeying the invitation have not been verified. Existing
 installed/running apps need a new build before these links serve the document.
+
+User-requested Antigravity verification starts with `agy mcp list` reporting no
+configured servers; both current CLI and IDE MCP configuration inventories are
+empty, so there is no remaining Room Connector registration to remove. A fresh
+isolated native host issues a real local invitation. Ordinary external Antigravity
+CLI 1.2.14, Gemini 3.8 Flash Low and `--effort low` receive only that URL and a request
+to join. After trusting only the empty test workspace, the CLI requests permission
+to fetch the document with curl, inspect its own MCP list and read registration
+command help. Each read is approved once. It then requests normal approval for
+the document's HTTP `agy mcp add` command; this is cancelled to preserve the
+unregistered state. Following an explicit request for guidance only, it explains
+missing `room_join`, registration, opening a new session, and two-stage admission.
+Thus link reading and setup guidance succeed; this run does not prove automatic
+registration or joining from the original MCP-free conversation.
+
+The isolated database independently retains one unredeemed invitation, no agent
+participants and only the original room-created event. No direct HTTP join or room
+publication occurs. CLI and host exit normally, MCP configuration remains unchanged
+and empty, and the exact temporary workspace trust entry is removed while unrelated
+settings remain. Only this run's generated host/workspace/probe artifacts are
+removed; the CLI's own conversation history is retained. No code, model defaults,
+global permission rules, personal room or existing waiting host is changed.

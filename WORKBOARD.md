@@ -7,8 +7,10 @@
   clients without MCP receive registration and session reopening instructions.
   GET/HEAD preserve invitations and room state. Native HTTP/MCP, human entry,
   origin/input boundaries, frontend build and mandatory gates pass. One source owns
-  copied and HTTP guidance. Updated packaged-app and individual AI link-reading
-  flows remain unverified. Evidence: `docs/VERIFICATION.md` -> AI-readable invitation.
+  copied and HTTP guidance. Real Antigravity CLI with no configured MCP reads the
+  link, requests normal registration approval and explains setup after cancellation;
+  no admission or invite consumption occurs. Updated package and other AI flows
+  remain unverified. Evidence: `docs/VERIFICATION.md` -> AI-readable invitation.
 
 - 2026-10-02 requested Sites MCP deployment: existing native MCP cannot be uploaded
   as a Worker artifact. The user clarified the deployment adapter is authorized.
