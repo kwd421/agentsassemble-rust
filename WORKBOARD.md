@@ -2,10 +2,15 @@
 
 ## Active work
 
-- 2026-10-02 server naming in progress: host computer default, durable owner rename
-  in both choosers, and legacy automatic-alias correction. Security boundaries,
-  local and packaged verification, then requested Daybreak review remain pending.
-  Contract: `docs/specs/identity-accounts-friends-slice.md` -> Central server names.
+- 2026-10-02 server naming completed and deployed: actual computer defaults,
+  durable owner rename in both choosers, legacy alias correction, cross-owner
+  hostname privacy and recoverable name edits. Frontend 952, Worker 32, affected
+  native boundaries and mandatory gates pass. Signed macOS naming/restart and
+  native failure display pass. Daybreak accepted Rust `3552a7c2` and Worker
+  `900b2b9f`, closing all four findings with no new ones. Windows, interactive web
+  rename and online cross-device reopening remain unverified. Contract/evidence:
+  `docs/specs/identity-accounts-friends-slice.md` and `docs/VERIFICATION.md`
+  -> Central server names.
 
 - 2026-10-02 desktop client-first entry implemented: existing account servers appear
   before any local room runtime; hosting requires an explicit choice. Google return
