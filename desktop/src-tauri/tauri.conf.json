@@ -1,12 +1,24 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
   "productName": "AgentsAssemble",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "identifier": "app.agentsassemble.rust",
   "plugins": {
     "deep-link": {
       "desktop": {
-        "schemes": ["agentsassemble"]
+        "schemes": [
+          "agentsassemble"
+        ]
+      }
+    },
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDY3RjNENEJEQTNGOEFCMjMKUldRanEvaWp2ZFR6Wi9UKzRVdmYzWUlZZWt6S1ZLR0lGYUE2YmJZNDdScWE2Zzd5aW1IOTI1U20K",
+      "endpoints": [
+        "https://github.com/kwd421/agentsassemble-rust/releases/latest/download/latest.json"
+      ],
+      "requireSignedVersion": true,
+      "windows": {
+        "installMode": "passive"
       }
     }
   },
@@ -28,7 +40,9 @@
     ],
     "security": {
       "csp": "default-src 'self'; script-src 'self'; style-src 'self'; connect-src ipc: http://ipc.localhost http://127.0.0.1:* ws://127.0.0.1:* https://agentsassemble-identity-directory.seinel.workers.dev; img-src 'self' data: blob: http://127.0.0.1:*",
-      "capabilities": ["desktop"]
+      "capabilities": [
+        "desktop"
+      ]
     }
   },
   "bundle": {
@@ -44,6 +58,12 @@
       "../../provider-runtime/claude-native-delivery.mjs": "provider-runtime/claude-native-delivery.mjs",
       "../../provider-runtime/claude-agent-sdk-bridge.mjs": "provider-runtime/claude-agent-sdk-bridge.mjs",
       "../../provider-runtime/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs": "provider-runtime/node_modules/@anthropic-ai/claude-agent-sdk/sdk.mjs"
+    },
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installMode": "currentUser"
+      }
     }
   }
 }

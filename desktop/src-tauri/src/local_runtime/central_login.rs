@@ -30,6 +30,7 @@ impl LocalRuntime {
             .login_process
             .lock()
             .map_err(|_| "local runtime state lock is poisoned".to_owned())?;
+        self.ensure_not_updating()?;
         if action == CentralLoginAction::Start {
             if let Some(runtime) = process.as_mut() {
                 if runtime

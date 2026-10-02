@@ -30,6 +30,7 @@ mod message_pins;
 mod message_search;
 mod provider_discovery;
 mod side_chat;
+mod update_install;
 
 use control::{
     TicketFailure, request_bootstrap_initialize, request_bootstrap_status,
@@ -69,6 +70,7 @@ pub struct CentralRegistrationTicketGrant {
 pub struct LocalRuntime {
     process: Mutex<Option<RuntimeProcess>>,
     login_process: Mutex<Option<RuntimeProcess>>,
+    updating: std::sync::atomic::AtomicBool,
 }
 
 struct RuntimeProcess {
@@ -267,6 +269,7 @@ fn ensure_runtime<'a>(
     process: &'a mut Option<RuntimeProcess>,
     app: &AppHandle,
 ) -> Result<&'a mut RuntimeProcess, String> {
+    app.state::<LocalRuntime>().ensure_not_updating()?;
     let must_start = match process.as_mut() {
         Some(runtime) => runtime
             .child

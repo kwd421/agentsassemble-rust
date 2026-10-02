@@ -358,9 +358,13 @@ fn terminate_sidecar(child: &mut Child) {
 // The child is the still-owned stable group leader / Windows Job owner, never a
 // server PID recovered from an output record or persisted process identifier.
 pub(crate) fn terminate_owned_supervisor(child: &mut Child) {
-    if let Err(error) = join_supervisor(child, DESKTOP_SHUTDOWN_GRACE) {
+    if let Err(error) = terminate_owned_supervisor_checked(child) {
         eprintln!("owned runtime shutdown was not confirmed: {error}");
     }
+}
+
+pub(crate) fn terminate_owned_supervisor_checked(child: &mut Child) -> io::Result<()> {
+    join_supervisor(child, DESKTOP_SHUTDOWN_GRACE)
 }
 
 fn join_supervisor(child: &mut Child, grace: Duration) -> io::Result<()> {

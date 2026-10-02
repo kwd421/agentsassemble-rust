@@ -2,6 +2,10 @@
 
 ## Active work
 
+- 2026-10-02 active: implement the user-approved official Tauri updater for macOS
+  and Windows, including signed release delivery and owned-runtime shutdown before
+  installation. Contract: `docs/specs/desktop-updates.md`.
+
 - 2026-10-02 macOS default server names now read the System Configuration
   computer display name instead of a router/DNS-derived hostname. Native identity
   4 and registration TCP 2 tests, Clippy, mandatory gates and signed package build

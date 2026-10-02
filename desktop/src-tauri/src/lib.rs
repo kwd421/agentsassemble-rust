@@ -1,6 +1,9 @@
+mod app_updates;
 mod attendee_handoff;
 mod central_login;
 mod provider_setup;
+#[cfg(test)]
+mod update_tests;
 use provider_setup::{open_provider_setup_help, runtime_provider_discovery};
 mod local_runtime;
 use central_login::{open_central_google_login, runtime_central_login};
@@ -556,14 +559,25 @@ pub fn run() {
             },
         ))
         .plugin(tauri_plugin_deep_link::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(LocalRuntime::default())
         .manage(registered_host_product_surface())
         .invoke_handler(registered_invoke_handler!())
-        .setup(|app| provider_setup::install(app.handle()))
+        .setup(|app| {
+            provider_setup::install(app.handle())?;
+            app_updates::install(app.handle())
+        })
         .build(tauri::generate_context!())
         .unwrap_or_else(|error| panic!("AgentsAssemble desktop failed to initialize: {error}"));
     app.run(|handle, event| {
+        if let RunEvent::ExitRequested { api, code, .. } = &event
+            && *code != Some(tauri::RESTART_EXIT_CODE)
+            && app_updates::installing(handle)
+        {
+            api.prevent_exit();
+        }
         if matches!(event, RunEvent::Exit) {
+            app_updates::stop(handle);
             handle.state::<LocalRuntime>().stop();
         }
     });
