@@ -99,6 +99,10 @@ async fn check(
     ready: &mut Option<ReadyUpdate>,
     manual: bool,
 ) {
+    let Some(window) = app.get_webview_window("main") else {
+        status(item, "업데이트 창을 열 수 없음", false);
+        return;
+    };
     status(item, "업데이트 확인 중…", false);
     if ready.is_none() {
         match download(app, item).await {
@@ -107,6 +111,7 @@ async fn check(
                 status(item, CHECK_LABEL, true);
                 if manual {
                     notice(
+                        &window,
                         &format!(
                             "현재 최신 버전({})을 사용하고 있어요.",
                             app.package_info().version
@@ -120,7 +125,7 @@ async fn check(
             Err(message) => {
                 status(item, "업데이트 확인 실패 · 다시 시도…", true);
                 if manual {
-                    notice(message, true).await;
+                    notice(&window, message, true).await;
                 }
                 return;
             }
@@ -132,6 +137,7 @@ async fn check(
     let label = format!("{} 설치 후 재시작…", pending.update.version);
     status(item, &label, false);
     let choice = AsyncMessageDialog::new()
+        .set_parent(&window)
         .set_title("AgentsAssemble 업데이트")
         .set_description(format!("새 버전 {} 다운로드와 서명 확인이 끝났어요.\n\n지금 설치하고 다시 시작할까요? 이 기기의 방 서버와 에이전트 작업이 종료되며, 연결된 참가자는 재접속해야 해요. 진행 중인 작업이 있다면 나중에 업데이트 메뉴에서 설치하세요.", pending.update.version))
         .set_buttons(MessageButtons::YesNo)
@@ -167,11 +173,12 @@ async fn check(
         Ok(Ok(())) => app.request_restart(),
         Ok(Err(message)) => {
             status(item, "업데이트 설치 실패 · 다시 시도…", true);
-            notice(&message, true).await;
+            notice(&window, &message, true).await;
         }
         Err(_) => {
             status(item, "업데이트 상태 확인 필요", false);
             notice(
+                &window,
                 "업데이트 작업 결과를 확인하지 못했어요. 앱을 다시 시작해 주세요.",
                 true,
             )
@@ -208,8 +215,9 @@ async fn download(
     Ok(Some(ReadyUpdate { update, bytes }))
 }
 
-async fn notice(message: &str, error: bool) {
+async fn notice(window: &tauri::WebviewWindow, message: &str, error: bool) {
     AsyncMessageDialog::new()
+        .set_parent(window)
         .set_title("AgentsAssemble 업데이트")
         .set_description(message)
         .set_level(if error {

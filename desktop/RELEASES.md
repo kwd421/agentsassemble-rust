@@ -34,6 +34,11 @@ notarization and Windows Authenticode signing.
    npm run build:signed:macos
    ```
 
+   On the current rustc 1.97.1 / LLVM 22 / Xcode 27 host, set
+   `CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=none` for the build: stripping
+   proc-macro dylibs triggers upstream rust-lang/rust#157750 (misaligned LINKEDIT).
+   This affects build-time dependencies, not runtime update verification.
+
    Configure Apple notarization credentials when distributing publicly. The build
    reports whether notarization was performed; a signed bundle alone is not
    notarization proof. Verify the packaged app and its user flow before publishing.
@@ -43,7 +48,7 @@ notarization and Windows Authenticode signing.
    ```sh
    node scripts/release_manifest.mjs /path/to/latest.json \
      darwin-aarch64=/path/to/AgentsAssemble.app.tar.gz \
-     windows-x86_64=/path/to/AgentsAssemble_0.1.1_x64-setup.exe
+     windows-x86_64=/path/to/AgentsAssemble_0.1.2_x64-setup.exe
    ```
 
 5. Create a draft GitHub Release for that tag. Upload both artifacts, their `.sig`
