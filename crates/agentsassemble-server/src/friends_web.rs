@@ -1,5 +1,5 @@
 use agentsassemble_domain::SaveFriend;
-use agentsassemble_persistence::PersistenceError;
+use agentsassemble_persistence::{PersistenceError, ServerOwnerAuthority};
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
@@ -40,10 +40,33 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn friend_routes<AppState>() {
         private "/api/room-friends" => get(list).post(save).delete(delete),
+        same_origin_public "/api/central-owner/friends" => get(list).post(save).delete(delete),
     }
 }
 
-async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), Failure> {
+async fn authorize(
+    state: &AppState,
+    headers: &HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
+    remote: bool,
+) -> Result<ServerOwnerAuthority, Failure> {
+    if remote {
+        return crate::room_session_http_authority::require_central_owner_session(
+            state, headers, origin,
+        )
+        .await
+        .map(|session| ServerOwnerAuthority::CentralOwner(Box::new(session)))
+        .map_err(|error| match error {
+            crate::room_session_http_authority::RoomSessionBearerError::Persistence(error) => {
+                storage_error(error)
+            }
+            crate::room_session_http_authority::RoomSessionBearerError::Invalid => failure(
+                StatusCode::UNAUTHORIZED,
+                "unauthorized",
+                "A current server owner session is required.",
+            ),
+        });
+    }
     if consume_local_operator(state, headers).await.is_none() {
         return Err(failure(
             StatusCode::UNAUTHORIZED,
@@ -51,26 +74,42 @@ async fn authorize(state: &AppState, headers: &HeaderMap) -> Result<(), Failure>
             "A local operator ticket is required.",
         ));
     }
-    Ok(())
+    Ok(ServerOwnerAuthority::LocalOperator)
 }
 
 async fn list(State(state): State<AppState>, request: Request) -> Result<Response, Failure> {
-    authorize(&state, request.headers()).await?;
+    let authority = authorize(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        request.uri().path() == "/api/central-owner/friends",
+    )
+    .await?;
     ensure_empty_body(request, MAX_FRIEND_BODY_BYTES)
         .await
         .map_err(body_error)?;
-    let friends = state.store.saved_friends().await.map_err(storage_error)?;
+    let friends = state
+        .store
+        .saved_friends(&authority)
+        .await
+        .map_err(storage_error)?;
     Ok(Json(json!({"friends": friends})).into_response())
 }
 
 async fn save(State(state): State<AppState>, request: Request) -> Result<Response, Failure> {
-    authorize(&state, request.headers()).await?;
+    let authority = authorize(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        request.uri().path() == "/api/central-owner/friends",
+    )
+    .await?;
     let body: SaveFriend = decode_json_body(request, MAX_FRIEND_BODY_BYTES)
         .await
         .map_err(body_error)?;
     let friend = state
         .store
-        .save_friend(&body)
+        .save_friend(&authority, &body)
         .await
         .map_err(storage_error)?;
     Ok(Json(friend).into_response())
@@ -87,13 +126,19 @@ async fn delete(
     Query(query): Query<DeleteQuery>,
     request: Request,
 ) -> Result<Response, Failure> {
-    authorize(&state, request.headers()).await?;
+    let authority = authorize(
+        &state,
+        request.headers(),
+        request.extensions().get(),
+        request.uri().path() == "/api/central-owner/friends",
+    )
+    .await?;
     ensure_empty_body(request, MAX_FRIEND_BODY_BYTES)
         .await
         .map_err(body_error)?;
     let deleted = state
         .store
-        .delete_friend(query.friend_id)
+        .delete_friend(&authority, query.friend_id)
         .await
         .map_err(storage_error)?;
     Ok(Json(json!({"deleted": deleted})).into_response())
@@ -105,6 +150,7 @@ fn storage_error(error: PersistenceError) -> Failure {
             let status = match code.as_bytes() {
                 b"friend_invalid" => StatusCode::BAD_REQUEST,
                 b"friend_conflict" => StatusCode::CONFLICT,
+                b"session_revoked" => StatusCode::UNAUTHORIZED,
                 _ => StatusCode::SERVICE_UNAVAILABLE,
             };
             failure(status, &code, &message)

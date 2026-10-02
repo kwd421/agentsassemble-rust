@@ -154,6 +154,17 @@ async fn verify_owner_profile_authority(
         .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
     assert!(!ordinary.authorization.is_central_owner());
     assert_eq!(
+        code(
+            store
+                .saved_friends(&crate::ServerOwnerAuthority::CentralOwner(Box::new(
+                    ordinary.authorization.clone()
+                )))
+                .await
+        ),
+        "session_revoked"
+    );
+
+    assert_eq!(
         code(store.central_owner_profile(&ordinary.authorization).await),
         "session_revoked"
     );
@@ -187,6 +198,14 @@ async fn verify_owner_profile_authority(
             .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
         assert_eq!(
             code(super::revalidate_central_owner_session(&mut tx, authorization).await),
+            "session_revoked"
+        );
+        assert_eq!(
+            code(
+                crate::ServerOwnerAuthority::CentralOwner(Box::new(authorization.clone()))
+                    .revalidate(&mut tx)
+                    .await
+            ),
             "session_revoked"
         );
         tx.rollback()

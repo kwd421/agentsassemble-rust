@@ -58,7 +58,13 @@ async fn saved_ai_packet_uses_exact_manager_purpose_and_normalized_attendee_admi
             assert_eq!(first, &value);
         }
         packet = Some(value);
-        server.store.delete_friend(friend).await?;
+        server
+            .store
+            .delete_friend(
+                &agentsassemble_persistence::ServerOwnerAuthority::LocalOperator,
+                friend,
+            )
+            .await?;
     }
     let packet = packet.ok_or("packet missing")?;
     assert_eq!(
@@ -221,23 +227,26 @@ async fn save_friend(
     provider: &str,
 ) -> Result<Uuid, agentsassemble_persistence::PersistenceError> {
     let friend = store
-        .save_friend(&SaveFriend {
-            friend_id: Uuid::new_v4(),
-            expected_revision: 0,
-            details: FriendDetails {
-                display_name: "Saved AI".to_owned(),
-                handle: String::new(),
-                participant_type: FriendParticipantType::SubscriptionAi,
-                provider_kind: provider.to_owned(),
-                connection_kind: "external".to_owned(),
-                agent_id: String::new(),
-                source_agent_id: String::new(),
-                last_meeting_id: String::new(),
-                status: "offline".to_owned(),
-                source: "manual".to_owned(),
-                last_seen_at: None,
+        .save_friend(
+            &agentsassemble_persistence::ServerOwnerAuthority::LocalOperator,
+            &SaveFriend {
+                friend_id: Uuid::new_v4(),
+                expected_revision: 0,
+                details: FriendDetails {
+                    display_name: "Saved AI".to_owned(),
+                    handle: String::new(),
+                    participant_type: FriendParticipantType::SubscriptionAi,
+                    provider_kind: provider.to_owned(),
+                    connection_kind: "external".to_owned(),
+                    agent_id: String::new(),
+                    source_agent_id: String::new(),
+                    last_meeting_id: String::new(),
+                    status: "offline".to_owned(),
+                    source: "manual".to_owned(),
+                    last_seen_at: None,
+                },
             },
-        })
+        )
         .await?;
     Ok(friend.friend_id)
 }

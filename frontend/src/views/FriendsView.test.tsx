@@ -16,7 +16,8 @@ beforeEach(() => {
 
 it("keeps a failed creation draft and its ID for retry, then cancels an edit without saving", async () => {
   api.save.mockRejectedValueOnce(new Error("저장 실패"));
-  render(<FriendsView onClose={vi.fn()} />);
+  const authority = { kind: "remote" as const, sessionToken: "owner-session", deviceToken: "owner-device" };
+  render(<FriendsView authority={authority} onClose={vi.fn()} />);
   const add = screen.getByRole("button", { name: "친구 추가" });
   await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false));
   fireEvent.click(add);
@@ -33,6 +34,8 @@ it("keeps a failed creation draft and its ID for retry, then cancels an edit wit
   expect((screen.getByRole("button", { name: "저장" }) as HTMLButtonElement).disabled).toBe(true);
   fireEvent.change(screen.getByLabelText("이름"), { target: { value: "취소할 수정" } });
   fireEvent.click(screen.getByRole("button", { name: "취소" }));
+  expect(api.list).toHaveBeenCalledWith(authority);
+  expect(api.save.mock.calls[1][1]).toEqual(authority);
   expect(api.save).toHaveBeenCalledTimes(2);
   expect(screen.getByText("새 친구")).toBeTruthy();
 });

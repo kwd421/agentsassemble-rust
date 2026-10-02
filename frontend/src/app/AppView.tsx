@@ -80,6 +80,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     currentChannelScope.current = channelScope;
     return () => { currentChannelScope.current = ""; };
   }, [channelScope]);
+  const canManageFriends = roomLifecycle.enabled || Boolean(guestSession?.centralOwner && admittedSessionToken && !guestExpired);
   const canCreateChannel = canManageActiveRoom && canonicalRoom.connectionState === "connected";
   const canPostHumanMessage = lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) &&
     canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
@@ -147,9 +148,9 @@ export default function AppView({ controller }: { controller: AppController }) {
         mobileViewport={mobileViewport}
         inert={mobileViewport && !mobileSidebarOpen}
         onSelectRoom={(roomId) => { setFriendsOpen(false); selectRoom(roomId); }}
-        friendsOpen={friendsOpen && roomLifecycle.enabled}
+        friendsOpen={friendsOpen && canManageFriends}
         onOpenAdmin={!guestLocked && isDesktopWebview() ? () => { setAdminOpen(true); setFriendsOpen(false); closeMobileSidebar(); setRoomMenu(null); } : undefined}
-        onOpenFriends={roomLifecycle.enabled ? () => { setAdminOpen(false); setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
+        onOpenFriends={canManageFriends ? () => { setAdminOpen(false); setFriendsOpen(true); closeMobileSidebar(); setRoomMenu(null); } : undefined}
         onAddRoom={addFreshRoom}
         onOpenRoomMenu={openRoomMenu}
         onMarkRoomRead={markRoomRead}
@@ -372,8 +373,8 @@ export default function AppView({ controller }: { controller: AppController }) {
       {/* Central channel column */}
       <main className="dc-chat flex min-w-0 flex-1 flex-col" aria-label="채널 내용" style={{ paddingTop: persistentRail ? 48 : 0 }} inert={mobileViewport && (mobileSidebarOpen || mobileRoomInfoOpen)}>
         <Suspense fallback={<DeferredViewFallback />}>
-          {friendsOpen && roomLifecycle.enabled ? (
-            <FriendsView onClose={() => setFriendsOpen(false)} />
+          {friendsOpen && canManageFriends ? (
+            <FriendsView authority={roomHttpAuthority} onClose={() => setFriendsOpen(false)} />
           ) : guestExpired ? (
             <section className="dc-disconnected-room" role="status" style={{ padding: 24 }}>
               <h1>방 접속이 끝났어요</h1>

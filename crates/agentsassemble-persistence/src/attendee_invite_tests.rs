@@ -15,29 +15,37 @@ async fn attendee_friend_receipt_preserves_selected_metadata_without_admitting_o
     let authority = crate::room_user_identity::test_authority(&store).await;
     let manager = RoomManagerAuthority::Local(authority);
     let friend = store
-        .save_friend(&SaveFriend {
-            friend_id: Uuid::new_v4(),
-            expected_revision: 0,
-            details: FriendDetails {
-                display_name: "Remote Codex".to_owned(),
-                handle: String::new(),
-                participant_type: FriendParticipantType::SubscriptionAi,
-                provider_kind: "codex".to_owned(),
-                connection_kind: "external".to_owned(),
-                agent_id: String::new(),
-                source_agent_id: String::new(),
-                last_meeting_id: String::new(),
-                status: "offline".to_owned(),
-                source: "manual".to_owned(),
-                last_seen_at: None,
+        .save_friend(
+            &crate::ServerOwnerAuthority::LocalOperator,
+            &SaveFriend {
+                friend_id: Uuid::new_v4(),
+                expected_revision: 0,
+                details: FriendDetails {
+                    display_name: "Remote Codex".to_owned(),
+                    handle: String::new(),
+                    participant_type: FriendParticipantType::SubscriptionAi,
+                    provider_kind: "codex".to_owned(),
+                    connection_kind: "external".to_owned(),
+                    agent_id: String::new(),
+                    source_agent_id: String::new(),
+                    last_meeting_id: String::new(),
+                    status: "offline".to_owned(),
+                    source: "manual".to_owned(),
+                    last_seen_at: None,
+                },
             },
-        })
+        )
         .await?;
     let request = Uuid::new_v4();
     let first = store
         .create_friend_attendee_invite(&manager, request, friend.friend_id, resolve_provider, now)
         .await?;
-    store.delete_friend(friend.friend_id).await?;
+    store
+        .delete_friend(
+            &crate::ServerOwnerAuthority::LocalOperator,
+            friend.friend_id,
+        )
+        .await?;
     let retry = store
         .create_friend_attendee_invite(
             &manager,

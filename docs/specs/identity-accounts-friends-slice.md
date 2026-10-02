@@ -303,6 +303,31 @@ unverified. No full-completion claim while required rows lack evidence or contai
 unapproved differences. A discovered shared cause expands this audit to its other
 affected flows; these rows are a minimum, not a ceiling on investigation.
 
+### Remote owner workspace completion (2026-10-02)
+
+The same server owner must reach the same saved friends, room directory/create,
+room switching and invitation management from native and web entry, including an
+empty server. Ordinary human invitations and operator device pairings remain
+room-scoped. Native process, filesystem, provider credentials and public-ingress
+lifecycle stay on their existing local-device authority; remote room actions do
+not acquire native IPC. The published 0.1.4 artifacts remain immutable.
+
+Reuse verified central-owner provenance and existing domain transactions. Every
+remote read/write must revalidate current origin, device, expiry, revocation and
+owner provenance before reading private data or committing changes. Keep existing
+revision conflicts, idempotent request outcomes, deletion tombstones, quotas and
+room-generation binding. Shared UI receives explicit transport authority; hiding
+controls is never authorization, and a remote failure never retries with local
+operator privileges. Credentials stay out of projections, logs and URLs.
+
+Connect these owners in buildable slices, then verify the whole flow: native and
+web observe the same stored records; ordinary pairing, wrong device/origin,
+expired/revoked authority and stale room incarnations are rejected without writes.
+Exercise empty/nonempty room lists, create/switch/reload, invite create/revoke,
+friend save/conflict/delete, and visible failure/retry in the shared UI. Reuse the
+existing boundary/UI tests and packaged/browser verification; no new automated
+security scan or separate regression harness is authorized by this correction.
+
 ### Local Google account binding and guest retirement
 
 On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,

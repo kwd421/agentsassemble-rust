@@ -355,6 +355,66 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
     verify_signed_call(&next_call(calls).await, public_key);
 }
 
+async fn verify_owner_friends(client: &reqwest::Client, address: SocketAddr, session: &str) {
+    let authorized = |request: reqwest::RequestBuilder, device: &str| {
+        request
+            .header("host", "owner.example.test")
+            .header("x-forwarded-proto", "https")
+            .header("x-agentsassemble-proxy-token", SECRET)
+            .header("origin", ORIGIN)
+            .header("x-device-token", device)
+            .bearer_auth(session)
+    };
+    let friend_url = format!("http://{address}/api/central-owner/friends");
+    let draft = json!({"friend_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "expected_revision": 0,
+        "details": {"display_name": "Owner contact", "handle": "", "participant_type": "human",
+        "provider_kind": "", "connection_kind": "", "agent_id": "", "source_agent_id": "",
+        "last_meeting_id": "", "status": "offline", "source": "manual", "last_seen_at": null}});
+    let saved = authorized(client.post(&friend_url), DEVICE)
+        .json(&draft)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("owner friend: {error:?}"));
+    assert_eq!(saved.status(), StatusCode::OK);
+    let saved: Value = saved
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("friend JSON: {error:?}"));
+    assert_eq!(saved["revision"], 1);
+    let listed: Value = authorized(client.get(&friend_url), DEVICE)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("owner friends: {error:?}"))
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("friend list JSON: {error:?}"));
+    assert_eq!(listed["friends"], json!([saved]));
+    let rejected = authorized(
+        client.get(&friend_url),
+        "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB",
+    )
+    .send()
+    .await
+    .unwrap_or_else(|error| panic!("friend rejection: {error:?}"));
+    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
+    let deleted = authorized(
+        client.delete(format!(
+            "{friend_url}?friend_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+        )),
+        DEVICE,
+    )
+    .send()
+    .await
+    .unwrap_or_else(|error| panic!("friend delete: {error:?}"));
+    assert_eq!(deleted.status(), StatusCode::OK);
+    let replay = authorized(client.post(&friend_url), DEVICE)
+        .json(&draft)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("friend recreation: {error:?}"));
+    assert_eq!(replay.status(), StatusCode::CONFLICT);
+}
+
 async fn verify_owner_profile(client: &reqwest::Client, address: SocketAddr, admission: &Value) {
     let session = admission["session_token"]
         .as_str()
@@ -368,6 +428,7 @@ async fn verify_owner_profile(client: &reqwest::Client, address: SocketAddr, adm
             .header("x-device-token", device)
             .bearer_auth(session)
     };
+    verify_owner_friends(client, address, session).await;
     let profile_url = format!("http://{address}/api/user-profile");
     let profile = authorized(client.get(&profile_url), DEVICE)
         .send()

@@ -3,16 +3,19 @@ use chrono::Utc;
 use sqlx::{Sqlite, Transaction};
 use uuid::Uuid;
 
-use crate::{PersistenceError, SqliteStore, bootstrap::require_complete_bootstrap_in_transaction};
+use crate::{PersistenceError, ServerOwnerAuthority, SqliteStore};
 
 impl SqliteStore {
     /// Reads the local operator address book without inferring presence.
     ///
     /// # Errors
     /// Rejects incomplete bootstrap and propagates storage or decoding failures.
-    pub async fn saved_friends(&self) -> Result<Vec<SavedFriend>, PersistenceError> {
+    pub async fn saved_friends(
+        &self,
+        authority: &ServerOwnerAuthority,
+    ) -> Result<Vec<SavedFriend>, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
-        require_complete_bootstrap_in_transaction(&mut transaction).await?;
+        authority.revalidate(&mut transaction).await?;
         let rows: Vec<String> = sqlx::query_scalar(
             "SELECT friend_json FROM saved_friends WHERE friend_json IS NOT NULL ORDER BY friend_id",
         )
@@ -30,7 +33,11 @@ impl SqliteStore {
     ///
     /// # Errors
     /// Rejects invalid metadata, stale differing edits and edits of deleted records.
-    pub async fn save_friend(&self, request: &SaveFriend) -> Result<SavedFriend, PersistenceError> {
+    pub async fn save_friend(
+        &self,
+        authority: &ServerOwnerAuthority,
+        request: &SaveFriend,
+    ) -> Result<SavedFriend, PersistenceError> {
         if request.friend_id.is_nil()
             || request.expected_revision < 0
             || !request.details.is_valid()
@@ -41,7 +48,7 @@ impl SqliteStore {
             ));
         }
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        require_complete_bootstrap_in_transaction(&mut transaction).await?;
+        authority.revalidate(&mut transaction).await?;
         let existing = load(&mut transaction, request.friend_id).await?;
         let now = Utc::now();
         let friend = match existing {
@@ -90,9 +97,13 @@ impl SqliteStore {
     ///
     /// # Errors
     /// Rejects incomplete bootstrap and propagates storage failures.
-    pub async fn delete_friend(&self, friend_id: Uuid) -> Result<bool, PersistenceError> {
+    pub async fn delete_friend(
+        &self,
+        authority: &ServerOwnerAuthority,
+        friend_id: Uuid,
+    ) -> Result<bool, PersistenceError> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        require_complete_bootstrap_in_transaction(&mut transaction).await?;
+        authority.revalidate(&mut transaction).await?;
         // Retain only the ID so a delayed creation retry cannot restore deleted metadata.
         let result = sqlx::query("UPDATE saved_friends SET friend_json = NULL WHERE friend_id = ? AND friend_json IS NOT NULL")
             .bind(friend_id.to_string())

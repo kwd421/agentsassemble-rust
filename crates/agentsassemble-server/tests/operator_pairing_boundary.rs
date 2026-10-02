@@ -221,6 +221,14 @@ async fn paired_room_http(
         .await
         .unwrap_or_else(|error| panic!("paired profile boundary: {error}"));
     assert_eq!(profile.status(), StatusCode::UNAUTHORIZED);
+    let friends = public(client.get(format!("{base}/api/central-owner/friends")))
+        .header("x-device-token", device)
+        .bearer_auth(session)
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("paired friends boundary: {error}"));
+    assert_eq!(friends.status(), StatusCode::UNAUTHORIZED);
+
     let private = client
         .get(format!("{base}/api/room-settings?room_id=general"))
         .header("origin", ORIGIN)

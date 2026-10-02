@@ -6,6 +6,8 @@ import type { SaveFriend } from "../types/generated/SaveFriend";
 import type { SavedFriend } from "../types/generated/SavedFriend";
 import { isActivePresence } from "../lib/presenceStatus";
 
+import type { RoomHttpAuthority } from "../api/roomHttpAuthority";
+
 const types: Record<FriendParticipantType, string> = {
   human: "사람", subscription_ai: "구독형 AI", api: "API", local: "Local", remote: "외부 AI", unknown: "기타",
 };
@@ -20,8 +22,8 @@ function newFriend(): SaveFriend {
   } };
 }
 
-export default function FriendsView({ onClose }: { onClose: () => void }) {
-  const directory = useFriendsDirectory();
+export default function FriendsView({ onClose, authority }: { onClose: () => void; authority?: RoomHttpAuthority }) {
+  const directory = useFriendsDirectory(authority);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<FriendParticipantType | "all">("all");
   const [onlineOnly, setOnlineOnly] = useState(false);

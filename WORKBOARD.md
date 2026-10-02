@@ -27,6 +27,13 @@
   Chrome-to-Mac and Mac-to-Chrome changes update the bottom panel, member list and
   history without reload. Other acceptance rows remain open; this is not full parity.
 
+- 2026-10-02 owner workspace in progress: the shared friends view now sends explicit
+  native or remote owner authority to the same storage operations. Public access
+  revalidates central-owner provenance in the transaction; ordinary pairing remains
+  denied. Existing server boundaries, 358 persistence tests, focused UI checks,
+  build, Clippy and mandatory gates pass. Packaged/browser integration follows
+  room directory/create and invitation wiring; no whole-parity completion claimed.
+
 - 2026-10-02 remaining app/web owner-workspace correction: room directory/create,
   invitations and friends still rely on native manager authority or guest-only
   presentation. Preserve private/native transport boundaries while extending their

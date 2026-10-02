@@ -22,6 +22,24 @@ pub(crate) enum RoomSessionBearerError {
     Persistence(PersistenceError),
 }
 
+pub(crate) async fn require_central_owner_session(
+    state: &AppState,
+    headers: &HeaderMap,
+    origin: Option<&TrustedIngressOrigin>,
+) -> Result<agentsassemble_persistence::OperatorSessionAuthorization, RoomSessionBearerError> {
+    let bearer =
+        crate::http_api::bearer_credential(headers).ok_or(RoomSessionBearerError::Invalid)?;
+    match resolve_room_session_bearer(state, headers, origin, bearer).await? {
+        RoomSessionBearerResolution::Authorized(authorization) => match *authorization {
+            RoomSessionAuthorization::Operator(session) if session.is_central_owner() => {
+                Ok(session)
+            }
+            _ => Err(RoomSessionBearerError::Invalid),
+        },
+        RoomSessionBearerResolution::Other => Err(RoomSessionBearerError::Invalid),
+    }
+}
+
 pub(crate) async fn resolve_room_session_bearer(
     state: &AppState,
     headers: &HeaderMap,
