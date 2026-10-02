@@ -27,6 +27,7 @@ vi.mock("../../lib/deviceIdentity", () => ({
 vi.mock("./StartupIdentityGate", () => ({
   default: () => <main aria-label="authoritative startup gate" />,
 }));
+vi.mock("./CentralWebIdentityGate", () => ({ default: () => <main aria-label="central web account" /> }));
 vi.mock("./CentralOwnerConnectGate", () => ({
   default: ({ deviceToken }: { deviceToken: string }) => (
     <main aria-label="central owner gate" data-device-token={deviceToken} />
@@ -35,6 +36,7 @@ vi.mock("./CentralOwnerConnectGate", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
   deviceMocks.getOrCreateBrowserCredential.mockReset();
   deviceMocks.getOrCreateBrowserCredential.mockReturnValue(
     "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA"
@@ -49,6 +51,16 @@ afterEach(() => {
 });
 
 describe("StartupIdentityBoundary", () => {
+  it("shows central login only on the configured central origin without minting local authority", async () => {
+    boundaryMocks.desktop = false;
+    vi.resetModules();
+    vi.stubEnv("VITE_AGENTSASSEMBLE_CENTRAL_URL", window.location.origin);
+    const { default: WebBoundary } = await import("./StartupIdentityBoundary");
+    render(<WebBoundary>{() => <main aria-label="product" />}</WebBoundary>);
+    expect(screen.getByRole("main", { name: "central web account" })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: "product" })).toBeNull();
+    expect(deviceMocks.getOrCreateBrowserCredential).not.toHaveBeenCalled();
+  });
   it("treats central-owner navigation inside a desktop webview as remote browser admission", () => {
     const payload = {
       grantToken: `aacg1.${"a".repeat(43)}`,

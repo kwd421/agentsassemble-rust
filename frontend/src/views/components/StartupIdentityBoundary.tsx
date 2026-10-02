@@ -13,6 +13,8 @@ import {
   operatorPairingTokenFromUrl,
   roomGuestSessionExpired,
 } from "../../lib/roomGuestSession";
+import { centralAccountEntryUrl, isCentralWebEntry } from "../../lib/centralIdentity";
+import CentralWebIdentityGate from "./CentralWebIdentityGate";
 import StartupIdentityGate from "./StartupIdentityGate";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
 
@@ -62,6 +64,8 @@ export default function StartupIdentityBoundary({
     }
   });
 
+  if (isCentralWebEntry()) return <CentralWebIdentityGate />;
+
   if (!desktop && !ready && !centralOwnerConnect) {
     return (
       <div className="fixed inset-0 z-[400] grid place-items-center bg-[#101114] p-5">
@@ -70,14 +74,14 @@ export default function StartupIdentityBoundary({
           aria-label="브라우저 직접 시작 사용 불가"
         >
           <h1 className="text-2xl font-black text-text-primary">
-            접속 링크를 열어 주세요
+            AgentsAssemble에 로그인
           </h1>
+          {centralAccountEntryUrl() && <a href={centralAccountEntryUrl()} className="ops-button">Google 로그인 · 내 서버 열기</a>}
           <p
             role="alert"
             className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
           >
-            이 화면에서는 방에 바로 들어갈 수 없어요. 호스트에게 받은 초대·기기 연결·복구
-            링크를 열어 주세요.
+            내 서버는 중앙 계정으로 로그인해 열 수 있어요. 초대받은 방은 호스트에게 받은 초대·기기 연결·복구 링크로 들어가세요.
           </p>
         </main>
       </div>

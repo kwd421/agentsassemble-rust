@@ -18,10 +18,6 @@ const STORE_NAME = "credentials";
 const DEVICE_KEY = "device-v1";
 const RECOVERY_CODE_PATTERN = /^(?:[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}-){7}[ABCDEFGHJKLMNPQRSTUVWXYZ23456789]{4}$/;
 
-type ImportMetaWithEnv = ImportMeta & {
-  env?: Record<string, string | undefined>;
-};
-
 export type CentralPerson = {
   person_id: string;
   display_name: string;
@@ -93,7 +89,7 @@ let devicePromise: Promise<StoredDevice> | undefined;
 
 function configuredUrl(): string {
   const raw = String(
-    (import.meta as ImportMetaWithEnv).env?.VITE_AGENTSASSEMBLE_CENTRAL_URL || ""
+    import.meta.env.VITE_AGENTSASSEMBLE_CENTRAL_URL || ""
   )
     .trim()
     .replace(/\/+$/, "");
@@ -115,6 +111,14 @@ function configuredUrl(): string {
   } catch {
     return "";
   }
+}
+
+export function centralAccountEntryUrl(): string {
+  return configuredUrl() ? `${configuredUrl()}/` : "";
+}
+
+export function isCentralWebEntry(): boolean {
+  return Boolean(configuredUrl()) && window.location.origin === configuredUrl() && !isDesktopWebview();
 }
 
 export function centralIdentityConfigured(): boolean {
@@ -213,7 +217,7 @@ function storedDevice(): Promise<StoredDevice> {
   return devicePromise;
 }
 
-function saveSession(
+export function saveSession(
   result:
     | CentralGuestResult
     | { person: CentralPerson; session: Omit<CentralSession, "person"> }
@@ -326,7 +330,7 @@ async function responsePayload<T>(response: Response): Promise<T> {
   return payload;
 }
 
-async function unsignedPost<T>(
+export async function unsignedPost<T>(
   path: string,
   body: Record<string, unknown>,
   signal?: AbortSignal
@@ -475,7 +479,7 @@ async function signedRequest<T>(
   return responsePayload<T>(response);
 }
 
-async function authDeviceBody(displayName?: string): Promise<Record<string, unknown>> {
+export async function authDeviceBody(displayName?: string): Promise<Record<string, unknown>> {
   const device = await storedDevice();
   return {
     device_id: device.deviceId,
@@ -627,16 +631,17 @@ export async function openCentralOwnedServer(server: CentralServer): Promise<voi
   ) {
     throw new Error("중앙 서버 접속권 응답이 올바르지 않습니다.");
   }
-  await openDesktopCentralOwnedServer(
-    centralOwnerServerUrl(grant.origin, {
+  const target = centralOwnerServerUrl(grant.origin, {
       grantToken: grant.grant_token,
       serverId: grant.server_id,
       generation: grant.generation,
       expiresAt: grant.expires_at,
       hostPublicKeyX: String(server.host_public_key_jwk.x || ""),
       hostKeyFingerprint: server.host_key_fingerprint,
-    })
-  );
+    });
+  if (isDesktopWebview()) await openDesktopCentralOwnedServer(target);
+  else if (isCentralWebEntry()) window.location.assign(target);
+  else throw new Error("중앙 계정 페이지에서 서버를 열어 주세요.");
 }
 
 export type LocalServerInfo = {

@@ -12078,3 +12078,47 @@ is removed through the official CLI; MCP config and CLI settings are restored
 byte-for-byte, and `agy mcp list` again reports no configured servers. Only this
 run's generated host/workspace/probe artifacts are removed; native CLI conversation
 history remains. No product implementation change is needed for this verification.
+
+
+## Browser central Google entry (2026-10-02)
+
+A fresh private Chrome window originally reached only the native host's
+"open an invitation" gate. Browser startup now links to the fixed central origin,
+where the same Rust frontend renders Google login and the owned-server chooser.
+Central sessions/device keys never cross into room-host origins. Web Google
+handoffs use the existing configured Web client, nonce verification, a browser-held
+verifier and the shared canonical person/session owners. Only exact same-origin
+web start/completion requests are accepted. No CORS relaxation, guest merge,
+compatibility fallback, database migration or local authority initialization occurs.
+Existing desktop PKCE login and central connect-grant/host-challenge admission remain.
+
+Worker HTTP/durable-state regressions fail before implementation, then pass with
+web login. Its 29 tests cover forged audience/nonce/verifier, foreign origin,
+expiry, missing configuration, replay/concurrent completion, shared desktop/web
+person identity and static asset/API route separation. Worker syntax checks,
+architecture/source-growth, regenerated codebase maps and diff checks pass. The
+frontend production build, all 944 frontend tests and affected startup/login/
+cancellation/logout/owner tests pass.
+Rust architecture/source-growth, 19 policy/artifact tests, formatting/diff and
+artifact checks pass. No Rust native implementation changed. Existing bundle/source
+size warnings remain unchanged; no gate is weakened. No new security scan,
+subagent or independent reviewer was launched.
+
+Worker deployment version `e92b53d5-6780-4fa5-9e95-6104a329ac01` serves the shared
+production frontend at https://agentsassemble-identity-directory.seinel.workers.dev/.
+Real Chrome private mode displays the Google entry, opens Google's normal login,
+and reaches the approved account's password/passkey step. Selecting the existing
+Apple Passwords passkey requests Touch ID, which needs the user; private-window
+login completion is unverified. The user was asked to complete that step.
+
+A separate ordinary Chrome tab uses the user's already signed-in Google account.
+Selecting Nel Le completes the actual web handoff and displays Nel Le's four
+existing servers. Reload revalidates the account and retains the four-server list;
+explicit product logout removes both account display and server list. All four
+servers report offline, so no actual owner grant/room-history reopening is claimed.
+The installed main Mac package/data are old and no matching active host exists;
+they were not overwritten or migrated for this test. The isolated loopback test
+server is still open at http://127.0.0.1:63239 using only this task's data at
+`/tmp/aa-private-google-20261002-IGqdGH`; it now serves the updated frontend. It is
+not a substitute for an online Google-owned host. Completion still needs private
+Google authentication and an online owned host with external access enabled.

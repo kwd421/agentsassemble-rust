@@ -2,6 +2,14 @@
 
 ## Active work
 
+- 2026-10-02 browser central Google entry implemented and deployed at the fixed
+  identity origin. Real ordinary Chrome login resolves Nel Le and shows four
+  existing servers; reload and logout pass. All four hosts are offline, so room
+  reopening remains unverified. Private Chrome reaches Google authentication but
+  needs user password/passkey completion. Worker 29 and frontend verification pass;
+  no new security scan or review session. Contract: `docs/specs/identity-accounts-friends-slice.md`
+  -> Browser central Google entry; evidence: `docs/VERIFICATION.md` -> Browser central Google entry.
+
 - 2026-10-02 AI-readable connector invitation implemented: existing `/join` links
   serve setup/join guidance without JavaScript. Connected clients use `room_join`;
   clients without MCP receive registration and session reopening instructions.

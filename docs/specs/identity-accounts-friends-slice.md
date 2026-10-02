@@ -187,6 +187,33 @@ boundary tests, frontend startup/navigation tests, mandatory gates, a signed pac
 Mac host plus Windows client flow, and a standard diff security scan. Do not use Deep
 Scan. Preserve the already-running Windows room and its owned children throughout.
 
+### Browser central Google entry (2026-10-02)
+
+Browser startup without an invitation links to the fixed central identity origin.
+That origin serves the same frontend's account entry and owned-server chooser;
+room hosts never receive central bearers, signing keys or Google credentials.
+Google Identity Services returns a nonce-bound ID token to this central page.
+A ten-minute, one-use Worker handoff binds the device public key and a browser-held
+verifier before Google authentication. Completion checks the verifier, Google
+signature/audience/nonce and current account/device state using the same identity
+and session owners as desktop login. Only exact same-origin web requests may use
+this flow. Desktop loopback OAuth and invitation admission remain unchanged.
+
+The browser validates the current central session before listing servers and uses
+existing owner connect grants, host challenge verification and room session minting.
+Offline servers remain visible but disabled; bookmarks require their existing
+invitation authority. Web startup cannot initialize a host, claim ownership or
+create rooms. Expired/revoked sessions, script failure and popup cancellation expose
+retryable UI. Logout revokes the central session and clears its local account slot.
+No schema migration, fallback, widened CORS or account merging is introduced.
+
+Acceptance: same Google subject resolves the existing desktop person; bad audience,
+nonce/verifier, replay and foreign-origin completion fail without issuing sessions;
+the real private-window flow lists existing servers and opens an online owned room.
+Verify Worker HTTP/durable-state tests, frontend startup/session/navigation tests,
+production build and mandatory structure gates, then real Google/private-browser
+entry. Record unavailable host or Google-provider dependencies as unverified.
+
 ### Local Google account binding and guest retirement
 
 On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,
