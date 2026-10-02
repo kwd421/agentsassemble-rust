@@ -14,8 +14,8 @@
   Web OAuth credential is reused; no replacement credential was created. Remote
   owner navigation now targets the existing public `/pair` shell instead of private
   `/app`; real Chrome entry shows the existing room/history. Owner profile settings
-  are still suppressed by ordinary pairing treatment and remain active work. The
-  server must distinguish central-owner session provenance before exposing edits.
+  initially remained suppressed by ordinary pairing treatment; the correction and
+  real-flow evidence are recorded in the following row.
 
 - 2026-10-02 central owner profile correction: server-issued provenance now permits
   the same owner profile/name/avatar API and shared settings. Ordinary pairing
@@ -27,14 +27,25 @@
   Chrome-to-Mac and Mac-to-Chrome changes update the bottom panel, member list and
   history without reload. Other acceptance rows remain open; this is not full parity.
 
+- 2026-10-02 remaining app/web owner-workspace correction: room directory/create,
+  invitations and friends still rely on native manager authority or guest-only
+  presentation. Preserve private/native transport boundaries while extending their
+  existing server-owned contracts; do not fake authority with frontend flags.
+  Chrome account logout/reload and Google retry pass without affecting the Mac.
+
 - 2026-10-02 release continuation: package 0.1.4 for schema 72 and the verified
   shared startup/profile fixes. Keep published 0.1.3 artifacts immutable. The
-  installed 0.1.3 must not be reopened against migrated data; its replacement and
-  both platform updater artifacts are active work. User data backup is retained.
+  installed Mac app is now verified 0.1.4 and opens the existing schema 72 data.
+  Windows run 37016132161 passes with 34 native tests. Both signed artifacts and
+  the production manifest are published as latest; public bytes match staged
+  artifacts, and the installed Mac confirms latest 0.1.4. Windows interactive
+  installation remains unverified. Previous app/data backups are retained privately.
 
-- 2026-10-02 active: implement the user-approved official Tauri updater for macOS
-  and Windows, including signed release delivery and owned-runtime shutdown before
-  installation. Contract: `docs/specs/desktop-updates.md`.
+- 2026-10-02 official Tauri updater implemented and delivered for macOS/Windows
+  in release `desktop-v0.1.4`. Mac signed update, defer/install and latest-version
+  checks pass; Windows signed build and native contracts pass, interactive update
+  remains unverified. Contract: `docs/specs/desktop-updates.md`; evidence:
+  `docs/VERIFICATION.md` -> Shared app/web startup and central owner profiles.
 
 - 2026-10-02 macOS default server names now read the System Configuration
   computer display name instead of a router/DNS-derived hostname. Native identity

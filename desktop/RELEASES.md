@@ -53,7 +53,7 @@ notarization and Windows Authenticode signing.
    ```sh
    node scripts/release_manifest.mjs /path/to/latest.json \
      darwin-aarch64=/path/to/AgentsAssemble.app.tar.gz \
-     windows-x86_64=/path/to/AgentsAssemble_0.1.3_x64-setup.exe
+     windows-x86_64=/path/to/AgentsAssemble_0.1.4_x64-setup.exe
    ```
 
 5. Create a draft GitHub Release for that tag. Upload both artifacts, their `.sig`
@@ -65,3 +65,12 @@ notarization and Windows Authenticode signing.
 Ordinary source pushes do not publish updates. Existing installations without the
 updater require one manual installation of an updater-enabled release. Keep app
 data outside the bundle and preserve `app.agentsassemble.rust` across releases.
+
+## Current delivery
+
+`desktop-v0.1.4` is the published latest release at source `bd742095`. It contains
+Apple Silicon macOS and x86-64 Windows updater artifacts and their signed-version
+manifest. Windows build/native tests and public download digests pass; the installed
+Mac reports latest 0.1.4. Windows interactive installation remains unverified.
+The Mac bundle is Developer ID signed but not notarized; the Windows installer has
+an updater signature, not an Authenticode signature.

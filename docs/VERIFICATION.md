@@ -12421,3 +12421,62 @@ room operation comparisons. Remote owner still uses a room-scoped workspace; bro
 server directory/create/invite/friend behavior is not established by these checks.
 Windows UI remains unverified. The published immutable 0.1.3 artifacts predate these
 changes; final release delivery and installed-app replacement remain separate work.
+
+Additional isolated browser check: local Worker plus its local-only migrated D1
+and throwaway local peppers verify new guest creation, logout, rejected invalid
+code, recovery to the same display identity, rotation, survival of the pending
+replacement code across reload, and rejection of the previously consumed code.
+The first attempt exposed missing local verification setup (empty local DB and
+absent local secrets); preparing that isolated environment resolved it. Production
+D1 and credentials were not used or modified. The stopped local preview and its
+throwaway database/keys are removed. This is browser evidence, not a native guest
+recovery or second-machine claim.
+
+Release `desktop-v0.1.4` is frozen at `bd742095`. The Mac Developer ID and Tauri
+updater-signed release build completes. `/Applications/AgentsAssemble.app` is replaced
+with that verified 0.1.4 bundle; its previous bundle and a pre-migration database
+backup are retained privately for rollback. Real installed startup retains Nel Le,
+the same server, room, profile and original message. Schema is 72; original room
+rows, original event bytes and profile values (excluding normal edit revision/time)
+are preserved. Windows build and public manifest delivery complete below.
+
+Additional production Chrome account check: the common account section logs out;
+reload remains on the shared startup choice. Google account selection is reached
+in that same Chrome tab. Returning with browser Back and reloading permits retry;
+retry resolves the original Nel Le account and server. The running installed Mac
+retains its account, room and original message throughout this web logout/login.
+The temporary browser-control disconnect was recovered by rebinding the same app;
+it was not treated as product success. Native guest recovery and forced network
+failure/retry remain unverified.
+
+The continued source audit identifies remaining owner-workspace differences:
+`useRoomAdmission` treats central owners as room-bound guests; `useRoomDirectory`
+and room creation require native manager authority; invitation management uses
+native one-use tickets; friends and some invite controls are hidden by `guestLocked`.
+These are not approved web omissions. Completing them requires server-owned remote
+owner authority and corresponding shared presentation, not clearing the client flag
+or exposing private/native APIs. Public ingress remains off after verification.
+
+Final 0.1.4 delivery: GitHub Windows run `37016132161` succeeds on exact
+`bd742095d59eaeba0ee3b7af5ea8a2bd84d9f346`, including all 34 platform-applicable
+native tests. The Mac updater archive and Windows installer both verify against
+the embedded production public key using the updater's Minisign library. Their
+signed comments bind version 0.1.4. All six uploaded release assets match local
+SHA-256 digests. The release is published as latest:
+https://github.com/kwd421/agentsassemble-rust/releases/tag/desktop-v0.1.4
+
+The production `releases/latest/download/latest.json` returns HTTP 200 and exact
+staged metadata; both advertised download URLs return exact signed artifact bytes
+(Mac 27,289,935 bytes; Windows 18,518,854 bytes). In the installed Mac app the native
+Update menu recovers from the earlier unpublished-feed failure and visibly reports
+current latest version 0.1.4. The temporary `macos-validation.json` asset is removed
+from the immutable 0.1.3 prerelease; its binaries are unchanged. No Apple notarization
+or Windows Authenticode claim is made. Actual Windows install/update UI remains
+unverified, as does a visible automatic relaunch window from the earlier Mac update.
+This release completion does not close the remaining app/web parity acceptance.
+
+After verification the installed app is normally quit; its exact owned runtime
+children exit and no public tunnel remains. Computer Use is reset. The isolated
+parity package/config and one-use signature-verification program are removed;
+production app data, release artifacts and rollback backups are retained. Unrelated
+untracked `.agents/` and `scripts/__pycache__/` remain untouched.
