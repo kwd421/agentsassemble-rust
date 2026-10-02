@@ -1,0 +1,56 @@
+name: Windows desktop release artifact
+
+"on":
+  workflow_dispatch:
+  push:
+    tags: ["desktop-v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      CARGO_INCREMENTAL: "0"
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: "22"
+      - name: Install dependencies
+        shell: pwsh
+        run: |
+          rustup update stable --no-self-update
+          npm --prefix frontend ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix desktop ci
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npm --prefix provider-runtime ci --omit=optional --ignore-scripts
+          exit $LASTEXITCODE
+      - name: Build signed updater artifact
+        working-directory: desktop
+        shell: pwsh
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        run: |
+          if (-not $env:TAURI_SIGNING_PRIVATE_KEY) { throw "Missing updater signing key" }
+          $env:CARGO_TARGET_DIR = Join-Path $env:GITHUB_WORKSPACE "target"
+          npm run prepare:sidecar:release
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          npx tauri build --bundles nsis
+          exit $LASTEXITCODE
+      - name: Verify desktop contracts
+        run: cargo +stable test --locked --manifest-path desktop/src-tauri/Cargo.toml --target-dir target --release --lib
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-x86_64-updater
+          path: |
+            target/release/bundle/nsis/*.exe
+            target/release/bundle/nsis/*.sig
+          if-no-files-found: error
+          retention-days: 14
