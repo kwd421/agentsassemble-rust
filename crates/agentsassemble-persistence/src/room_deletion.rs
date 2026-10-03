@@ -206,6 +206,7 @@ impl SqliteStore {
             .bind(request_id).bind(&payload_hash).bind(serde_json::to_string(&result)?)
             .execute(&mut *transaction).await?;
         transaction.commit().await?;
+        self.notify_room_directory_changed();
         Ok(RoomDeletionMutation {
             outcome: CommandOutcome {
                 result,
@@ -284,6 +285,7 @@ impl SqliteStore {
         sqlx::query("UPDATE room_delete_results SET state = 'complete' WHERE room_id = ? AND state = 'pending'")
             .bind(room_id).execute(&mut *transaction).await?;
         transaction.commit().await?;
+        self.notify_room_directory_changed();
         self.side_chat.clear_room(room.room_uid).await;
         Ok(true)
     }

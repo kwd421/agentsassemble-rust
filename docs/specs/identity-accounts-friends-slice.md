@@ -312,6 +312,33 @@ affected flows; these rows are a minimum, not a ceiling on investigation.
 
 ### Remote owner workspace completion (2026-10-02)
 
+Live directory correction (2026-10-03): retain Claude's current shared UI. Native
+and central-owner web workspaces must receive committed room creation, settings,
+archive/restore/close, pending/completed deletion and cleanup changes without
+restart or manual refresh, including an empty workspace and changes to another
+room. Reconnection must reconcile changes missed while disconnected. Ordinary
+room invitations and device pairings do not acquire a server directory stream.
+
+The persistence owner publishes a coalesced invalidation only after commit; it is
+not another directory or authority. A separate authenticated directory connection
+is necessary because an empty workspace has no room socket. Native entry consumes
+its existing one-use operator ticket; web entry validates its existing central
+grant, exact origin, generation and device custody before opening and before each
+invalidation. Expiry/shutdown ends the connection. Notifications contain no room
+data or credentials; both clients read the existing authoritative directory API.
+Use existing connection budgets, bounded reconnect and visible failure. No polling
+or substitute authorization. Preserve foreground create/lifecycle continuity and
+reject stale asynchronous reads across workspace/authority changes.
+Preserve canonical empty metadata: an empty room topic remains empty after a
+directory reconciliation and must not be replaced by its name.
+
+Acceptance: two clients see creation and renaming without reload; archive/restore,
+close and deletion update the rail/management list; an initially empty client sees
+the first room. A reconnect reconciles missed commits. Wrong origin/device,
+ordinary guest/pairing, expired/revoked grant and stale generation receive no
+directory notifications. Validate affected existing API/concurrency checks and the
+signed isolated package; record browser/Windows evidence separately.
+
 The same server owner must reach the same saved friends, room directory/create,
 room switching and invitation management from native and web entry, including an
 empty server. Ordinary human invitations and operator device pairings remain

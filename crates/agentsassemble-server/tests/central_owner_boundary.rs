@@ -160,6 +160,7 @@ async fn post(
 }
 
 struct Fixture {
+    store: SqliteStore,
     address: SocketAddr,
     room_uid: String,
     client: reqwest::Client,
@@ -232,7 +233,7 @@ async fn start_fixture() -> Fixture {
         .room_uid
         .to_string();
     let runtime_state = AppState::local(
-        store,
+        store.clone(),
         TicketStore::new(Duration::from_secs(30), 8),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
@@ -254,6 +255,7 @@ async fn start_fixture() -> Fixture {
         .build()
         .unwrap_or_else(|error| panic!("client: {error:?}"));
     Fixture {
+        store,
         address,
         room_uid,
         client,
@@ -609,6 +611,7 @@ async fn central_owner_routes_redeem_current_grant_and_join_offline_publication(
     verify_signed_call(&online, &public_key);
 
     verify_routes(&mut fixture, generation, &public_key).await;
+    verify_owner_stream(&mut fixture, generation, &public_key).await;
     fixture.cancel.cancel();
     fixture
         .host_task
@@ -624,4 +627,84 @@ async fn central_owner_routes_redeem_current_grant_and_join_offline_publication(
     verify_signed_call(&offline, &public_key);
     fixture.worker_task.abort();
     let _ = fixture.worker_task.await;
+}
+
+async fn verify_owner_stream(fixture: &mut Fixture, generation: i64, public_key: &[u8]) {
+    fixture.worker_state.reject.store(false, Ordering::SeqCst);
+    let body = json!({"grant_token": TOKEN, "generation": generation});
+    for (origin, device, expected) in [
+        ("https://evil.example.test", DEVICE, StatusCode::FORBIDDEN),
+        (ORIGIN, "invalid", StatusCode::UNAUTHORIZED),
+        (
+            ORIGIN,
+            "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA",
+            StatusCode::UNAUTHORIZED,
+        ),
+    ] {
+        let denied = post(
+            &fixture.client,
+            fixture.address,
+            "/api/central-owner/events",
+            body.clone(),
+            origin,
+            device,
+        )
+        .await;
+        assert_eq!(denied.status(), expected);
+        if device.starts_with("aad1_B") {
+            verify_signed_call(&next_call(&mut fixture.calls).await, public_key);
+        }
+    }
+    let mut stream = post(
+        &fixture.client,
+        fixture.address,
+        "/api/central-owner/events",
+        body,
+        ORIGIN,
+        DEVICE,
+    )
+    .await;
+    assert_eq!(stream.status(), StatusCode::OK);
+    owner_directory_notice(&mut stream).await;
+    for _ in 0..2 {
+        verify_signed_call(&next_call(&mut fixture.calls).await, public_key);
+    }
+    fixture
+        .store
+        .create_room_for_local_operator(
+            "10000000-0000-4000-8000-000000000020",
+            "stream-change",
+            "Committed elsewhere",
+        )
+        .await
+        .unwrap_or_else(|e| panic!("cross-client commit: {e}"));
+    owner_directory_notice(&mut stream).await;
+    verify_signed_call(&next_call(&mut fixture.calls).await, public_key);
+    fixture.worker_state.reject.store(true, Ordering::SeqCst);
+    fixture
+        .store
+        .create_room_for_local_operator(
+            "10000000-0000-4000-8000-000000000021",
+            "revoked-change",
+            "Not delivered",
+        )
+        .await
+        .unwrap_or_else(|e| panic!("commit after revocation: {e}"));
+    let terminal = tokio::time::timeout(Duration::from_secs(5), stream.chunk())
+        .await
+        .unwrap_or_else(|e| panic!("revocation deadline: {e}"));
+    assert!(
+        matches!(terminal, Err(_) | Ok(None)),
+        "revoked owner received data"
+    );
+    verify_signed_call(&next_call(&mut fixture.calls).await, public_key);
+}
+
+async fn owner_directory_notice(response: &mut reqwest::Response) {
+    let bytes = tokio::time::timeout(Duration::from_secs(5), response.chunk())
+        .await
+        .unwrap_or_else(|e| panic!("directory deadline: {e}"))
+        .unwrap_or_else(|e| panic!("directory frame: {e}"))
+        .unwrap_or_else(|| panic!("directory stream ended"));
+    assert_eq!(bytes.as_ref(), b"event: directory_changed\ndata: {}\n\n");
 }

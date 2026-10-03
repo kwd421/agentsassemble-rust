@@ -59,9 +59,45 @@ pub(crate) fn routes() -> Router<AppState> {
 registered_routes! {
     fn directory_routes<AppState>() {
         private "/api/rooms" => get(list_rooms).post(create_room),
+        private "/api/rooms/events" => get(directory_events),
         private "/api/rooms/lifecycle" => post(change_lifecycle),
         same_origin_public "/api/room-session/lifecycle" => post(change_session_lifecycle),
     }
+}
+
+async fn directory_events(State(state): State<AppState>, request: Request) -> Response {
+    async fn open(state: AppState, request: Request) -> Result<Response, DirectoryHttpError> {
+        consume_operator(&state, request.headers()).await?;
+        let transport = request
+            .extensions()
+            .get::<crate::http_admission::HttpConnectionAdmission>()
+            .cloned()
+            .ok_or_else(DirectoryHttpError::internal)?;
+        ensure_empty_body(request, MAX_DIRECTORY_BODY_BYTES)
+            .await
+            .map_err(DirectoryHttpError::from_body)?;
+        let changes = state.store.subscribe_room_directory();
+        state
+            .store
+            .validate_server_owner(&agentsassemble_persistence::ServerOwnerAuthority::LocalOperator)
+            .await?;
+        let lease = state
+            .connection_admission
+            .acquire_directory()
+            .map_err(|_| DirectoryHttpError {
+                status: StatusCode::TOO_MANY_REQUESTS,
+                code: "directory_connection_capacity".into(),
+                message: "Server directory connection capacity is unavailable.".to_owned(),
+            })?;
+        Ok(crate::room_directory_stream::directory_stream(
+            state,
+            changes,
+            crate::room_directory_stream::DirectoryStreamAuthority::Local,
+            lease,
+            transport.retain_authenticated_wait(),
+        ))
+    }
+    open(state, request).await.into_response()
 }
 
 async fn change_lifecycle(

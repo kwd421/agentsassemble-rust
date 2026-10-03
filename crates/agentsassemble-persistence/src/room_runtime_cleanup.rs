@@ -204,6 +204,12 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         let commit = finish_cleanup_in(&mut transaction, key).await?;
         transaction.commit().await?;
+        if commit
+            .as_ref()
+            .is_some_and(|commit| !commit.events.is_empty())
+        {
+            self.notify_room_directory_changed();
+        }
         Ok(commit)
     }
 }

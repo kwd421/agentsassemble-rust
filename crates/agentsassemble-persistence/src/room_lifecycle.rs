@@ -172,6 +172,7 @@ impl SqliteStore {
         )
         .await?;
         transaction.commit().await?;
+        self.notify_room_directory_changed();
         Ok(RoomLifecycleMutation {
             outcome,
             revoked_session_fingerprints,

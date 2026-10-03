@@ -89,6 +89,22 @@ impl ServerOwnerAuthority {
     }
 }
 
+impl crate::SqliteStore {
+    /// Revalidates server ownership without reading a room or its directory.
+    ///
+    /// # Errors
+    /// Rejects incomplete bootstrap and expired, revoked or changed owner custody.
+    pub async fn validate_server_owner(
+        &self,
+        owner: &ServerOwnerAuthority,
+    ) -> Result<crate::LocalBootstrapStatus, PersistenceError> {
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let bootstrap = owner.revalidate(&mut transaction).await?;
+        transaction.commit().await?;
+        Ok(bootstrap)
+    }
+}
+
 // A short central grant is shared by directory/create/room admission, but only by
 // its first browser. Store fingerprints only; bounded cleanup follows grant expiry.
 pub(crate) const GRANT_DDL: &str = "CREATE TABLE central_owner_grants (

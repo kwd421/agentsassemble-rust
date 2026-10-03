@@ -8,6 +8,11 @@ const apiMocks = vi.hoisted(() => ({
   fetchRooms: vi.fn(),
 }));
 
+const subscriptionMocks = vi.hoisted(() => ({ subscribe: vi.fn(), close: vi.fn(), retry: vi.fn() }));
+vi.mock("../lib/roomDirectorySubscription", () => ({
+  openNativeDirectoryStream: vi.fn(), subscribeRoomDirectory: subscriptionMocks.subscribe,
+}));
+
 const persistenceMocks = vi.hoisted(() => ({
   persistRoomDockItems: vi.fn(),
   syncNativeRoomDockItems: vi.fn(),
@@ -104,8 +109,26 @@ function mockHydrationRace() {
 describe("useRoomDirectory", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    subscriptionMocks.subscribe.mockReturnValue({ close: subscriptionMocks.close, retry: subscriptionMocks.retry });
     directoryMocks.bindRoomDirectoryAuthority.mockResolvedValue(true);
     directoryMocks.currentRoomDirectoryAuthority.mockReturnValue(null);
+  });
+
+  it("reconciles an empty remote workspace on invalidation without superseding foreground continuity", async () => {
+    const remoteFetch = vi.fn().mockResolvedValue({ server_id: serverId, authority_lineage_id: lineageId, rooms: [] });
+    const remoteOwner = { serverId, fetchRooms: remoteFetch, openStream: vi.fn() };
+    const hook = renderHook(() => useRoomDirectory({ initialRooms: [], hostEnabled: false, remoteOwner }));
+    await waitFor(() => expect(hook.result.current.syncIssue).toBeNull());
+    const continuity = hook.result.current.captureRoomDirectoryContinuity();
+    const changed = subscriptionMocks.subscribe.mock.calls[0][1] as () => Promise<void>;
+    remoteFetch.mockResolvedValue(verifiedDirectory("new-from-another-client"));
+    await act(changed);
+    expect(hook.result.current.rooms.map(room => room.meetingId)).toEqual(["new-from-another-client"]);
+    expect(() => hook.result.current.validateRoomDirectoryContinuity(continuity)).not.toThrow();
+    hook.unmount();
+    expect(subscriptionMocks.close).toHaveBeenCalledOnce();
+    await changed();
+    expect(remoteFetch).toHaveBeenCalledTimes(2);
   });
 
   it("resolves one frozen manager tuple only from the confirmed local directory", async () => {
@@ -167,7 +190,7 @@ describe("useRoomDirectory", () => {
       authority_lineage_id: lineageId,
     });
     const remoteFetch = vi.fn().mockResolvedValue(verifiedDirectory("general"));
-    const remoteOwner = { serverId, fetchRooms: remoteFetch };
+    const remoteOwner = { serverId, fetchRooms: remoteFetch, openStream: vi.fn() };
 
     const remote = renderHook(() =>
       useRoomDirectory({ initialRooms: [remoteRoom], hostEnabled: false, remoteOwner })
@@ -264,7 +287,7 @@ describe("useRoomDirectory", () => {
         "server-meeting",
       ])
     );
-    expect(apiMocks.fetchRooms).toHaveBeenCalledWith(true, expect.any(Function));
+    expect(apiMocks.fetchRooms).toHaveBeenCalledWith(true, expect.any(Function), expect.any(AbortSignal));
     expect(persistenceMocks.persistRoomDockItems).toHaveBeenCalledWith(
       expect.arrayContaining([
         expect.objectContaining({ meetingId: "local-meeting" }),
@@ -273,7 +296,7 @@ describe("useRoomDirectory", () => {
     );
   });
 
-  it("hydrates an inactive room appearance from the canonical directory", async () => {
+  it("hydrates inactive room appearance and preserves its empty canonical topic", async () => {
     const localRoom = makeRoom("custom", { meetingId: "custom-room" });
     apiMocks.fetchRooms.mockResolvedValueOnce({
       rooms: [{
@@ -282,7 +305,7 @@ describe("useRoomDirectory", () => {
           settings_revision: "settings-custom-room",
           room_id: "custom-room",
           label: "Custom Room",
-          topic: "Canonical topic",
+          topic: "",
           appearance: {
             banner_preset: "custom",
             banner_image_url: "/api/attachments/banner01?view=1",
@@ -312,6 +335,7 @@ describe("useRoomDirectory", () => {
         bannerImage: "/api/attachments/banner01?view=1",
       })
     );
+    expect(result.current.rooms[0].topic).toBe("");
   });
 
   it("preserves local rooms when host hydration fails", async () => {

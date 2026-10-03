@@ -152,6 +152,7 @@ impl SqliteStore {
         )
         .await?;
         tx.commit().await?;
+        self.notify_room_directory_changed();
         Ok(RoomCommandMutation {
             outcome: CommandOutcome {
                 result,

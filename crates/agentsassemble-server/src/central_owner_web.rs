@@ -56,9 +56,83 @@ struct CreateRequest {
 registered_routes! {
     fn central_owner_routes<AppState>() {
         same_origin_public "/api/central-owner/directory" => post(directory),
+        same_origin_public "/api/central-owner/events" => post(directory_events),
         same_origin_public "/api/central-owner/room" => post(room),
         same_origin_public "/api/central-owner/rooms" => post(create),
     }
+}
+
+async fn directory_events(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Response, CentralOwnerHttpError> {
+    let transport = request
+        .extensions()
+        .get::<crate::http_admission::HttpConnectionAdmission>()
+        .cloned()
+        .ok_or_else(|| {
+            CentralOwnerHttpError::new(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "http_connection_unavailable",
+                "HTTP connection is unavailable.",
+            )
+        })?;
+    let origin = require_ready_origin(&state, request.headers())
+        .map_err(|_| CentralOwnerHttpError::unauthorized())?;
+    let device =
+        device_fingerprint(request.headers()).ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let body: DirectoryRequest = decode_json_body(request, MAX_BODY)
+        .await
+        .map_err(CentralOwnerHttpError::body)?;
+    let changes = state.store.subscribe_room_directory();
+    let (owner, expires_at) =
+        redeem_directory_owner(&state, &body.grant_token, &origin, body.generation, device).await?;
+    state.store.validate_server_owner(&owner).await?;
+    let lease = state
+        .connection_admission
+        .acquire_directory()
+        .map_err(|_| {
+            CentralOwnerHttpError::new(
+                StatusCode::TOO_MANY_REQUESTS,
+                "central_connect_capacity",
+                "Server directory connection capacity is unavailable.",
+            )
+        })?;
+    Ok(crate::room_directory_stream::directory_stream(
+        state,
+        changes,
+        crate::room_directory_stream::DirectoryStreamAuthority::Central {
+            token: body.grant_token,
+            generation: body.generation,
+            origin,
+            device,
+            expires_at,
+        },
+        lease,
+        transport.retain_authenticated_wait(),
+    ))
+}
+
+pub(crate) async fn redeem_directory_owner(
+    state: &AppState,
+    token: &str,
+    origin: &str,
+    generation: i64,
+    device: [u8; 32],
+) -> Result<(ServerOwnerAuthority, DateTime<Utc>), CentralOwnerHttpError> {
+    // The configured ingress origin may have changed since HTTP admission.
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        header::ORIGIN,
+        origin
+            .parse()
+            .map_err(|_| CentralOwnerHttpError::unauthorized())?,
+    );
+    require_ready_origin(state, &headers).map_err(|_| CentralOwnerHttpError::unauthorized())?;
+    let grant = redeem(state, token, origin, generation).await?;
+    let expiry = DateTime::from_timestamp(grant.expires_at, 0)
+        .ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    Ok((grant_authority(&grant, token, device)?, expiry))
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -238,7 +312,7 @@ async fn redeem(
         .map_err(|error| CentralOwnerHttpError::central(&error))
 }
 
-struct CentralOwnerHttpError {
+pub(crate) struct CentralOwnerHttpError {
     status: StatusCode,
     code: &'static str,
     message: &'static str,

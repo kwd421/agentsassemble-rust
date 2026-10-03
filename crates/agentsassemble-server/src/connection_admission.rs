@@ -35,7 +35,7 @@ struct ScopeEntry {
 struct LeaseRecord {
     principal_id: String,
     principal_generation: u64,
-    room_id: String,
+    room_id: Option<String>,
     room_generation: u64,
 }
 
@@ -44,7 +44,7 @@ struct AdmissionState {
     sequence: u64,
     active: usize,
     principals: HashMap<String, ScopeEntry>,
-    rooms: HashMap<String, ScopeEntry>,
+    rooms: HashMap<Option<String>, ScopeEntry>,
     leases: HashMap<u64, LeaseRecord>,
 }
 
@@ -87,27 +87,40 @@ impl ConnectionAdmission {
         &self,
         principal: &AuthenticatedPrincipal,
     ) -> Result<ConnectionLease, ConnectionAdmissionError> {
+        self.acquire_scope(&principal.principal_id, Some(principal.room_id.clone()))
+    }
+
+    // Budget scope only: callers authenticate server ownership before admission.
+    pub(crate) fn acquire_directory(&self) -> Result<ConnectionLease, ConnectionAdmissionError> {
+        self.acquire_scope(agentsassemble_domain::LOCAL_OPERATOR_USER_ID, None)
+    }
+
+    fn acquire_scope(
+        &self,
+        principal_id: &str,
+        room_id: Option<String>,
+    ) -> Result<ConnectionLease, ConnectionAdmissionError> {
         let mut state = self.state.lock();
         if state.active >= self.limits.total {
             return Err(ConnectionAdmissionError::GlobalLimit);
         }
         if state
             .principals
-            .get(&principal.principal_id)
+            .get(principal_id)
             .is_some_and(|entry| entry.active >= self.limits.principal)
         {
             return Err(ConnectionAdmissionError::PrincipalLimit);
         }
         if state
             .rooms
-            .get(&principal.room_id)
+            .get(&room_id)
             .is_some_and(|entry| entry.active >= self.limits.room)
         {
             return Err(ConnectionAdmissionError::RoomLimit);
         }
 
-        let new_principal = !state.principals.contains_key(&principal.principal_id);
-        let new_room = !state.rooms.contains_key(&principal.room_id);
+        let new_principal = !state.principals.contains_key(principal_id);
+        let new_room = !state.rooms.contains_key(&room_id);
         let identities = 1_u64 + u64::from(new_principal) + u64::from(new_room);
         let final_sequence = state
             .sequence
@@ -121,7 +134,7 @@ impl ConnectionAdmission {
         let principal_generation = if new_principal {
             allocate_identity()
         } else {
-            let Some(entry) = state.principals.get(&principal.principal_id) else {
+            let Some(entry) = state.principals.get(principal_id) else {
                 return Err(ConnectionAdmissionError::IdentityUnavailable);
             };
             entry.generation
@@ -129,7 +142,7 @@ impl ConnectionAdmission {
         let room_generation = if new_room {
             allocate_identity()
         } else {
-            let Some(entry) = state.rooms.get(&principal.room_id) else {
+            let Some(entry) = state.rooms.get(&room_id) else {
                 return Err(ConnectionAdmissionError::IdentityUnavailable);
             };
             entry.generation
@@ -137,30 +150,28 @@ impl ConnectionAdmission {
         let lease_id = allocate_identity();
         debug_assert_eq!(next_identity, final_sequence);
 
-        let principal_entry = state
-            .principals
-            .entry(principal.principal_id.clone())
-            .or_insert(ScopeEntry {
-                generation: principal_generation,
-                active: 0,
-            });
+        let principal_entry =
+            state
+                .principals
+                .entry(principal_id.to_owned())
+                .or_insert(ScopeEntry {
+                    generation: principal_generation,
+                    active: 0,
+                });
         principal_entry.active += 1;
-        let room_entry = state
-            .rooms
-            .entry(principal.room_id.clone())
-            .or_insert(ScopeEntry {
-                generation: room_generation,
-                active: 0,
-            });
+        let room_entry = state.rooms.entry(room_id.clone()).or_insert(ScopeEntry {
+            generation: room_generation,
+            active: 0,
+        });
         room_entry.active += 1;
         state.active += 1;
         state.sequence = final_sequence;
         state.leases.insert(
             lease_id,
             LeaseRecord {
-                principal_id: principal.principal_id.clone(),
+                principal_id: principal_id.to_owned(),
                 principal_generation,
-                room_id: principal.room_id.clone(),
+                room_id,
                 room_generation,
             },
         );
@@ -191,7 +202,11 @@ impl Drop for ConnectionLease {
     }
 }
 
-fn release_scope(scopes: &mut HashMap<String, ScopeEntry>, key: &str, generation: u64) {
+fn release_scope<K: Eq + std::hash::Hash>(
+    scopes: &mut HashMap<K, ScopeEntry>,
+    key: &K,
+    generation: u64,
+) {
     let remove = scopes.get_mut(key).is_some_and(|entry| {
         if entry.generation != generation {
             return false;
@@ -225,6 +240,22 @@ mod tests {
                 false,
             ),
         }
+    }
+
+    #[test]
+    fn directory_budget_does_not_charge_a_named_product_room() {
+        let admission = ConnectionAdmission::with_limits(Limits {
+            total: 2,
+            principal: 2,
+            room: 1,
+        });
+        let directory = admission
+            .acquire_directory()
+            .unwrap_or_else(|e| panic!("directory lease: {e}"));
+        let room = admission
+            .acquire(&principal("guest", "server-directory"))
+            .unwrap_or_else(|e| panic!("directory charged a product room: {e}"));
+        drop((directory, room));
     }
 
     #[test]

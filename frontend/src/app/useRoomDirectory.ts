@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fetchRooms } from "../api";
+import { openNativeDirectoryStream, subscribeRoomDirectory, type OpenDirectoryStream } from "../lib/roomDirectorySubscription";
 import {
   mergeServerRoomsIntoDock,
   roomFromServerRoom,
@@ -29,7 +30,7 @@ import {
 type UseRoomDirectoryOptions = {
   initialRooms: RoomDockItem[];
   hostEnabled: boolean;
-  remoteOwner?: { serverId: string; fetchRooms: (beforeDispatch: () => void) => Promise<StrictRoomDirectory> };
+  remoteOwner?: { serverId: string; fetchRooms: (beforeDispatch: () => void, signal?: AbortSignal) => Promise<StrictRoomDirectory>; openStream: OpenDirectoryStream };
 };
 
 type RoomDirectorySyncIssue = {
@@ -164,6 +165,9 @@ export function useRoomDirectory({
     useState<RoomDirectorySyncIssue | null>(initialIssue);
   const membershipRevisionRef = useRef(0);
   const metadataRevisionRef = useRef(0);
+  const directoryReadsRef = useRef(new Set<Promise<StrictRoomDirectory>>());
+  const directoryReadAbortRef = useRef<AbortController | null>(null);
+  const subscriptionRef = useRef<ReturnType<typeof subscribeRoomDirectory> | null>(null);
   const authorityRef = useRef<RoomDirectoryAuthority | null>(
     currentRoomDirectoryAuthority()
   );
@@ -370,23 +374,28 @@ export function useRoomDirectory({
   );
 
   const fetchVerifiedRoomDirectory = useCallback(
-    async (epoch: number) => {
-      const payload = remoteOwner
-        ? await remoteOwner.fetchRooms(() => assertCurrentEpoch(epoch))
-        : await fetchRooms(true, () => assertCurrentEpoch(epoch));
-      assertCurrentEpoch(epoch);
-      const stagedTrust = await resolveTrustedRoomDirectoryAuthority(payload);
-      assertCurrentEpoch(epoch);
-      const bound = await bindRoomDirectoryAuthority(
-        payload,
-        stagedTrust.trustedSurface,
-        window.location.origin,
-        () => isCurrentEpoch(epoch)
-      );
-      if (!bound) throw new RoomDirectoryOperationSuperseded();
-      assertCurrentEpoch(epoch);
-      authorityRef.current = stagedTrust.retainedAuthority;
-      return payload;
+    (epoch: number) => {
+      const read = (async () => {
+        const payload = remoteOwner
+          ? await remoteOwner.fetchRooms(() => assertCurrentEpoch(epoch), directoryReadAbortRef.current?.signal)
+          : await fetchRooms(true, () => assertCurrentEpoch(epoch), directoryReadAbortRef.current?.signal);
+        assertCurrentEpoch(epoch);
+        const stagedTrust = await resolveTrustedRoomDirectoryAuthority(payload);
+        assertCurrentEpoch(epoch);
+        const bound = await bindRoomDirectoryAuthority(
+          payload,
+          stagedTrust.trustedSurface,
+          window.location.origin,
+          () => isCurrentEpoch(epoch)
+        );
+        if (!bound) throw new RoomDirectoryOperationSuperseded();
+        assertCurrentEpoch(epoch);
+        authorityRef.current = stagedTrust.retainedAuthority;
+        return payload;
+      })();
+      directoryReadsRef.current.add(read);
+      void read.finally(() => directoryReadsRef.current.delete(read)).catch(() => undefined);
+      return read;
     },
     [assertCurrentEpoch, isCurrentEpoch, resolveTrustedRoomDirectoryAuthority, remoteOwner]
   );
@@ -419,6 +428,7 @@ export function useRoomDirectory({
       try {
         const payload = await fetchVerifiedRoomDirectory(epoch);
         const synchronized = publishDirectory(payload, epoch);
+        subscriptionRef.current?.retry();
         return {
           ok: true,
           rooms: synchronized,
@@ -495,6 +505,8 @@ export function useRoomDirectory({
   }, [hostEnabled, rooms, remoteOwner]);
 
   useLayoutEffect(() => {
+    directoryReadAbortRef.current = new AbortController();
+    directoryReadsRef.current.clear();
     activeRef.current = true;
     directoryEnabledRef.current = directoryEnabled;
     publicationEpochRef.current += 1;
@@ -504,6 +516,8 @@ export function useRoomDirectory({
       : null;
     publishSyncIssue(directoryEnabled ? UNCONFIRMED_ISSUE : null);
     return () => {
+      directoryReadAbortRef.current?.abort();
+      directoryReadsRef.current.clear();
       activeRef.current = false;
       directoryEnabledRef.current = false;
       invalidateDirectory();
@@ -553,6 +567,40 @@ export function useRoomDirectory({
     publishDirectory,
     publishSyncIssue,
   ]);
+
+  useEffect(() => {
+    if (!directoryEnabled || (!remoteOwner && !isDesktopWebview())) return;
+    let active = true;
+    const subscription = subscribeRoomDirectory(
+      remoteOwner ? remoteOwner.openStream : openNativeDirectoryStream,
+      async () => {
+        // An invalidation does not supersede a foreground command's continuity.
+        // Let admitted directory reads finish before reading the newer commit.
+        await Promise.allSettled([...directoryReadsRef.current]);
+        if (!active) return;
+        const epoch = publicationEpochRef.current;
+        try {
+          const payload = await fetchVerifiedRoomDirectory(epoch);
+          if (active) publishDirectory(payload, epoch);
+        } catch (error) {
+          if (!active || error instanceof RoomDirectoryOperationSuperseded) return;
+          throw error;
+        }
+      },
+      error => {
+        if (!active) return;
+        managerSnapshotRef.current = null;
+        publishSyncIssue({ category: "room_directory_unavailable",
+          message: error instanceof Error ? error.message : "방 목록 변경 연결을 확인하지 못했어요." });
+      }
+    );
+    subscriptionRef.current = subscription;
+    return () => {
+      active = false;
+      subscription.close();
+      if (subscriptionRef.current === subscription) subscriptionRef.current = null;
+    };
+  }, [directoryEnabled, remoteOwner, fetchVerifiedRoomDirectory, publishDirectory, publishSyncIssue]);
 
   return {
     rooms,

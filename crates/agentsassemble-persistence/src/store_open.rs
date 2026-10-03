@@ -65,6 +65,7 @@ impl SqliteStore {
             runtime_generation: format!("runtime-generation-v1-{}", uuid::Uuid::new_v4()).into(),
             side_chat: Arc::new(crate::side_chat::SideChatRepository::default()),
             created: fresh_authority,
+            directory_changes: tokio::sync::watch::channel(()).0,
         };
         if store.created {
             store.initialize().await?;

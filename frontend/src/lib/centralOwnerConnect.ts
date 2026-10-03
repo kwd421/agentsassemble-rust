@@ -212,10 +212,22 @@ export async function verifyCentralOwnerHost(
   }
 }
 
-export async function fetchCentralOwnerRooms(connect: CentralOwnerConnect, deviceToken: string) {
-  const payload = parseStrictRoomDirectory(await ownerRequest(connect, deviceToken, "directory"));
+export async function fetchCentralOwnerRooms(connect: CentralOwnerConnect, deviceToken: string, signal?: AbortSignal) {
+  const payload = parseStrictRoomDirectory(await ownerRequest(connect, deviceToken, "directory", {}, signal));
   if (payload.server_id !== connect.serverId) throw new Error("선택한 서버와 방 목록이 일치하지 않습니다.");
   return payload;
+}
+
+export function openCentralOwnerDirectoryStream(
+  connect: CentralOwnerConnect, deviceToken: string, signal: AbortSignal
+) {
+  if (!normalize(connect)) throw new ApiError(401, "서버 접속이 만료됐어요. 계정에서 서버를 다시 열어 주세요.", "central_connect_invalid");
+  signal.throwIfAborted();
+  return fetch("/api/central-owner/events", {
+    method: "POST", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
+    headers: { "content-type": "application/json", "x-device-token": deviceToken },
+    body: JSON.stringify({ grant_token: connect.grantToken, generation: connect.generation }),
+  });
 }
 
 export async function createCentralOwnerRoom(
@@ -230,11 +242,11 @@ export async function createCentralOwnerRoom(
 }
 
 async function ownerRequest(
-  connect: CentralOwnerConnect, deviceToken: string, route: string, body: Record<string, unknown> = {}
+  connect: CentralOwnerConnect, deviceToken: string, route: string, body: Record<string, unknown> = {}, signal?: AbortSignal
 ): Promise<unknown> {
   if (!normalize(connect)) throw new ApiError(401, "서버 접속이 만료됐어요. 계정에서 서버를 다시 열어 주세요.", "central_connect_invalid");
   const response = await fetch(`/api/central-owner/${route}`, {
-    method: "POST", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer",
+    method: "POST", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
     headers: { "content-type": "application/json", "x-device-token": deviceToken },
     body: JSON.stringify({ grant_token: connect.grantToken, generation: connect.generation, ...body }),
   });

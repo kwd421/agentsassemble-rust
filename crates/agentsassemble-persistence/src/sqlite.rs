@@ -118,6 +118,7 @@ pub struct SqliteStore {
     pub(crate) runtime_generation: Arc<str>,
     pub(crate) side_chat: Arc<crate::side_chat::SideChatRepository>,
     pub(crate) created: bool,
+    pub(crate) directory_changes: tokio::sync::watch::Sender<()>,
 }
 
 impl SqliteStore {

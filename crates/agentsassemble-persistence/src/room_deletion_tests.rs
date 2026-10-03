@@ -11,11 +11,14 @@ async fn deletion_waits_for_custody_and_publication_then_replays_after_recreatio
     let (store, principal, directory) = fixture().await;
     let room = store.snapshot("general", 0, 20).await?.room;
     let payload = json!({"room_uid": room.room_uid, "confirmation_name": room.label});
+    let mut directory_changes = store.subscribe_room_directory();
     let prepared = store
         .execute_room_delete(TrustedPrincipal(&principal), "delete", &payload)
         .await?;
     assert!(!prepared.complete);
     assert!(!prepared.outcome.deduplicated);
+    assert!(directory_changes.has_changed()?);
+    directory_changes.borrow_and_update();
     assert_eq!(
         store.snapshot("general", 0, 20).await?.room.status,
         RoomStatus::Closed
@@ -38,6 +41,7 @@ async fn deletion_waits_for_custody_and_publication_then_replays_after_recreatio
         Err(PersistenceError::CommandConflict)
     ));
     assert!(!store.finish_room_deletion("general").await?);
+    assert!(!directory_changes.has_changed()?);
     for key in store.load_room_runtime_cleanup_page(None).await?.keys {
         assert!(store.finish_room_runtime_cleanup(&key).await?.is_some());
     }
@@ -50,11 +54,14 @@ async fn deletion_waits_for_custody_and_publication_then_replays_after_recreatio
     }
     drop(store);
     let store = SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?;
+    let mut directory_changes = store.subscribe_room_directory();
     assert_eq!(
         store.pending_room_deletions(None).await?.room_ids,
         vec!["general"]
     );
     assert!(store.finish_room_deletion("general").await?);
+    assert!(directory_changes.has_changed()?);
+    directory_changes.borrow_and_update();
     assert!(
         store
             .pending_room_deletions(None)

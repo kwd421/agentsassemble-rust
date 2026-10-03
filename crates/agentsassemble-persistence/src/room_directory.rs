@@ -34,6 +34,17 @@ pub struct RoomCreateCommit {
 }
 
 impl SqliteStore {
+    /// Subscribes to coalesced committed directory changes, including other rooms.
+    /// Receivers must authenticate separately and read the canonical directory.
+    #[must_use]
+    pub fn subscribe_room_directory(&self) -> tokio::sync::watch::Receiver<()> {
+        self.directory_changes.subscribe()
+    }
+
+    pub(crate) fn notify_room_directory_changed(&self) {
+        self.directory_changes.send_replace(());
+    }
+
     /// Returns the durable identity of this database authority.
     ///
     /// # Errors
@@ -132,6 +143,9 @@ impl SqliteStore {
         )
         .await?;
         transaction.commit().await?;
+        if !commit.deduplicated {
+            self.notify_room_directory_changed();
+        }
         Ok(commit)
     }
 }

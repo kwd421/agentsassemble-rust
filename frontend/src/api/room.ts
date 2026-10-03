@@ -528,15 +528,16 @@ export function createRoom(
   }, beforeDispatch).then(parseStrictRoomCreateResponse);
 }
 
-export function fetchRooms(includeArchived = false, beforeDispatch?: () => void) {
+export function fetchRooms(includeArchived = false, beforeDispatch?: () => void, signal?: AbortSignal) {
   if (includeArchived) {
     return fetchJsonServerOperator<unknown>(
       "/api/rooms?include_archived=true",
-      beforeDispatch
+      beforeDispatch,
+      signal
     )
       .then(parseStrictRoomDirectory);
   }
-  return fetchJsonServerOperator<unknown>("/api/rooms", beforeDispatch)
+  return fetchJsonServerOperator<unknown>("/api/rooms", beforeDispatch, signal)
     .then(parseStrictRoomDirectory);
 }
 

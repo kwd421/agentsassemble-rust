@@ -87,17 +87,13 @@ impl SqliteStore {
         room.label.clone_from(&next.label);
         room.updated_at = now;
         let public = public_settings(&next)?;
-        let event = settings_updated_event(
+        let outcome = settings_updated_outcome(
             principal,
             &public,
             next_sequence(&mut transaction, &principal.room_id).await?,
             now,
         );
-        let result = json!({
-            "room_settings": public,
-            "event": event,
-            "event_seq": event.seq,
-        });
+        let event = &outcome.event;
         sqlx::query("UPDATE rooms SET room_json = ?, settings_json = ? WHERE room_id = ?")
             .bind(serde_json::to_string(&room)?)
             .bind(serde_json::to_string(&next)?)
@@ -107,7 +103,7 @@ impl SqliteStore {
         sqlx::query("INSERT INTO room_events(room_id, seq, event_json) VALUES (?, ?, ?)")
             .bind(&principal.room_id)
             .bind(event.seq)
-            .bind(serde_json::to_string(&event)?)
+            .bind(serde_json::to_string(event)?)
             .execute(&mut *transaction)
             .await?;
         store_command_result(
@@ -116,26 +112,22 @@ impl SqliteStore {
             request_id,
             "room.settings.update",
             &payload_hash,
-            &result,
+            &outcome.result,
         )
         .await?;
         transaction.commit().await?;
-        Ok(CommandOutcome {
-            result,
-            event: event.clone(),
-            events: vec![event],
-            deduplicated: false,
-        })
+        self.notify_room_directory_changed();
+        Ok(outcome)
     }
 }
 
-fn settings_updated_event(
+fn settings_updated_outcome(
     principal: &AuthenticatedPrincipal,
     public: &agentsassemble_domain::PublicRoomSettings,
     sequence: i64,
     now: chrono::DateTime<Utc>,
-) -> RoomEvent {
-    RoomEvent {
+) -> CommandOutcome {
+    let event = RoomEvent {
         v: 1,
         id: Uuid::new_v4().to_string(),
         seq: sequence,
@@ -154,6 +146,12 @@ fn settings_updated_event(
         content: None,
         message_kind: None,
         extra: BTreeMap::from([("room_settings".to_owned(), json!(public))]),
+    };
+    CommandOutcome {
+        result: json!({"room_settings": public, "event": event, "event_seq": event.seq}),
+        event: event.clone(),
+        events: vec![event],
+        deduplicated: false,
     }
 }
 

@@ -193,7 +193,7 @@ export function roomFromServerRoom(
     roomOrigin: remote ? "remote_server" : "local",
     serverOrigin: remote ? (existing?.serverOrigin || currentServerOrigin) : undefined,
     connectionState: remote ? "connected" : "local",
-    topic: settings?.topic || label,
+    topic: settings?.topic ?? label,
     shortLabel: settings?.shortLabel || label.slice(0, 1).toUpperCase() || "R",
     appearance: settings?.appearance,
     inviteScope: settings?.appearance.inviteScope,

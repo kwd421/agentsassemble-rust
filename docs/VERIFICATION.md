@@ -12618,3 +12618,67 @@ Discord publishes no client UI guide; the reference is the user's Discord app
 - Escape did not dismiss the room header or member menus during this native run;
   whether the key reached the webview is unknown. Friends view and room settings
   copy were not changed. Mobile layout and Windows were not verified.
+
+
+## Live owner room directory correction (2026-10-03)
+
+Baseline: Claude commits 28f2531f, d1d2d41c and b1dce20e are retained and pushed.
+No product UI or styles were replaced. The correction contract is recorded in
+`docs/specs/identity-accounts-friends-slice.md` before implementation.
+
+- Cause: directory hydration ran on workspace mount/explicit foreground refresh;
+  another client's room creation had no subscription on the existing room socket.
+  An empty workspace has no room socket at all. A clone-shared persistence watch
+  now invalidates only after actual create/settings/lifecycle/deletion/cleanup
+  commits; exact replays and rejected writes do not create a success notification.
+- Native GET `/api/rooms/events` consumes the existing one-use server operator
+  ticket. Same-origin owner POST `/api/central-owner/events` redeems the existing
+  central grant with origin/generation/device custody. Admission and every data
+  frame validate ownership; remote frames also redeem against the central owner.
+  Expiry/shutdown cancels both idle waiting and in-flight revalidation. Existing
+  connection budgets and drop-owned leases apply; the SSE body also retains the
+  existing authenticated HTTP-wait lease until drop/expiry/shutdown. The first
+  real Chrome comparison exposed a missing transport lease: the generic 30s HTTP
+  deadline closed directory streams and exhausted client recovery. The existing
+  TCP check now crosses that deadline before requiring a later commit. No HTTP
+  timeout or admission limit is relaxed. Directory scope is distinct
+  from every product room, without a fake room/principal authorization.
+- The SSE payload is the fixed empty `directory_changed` hint. Both transports
+  read the existing verified directory, including archived management rows. An
+  initial hint covers reconnect gaps; foreground continuity is not superseded.
+  Workspace exit cancels its directory HTTP reads and stream. Reconnect is capped
+  at four admissions, with 0.5/1/2 second backoff; rejected ownership/capacity stops
+  retry. HTTP admission has a 10s deadline and missing transport has a 45s deadline.
+  The server's 15s comment keeps an idle transport alive; it carries no room data
+  and does not poll the directory. Manual successful directory refresh can restart
+  an exhausted subscription. Failures use the existing visible sync notice.
+- Checks: all 956 frontend tests pass; subsequent cancellation edits pass the 32
+  affected checks and TypeScript/Vite build. Existing server directory/central-owner
+  integration suites pass all six checks, including an initially empty directory,
+  one-use and wrong-scope ticket rejection, cross-room archive/restore, wrong
+  origin/device and central revocation before delivery. Existing deletion checks
+  pass with committed pending/completed invalidations; seven settings/scheduler
+  checks and three connection-budget checks pass. Scoped server/persistence all-target Clippy denies warnings and
+  mandatory architecture/source gates (19 policy/artifact tests) pass.
+- Signed isolated macOS package: ID `app.agentsassemble.workspace20261003`, version
+  0.1.5, existing server ec77a196-085c-40ac-8867-bf5bcdd62923. Strict/deep codesign
+  passes and the packaged frontend manifest matches the built manifest. Normal
+  startup reaches the same three-column room UI, retained profile and original
+  two rooms/history. Actual native creation enters a third room without an error
+  while its invalidation races the create response; rename appears in the rail.
+  Read-only SQLite confirms `room-20261003T100335` / `DIRECTORY-MAC-1004` committed.
+  Test rooms are retained for the ongoing owner-workspace verification.
+- Actual Chrome creates `room-20261003T102725`; Mac adds it without restart while
+  another room is selected. Web rename to DIRECTORY-WEB-1028 reaches Mac; Mac
+  rename to DIRECTORY-MAC-1029 reaches Chrome, both beyond the generic 30s deadline.
+  Chrome briefly uses DevTools Offline while Mac renames its other room. Restoring
+  No throttling shows the new name without reload; this alone does not establish
+  that the ongoing SSE transport disconnected. Ingress is closed afterward.
+- Reconciliation exposed an existing empty-topic fallback to the room label.
+  Canonical empty topics are now retained; the existing inactive-room check covers
+  that outcome (31 affected frontend checks and build pass). The final signed
+  package clears the test room topic, receives its own invalidation and retains
+  the empty field/generic introduction; read-only SQLite confirms the empty value.
+- Actual empty/reconnect UI, invitations, Windows and overall parity remain open.
+  No automated scan, subagent, real provider execution or production data migration/
+  deletion was performed. Installed 0.1.4 remains unchanged.

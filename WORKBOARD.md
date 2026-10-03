@@ -2,6 +2,16 @@
 
 ## Active work
 
+- 2026-10-03 live owner directory correction: retain Claude's UI baseline; committed
+  create/settings/archive/restore/close/delete/cleanup now invalidate a separate
+  authenticated owner directory connection, including empty workspaces. Shared
+  clients reconcile through the existing verified API without polling or granting
+  guest authority. Affected checks, gates and signed isolated Mac startup/create/
+  rename pass. Actual Chrome-to-Mac creation and cross-room naming in both directions
+  pass beyond 30s after binding the existing authenticated HTTP-wait lifetime.
+  Empty/reconnect UI, invitations, Windows and full parity remain open. Evidence:
+  `docs/VERIFICATION.md` -> Live owner room directory correction.
+
 - 2026-10-03 Discord-style UI correction (user request): the invite dialog is one
   480px Discord-sized link field with one primary action, collapsed link settings
   and a one-line hosting status; the sidebar hides the default empty banner and

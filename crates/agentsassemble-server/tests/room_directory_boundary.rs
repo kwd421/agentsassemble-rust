@@ -36,6 +36,92 @@ impl RunningServer {
 }
 
 #[tokio::test]
+async fn owner_directory_stream_covers_an_empty_server_and_other_room_lifecycle() {
+    let store = zero_room_fixture().await;
+    let tickets = TicketStore::new(Duration::from_secs(30), 32);
+    let server = start(store.clone(), tickets.clone()).await;
+    let client = Client::new();
+    let route = format!("{}/api/rooms/events", server.base_url);
+    let denied = client
+        .get(&route)
+        .send()
+        .await
+        .unwrap_or_else(|e| panic!("denied stream: {e}"));
+    assert_eq!(denied.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let room_ticket = issue_room_ticket(&tickets, "general").await;
+    let scoped = client
+        .get(&route)
+        .header("authorization", format!("Bearer {room_ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|e| panic!("room-scoped stream: {e}"));
+    assert_eq!(scoped.status(), reqwest::StatusCode::UNAUTHORIZED);
+    let ticket = issue_operator_ticket(&tickets).await;
+    let mut stream = client
+        .get(&route)
+        .header("authorization", format!("Bearer {ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|e| panic!("open directory stream: {e}"));
+    assert_eq!(stream.status(), reqwest::StatusCode::OK);
+    assert_eq!(stream.headers()["cache-control"], "private, no-store");
+    assert_eq!(stream.headers()["content-type"], "text/event-stream");
+    directory_notice(&mut stream).await;
+    let replay = client
+        .get(&route)
+        .header("authorization", format!("Bearer {ticket}"))
+        .send()
+        .await
+        .unwrap_or_else(|e| panic!("replayed stream ticket: {e}"));
+    assert_eq!(replay.status(), reqwest::StatusCode::UNAUTHORIZED);
+    // The authenticated body, rather than the generic HTTP connection's 30s
+    // deadline, owns the live directory lifetime. The next commit must arrive.
+    tokio::time::pause();
+    tokio::time::advance(Duration::from_secs(31)).await;
+    tokio::time::resume();
+    let server_id = store
+        .server_id()
+        .await
+        .unwrap_or_else(|e| panic!("server id: {e}"));
+    let uid = create_and_retry_room(&client, &server, &tickets, &server_id).await;
+    directory_notice(&mut stream).await;
+    let principal = local_principal("project-room");
+    for archived in [true, false] {
+        store
+            .execute_room_lifecycle(
+                agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
+                &format!("archive-{archived}"),
+                "room.archive",
+                &json!({"room_uid": uid, "archived": archived}),
+            )
+            .await
+            .unwrap_or_else(|e| panic!("room lifecycle: {e}"));
+        directory_notice(&mut stream).await;
+    }
+    drop(stream);
+    server.stop().await;
+}
+
+async fn directory_notice(response: &mut reqwest::Response) {
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            let bytes = response
+                .chunk()
+                .await
+                .unwrap_or_else(|e| panic!("directory notification: {e}"))
+                .unwrap_or_else(|| panic!("directory stream ended"));
+            if bytes.starts_with(b":") {
+                continue;
+            }
+            assert_eq!(bytes.as_ref(), b"event: directory_changed\ndata: {}\n\n");
+            break;
+        }
+    })
+    .await
+    .unwrap_or_else(|e| panic!("directory notification deadline: {e}"));
+}
+
+#[tokio::test]
 async fn operator_directory_ticket_is_scope_separated_and_room_creation_is_canonical() {
     let store = fixture().await;
     let tickets = TicketStore::new(Duration::from_secs(30), 32);
