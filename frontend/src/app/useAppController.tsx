@@ -79,6 +79,8 @@ export function useAppController(deviceToken: string, clientId: string) {
   const [startupRoute] = useState(() =>
     createStartupRoute({ operatorPairingPending: Boolean(operatorPairingToken) })
   );
+  // Navigation custody only: retained admission never authorizes a server request.
+  const lastOwnerRoomUid = useRef(startupRoute.guestSession?.centralOwner ? startupRoute.guestSession.roomUid || "" : "");
   const [startupIdentityReady] = useState(isDesktopWebview);
   const guestInvite = startupRoute.guestInvite;
   const guestJoinToken = startupRoute.guestJoinToken;
@@ -195,6 +197,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     onRoomJoined: onGuestRoomJoined,
     onResetToLobby: onGuestAdmissionReset,
   });
+  if (guestSession?.centralOwner && guestSession.roomUid) lastOwnerRoomUid.current = guestSession.roomUid;
   const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
   const canCreateRoom = startupHostEnabled || Boolean(ownerWorkspace.connect);
   const canInviteRooms = startupHostEnabled || Boolean(ownerWorkspace.connect);
@@ -235,8 +238,13 @@ export function useAppController(deviceToken: string, clientId: string) {
     verifyRoomDirectoryAuthority,
     onCreated: onRoomCreated,
   });
+  const ownerLifecycleTransport = useMemo(() => ownerWorkspace.connect ? {
+    kind: "central_grant" as const,
+    credential: { grantToken: ownerWorkspace.connect.grantToken, generation: ownerWorkspace.connect.generation }, deviceToken,
+  } : undefined, [ownerWorkspace.connect, deviceToken]);
   const roomLifecycle = useRoomLifecycle({
-    enabled: !guestLocked && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === "/api/rooms/lifecycle")),
+    enabled: Boolean(ownerLifecycleTransport || !guestLocked) && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === (ownerLifecycleTransport ? "/api/room-session/lifecycle" : "/api/rooms/lifecycle"))),
+    transport: ownerLifecycleTransport,
     authorityReady: !roomDirectorySyncIssue,
     managementRooms, captureRoomDirectoryContinuity, validateRoomDirectoryContinuity, refreshRoomDirectory,
   });
@@ -381,7 +389,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   const canManageActiveRoom = !activeRoomDisconnected && Boolean(activeRoomCapabilities["room.manage"]);
   const canControlActiveAgents = !activeRoomDisconnected && Boolean(activeRoomCapabilities["agent.control"]);
   const pairedRoomLifecycle = usePairedRoomLifecycle({
-    enabled: guestLocked && canManageActiveRoom && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === "/api/room-session/lifecycle")),
+    enabled: !ownerLifecycleTransport && guestLocked && canManageActiveRoom && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === "/api/room-session/lifecycle")),
     session: guestSession, deviceToken, expired: guestExpired,
     room: canonicalRoom.room ? { ...canonicalRoom.room, label: canonicalRoom.roomSettings?.label ?? canonicalRoom.room.label } : null,
     refreshProjection: () => canonicalRoom.socket?.resync?.(),
@@ -447,7 +455,8 @@ export function useAppController(deviceToken: string, clientId: string) {
 
   useEffect(() => {
     if (!ownerWorkspace.connect || guestSession || !rooms.length || roomDirectorySyncIssue) return;
-    void selectRoom(rooms[0].id);
+    const next = rooms.find(room => room.roomUid !== lastOwnerRoomUid.current);
+    if (next) void selectRoom(next.id);
   }, [ownerWorkspace.connect, guestSession, rooms, roomDirectorySyncIssue]);
 
   // The room header anchors its menu below itself; the rail and context menus open at the pointer.

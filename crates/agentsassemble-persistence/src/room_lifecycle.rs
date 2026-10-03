@@ -100,7 +100,7 @@ impl SqliteStore {
         payload: &Value,
     ) -> Result<RoomLifecycleMutation, PersistenceError> {
         let parsed = parse_payload(action, payload)?;
-        let mut transaction = self.pool.begin().await?;
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let credential = authority.resolve(&mut transaction).await?;
         let principal = resolve_manager(&mut transaction, &credential).await?;
         let (mut room, _) = load_room_with_settings(&mut transaction, &principal.room_id).await?;

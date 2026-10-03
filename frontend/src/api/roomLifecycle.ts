@@ -3,7 +3,7 @@ import type { Room } from "../types/generated/Room";
 import { publicRoomEventIsValid } from "../lib/roomSocketValidation";
 import { roomFromLifecycleEvent } from "../lib/roomLifecycleContract";
 import { assertExactKeys, strictRecord } from "../lib/strictJsonContract";
-import { postJsonServerOperator, responseError, isPrivateNoStoreResponse } from "./http";
+import { postJsonServerOperator, responseError, isPrivateNoStoreResponse, serverOwnerGrantHeaders, type ServerOwnerGrantCredential } from "./http";
 import type { RoomHttpAuthority } from "./roomHttpAuthority";
 
 export type RoomLifecycleIntent = {
@@ -17,7 +17,9 @@ export type RoomLifecycleIntent = {
   confirmationName?: string;
 };
 
-export async function changeRoomLifecycle(intent: RoomLifecycleIntent, beforeDispatch: () => void, session?: Extract<RoomHttpAuthority, { kind: "remote" }>): Promise<{ room: Room; cleanupPending: boolean; deleted?: boolean }> {
+export type RoomLifecycleTransport = Extract<RoomHttpAuthority, { kind: "remote" }> | { kind: "central_grant"; credential: ServerOwnerGrantCredential; deviceToken: string };
+
+export async function changeRoomLifecycle(intent: RoomLifecycleIntent, beforeDispatch: () => void, session?: RoomLifecycleTransport): Promise<{ room: Room; cleanupPending: boolean; deleted?: boolean }> {
   const deleting = intent.action === "room.delete";
   const body = {
     server_id: intent.serverId, authority_lineage_id: intent.authorityLineageId,
@@ -26,11 +28,11 @@ export async function changeRoomLifecycle(intent: RoomLifecycleIntent, beforeDis
   };
   let raw: unknown;
   if (session) {
-    if (!session.sessionToken || !session.deviceToken) throw new Error("현재 기기의 방 세션 권위를 사용할 수 없습니다.");
+    if (!session.deviceToken || (session.kind === "remote" ? !session.sessionToken : !session.credential.grantToken)) throw new Error("현재 기기의 방 세션 권위를 사용할 수 없습니다.");
     beforeDispatch();
     const response = await fetch("/api/room-session/lifecycle", {
-      method: "POST", cache: "no-store", redirect: "error",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${session.sessionToken}`, "X-Device-Token": session.deviceToken },
+      method: "POST", cache: "no-store", redirect: "error", credentials: "omit", referrerPolicy: "no-referrer",
+      headers: { "Content-Type": "application/json", ...(session.kind === "central_grant" ? serverOwnerGrantHeaders(session.credential, session.deviceToken) : { Authorization: `Bearer ${session.sessionToken}`, "X-Device-Token": session.deviceToken }) },
       body: JSON.stringify(body),
     });
     if (!response.ok) throw await responseError(response);

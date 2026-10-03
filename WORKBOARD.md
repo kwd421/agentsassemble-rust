@@ -2,14 +2,24 @@
 
 ## Active work
 
+- 2026-10-03 shared deletion recovery correction: server-wide web ownership now
+  retains transactional grant provenance through the existing bounded command
+  queue and immutable deletion replay. The shared shell exposes the exact pending
+  target and explicit retry even with no rooms; directory absence is not success.
+  HTTP8, persistence358, frontend964, Clippy and mandatory gates pass. Signed
+  Mac/Chrome last-room retirement, exact completion recovery, restored-session
+  re-entry and network failure/fresh authorized reconnect pass. Duplicate macOS
+  registration diagnosis follows; Windows and overall parity remain open. Contract: room-lifecycle slice -> Shared
+  owner recovery after room retirement.
+
 - 2026-10-03 server-wide owner account correction: profiles, bounded avatars and
   saved friends reuse the centrally redeemed server-owner grant without room
   admission. Existing authenticated directory invalidation now carries the canonical
   host profile revision, including zero rooms. HTTP9, persistence358, frontend962,
   Clippy and mandatory gates pass. Signed Mac/Chrome empty-server read/edit, live
   profile changes both directions, first-room creation and reload pass; originals
-  are restored. Deletion progress/recovery, actual network reconnect, Windows and
-  overall parity remain open. Diagnose the two macOS registrations afterward,
+  are restored. Deletion progress/recovery and actual network reconnect pass in
+  the following correction; Windows and overall parity remain open. Diagnose the two macOS registrations afterward,
   without deleting them. Evidence: `docs/VERIFICATION.md` -> Server-wide owner
   profile and friends without rooms.
 

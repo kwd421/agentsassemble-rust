@@ -21,8 +21,9 @@ describe("room lifecycle request ownership", () => {
       beforeDispatch();
       return new Promise((_resolve, fail) => { reject = fail; });
     });
-    const { result } = renderHook(() => useRoomLifecycle({ enabled: true, authorityReady: true, managementRooms: [room],
-      captureRoomDirectoryContinuity: () => continuity, validateRoomDirectoryContinuity: vi.fn(), refreshRoomDirectory }));
+    const transport = { kind: "central_grant" as const, credential: { grantToken: "aacg1.owner", generation: 2 }, deviceToken: "device" };
+    const { result, rerender } = renderHook(({ rooms }) => useRoomLifecycle({ enabled: true, authorityReady: true, managementRooms: rooms, transport,
+      captureRoomDirectoryContinuity: () => continuity, validateRoomDirectoryContinuity: vi.fn(), refreshRoomDirectory }), { initialProps: { rooms: [room] } });
     act(() => { result.current.change(room, "archive"); result.current.onRoomLifecycle(); });
     expect(refreshRoomDirectory).not.toHaveBeenCalled();
     act(() => reject(new Error("Response was lost")));
@@ -38,6 +39,8 @@ describe("room lifecycle request ownership", () => {
     expect(refreshRoomDirectory).toHaveBeenCalledTimes(2);
     expect(result.current.notice).toContain("정리");
     await act(async () => { await result.current.refresh(); });
+    expect(result.current.notice).toContain("정리");
+    act(() => result.current.dismissNotice());
     expect(result.current.notice).toBe("");
     vi.mocked(changeRoomLifecycle).mockRejectedValueOnce(new ApiError(409, "stale room", "room_incarnation_changed", "rejected"));
     act(() => result.current.change(room, "close"));
@@ -49,6 +52,9 @@ describe("room lifecycle request ownership", () => {
     act(() => result.current.change(room, "delete", "General"));
     await waitFor(() => expect(result.current.busy).toBe(false));
     const deletion = result.current.pending;
+    rerender({ rooms: [] });
+    act(() => result.current.dismissNotice());
+    expect(result.current.pending).toEqual(deletion);
     expect(deletion?.confirmationName).toBe("General");
     expect(result.current.notice).toContain("삭제를 처리");
     expect(result.current.error).toBe("");
@@ -56,6 +62,7 @@ describe("room lifecycle request ownership", () => {
     act(() => result.current.retry());
     await waitFor(() => expect(result.current.pending).toBeNull());
     expect(vi.mocked(changeRoomLifecycle).mock.calls.at(-1)?.[0]).toEqual(deletion);
+    expect(vi.mocked(changeRoomLifecycle).mock.calls.at(-1)?.[2]).toEqual(transport);
     expect(result.current.notice).toBe("방이 삭제됐습니다.");
   });
 });

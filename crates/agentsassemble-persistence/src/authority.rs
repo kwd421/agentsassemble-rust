@@ -16,6 +16,8 @@ pub enum RoomMutationAuthority<'a> {
     ConnectorSession(&'a crate::ConnectorSessionAuthorization),
     /// Exact device-bound remote operator session, revalidated in the transaction.
     OperatorSession(&'a crate::OperatorSessionAuthorization),
+    /// Server-wide owner provenance for lifecycle mutation and terminal receipt recovery.
+    ServerOwnerLifecycle(&'a crate::ServerOwnerLifecycleAuthorization),
 }
 
 impl<'a> RoomMutationAuthority<'a> {
@@ -24,6 +26,7 @@ impl<'a> RoomMutationAuthority<'a> {
             Self::TrustedPrincipal(principal) => principal,
             Self::HumanSession(session) => session.principal(),
             Self::OperatorSession(session) => session.principal(),
+            Self::ServerOwnerLifecycle(owner) => owner.principal(),
             Self::ConnectorSession(session) => session.principal(),
         }
     }
@@ -34,6 +37,9 @@ impl<'a> RoomMutationAuthority<'a> {
     ) -> Result<std::borrow::Cow<'a, AuthenticatedPrincipal>, PersistenceError> {
         match self {
             Self::TrustedPrincipal(principal) => Ok(std::borrow::Cow::Borrowed(principal)),
+            Self::ServerOwnerLifecycle(owner) => Ok(std::borrow::Cow::Owned(
+                owner.revalidate(transaction).await?,
+            )),
             Self::ConnectorSession(expected) => {
                 let current = crate::connector_session::revalidate_in(
                     transaction,

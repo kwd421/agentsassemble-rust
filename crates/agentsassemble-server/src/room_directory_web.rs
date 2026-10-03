@@ -105,7 +105,7 @@ async fn change_lifecycle(
     request: Request,
 ) -> Result<Response, DirectoryHttpError> {
     consume_operator(&state, request.headers()).await?;
-    execute_lifecycle(&state, request, None).await
+    execute_lifecycle(&state, request, None, None).await
 }
 
 async fn change_session_lifecycle(
@@ -117,6 +117,20 @@ async fn change_session_lifecycle(
     };
     let credential = crate::http_api::bearer_credential(request.headers())
         .ok_or_else(DirectoryHttpError::unauthorized)?;
+    if credential.starts_with("aacg1.") {
+        let owner = crate::central_owner_web::owner_from_grant_headers(
+            &state,
+            request.headers(),
+            request.extensions().get(),
+        )
+        .await
+        .map_err(|error| DirectoryHttpError {
+            status: error.status,
+            code: error.code.into(),
+            message: error.message.into(),
+        })?;
+        return execute_lifecycle(&state, request, None, Some(owner)).await;
+    }
     let authorization = match resolve_room_session_bearer(
         &state,
         request.headers(),
@@ -136,13 +150,14 @@ async fn change_session_lifecycle(
         Err(RoomSessionBearerError::Persistence(error)) => return Err(error.into()),
         _ => return Err(DirectoryHttpError::unauthorized()),
     };
-    execute_lifecycle(&state, request, Some(&authorization)).await
+    execute_lifecycle(&state, request, Some(&authorization), None).await
 }
 
 async fn execute_lifecycle(
     state: &AppState,
     request: Request,
     session: Option<&agentsassemble_persistence::RoomSessionAuthorization>,
+    owner: Option<agentsassemble_persistence::ServerOwnerAuthority>,
 ) -> Result<Response, DirectoryHttpError> {
     use agentsassemble_domain::{
         AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
@@ -170,7 +185,18 @@ async fn execute_lifecycle(
     }
     let room_id = validate_room_id(&body.room_id)
         .map_err(|error| DirectoryHttpError::bad_request(error.message))?;
-    let execution = if let Some(session) = session {
+    let execution = if let Some(owner) = owner {
+        state
+            .rooms
+            .execute_server_owner_lifecycle(
+                owner,
+                room_id,
+                body.request_id.clone(),
+                body.action,
+                body.payload,
+            )
+            .await
+    } else if let Some(session) = session {
         if room_id != session.principal().room_id {
             return Err(DirectoryHttpError::bad_request(
                 "The paired session belongs to another room.",

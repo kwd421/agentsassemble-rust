@@ -12759,3 +12759,50 @@ That presentation/recovery defect, actual network reconnect, Windows and the bro
 parity matrix remain open. The duplicate macOS registration diagnosis follows the
 active correction work. Temporary public ingress remains open only for this run's
 remaining packaged verification; normal shutdown/cleanup is still required.
+
+
+## Shared deletion recovery after room retirement (2026-10-03)
+
+The zero-room packaged flow exposed unresolved deletion custody disappearing with
+settings. A different room's delete dialog showed the previous request's retry
+without its target/progress; no rooms meant no retry entrance. Browser server
+owners depended on room sessions revoked by deletion, requiring a native host for
+the retained receipt. Contract: room-lifecycle slice, shared owner recovery.
+
+The existing server-owner grant now authorizes lifecycle through the existing HTTP
+adapter and bounded command admission/queue. Storage retains explicit provenance,
+derives the host identity and revalidates generation, expiry and first-device/origin
+binding in the same writer transaction as mutation or terminal receipt read.
+Retained receipt routing does not recreate a retired room actor. Native tickets,
+ordinary room-scoped pairings, request budgets, exact UID/name/hash, publication
+and runtime cleanup are unchanged. No schema, provider effect, poll, scheduler,
+new token or fallback is added. The shared status notice retains the exact target
+and explicit retry without room settings, while a confirmed receipt clears custody.
+Ordinary directory refresh cannot erase the terminal confirmation.
+
+Affected checks: HTTP8 (central owner, directory and lifecycle), persistence358,
+frontend964, release Clippy and unchanged architecture/source/policy gates pass.
+The HTTP fixture verifies wrong device, stale generation, archive/restore, pending
+delete, terminal replay after physical removal, exact replay preserving a replacement
+incarnation and revoked central authority. The hook retries unchanged intent with
+an empty directory; the shared notice and delete dialog expose its original target.
+The final dialog copy adjustment passes its affected three cases. The isolated
+0.1.5 package passes deep/strict signature verification. Mac and Chrome both show
+last-room deletion's original target and explicit retry in the empty shell; retry
+then shows canonical completion and permits a new first room. Cross-client native
+retirement additionally exposed automatic browser re-entry into the old directory
+row before its removal. Navigation now retains the last admitted UID, including
+restored sessions, solely to exclude that ended incarnation from automatic selection;
+another canonical room can still be selected. Retired-room admission reports a room
+conflict rather than a grant failure. Its existing HTTP proof checks archived and
+physically absent targets. Frontend964 and affected admission/directory/lifecycle37
+pass after the correction. The rebuilt signed package and Chrome restored-session
+flow pass native last-room retirement without false authentication/directory errors,
+canonical native completion, and automatic browser entry into a newly created first
+room. Actual Chrome Network Offline exposes failed directory/event requests and the
+shared directory error; bounded retries stop. No throttling is restored. Reload then
+encounters the separately expired five-minute grant and correctly requires the
+existing central server chooser. Fresh authorized entry restores both canonical
+rooms; a subsequent native third-room creation appears in stationary Chrome without
+reload. This proves explicit recovery plus renewed live synchronization, not automatic
+recovery after exhausted retries. Windows and overall parity remain unverified.

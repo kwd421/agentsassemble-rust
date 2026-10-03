@@ -162,6 +162,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     >
       <RoomSyncNotice
         issue={canonicalRoom.syncIssue || roomDirectorySyncIssue}
+        lifecycle={roomLifecycle.enabled ? roomLifecycle : undefined}
       />
       <RoomRail
         rooms={rooms}

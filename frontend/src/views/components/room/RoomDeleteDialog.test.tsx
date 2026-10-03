@@ -47,8 +47,9 @@ it("keeps an uncertain deletion retryable and reports its failure", () => {
   render(<RoomDeleteDialog target={target} controller={controller} onClose={vi.fn()} />);
 
   expect(screen.getByRole("alert").textContent).toBe("응답 미확인");
-  fireEvent.change(screen.getByLabelText("방 이름 입력"), { target: { value: "General" } });
-  expect((screen.getByRole("button", { name: "방 삭제" }) as HTMLButtonElement).disabled).toBe(true);
+  expect(screen.queryByLabelText("방 이름 입력")).toBeNull();
+  expect(screen.queryByRole("button", { name: "방 삭제" })).toBeNull();
+  expect(screen.getByRole("status").textContent).toContain("General");
   fireEvent.click(screen.getByRole("button", { name: "같은 요청 다시 확인" }));
   expect(controller.retry).toHaveBeenCalledOnce();
 });

@@ -44,12 +44,13 @@ impl SqliteStore {
     /// Requires current local authority and rejects conflicting exact request reuse.
     pub async fn completed_room_deletion(
         &self,
-        credential: &AuthenticatedPrincipal,
+        authority: crate::RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<Option<CommandOutcome>, PersistenceError> {
-        let mut transaction = self.pool.begin().await?;
-        let principal = resolve_local_owner(&mut transaction, credential).await?;
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let credential = authority.resolve(&mut transaction).await?;
+        let principal = resolve_local_owner(&mut transaction, &credential).await?;
         let replay = deletion_replay(
             &mut transaction,
             &principal,
@@ -138,7 +139,7 @@ impl SqliteStore {
     ) -> Result<RoomDeletionMutation, PersistenceError> {
         let parsed = parse_payload(payload)?;
         let payload_hash = canonical_payload_hash(payload);
-        let mut transaction = self.pool.begin().await?;
+        let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let credential = authority.resolve(&mut transaction).await?;
         let (principal, replay) =
             resolve_delete_request(&mut transaction, &credential, request_id, &payload_hash)

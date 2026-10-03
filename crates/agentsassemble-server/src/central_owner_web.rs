@@ -415,9 +415,26 @@ impl From<PersistenceError> for CentralOwnerHttpError {
                     "Central owner session capacity is unavailable.",
                 )
             }
-            PersistenceError::CommandRejected { .. }
-            | PersistenceError::ParticipantMissing
-            | PersistenceError::RoomMissing => Self::unauthorized(),
+            PersistenceError::RoomMissing => Self::new(
+                StatusCode::CONFLICT,
+                "room_missing",
+                "The selected room no longer exists.",
+            ),
+            PersistenceError::CommandRejected { code, .. }
+                if matches!(
+                    code.as_bytes(),
+                    b"room_inactive" | b"room_incarnation_changed"
+                ) =>
+            {
+                Self::new(
+                    StatusCode::CONFLICT,
+                    "room_inactive",
+                    "The selected room is no longer open.",
+                )
+            }
+            PersistenceError::CommandRejected { .. } | PersistenceError::ParticipantMissing => {
+                Self::unauthorized()
+            }
             _ => Self::new(
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "central_connect_failed",

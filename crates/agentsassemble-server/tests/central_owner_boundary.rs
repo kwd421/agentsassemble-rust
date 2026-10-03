@@ -27,6 +27,8 @@ use tokio_util::sync::CancellationToken;
 
 #[path = "central_owner_boundary/invitations.rs"]
 mod invitations;
+#[path = "central_owner_boundary/lifecycle.rs"]
+mod lifecycle;
 
 const ORIGIN: &str = "https://owner.example.test";
 const SECRET: &str = "central-owner-boundary-proxy-secret-0000001";
@@ -329,7 +331,6 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
     let client = &fixture.client;
     let address = fixture.address;
     let calls = &mut fixture.calls;
-    let worker_state = &fixture.worker_state;
     let room_uid = &fixture.room_uid;
     let directory_body = json!({"grant_token": TOKEN, "generation": generation});
     let stale_generation = post(
@@ -376,7 +377,11 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
     verify_signed_call(&next_call(calls).await, public_key);
 
     verify_owner_rooms(client, address, generation, calls, public_key, &admission).await;
-    worker_state.reject.store(true, Ordering::SeqCst);
+    lifecycle::verify(fixture, generation, public_key).await;
+    let client = &fixture.client;
+    let address = fixture.address;
+    let calls = &mut fixture.calls;
+    fixture.worker_state.reject.store(true, Ordering::SeqCst);
     let rejected = post(
         client,
         address,

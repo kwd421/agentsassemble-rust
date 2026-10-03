@@ -79,6 +79,33 @@ plugin framework, scheduler, or periodic cleanup is implied by this phase.
 
 ## Acceptance and verification
 
+### Shared owner recovery after room retirement (2026-10-03)
+
+The signed Mac flow exposed unresolved deletion custody disappearing with the
+room settings modal. The next room's dialog offered an unexplained retry for the
+previous room, and an empty workspace had no retry entrance. The web owner also
+used a room session that deletion revokes, leaving terminal recovery native-only.
+
+Preserve one exact lifecycle intent and show its original target, progress,
+failure and retry in the shared shell even after switching or removing the last
+room. Only the canonical committed receipt clears pending custody; directory
+absence is not completion. Do not poll, auto-resubmit or create another request.
+Server-wide web owners use their existing redeemed, device/origin/generation-bound
+grant for lifecycle admission, queued mutation and retained deletion replay.
+Revalidate it in the transaction that reads or mutates the receipt, derive the
+canonical host principal on the server and retain command budgets, queues,
+incarnation/name checks, publication and cleanup ownership. Ordinary paired
+sessions stay room-scoped; they do not inherit server ownership or terminal replay.
+Native one-use tickets retain their current contract. Cross-client retirement can
+clear a room session before the directory removes its old row. Automatic selection
+must not re-enter that just-ended incarnation; select another canonical room when
+available. A retired room is a room conflict, not invalid server-owner authentication.
+
+Verify the existing uncertain-request case with an empty directory and unchanged
+retry identity, HTTP grant rejection and archive/restore/delete/terminal replay,
+then signed Mac and Chrome last-room deletion, visible retry and subsequent room
+creation/deletion. Preserve unrelated data, providers and Claude's composition.
+
 - Existing participant mutation, admission, profile, lifecycle and recovery tests
   preserve their public results with the shared codec; missing exact save fails and
   transaction rollback remains observable.

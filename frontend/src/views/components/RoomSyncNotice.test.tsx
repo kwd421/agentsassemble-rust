@@ -1,5 +1,5 @@
-import { cleanup, render, screen } from "@testing-library/react";
-import { afterEach, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import RoomSyncNotice from "./RoomSyncNotice";
 
 afterEach(cleanup);
@@ -55,4 +55,18 @@ describe("RoomSyncNotice", () => {
       "서버 원본과 확인"
     );
   });
+  it("keeps the original lifecycle target retryable without a room and shows only confirmed completion", () => {
+    const lifecycle = { pending: { serverId: "server", authorityLineageId: "lineage", requestId: "same",
+      roomId: "removed", roomUid: "exact", action: "room.delete" as const, confirmationName: "Previous room" },
+      busy: false, error: "", notice: "방 삭제를 처리하고 있어요.", retry: vi.fn(), dismissNotice: vi.fn() };
+    const { rerender } = render(<RoomSyncNotice issue={null} lifecycle={lifecycle} />);
+    expect(screen.getByRole("status").textContent).toContain("Previous room");
+    fireEvent.click(screen.getByRole("button", { name: "완료 여부 확인" }));
+    expect(lifecycle.retry).toHaveBeenCalledOnce();
+    rerender(<RoomSyncNotice issue={null} lifecycle={{ ...lifecycle, pending: null, notice: "방이 삭제됐습니다." }} />);
+    expect(screen.queryByRole("button", { name: "완료 여부 확인" })).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+    expect(lifecycle.dismissNotice).toHaveBeenCalledOnce();
+  });
+
 });

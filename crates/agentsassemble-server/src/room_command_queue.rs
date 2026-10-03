@@ -17,6 +17,7 @@ use tokio::sync::{OwnedSemaphorePermit, mpsc, oneshot};
 pub(crate) enum RoomCommandSession {
     Browser(Box<RoomSessionAuthorization>),
     Connector(Box<ConnectorSessionAuthorization>),
+    ServerOwner(Box<agentsassemble_persistence::ServerOwnerLifecycleAuthorization>),
 }
 
 pub(crate) struct RoomCommand {
@@ -39,6 +40,9 @@ impl RoomCommand {
             Some(RoomCommandSession::Browser(session)) => session.mutation_authority(),
             Some(RoomCommandSession::Connector(session)) => {
                 agentsassemble_persistence::RoomMutationAuthority::ConnectorSession(session)
+            }
+            Some(RoomCommandSession::ServerOwner(owner)) => {
+                agentsassemble_persistence::RoomMutationAuthority::ServerOwnerLifecycle(owner)
             }
             None => {
                 agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&self.principal)
@@ -97,6 +101,50 @@ impl RoomRuntime {
         .await
     }
 
+    pub(crate) async fn execute_server_owner_lifecycle(
+        &self,
+        owner: agentsassemble_persistence::ServerOwnerAuthority,
+        room_id: String,
+        request_id: String,
+        action: RoomAction,
+        payload: Value,
+    ) -> Result<CommandOutcome, CommandFailure> {
+        if !matches!(
+            action,
+            RoomAction::RoomClose | RoomAction::RoomArchive | RoomAction::RoomDelete
+        ) {
+            return Err(CommandFailure::rejected(
+                PersistenceError::CommandRejected {
+                    code: "bad_request".into(),
+                    message: "Server-owner commands are lifecycle-only.".into(),
+                },
+            ));
+        }
+        let authorization = self
+            .store
+            .authorize_server_owner_lifecycle(owner, room_id)
+            .await
+            .map_err(CommandFailure::unresolved)?;
+        let admitted = admit_human_command(
+            &self.store,
+            &self.principal_mutations,
+            authorization.principal(),
+            &request_id,
+            action,
+            &payload,
+        )
+        .await?;
+        self.enqueue_command(
+            admitted,
+            Some(RoomCommandSession::ServerOwner(Box::new(authorization))),
+            None,
+            request_id,
+            action,
+            payload,
+        )
+        .await
+    }
+
     pub(super) async fn enqueue_command(
         &self,
         admitted: AdmittedHumanCommand,
@@ -115,10 +163,19 @@ impl RoomRuntime {
             // Serialize replay routing with deletion retirement. An immutable
             // retry must not recreate an actor for a physically absent room.
             let mut rooms = self.rooms.lock().await;
-            if session.is_none()
+            let replay_authority = match &session {
+                None => Some(
+                    agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
+                ),
+                Some(RoomCommandSession::ServerOwner(owner)) => Some(
+                    agentsassemble_persistence::RoomMutationAuthority::ServerOwnerLifecycle(owner),
+                ),
+                _ => None,
+            };
+            if let Some(authority) = replay_authority
                 && let Some(outcome) = self
                     .store
-                    .completed_room_deletion(&principal, &request_id, &payload)
+                    .completed_room_deletion(authority, &request_id, &payload)
                     .await
                     .map_err(CommandFailure::unresolved)?
             {

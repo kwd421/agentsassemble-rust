@@ -1,16 +1,16 @@
 import { currentRoomDirectoryAuthority } from "../lib/roomDirectoryContract";
 import { ApiError } from "../lib/apiErrors";
 import { useCallback, useRef, useState } from "react";
-import { changeRoomLifecycle, type RoomLifecycleIntent } from "../api/roomLifecycle";
+import { changeRoomLifecycle, type RoomLifecycleIntent, type RoomLifecycleTransport } from "../api/roomLifecycle";
 import { createSecureRequestId } from "../lib/secureRequestId";
 import type { ServerRoomDockSource } from "../lib/roomDockModel";
 import type { useRoomDirectory } from "./useRoomDirectory";
 import { RoomDirectoryOperationSuperseded } from "./useRoomDirectory";
 
 type Directory = ReturnType<typeof useRoomDirectory>;
-type Options = Pick<Directory, "managementRooms" | "captureRoomDirectoryContinuity" | "validateRoomDirectoryContinuity" | "refreshRoomDirectory"> & { enabled: boolean; authorityReady: boolean };
+type Options = Pick<Directory, "managementRooms" | "captureRoomDirectoryContinuity" | "validateRoomDirectoryContinuity" | "refreshRoomDirectory"> & { enabled: boolean; authorityReady: boolean; transport?: RoomLifecycleTransport };
 
-export function useRoomLifecycle({ enabled, authorityReady, managementRooms, captureRoomDirectoryContinuity, validateRoomDirectoryContinuity, refreshRoomDirectory }: Options) {
+export function useRoomLifecycle({ enabled, authorityReady, managementRooms, captureRoomDirectoryContinuity, validateRoomDirectoryContinuity, refreshRoomDirectory, transport }: Options) {
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -31,7 +31,6 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
         const result = await refreshRoomDirectory(captureRoomDirectoryContinuity());
         if (!result.ok) throw result.error;
       } while (directoryInvalidatedRef.current);
-      if (!pendingRef.current) setNotice("");
     } catch (failure) {
       if (!(failure instanceof RoomDirectoryOperationSuperseded)) {
         setError(failure instanceof Error ? failure.message : "방 목록을 확인하지 못했습니다.");
@@ -52,7 +51,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
     setPending(intent);
     try {
       const continuity = captureRoomDirectoryContinuity();
-      const response = await changeRoomLifecycle(intent, () => validateRoomDirectoryContinuity(continuity));
+      const response = await changeRoomLifecycle(intent, () => validateRoomDirectoryContinuity(continuity), transport);
       validateRoomDirectoryContinuity(continuity);
       pendingRef.current = null;
       setPending(null);
@@ -77,7 +76,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
         void refresh();
       }
     }
-  }, [enabled, captureRoomDirectoryContinuity, validateRoomDirectoryContinuity, refreshRoomDirectory, refresh]);
+  }, [enabled, captureRoomDirectoryContinuity, validateRoomDirectoryContinuity, refreshRoomDirectory, refresh, transport]);
 
   function change(room: ServerRoomDockSource, action: "close" | "archive" | "restore" | "delete", confirmationName?: string) {
     if (!authorityReady || !room.room_uid || pendingRef.current || !managementRooms.some((candidate) => candidate.room_id === room.room_id && candidate.room_uid === room.room_uid)) return;
@@ -95,6 +94,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
       if (busyRef.current) directoryInvalidatedRef.current = true;
       else void refresh();
     },
+    dismissNotice: () => { if (!pendingRef.current && !busyRef.current) { setNotice(""); setError(""); } },
     retry: () => { if (pendingRef.current) void submit(pendingRef.current); },
   };
 }

@@ -34,7 +34,7 @@ it("binds lifecycle confirmation to the authority, incarnation and published roo
   await expect(changeRoomLifecycle(deletion, vi.fn())).rejects.toThrow();
 });
 
-it("uses the exact paired bearer/device and preserves a pending deletion response", async () => {
+it.each(["remote", "central_grant"] as const)("uses the exact %s credential and preserves a pending deletion response", async (kind) => {
   vi.mocked(postJsonServerOperator).mockClear();
   const fetchMock = vi.fn().mockResolvedValue(new Response(JSON.stringify({
     code: "room_deletion_pending", error: "Deletion accepted", resolution: "unresolved",
@@ -42,13 +42,13 @@ it("uses the exact paired bearer/device and preserves a pending deletion respons
   vi.stubGlobal("fetch", fetchMock);
   const beforeDispatch = vi.fn();
   await expect(changeRoomLifecycle({ serverId: "server", authorityLineageId: "lineage", requestId: "same-request", roomId: "general", roomUid: "exact", action: "room.delete", confirmationName: "General" },
-    beforeDispatch, { kind: "remote", sessionToken: "aops1.paired", deviceToken: "device" })).rejects.toMatchObject({
+    beforeDispatch, kind === "remote" ? { kind, sessionToken: "aops1.paired", deviceToken: "device" } : { kind, credential: { grantToken: "aacg1.owner", generation: 2 }, deviceToken: "device" })).rejects.toMatchObject({
       code: "room_deletion_pending", resolution: "unresolved",
     });
   expect(beforeDispatch).toHaveBeenCalledOnce();
   expect(postJsonServerOperator).not.toHaveBeenCalled();
   expect(fetchMock).toHaveBeenCalledWith("/api/room-session/lifecycle", expect.objectContaining({
     redirect: "error", cache: "no-store", method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: "Bearer aops1.paired", "X-Device-Token": "device" },
+    headers: { "Content-Type": "application/json", Authorization: kind === "remote" ? "Bearer aops1.paired" : "Bearer aacg1.owner", "X-Device-Token": "device", ...(kind === "central_grant" ? { "X-Central-Generation": "2" } : {}) },
   }));
 });

@@ -1,3 +1,5 @@
+import type { useRoomLifecycle } from "../../app/useRoomLifecycle";
+
 type RoomSyncIssue = {
   category: string;
   message: string;
@@ -20,20 +22,31 @@ function noticeMessage(category: string) {
 }
 
 export default function RoomSyncNotice({
-  issue,
+  issue, lifecycle,
 }: {
   issue: RoomSyncIssue | null;
+  lifecycle?: Pick<ReturnType<typeof useRoomLifecycle>, "pending" | "busy" | "notice" | "error" | "retry" | "dismissNotice">;
 }) {
-  if (!issue) return null;
+  const operation = lifecycle && (lifecycle.pending || lifecycle.notice || lifecycle.error) ? lifecycle : null;
+  if (!issue && !operation) return null;
   return (
     <div
       role="status"
       aria-live="polite"
-      data-room-sync-issue={issue.category}
-      className="pointer-events-none fixed left-1/2 top-3 z-[220] w-[min(92vw,680px)] -translate-x-1/2 rounded-lg border border-amber-300/25 bg-[rgb(41_38_31/0.95)] px-4 py-3 text-sm text-amber-50 shadow-xl backdrop-blur"
+      data-room-sync-issue={issue?.category}
+      className="fixed left-1/2 top-3 z-[220] w-[min(92vw,680px)] -translate-x-1/2 rounded-lg border border-amber-300/25 bg-[rgb(41_38_31/0.95)] px-4 py-3 text-sm text-amber-50 shadow-xl backdrop-blur"
     >
-      <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-amber-300" />
-      {noticeMessage(issue.category)}
+      {operation ? <>
+        {operation.pending && <p className="preserve-words">‘{operation.pending.confirmationName || operation.pending.roomId}’ 방 관리 결과</p>}
+        <p className="preserve-words">{operation.error || operation.notice || "방 관리 요청을 처리하고 있어요."}</p>
+        <button type="button" className="ops-button mt-2 px-3 py-2" disabled={operation.busy}
+          onClick={operation.pending ? operation.retry : operation.dismissNotice}>
+          {operation.pending ? "완료 여부 확인" : "닫기"}
+        </button>
+      </> : issue && <>
+        <span className="mr-2 inline-block h-2 w-2 animate-pulse rounded-full bg-amber-300" />
+        {noticeMessage(issue.category)}
+      </>}
     </div>
   );
 }
