@@ -12806,3 +12806,25 @@ existing central server chooser. Fresh authorized entry restores both canonical
 rooms; a subsequent native third-room creation appears in stationary Chrome without
 reload. This proves explicit recovery plus renewed live synchronization, not automatic
 recovery after exhausted retries. Windows and overall parity remain unverified.
+
+
+## Two macOS server registrations (2026-10-03)
+
+After the active shared deletion/network correction, the actual central chooser
+shows two identically named macOS rows: `0e2827be` offline and `ec77a196` online.
+Read-only `runtime_metadata.server_id` queries match them exactly to independent
+installation stores. The installed `/Applications/AgentsAssemble.app` (0.1.4,
+`app.agentsassemble.rust`) owns `0e2827be-38f2-423c-8529-418a5beff2a2`.
+The isolated signed verification package (0.1.5,
+`app.agentsassemble.workspace20261003`) owns
+`ec77a196-085c-40ac-8867-bf5bcdd62923`. Both use this physical Mac's friendly host
+name/OS; installation identity is distinct. The second registration came from this
+verification run, not a second physical Mac or duplicate rendering of one server.
+
+Temporary ingress is visibly off before normal Quit of the exact isolated app.
+Its app/server/supervisor/tunnel processes are absent. Only the owned Chrome
+verification tab is closed; the pre-existing tab remains. Computer Use is reset.
+The exact isolated bundle/data are moved recoverably to the user's Trash; the
+installed app and primary store are preserved. Artifact maintenance check passes.
+Central registrations are not removed: local cleanup does not delete the account's
+server registry, and the user requested diagnosis rather than registry deletion.

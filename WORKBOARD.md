@@ -8,8 +8,11 @@
   target and explicit retry even with no rooms; directory absence is not success.
   HTTP8, persistence358, frontend964, Clippy and mandatory gates pass. Signed
   Mac/Chrome last-room retirement, exact completion recovery, restored-session
-  re-entry and network failure/fresh authorized reconnect pass. Duplicate macOS
-  registration diagnosis follows; Windows and overall parity remain open. Contract: room-lifecycle slice -> Shared
+  re-entry and network failure/fresh authorized reconnect pass. The two macOS rows
+  are the installed app (0e2827be) and isolated verification app (ec77a196); exact
+  store IDs match. Ingress/processes are closed and isolated data/bundle moved to
+  Trash; central rows and primary data are preserved. Windows and overall parity
+  remain open. Contract: room-lifecycle slice -> Shared
   owner recovery after room retirement.
 
 - 2026-10-03 server-wide owner account correction: profiles, bounded avatars and
