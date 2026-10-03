@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { sha256Hex, utf8 } from "../lib/lengthDelimitedCrypto";
 
@@ -69,6 +69,7 @@ function response(status: number, body: unknown) {
 }
 
 describe("managed human invite contract", () => {
+  afterEach(() => vi.unstubAllGlobals());
   beforeEach(() => {
     vi.resetAllMocks();
   });
@@ -191,7 +192,7 @@ describe("managed human invite contract", () => {
     }
   });
 
-  it("sends only the canonical human intent through the manager grant", async () => {
+  it.each([false, true])("sends canonical human intent with explicit manager transport (remote=%s)", async (web) => {
     const payload = await exactResponse();
     bridgeMocks.create.mockImplementation(
       async (_authority, _init, beforeDispatch?: () => void) => {
@@ -199,26 +200,31 @@ describe("managed human invite contract", () => {
         return response(200, payload);
       }
     );
+    const remote = web ? { sessionToken: "owner-session", deviceToken: "owner-device" } : undefined;
+    const transport = vi.fn().mockResolvedValue(response(200, payload));
+    if (web) vi.stubGlobal("fetch", transport);
     const beforeDispatch = vi.fn();
 
-    const custody = await createManagedHumanInvite(intent, beforeDispatch);
+    const custody = await createManagedHumanInvite(intent, beforeDispatch, remote);
 
     expect(beforeDispatch).toHaveBeenCalledOnce();
     expect(custody.joinUrl).toContain(joinCode);
-    expect(bridgeMocks.create).toHaveBeenCalledWith(
-      authority,
-      expect.objectContaining({
-        method: "POST",
-        body: JSON.stringify({
-          meeting_id: "general",
-          display_name: "Guest",
-          invite_scope: "room",
-          ttl_seconds: 3600,
-          max_uses: 1,
-        }),
-      }),
-      expect.any(Function)
-    );
+    const expectedBody = JSON.stringify({ meeting_id: "general", display_name: "Guest", invite_scope: "room", ttl_seconds: 3600, max_uses: 1 });
+    if (web) {
+      expect(bridgeMocks.create).not.toHaveBeenCalled();
+      expect(transport).toHaveBeenCalledWith("/api/central-owner/room-invite/create", expect.objectContaining({ body: expectedBody, redirect: "error", credentials: "omit" }));
+      const headers = transport.mock.calls[0][1].headers as Headers;
+      expect(headers.get("Authorization")).toBe("Bearer owner-session");
+      expect(headers.get("X-Device-Token")).toBe("owner-device");
+      transport.mockRejectedValueOnce(new Error("response lost"));
+      await expect(createManagedHumanInvite(intent, beforeDispatch, remote)).rejects.toMatchObject({ outcome: "outcome_unknown" });
+      expect(bridgeMocks.create).not.toHaveBeenCalled();
+      await expect(createManagedHumanInvite(intent, () => { throw new Error("retired"); }, remote)).rejects.toMatchObject({ outcome: "proven_not_dispatched" });
+      expect(transport).toHaveBeenCalledTimes(2);
+    } else {
+      expect(bridgeMocks.create).toHaveBeenCalledWith(authority, expect.objectContaining({ method: "POST", body: expectedBody }), expect.any(Function));
+    }
+
   });
 
   it("captures manager authority before the grant and dispatch boundary", async () => {

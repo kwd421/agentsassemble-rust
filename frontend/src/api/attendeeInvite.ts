@@ -1,3 +1,4 @@
+import { fetchRemoteRoomInvite, type RemoteInviteTransport } from "./roomInviteTransport";
 import { requestDesktopAttendeeInviteCreateTicket, type DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import type { RoomGuestSession } from "../lib/roomGuestSession";
 import { assertExactKeys, requiredString, strictRecord } from "../lib/strictJsonContract";
@@ -10,14 +11,20 @@ export type AttendeePacketCustody = { result: AttendeeEntryPacket; origin: strin
 type Expected = { requestId: string; roomId: string; roomUid: string };
 
 export async function createFriendAttendeeInvite(
-  authority: DesktopManagerRoomAuthority, request: CreateFriendAttendeeInvite, assertCurrent: () => void,
+  authority: DesktopManagerRoomAuthority, request: CreateFriendAttendeeInvite, assertCurrent: () => void, remote?: RemoteInviteTransport,
 ): Promise<AttendeePacketCustody> {
-  const ticket = await requestDesktopAttendeeInviteCreateTicket(authority);
-  assertCurrent();
-  const response = await fetch(`${ticket.http_base_url}/api/room-attendee/friend-invite`, {
-    method: "POST", cache: "no-store", redirect: "error",
-    headers: { Authorization: `Bearer ${ticket.ticket}`, "Content-Type": "application/json" }, body: JSON.stringify(request),
-  });
+  const response = remote
+    ? await fetchRemoteRoomInvite("/room-attendee/friend-invite", remote, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request),
+      }, assertCurrent)
+    : await (async () => {
+        const ticket = await requestDesktopAttendeeInviteCreateTicket(authority);
+        assertCurrent();
+        return fetch(`${ticket.http_base_url}/api/room-attendee/friend-invite`, {
+          method: "POST", cache: "no-store", redirect: "error",
+          headers: { Authorization: `Bearer ${ticket.ticket}`, "Content-Type": "application/json" }, body: JSON.stringify(request),
+        });
+      })();
   return readPacket(response, { requestId: request.request_id, roomId: authority.room_id, roomUid: authority.room_uid });
 }
 

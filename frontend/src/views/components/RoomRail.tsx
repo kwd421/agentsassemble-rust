@@ -30,6 +30,7 @@ export default function RoomRail({
   roomAppearances,
   guestLocked,
   canCreateRoom = !guestLocked,
+  canInviteRooms = !guestLocked,
   canManageActiveRoom = false,
   adminOpen,
   menuRoom,
@@ -53,6 +54,7 @@ export default function RoomRail({
   roomAppearances: Record<string, RoomAppearance>;
   guestLocked: boolean;
   canCreateRoom?: boolean;
+  canInviteRooms?: boolean;
   canManageActiveRoom?: boolean;
   adminOpen: boolean;
   menuRoom?: RoomDockItem;
@@ -154,7 +156,7 @@ export default function RoomRail({
           {(readStatus === "stale" || readStatus === "error") && onRetryRoomRead && (
             <button type="button" role="menuitem" onClick={onRetryRoomRead}>읽음 설정 다시 불러오기</button>
           )}
-          {!guestLocked && menuRoom && !roomIsDisconnected(menuRoom) && (
+          {canInviteRooms && menuRoom && !roomIsDisconnected(menuRoom) && (
             <button type="button" role="menuitem" onClick={() => onInviteRoom(menuRoom.id)}>
               <UserPlus size={16} />
               방에 초대하기

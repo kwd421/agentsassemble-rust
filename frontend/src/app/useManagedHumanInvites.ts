@@ -1,3 +1,4 @@
+import type { RemoteInviteTransport } from "../api/roomInviteTransport";
 import { useEffect, useRef, useState } from "react";
 
 import {
@@ -93,6 +94,7 @@ function presentHumanInvite(
 }
 
 type UseManagedHumanInvitesOptions = {
+  remote?: RemoteInviteTransport;
   modalRoomDockId: string;
   currentPublicOrigin: string;
   resolveManagerRoomAuthority: (roomDockId: string) => DesktopManagerRoomAuthority;
@@ -112,6 +114,7 @@ type HumanInviteOriginProof = Readonly<{
 const COPY_NO_LONGER_ELIGIBLE = Symbol("managed human invite copy is no longer eligible");
 
 export function useManagedHumanInvites({
+  remote,
   modalRoomDockId,
   currentPublicOrigin,
   resolveManagerRoomAuthority,
@@ -313,7 +316,7 @@ export function useManagedHumanInvites({
         if (!revokeAttemptIsCurrent(key, generation)) {
           throw new Error("사람 초대 폐기 작업이 대체되었습니다.");
         }
-      });
+      }, remote);
       if (!revokeAttemptIsCurrent(key, generation)) return;
       commit((existingRecords) =>
         existingRecords.map((candidate) =>

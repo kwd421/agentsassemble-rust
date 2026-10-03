@@ -51,6 +51,8 @@ export default function AppOverlays({ controller, companionInvites }: { controll
         {inviteModalRoom && (
           <RoomInviteModal
             roomLabel={inviteModalRoom.label}
+            friendAuthority={controller.roomHttpAuthority}
+            canControlIngress={roomInvite.canControlIngress}
             humanInvites={roomInvite.humanInvites}
             connectorInvites={roomInvite.connectorInvites}
             attendeeInvites={roomInvite.attendeeInvites}
@@ -98,7 +100,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
             orderedExcludePreviousSpeaker={
               roomSettings.orderedExcludePreviousSpeakerFor(settingsModalRoom)
             }
-            canInvite={!guestLocked}
+            canInvite={controller.canInviteRooms}
             lifecycleController={lifecycleController}
             onClose={() => setSettingsModal(null)}
             onInvite={() => {

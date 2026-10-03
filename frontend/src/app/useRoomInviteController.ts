@@ -1,3 +1,4 @@
+import { fetchRemoteInviteOrigin, type RemoteInviteTransport } from "../api/roomInviteTransport";
 import { copyText } from "../lib/copyInviteText";
 import { useEffect, useRef, useState } from "react";
 import {
@@ -30,6 +31,7 @@ export type HumanInviteOptions = {
 };
 
 type UseRoomInviteControllerOptions = {
+  remote?: RemoteInviteTransport;
   localOperatorEligible: boolean;
   resolveManagerRoomAuthority: (roomDockId: string) => DesktopManagerRoomAuthority;
 };
@@ -38,11 +40,12 @@ const RETIRED_INGRESS_OPERATION = Symbol("retired ingress operation");
 
 export function useRoomInviteController({
   localOperatorEligible,
+  remote,
   resolveManagerRoomAuthority,
 }: UseRoomInviteControllerOptions) {
   const [modal, setModal] = useState<InviteModalState>(null);
   const [copyStatus, setCopyStatus] = useState("");
-  const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | null>(null);
+  const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | { public_url: string; remote: true } | null>(null);
   const [publicAccessTransition, setPublicAccessTransition] =
     useState<PublicAccessTransition>("idle");
   const ingressGenerationRef = useRef(0);
@@ -51,6 +54,7 @@ export function useRoomInviteController({
   const [pairingCreating, setPairingCreating] = useState(false);
 
   const managedHumanInvites = useManagedHumanInvites({
+    remote,
     modalRoomDockId: modal?.roomId || "",
     currentPublicOrigin: publicInviteStatus?.public_url || "",
     resolveManagerRoomAuthority,
@@ -59,6 +63,7 @@ export function useRoomInviteController({
     publishStatus: setCopyStatus,
   });
   const managedPairings = useManagedOperatorPairings({
+    remote,
     roomDockId: modal?.roomId || "",
     publicOrigin: publicInviteStatus?.public_url || "",
     resolveManager: resolveManagerRoomAuthority,
@@ -68,9 +73,10 @@ export function useRoomInviteController({
   });
 
   const connectorInvites = useManagedAiInvites({
+    remote,
     roomDockId: modal?.roomId || "",
     publicOrigin: publicInviteStatus?.public_url || "",
-    localOrigin: publicInviteStatus?.tunnel.local_url || "",
+    localOrigin: publicInviteStatus && "tunnel" in publicInviteStatus ? publicInviteStatus.tunnel.local_url : "",
     resolveManager: resolveManagerRoomAuthority,
     copyText,
     captureOriginRefresh: captureCurrentPublicOriginRefresh,
@@ -155,7 +161,7 @@ export function useRoomInviteController({
         if (!ingressOperationIsCurrent(generation)) return null;
         return Object.freeze({
           publicOrigin: status.public_url,
-          localOrigin: status.tunnel.local_url,
+          localOrigin: "tunnel" in status ? status.tunnel.local_url : "",
           isCurrent: () => ingressOperationIsCurrent(generation),
         });
       } catch (error) {
@@ -183,7 +189,7 @@ export function useRoomInviteController({
 
   useEffect(() => {
     if (!modal) return;
-    if (!localOperatorEligible) {
+    if (!localOperatorEligible && !remote) {
       retireIngressOperation();
       setPublicAccessTransition("idle");
       setPublicInviteStatus(null);
@@ -201,9 +207,16 @@ export function useRoomInviteController({
     return () => {
       if (ingressOperationIsCurrent(generation)) retireIngressOperation();
     };
-  }, [localOperatorEligible, modal?.roomId]);
+  }, [localOperatorEligible, remote?.sessionToken, remote?.deviceToken, modal?.roomId]);
 
   async function refreshPublicInviteState(generation: number) {
+    if (remote) {
+      assertIngressOperation(generation);
+      const status = await fetchRemoteInviteOrigin(remote, () => assertIngressOperation(generation));
+      assertIngressOperation(generation);
+      setPublicInviteStatus(status);
+      return status;
+    }
     if (!localOperatorEligible) {
       throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
     }
@@ -219,8 +232,8 @@ export function useRoomInviteController({
   async function waitForTunnelReady(generation: number) {
     for (let attempt = 0; attempt < 18; attempt += 1) {
       const nextStatus = await refreshPublicInviteState(generation);
-      if (nextStatus.public_url && nextStatus.tunnel.phase === "running") return nextStatus;
-      if (nextStatus.tunnel.phase === "stopped" || nextStatus.tunnel.last_error) return nextStatus;
+      if (nextStatus.public_url && "tunnel" in nextStatus && nextStatus.tunnel.phase === "running") return nextStatus;
+      if ("tunnel" in nextStatus && (nextStatus.tunnel.phase === "stopped" || nextStatus.tunnel.last_error)) return nextStatus;
       await waitForNextIngressPoll(generation);
     }
     return refreshPublicInviteState(generation);
@@ -229,7 +242,7 @@ export function useRoomInviteController({
   async function preparePublicInvite(generation: number) {
     let status = await refreshPublicInviteState(generation);
     if (status.public_url) return status;
-    if (!status.tunnel.available) {
+    if (!("tunnel" in status) || !status.tunnel.available) {
       throw new Error("공개 URL을 만들 수 없습니다. cloudflared 설치 상태를 확인하세요.");
     }
     assertIngressOperation(generation);
@@ -239,11 +252,11 @@ export function useRoomInviteController({
     );
     assertIngressOperation(generation);
     setPublicInviteStatus(status);
-    if (status.public_url && status.tunnel.phase === "running") return status;
+    if (status.public_url && "tunnel" in status && status.tunnel.phase === "running") return status;
     const readyStatus = await waitForTunnelReady(generation);
-    if (readyStatus.public_url && readyStatus.tunnel.phase === "running") return readyStatus;
+    if (readyStatus.public_url && "tunnel" in readyStatus && readyStatus.tunnel.phase === "running") return readyStatus;
     throw new Error(
-      readyStatus.tunnel.last_error ||
+      ("tunnel" in readyStatus ? readyStatus.tunnel.last_error : "") ||
         "공개 터널이 아직 초대 URL을 보고하지 않았습니다. 잠시 후 다시 눌러 주세요."
     );
   }
@@ -276,8 +289,8 @@ export function useRoomInviteController({
     maxUses: number;
     startTunnelIfNeeded: boolean;
   }) {
-    if (!localOperatorEligible) {
-      throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+    if (!localOperatorEligible && !remote) {
+      throw new Error("현재 방의 초대 관리 권한을 확인할 수 없어요.");
     }
     const generation = beginIngressOperation();
     await requirePublicInviteReady(generation, startTunnelIfNeeded);
@@ -293,7 +306,7 @@ export function useRoomInviteController({
           ttlSeconds,
           maxUses,
         },
-        () => assertManagerOperation(generation, room.id, authority)
+        () => assertManagerOperation(generation, room.id, authority), remote
       );
     } catch (error) {
       if (!managerOperationIsCurrent(generation, room.id, authority)) {
@@ -337,7 +350,7 @@ export function useRoomInviteController({
       setCopyStatus(
         latest.public_url
           ? "서버가 공개되었습니다. 이제 외부 초대 링크를 만들 수 있습니다."
-          : latest.tunnel.last_error || "외부 접속 주소가 아직 준비되지 않았습니다."
+          : ("tunnel" in latest ? latest.tunnel.last_error : "") || "외부 접속 주소가 아직 준비되지 않았습니다."
       );
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
@@ -398,7 +411,7 @@ export function useRoomInviteController({
   }
 
   async function generatePairing(room: RoomDockItem) {
-    if (!localOperatorEligible || pairingCreationRef.current) return;
+    if ((!localOperatorEligible && !remote) || pairingCreationRef.current) return;
     pairingCreationRef.current = true;
     setPairingCreating(true);
     const generation = beginIngressOperation();
@@ -408,7 +421,7 @@ export function useRoomInviteController({
       const authority = resolveManagerRoomAuthority(room.id);
       assertManagerOperation(generation, room.id, authority);
       const custody = await createOperatorPairing(authority,
-        () => assertManagerOperation(generation, room.id, authority));
+        () => assertManagerOperation(generation, room.id, authority), remote);
       const current = managerOperationIsCurrent(generation, room.id, authority) &&
         custody.origin === ready.public_url;
       // Retain a confirmed but retired response so its grant can still be revoked.
@@ -429,12 +442,13 @@ export function useRoomInviteController({
     modal,
     copyStatus,
     humanInvites: managedHumanInvites.humanInvites,
-    publicInviteStatus,
+    publicInviteStatus: publicInviteStatus && "tunnel" in publicInviteStatus ? publicInviteStatus : null,
     publicAccessTransition,
     invitePublicUrl:
-      publicInviteStatus?.stable_url || publicInviteStatus?.public_url || "",
+      (publicInviteStatus && "stable_url" in publicInviteStatus ? publicInviteStatus.stable_url : "") || publicInviteStatus?.public_url || "",
     open,
     close,
+    canControlIngress: localOperatorEligible,
     startTunnel,
     stopTunnel,
     generateSecureInvite,

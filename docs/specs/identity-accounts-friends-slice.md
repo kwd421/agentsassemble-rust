@@ -401,6 +401,14 @@ invitation origin; it receives no tunnel controls, private host diagnostics or n
 IPC. Native ingress start/stop and local-only AI reach retain their actual host
 capability. Remote failure is visible; no fallback transport is selected.
 
+Observed shared-flow requirements: the connector card uses the verified public
+invitation origin in both transports, including MCP setup instructions. Manual
+provider identifiers must not be changed by OS spelling/capitalization correction.
+Owner profile reads wait for actual profile authority; admission-in-progress must
+not send an unauthenticated private profile request. Empty-workspace profile and
+friend access remains part of the broader account contract. Existing per-device
+dock ordering is retained by the same merge owner in both transports.
+
 Acceptance uses existing manager boundary and shared-dialog checks plus the signed
 isolated app and current Chrome review: issue/copy/revoke people and device links,
 create connector and saved-AI instructions without running a provider, change rooms,

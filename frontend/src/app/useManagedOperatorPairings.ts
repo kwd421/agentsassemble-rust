@@ -1,3 +1,4 @@
+import type { RemoteInviteTransport } from "../api/roomInviteTransport";
 import { useEffect, useRef, useState } from "react";
 import { revokeOperatorPairing, type OperatorPairingCustody } from "../api/operatorPairing";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
@@ -23,8 +24,9 @@ type OriginProof = { publicOrigin: string; isCurrent: () => boolean };
 const RETIRED_COPY = Symbol("retired pairing copy");
 
 export function useManagedOperatorPairings({
-  roomDockId, publicOrigin, resolveManager, copyText, captureOriginRefresh, publishStatus,
+  roomDockId, publicOrigin, resolveManager, copyText, captureOriginRefresh, publishStatus, remote,
 }: {
+  remote?: RemoteInviteTransport;
   roomDockId: string;
   publicOrigin: string;
   resolveManager: (roomDockId: string) => DesktopManagerRoomAuthority;
@@ -119,7 +121,7 @@ export function useManagedOperatorPairings({
         if (!activeRef.current || !managerCurrent(record)) {
           throw new Error("현재 방의 연결 해제 권위를 확인할 수 없어요.");
         }
-      });
+      }, remote);
       if (!activeRef.current) return;
       commit((prior) => prior.map((entry) => entry.key === key ? { ...entry, state: "revoked" } : entry));
       publishStatus("이 링크와 연결된 기기의 방 접속을 해제했어요.");

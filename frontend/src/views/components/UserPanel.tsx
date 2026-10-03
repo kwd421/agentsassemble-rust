@@ -35,6 +35,7 @@ export default function UserPanel({
   hasBackendError,
   guestProfile,
   pairedRoomSession = false,
+  profileAuthorityReady = true,
   profileIdentity = {},
   publishedProfileRevision = 0,
   onGuestExit,
@@ -50,6 +51,7 @@ export default function UserPanel({
     expired?: boolean;
   };
   pairedRoomSession?: boolean;
+  profileAuthorityReady?: boolean;
   profileIdentity?: UserProfileIdentity;
   publishedProfileRevision?: number;
   onGuestExit?: () => void;
@@ -106,7 +108,8 @@ export default function UserPanel({
     profileIntentGeneration.current += 1;
     profileWriteGeneration.current += 1;
     setSaving(false);
-    if (guestProfile?.expired || guestAwaitingAdmission || pairedRoomSession) {
+    if (!profileAuthorityReady || guestProfile?.expired || guestAwaitingAdmission || pairedRoomSession) {
+      setProfileError("");
       setProfileHydrated(false);
       return;
     }
@@ -140,6 +143,7 @@ export default function UserPanel({
       }
     };
   }, [
+    profileAuthorityReady,
     guestProfile?.expired,
     guestAwaitingAdmission,
     pairedRoomSession,

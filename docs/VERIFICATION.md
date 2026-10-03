@@ -12699,5 +12699,16 @@ persistence tests pass; server and persistence all-target release Clippy pass.
 All 165 frontend files / 958 tests pass, including the existing human-intent and
 controller cases extended to explicit remote transport, uncertain dispatch and
 native-control denial. Required architecture/source gates and 19 policy/artifact
-checks pass; formatting and diff checks pass. Signed isolated packaged and Chrome
-verification are in progress. This is not whole app/web acceptance or Windows proof.
+checks pass; formatting and diff checks pass. Signed isolated 0.1.5 Mac and actual
+Chrome both issue/copy/revoke human and device invitations, and issue/copy connector
+and saved subscription-AI friend entry packets. No provider is launched or recipient
+admitted. The same saved friend is visible across both transports. The verified
+connector origin now renders MCP instructions in Chrome as well as the app. Native
+provider identifier input disables OS auto-correction after the actual WebView changed
+`codex` to `Codex`; direct typing/blur now preserves `codex`. Owner profile hydration
+waits for real admission instead of issuing an unauthenticated profile request.
+The affected existing checks now pass 51 cases; the package signature passes deep
+strict verification and keeps the same CSS artifact. Temporary public ingress is
+closed after verification. Per-device dock order is retained by the shared merge
+owner; no new sorting authority is introduced. Empty-workspace account/friend access,
+actual reconnect/empty UI, Windows and full acceptance remain open.

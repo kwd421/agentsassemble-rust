@@ -163,7 +163,7 @@ describe("UserPanel", () => {
     await waitFor(() => expect(within(view.container).getByRole("button", { name: /Newer device/ })).toBeTruthy());
   });
 
-  it("waits for guest admission before reading the server-owned profile", async () => {
+  it.each([false, true])("waits for admission before reading the server-owned profile (central owner: %s)", async (centralOwner) => {
     const loaded = {
       ...DEFAULT_USER_PROFILE,
       displayName: "Guest Joined",
@@ -176,7 +176,8 @@ describe("UserPanel", () => {
         onlineCount={1}
         agentCount={0}
         hasBackendError={false}
-        guestProfile={{
+        profileAuthorityReady={!centralOwner}
+        guestProfile={centralOwner ? undefined : {
           displayName: "Guest Pending",
           avatarLabel: "GP",
           statusLabel: "온라인",
@@ -186,14 +187,15 @@ describe("UserPanel", () => {
     );
 
     expect(apiMocks.fetchUserProfile).not.toHaveBeenCalled();
-    expect(within(view.container).getByText("Guest Pending")).toBeTruthy();
+    expect(within(view.container).getByText(centralOwner ? "프로필 불러오는 중" : "Guest Pending")).toBeTruthy();
 
     view.rerender(
       <UserPanel
         onlineCount={1}
         agentCount={0}
         hasBackendError={false}
-        guestProfile={{
+        profileAuthorityReady
+        guestProfile={centralOwner ? undefined : {
           displayName: "Guest Joined",
           avatarLabel: "GJ",
           statusLabel: "온라인",

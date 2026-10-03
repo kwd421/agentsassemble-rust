@@ -1,3 +1,4 @@
+import type { RoomHttpAuthority } from "../../api/roomHttpAuthority";
 import { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import { AttendeeFriendInviteCard, type AttendeeInviteControls } from "./AttendeeFriendInviteCard";
 import { ConnectorInviteCard, type ConnectorInviteControls } from "./ConnectorInviteCard";
@@ -41,6 +42,8 @@ function humanInviteSummary(maxUses: number, ttlSeconds: number) {
 
 export default function RoomInviteModal({
   roomLabel,
+  friendAuthority,
+  canControlIngress = true,
   humanInvites = [],
   connectorInvites,
   attendeeInvites,
@@ -62,6 +65,8 @@ export default function RoomInviteModal({
   onStopTunnel,
 }: {
   roomLabel: string;
+  friendAuthority?: RoomHttpAuthority;
+  canControlIngress?: boolean;
   humanInvites?: readonly HumanInvitePresentation[];
   connectorInvites?: ConnectorInviteControls;
   attendeeInvites?: AttendeeInviteControls;
@@ -82,7 +87,7 @@ export default function RoomInviteModal({
   onStartTunnel: () => void;
   onStopTunnel: () => void;
 }) {
-  const friendsDirectory = useFriendsDirectory();
+  const friendsDirectory = useFriendsDirectory(friendAuthority);
   const dialogRef = useRef<HTMLDialogElement>(null);
   const [opener] = useState(() => document.activeElement);
   useEffect(() => {
@@ -332,7 +337,7 @@ export default function RoomInviteModal({
 
           {tab === "ai" && attendeeInvites && <AttendeeFriendInviteCard directory={friendsDirectory} controls={attendeeInvites} disabled={publicAccessBusy || !publicAccessRunning} />}
           {tab === "ai" && connectorInvites && <ConnectorInviteCard controls={connectorInvites} localOnly={!publicAccessRunning}
-            mcpOrigin={publicAccessBusy ? undefined : tunnelStatus?.public_url}
+            mcpOrigin={publicAccessBusy ? undefined : publicUrl}
             disabled={publicAccessBusy || (!publicAccessRunning && !tunnelStatus?.local_url)} />}
           {tab === "device" && onCreatePairing && onCopyPairing && onRevokePairing && (
             <section className="dc-invite-card" aria-labelledby="operator-pairing-heading">
@@ -388,7 +393,7 @@ export default function RoomInviteModal({
         >
           <span className="dc-invite-hosting-dot" aria-hidden="true" />
           <div className="dc-invite-hosting-copy">
-            <h3 id="room-hosting-heading" className="sr-only">이 컴퓨터의 서버 공개</h3>
+            <h3 id="room-hosting-heading" className="sr-only">서버 외부 접속</h3>
             <p className="dc-invite-hosting-state">
               {publicAccessStarting
                 ? "공개 준비 중"
@@ -407,7 +412,7 @@ export default function RoomInviteModal({
               <p className="dc-invite-hosting-error preserve-words">{tunnelStatus.last_error}</p>
             )}
           </div>
-          {showStopTunnel ? (
+          {canControlIngress && (showStopTunnel ? (
             <button
               type="button"
               className="dc-invite-row-button"
@@ -431,7 +436,8 @@ export default function RoomInviteModal({
             >
               외부 접속 열기
             </button>
-          )}
+          ))}
+          {!canControlIngress && <span>호스트 기기에서 접속을 관리해요.</span>}
         </footer>
         {pendingPublicAction && (
           <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>

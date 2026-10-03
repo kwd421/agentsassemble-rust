@@ -53,7 +53,7 @@ it("expires only link copying while retaining the exact grant for revocation", a
   expect(hook.result.current.pairings[0]).toMatchObject({ expired: true, copyable: false });
   api.revoke.mockImplementationOnce(async (_custody, beforeDispatch) => beforeDispatch());
   await act(() => hook.result.current.revoke(key));
-  expect(api.revoke).toHaveBeenCalledWith(custody, expect.any(Function));
+  expect(api.revoke).toHaveBeenCalledWith(custody, expect.any(Function), undefined);
   expect(hook.result.current.pairings[0].state).toBe("revoked");
   hook.unmount();
   expect(vi.getTimerCount()).toBe(0);

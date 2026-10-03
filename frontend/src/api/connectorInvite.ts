@@ -1,3 +1,4 @@
+import { fetchRemoteRoomInvite, type RemoteInviteTransport } from "./roomInviteTransport";
 import { requestDesktopConnectorInviteCreateTicket, type DesktopManagerRoomAuthority } from "../lib/desktopBridge";
 import { strictRecord, requiredString, assertExactKeys } from "../lib/strictJsonContract";
 import { parseLocalIngressOrigin, parsePublicIngressOrigin } from "../lib/publicIngressStatus";
@@ -31,14 +32,21 @@ export async function createConnectorInvite(
   authority: DesktopManagerRoomAuthority,
   request: CreateConnectorInviteRequest,
   assertCurrent: () => void,
+  remote?: RemoteInviteTransport,
 ): Promise<ConnectorInviteCustody> {
-  const ticket = await requestDesktopConnectorInviteCreateTicket(authority);
-  assertCurrent();
-  const response = await fetch(`${ticket.http_base_url}/api/room-connector/invite`, {
-    method: "POST", cache: "no-store", redirect: "error",
-    headers: { Authorization: `Bearer ${ticket.ticket}`, "Content-Type": "application/json" },
-    body: JSON.stringify(request),
-  });
+  const response = remote
+    ? await fetchRemoteRoomInvite("/room-connector/invite", remote, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(request),
+      }, assertCurrent)
+    : await (async () => {
+        const ticket = await requestDesktopConnectorInviteCreateTicket(authority);
+        assertCurrent();
+        return fetch(`${ticket.http_base_url}/api/room-connector/invite`, {
+          method: "POST", cache: "no-store", redirect: "error",
+          headers: { Authorization: `Bearer ${ticket.ticket}`, "Content-Type": "application/json" },
+          body: JSON.stringify(request),
+        });
+      })();
   if (!response.ok) throw new Error("외부 AI 초대 생성 결과를 확인하지 못했어요. 다시 시도해 주세요.");
   const value = strictRecord(await response.json(), "외부 AI 초대");
   assertExactKeys(value, ["request_id", "room_uid", "invite_id", "expires_at", "join_url"], "외부 AI 초대");

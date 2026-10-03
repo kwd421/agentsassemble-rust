@@ -1,3 +1,4 @@
+import type { RemoteInviteTransport } from "../api/roomInviteTransport";
 import { useEffect, useRef, useState } from "react";
 import { connectorInviteText, createConnectorInvite, type ConnectorInviteCustody } from "../api/connectorInvite";
 import { createFriendAttendeeInvite, attendeePacketText, type AttendeePacketCustody } from "../api/attendeeInvite";
@@ -16,7 +17,8 @@ function isLocal(record: ManagedAiInvite) {
   return record.kind === "connector" && record.reach === "local";
 }
 
-export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, resolveManager, captureOriginRefresh, copyText, publishStatus }: {
+export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, resolveManager, captureOriginRefresh, copyText, publishStatus, remote }: {
+  remote?: RemoteInviteTransport;
   roomDockId: string;
   publicOrigin: string;
   /** The runtime's loopback origin; lets a connector invite reach an AI on this machine without public access. */
@@ -77,8 +79,8 @@ export function useManagedAiInvites({ roomDockId, publicOrigin, localOrigin, res
       }
       assertCurrent();
       const record: ManagedAiInvite = friendId
-        ? { ...await createFriendAttendeeInvite(authority, { request_id: receipt.requestId, friend_id: friendId }, assertCurrent), kind: "attendee", authority }
-        : { ...await createConnectorInvite(authority, { request_id: receipt.requestId, scope: "read_write", reach }, assertCurrent), kind: "connector" };
+        ? { ...await createFriendAttendeeInvite(authority, { request_id: receipt.requestId, friend_id: friendId }, assertCurrent, remote), kind: "attendee", authority }
+        : { ...await createConnectorInvite(authority, { request_id: receipt.requestId, scope: "read_write", reach }, assertCurrent, remote), kind: "connector" };
       // Keep the receipt after any uncertain response. Only a confirmed result releases it.
       pending.current.delete(pendingKey);
       if (!active.current) return;

@@ -1,3 +1,4 @@
+import { fetchRemoteRoomInvite, type RemoteInviteTransport } from "./roomInviteTransport";
 import type { RoomAppearance } from "../lib/roomAppearance";
 import { decodeCanonicalBase64Url } from "../lib/base64Url";
 import {
@@ -287,12 +288,17 @@ function dispatchError(dispatched: boolean): HumanInviteDispatchError {
 
 export async function createManagedHumanInvite(
   intent: ManagedHumanInviteCreateIntent,
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  remote?: RemoteInviteTransport
 ): Promise<ManagedHumanInviteCustody> {
   let dispatched = false;
   try {
     const request = validateCreateIntent(intent);
-    const response = await fetchDesktopHumanInviteCreate(
+    const dispatch = remote
+      ? (_authority: DesktopManagerRoomAuthority, init: RequestInit, mark: () => void) =>
+          fetchRemoteRoomInvite("/room-invite/create", remote, init, mark)
+      : fetchDesktopHumanInviteCreate;
+    const response = await dispatch(
       request.authority,
       {
         method: "POST",
@@ -328,7 +334,8 @@ function exactInviteNotFound(value: unknown): boolean {
 
 export async function revokeManagedHumanInvite(
   custody: Pick<ManagedHumanInviteCustody, "authority" | "inviteId">,
-  beforeDispatch?: () => void
+  beforeDispatch?: () => void,
+  remote?: RemoteInviteTransport
 ): Promise<ManagedHumanInviteRevokeResult> {
   let dispatched = false;
   try {
@@ -336,7 +343,11 @@ export async function revokeManagedHumanInvite(
     if (!/^[0-9a-f]{16}$/.test(custody.inviteId)) {
       throw new Error("사람 초대 취소 계약이 올바르지 않습니다.");
     }
-    const response = await fetchDesktopHumanInviteRevoke(
+    const dispatch = remote
+      ? (_authority: DesktopManagerRoomAuthority, init: RequestInit, mark: () => void) =>
+          fetchRemoteRoomInvite("/room-invite/revoke", remote, init, mark)
+      : fetchDesktopHumanInviteRevoke;
+    const response = await dispatch(
       authority,
       {
         method: "POST",

@@ -1,3 +1,4 @@
+import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
 import { Hash } from "lucide-react";
 import { isCustomChannelId } from "../lib/customChannelId";
 import { useRoomChannels } from "./useRoomChannels";
@@ -196,6 +197,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   });
   const guestLocked = admissionGuestLocked || Boolean(ownerWorkspace.connect);
   const canCreateRoom = startupHostEnabled || Boolean(ownerWorkspace.connect);
+  const canInviteRooms = startupHostEnabled || Boolean(ownerWorkspace.connect);
   const startupIdentityResolved =
     startupIdentityReady || Boolean(ownerWorkspace.connect) ||
     Boolean(
@@ -334,9 +336,12 @@ export function useAppController(deviceToken: string, clientId: string) {
     },
   });
   const roomAppearances = roomAppearanceAssets.appearances;
+  const invitationAccess = useRoomInvitationAccess(Boolean(ownerWorkspace.connect), rooms,
+    guestSession, deviceToken, resolveManagerRoomAuthority);
   const roomInvite = useRoomInviteController({
     localOperatorEligible: startupHostEnabled,
-    resolveManagerRoomAuthority,
+    remote: invitationAccess.remote,
+    resolveManagerRoomAuthority: invitationAccess.resolve,
   });
   const {
     modal: inviteModal,
@@ -497,7 +502,17 @@ export function useAppController(deviceToken: string, clientId: string) {
     }
   }
 
-  function inviteRoom(roomId: string) {
+  async function inviteRoom(roomId: string) {
+    const room = rooms.find((candidate) => candidate.id === roomId);
+    if (!room || !canInviteRooms) return;
+    if (ownerWorkspace.connect) {
+      try {
+        if (!await ownerWorkspace.enter(room, acceptOwnerSession)) return;
+      } catch (error) {
+        window.alert(error instanceof Error ? error.message : "방 초대를 열지 못했어요.");
+        return;
+      }
+    }
     setActiveRoomId(roomId);
     setChannel("lobby");
     setAdminOpen(false);
@@ -662,7 +677,8 @@ export function useAppController(deviceToken: string, clientId: string) {
     connectorJoinUrl: startupRoute.connectorJoinUrl,
     guestExpired, guestJoinRequested, guestJoinStatus, guestJoinToken,
     guestPreflightRetryable, guestJoinRetryable,
-    guestLocked, canCreateRoom, guestPanelProfile, guestRecoveryRequest, guestSession,
+    profileAuthorityReady: startupHostEnabled || Boolean(admittedSessionToken),
+    guestLocked, canCreateRoom, canInviteRooms, guestPanelProfile, guestRecoveryRequest, guestSession,
     handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteCopyStatus, inviteModalAppearance,
     inviteModalRoom, invitePublicUrl, inviteRoom,

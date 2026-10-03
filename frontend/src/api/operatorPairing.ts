@@ -1,3 +1,4 @@
+import { fetchRemoteRoomInvite, type RemoteInviteTransport } from "./roomInviteTransport";
 import {
   parseDesktopManagerRoomAuthority,
   type DesktopManagerRoomAuthority,
@@ -17,12 +18,15 @@ export type OperatorPairingCustody = Readonly<{
 
 export async function createOperatorPairing(
   authority: DesktopManagerRoomAuthority,
-  beforeDispatch: () => void
+  beforeDispatch: () => void,
+  remote?: RemoteInviteTransport
 ): Promise<OperatorPairingCustody> {
   const exactAuthority = parseDesktopManagerRoomAuthority(authority);
-  const response = strictRecord(await postJsonServerOperator<unknown>(
-    "/api/operator-pairing/create", exactAuthority, beforeDispatch
-  ), "기기 연결");
+  const response = strictRecord(remote
+    ? await (await fetchRemoteRoomInvite("/operator-pairing/create", remote, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(exactAuthority),
+      }, beforeDispatch)).json()
+    : await postJsonServerOperator<unknown>("/api/operator-pairing/create", exactAuthority, beforeDispatch), "기기 연결");
   assertExactKeys(response, ["pairing_id", "pairing_url", "expires_at"], "기기 연결");
   const pairingId = requiredString(response, "pairing_id", "기기 연결");
   const pairingUrl = requiredString(response, "pairing_url", "기기 연결");
@@ -52,13 +56,15 @@ export async function createOperatorPairing(
 
 export async function revokeOperatorPairing(
   custody: OperatorPairingCustody,
-  beforeDispatch: () => void
+  beforeDispatch: () => void,
+  remote?: RemoteInviteTransport
 ) {
-  const response = strictRecord(await postJsonServerOperator<unknown>(
-    "/api/operator-pairing/revoke",
-    { authority: custody.authority, pairing_id: custody.pairingId },
-    beforeDispatch
-  ), "기기 연결 해제");
+  const body = { authority: custody.authority, pairing_id: custody.pairingId };
+  const response = strictRecord(remote
+    ? await (await fetchRemoteRoomInvite("/operator-pairing/revoke", remote, {
+        method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body),
+      }, beforeDispatch)).json()
+    : await postJsonServerOperator<unknown>("/api/operator-pairing/revoke", body, beforeDispatch), "기기 연결 해제");
   assertExactKeys(response, ["status", "pairing_id"], "기기 연결 해제");
   if (response.status !== "revoked" || response.pairing_id !== custody.pairingId) {
     throw new Error("연결 해제 결과를 확인할 수 없어요. 다시 시도해 주세요.");

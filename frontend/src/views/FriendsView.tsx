@@ -159,7 +159,7 @@ function FriendEditor({ initial, busy, error, onCancel, onSave }: {
         {Object.entries(types).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
       </select></label>
       <label>핸들 (선택)<input className="ops-input" style={inputStyle} maxLength={120} value={draft.details.handle} disabled={busy} onChange={(event) => update("handle", event.target.value)} /></label>
-      <label>제공자 (선택)<input className="ops-input" style={inputStyle} maxLength={256} value={draft.details.provider_kind} disabled={busy} onChange={(event) => update("provider_kind", event.target.value)} /></label>
+      <label>제공자 (선택)<input autoCorrect="off" autoCapitalize="none" spellCheck={false} className="ops-input" style={inputStyle} maxLength={256} value={draft.details.provider_kind} disabled={busy} onChange={(event) => update("provider_kind", event.target.value)} /></label>
       {error && <p role="alert">{error}</p>}
       <div style={{ display: "flex", justifyContent: "end", gap: 12 }}>
         <button type="button" className="ops-button" style={buttonStyle} disabled={busy} onClick={onCancel}>취소</button>

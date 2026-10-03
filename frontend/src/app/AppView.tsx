@@ -54,7 +54,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     channelSidebarWidth, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     deviceToken, exitGuestSurface,
     expireGuestSession, goToChannel,
-    guestExpired, guestLocked, canCreateRoom,
+    guestExpired, guestLocked, canCreateRoom, canInviteRooms, profileAuthorityReady,
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteRoom,
     loadCanonicalRoomHistory, lobbyPostingState, markChannelRead, channelReadReady,
@@ -127,6 +127,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         onlineCount={scopedOnlineCount}
         agentCount={scopedAgents.length || 0}
         hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
+        profileAuthorityReady={profileAuthorityReady}
         guestProfile={guestPanelProfile}
         pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
         publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
@@ -166,6 +167,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         roomAppearances={roomAppearances}
         guestLocked={guestLocked}
         canCreateRoom={canCreateRoom}
+        canInviteRooms={canInviteRooms}
         adminOpen={adminOpen}
         menuRoom={menuRoom}
         roomMenu={roomMenu}
@@ -211,7 +213,7 @@ export default function AppView({ controller }: { controller: AppController }) {
               <span className="truncate preserve-words">{activeRoom.label}</span>
               <ChevronDown size={16} />
             </button>
-            {hasRoom && !guestLocked && !mobileViewport && (
+            {hasRoom && canInviteRooms && !mobileViewport && (
               <button
                 type="button"
                 className="dc-sidebar-invite-button"
@@ -240,7 +242,7 @@ export default function AppView({ controller }: { controller: AppController }) {
                   placeholder="검색하기"
                 />
               </label>
-              {!guestLocked && (
+              {canInviteRooms && (
                 <button
                   type="button"
                   className="dc-mobile-channel-tool"
@@ -477,7 +479,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           onClose={closeMobileRoomInfo}
           onStartAddAgent={openAgentCreate}
           onOpenSideChat={canOpenSideChat ? () => { closeMobileRoomInfo(); setSideChatOpen(true); } : undefined}
-          onInvite={guestLocked ? undefined : () => inviteRoom(activeRoom.id)}
+          onInvite={canInviteRooms ? () => void inviteRoom(activeRoom.id) : undefined}
           onOpenSettings={!guestLocked || canManageActiveRoom ? () => openRoomSettings(activeRoom.id) : undefined}
           agentSessions={activeRoomAgentSessions}
           availableProviders={canonicalRoom.availableProviders}

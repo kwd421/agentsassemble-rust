@@ -15,6 +15,7 @@ const apiMocks = vi.hoisted(() => ({
   createOperatorPairing: vi.fn(),
   revokeOperatorPairing: vi.fn(),
   fetchPublicInviteStatus: vi.fn(),
+  fetchRemoteInviteOrigin: vi.fn(),
   revokeManagedHumanInvite: vi.fn(),
   startPublicInviteTunnel: vi.fn(),
   stopPublicInviteTunnel: vi.fn(),
@@ -24,6 +25,8 @@ vi.mock("../api", async () => ({
   ...(await vi.importActual<typeof import("../api")>("../api")),
   ...apiMocks,
 }));
+
+vi.mock("../api/roomInviteTransport", () => ({ fetchRemoteInviteOrigin: apiMocks.fetchRemoteInviteOrigin }));
 
 vi.mock("../api/operatorPairing", () => ({
   createOperatorPairing: apiMocks.createOperatorPairing,
@@ -175,7 +178,7 @@ describe("useRoomInviteController", () => {
     hook.unmount();
   });
 
-  it("creates human invites through exact directory authority and retains accepted custody", async () => {
+  it.each([false, true])("creates and revokes human invites with exact authority (remote=%s)", async (web) => {
     const custody = managedCustody("0123456789abcdef");
     apiMocks.createManagedHumanInvite.mockImplementation(
       async (_intent, beforeDispatch?: () => void) => {
@@ -183,9 +186,13 @@ describe("useRoomInviteController", () => {
         return custody;
       }
     );
-    const hook = renderInviteController();
+    const remote = web ? { sessionToken: "owner-session", deviceToken: "owner-device" } : undefined;
+    apiMocks.fetchRemoteInviteOrigin.mockResolvedValue({ public_url: publicStatus.public_url, remote: true });
+    const hook = renderHook(() => useRoomInviteController({
+      localOperatorEligible: !web, remote, resolveManagerRoomAuthority: () => managerAuthority,
+    }));
     act(() => hook.result.current.open(room.id));
-    await waitFor(() => expect(hook.result.current.publicInviteStatus).toEqual(publicStatus));
+    await waitFor(() => expect(hook.result.current.invitePublicUrl).toBe(publicStatus.public_url));
 
     await act(async () => {
       await hook.result.current.generateSecureInvite(
@@ -204,7 +211,7 @@ describe("useRoomInviteController", () => {
         ttlSeconds: 604800,
         maxUses: 5,
       },
-      expect.any(Function)
+      expect.any(Function), remote
     );
     expect(hook.result.current.humanInvites[0].copyUrl).toBe(custody.joinUrl);
     expect(hook.result.current.humanInvites).toEqual([
@@ -217,6 +224,16 @@ describe("useRoomInviteController", () => {
         copyUrl: custody.joinUrl,
       }),
     ]);
+    apiMocks.revokeManagedHumanInvite.mockResolvedValue("revoked");
+    await act(() => hook.result.current.revokeHumanInvite(hook.result.current.humanInvites[0].key));
+    expect(apiMocks.revokeManagedHumanInvite).toHaveBeenCalledWith(custody, expect.any(Function), remote);
+    expect(hook.result.current.humanInvites[0].revocation).toBe("dead");
+    if (web) {
+      expect(apiMocks.fetchPublicInviteStatus).not.toHaveBeenCalled();
+      await act(() => hook.result.current.startTunnel());
+      expect(apiMocks.startPublicInviteTunnel).not.toHaveBeenCalled();
+    }
+    hook.unmount();
   });
 
   it("retains a post-dispatch accepted invite as revoke-only when its operation is superseded", async () => {

@@ -7,8 +7,10 @@
   transactions with explicit native or central-owner room-session transport.
   Native ingress controls remain host-owned; newly paired devices remain room-only.
   11 HTTP boundaries, 358 persistence checks, 958 frontend checks, Clippy and
-  mandatory gates pass. Signed isolated Mac/Chrome verification and full parity
-  remain open. After parity work, diagnose the user's two macOS server rows without
+  mandatory gates pass. Signed isolated Mac/Chrome issue/copy/revoke and AI packets
+  pass, including MCP instructions and identifier input correction; affected 51
+  checks pass. Empty-workspace account/friend access and full parity remain open.
+  After parity work, diagnose the user's two macOS server rows without
   deleting registrations. Contract/evidence: identity-accounts-friends slice and
   `docs/VERIFICATION.md` -> Shared invitation transport correction.
 
