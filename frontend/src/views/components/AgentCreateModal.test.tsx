@@ -577,7 +577,7 @@ describe("AgentCreateModal", () => {
 
     expect(screen.queryByRole("listitem", { name: "DeepSeek" })).toBeNull();
     await userEvent.click(screen.getByRole("listitem", { name: "API" }));
-    expect(screen.getByRole("list", { name: "API 프로바이더" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "API 제공자" })).toBeTruthy();
     expect(screen.queryByLabelText("API 키")).toBeNull();
 
     await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));

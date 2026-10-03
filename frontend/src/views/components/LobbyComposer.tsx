@@ -619,7 +619,7 @@ export default function LobbyComposer({
           onKeyDown={handleKeyDown}
           onPaste={handlePaste}
           className="dc-composer-input"
-          placeholder={disabledReason || (uploading ? "첨부 업로드 중..." : "메시지 입력")}
+          placeholder={disabledReason || (uploading ? "첨부 업로드 중..." : "#general에 메시지 보내기")}
           disabled={busy || disabled}
           mentionables={mentionables}
           ariaLabel="채팅 입력"

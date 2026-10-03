@@ -85,6 +85,7 @@ export default function RoomRail({
       style={mobileViewport ? { width: MOBILE_ROOM_RAIL_WIDTH } : undefined}
     >
       {onOpenFriends && <button type="button" className="dc-server-btn" style={buttonStyle} aria-label="친구" title="친구" aria-pressed={friendsOpen} data-active={friendsOpen} onClick={onOpenFriends}><Users size={20} /></button>}
+      {onOpenFriends && <span className="dc-rail-divider" aria-hidden />}
       <div className="dc-room-stack min-h-0 flex-1 overflow-y-auto chat-scroll" aria-label="방 목록">
         {rooms.map((room) => {
           const active = !adminOpen && !friendsOpen && activeRoom.id === room.id;

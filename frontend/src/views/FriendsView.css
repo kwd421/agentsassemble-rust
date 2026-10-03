@@ -18,6 +18,9 @@
 .dc-friends-tabs .add-tab { background: var(--color-accent); color: #fff; }
 .dc-friends-tabs .add-tab:hover { background: var(--color-accent-hover); }
 .dc-friends-close { margin-left: auto; }
+.dc-friends-icon-button { display: grid; width: 44px; height: 44px; place-items: center; border-radius: 8px; color: var(--color-text-muted); }
+.dc-friends-icon-button:hover:not(:disabled), .dc-friends-icon-button:focus-visible { background: rgba(78, 80, 88, .4); color: var(--color-text-primary); outline: none; }
+.dc-friends-icon-button:disabled { opacity: .5; }
 .dc-friends-body { display: grid; min-height: 0; flex: 1; grid-template-columns: minmax(0, 1fr) 360px; }
 .dc-friends-main { min-height: 0; overflow-y: auto; padding: 18px 30px 24px; }
 .dc-friends-search { display: flex; height: 42px; align-items: center; gap: 10px; border-radius: 6px; background: #1e1f22; padding: 0 13px; color: var(--color-text-muted); }

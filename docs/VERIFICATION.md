@@ -12828,3 +12828,27 @@ The exact isolated bundle/data are moved recoverably to the user's Trash; the
 installed app and primary store are preserved. Artifact maintenance check passes.
 Central registrations are not removed: local cleanup does not delete the account's
 server registry, and the user requested diagnosis rather than registry deletion.
+
+## Discord-style frontend pass 2 (2026-10-03)
+
+Scope: user request to review the whole frontend against the running Discord client,
+including web. Discord references (friends home, server view with member list, server
+menu) were read from the user's Discord app without changes.
+
+- Web: the isolated server binary served the built frontend on a loopback port to the
+  desktop browser pane with fresh isolated data. `/app/` shows the reworked login
+  (one Google action, neutral guidance instead of an alert box). Before/after use the
+  same server; only the served frontend build changed.
+- Component preview: a scratch Vite page rendered the real `StartupIdentityGate`
+  (web entry), `CentralServerList` with a local host, `MemberList`, `FriendsView` and
+  `RoomSettingsModal`, with central identity and friends APIs replaced by fixed stubs.
+  The same page ran against a HEAD worktree for the before images. This shows layout
+  and copy only; it does not exercise central, friends or room authority.
+- Native packaged app: a signed isolated package (`app.agentsassemble.uicheck20261003`)
+  was built and launched, but Computer Use access was not granted, so it was quit
+  without inspection. Rail divider, composer placeholder, add-agent labels and all
+  native/remote signed-in room views remain visually unverified.
+- 165 files / 964 frontend tests, `tsc`, vite build, `make architecture-check` and
+  `git diff --check` pass. Test-facing accessible names are unchanged except the
+  add-agent API list label (`API 제공자`), whose test was updated.
+

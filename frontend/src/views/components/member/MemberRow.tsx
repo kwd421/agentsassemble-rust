@@ -34,6 +34,10 @@ export default function MemberRow({
     ? ROLE_OPTIONS.find((option) => option.id === entry.role)?.label
     : undefined;
   const isAgent = Boolean(entry.agent || entry.agentSession);
+  // Like Discord's member list, a person is just a name; agents keep their model line.
+  const showDetail = isAgent || !(entry.owner || entry.member?.participant_type === "human");
+  // Without a model, an agent's status reads like a Discord activity line instead of a chip.
+  const modelText = entry.modelLabel || entry.detail;
   // Roles and moderation open from the row's context menu. A row without a profile
   // button still takes focus, so the menu key and Shift+F10 reach it from the keyboard.
   const manageable = Boolean(canManageParticipant && (canEditRoles || (!entry.owner && entry.meetingId)));
@@ -136,7 +140,7 @@ export default function MemberRow({
             </span>
           )}
         </div>
-        <div className="dc-member-detail-row">
+        {showDetail && <div className="dc-member-detail-row">
           <div
             className="dc-member-model-line"
             aria-label={memberModelAccessibleLabel(entry)}
@@ -151,7 +155,7 @@ export default function MemberRow({
               />
             )}
             <span className="truncate preserve-words">
-              {entry.modelLabel || entry.detail}
+              {modelText || (isAgent ? entry.statusLabel : "")}
             </span>
             {entry.reasoningEffort && (
               <span
@@ -162,7 +166,7 @@ export default function MemberRow({
               </span>
             )}
           </div>
-          {isAgent && entry.statusLabel && (
+          {isAgent && modelText && entry.statusLabel && (
             <span
               className="dc-member-status-chip preserve-words"
               data-state={entry.active ? "active" : "idle"}
@@ -170,7 +174,7 @@ export default function MemberRow({
               {entry.statusLabel}
             </span>
           )}
-        </div>
+        </div>}
       </div>
     </div>
   );

@@ -2,6 +2,20 @@
 
 ## Active work
 
+- 2026-10-03 Discord-style frontend pass 2 (user request, app and web): shared
+  secondary buttons get Discord sizing/colour with layered defaults; the web login
+  is one primary Google action; the server chooser uses icon/name/status rows,
+  an icon refresh and a text logout; people rows drop the type line and agents
+  without a model show status inline; the rail separates home; the lobby composer
+  says `#general에 메시지 보내기`; friends header actions become icon buttons;
+  room-mode copy becomes name plus caption; add-agent labels are Korean. Labels
+  and actions used by tests are unchanged. Frontend 964, build, architecture and
+  diff gates pass. Web login is verified on the real server; chooser, members,
+  friends and room settings are verified in a stubbed component preview against
+  a HEAD worktree. Native packaged and signed-in web room views remain unverified
+  (app access not granted during this run). Evidence: `docs/VERIFICATION.md` ->
+  Discord-style frontend pass 2.
+
 - 2026-10-03 shared deletion recovery correction: server-wide web ownership now
   retains transactional grant provenance through the existing bounded command
   queue and immutable deletion replay. The shared shell exposes the exact pending

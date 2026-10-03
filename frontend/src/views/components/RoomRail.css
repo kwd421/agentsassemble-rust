@@ -22,3 +22,12 @@
   line-height: 1;
   white-space: nowrap;
 }
+
+/* Discord separates the home button from the server list with a short rule. */
+.dc-rail-divider {
+  width: 32px;
+  height: 2px;
+  flex-shrink: 0;
+  border-radius: 1px;
+  background: rgba(78, 80, 88, 0.48);
+}

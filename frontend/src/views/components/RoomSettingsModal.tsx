@@ -264,7 +264,8 @@ export default function RoomSettingsModal({
                     onChange={() => onConversationModeChange("ordered")}
                   />
                   <span className="preserve-words">
-                    🔢 순서 — 새 메시지마다 후보 둘을 무작위로 비교해 덜 말한 에이전트 한 명만 방을 확인합니다. @멘션은 그 에이전트에게 다음 순서를 줍니다.
+                    <strong>순서</strong>
+                    <small>새 메시지마다 덜 말한 에이전트 한 명만 방을 확인해요. @멘션하면 그 에이전트 차례가 돼요.</small>
                   </span>
                 </label>
                 <label>
@@ -276,7 +277,8 @@ export default function RoomSettingsModal({
                     onChange={() => onConversationModeChange("ambient")}
                   />
                   <span className="preserve-words">
-                    자유 토론 (실험적) — 새 메시지가 생기면 연결된 에이전트들이 방을 확인하고, 각자 말할지 정합니다.
+                    <strong>자유 토론 (실험적)</strong>
+                    <small>새 메시지가 오면 연결된 에이전트가 모두 방을 보고, 말할지 각자 정해요.</small>
                   </span>
                 </label>
               </div>
@@ -294,7 +296,8 @@ export default function RoomSettingsModal({
                       }
                     />
                     <span className="preserve-words">
-                      직전 발언자 연속 선택 방지 — 다른 선택 가능한 에이전트가 있으면 직전 발언자를 다음 일반 선택 후보에서 제외합니다. @멘션은 이 제한보다 우선합니다.
+                      <strong>직전 발언자 연속 선택 방지</strong>
+                      <small>다른 에이전트가 있으면 방금 말한 에이전트는 다음 차례에서 빼요. @멘션은 예외예요.</small>
                     </span>
                   </label>
                 </div>
@@ -312,7 +315,8 @@ export default function RoomSettingsModal({
                     onChange={() => onToolModeChange("chat")}
                   />
                   <span className="preserve-words">
-                    일반 대화 — 방 읽기와 발언만 제공합니다.
+                    <strong>일반 대화</strong>
+                    <small>방 읽기와 말하기만 써요.</small>
                   </span>
                 </label>
                 <label>
@@ -324,7 +328,8 @@ export default function RoomSettingsModal({
                     onChange={() => onToolModeChange("tabletop")}
                   />
                   <span className="preserve-words">
-                    테이블탑 · D&amp;D — 검증된 서버 주사위와 무작위 선택을 추가합니다.
+                    <strong>테이블탑 · D&amp;D</strong>
+                    <small>서버가 굴리는 주사위와 무작위 선택을 더해요.</small>
                   </span>
                 </label>
               </div>

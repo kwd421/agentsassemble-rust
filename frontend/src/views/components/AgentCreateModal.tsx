@@ -455,7 +455,7 @@ export default function AgentCreateModal({
               <ProviderModelRefresh
                 onCatalogChange={onCatalogChange}
                 localAvailable={localProviderActions}
-                title={`${providerGroupLabel(providerGroup)} Providers`}
+                title={`${providerGroupLabel(providerGroup)} 제공자`}
                 providerId={existingSessionId ? "" : selectedProvider?.id || ""}
                 automaticAllowed={Boolean(selectedProvider &&
                   selectedProvider.discovery_error_code !== "authentication_required" &&
@@ -465,9 +465,7 @@ export default function AgentCreateModal({
                 className="dc-agent-provider-grid"
                 role="list"
                 aria-label={
-                  providerGroup === "api"
-                    ? "API 프로바이더"
-                    : `${providerGroupLabel(providerGroup)} Providers`
+                  `${providerGroupLabel(providerGroup)} 제공자`
                 }
               >
                 {visibleProviders.map(renderProviderChoice)}

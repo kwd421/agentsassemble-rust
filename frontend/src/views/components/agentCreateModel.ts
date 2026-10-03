@@ -35,7 +35,7 @@ export function deriveAgentCreateStatus({
     return "선택한 provider가 현재 catalog에 없습니다.";
   }
   if (!selectedProvider && !selectedProviderMissing && hasProviders) {
-    return "사용할 provider를 선택하세요.";
+    return "사용할 제공자를 골라 주세요.";
   }
   if (invalidControl) {
     return `${invalidControl.label}의 유효한 기본값이 없어 직접 선택해야 합니다.`;
