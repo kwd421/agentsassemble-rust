@@ -159,7 +159,12 @@ async fn paired_socket_retains_session_provenance_and_leave_preserves_native_hos
         .unwrap_or_else(|error| panic!("authorize host: {error}"));
     let now = chrono::Utc::now();
     store
-        .create_operator_pairing(&manager, &[0x51; 32], "https://room.example.test", now)
+        .create_operator_pairing(
+            &agentsassemble_persistence::RoomManagerAuthority::Local(manager.clone()),
+            &[0x51; 32],
+            "https://room.example.test",
+            now,
+        )
         .await
         .unwrap_or_else(|error| panic!("create pair: {error}"));
     let paired = store

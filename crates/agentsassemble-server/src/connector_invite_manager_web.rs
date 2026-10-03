@@ -18,6 +18,7 @@ use crate::{
 registered_routes! {
     fn manager_routes<AppState>() {
         private "/api/room-connector/invite" => post(create),
+        same_origin_public "/api/central-owner/room-connector/invite" => post(create),
     }
 }
 
@@ -34,16 +35,43 @@ async fn create(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<CreatedConnectorInvite>, ConnectorHttpError> {
-    let bearer =
-        bearer_credential(request.headers()).ok_or_else(ConnectorHttpError::unauthorized)?;
-    let grant = state
-        .tickets
-        .consume_connector_invite_create(bearer)
+    let remote = request.uri().path().starts_with("/api/central-owner/");
+    let (authority, binding) = if remote {
+        crate::room_session_http_authority::central_owner_room_manager(
+            &state,
+            request.headers(),
+            request
+                .extensions()
+                .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+        )
         .await
-        .map_err(|_| ConnectorHttpError::unauthorized())?;
+        .map_err(|error| match error {
+            crate::room_session_http_authority::RoomSessionBearerError::Persistence(error) => {
+                ConnectorHttpError::from_persistence(error)
+            }
+            crate::room_session_http_authority::RoomSessionBearerError::Invalid => {
+                ConnectorHttpError::unauthorized()
+            }
+        })?
+    } else {
+        let bearer =
+            bearer_credential(request.headers()).ok_or_else(ConnectorHttpError::unauthorized)?;
+        let grant = state
+            .tickets
+            .consume_connector_invite_create(bearer)
+            .await
+            .map_err(|_| ConnectorHttpError::unauthorized())?;
+        (
+            RoomManagerAuthority::Local(grant.authority.clone()),
+            grant.authority,
+        )
+    };
     let payload: CreateConnectorInviteRequest = decode_json_body(request, 8192).await?;
     let request_id =
         Uuid::parse_str(&payload.request_id).map_err(|_| ConnectorHttpError::invalid())?;
+    if remote && payload.reach == InviteReach::Local {
+        return Err(ConnectorHttpError::invalid());
+    }
     let origin = match payload.reach {
         InviteReach::Public => state
             .public_ingress
@@ -64,15 +92,10 @@ async fn create(
             )
         })?,
     };
-    let room_uid = grant.authority.room_uid.to_string();
+    let room_uid = binding.room_uid.to_string();
     let invite = state
         .store
-        .create_connector_invite(
-            &RoomManagerAuthority::Local(grant.authority),
-            request_id,
-            payload.scope,
-            Utc::now(),
-        )
+        .create_connector_invite(&authority, request_id, payload.scope, Utc::now())
         .await
         .map_err(ConnectorHttpError::from_persistence)?;
     let mut join = url::Url::parse(&format!("{}/join", origin.trim_end_matches('/')))

@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     LocalRoomManagerAuthority, PersistenceError, RoomUserIdentity, SqliteStore,
-    room_user_identity::{require_exact_local_room_manager, resolve_local_room_manager},
+    room_user_identity::resolve_local_room_manager,
     session_bearer::{SessionBearerPurpose, derive_session_bearer},
 };
 
@@ -264,13 +264,13 @@ impl SqliteStore {
         Ok(redemption)
     }
 
-    /// Creates a bounded grant for an exact local manager and ready ingress origin.
+    /// Creates a bounded grant for an exact current room manager and ready ingress origin.
     ///
     /// # Errors
     /// Rejects stale manager authority, invalid origin, capacity exhaustion and storage failures.
     pub async fn create_operator_pairing(
         &self,
-        manager: &LocalRoomManagerAuthority,
+        authority: &crate::RoomManagerAuthority,
         token_fingerprint: &[u8; 32],
         target_origin: &str,
         now: DateTime<Utc>,
@@ -278,7 +278,7 @@ impl SqliteStore {
         let now = timestamp(now.timestamp_micros())?;
         require_origin(target_origin)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        require_exact_local_room_manager(&mut tx, manager).await?;
+        let manager = authority.exact_binding(&mut tx).await?;
         sqlx::query(
             "DELETE FROM operator_pairings WHERE COALESCE(session_expires_at, expires_at) <= ?",
         )
@@ -412,14 +412,14 @@ impl SqliteStore {
     /// Revokes exactly one grant and returns its session fingerprint for publication after commit.
     ///
     /// # Errors
-    /// Rejects stale local manager authority, foreign pairings and storage failures.
+    /// Rejects stale manager authority, foreign pairings and storage failures.
     pub async fn revoke_operator_pairing(
         &self,
-        manager: &LocalRoomManagerAuthority,
+        authority: &crate::RoomManagerAuthority,
         pairing_id: Uuid,
     ) -> Result<Option<[u8; 32]>, PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        require_exact_local_room_manager(&mut tx, manager).await?;
+        let manager = authority.exact_binding(&mut tx).await?;
         let row = sqlx::query("SELECT * FROM operator_pairings WHERE pairing_id = ?")
             .bind(pairing_id.to_string())
             .fetch_optional(&mut *tx)
@@ -429,7 +429,7 @@ impl SqliteStore {
             return Ok(None);
         };
         let record = PairingRecord::decode(&row)?;
-        if record.manager != *manager {
+        if record.manager != manager {
             return Err(unavailable());
         }
         sqlx::query("UPDATE operator_pairings SET revoked = 1 WHERE pairing_id = ?")

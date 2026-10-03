@@ -126,8 +126,8 @@ pub async fn persist_invite(
         .await
         .unwrap_or_else(|error| panic!("authorize human invite manager: {error}"));
     store
-        .create_human_invite_for_local_manager(
-            &manager,
+        .create_human_invite_for_manager(
+            &agentsassemble_persistence::RoomManagerAuthority::Local(manager.clone()),
             NewHumanInvite {
                 signed_token_fingerprint: *credentials.signed_token_fingerprint(),
                 join_code_fingerprint: *credentials.join_code_fingerprint(),

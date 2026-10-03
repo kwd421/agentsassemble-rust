@@ -195,7 +195,7 @@ impl RoomRuntime {
 
     pub(crate) async fn revoke_operator_pairing(
         &self,
-        manager: &agentsassemble_persistence::LocalRoomManagerAuthority,
+        manager: &agentsassemble_persistence::RoomManagerAuthority,
         pairing_id: uuid::Uuid,
     ) -> Result<(), PersistenceError> {
         let fingerprint = self
@@ -204,7 +204,7 @@ impl RoomRuntime {
             .await?;
         if let Some(fingerprint) = fingerprint {
             let rooms = self.rooms.lock().await;
-            if let Some(handle) = rooms.get(&manager.manager.room_id) {
+            if let Some(handle) = rooms.get(manager.room_id()) {
                 let _ = handle.human_session_revocations.send(fingerprint);
             }
         }

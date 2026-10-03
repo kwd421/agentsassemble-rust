@@ -531,8 +531,8 @@ impl HumanSessionFixture {
                 .unwrap_or_else(|_| panic!("human session fixture marker overflow"));
             let join_fingerprint = [marker.saturating_add(0x40); 32];
             store
-                .create_human_invite_for_local_manager(
-                    &manager,
+                .create_human_invite_for_manager(
+                    &agentsassemble_persistence::RoomManagerAuthority::Local(manager.clone()),
                     NewHumanInvite {
                         signed_token_fingerprint: [marker; 32],
                         join_code_fingerprint: join_fingerprint,

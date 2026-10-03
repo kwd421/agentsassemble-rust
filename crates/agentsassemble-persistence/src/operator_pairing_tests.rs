@@ -155,7 +155,12 @@ async fn verify_owner_profile_authority(
             .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"))
     );
     store
-        .create_operator_pairing(manager, &[20; 32], ORIGIN, now)
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local((manager).clone()),
+            &[20; 32],
+            ORIGIN,
+            now,
+        )
         .await
         .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
     let ordinary = store
@@ -230,7 +235,12 @@ async fn archive_revokes_used_and_unused_pairings_permanently_after_restore() {
     let now = Utc::now();
     for token in [[1; 32], [3; 32]] {
         store
-            .create_operator_pairing(&manager, &token, ORIGIN, now)
+            .create_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager.clone()),
+                &token,
+                ORIGIN,
+                now,
+            )
             .await
             .unwrap_or_else(|error| panic!("grant: {error}"));
     }
@@ -316,7 +326,12 @@ async fn concurrent_redemption_has_one_device_owner_and_retry_survives_token_exp
     let (store, manager) = fixture("sqlite::memory:").await;
     let now = Utc::now();
     let pairing = store
-        .create_operator_pairing(&manager, &[1; 32], ORIGIN, now)
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager.clone()),
+            &[1; 32],
+            ORIGIN,
+            now,
+        )
         .await
         .unwrap_or_else(|error| panic!("grant: {error}"));
     let (first, second) = tokio::join!(
@@ -375,7 +390,10 @@ async fn concurrent_redemption_has_one_device_owner_and_retry_survives_token_exp
         .unwrap_or_else(|error| panic!("commit: {error}"));
     assert_eq!(
         store
-            .revoke_operator_pairing(&manager, pairing.pairing_id)
+            .revoke_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager.clone()),
+                pairing.pairing_id
+            )
             .await
             .unwrap_or_else(|error| panic!("revoke: {error}")),
         Some(fingerprint)
@@ -403,7 +421,12 @@ async fn expiry_origin_and_room_incarnation_fail_without_consuming_grant() {
     let (store, manager) = fixture("sqlite::memory:").await;
     let now = Utc::now();
     store
-        .create_operator_pairing(&manager, &[1; 32], ORIGIN, now)
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager.clone()),
+            &[1; 32],
+            ORIGIN,
+            now,
+        )
         .await
         .unwrap_or_else(|error| panic!("grant: {error}"));
     assert_eq!(
@@ -466,7 +489,12 @@ async fn ordinary_human_bearer_domain_cannot_match_operator_session() {
     let (store, manager) = fixture("sqlite::memory:").await;
     let now = Utc::now();
     store
-        .create_operator_pairing(&manager, &[1; 32], ORIGIN, now)
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager.clone()),
+            &[1; 32],
+            ORIGIN,
+            now,
+        )
         .await
         .unwrap_or_else(|error| panic!("grant: {error}"));
     let paired = store
@@ -504,7 +532,12 @@ async fn consumed_pairing_survives_restart_and_queued_authority_observes_revocat
     let (store, manager) = fixture(&url).await;
     let now = Utc::now();
     let pairing = store
-        .create_operator_pairing(&manager, &[1; 32], ORIGIN, now)
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager.clone()),
+            &[1; 32],
+            ORIGIN,
+            now,
+        )
         .await
         .unwrap_or_else(|error| panic!("grant: {error}"));
     let first = store
@@ -522,7 +555,10 @@ async fn consumed_pairing_survives_restart_and_queued_authority_observes_revocat
         .unwrap_or_else(|error| panic!("retry: {error}"));
     assert_eq!(retry.session_bearer, first.session_bearer);
     store
-        .revoke_operator_pairing(&manager, pairing.pairing_id)
+        .revoke_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager.clone()),
+            pairing.pairing_id,
+        )
         .await
         .unwrap_or_else(|error| panic!("revoke: {error}"));
     let mut tx = store
@@ -554,7 +590,12 @@ async fn paired_attendee_observes_parent_expiry_membership_and_exact_host_room()
         // the attendee's ordinary hour, the limiting authority.
         let paired_at = now - SESSION_TTL + Duration::seconds(20);
         store
-            .create_operator_pairing(&manager, &[1; 32], ORIGIN, paired_at)
+            .create_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager.clone()),
+                &[1; 32],
+                ORIGIN,
+                paired_at,
+            )
             .await?;
         let paired = store
             .redeem_operator_pairing(&[1; 32], &[2; 32], ORIGIN, paired_at)

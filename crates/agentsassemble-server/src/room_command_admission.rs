@@ -150,6 +150,7 @@ mod tests {
             )
             .await
             .unwrap_or_else(|error| panic!("manager: {error}"));
+        let manager = agentsassemble_persistence::RoomManagerAuthority::Local(manager);
         let now = chrono::Utc::now();
         let mut sessions = Vec::new();
         for token in [[1; 32], [2; 32]] {

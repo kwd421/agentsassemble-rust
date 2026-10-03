@@ -245,7 +245,12 @@ async fn paired_image_uploads_revalidate_revocation_before_storage()
     let origin = "https://paired-assets.example.test";
     let now = chrono::Utc::now();
     let grant = store
-        .create_operator_pairing(&manager, &[71; 32], origin, now)
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager.clone()),
+            &[71; 32],
+            origin,
+            now,
+        )
         .await?;
     let paired = store
         .redeem_operator_pairing(&[71; 32], &[72; 32], origin, now)
@@ -258,7 +263,10 @@ async fn paired_image_uploads_revalidate_revocation_before_storage()
         .store_pending_room_appearance_asset(&authority, "room.png", "image/png", png()?)
         .await?;
     store
-        .revoke_operator_pairing(&manager, grant.pairing_id)
+        .revoke_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager.clone()),
+            grant.pairing_id,
+        )
         .await?;
     for result in [
         store

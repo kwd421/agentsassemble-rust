@@ -168,8 +168,8 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("authorize room manager: {error}"));
         store
-            .create_human_invite_for_local_manager(
-                &manager,
+            .create_human_invite_for_manager(
+                &agentsassemble_persistence::RoomManagerAuthority::Local(manager.clone()),
                 NewHumanInvite {
                     signed_token_fingerprint: *issued.signed_token_fingerprint(),
                     join_code_fingerprint: *issued.join_code_fingerprint(),

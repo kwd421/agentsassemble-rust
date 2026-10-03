@@ -25,6 +25,9 @@ use sha2::{Digest, Sha256};
 use tokio::{net::TcpListener, sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
+#[path = "central_owner_boundary/invitations.rs"]
+mod invitations;
+
 const ORIGIN: &str = "https://owner.example.test";
 const SECRET: &str = "central-owner-boundary-proxy-secret-0000001";
 const TOKEN: &str = "aacg1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
@@ -521,6 +524,7 @@ async fn verify_owner_profile(client: &reqwest::Client, address: SocketAddr, adm
             .bearer_auth(session)
     };
     verify_owner_friends(client, address, session).await;
+    invitations::verify(client, address, admission).await;
     let profile_url = format!("http://{address}/api/user-profile");
     let profile = authorized(client.get(&profile_url), DEVICE)
         .send()

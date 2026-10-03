@@ -82,3 +82,25 @@ pub(crate) async fn resolve_room_session_bearer(
         }
     }
 }
+
+/// Reuses admitted central-owner custody; the returned binding is metadata, not a native ticket.
+pub(crate) async fn central_owner_room_manager(
+    state: &AppState,
+    headers: &HeaderMap,
+    origin: Option<&TrustedIngressOrigin>,
+) -> Result<
+    (
+        agentsassemble_persistence::RoomManagerAuthority,
+        agentsassemble_persistence::LocalRoomManagerAuthority,
+    ),
+    RoomSessionBearerError,
+> {
+    let session = require_central_owner_session(state, headers, origin).await?;
+    let authority = agentsassemble_persistence::RoomManagerAuthority::Operator(Box::new(session));
+    let binding = state
+        .store
+        .authorize_room_manager(&authority)
+        .await
+        .map_err(RoomSessionBearerError::Persistence)?;
+    Ok((authority, binding))
+}

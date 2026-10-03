@@ -1,5 +1,5 @@
 use agentsassemble_domain::{InviteScope, clean_single_line, validate_room_id};
-use agentsassemble_persistence::{NewHumanInvite, PersistenceError};
+use agentsassemble_persistence::{NewHumanInvite, PersistenceError, RoomManagerAuthority};
 use axum::{
     Json, Router,
     extract::{Request, State},
@@ -68,6 +68,8 @@ registered_routes! {
     fn manager_routes<AppState>() {
         private "/api/room-invite/create" => post(create_invite),
         private "/api/room-invite/revoke" => post(revoke_invite),
+        same_origin_public "/api/central-owner/room-invite/create" => post(create_invite),
+        same_origin_public "/api/central-owner/room-invite/revoke" => post(revoke_invite),
     }
 }
 
@@ -84,11 +86,34 @@ async fn create_invite(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<CreateInviteResponse>, InviteManagerHttpError> {
-    let grant = consume_create_ticket(&state, request.headers()).await?;
+    let (authority, binding) = if request.uri().path().starts_with("/api/central-owner/") {
+        crate::room_session_http_authority::central_owner_room_manager(
+            &state,
+            request.headers(),
+            request
+                .extensions()
+                .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+        )
+        .await
+        .map_err(|error| match error {
+            crate::room_session_http_authority::RoomSessionBearerError::Persistence(error) => {
+                error.into()
+            }
+            crate::room_session_http_authority::RoomSessionBearerError::Invalid => {
+                InviteManagerHttpError::unauthorized()
+            }
+        })?
+    } else {
+        let grant = consume_create_ticket(&state, request.headers()).await?;
+        (
+            RoomManagerAuthority::Local(grant.authority.clone()),
+            grant.authority,
+        )
+    };
     let payload: CreateInviteRequest = decode_json_body(request, MAX_MANAGER_BODY_BYTES)
         .await
         .map_err(InviteManagerHttpError::from_body)?;
-    let room_id = bound_room_id(&grant, &payload.meeting_id)?;
+    let room_id = bound_room_id(&binding.manager.room_id, &payload.meeting_id)?;
     let display_name = clean_single_line(&payload.display_name, 128);
     let display_name = if display_name.is_empty() {
         "Guest".to_owned()
@@ -117,8 +142,8 @@ async fn create_invite(
         })?;
     let invite = state
         .store
-        .create_human_invite_for_local_manager(
-            &grant.authority,
+        .create_human_invite_for_manager(
+            &authority,
             NewHumanInvite {
                 signed_token_fingerprint: *credentials.signed_token_fingerprint(),
                 join_code_fingerprint: *credentials.join_code_fingerprint(),
@@ -159,14 +184,37 @@ async fn revoke_invite(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<serde_json::Value>, InviteManagerHttpError> {
-    let grant = consume_revoke_ticket(&state, request.headers()).await?;
+    let (authority, binding) = if request.uri().path().starts_with("/api/central-owner/") {
+        crate::room_session_http_authority::central_owner_room_manager(
+            &state,
+            request.headers(),
+            request
+                .extensions()
+                .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+        )
+        .await
+        .map_err(|error| match error {
+            crate::room_session_http_authority::RoomSessionBearerError::Persistence(error) => {
+                error.into()
+            }
+            crate::room_session_http_authority::RoomSessionBearerError::Invalid => {
+                InviteManagerHttpError::unauthorized()
+            }
+        })?
+    } else {
+        let grant = consume_revoke_ticket(&state, request.headers()).await?;
+        (
+            RoomManagerAuthority::Local(grant.authority.clone()),
+            grant.authority,
+        )
+    };
     let payload: RevokeInviteRequest = decode_json_body(request, MAX_MANAGER_BODY_BYTES)
         .await
         .map_err(InviteManagerHttpError::from_body)?;
-    bound_room_id(&grant, &payload.meeting_id)?;
+    bound_room_id(&binding.manager.room_id, &payload.meeting_id)?;
     if !state
         .store
-        .revoke_human_invite_for_local_manager(&grant.authority, &payload.invite_id)
+        .revoke_human_invite_for_manager(&authority, &payload.invite_id)
         .await?
     {
         return Err(InviteManagerHttpError::not_found());
@@ -200,13 +248,10 @@ async fn consume_revoke_ticket(
         .map_err(|_| InviteManagerHttpError::unauthorized())
 }
 
-fn bound_room_id(
-    grant: &ConsumedLocalRoomManagerTicket,
-    requested: &str,
-) -> Result<String, InviteManagerHttpError> {
+fn bound_room_id(expected: &str, requested: &str) -> Result<String, InviteManagerHttpError> {
     let room_id = validate_room_id(requested)
         .map_err(|error| InviteManagerHttpError::bad_request(error.message))?;
-    if room_id != grant.authority.manager.room_id {
+    if room_id != expected {
         return Err(InviteManagerHttpError::unauthorized());
     }
     Ok(room_id)

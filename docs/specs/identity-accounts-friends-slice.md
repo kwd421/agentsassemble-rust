@@ -379,6 +379,35 @@ friend save/conflict/delete, and visible failure/retry in the shared UI. Reuse t
 existing boundary/UI tests and packaged/browser verification; no new automated
 security scan or separate regression harness is authorized by this correction.
 
+### Shared invitation transport correction (2026-10-03)
+
+Required behavior: the room header, room menu and room settings open the same
+Claude-edited invitation dialog in the native and central-owner web workspace.
+People links retain scope, name, use limit, expiry, copy and revocation; connector
+and saved AI friend invitations retain their existing request-ID replay and entry
+instructions; device links retain room binding, expiry, copy and revocation.
+Selecting another room must admit that exact room before using its invitation
+session. Closing or changing authority retires pending results without hiding an
+uncertain dispatched write or retrying it with local privileges.
+
+The existing room-manager storage owner revalidates native manager provenance or
+an admitted central-owner operator session inside each invitation transaction.
+Browser routes require the current same-origin, device-bound, unexpired central
+owner session. Human guests and ordinary device pairings are denied these owner
+entry points. Pairing links minted here remain ordinary room-only pairings; they
+never inherit central-owner or native process authority. Existing private purpose
+routes and one-use tickets remain private. The browser reads only the active public
+invitation origin; it receives no tunnel controls, private host diagnostics or native
+IPC. Native ingress start/stop and local-only AI reach retain their actual host
+capability. Remote failure is visible; no fallback transport is selected.
+
+Acceptance uses existing manager boundary and shared-dialog checks plus the signed
+isolated app and current Chrome review: issue/copy/revoke people and device links,
+create connector and saved-AI instructions without running a provider, change rooms,
+and reject wrong device/origin, expired/revoked sessions and stale room generations
+without writes. Retain Claude's layout. This closes invitation transport only;
+remaining app/web acceptance and the user's duplicate macOS-server diagnosis follow.
+
 ### Local Google account binding and guest retirement
 
 On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,

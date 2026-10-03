@@ -12682,3 +12682,22 @@ No product UI or styles were replaced. The correction contract is recorded in
 - Actual empty/reconnect UI, invitations, Windows and overall parity remain open.
   No automated scan, subagent, real provider execution or production data migration/
   deletion was performed. Installed 0.1.4 remains unchanged.
+
+## Shared invitation transport correction (2026-10-03)
+
+The existing room manager now owns native and admitted central-owner human,
+connector, saved-AI-friend and device invitation writes. Private purpose-ticket
+routes remain private; explicit same-origin owner routes require the existing
+room session/device custody. Every storage write revalidates session provenance;
+new device pairings remain room-only. Remote status reads expose only the public
+invitation origin. Native ingress controls and local connector reach remain native.
+
+Local verification: 11 existing server HTTP boundary tests pass, with the central
+owner flow extended through create/revoke, connector/friend exact replay, wrong
+device, mismatched room/UID, ordinary-pairing denial and device revocation. All 358
+persistence tests pass; server and persistence all-target release Clippy pass.
+All 165 frontend files / 958 tests pass, including the existing human-intent and
+controller cases extended to explicit remote transport, uncertain dispatch and
+native-control denial. Required architecture/source gates and 19 policy/artifact
+checks pass; formatting and diff checks pass. Signed isolated packaged and Chrome
+verification are in progress. This is not whole app/web acceptance or Windows proof.

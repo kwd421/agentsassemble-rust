@@ -216,7 +216,12 @@ async fn recovery_issue_rejects_wrong_device_and_paired_operator_authority() {
         server
             .state
             .store
-            .create_operator_pairing(&manager, &[4; 32], ORIGIN, Utc::now())
+            .create_operator_pairing(
+                &agentsassemble_persistence::RoomManagerAuthority::Local(manager.clone()),
+                &[4; 32],
+                ORIGIN,
+                Utc::now(),
+            )
             .await,
     );
     let paired = checked(

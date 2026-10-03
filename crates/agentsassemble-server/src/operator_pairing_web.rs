@@ -1,4 +1,6 @@
-use agentsassemble_persistence::{LocalRoomManagerAuthority, PersistenceError};
+use agentsassemble_persistence::{
+    LocalRoomManagerAuthority, PersistenceError, RoomManagerAuthority,
+};
 use axum::{
     Json, Router,
     extract::{Request, State},
@@ -53,6 +55,8 @@ registered_routes! {
     fn pairing_routes<AppState>() {
         private "/api/operator-pairing/create" => post(create),
         private "/api/operator-pairing/revoke" => post(revoke),
+        same_origin_public "/api/central-owner/operator-pairing/create" => post(create),
+        same_origin_public "/api/central-owner/operator-pairing/revoke" => post(revoke),
         same_origin_public "/api/operator-pairing/redeem" => post(redeem),
     }
 }
@@ -74,13 +78,35 @@ async fn create(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, PairingHttpError> {
-    consume_local_operator(&state, request.headers())
-        .await
-        .ok_or_else(PairingHttpError::unauthorized)?;
+    let remote = if request.uri().path().starts_with("/api/central-owner/") {
+        Some(
+            crate::room_session_http_authority::central_owner_room_manager(
+                &state,
+                request.headers(),
+                request
+                    .extensions()
+                    .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+            )
+            .await
+            .map_err(|error| match error {
+                crate::room_session_http_authority::RoomSessionBearerError::Persistence(error) => {
+                    error.into()
+                }
+                crate::room_session_http_authority::RoomSessionBearerError::Invalid => {
+                    PairingHttpError::unauthorized()
+                }
+            })?,
+        )
+    } else {
+        consume_local_operator(&state, request.headers())
+            .await
+            .ok_or_else(PairingHttpError::unauthorized)?;
+        None
+    };
     let body: CreateRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(PairingHttpError::body)?;
-    let manager = resolve_manager(&state, body).await?;
+    let manager = resolve_manager(&state, body, remote).await?;
     let origin = ready_origin(&state)?;
     let mut bytes = [0; 32];
     SystemRandom::new()
@@ -103,13 +129,35 @@ async fn revoke(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<Value>, PairingHttpError> {
-    consume_local_operator(&state, request.headers())
-        .await
-        .ok_or_else(PairingHttpError::unauthorized)?;
+    let remote = if request.uri().path().starts_with("/api/central-owner/") {
+        Some(
+            crate::room_session_http_authority::central_owner_room_manager(
+                &state,
+                request.headers(),
+                request
+                    .extensions()
+                    .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+            )
+            .await
+            .map_err(|error| match error {
+                crate::room_session_http_authority::RoomSessionBearerError::Persistence(error) => {
+                    error.into()
+                }
+                crate::room_session_http_authority::RoomSessionBearerError::Invalid => {
+                    PairingHttpError::unauthorized()
+                }
+            })?,
+        )
+    } else {
+        consume_local_operator(&state, request.headers())
+            .await
+            .ok_or_else(PairingHttpError::unauthorized)?;
+        None
+    };
     let body: RevokeRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(PairingHttpError::body)?;
-    let manager = resolve_manager(&state, body.authority).await?;
+    let manager = resolve_manager(&state, body.authority, remote).await?;
     state
         .rooms
         .revoke_operator_pairing(&manager, body.pairing_id)
@@ -171,7 +219,18 @@ async fn redeem(
 async fn resolve_manager(
     state: &AppState,
     body: CreateRequest,
-) -> Result<LocalRoomManagerAuthority, PairingHttpError> {
+    remote: Option<(RoomManagerAuthority, LocalRoomManagerAuthority)>,
+) -> Result<RoomManagerAuthority, PairingHttpError> {
+    if let Some((authority, binding)) = remote {
+        if body.server_id != binding.server_id
+            || body.authority_lineage_id != binding.authority_lineage_id
+            || body.room_id != binding.manager.room_id
+            || body.room_uid != binding.room_uid.to_string()
+        {
+            return Err(PairingHttpError::unauthorized());
+        }
+        return Ok(authority);
+    }
     crate::ticket_issuer::resolve_local_room_manager(
         state,
         &crate::ManagerRoomAuthorityRequest {
@@ -182,6 +241,7 @@ async fn resolve_manager(
         },
     )
     .await
+    .map(RoomManagerAuthority::Local)
     .map_err(|error| match error {
         crate::TicketIssueError::Persistence(error) => error.into(),
         _ => PairingHttpError::unauthorized(),

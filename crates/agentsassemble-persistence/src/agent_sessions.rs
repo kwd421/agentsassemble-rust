@@ -143,7 +143,12 @@ mod tests {
         let now = chrono::Utc::now();
         let origin = "https://room.example.test";
         let pairing = store
-            .create_operator_pairing(&manager, &[1; 32], origin, now)
+            .create_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager.clone()),
+                &[1; 32],
+                origin,
+                now,
+            )
             .await
             .unwrap_or_else(|error| panic!("pairing: {error}"));
         let redeemed = store
@@ -173,7 +178,10 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("configure: {error}"));
         store
-            .revoke_operator_pairing(&manager, pairing.pairing_id)
+            .revoke_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager.clone()),
+                pairing.pairing_id,
+            )
             .await
             .unwrap_or_else(|error| panic!("revoke: {error}"));
         let errors = [

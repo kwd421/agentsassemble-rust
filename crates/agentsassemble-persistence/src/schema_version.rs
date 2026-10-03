@@ -107,7 +107,7 @@ mod tests {
                 .await?;
             store
                 .create_operator_pairing(
-                    &manager,
+                    &crate::RoomManagerAuthority::Local(manager.clone()),
                     &[31; 32],
                     "https://preserved.example.test",
                     chrono::Utc::now(),

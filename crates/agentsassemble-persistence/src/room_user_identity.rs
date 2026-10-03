@@ -34,6 +34,33 @@ pub enum RoomManagerAuthority {
 }
 
 impl RoomManagerAuthority {
+    #[must_use]
+    pub fn room_id(&self) -> &str {
+        match self {
+            Self::Local(binding) => &binding.manager.room_id,
+            Self::Operator(session) => &session.principal().room_id,
+        }
+    }
+
+    pub(crate) async fn exact_binding(
+        &self,
+        transaction: &mut Transaction<'_, Sqlite>,
+    ) -> Result<LocalRoomManagerAuthority, PersistenceError> {
+        if let Self::Local(binding) = self {
+            binding.resolve(transaction).await?;
+            return Ok(binding.clone());
+        }
+        let identity = self.resolve(transaction).await?;
+        let (binding, _) = resolve_local_room_manager(
+            transaction,
+            &identity.room_id,
+            &identity.user_id,
+            &identity.participant_id,
+        )
+        .await?;
+        Ok(binding)
+    }
+
     pub(crate) async fn resolve(
         &self,
         transaction: &mut Transaction<'_, Sqlite>,
@@ -57,6 +84,20 @@ impl RoomManagerAuthority {
 }
 
 impl SqliteStore {
+    /// Reads the exact current manager binding without granting native host authority.
+    ///
+    /// # Errors
+    /// Rejects stale room/session provenance or incomplete local bootstrap custody.
+    pub async fn authorize_room_manager(
+        &self,
+        authority: &RoomManagerAuthority,
+    ) -> Result<LocalRoomManagerAuthority, PersistenceError> {
+        let mut transaction = self.pool.begin().await?;
+        let binding = authority.exact_binding(&mut transaction).await?;
+        transaction.commit().await?;
+        Ok(binding)
+    }
+
     /// Resolves one current room human through the canonical profile binding.
     ///
     /// # Errors

@@ -2,6 +2,16 @@
 
 ## Active work
 
+- 2026-10-03 invitation transport correction: preserve Claude's shared dialog;
+  human, connector, saved-AI-friend and device issuance reuse current room-manager
+  transactions with explicit native or central-owner room-session transport.
+  Native ingress controls remain host-owned; newly paired devices remain room-only.
+  11 HTTP boundaries, 358 persistence checks, 958 frontend checks, Clippy and
+  mandatory gates pass. Signed isolated Mac/Chrome verification and full parity
+  remain open. After parity work, diagnose the user's two macOS server rows without
+  deleting registrations. Contract/evidence: identity-accounts-friends slice and
+  `docs/VERIFICATION.md` -> Shared invitation transport correction.
+
 - 2026-10-03 live owner directory correction: retain Claude's UI baseline; committed
   create/settings/archive/restore/close/delete/cleanup now invalidate a separate
   authenticated owner directory connection, including empty workspaces. Shared

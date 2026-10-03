@@ -25,6 +25,7 @@ use uuid::Uuid;
 registered_routes! {
     fn entry_routes<AppState>() {
         private "/api/room-attendee/friend-invite" => post(friend),
+        same_origin_public "/api/central-owner/room-attendee/friend-invite" => post(friend),
         same_origin_public "/api/room-attendee/companion-invite" => post(companion),
     }
 }
@@ -42,19 +43,40 @@ async fn friend(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Json<AttendeeEntryPacket>, AttendeeHttpError> {
-    let bearer = bearer_credential(request.headers()).ok_or_else(unauthorized)?;
-    let grant = state
-        .tickets
-        .consume_attendee_invite_create(bearer)
+    let (authority, binding) = if request.uri().path().starts_with("/api/central-owner/") {
+        crate::room_session_http_authority::central_owner_room_manager(
+            &state,
+            request.headers(),
+            request
+                .extensions()
+                .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+        )
         .await
-        .map_err(|_| unauthorized())?;
+        .map_err(|error| match error {
+            RoomSessionBearerError::Persistence(error) => {
+                AttendeeHttpError::from_persistence(error)
+            }
+            RoomSessionBearerError::Invalid => unauthorized(),
+        })?
+    } else {
+        let bearer = bearer_credential(request.headers()).ok_or_else(unauthorized)?;
+        let grant = state
+            .tickets
+            .consume_attendee_invite_create(bearer)
+            .await
+            .map_err(|_| unauthorized())?;
+        (
+            RoomManagerAuthority::Local(grant.authority.clone()),
+            grant.authority,
+        )
+    };
     let body: CreateFriendAttendeeInvite = decode_json_body(request, 8192).await?;
     let origin = public_origin(&state)?;
-    let room_id = grant.authority.manager.room_id.clone();
+    let room_id = binding.manager.room_id.clone();
     let invite = state
         .store
         .create_friend_attendee_invite(
-            &RoomManagerAuthority::Local(grant.authority),
+            &authority,
             parse_id(&body.request_id)?,
             parse_id(&body.friend_id)?,
             registered_provider_kind,

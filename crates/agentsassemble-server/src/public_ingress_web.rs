@@ -22,6 +22,7 @@ const MAX_CONTROL_BODY_BYTES: usize = 4 * 1024;
 registered_routes! {
     fn control_routes<AppState>() {
         private "/api/public-invite/status" => get(status),
+        same_origin_public "/api/central-owner/public-invite/origin" => get(invite_origin),
         private "/api/public-invite/tunnel/start" => post(start),
         private "/api/public-invite/tunnel/stop" => post(stop),
     }
@@ -34,6 +35,37 @@ pub(crate) fn routes() -> Router<AppState> {
             PRIVATE_NO_STORE.clone(),
         ))
         .layer(exact_tauri_cors([Method::GET, Method::POST]))
+}
+
+async fn invite_origin(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<serde_json::Value>, ControlApiError> {
+    crate::room_session_http_authority::central_owner_room_manager(
+        &state,
+        request.headers(),
+        request
+            .extensions()
+            .get::<crate::ingress_trust::TrustedIngressOrigin>(),
+    )
+    .await
+    .map_err(|error| match error {
+        crate::room_session_http_authority::RoomSessionBearerError::Invalid => {
+            ControlApiError::unauthorized()
+        }
+        crate::room_session_http_authority::RoomSessionBearerError::Persistence(error) => {
+            ControlApiError::from(error)
+        }
+    })?;
+    ensure_empty_body(request, MAX_CONTROL_BODY_BYTES)
+        .await
+        .map_err(ControlApiError::from)?;
+    let public_url = state
+        .public_ingress
+        .ready_snapshot()
+        .ok_or_else(ControlApiError::unauthorized)?
+        .public_url;
+    Ok(Json(json!({"public_url": public_url})))
 }
 
 async fn status(
@@ -151,5 +183,22 @@ impl IntoResponse for ControlApiError {
             Json(json!({"error": {"code": self.code, "message": self.message}})),
         )
             .into_response()
+    }
+}
+
+impl From<agentsassemble_persistence::PersistenceError> for ControlApiError {
+    fn from(error: agentsassemble_persistence::PersistenceError) -> Self {
+        match error {
+            agentsassemble_persistence::PersistenceError::CommandRejected { .. }
+            | agentsassemble_persistence::PersistenceError::RoomMissing
+            | agentsassemble_persistence::PersistenceError::ParticipantMissing => {
+                Self::unauthorized()
+            }
+            _ => Self {
+                status: StatusCode::INTERNAL_SERVER_ERROR,
+                code: "ingress_status_failed",
+                message: "Invitation origin could not be read.",
+            },
+        }
     }
 }
