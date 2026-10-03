@@ -2,6 +2,17 @@
 
 ## Active work
 
+- 2026-10-03 server-wide owner account correction: profiles, bounded avatars and
+  saved friends reuse the centrally redeemed server-owner grant without room
+  admission. Existing authenticated directory invalidation now carries the canonical
+  host profile revision, including zero rooms. HTTP9, persistence358, frontend962,
+  Clippy and mandatory gates pass. Signed Mac/Chrome empty-server read/edit, live
+  profile changes both directions, first-room creation and reload pass; originals
+  are restored. Deletion progress/recovery, actual network reconnect, Windows and
+  overall parity remain open. Diagnose the two macOS registrations afterward,
+  without deleting them. Evidence: `docs/VERIFICATION.md` -> Server-wide owner
+  profile and friends without rooms.
+
 - 2026-10-03 invitation transport correction: preserve Claude's shared dialog;
   human, connector, saved-AI-friend and device issuance reuse current room-manager
   transactions with explicit native or central-owner room-session transport.

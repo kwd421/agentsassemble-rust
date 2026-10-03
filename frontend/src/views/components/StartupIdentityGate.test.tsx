@@ -32,6 +32,7 @@ const directory = (authority_lineage_id = LINEAGE_ID) => ({
   server_id: SERVER_ID,
   authority_lineage_id,
   server_product_surface: SERVER_SURFACE,
+  profile_revision: 2,
   rooms: [],
 });
 const desktopProfile = {

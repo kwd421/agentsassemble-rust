@@ -1,5 +1,5 @@
 use agentsassemble_domain::{RoomStatus, clean_single_line, public_settings, validate_room_id};
-use agentsassemble_persistence::{LocalBootstrapPhase, PersistenceError, StoredRoomSummary};
+use agentsassemble_persistence::{PersistenceError, StoredRoomSummary};
 use axum::{
     Json, Router,
     extract::{Query, Request, State},
@@ -243,11 +243,13 @@ async fn list_rooms(
         query.include_archived.trim().to_ascii_lowercase().as_str(),
         "1" | "true" | "yes" | "on"
     );
-    let bootstrap = state.store.local_bootstrap_status().await?;
-    if bootstrap.phase != LocalBootstrapPhase::Complete {
-        return Err(DirectoryHttpError::authority_unavailable());
-    }
-    let rooms = state.store.list_room_directory(include_archived).await?;
+    let (bootstrap, rooms, profile_revision) = state
+        .store
+        .list_room_directory_for_owner(
+            &agentsassemble_persistence::ServerOwnerAuthority::LocalOperator,
+            include_archived,
+        )
+        .await?;
     let rooms = rooms
         .iter()
         .map(|room| room_payload(room, "agent_session"))
@@ -257,6 +259,7 @@ async fn list_rooms(
         "authority_lineage_id": bootstrap.authority_lineage_id,
         "server_product_surface": state.server_product_surface,
         "rooms": rooms,
+        "profile_revision": profile_revision,
     })))
 }
 
@@ -423,6 +426,9 @@ impl DirectoryHttpError {
 impl From<PersistenceError> for DirectoryHttpError {
     fn from(error: PersistenceError) -> Self {
         match error {
+            PersistenceError::CommandRejected { code, .. } if code == "bootstrap_required" => {
+                Self::authority_unavailable()
+            }
             PersistenceError::CommandConflict => Self {
                 status: StatusCode::CONFLICT,
                 code: "command_conflict".into(),

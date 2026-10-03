@@ -51,6 +51,13 @@ async fn authorize(
     remote: bool,
 ) -> Result<ServerOwnerAuthority, Failure> {
     if remote {
+        if crate::http_api::bearer_credential(headers)
+            .is_some_and(|token| token.starts_with("aacg1."))
+        {
+            return crate::central_owner_web::owner_from_grant_headers(state, headers, origin)
+                .await
+                .map_err(|error| failure(error.status, error.code, error.message));
+        }
         return crate::room_session_http_authority::require_central_owner_session(
             state, headers, origin,
         )
@@ -150,7 +157,8 @@ fn storage_error(error: PersistenceError) -> Failure {
             let status = match code.as_bytes() {
                 b"friend_invalid" => StatusCode::BAD_REQUEST,
                 b"friend_conflict" => StatusCode::CONFLICT,
-                b"session_revoked" => StatusCode::UNAUTHORIZED,
+                b"session_revoked" | b"central_connect_invalid" => StatusCode::UNAUTHORIZED,
+                b"pairing_capacity" => StatusCode::TOO_MANY_REQUESTS,
                 _ => StatusCode::SERVICE_UNAVAILABLE,
             };
             failure(status, &code, &message)

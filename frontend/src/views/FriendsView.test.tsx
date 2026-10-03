@@ -14,9 +14,9 @@ beforeEach(() => {
   api.save.mockImplementation(async (request: SaveFriend) => ({ friend_id: request.friend_id, revision: request.expected_revision + 1, details: request.details, created_at: "2026-09-08T00:00:00Z", updated_at: "2026-09-08T00:00:00Z" }));
 });
 
-it("keeps a failed creation draft and its ID for retry, then cancels an edit without saving", async () => {
+it.each([false, true])("keeps failed creation custody and cancels edits (server grant: %s)", async (grant) => {
   api.save.mockRejectedValueOnce(new Error("저장 실패"));
-  const authority = { kind: "remote" as const, sessionToken: "owner-session", deviceToken: "owner-device" };
+  const authority = grant ? { kind: "central_grant" as const, credential: { grantToken: "owner-grant", generation: 3 }, deviceToken: "owner-device" } : { kind: "remote" as const, sessionToken: "owner-session", deviceToken: "owner-device" };
   render(<FriendsView authority={authority} onClose={vi.fn()} />);
   const add = screen.getByRole("button", { name: "친구 추가" });
   await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false));

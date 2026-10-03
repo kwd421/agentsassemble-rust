@@ -97,7 +97,7 @@ async fn read_profile(
         }
         ProfileAuthority::LocalOperator => state.store.local_operator_profile().await?,
         ProfileAuthority::CentralOwner(session) => {
-            state.store.central_owner_profile(&session).await?
+            state.store.server_owner_profile(&session).await?
         }
     };
     Ok(Json(json!({"profile": profile})))
@@ -132,7 +132,7 @@ async fn update_profile(
         ProfileAuthority::CentralOwner(session) => {
             state
                 .store
-                .update_central_owner_profile(&session, update.expected_revision, update.patch)
+                .update_server_owner_profile(&session, update.expected_revision, update.patch)
                 .await?
         }
         ProfileAuthority::LocalOperator => {
@@ -171,7 +171,9 @@ async fn upload_attachment(
         AttachmentUploadAuthority::Operator(session)
             if payload.purpose.trim() == "profile_avatar" && session.is_central_owner() =>
         {
-            AttachmentUploadAuthority::Profile(ProfileAuthority::CentralOwner(*session))
+            AttachmentUploadAuthority::Profile(ProfileAuthority::CentralOwner(
+                agentsassemble_persistence::ServerOwnerAuthority::CentralOwner(session),
+            ))
         }
         AttachmentUploadAuthority::Operator(session) => AttachmentUploadAuthority::Appearance(
             agentsassemble_persistence::RoomManagerAuthority::Operator(session),
@@ -291,7 +293,7 @@ async fn store_profile_attachment(
         ProfileAuthority::CentralOwner(session) => {
             state
                 .store
-                .store_central_owner_profile_attachment(
+                .store_server_owner_profile_attachment(
                     &session,
                     &payload.filename,
                     &payload.content_type,
@@ -459,7 +461,7 @@ fn attachment_response(
 }
 
 enum ProfileAuthority {
-    CentralOwner(agentsassemble_persistence::OperatorSessionAuthorization),
+    CentralOwner(agentsassemble_persistence::ServerOwnerAuthority),
     HumanSession(HumanSessionAuthorization),
     LocalOperator,
 }
@@ -550,6 +552,14 @@ async fn resolve_attachment_upload_authority(
     origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
 ) -> Result<AttachmentUploadAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
+    if credential.starts_with("aacg1.") {
+        let owner = crate::central_owner_web::owner_from_grant_headers(state, headers, origin)
+            .await
+            .map_err(|error| ProfileHttpError::new(error.status, error.code, error.message))?;
+        return Ok(AttachmentUploadAuthority::Profile(
+            ProfileAuthority::CentralOwner(owner),
+        ));
+    }
     match resolve_room_session_bearer(state, headers, origin, credential).await {
         Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
             return Ok(match *authorization {
@@ -588,6 +598,12 @@ async fn resolve_profile_authority(
     origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
 ) -> Result<ProfileAuthority, ProfileHttpError> {
     let credential = bearer_credential(headers).ok_or_else(ProfileHttpError::unauthorized)?;
+    if credential.starts_with("aacg1.") {
+        let owner = crate::central_owner_web::owner_from_grant_headers(state, headers, origin)
+            .await
+            .map_err(|error| ProfileHttpError::new(error.status, error.code, error.message))?;
+        return Ok(ProfileAuthority::CentralOwner(owner));
+    }
     match resolve_room_session_bearer(state, headers, origin, credential).await {
         Ok(RoomSessionBearerResolution::Authorized(authorization)) => {
             return match *authorization {
@@ -597,7 +613,11 @@ async fn resolve_profile_authority(
                 agentsassemble_persistence::RoomSessionAuthorization::Operator(session)
                     if session.is_central_owner() =>
                 {
-                    Ok(ProfileAuthority::CentralOwner(session))
+                    Ok(ProfileAuthority::CentralOwner(
+                        agentsassemble_persistence::ServerOwnerAuthority::CentralOwner(Box::new(
+                            session,
+                        )),
+                    ))
                 }
                 agentsassemble_persistence::RoomSessionAuthorization::Operator(_) => {
                     Err(ProfileHttpError::unauthorized())
@@ -700,7 +720,7 @@ impl From<PersistenceError> for ProfileHttpError {
         match error {
             PersistenceError::CommandRejected { code, message } => {
                 let status = match code.as_bytes() {
-                    b"session_revoked" => StatusCode::UNAUTHORIZED,
+                    b"session_revoked" | b"central_connect_invalid" => StatusCode::UNAUTHORIZED,
                     b"attachment_missing"
                     | b"attachment_not_found"
                     | b"appearance_asset_missing"
@@ -717,7 +737,9 @@ impl From<PersistenceError> for ProfileHttpError {
                     b"attachment_owner_mismatch" | b"profile_authority_mismatch" => {
                         StatusCode::FORBIDDEN
                     }
-                    b"attachment_quota_reached" => StatusCode::TOO_MANY_REQUESTS,
+                    b"pairing_capacity" | b"attachment_quota_reached" => {
+                        StatusCode::TOO_MANY_REQUESTS
+                    }
                     b"profile_revision_conflict" => StatusCode::CONFLICT,
                     b"attachment_too_large" => StatusCode::PAYLOAD_TOO_LARGE,
                     b"attachment_type_unsupported"

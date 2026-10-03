@@ -63,6 +63,7 @@ function directory(rooms: ReturnType<typeof directoryRoom>[]) {
     server_id: serverId,
     authority_lineage_id: lineageId,
     server_product_surface: surface,
+    profile_revision: 1,
     rooms,
   };
 }
@@ -169,6 +170,7 @@ describe("room directory contracts", () => {
       server_id: serverId,
       authority_lineage_id: lineageId,
       server_product_surface: surface,
+      profile_revision: 1,
       rooms: [],
     };
     await bindRoomDirectoryAuthority(

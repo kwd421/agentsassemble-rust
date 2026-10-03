@@ -6,7 +6,7 @@ import type { SaveFriend } from "../types/generated/SaveFriend";
 import type { SavedFriend } from "../types/generated/SavedFriend";
 import { isActivePresence, presenceStatusLabel } from "../lib/presenceStatus";
 
-import type { RoomHttpAuthority } from "../api/roomHttpAuthority";
+import type { SavedFriendsAuthority } from "../api/friends";
 
 const types: Record<FriendParticipantType, string> = {
   subscription_ai: "구독형 AI", api: "API", local: "Local", remote: "외부 AI", human: "사람", unknown: "기타",
@@ -23,7 +23,7 @@ function newFriend(): SaveFriend {
   } };
 }
 
-export default function FriendsView({ onClose, authority, userArea }: { onClose: () => void; authority?: RoomHttpAuthority; userArea?: ReactNode }) {
+export default function FriendsView({ onClose, authority, userArea }: { onClose: () => void; authority?: SavedFriendsAuthority; userArea?: ReactNode }) {
   const directory = useFriendsDirectory(authority);
   const [query, setQuery] = useState("");
   const [type, setType] = useState<FriendParticipantType | "all">("all");

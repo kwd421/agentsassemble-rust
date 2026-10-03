@@ -93,6 +93,7 @@ function verifiedDirectory(roomId: string, uid = roomUid) {
   return {
     server_id: serverId,
     authority_lineage_id: lineageId,
+    profile_revision: 1,
     rooms: [verifiedDirectoryRoom(roomId, uid)],
   };
 }
@@ -115,7 +116,7 @@ describe("useRoomDirectory", () => {
   });
 
   it("reconciles an empty remote workspace on invalidation without superseding foreground continuity", async () => {
-    const remoteFetch = vi.fn().mockResolvedValue({ server_id: serverId, authority_lineage_id: lineageId, rooms: [] });
+    const remoteFetch = vi.fn().mockResolvedValue({ server_id: serverId, authority_lineage_id: lineageId, profile_revision: 1, rooms: [] });
     const remoteOwner = { serverId, fetchRooms: remoteFetch, openStream: vi.fn() };
     const hook = renderHook(() => useRoomDirectory({ initialRooms: [], hostEnabled: false, remoteOwner }));
     await waitFor(() => expect(hook.result.current.syncIssue).toBeNull());
@@ -125,10 +126,15 @@ describe("useRoomDirectory", () => {
     await act(changed);
     expect(hook.result.current.rooms.map(room => room.meetingId)).toEqual(["new-from-another-client"]);
     expect(() => hook.result.current.validateRoomDirectoryContinuity(continuity)).not.toThrow();
+    remoteFetch.mockResolvedValue({ server_id: serverId, authority_lineage_id: lineageId, profile_revision: 3, rooms: [] });
+    await act(async () => { await changed(); });
+    expect(hook.result.current.rooms).toEqual([]);
+    expect(hook.result.current.ownerProfileRevision).toBe(3);
+    expect(() => hook.result.current.validateRoomDirectoryContinuity(continuity)).not.toThrow();
     hook.unmount();
     expect(subscriptionMocks.close).toHaveBeenCalledOnce();
     await changed();
-    expect(remoteFetch).toHaveBeenCalledTimes(2);
+    expect(remoteFetch).toHaveBeenCalledTimes(3);
   });
 
   it("resolves one frozen manager tuple only from the confirmed local directory", async () => {

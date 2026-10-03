@@ -416,6 +416,42 @@ and reject wrong device/origin, expired/revoked sessions and stale room generati
 without writes. Retain Claude's layout. This closes invitation transport only;
 remaining app/web acceptance and the user's duplicate macOS-server diagnosis follow.
 
+### Server-wide account access without room admission (2026-10-03)
+
+Required behavior: an authenticated server owner sees the same profile settings and
+saved friends when no room is open, while a room is being admitted, and after the
+last room is archived. These server-wide records must not require a fabricated
+room, membership or operator pairing. App and browser keep the shared settings and
+friends composition; the account transport is distinct from room-only authority.
+
+Reuse the existing centrally redeemed, five-minute, device/origin/generation-bound
+server-owner grant. Profile reads, revisioned writes and bounded avatar uploads,
+and saved-friend reads/writes, revalidate that owner in the same storage transaction.
+The host redeems against its configured central authority for each grant request.
+Explicit grant credential dispatch must reject invalid/expired/revoked custody,
+wrong device/origin/generation and ordinary room credentials without native fallback.
+No schema migration, extra token, timer, process or privilege inheritance is needed.
+Actual guest and paired room capabilities remain unchanged. Room invitations still
+require their exact admitted room session. Cancelled editors retain existing behavior;
+profile revisions and mutation event publication keep their existing owner.
+
+Use existing account/profile/friend and central-owner boundary checks; exercise the
+signed Mac and existing Chrome review after product-UI cleanup of this run's own
+regenerable test rooms, account/friend read/edit and first-room creation. The current
+UI has no archive/restore entry point; do not fabricate one for verification.
+No production data deletion or additional server registration is authorized here.
+
+The real empty-workspace check exposed stale cross-client profile presentation:
+profile storage committed, but only room participant events advertised its revision.
+The existing authenticated owner-directory stream must also invalidate on committed
+owner-profile changes. Its canonical directory read includes the existing host
+profile revision from the same owner transaction, even with zero rooms. Shared
+clients use that server revision for the existing UserPanel refresh; an open draft
+keeps its save revision and conflict behavior. No new stream, polling, local revision
+authority or expanded guest access. The extra read is one profile in the existing
+directory transaction; room-only profile projection events are preserved.
+
+
 ### Local Google account binding and guest retirement
 
 On an already bootstrapped room server, the retained public Google flow accepts a verified ID token with a short-lived,

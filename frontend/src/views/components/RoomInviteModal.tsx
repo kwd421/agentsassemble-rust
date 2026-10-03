@@ -1,4 +1,4 @@
-import type { RoomHttpAuthority } from "../../api/roomHttpAuthority";
+import type { SavedFriendsAuthority } from "../../api/friends";
 import { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import { AttendeeFriendInviteCard, type AttendeeInviteControls } from "./AttendeeFriendInviteCard";
 import { ConnectorInviteCard, type ConnectorInviteControls } from "./ConnectorInviteCard";
@@ -65,7 +65,7 @@ export default function RoomInviteModal({
   onStopTunnel,
 }: {
   roomLabel: string;
-  friendAuthority?: RoomHttpAuthority;
+  friendAuthority?: SavedFriendsAuthority;
   canControlIngress?: boolean;
   humanInvites?: readonly HumanInvitePresentation[];
   connectorInvites?: ConnectorInviteControls;

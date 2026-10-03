@@ -8,6 +8,7 @@ import {
   fileToBase64,
   postJsonWithIdentity,
   responseError,
+  type ServerOwnerGrantCredential,
 } from "./http";
 
 export interface UserProfile {
@@ -27,6 +28,7 @@ export interface UserProfile {
 
 export type UserProfileIdentity = {
   centralOwner?: boolean;
+  centralGrant?: ServerOwnerGrantCredential;
   sessionToken?: string;
   deviceToken?: string;
 };
@@ -133,7 +135,7 @@ async function requestDesktopProfile(
 export async function fetchUserProfile(
   identity: UserProfileIdentity = {}
 ): Promise<UserProfileSnapshot> {
-  if (!identity.sessionToken && isDesktopWebview()) {
+  if (!identity.centralGrant && !identity.sessionToken && isDesktopWebview()) {
     const result = await requestDesktopProfile({ cache: "no-store" });
     return {
       ...normalizeUserProfile(result.payload.profile),
@@ -163,7 +165,7 @@ export async function saveUserProfile(
     ...userProfileToApi(profile),
     expected_revision: expectedRevision,
   };
-  if (!identity.sessionToken && isDesktopWebview()) {
+  if (!identity.centralGrant && !identity.sessionToken && isDesktopWebview()) {
     const result = await requestDesktopProfile({
       cache: "no-store",
       method: "POST",

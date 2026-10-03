@@ -147,11 +147,11 @@ describe("desktop profile HTTP routing", () => {
 
     expect(invoke).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenNthCalledWith(1, "/api/user-profile", {
-      cache: "no-store",
+      cache: "no-store", redirect: "error", credentials: "omit", referrerPolicy: "no-referrer",
       headers: { Authorization: "Bearer guest-session" },
     });
     expect(fetchMock).toHaveBeenNthCalledWith(2, "/api/user-profile", {
-      cache: "no-store",
+      cache: "no-store", redirect: "error", credentials: "omit", referrerPolicy: "no-referrer",
       method: "POST",
       headers: {
         Authorization: "Bearer guest-session",

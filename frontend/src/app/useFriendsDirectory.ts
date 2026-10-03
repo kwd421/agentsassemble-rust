@@ -3,9 +3,9 @@ import { deleteFriend, fetchSavedFriends, saveFriend } from "../api/friends";
 import type { SaveFriend } from "../types/generated/SaveFriend";
 import type { SavedFriend } from "../types/generated/SavedFriend";
 
-import type { RoomHttpAuthority } from "../api/roomHttpAuthority";
+import type { SavedFriendsAuthority } from "../api/friends";
 
-export function useFriendsDirectory(authority: RoomHttpAuthority = { kind: "local" }) {
+export function useFriendsDirectory(authority: SavedFriendsAuthority = { kind: "local" }) {
   const scope = JSON.stringify(authority);
   const [loadedScope, setLoadedScope] = useState("");
   const [friends, setFriends] = useState<SavedFriend[] | null>(null);

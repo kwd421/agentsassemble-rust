@@ -135,8 +135,9 @@ async fn verify_owner_profile_authority(
     now: chrono::DateTime<Utc>,
 ) {
     assert!(authorization.is_central_owner());
+    let owner = crate::ServerOwnerAuthority::CentralOwner(Box::new(authorization.clone()));
     let profile = store
-        .central_owner_profile(authorization)
+        .server_owner_profile(&owner)
         .await
         .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
     let patch = agentsassemble_domain::UserProfilePatch {
@@ -144,7 +145,7 @@ async fn verify_owner_profile_authority(
         ..Default::default()
     };
     let updated = store
-        .update_central_owner_profile(authorization, profile.revision, patch.clone())
+        .update_server_owner_profile(&owner, profile.revision, patch.clone())
         .await
         .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
     assert_eq!(
@@ -168,26 +169,22 @@ async fn verify_owner_profile_authority(
         .await
         .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));
     assert!(!ordinary.authorization.is_central_owner());
+    let ordinary_owner =
+        crate::ServerOwnerAuthority::CentralOwner(Box::new(ordinary.authorization));
     assert_eq!(
-        code(
-            store
-                .saved_friends(&crate::ServerOwnerAuthority::CentralOwner(Box::new(
-                    ordinary.authorization.clone()
-                )))
-                .await
-        ),
+        code(store.saved_friends(&ordinary_owner).await),
         "session_revoked"
     );
 
     assert_eq!(
-        code(store.central_owner_profile(&ordinary.authorization).await),
+        code(store.server_owner_profile(&ordinary_owner).await),
         "session_revoked"
     );
     assert_eq!(
         code(
             store
-                .update_central_owner_profile(
-                    &ordinary.authorization,
+                .update_server_owner_profile(
+                    &ordinary_owner,
                     updated.profile.revision,
                     patch.clone()
                 )
@@ -215,14 +212,7 @@ async fn verify_owner_profile_authority(
             code(super::revalidate_central_owner_session(&mut tx, authorization).await),
             "session_revoked"
         );
-        assert_eq!(
-            code(
-                crate::ServerOwnerAuthority::CentralOwner(Box::new(authorization.clone()))
-                    .revalidate(&mut tx)
-                    .await
-            ),
-            "session_revoked"
-        );
+        assert_eq!(code(owner.revalidate(&mut tx).await), "session_revoked");
         tx.rollback()
             .await
             .unwrap_or_else(|error| panic!("owner profile verification: {error:?}"));

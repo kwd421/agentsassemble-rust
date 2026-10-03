@@ -46,7 +46,7 @@ describe("canonical user profile provenance", () => {
     Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
   });
 
-  it("publishes the canonical profile with the same operator grant base", async () => {
+  it.each([false, true])("publishes canonical profile under explicit server ownership (web=%s)", async (web) => {
     const invoke = desktopInvoke();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     vi.stubGlobal(
@@ -60,13 +60,23 @@ describe("canonical user profile provenance", () => {
     );
 
     await requestDesktopHostProductSurface();
-    const snapshot = await fetchUserProfile();
+    const identity = web ? { centralGrant: { grantToken: "aacg1." + "A".repeat(43), generation: 3 }, deviceToken: "owner-device" } : {};
+    if (web) Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
+    const snapshot = await fetchUserProfile(identity);
 
     expect(snapshot.profile.avatarImage).toBe(
       "/api/attachments/avatar_1234?view=1"
     );
     expect(snapshot.revision).toBe(1);
-    expect(snapshot.displayResourceBase).toBe("http://127.0.0.1:49163");
+    expect(snapshot.displayResourceBase).toBe(web ? window.location.origin : "http://127.0.0.1:49163");
+    if (web) {
+      const request = vi.mocked(fetch).mock.calls.at(-1)?.[1];
+      const headers = new Headers(request?.headers);
+      expect(headers.get("Authorization")).toBe("Bearer " + identity.centralGrant!.grantToken);
+      expect(headers.get("X-Central-Generation")).toBe("3");
+      expect(headers.get("X-Device-Token")).toBe("owner-device");
+      expect(invoke).toHaveBeenCalledTimes(1);
+    }
   });
 
   it("serializes a relative avatar unchanged when another profile field changes", async () => {
@@ -115,7 +125,7 @@ describe("canonical user profile provenance", () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
-  it("uploads a local profile avatar through operator authority without a room", async () => {
+  it.each([false, true])("uploads a profile avatar without a room (web=%s)", async (web) => {
     const invoke = desktopInvoke();
     Object.assign(window, { __TAURI_INTERNALS__: { invoke } });
     const fetchMock = vi.fn().mockResolvedValue(
@@ -129,19 +139,21 @@ describe("canonical user profile provenance", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await requestDesktopHostProductSurface();
+    const identity = web ? { centralGrant: { grantToken: "aacg1." + "A".repeat(43), generation: 3 }, deviceToken: "owner-device" } : {};
+    if (web) Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     const avatar = await uploadUserProfileAvatar(
-      new File(["avatar"], "avatar.png", { type: "image/png" })
+      new File(["avatar"], "avatar.png", { type: "image/png" }), identity
     );
 
     expect(avatar).toBe("/api/attachments/avatar_1234?view=1");
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock.mock.calls[0]?.[0]).toBe(
-      "http://127.0.0.1:49163/api/attachments"
+      web ? "/api/attachments" : "http://127.0.0.1:49163/api/attachments"
     );
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(request.method).toBe("POST");
     const headers = new Headers(request.headers);
-    expect(headers.get("Authorization")).toBe(`Bearer ${"f".repeat(64)}`);
+    expect(headers.get("Authorization")).toBe(web ? "Bearer " + identity.centralGrant!.grantToken : `Bearer ${"f".repeat(64)}`);
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.has("X-Host-Token")).toBe(false);
     expect(JSON.parse(String(request.body))).toEqual({

@@ -12712,3 +12712,50 @@ strict verification and keeps the same CSS artifact. Temporary public ingress is
 closed after verification. Per-device dock order is retained by the shared merge
 owner; no new sorting authority is introduced. Empty-workspace account/friend access,
 actual reconnect/empty UI, Windows and full acceptance remain open.
+
+## Server-wide owner profile and friends without rooms (2026-10-03)
+
+The current owner grant already authorized directory access and first-room creation;
+profile, avatar and friends transports incorrectly depended on room admission.
+Explicit grant-domain dispatch now reuses the signed central redemption and the
+existing device/origin/generation/expiry binding. Reads, revisioned writes and
+bounded avatar storage revalidate `ServerOwnerAuthority` in their storage transaction.
+Ordinary pairings remain room-only; native purpose tickets stay private. Neither a
+client ownership flag nor a failed grant can select native authority.
+
+The authenticated owner directory now includes the existing host profile revision
+from its owner transaction. Successful host-profile commits invalidate the existing
+stream. The shared UserPanel reuses its revision refresh and open-editor conflict
+behavior. No new stream, timer, polling, schema or token. Cost: one profile read in
+each existing directory read, plus the authenticated profile read when its server
+revision advances; invalidations retain the existing coalescing and bounded leases.
+
+Local verification: server central-owner/profile/directory HTTP9 pass, persistence358
+pass, all-target release Clippy pass, frontend165 files/962 checks pass, frontend
+build and mandatory architecture/source/format/diff plus policy/artifact19 pass.
+Existing empty-directory invalidation and profile/friend cases cover the new contract;
+the HTTP fixture starts with no room, verifies owner profile/avatar edits, friends,
+wrong-device rejection, stale revisions and committed profile notification before
+creating the first room. No new automated scan, reviewer or subagent.
+
+Signed isolated0.1.5 (`app.agentsassemble.workspace20261003`, server ec77a196) and
+Chrome actual flow: this run's regenerable test rooms are removed through product
+UI; both show no open room. Chrome enters that already-empty server with a fresh
+owner grant, without room admission or a fabricated room. Profile read/edit/save,
+friend read/edit/save and native edit cancellation pass. A first build exposed stale
+native profile display without room events; the owner-directory correction above
+then passes both directions with the observing screen left unchanged: Chrome saves
+AA-EMPTY-LIVE-1215 and the Mac bottom panel updates automatically; Mac saves
+AA-EMPTY-NATIVE-1216 and Chrome updates automatically, without reload or navigation.
+The profile is restored to Nel Le, the test friend to AA-INVITE-AI-1113. Chrome creates
+the first room and Mac receives it live; Chrome reload restores the same room/profile.
+Production installation/data and both central registrations are preserved. No real
+provider or recipient admission was performed.
+
+This is scoped account/friend/empty-workspace proof. During temporary-room cleanup,
+a native deletion can retain its exact unresolved request after the room disappears;
+the next room's dialog offers retry without displaying the old request's progress.
+That presentation/recovery defect, actual network reconnect, Windows and the broader
+parity matrix remain open. The duplicate macOS registration diagnosis follows the
+active correction work. Temporary public ingress remains open only for this run's
+remaining packaged verification; normal shutdown/cleanup is still required.

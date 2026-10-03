@@ -2,14 +2,16 @@ import type { SaveFriend } from "../types/generated/SaveFriend";
 import type { SavedFriend } from "../types/generated/SavedFriend";
 import type { RoomHttpAuthority } from "./roomHttpAuthority";
 import { fetchDesktopOperatorRuntime } from "../lib/desktopBridge";
-import { responseError } from "./http";
+import { responseError, serverOwnerGrantHeaders, type ServerOwnerGrantCredential } from "./http";
 
-async function request<T>(authority: RoomHttpAuthority, method: string, body?: object, query = ""): Promise<T> {
+export type SavedFriendsAuthority = RoomHttpAuthority | { kind: "central_grant"; credential: ServerOwnerGrantCredential; deviceToken: string };
+
+async function request<T>(authority: SavedFriendsAuthority, method: string, body?: object, query = ""): Promise<T> {
   const init: RequestInit = {
     method, cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer",
     headers: { ...(body ? { "Content-Type": "application/json" } : {}),
       ...(authority.kind === "remote" ? { Authorization: `Bearer ${authority.sessionToken}`,
-        "X-Device-Token": authority.deviceToken || "" } : {}) },
+        "X-Device-Token": authority.deviceToken || "" } : authority.kind === "central_grant" ? serverOwnerGrantHeaders(authority.credential, authority.deviceToken) : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   };
   const response = authority.kind === "local"
@@ -19,14 +21,14 @@ async function request<T>(authority: RoomHttpAuthority, method: string, body?: o
   return response.json();
 }
 
-export async function fetchSavedFriends(authority: RoomHttpAuthority = { kind: "local" }): Promise<SavedFriend[]> {
+export async function fetchSavedFriends(authority: SavedFriendsAuthority = { kind: "local" }): Promise<SavedFriend[]> {
   return (await request<{ friends: SavedFriend[] }>(authority, "GET")).friends;
 }
 
-export function saveFriend(body: SaveFriend, authority: RoomHttpAuthority = { kind: "local" }): Promise<SavedFriend> {
+export function saveFriend(body: SaveFriend, authority: SavedFriendsAuthority = { kind: "local" }): Promise<SavedFriend> {
   return request(authority, "POST", body);
 }
 
-export function deleteFriend(friendId: string, authority: RoomHttpAuthority = { kind: "local" }): Promise<{ deleted: boolean }> {
+export function deleteFriend(friendId: string, authority: SavedFriendsAuthority = { kind: "local" }): Promise<{ deleted: boolean }> {
   return request(authority, "DELETE", undefined, `?friend_id=${encodeURIComponent(friendId)}`);
 }

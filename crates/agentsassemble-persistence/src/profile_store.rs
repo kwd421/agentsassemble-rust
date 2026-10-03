@@ -47,16 +47,16 @@ impl<'a> ProfileIdentity<'a> {
 }
 
 impl SqliteStore {
-    /// Reads the host profile through a currently valid central-owner session.
+    /// Reads the host profile through current server-wide ownership.
     ///
     /// # Errors
     /// Rejects ordinary pairings and stale room, device, origin or session authority.
-    pub async fn central_owner_profile(
+    pub async fn server_owner_profile(
         &self,
-        authorization: &crate::OperatorSessionAuthorization,
+        authorization: &crate::ServerOwnerAuthority,
     ) -> Result<UserProfile, PersistenceError> {
-        let mut tx = self.pool.begin().await?;
-        crate::operator_pairing::revalidate_central_owner_session(&mut tx, authorization).await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        authorization.revalidate(&mut tx).await?;
         let profile = load_profile(&mut tx, ProfileIdentity::local_operator()).await?;
         tx.commit().await?;
         Ok(profile)
@@ -66,14 +66,14 @@ impl SqliteStore {
     ///
     /// # Errors
     /// Rejects stale authority, revision conflicts and foreign avatar references.
-    pub async fn update_central_owner_profile(
+    pub async fn update_server_owner_profile(
         &self,
-        authorization: &crate::OperatorSessionAuthorization,
+        authorization: &crate::ServerOwnerAuthority,
         expected_revision: i64,
         patch: UserProfilePatch,
     ) -> Result<ProfileUpdateOutcome, PersistenceError> {
-        let mut tx = self.pool.begin().await?;
-        crate::operator_pairing::revalidate_central_owner_session(&mut tx, authorization).await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        authorization.revalidate(&mut tx).await?;
         let outcome = update_profile_in_transaction(
             &mut tx,
             ProfileIdentity::local_operator(),
@@ -82,6 +82,7 @@ impl SqliteStore {
         )
         .await?;
         tx.commit().await?;
+        self.notify_room_directory_changed();
         Ok(outcome)
     }
 
@@ -204,6 +205,7 @@ impl SqliteStore {
         )
         .await?;
         transaction.commit().await?;
+        self.notify_room_directory_changed();
         Ok(outcome)
     }
 }

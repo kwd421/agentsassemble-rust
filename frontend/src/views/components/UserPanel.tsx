@@ -101,7 +101,7 @@ export default function UserPanel({
     .slice(0, 2)
     .toUpperCase();
   const guestHasAvatarImage = Boolean(guestProfile?.avatarImage);
-  const guestAwaitingAdmission = Boolean(guestProfile && !profileIdentity.sessionToken);
+  const guestAwaitingAdmission = Boolean(guestProfile && !profileIdentity.centralGrant && !profileIdentity.sessionToken);
 
   useEffect(() => {
     const generation = ++profileScopeGeneration.current;
@@ -149,6 +149,8 @@ export default function UserPanel({
     pairedRoomSession,
     profileIdentity.deviceToken,
     profileIdentity.sessionToken,
+    profileIdentity.centralGrant?.grantToken,
+    profileIdentity.centralGrant?.generation,
   ]);
 
   useEffect(() => {
@@ -180,7 +182,8 @@ export default function UserPanel({
     return () => { current = false; };
   }, [publishedProfileRevision, profileSnapshot?.revision, profileHydrated,
     pairedRoomSession, guestProfile?.expired, saving, settingsOpen, profileOpen,
-    avatarEditorOpen, profileIdentity.deviceToken, profileIdentity.sessionToken]);
+    avatarEditorOpen, profileIdentity.deviceToken, profileIdentity.sessionToken,
+    profileIdentity.centralGrant?.grantToken, profileIdentity.centralGrant?.generation]);
 
   useEffect(() => {
     if (!profileOpen && !settingsOpen && !avatarEditorOpen) return;

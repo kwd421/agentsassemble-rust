@@ -220,21 +220,7 @@ async fn start_fixture() -> Fixture {
         .bootstrap_local_authority("518f301c-e3bf-4b1c-82dd-5853bacb837f", "Host")
         .await
         .unwrap_or_else(|error| panic!("host bootstrap: {error:?}"));
-    store
-        .create_room_for_local_operator(
-            "20000000-0000-4000-8000-000000000015",
-            "general",
-            "General",
-        )
-        .await
-        .unwrap_or_else(|error| panic!("create room: {error:?}"));
-    let room_uid = store
-        .list_room_directory(false)
-        .await
-        .unwrap_or_else(|error| panic!("list rooms: {error:?}"))[0]
-        .room
-        .room_uid
-        .to_string();
+    let room_uid = String::new();
     let runtime_state = AppState::local(
         store.clone(),
         TicketStore::new(Duration::from_secs(30), 8),
@@ -270,12 +256,10 @@ async fn start_fixture() -> Fixture {
     }
 }
 
-async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]) {
+async fn verify_empty_workspace(fixture: &mut Fixture, generation: i64, public_key: &[u8]) {
     let client = &fixture.client;
     let address = fixture.address;
-    let room_uid = &fixture.room_uid;
     let calls = &mut fixture.calls;
-    let worker_state = &fixture.worker_state;
     let directory_body = json!({"grant_token": TOKEN, "generation": generation});
     let wrong_origin = post(
         client,
@@ -311,9 +295,43 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
         .json()
         .await
         .unwrap_or_else(|error| panic!("directory JSON: {error:?}"));
-    assert_eq!(listing["rooms"][0]["room_uid"], room_uid.as_str());
+    assert_eq!(listing["rooms"], json!([]));
+    assert_eq!(listing["profile_revision"], 1);
     verify_signed_call(&next_call(calls).await, public_key);
+    let workspace_changes = fixture.store.subscribe_room_directory();
+    verify_owner_profile(client, address, TOKEN, Some(generation)).await;
+    assert!(
+        workspace_changes
+            .has_changed()
+            .unwrap_or_else(|error| panic!("profile notification: {error}"))
+    );
+    for _ in 0..12 {
+        verify_signed_call(&next_call(calls).await, public_key);
+    }
+    let created = post(client, address, "/api/central-owner/rooms", json!({
+        "grant_token": TOKEN, "generation": generation,
+        "request_id": "20000000-0000-4000-8000-000000000015", "room_id": "general", "label": "General"
+    }), ORIGIN, DEVICE).await;
+    assert_eq!(created.status(), StatusCode::OK);
+    let created: Value = created
+        .json()
+        .await
+        .unwrap_or_else(|error| panic!("first room: {error:?}"));
+    created["room"]["room_uid"]
+        .as_str()
+        .unwrap_or_else(|| panic!("first room UID"))
+        .clone_into(&mut fixture.room_uid);
+    verify_signed_call(&next_call(calls).await, public_key);
+}
 
+async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]) {
+    verify_empty_workspace(fixture, generation, public_key).await;
+    let client = &fixture.client;
+    let address = fixture.address;
+    let calls = &mut fixture.calls;
+    let worker_state = &fixture.worker_state;
+    let room_uid = &fixture.room_uid;
+    let directory_body = json!({"grant_token": TOKEN, "generation": generation});
     let stale_generation = post(
         client,
         address,
@@ -345,7 +363,16 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
     assert_eq!(admission["meeting_id"], "general");
     assert_eq!(admission["status"], "admitted");
     assert_eq!(admission["central_owner"], true);
-    verify_owner_profile(client, address, &admission).await;
+    verify_owner_profile(
+        client,
+        address,
+        admission["session_token"]
+            .as_str()
+            .unwrap_or_else(|| panic!("owner session")),
+        None,
+    )
+    .await;
+    invitations::verify(client, address, &admission).await;
     verify_signed_call(&next_call(calls).await, public_key);
 
     verify_owner_rooms(client, address, generation, calls, public_key, &admission).await;
@@ -450,18 +477,33 @@ async fn verify_owner_rooms(
     }
 }
 
-async fn verify_owner_friends(client: &reqwest::Client, address: SocketAddr, session: &str) {
+async fn verify_owner_friends(
+    client: &reqwest::Client,
+    address: SocketAddr,
+    session: &str,
+    generation: Option<i64>,
+) {
     let authorized = |request: reqwest::RequestBuilder, device: &str| {
-        request
+        let request = request
             .header("host", "owner.example.test")
             .header("x-forwarded-proto", "https")
             .header("x-agentsassemble-proxy-token", SECRET)
             .header("origin", ORIGIN)
             .header("x-device-token", device)
-            .bearer_auth(session)
+            .bearer_auth(session);
+        if let Some(generation) = generation {
+            request.header("x-central-generation", generation)
+        } else {
+            request
+        }
     };
     let friend_url = format!("http://{address}/api/central-owner/friends");
-    let draft = json!({"friend_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "expected_revision": 0,
+    let friend_id = if generation.is_some() {
+        "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"
+    } else {
+        "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
+    };
+    let draft = json!({"friend_id": friend_id, "expected_revision": 0,
         "details": {"display_name": "Owner contact", "handle": "", "participant_type": "human",
         "provider_kind": "", "connection_kind": "", "agent_id": "", "source_agent_id": "",
         "last_meeting_id": "", "status": "offline", "source": "manual", "last_seen_at": null}});
@@ -493,9 +535,7 @@ async fn verify_owner_friends(client: &reqwest::Client, address: SocketAddr, ses
     .unwrap_or_else(|error| panic!("friend rejection: {error:?}"));
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
     let deleted = authorized(
-        client.delete(format!(
-            "{friend_url}?friend_id=aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
-        )),
+        client.delete(format!("{friend_url}?friend_id={friend_id}")),
         DEVICE,
     )
     .send()
@@ -510,21 +550,27 @@ async fn verify_owner_friends(client: &reqwest::Client, address: SocketAddr, ses
     assert_eq!(replay.status(), StatusCode::CONFLICT);
 }
 
-async fn verify_owner_profile(client: &reqwest::Client, address: SocketAddr, admission: &Value) {
-    let session = admission["session_token"]
-        .as_str()
-        .unwrap_or_else(|| panic!("owner session missing"));
+async fn verify_owner_profile(
+    client: &reqwest::Client,
+    address: SocketAddr,
+    session: &str,
+    generation: Option<i64>,
+) {
     let authorized = |request: reqwest::RequestBuilder, device: &str| {
-        request
+        let request = request
             .header("host", "owner.example.test")
             .header("x-forwarded-proto", "https")
             .header("x-agentsassemble-proxy-token", SECRET)
             .header("origin", ORIGIN)
             .header("x-device-token", device)
-            .bearer_auth(session)
+            .bearer_auth(session);
+        if let Some(generation) = generation {
+            request.header("x-central-generation", generation)
+        } else {
+            request
+        }
     };
-    verify_owner_friends(client, address, session).await;
-    invitations::verify(client, address, admission).await;
+    verify_owner_friends(client, address, session, generation).await;
     let profile_url = format!("http://{address}/api/user-profile");
     let profile = authorized(client.get(&profile_url), DEVICE)
         .send()
@@ -581,6 +627,12 @@ async fn verify_owner_profile(client: &reqwest::Client, address: SocketAddr, adm
         reread["profile"]["avatar_image_url"],
         upload["attachment"]["url"]
     );
+    let restored = authorized(client.post(&profile_url), DEVICE)
+        .json(&json!({"expected_revision": reread["profile"]["revision"], "display_name": "Host"}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("restore profile: {error:?}"));
+    assert_eq!(restored.status(), StatusCode::OK);
 }
 
 #[tokio::test]

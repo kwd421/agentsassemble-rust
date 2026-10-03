@@ -34,7 +34,7 @@ pub struct RoomCreateCommit {
 }
 
 impl SqliteStore {
-    /// Subscribes to coalesced committed directory changes, including other rooms.
+    /// Subscribes to coalesced owner-directory changes, including host profile metadata.
     /// Receivers must authenticate separately and read the canonical directory.
     #[must_use]
     pub fn subscribe_room_directory(&self) -> tokio::sync::watch::Receiver<()> {
@@ -82,12 +82,15 @@ impl SqliteStore {
         &self,
         owner: &crate::ServerOwnerAuthority,
         include_archived: bool,
-    ) -> Result<(crate::LocalBootstrapStatus, Vec<StoredRoomSummary>), PersistenceError> {
+    ) -> Result<(crate::LocalBootstrapStatus, Vec<StoredRoomSummary>, i64), PersistenceError> {
         let mut transaction = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let authority = owner.revalidate(&mut transaction).await?;
         let rooms = read_room_directory(&mut transaction, include_archived).await?;
+        let profile_revision = load_local_operator_profile(&mut transaction)
+            .await?
+            .revision;
         transaction.commit().await?;
-        Ok((authority, rooms))
+        Ok((authority, rooms, profile_revision))
     }
 
     /// Creates one room idempotently under the local server operator.

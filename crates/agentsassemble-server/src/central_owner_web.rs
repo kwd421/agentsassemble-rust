@@ -135,6 +135,35 @@ pub(crate) async fn redeem_directory_owner(
     Ok((grant_authority(&grant, token, device)?, expiry))
 }
 
+/// Server-wide profile/friend access uses the same grant as an empty directory.
+/// Credential-domain dispatch is explicit; rejection never tries a local ticket.
+pub(crate) async fn owner_from_grant_headers(
+    state: &AppState,
+    headers: &axum::http::HeaderMap,
+    origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
+) -> Result<ServerOwnerAuthority, CentralOwnerHttpError> {
+    let token = crate::http_api::bearer_credential(headers)
+        .ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let generation = crate::ingress_trust::single_header(
+        headers,
+        header::HeaderName::from_static("x-central-generation"),
+    )
+    .and_then(|value| {
+        value
+            .parse::<i64>()
+            .ok()
+            .filter(|parsed| parsed.to_string() == value)
+    })
+    .ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let origin = origin
+        .ok_or_else(CentralOwnerHttpError::unauthorized)?
+        .as_str();
+    let device = device_fingerprint(headers).ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    redeem_directory_owner(state, token, origin, generation, device)
+        .await
+        .map(|(owner, _)| owner)
+}
+
 pub(crate) fn routes() -> Router<AppState> {
     central_owner_routes()
         .layer(SetResponseHeaderLayer::overriding(
@@ -160,7 +189,7 @@ async fn directory(
         .map_err(CentralOwnerHttpError::body)?;
     let grant = redeem(&state, &body.grant_token, &origin, body.generation).await?;
     let authority = grant_authority(&grant, &body.grant_token, device)?;
-    let (bootstrap, rooms) = state
+    let (bootstrap, rooms, profile_revision) = state
         .store
         .list_room_directory_for_owner(&authority, true)
         .await?;
@@ -174,6 +203,7 @@ async fn directory(
         "authority_lineage_id": bootstrap.authority_lineage_id,
         "server_product_surface": state.server_product_surface,
         "rooms": rooms,
+        "profile_revision": profile_revision,
     })))
 }
 
@@ -313,9 +343,9 @@ async fn redeem(
 }
 
 pub(crate) struct CentralOwnerHttpError {
-    status: StatusCode,
-    code: &'static str,
-    message: &'static str,
+    pub(crate) status: StatusCode,
+    pub(crate) code: &'static str,
+    pub(crate) message: &'static str,
 }
 
 impl CentralOwnerHttpError {

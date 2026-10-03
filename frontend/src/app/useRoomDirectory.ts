@@ -152,6 +152,7 @@ export function useRoomDirectory({
   const directoryEnabled = hostEnabled || Boolean(remoteOwner);
   const initialIssue = directoryEnabled ? UNCONFIRMED_ISSUE : null;
   const roomsRef = useRef<RoomDockItem[]>(initialRooms);
+  const [ownerProfileRevision, setOwnerProfileRevision] = useState(0);
   const [managementRooms, setManagementRooms] = useState<StrictRoomDirectory["rooms"]>([]);
   const [rooms, setRooms] = useState<RoomDockItem[]>(initialRooms);
   const activeRef = useRef(false);
@@ -416,6 +417,7 @@ export function useRoomDirectory({
       managerSnapshotRef.current = snapshot;
       setRooms(synchronized);
       setManagementRooms(payload.rooms);
+      setOwnerProfileRevision(payload.profile_revision);
       publishSyncIssue(null);
       return synchronized;
     },
@@ -604,7 +606,7 @@ export function useRoomDirectory({
 
   return {
     rooms,
-    managementRooms,
+    managementRooms, ownerProfileRevision,
     replaceRooms,
     prependRoom,
     mergeFlowRoom,
