@@ -228,7 +228,7 @@ function LobbyImageAttachment({
                   type="button"
                   onClick={downloadPreview}
                   disabled={downloading}
-                  className="ops-button grid h-9 w-9 place-items-center rounded-lg"
+                  className="ops-button grid h-9 w-9 place-items-center rounded-lg p-0"
                   aria-label={`${attachment.filename} 다운로드`}
                   aria-busy={downloading}
                 >
@@ -238,7 +238,7 @@ function LobbyImageAttachment({
                   data-preview-close
                   type="button"
                   onClick={closePreview}
-                  className="ops-button grid h-9 w-9 place-items-center rounded-lg"
+                  className="ops-button grid h-9 w-9 place-items-center rounded-lg p-0"
                   aria-label="이미지 미리보기 닫기"
                 >
                   <X size={16} />

@@ -11,6 +11,7 @@ import {
   KeyRound,
   LoaderCircle,
   LogIn,
+  RefreshCw,
   UserRound,
 } from "lucide-react";
 
@@ -467,9 +468,6 @@ export default function StartupIdentityGate({
       <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
         <main className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl">
           <header className="grid gap-2">
-            <span className="text-[11px] font-black uppercase tracking-[0.16em] text-[#8d96ff]">
-              AgentsAssemble
-            </span>
             <h1 className="text-2xl font-black text-text-primary">어떻게 사용할까요?</h1>
             <p className="text-[13px] font-semibold leading-5 text-text-muted">
               중앙 디렉터리가 설정되지 않아 기존 로컬 신원 모드로 시작합니다.
@@ -513,9 +511,6 @@ export default function StartupIdentityGate({
         aria-label="시작 로그인"
       >
         <header className="grid gap-2">
-          <span className="text-[11px] font-black uppercase tracking-[0.16em] text-[#8d96ff]">
-            AgentsAssemble
-          </span>
           <h1 className="text-2xl font-black text-text-primary">
             {screen === "recovery-code"
               ? "복구 코드를 보관하세요"
@@ -527,7 +522,7 @@ export default function StartupIdentityGate({
             {screen === "recovery-code"
               ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요합니다. 중앙에는 코드 원문을 저장하지 않습니다."
               : screen === "servers"
-                ? "기존 서버를 열면 다른 컴퓨터에서도 같은 방을 사용할 수 있어요. 호스트가 켜져 있어야 합니다."
+                ? "호스트 컴퓨터가 켜져 있는 서버만 열 수 있어요."
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용합니다. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남습니다."}
           </p>
         </header>
@@ -582,14 +577,16 @@ export default function StartupIdentityGate({
         )}
 
         {screen === "servers" && (
-          <section className="grid gap-3 rounded-lg bg-[#1b1c20] p-4">
+          <section className="grid gap-2">
             {webEntry && new URLSearchParams(window.location.search).get("account") === "settings" && <CentralAccountSettings disabled={busy} />}
-            <p className="text-[13px] text-text-secondary">{centralPerson?.display_name}님의 서버</p>
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-[12px] font-semibold text-text-muted">{centralPerson?.display_name}님의 서버</p>
+              <button type="button" className="grid h-11 w-11 place-items-center rounded-lg text-text-muted hover:bg-white/5 hover:text-text-primary disabled:opacity-50" aria-label="서버 목록 새로고침" title="새로고침" disabled={busy} onClick={() => void refreshServers()}><RefreshCw size={16} /></button>
+            </div>
             {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
             {localHostError && <p role="alert" className="text-sm text-red-300">이 기기 · {localHostError} 서버 목록 새로고침으로 다시 확인해 주세요.</p>}
             <CentralServerList key={centralPerson?.person_id} servers={centralServers} busy={busy} localHost={localHost} onOpenLocal={!webEntry ? () => selectCentralServer() : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
-            <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void refreshServers()}>서버 목록 새로고침</button>
-            <button type="button" className="min-h-10 rounded-md border border-white/10 px-4 text-[12px] font-black text-text-primary disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
+            <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}
 

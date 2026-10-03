@@ -308,6 +308,24 @@
   flex-shrink: 0;
 }
 
+/* An option reads as a short name with a muted one-line explanation under it. */
+.dc-settings-field .dc-radio-stack label > span {
+  display: grid;
+  gap: 2px;
+}
+
+.dc-settings-field .dc-radio-stack strong {
+  color: var(--color-text-primary);
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.dc-settings-field .dc-radio-stack small {
+  color: var(--color-text-muted);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .dc-settings-invite {
   width: fit-content;
   display: inline-flex;
@@ -336,20 +354,36 @@
   border-radius: 8px;
 }
 
+/* Discord's secondary button. Size defaults live in the components layer so a
+   usage's own Tailwind size or padding utilities still win. */
 .ops-button {
-  border: 1px solid var(--color-line);
-  background: var(--color-panel-soft);
-  color: var(--color-text-secondary);
-  border-radius: 4px;
+  border: 1px solid transparent;
+  background: #4e5058;
+  color: #fff;
+  border-radius: 8px;
   transition:
     background-color 140ms ease,
     color 140ms ease,
     border-color 140ms ease;
 }
 
+@layer components {
+  .ops-button {
+    display: inline-flex;
+    min-height: 44px;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    padding: 0 14px;
+    font-size: 14px;
+    font-weight: 600;
+    text-decoration: none;
+  }
+}
+
 .ops-button:hover:not(:disabled) {
-  background: var(--color-sidebar-hover);
-  color: var(--color-text-primary);
+  background: #6d6f78;
+  color: #fff;
 }
 
 .ops-button:disabled,
@@ -362,7 +396,7 @@
   border: 1px solid transparent;
   background: var(--color-accent);
   color: #fff;
-  border-radius: 4px;
+  border-radius: 8px;
   font-weight: 700;
   transition: background-color 140ms ease;
 }

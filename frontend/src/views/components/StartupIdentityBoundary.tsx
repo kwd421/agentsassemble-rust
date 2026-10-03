@@ -93,15 +93,15 @@ export default function StartupIdentityBoundary({
           className="grid w-full max-w-[520px] gap-3 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
           aria-label="브라우저 직접 시작 사용 불가"
         >
-          <h1 className="text-2xl font-black text-text-primary">
+          <h1 className="text-2xl font-bold text-text-primary">
             AgentsAssemble에 로그인
           </h1>
-          {centralAccountEntryUrl() && <a href={centralAccountEntryUrl()} className="ops-button">Google 로그인 · 내 서버 열기</a>}
-          <p
-            role="alert"
-            className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]"
-          >
-            내 서버는 중앙 계정으로 로그인해 열 수 있어요. 초대받은 방은 호스트에게 받은 초대·기기 연결·복구 링크로 들어가세요.
+          <p className="text-[14px] leading-6 text-text-muted">
+            내 서버는 Google 계정으로 로그인해서 열어요.
+          </p>
+          {centralAccountEntryUrl() && <a href={centralAccountEntryUrl()} className="ops-cta mt-2 inline-flex min-h-11 items-center justify-center px-4 text-[15px]">Google로 로그인</a>}
+          <p className="mt-1 text-[13px] leading-5 text-text-muted">
+            초대받은 방은 호스트가 보낸 초대·기기 연결·복구 링크로 바로 들어갈 수 있어요.
           </p>
         </main>
       </div>
