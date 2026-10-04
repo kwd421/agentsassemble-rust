@@ -13012,3 +13012,29 @@ Live process inspection confirmed the desktop (65235), supervisor (65474) and se
   and web menu Esc checks remain pending at-action public-exposure confirmation.
   External access has not been opened in this run. Windows physical-device
   verification remains unverified. The signed bundle/data are retained for that work.
+
+## Signed-in web room check (2026-10-04)
+
+- Rebuilt the signed `app.agentsassemble.uicheck` 0.1.6 bundle at `a2e28a2d` and
+  launched it with `open` (GUI PATH). `외부 접속 열기` was enabled; enabling it started
+  `/opt/homebrew/bin/cloudflared` and the footer showed the public origin.
+- In the signed-in central web chooser the owned server showed `온라인` and opened
+  through the owner connect grant. At 1280x800 the web room, members, profile popout
+  (single edit entry, status row, no close button), circle crop dialog (test PNG
+  injected into the hidden picker, cancelled, nothing uploaded), header menu and
+  invite dialog (`외부 접속 열림` with the tunnel origin) match the app. At phone
+  width the existing mobile rule hides the channel intro.
+- Escape: crop dialog closes first while the popout stays; the next Escape closes
+  the popout; the header menu closes and focus returns to its trigger. The member
+  right-click menu stayed open because focus remained on the row and the menu's own
+  key handler never ran. MemberList now closes it from a window key listener while
+  open. The new MemberList test fails without the fix and passes with it.
+- The invite footer's viewer-only `호스트 기기에서 접속을 관리해요.` was an unstyled
+  span; it is now muted 12px copy.
+- Open defect (central/host owner, not changed here): about five minutes after
+  opening, the web owner workspace showed `서버 접속이 만료됐어요`. The Worker's
+  `GRANT_TTL_SECONDS = 300` connect grant bounds the whole owner workspace with no
+  renewal; while expiring, the invite footer briefly fell back to `외부 접속 꺼짐`.
+- Gates: tsc, frontend 165 files/967 tests, architecture check and diff check pass.
+  External access was turned off afterwards and cloudflared exited. The UI Check
+  bundle/data are retained. Windows physical-device verification remains unverified.

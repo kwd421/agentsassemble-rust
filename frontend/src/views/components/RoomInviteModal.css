@@ -219,6 +219,13 @@ dialog.dc-invite-modal {
   white-space: nowrap;
 }
 
+/* Viewers without ingress control get a quiet note where the host has its button. */
+.dc-invite-hosting-note {
+  flex-shrink: 0;
+  color: var(--color-text-muted);
+  font-size: 12px;
+}
+
 .dc-invite-hosting-error {
   color: #f23f43;
   font-size: 12px;

@@ -50,6 +50,16 @@ describe("MemberList component wiring", () => {
     expect(screen.getByRole("button", { name: "내보내기" })).toBeTruthy();
   });
 
+  it("closes the row's context menu on Escape while focus stays on the row", () => {
+    render(<MemberList agents={[AGENT]} agentSessions={[SESSION]} roomId="room-1" roomName="Room One" onParticipantRemove={vi.fn()} />);
+    const row = screen.getByRole("button", { name: "Agent One 프로필 보기" });
+    row.focus();
+    fireEvent.contextMenu(row, { clientX: 40, clientY: 40 });
+    expect(screen.getByRole("menu")).toBeTruthy();
+    fireEvent.keyDown(row, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("opens the extracted detail modal with Agent Session controls", () => {
     render(
       <MemberList

@@ -71,6 +71,16 @@
   Signed-in web room views remain unverified. Evidence: `docs/VERIFICATION.md` ->
   Discord-style frontend pass 2.
 
+- 2026-10-04 signed-in web room check: with the Finder PATH fix, the UI Check app
+  opened a real Quick Tunnel and the signed-in web chooser opened the owned server.
+  Web room, profile popout, avatar crop dialog, header menu and invite footer match
+  the app. Escape closes crop before popout and closes the header menu. A right-click
+  member menu ignored Escape because focus stayed on the row; it now closes from the
+  window like other popouts (regression test fails without it). The viewer-only
+  ingress note in the invite footer is styled as muted copy. Open defect, central/host
+  owner: the web owner workspace ends when its five-minute connect grant expires.
+  Evidence: `docs/VERIFICATION.md` -> Signed-in web room check.
+
 - 2026-10-03 shared deletion recovery correction: server-wide web ownership now
   retains transactional grant provenance through the existing bounded command
   queue and immutable deletion replay. The shared shell exposes the exact pending

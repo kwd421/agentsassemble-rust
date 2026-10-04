@@ -437,7 +437,7 @@ export default function RoomInviteModal({
               외부 접속 열기
             </button>
           ))}
-          {!canControlIngress && <span>호스트 기기에서 접속을 관리해요.</span>}
+          {!canControlIngress && <span className="dc-invite-hosting-note">호스트 기기에서 접속을 관리해요.</span>}
         </footer>
         {pendingPublicAction && (
           <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>

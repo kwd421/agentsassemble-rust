@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Bot, Check, Search, Volume2, VolumeX } from "lucide-react";
 import type {
@@ -84,6 +84,16 @@ export default function MemberList({
   const [muteBusy, setMuteBusy] = useState(false);
   const [roleChangeError, setRoleChangeError] = useState("");
   const query = searchQuery ?? localQuery;
+  const memberMenuOpen = memberMenu !== null;
+  // A right-click leaves focus on the row, so Escape is handled at the window like other popouts.
+  useEffect(() => {
+    if (!memberMenuOpen) return;
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setMemberMenu(null);
+    }
+    window.addEventListener("keydown", closeOnEscape);
+    return () => window.removeEventListener("keydown", closeOnEscape);
+  }, [memberMenuOpen]);
   const { entries, contextBadges } = useMemberEntries({
     agents,
     members,
@@ -285,7 +295,6 @@ export default function MemberList({
             className="dc-member-context-menu"
             role="menu"
             style={{ top: memberMenu.y, left: memberMenu.x }}
-            onKeyDown={(event) => { if (event.key === "Escape") setMemberMenu(null); }}
           >
             {roleMenuAvailable && (
               <div role="group" aria-label={`${memberMenu.entry.displayName} 역할`}>
