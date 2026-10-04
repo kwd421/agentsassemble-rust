@@ -116,6 +116,8 @@ async fn resolve_account_user(
             match user_id {
                 Some(user_id) => {
                     require_public_account_user(&user_id)?;
+                    crate::central_identity_bindings::require_unbound_user(transaction, &user_id)
+                        .await?;
                     load_account_user(transaction, &user_id).await.map(Some)
                 }
                 None => Ok(None),
@@ -212,6 +214,7 @@ pub(crate) async fn bind_account_device(
     user_id: &str,
     device: &[u8; 32],
 ) -> Result<(), PersistenceError> {
+    crate::central_identity_bindings::require_unbound_user(transaction, user_id).await?;
     match device_user_id(transaction, device).await? {
         Some(current) if current != user_id => {
             return Err(rejected(

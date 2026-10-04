@@ -17,6 +17,7 @@ pub(crate) async fn retire_guest(
     guest: &AccountUser,
     device: Option<&[u8; 32]>,
 ) -> Result<(Vec<RoomEvent>, Vec<(String, [u8; 32])>), PersistenceError> {
+    crate::central_identity_bindings::require_unbound_user(transaction, &guest.user_id).await?;
     // The current Rust room owner is the bootstrapped local operator; it cannot be retired.
     if guest.user_id == LOCAL_OPERATOR_USER_ID {
         return Err(rejected(

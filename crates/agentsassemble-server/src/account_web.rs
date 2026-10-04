@@ -262,7 +262,8 @@ impl From<PersistenceError> for AccountHttpError {
                     b"account_switch_confirmation_required"
                     | b"account_link_conflict"
                     | b"account_identity_changed" => StatusCode::CONFLICT,
-                    b"account_operator_boundary"
+                    b"central_member_unsupported"
+                    | b"account_operator_boundary"
                     | b"account_switch_operator_forbidden"
                     | b"account_switch_unavailable"
                     | b"account_device_mismatch" => StatusCode::FORBIDDEN,

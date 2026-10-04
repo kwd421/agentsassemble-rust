@@ -288,6 +288,7 @@ async fn exact_admission(
     let Some(row) = row else {
         return Ok(None);
     };
+    crate::central_identity_bindings::require_unbound_user(transaction, row.get("user_id")).await?;
     if row.get::<String, _>("key_kind") != key_kind
         || row.get::<String, _>("invite_id") != invite.invite_id
         || row.get::<String, _>("room_id") != invite.room_id

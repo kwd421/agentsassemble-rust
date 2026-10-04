@@ -95,6 +95,8 @@ impl SqliteStore {
                 None => create_account_user(&mut transaction, identity).await?,
             },
         };
+        crate::central_identity_bindings::require_unbound_user(&mut transaction, &user.user_id)
+            .await?;
         let existing = account_fingerprint(&mut transaction, &user.user_id).await?;
         if existing.is_some_and(|fingerprint| fingerprint != *subject_fingerprint) {
             return Err(rejected(

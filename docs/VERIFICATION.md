@@ -1,5 +1,33 @@
 # Verification Contract
 
+## C4a host compatibility floor (2026-10-05)
+
+Contract-first commit `e8b242e9` freezes the schema 81 minimum binding DDL in
+[the identity owner](specs/identity-accounts-friends-slice.md#c4a-schema-81-최소-저장-계약-2026-10-05).
+The creation/migration target stays 80. Exactly 81 is additionally readable; no
+member route, migration or member authority writer is installed. C4b must retain
+this layout and rerun compatibility with its complete migration, including every
+additional member table and revocation/receipt authority.
+
+Before implementation, the seven new persistence cases produced five expected
+failures: v81 open, bound admission/session reuse, recovery issue, fresh/replayed
+recovery redeem, and device/Google binding. The HTTP mapping regression separately
+failed with 503 instead of the required explicit 403 unsupported-member response.
+The fixed tests snapshot all schema objects and table rows across v80/v81 reopen
+and denied operations, exercise missing table/column and 82/83/999 rejection,
+unbound anonymous recovery/Google flow, and native pairing two-hour use, last-use,
+30-day idle expiry, single/all revocation and revoked reopen. The v81 fixture uses
+the contract's DDL directly plus an explicitly synthetic opaque retention probe;
+it is not evidence that the future full C4b migration already exists or passes.
+
+`cargo test -p agentsassemble-persistence -p agentsassemble-server` passed
+(unit, integration and doc tests; persistence 409 and server library 118 cases).
+
+The guard reads one version marker inside the existing owner transaction; on 81
+it adds one indexed binding-existence lookup. It introduces no cache, background
+task, central call or schema write. Native pairing issuance/lifetime code is unchanged.
+Deployment, signed builds, manual app/web checks, and C6 acceptance are excluded.
+
 ## Runtime writer shutdown and parallel reopen (2026-10-05)
 
 The original runtime boundary failed under parallel load in both restart recovery

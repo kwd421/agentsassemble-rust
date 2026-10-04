@@ -595,7 +595,12 @@ SQLite is the local durable authority. The Rust schema owns its version, stable
 server identity, and cutover marker, while an adjacent process-lifetime exclusive
 writer lease prevents two Rust runtimes from becoming concurrent room authorities.
 A nonempty database without the Rust owner marker is rejected before any schema
-write, and any non-current schema version is rejected before product state is read.
+write. Schema 80 remains the creation version; explicit 70–79 upgrades retain their
+existing migration rules. The C4a host floor additionally opens exactly schema 81
+with its required additive binding columns, without migrating or rewriting it;
+82 and higher remain rejected. Central-bound users cannot use the floor's human
+admission or independent credential paths. The [C4a minimum schema contract](specs/identity-accounts-friends-slice.md#c4a-schema-81-최소-저장-계약-2026-10-05)
+owns the C4b compatibility requirements.
 A command result and its
 event commit in one transaction, as do canonical room creation and its initial
 membership/event boundary. Persistence failure is an error, never an in-memory

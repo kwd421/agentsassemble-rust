@@ -70,7 +70,7 @@ Status: Phase 5 locally verified and approved by Daybreak through `1e24adf`, C0/
 ### 파일 지도
 
 - `crates/agentsassemble-persistence/src/schema_version.rs`: 현재 80, host floor 및 additive member migration.
-- `crates/agentsassemble-persistence/src/central_identity_bindings.rs` (예정): issuer/person/local user 양방향 binding.
+- `crates/agentsassemble-persistence/src/central_identity_bindings.rs`: C4a의 read-only binding 존재 검사; issuer/person/local user 양방향 binding 생성은 C4b 소유.
 - `crates/agentsassemble-persistence/src/server_memberships.rs` (예정): membership/version CAS; 종료는 기존 removal 소유자와 조정.
 - `crates/agentsassemble-persistence/src/member_admission_results.rs` (예정), `membership_outbox.rs` (같은 디렉터리, 예정): durable intent/결과/예약 및 단조 동기화.
 - `crates/agentsassemble-persistence/src/human_admission_identity.rs`, `account_identity.rs`, `google_accounts.rs`, `account_guest_retirement.rs`, `guest_identity_recovery.rs`: 기존 profile 생성·credential·retirement·recovery 권위 확장.
@@ -191,7 +191,11 @@ CREATE INDEX central_identity_bindings_user ON central_identity_bindings(user_id
 81인데 이 테이블/필수 열이 없으면 DB 열기를 실패시키며 익명으로 간주하지 않는다.
 
 C4b는 기존 80 테이블/열/credential 의미를 바꾸지 않는 additive migration이어야
-한다. member 전용 parent/child/결과는 익명/owner 권위 행으로 인코딩하지 않는다.
+한다. 81은 DB 스키마 번호이며 bootstrap 권위 계약의 새 revision이 아니다.
+기존 `local_bootstrap_authority.schema_revision`/digest는 유지하고, 새 81 DB도
+floor가 이해하는 기존 bootstrap 계약 revision 80을 사용한다. bootstrap 의미
+변경은 별도 floor가 필요하다. member 전용 parent/child/결과는 익명/owner 권위
+행으로 인코딩하지 않는다.
 추가 member 테이블의 FK/trigger는 floor의 기존 쓰기가 member 권위·revision·폐기·
 결과를 삭제/재활성화하지 않도록 해야 한다. floor는 member 전용 테이블을 쓰거나
 정리하지 않는다. C4b는 실제 전체 migration DB로 이 호환 행렬을 재실행해야 한다.

@@ -70,6 +70,7 @@ impl SqliteStore {
         let user = revalidate_account_identity(&mut tx, identity)
             .await?
             .ok_or_else(invalid_code)?;
+        crate::central_identity_bindings::require_unbound_user(&mut tx, &user.user_id).await?;
         sqlx::query("INSERT INTO guest_recovery_codes(user_id, fingerprint) VALUES (?, ?) ON CONFLICT(user_id) DO UPDATE SET fingerprint = excluded.fingerprint, previous_fingerprint = NULL, session_key = NULL")
             .bind(&user.user_id).bind(code.fingerprint.as_slice()).execute(&mut *tx).await?;
         tx.commit().await?;
@@ -108,6 +109,7 @@ impl SqliteStore {
             .ok_or_else(invalid_code)?;
         let user_id: String = row.try_get("user_id")?;
         require_public_account_user(&user_id)?;
+        crate::central_identity_bindings::require_unbound_user(&mut tx, &user_id).await?;
         if row.try_get::<Vec<u8>, _>("fingerprint")?.as_slice() != fingerprint {
             let seed = row
                 .try_get::<Option<Vec<u8>>, _>("session_key")?

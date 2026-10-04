@@ -26,11 +26,19 @@ pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), Per
         .ok()
         .filter(|version| *version >= 1)
         .ok_or_else(|| PersistenceError::InvalidSchemaVersion(stored.clone()))?;
-    if !(70..=CURRENT_SCHEMA_VERSION).contains(&found) {
+    if !(70..=CURRENT_SCHEMA_VERSION).contains(&found)
+        && found != crate::central_identity_bindings::MEMBER_SCHEMA_VERSION
+    {
         return Err(PersistenceError::SchemaVersionMismatch {
             found,
             required: CURRENT_SCHEMA_VERSION,
         });
+    }
+    if found == crate::central_identity_bindings::MEMBER_SCHEMA_VERSION {
+        // Validate the contracted additive boundary before reading product state.
+        // This release neither creates nor migrates member tables.
+        sqlx::query("SELECT binding_id, issuer, person_id, user_id, created_at FROM central_identity_bindings LIMIT 0")
+            .fetch_all(pool).await?;
     }
     let server_id = sqlx::query_scalar::<_, String>(
         "SELECT value FROM runtime_metadata WHERE key = 'server_id'",

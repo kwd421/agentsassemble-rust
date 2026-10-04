@@ -163,6 +163,7 @@ mod room_history;
 mod room_preferences;
 mod room_random;
 pub use provider_requests::{OpenProviderRequest, ProviderRequestCommit};
+mod central_identity_bindings;
 #[cfg(test)]
 mod provider_request_resolution_tests;
 #[cfg(test)]
@@ -293,3 +294,6 @@ pub use provider_turn_execution::ProviderTurnAssignmentEnvelope;
 
 #[cfg(test)]
 mod attendee_turn_delivery_tests;
+
+#[cfg(test)]
+mod member_floor_tests;

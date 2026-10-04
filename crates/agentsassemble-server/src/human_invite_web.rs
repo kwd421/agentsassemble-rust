@@ -472,6 +472,11 @@ impl From<PersistenceError> for HumanInviteHttpError {
                     "Room was deleted or is unavailable.",
                 )
             }
+            PersistenceError::CommandRejected { code, message }
+                if code == "central_member_unsupported" =>
+            {
+                Self::new(StatusCode::FORBIDDEN, "central_member_unsupported", message)
+            }
             internal => {
                 tracing::error!(error = ?internal, "human invite HTTP persistence failed");
                 Self::internal()
@@ -502,6 +507,15 @@ mod tests {
         let timeout = HumanInviteHttpError::from_body(BodyDecodeError::RequestTimeout);
         assert_eq!(timeout.status, StatusCode::REQUEST_TIMEOUT);
         assert_eq!(timeout.code, "request_timeout");
+
+        let member = HumanInviteHttpError::from(
+            agentsassemble_persistence::PersistenceError::CommandRejected {
+                code: "central_member_unsupported".into(),
+                message: "This host version does not support central member authority.".into(),
+            },
+        );
+        assert_eq!(member.status, StatusCode::FORBIDDEN);
+        assert_eq!(member.code, "central_member_unsupported");
 
         let collision = HumanInviteHttpError::from(HumanAdmissionRejection::IdentityConflict);
         assert_eq!(collision.status, StatusCode::FORBIDDEN);
