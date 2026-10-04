@@ -12,9 +12,9 @@ work is active or waiting, and remove it when it closes.
 - Host-owned owner sessions: deployed (Worker `80a4eabf`, rollback `a41c6fd2`) and
   accepted on signed 0.1.7 (web past six minutes with messages both ways, single
   and all device revocation, revoked reload denied); Daybreak Blue `xhigh` approved
-  the corrections through `f2dda814` at C0/H0/M0/L0. Open: a signed build of
-  `f2dda814` (schema 77, socket custody order, directory recovery) is not yet
-  manually re-verified; central logout acceptance was skipped by user decision.
+  the corrections through `f2dda814` at C0/H0/M0/L0; signed 0.1.8 at `03756b43`
+  re-verified the schema 75 -> 77 upgrade and revocation. Central logout acceptance
+  was skipped by user decision.
 - Open defect from the 2026-10-05 real-provider chat: one agent in provider-turn
   recovery stalls the ordered room, so other agents never get a turn. (Codex
   `gpt-5.6-luna` Low skipping the room-observation tool is treated as model

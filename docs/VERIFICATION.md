@@ -13254,3 +13254,9 @@ contract and evidence below replace that implementation; no migration 0009 is ne
   legacy data, `f2dda814` retires all parentless remote pairings at v77. Final
   re-review: APPROVE, C0/H0/M0/L0. A signed build of `f2dda814` is not yet manually
   re-verified.
+- Signed 0.1.8 built at `03756b43` (includes `f2dda814`), deep/strict verified, opened
+  via `open`. Opening the local server upgraded the existing data from schema 75 to 77
+  with both rooms and all 61 room events intact; the previous chat and agents remain.
+  Web entry through the production Worker, a web message delivered to the app,
+  single device revocation ended the web tab, and reload returned to login. The app
+  was quit normally; tunnel and children exited.
