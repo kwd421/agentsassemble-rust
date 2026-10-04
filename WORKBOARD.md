@@ -9,15 +9,16 @@ work is active or waiting, and remove it when it closes.
   authorized real-provider verification. [Acceptance](docs/specs/final-parity-slice.md).
   Phases 1-8 are closed (Phase 8 through `f776e2e`); closing reviews and evidence are
   linked from the product plan and `docs/VERIFICATION.md`.
-- Waiting for user approval: host-owned owner sessions. Local work is complete and
-  pushed with the Daybreak Medium/Low findings closed; the remaining High
-  correction uses v77 to retire all parentless remote pairing authority once
-  (remote devices reconnect). Central Worker change `25fad46a` is on
-  `codex/owner-session-renewal` (local only; production already has migrations
-  0001-0008, so no new migration). Still needed: production Worker deployment, signed
-  build, actual app/web acceptance (use past five minutes with messages, logout,
-  single/all device revocation) and the required external review. Contract:
-  identity-accounts-friends slice -> Host-owned owner workspace and devices.
+- Host-owned owner sessions: deployed (Worker `80a4eabf`, rollback `a41c6fd2`) and
+  accepted on signed 0.1.7 (web past six minutes with messages both ways, single
+  and all device revocation, revoked reload denied); Daybreak Blue `xhigh` approved
+  the corrections through `f2dda814` at C0/H0/M0/L0. Open: a signed build of
+  `f2dda814` (schema 77, socket custody order, directory recovery) is not yet
+  manually re-verified; central logout acceptance was skipped by user decision.
+- Open defects from the 2026-10-05 real-provider chat: Codex `gpt-5.6-luna` at Low
+  ends turns without confirming the room observation (`room_observation_unconfirmed`,
+  quarantined twice) while the same CLI model runs directly; and one agent in
+  recovery stalls the ordered room so other agents never get a turn.
 - Open verification: Windows physical-device checks (recent Discord-style UI,
   server icons, interactive install/update `desktop-v0.1.4`, attendee CLI); full
   app/web parity rows in the final-parity slice; persistent web MCP endpoint

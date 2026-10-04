@@ -13224,3 +13224,33 @@ contract and evidence below replace that implementation; no migration 0009 is ne
   31,486,398,464 bytes against the unchanged 18 GiB cap; with no Cargo/Tauri
   work running, the existing `make artifact-prune` owner cleaned only repository
   Cargo artifacts, then `make artifact-check` passed. No full verify rerun.
+
+## Host-owned owner sessions: deployment, acceptance and review (2026-10-05)
+
+- Production Worker deployed from `codex/owner-session-renewal` `25fad46a` with the
+  shared frontend built at the Rust HEAD: version `80a4eabf-bf07-4160-8413-a24d3a4fad21`
+  (previous `a41c6fd2-6e7b-41ec-aecd-95d23dcfcc31`). Worker tests 45/45; remote D1
+  reported no migrations to apply. The deploy is additive for existing hosts: the
+  legacy endpoint PUT and redeem response shape are unchanged. Smoke: root 200,
+  unsigned `/endpoint/renew` 400 (route present), unauthenticated bootstrap 401.
+- Signed `app.agentsassemble.uicheck` 0.1.7 (deep/strict verified) opened via `open`.
+  The new host published through the new Worker and showed online in the web
+  chooser. Web entry at 14:22:39Z; messages crossed web->app and app->web at 0, 1
+  and 6m34s; the session stayed usable for about 21 minutes. Native settings ->
+  기기 listed the host ("이 기기", not revocable) and `Chrome · macOS` with last
+  access. Single revocation ended the web tab at once ("서버 연결이 종료됐어요");
+  reload returned to login instead of the room. After a fresh entry, revoke-all
+  ended the web session and kept the host. Central logout was not exercised (user
+  decision). The app was quit normally; tunnel and children exited.
+- Real-provider chat (user-authorized, minimum reasoning, about three minutes):
+  DeepSeek `deepseek-flash` (low, thinking off) and Grok `grok-4.7` (Low) replied and
+  continued the conversation. Codex `gpt-5.6-luna` (Low) entered
+  `provider_turn_recovery_required` twice (`room_observation_unconfirmed`); the same
+  model answers through both installed Codex CLIs. While it was quarantined, the
+  ordered room gave no further turns. Both remain open defects.
+- Daybreak Blue `xhigh`: `2287ca90..77603a81` REVISE 0/1/1/1; corrections
+  `4f2e0f46`, `7bdfecd5`, `0c5b04e7` closed Medium/Low and left one High (legacy
+  parentless pairings); with the user's decision that no deployed users need
+  legacy data, `f2dda814` retires all parentless remote pairings at v77. Final
+  re-review: APPROVE, C0/H0/M0/L0. A signed build of `f2dda814` is not yet manually
+  re-verified.
