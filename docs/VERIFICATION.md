@@ -12891,3 +12891,46 @@ Packaged `app.agentsassemble.uicheck`, NelLe account, this device's server:
   packaged app to avoid changing the account's profile; upload paths are unchanged
   and covered by existing tests with the cropper stubbed.
 
+
+
+## Central server icons, backend only (2026-10-04)
+
+The separate identity-directory Worker owns this feature. Migration 0008 adds an
+empty icon reference to historical server rows and one current bounded PNG blob per
+registration. The existing signed-device central API admits owner-only observed-value
+edits, matching alias idempotence/conflict semantics. Ownership/active registration,
+reference and blob are committed together; registration/claims preserve the icon.
+Bootstrap contains a versioned relative icon reference for every visible server.
+Its authenticated image GET enforces current directory visibility; no credential is
+embedded in a URL or handed to a room host. Shared web headers permit fetched local
+blob images. Frontend source/UI and room appearance are unchanged.
+
+Limits: 512x512 static, noninterlaced 8-bit RGB/RGBA PNG, at most 1,100,000 file bytes.
+The body stream is counted before accumulation; other routes retain 32KiB caps.
+Fixed-size PNG metadata is allowed; animation/compressed ancillary metadata are
+rejected. Platform streaming inflate enforces exact scanline expansion before the
+maintained fast-png8 decoder checks CRC/pixels. One atomic D1 batch replaces/removes
+both fields; no stale/orphan images accumulate. No poll, new token, external image
+fetch, public asset endpoint, object store or production process is added.
+
+Verification: pre-implementation icon tests fail on absent bootstrap/API/storage.
+All38 Worker tests then pass, including independent recovered-device list/image read,
+foreign/bookmark/former-owner mutation denial, stale/replay/logout/revoked rejection,
+image corruption/expansion/oversize rejection, failed-storage rollback, legacy migration,
+registration preservation and delete cascade. Actual workerd plus isolated local D1
+applies all migrations and passes a1,049,366-byte PNG upload, signed cross-device
+list/read, idempotence, expansion/oversize refusal, bookmark denial, removal and server
+cascade. Upload round-trip is136ms in this local sample, including client signing and
+transport; it is not a production latency/CPU measurement. A real D1 discrepancy is
+corrected: registration deletion's positive change count includes cascaded child rows,
+so a completed deletion no longer misreports404. Runtime proof failed before that fix
+and passes after it. Syntax and asset-backed Wrangler dry-run pass (130.56KiB source,
+29.42KiB gzip). Required Worker dependency installation is added to its existing CI.
+
+The legacy owner's working-tree architecture check remains blocked by the pre-existing
+removed application_transaction.py; unrelated cleanup is preserved. A clean shared
+clone with only this patch passes architecture/source-growth and regenerated codebase
+map checks. Rust architecture/source/policy/format/diff gates pass. Central-owner
+source maps retain the small regenerated infrastructure count update. This is backend
+request/storage proof, not frontend UI or production deployment proof. No automated
+security scan or subagent was used. Production migration/deployment are not performed.

@@ -957,3 +957,41 @@ Acceptance: default hostname, durable rename across registration/account reload,
 non-owner/revoked/replay/stale edit rejection, legacy-only migration, shared UI
 save/failure behavior, packaged user flow, mandatory gates and requested Daybreak
 review. This does not claim Windows or live remote-room verification.
+
+
+## Central server icons, backend only (2026-10-04)
+
+User request: persist a server icon in the central directory and return it in each
+CentralServer projection, including another signed-in device. Frontend UI/types and
+room appearance are outside this slice. The existing Worker remains the authority;
+no local engine or host endpoint is needed to edit an offline registration.
+
+Migration 0008 adds servers.icon (empty for existing rows) and one bounded current
+PNG blob per server. POST /v1/servers/:id/icon accepts icon (PNG data URL or empty
+string to remove) and expected_icon (the observed list reference). Current ownership,
+owner relation, active registration and observed value are checked in the write,
+with already-applied writes idempotent as for alias changes. Blob/reference changes
+are one atomic D1 batch. Stale/foreign/bookmark writes fail without mutation.
+Registration and same-owner claims preserve the icon. No new token, public asset
+access, remote image fetch, periodic work or room authority is introduced.
+
+GET /v1/bootstrap returns icon as an empty string or a versioned relative central
+image path. GET of that path uses the same device-signed central authentication and
+checks current owner/bookmark visibility. It returns image/png with no-store and
+nosniff. Shared web headers allow the resulting local blob image. Removed/replaced
+references and unrelated accounts cannot read it. Frontend consumers must signed-fetch the reference and display a local blob URL; no bearer or
+signature belongs in a URL. Compare exact expected_icon on the next edit.
+
+Upload contract: exactly 512x512 static, noninterlaced, 8-bit RGB/RGBA PNG, at most
+1,100,000 decoded-file bytes. Bound the upload stream and decompressed scanlines
+before the maintained PNG decoder verifies checksums and pixel structure. Reject
+external/SVG/JPEG URLs, animation, malformed/truncated PNG, wrong dimensions,
+oversize bodies and compressed expansion. Icon removal leaves no orphan blob;
+registration/account deletion cascades the icon row. Server lists contain only the
+small image reference, not repeated image data.
+
+Acceptance: real Worker request handler with signature checks and migrated SQLite
+proves cross-device lists/image bytes, owner-only set/remove, stale/replay/revocation
+rejection, atomic rollback, preservation across registration and cleanup. Local
+workerd/D1 verifies runtime/storage compatibility; production deployment and migration
+remain separate authorized operations. No frontend or room-icon modifications.

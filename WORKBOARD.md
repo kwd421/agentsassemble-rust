@@ -2,6 +2,17 @@
 
 ## Active work
 
+- 2026-10-04 central server icons (backend-only user request): implement a bounded
+  current PNG and versioned image reference in the existing central Worker. Reuse
+  device-signed authentication and alias-style atomic ownership/observed-value
+  rules; verify another device, non-owner/bookmark denial and removal. Frontend and
+  room appearance are excluded. Contract: identity-accounts-friends slice ->
+  Central server icons. Worker38 tests, actual local workerd/D1 cross-device PNG
+  write/list/read/remove and denial paths pass; syntax, asset-backed dry-run and
+  clean-source owner gates pass. Legacy dirty-tree gate remains blocked by prior
+  deletions. Frontend and production deployment are not part of this completion.
+  Evidence: docs/VERIFICATION.md -> Central server icons.
+
 - 2026-10-04 profile and image-picking UX (user request, Discord as reference): the
   own-profile popout drops its two close buttons and fake badges; custom status
   sits in a bubble beside the avatar and actions are one card (`프로필 편집`,
