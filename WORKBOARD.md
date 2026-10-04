@@ -15,6 +15,16 @@ work is active or waiting, and remove it when it closes.
   the corrections through `f2dda814` at C0/H0/M0/L0; signed 0.1.8 at `03756b43`
   re-verified the schema 75 -> 77 upgrade and revocation. Central logout acceptance
   was skipped by user decision.
+- Planned (user direction 2026-10-05), in order after the ordered-room stall and
+  desktop `/pair` fixes: (1) device pairing without the one-hour session limit,
+  revocable per device from the host, shown as a QR; (2) Tailscale address support
+  so the owner's own devices reach the host with no central request; (3) central
+  request hardening: reuse an unexpired connect grant on reload and move abuse rate
+  limiting off D1 writes (WAF rules later with a custom domain); (4) Discord-style
+  multi-server rail: app opens and serves the local server when central is down,
+  invited members bound to central identity by the host, and the account's server
+  list synced across devices. End-to-end encryption over the tunnel is a later
+  review item.
 - Open verification: Windows physical-device checks (recent Discord-style UI,
   server icons, interactive install/update `desktop-v0.1.4`, attendee CLI); full
   app/web parity rows in the final-parity slice; persistent web MCP endpoint
