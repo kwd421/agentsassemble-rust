@@ -242,6 +242,14 @@ is ordered by its authority transaction: already committed work remains committe
 and later work fails authorization. Closing a waiting socket does not cancel an
 accepted room command or erase its receipt.
 
+User decision (2026-10-05): the v77 upgrade, including databases already at v76,
+once revokes all remote operator pairing grants/sessions without a host parent,
+regardless of `central_owner`, and cuts off their derived authority at pairing
+redemption, session authorization, further issuance and attendee admission/use;
+legacy provenance cannot distinguish native-issued from old central-issued pairings.
+Remote devices must reconnect once; the native host and local operator authority
+remain intact, and pairings created after this upgrade survive later opens.
+
 Central request budget, excluding retries/login/registration/other product actions:
 connected owner renewal **0 requests and 0 D1 writes per user per day**, independent
 of duration or user count. Each admission uses **2 Worker requests** (grant issue

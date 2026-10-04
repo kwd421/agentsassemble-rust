@@ -2,7 +2,7 @@ use sqlx::{Row, SqlitePool};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 76;
+pub const CURRENT_SCHEMA_VERSION: i64 = 77;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -44,7 +44,7 @@ pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), Per
 }
 
 // Called only after the existing host key and database authority have been verified.
-// Additive upgrades retain existing product rows and never promote existing sessions.
+// Upgrades retain product rows but retire legacy remote authority without provable custody.
 pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let mut tx = pool.begin().await?;
     let version: String =
@@ -125,6 +125,19 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .execute(&mut *tx)
             .await?;
     }
+    if version.parse::<i64>().is_ok_and(|version| version < 77) {
+        // Old unmarked pairings cannot prove native versus central issuance.
+        // Retire used sessions and unused grants once, including v76 survivors;
+        // attendee authority is denied by its existing parent revalidation.
+        sqlx::query(
+            "UPDATE operator_pairings SET revoked = 1 WHERE host_owner_session_fingerprint IS NULL",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '77' WHERE key = 'schema_version'")
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -135,7 +148,7 @@ mod tests {
     use crate::{PersistenceError, SqliteStore};
 
     #[tokio::test]
-    async fn supported_upgrade_preserves_bootstrap_room_and_pairing_authority()
+    async fn supported_upgrade_preserves_bootstrap_room_and_local_authority()
     -> Result<(), Box<dyn std::error::Error>> {
         for previous in [70, 71, 72, 73, 74] {
             let directory = tempfile::tempdir()?;
@@ -222,69 +235,261 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn legacy_parentless_central_sessions_are_revoked_on_upgrade()
-    -> Result<(), Box<dyn std::error::Error>> {
-        for previous in [72, 73, 75] {
-            let directory = tempfile::tempdir()?;
-            let path = directory.path().join("runtime.sqlite3");
-            let store = SqliteStore::open_path(&path).await?;
+    async fn v72_parentless_remote_authority_is_retired() -> TestResult {
+        parentless_remote_authority_is_retired(72).await
+    }
+
+    #[tokio::test]
+    async fn v73_parentless_remote_authority_is_retired() -> TestResult {
+        parentless_remote_authority_is_retired(73).await
+    }
+
+    #[tokio::test]
+    async fn v75_parentless_remote_authority_is_retired() -> TestResult {
+        parentless_remote_authority_is_retired(75).await
+    }
+
+    #[tokio::test]
+    async fn v76_parentless_remote_authority_is_retired() -> TestResult {
+        parentless_remote_authority_is_retired(76).await
+    }
+
+    type TestResult = Result<(), Box<dyn std::error::Error>>;
+
+    struct LegacyRemoteAuthority {
+        root: crate::OperatorSessionAuthorization,
+        child: crate::OperatorSessionAuthorization,
+        invites: Vec<[u8; 32]>,
+        attendee: crate::AttendeeAdmission,
+        join_id: uuid::Uuid,
+    }
+
+    fn attendee_admission(
+        fingerprint: &[u8; 32],
+        request_id: uuid::Uuid,
+    ) -> crate::AttendeeAdmissionRequest<'_> {
+        crate::AttendeeAdmissionRequest {
+            invite_fingerprint: fingerprint,
+            client_fingerprint: &[9; 32],
+            request_id,
+            provider_kind: "codex_live_session",
+            display_name: "Companion",
+        }
+    }
+
+    async fn legacy_remote_authority(
+        store: &SqliteStore,
+    ) -> Result<LegacyRemoteAuthority, Box<dyn std::error::Error>> {
+        use crate::{RoomManagerAuthority, RoomSessionAuthorization};
+        use chrono::Utc;
+        use sha2::{Digest, Sha256};
+        store
+            .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Host")
+            .await?;
+        store
+            .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "room", "Room")
+            .await?;
+        let manager = store
+            .authorize_local_room_manager(
+                "room",
+                agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+                agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await?;
+        let origin = "https://owner.example.test";
+        store
+            .create_operator_pairing(
+                &RoomManagerAuthority::Local(manager),
+                &[31; 32],
+                origin,
+                Utc::now(),
+            )
+            .await?;
+        let root = store
+            .redeem_operator_pairing(&[31; 32], &[42; 32], origin, Utc::now())
+            .await?
+            .authorization;
+        // Reproduce the old central owner issuing an unmarked pairing and grant.
+        sqlx::query("UPDATE operator_pairings SET central_owner = 1")
+            .execute(&store.pool)
+            .await?;
+        let root = store
+            .authorize_operator_session(root.session_fingerprint(), &[42; 32], origin)
+            .await?;
+        for token in [32, 33] {
             store
-                .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Host")
-                .await?;
-            store
-                .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "room", "Room")
-                .await?;
-            let manager = store
-                .authorize_local_room_manager(
-                    "room",
-                    agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
-                    agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+                .create_operator_pairing(
+                    &RoomManagerAuthority::Operator(Box::new(root.clone())),
+                    &[token; 32],
+                    origin,
+                    Utc::now(),
                 )
                 .await?;
-            for fingerprint in [31, 32] {
-                store
-                    .create_operator_pairing(
-                        &crate::RoomManagerAuthority::Local(manager.clone()),
-                        &[fingerprint; 32],
-                        "https://owner.example.test",
-                        chrono::Utc::now(),
-                    )
-                    .await?;
-            }
-            sqlx::query("UPDATE operator_pairings SET central_owner = 1, session_fingerprint = ?, device_fingerprint = ?, session_expires_at = ? WHERE token_fingerprint = ?")
-                .bind([41_u8; 32].as_slice()).bind([42_u8; 32].as_slice())
-                .bind((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp_micros())
-                .bind([31_u8; 32].as_slice()).execute(&store.pool).await?;
-            if previous < 75 {
-                simulate_previous_schema(&store, previous).await?;
-            }
-            sqlx::query("UPDATE runtime_metadata SET value = ? WHERE key = 'schema_version'")
-                .bind(previous.to_string())
-                .execute(&store.pool)
+        }
+        let child = store
+            .redeem_operator_pairing(&[32; 32], &[43; 32], origin, Utc::now())
+            .await?
+            .authorization;
+        // A used unmarked pairing can perpetuate manager authority before the fix.
+        store
+            .create_operator_pairing(
+                &RoomManagerAuthority::Operator(Box::new(child.clone())),
+                &[34; 32],
+                origin,
+                Utc::now(),
+            )
+            .await?;
+        let issuer = RoomSessionAuthorization::Operator(child.clone());
+        let mut invites = Vec::new();
+        for _ in 0..2 {
+            let invite = store
+                .create_companion_attendee_invite(
+                    &issuer,
+                    crate::CompanionInviteRequest {
+                        request_id: uuid::Uuid::new_v4(),
+                        provider_kind: "codex_live_session",
+                        display_name: "Companion",
+                    },
+                    Utc::now(),
+                )
                 .await?;
-            drop(store);
-            let reopened = SqliteStore::open_path(&path).await?;
+            invites.push(<[u8; 32]>::from(Sha256::digest(
+                invite.invite_bearer.as_bytes(),
+            )));
+        }
+        let join_id = uuid::Uuid::new_v4();
+        let attendee = store
+            .admit_attendee(attendee_admission(&invites[0], join_id), Utc::now())
+            .await?;
+        store
+            .revalidate_attendee_session(&attendee.authorization, Utc::now())
+            .await?;
+        Ok(LegacyRemoteAuthority {
+            root,
+            child,
+            invites,
+            attendee,
+            join_id,
+        })
+    }
+
+    async fn parentless_remote_authority_is_retired(previous: i32) -> TestResult {
+        use crate::RoomManagerAuthority;
+        use chrono::Utc;
+
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path).await?;
+        let LegacyRemoteAuthority {
+            root,
+            child,
+            invites,
+            attendee,
+            join_id,
+        } = legacy_remote_authority(&store).await?;
+        let origin = "https://owner.example.test";
+        if previous < 75 {
+            simulate_previous_schema(&store, previous).await?;
+        }
+        sqlx::query("UPDATE runtime_metadata SET value = ? WHERE key = 'schema_version'")
+            .bind(previous.to_string())
+            .execute(&store.pool)
+            .await?;
+        drop(store);
+        let reopened = SqliteStore::open_path(&path).await?;
+        assert!(
+            reopened
+                .authorize_operator_session(child.session_fingerprint(), &[43; 32], origin)
+                .await
+                .is_err(),
+            "v{previous} unmarked session survived"
+        );
+        assert!(
+            reopened
+                .authorize_operator_session(root.session_fingerprint(), &[42; 32], origin)
+                .await
+                .is_err()
+        );
+        assert!(
+            reopened
+                .create_operator_pairing(
+                    &RoomManagerAuthority::Operator(Box::new(child)),
+                    &[35; 32],
+                    origin,
+                    Utc::now()
+                )
+                .await
+                .is_err()
+        );
+        for token in [31, 32, 33, 34] {
+            let device = if token == 31 { 42 } else { 43 };
             assert!(
                 reopened
-                    .authorize_operator_session(&[41; 32], &[42; 32], "https://owner.example.test")
+                    .redeem_operator_pairing(&[token; 32], &[device; 32], origin, Utc::now())
                     .await
-                    .is_err(),
-                "v{previous} authority survived"
-            );
-            let rows: Vec<(i64, i64)> = sqlx::query_as(
-                "SELECT central_owner, revoked FROM operator_pairings ORDER BY central_owner",
-            )
-            .fetch_all(&reopened.pool)
-            .await?;
-            assert_eq!(rows, vec![(0, 0), (1, 1)]);
-            assert_eq!(
-                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM rooms WHERE room_id = 'room'")
-                    .fetch_one(&reopened.pool)
-                    .await?,
-                1
+                    .is_err()
             );
         }
+        assert!(
+            reopened
+                .revalidate_attendee_session(&attendee.authorization, Utc::now())
+                .await
+                .is_err()
+        );
+        for invite in &invites {
+            assert!(
+                reopened
+                    .admit_attendee(attendee_admission(invite, join_id), Utc::now())
+                    .await
+                    .is_err()
+            );
+        }
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT COUNT(*) FROM operator_pairings WHERE revoked = 1"
+            )
+            .fetch_one(&reopened.pool)
+            .await?,
+            4
+        );
+        let fresh = reconnect_native_remote(&reopened).await?;
+        drop(reopened);
+        let reopened = SqliteStore::open_path(&path).await?;
+        reopened
+            .authorize_operator_session(fresh.session_fingerprint(), &[44; 32], origin)
+            .await?;
         Ok(())
+    }
+
+    async fn reconnect_native_remote(
+        store: &SqliteStore,
+    ) -> Result<crate::OperatorSessionAuthorization, Box<dyn std::error::Error>> {
+        use crate::RoomManagerAuthority;
+        use chrono::Utc;
+        let origin = "https://owner.example.test";
+        store
+            .validate_server_owner(&crate::ServerOwnerAuthority::LocalOperator)
+            .await?;
+        let manager = store
+            .authorize_local_room_manager(
+                "room",
+                agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+                agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await?;
+        store
+            .create_operator_pairing(
+                &RoomManagerAuthority::Local(manager),
+                &[36; 32],
+                origin,
+                Utc::now(),
+            )
+            .await?;
+        let fresh = store
+            .redeem_operator_pairing(&[36; 32], &[44; 32], origin, Utc::now())
+            .await?
+            .authorization;
+        Ok(fresh)
     }
 
     async fn simulate_previous_schema(

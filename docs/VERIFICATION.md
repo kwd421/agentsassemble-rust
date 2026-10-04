@@ -13197,3 +13197,30 @@ contract and evidence below replace that implementation; no migration 0009 is ne
   Rust 1,070, frontend 991, policy 19 passed; builds/Clippy passed. `make verify`
   ran once and stopped only at the final 18GiB artifact cap; owner cleanup and
   `make artifact-check` then passed. Production and signed/manual proof remain open.
+
+## Parentless remote authority upgrade correction (2026-10-05)
+
+- Daybreak re-review `77603a81..0c5b04e7`: the user reports Medium/Low
+  closed; the remaining High is valid because v76 missed unmarked descendants.
+- User-authorized v77 retires every parentless operator pairing row once, used or
+  unused, independent of `central_owner`; existing attendee parent revalidation
+  denies derived admission, replay and session use. Native bootstrap/local
+  operator authority is preserved; remote devices reconnect once.
+- Before the migration change, all four v72/v73/v75/v76 regressions failed with
+  `unmarked session survived`. Afterward persistence passes 368/368 tests,
+  including descendant issuance denial and new pairing survival after reopening.
+- The migration remains in the schema owner's transaction (one table
+  update plus version write); no new runtime loop or remote request is added.
+  The 645-line file remains cohesive migration/upgrade verification ownership.
+- Production, remote operations, signed builds and manual acceptance are excluded
+  from this task; this correction does not claim new external review approval.
+- `make verify` ran once: all Rust tests (1,073 including 43 desktop),
+  frontend (168 files / 991 tests), and policy tests (19) passed. Clippy caught
+  the regression helper exceeding the unchanged 100-line function limit.
+  Split fixture setup, upgrade denial and native reconnection responsibilities;
+  persistence 368/368 and final affected regressions 4/4 passed afterward.
+  Workspace all-target/all-feature Clippy then passed without gate exceptions.
+- Final architecture, formatting and diff gates passed. Artifact check found
+  31,486,398,464 bytes against the unchanged 18 GiB cap; with no Cargo/Tauri
+  work running, the existing `make artifact-prune` owner cleaned only repository
+  Cargo artifacts, then `make artifact-check` passed. No full verify rerun.
