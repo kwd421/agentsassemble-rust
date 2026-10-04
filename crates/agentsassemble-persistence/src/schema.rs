@@ -392,6 +392,11 @@ const TABLES: &[TableDefinition] = &[
         infrastructure: false,
     },
     TableDefinition {
+        name: "ordered_input_routes",
+        ddl: crate::ordered_input_route::DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "room_events",
         ddl: "CREATE TABLE IF NOT EXISTS room_events (room_id TEXT NOT NULL, seq INTEGER NOT NULL CHECK(seq > 0), event_json TEXT NOT NULL, PRIMARY KEY(room_id, seq), FOREIGN KEY(room_id) REFERENCES rooms(room_id) ON DELETE CASCADE)",
         infrastructure: false,

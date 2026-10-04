@@ -1,8 +1,8 @@
-use sqlx::{Row, SqlitePool};
+use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 78;
+pub const CURRENT_SCHEMA_VERSION: i64 = 79;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -138,14 +138,32 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .execute(&mut *tx)
             .await?;
     }
+    upgrade_turn_custody(&mut tx, &version).await?;
+    tx.commit().await?;
+    Ok(())
+}
+
+// Turn custody upgrades share the receipt and immutable-input routing boundary.
+async fn upgrade_turn_custody(
+    tx: &mut Transaction<'_, Sqlite>,
+    version: &str,
+) -> Result<(), PersistenceError> {
     if version.parse::<i64>().is_ok_and(|version| version < 78) {
         sqlx::query("ALTER TABLE provider_turn_executions ADD COLUMN released_input_ids TEXT CHECK(released_input_ids IS NULL OR (json_valid(released_input_ids) AND json_type(released_input_ids) = 'array'))")
-            .execute(&mut *tx).await?;
+            .execute(&mut **tx).await?;
         sqlx::query("UPDATE runtime_metadata SET value = '78' WHERE key = 'schema_version'")
-            .execute(&mut *tx)
+            .execute(&mut **tx)
             .await?;
     }
-    tx.commit().await?;
+    if version.parse::<i64>().is_ok_and(|version| version < 79) {
+        sqlx::query(crate::ordered_input_route::DDL)
+            .execute(&mut **tx)
+            .await?;
+        crate::ordered_input_route::upgrade_retained_inputs(tx).await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '79' WHERE key = 'schema_version'")
+            .execute(&mut **tx)
+            .await?;
+    }
     Ok(())
 }
 

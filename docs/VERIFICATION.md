@@ -1,5 +1,45 @@
 # Verification Contract
 
+## Daybreak ordered recovery H1/M1 corrections (2026-10-05)
+
+Both findings against `fae521d9` were confirmed in code. Before correction, four
+entry-point regressions failed for dispatched task death, interrupt handback,
+receipt-less quarantine replay and schema-upgraded quarantine. Rename/removal and
+a newly matching name reproduced three routing failures. The additional
+ambient-to-ordered decline regression failed with `ordered_route_missing` before
+connecting that first ordered route to the same immutable owner.
+
+One transaction now owns quarantine execution/public state, the durable release
+receipt, input transfer and next assignment across ordinary-result recovery, task
+death and interrupt recovery/ambiguity. Interrupt runtime callers deliver the
+committed state/assignments to the room instead of discarding them with an error.
+Startup repairs NULL receipts for recovery and both checkpointed/finalized Stop,
+and records assignments for the existing startup reconciliation owner. A recovery
+phase without a receipt cannot release the floor. Schema 79 stores source-owned
+ordered routing identity independently of mutable profiles and session lifetime;
+legacy classification uses canonical historical identities before release repair.
+The original quarantine, direct-target, once-only ordinary handoff, late-result
+suppression and fresh-generation resume decisions remain unchanged.
+
+Affected-crate verification: persistence 387 tests passed before the final
+mode-transition regression, server 301 tests passed (unit and integration), and
+the latest ordered recovery suite passed 20 tests. Upgrade coverage includes actual
+77/78 layouts, renamed direct and ordinary inputs, and completed Stop custody.
+The single commit-time `make verify` run passed architecture/policy, formatting,
+frontend 991 tests (168 files), desktop 46 tests and workspace Rust 1,050 tests,
+then stopped at Clippy's migration-function length and condition-expression findings.
+The turn-custody migrations were grouped under their existing schema owner and the
+condition corrected. The subsequent Clippy pass exposed a 16,824-byte downstream
+startup future; boxing the startup repair at its owner removed that propagation
+without a lint exception. Final persistence tests passed 388, then the final
+owner-layout correction passed all 20 ordered regressions and the three affected
+server lifecycle retry integration tests. `make format-check clippy diff-check`
+passed. After every Cargo process ended and no target file was open, the existing
+artifact owner cleaned 28.7 GiB of generated artifacts; `make artifact-check` passed.
+The full verification command was not repeated.
+No deployment, signed app build, real-provider run, manual verification or new
+security scan was performed. `.agents/` and `scripts/__pycache__/` were untouched.
+
 ## Ordered recovery floor isolation (2026-10-05)
 
 The persistence owner separates a quarantined execution's recovery custody from

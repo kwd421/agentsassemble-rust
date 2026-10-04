@@ -7,7 +7,22 @@ pub(super) fn last_direct_target<'a>(
     content: &str,
     sessions: impl Iterator<Item = &'a DurableAgentSession>,
 ) -> Option<String> {
-    let aliases = unique_aliases(sessions);
+    last_direct_target_for_names(
+        content,
+        sessions.map(|session| {
+            (
+                session.public.session_id.as_str(),
+                session.public.display_name.as_str(),
+            )
+        }),
+    )
+}
+
+pub(crate) fn last_direct_target_for_names<'a>(
+    content: &str,
+    names: impl Iterator<Item = (&'a str, &'a str)>,
+) -> Option<String> {
+    let aliases = unique_aliases(names);
     let content = content.to_lowercase();
     aliases
         .into_iter()
@@ -20,14 +35,13 @@ pub(super) fn last_direct_target<'a>(
 }
 
 fn unique_aliases<'a>(
-    sessions: impl Iterator<Item = &'a DurableAgentSession>,
+    names: impl Iterator<Item = (&'a str, &'a str)>,
 ) -> BTreeMap<String, Option<String>> {
     let mut aliases = BTreeMap::<String, Option<String>>::new();
-    for session in sessions {
-        let session_id = &session.public.session_id;
-        for candidate in std::iter::once(session_id.as_str())
-            .chain(std::iter::once(session.public.display_name.as_str()))
-            .chain(session.public.display_name.split(is_alias_separator))
+    for (session_id, display_name) in names {
+        for candidate in std::iter::once(session_id)
+            .chain(std::iter::once(display_name))
+            .chain(display_name.split(is_alias_separator))
         {
             let alias = candidate
                 .trim_matches(|character: char| " @,;!?[]{}".contains(character))
@@ -42,7 +56,7 @@ fn unique_aliases<'a>(
                         *owner = None;
                     }
                 })
-                .or_insert_with(|| Some(session_id.clone()));
+                .or_insert_with(|| Some(session_id.to_owned()));
         }
     }
     aliases

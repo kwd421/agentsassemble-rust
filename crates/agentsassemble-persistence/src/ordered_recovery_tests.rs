@@ -491,3 +491,6 @@ async fn ordered_quarantine_after_archive_retains_custody_without_scheduling()
 
 #[path = "ordered_release_entry_tests.rs"]
 mod entry_tests;
+
+#[path = "ordered_target_identity_tests.rs"]
+mod target_tests;

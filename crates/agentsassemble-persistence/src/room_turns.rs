@@ -540,7 +540,7 @@ mod context;
 #[path = "room_turn_finalization.rs"]
 mod finalization;
 #[path = "room_turn_routing.rs"]
-mod routing;
+pub(crate) mod routing;
 #[path = "room_turn_scheduler.rs"]
 pub(crate) mod scheduler;
 #[path = "room_turn_support.rs"]

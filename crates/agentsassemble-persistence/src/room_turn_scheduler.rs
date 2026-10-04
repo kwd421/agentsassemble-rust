@@ -37,7 +37,22 @@ pub(super) async fn route_message(
     let sessions = route_sessions(transaction, event).await?;
     let targets = match settings.conversation_mode.as_str() {
         "ordered" => {
-            ordered_targets(transaction, settings, event, &sessions, &BTreeSet::new()).await?
+            let direct = direct_target(event, &sessions, &BTreeSet::new());
+            let addressed = direct.is_some();
+            let targets = ordered_targets(
+                transaction,
+                settings,
+                event,
+                &sessions,
+                &BTreeSet::new(),
+                direct,
+            )
+            .await?;
+            if let Some((selected, _)) = targets.first() {
+                crate::ordered_input_route::record_first(transaction, event, selected, addressed)
+                    .await?;
+            }
+            targets
         }
         "ambient" => ambient_targets(event, &sessions),
         _ => {
@@ -175,7 +190,8 @@ async fn route_next_floor(
         return Ok(false);
     }
     let mut sessions = route_sessions(transaction, event).await?;
-    if preserve_target && direct_target(event, &sessions, &BTreeSet::new()).is_some() {
+    if preserve_target && crate::ordered_input_route::directly_addressed(transaction, event).await?
+    {
         return Ok(false);
     }
     let held = floor_holders(transaction, &event.room_id, &event.id).await?;
@@ -188,7 +204,18 @@ async fn route_next_floor(
                 .last_provider_sync_seq
                 .max(session.input_up_to_seq)
     });
-    let targets = ordered_targets(transaction, settings, event, &sessions, &held).await?;
+    let direct = if preserve_target {
+        None
+    } else {
+        direct_target(event, &sessions, &held)
+    };
+    let addressed = direct.is_some();
+    let targets = ordered_targets(transaction, settings, event, &sessions, &held, direct).await?;
+    // An ambient observation may first acquire ordered custody after a mode change and decline.
+    // Existing ordered identity survives every subsequent holder unchanged.
+    if !preserve_target && let Some((selected, _)) = targets.first() {
+        crate::ordered_input_route::record_first(transaction, event, selected, addressed).await?;
+    }
     let handed = !targets.is_empty();
     for (session_id, delivery_kind) in targets {
         queue_input(transaction, event, &session_id, delivery_kind).await?;
@@ -222,8 +249,8 @@ async fn ordered_targets(
     event: &RoomEvent,
     sessions: &[(DurableAgentSession, Participant)],
     excluded: &BTreeSet<String>,
+    direct: Option<String>,
 ) -> Result<Vec<(String, RoomInputDeliveryKind)>, PersistenceError> {
-    let direct = direct_target(event, sessions, excluded);
     let selected = if let Some(direct) = direct {
         let participant = sessions
             .iter()

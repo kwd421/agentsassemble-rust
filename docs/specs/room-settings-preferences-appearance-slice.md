@@ -145,6 +145,16 @@ target and direct/ordinary classification. Release reads this immutable decision
 profile rename or participant/session removal. Regression acceptance includes each of these
 entry points and schema-upgraded rows, without provider or manual runs.
 
+Schema 79 stores `ordered_input_routes` keyed by the canonical source event sequence,
+with the selected session ID and direct/ordinary classification. This routing fact has
+source-event lifetime and no session foreign key; profile changes, removal and later
+handoffs cannot rewrite it. Queue delivery kind remains owned by `QueuedRoomInput`.
+The 78 -> 79 upgrade classifies retained ordered inputs from canonical Agent Session
+identities preceding the source event, never current names, and preserves their earliest
+recorded holder or pending custody. Missing historical identity fails visibly. The
+upgrade completes before startup release repair. Routing adds one bounded row write per
+selected ordered source; release reads that row. There is no new periodic task or scan.
+
 Routing preserves the original distinction between addressed and unaddressed work.
 
 - Ordered direct targeting treats a structured handoff as the earliest target and

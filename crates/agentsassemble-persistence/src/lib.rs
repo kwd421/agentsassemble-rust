@@ -190,6 +190,7 @@ mod human_invite_preflight_tests;
 mod human_session_authority_tests;
 #[cfg(test)]
 mod message_attachment_tests;
+mod ordered_input_route;
 mod ordered_turn_release;
 mod participant_leave;
 mod participant_mute;

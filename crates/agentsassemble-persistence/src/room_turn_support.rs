@@ -469,7 +469,7 @@ pub(super) fn rejection(error: agentsassemble_domain::CommandRejection) -> Persi
     rejected(error.code, error.message)
 }
 
-pub(super) fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
+pub(crate) fn rejected(code: &'static str, message: impl Into<String>) -> PersistenceError {
     PersistenceError::CommandRejected {
         code: code.into(),
         message: message.into(),
