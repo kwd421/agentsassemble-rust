@@ -7,8 +7,11 @@
   sockets/streams and drafts. Central leases 60s, host renewal 20s, request deadline
   8s; definitive revocation normally <=28s, central loss cutoff <=60s. Correct
   invite unknown/error presentation in the shared frontend. Contract: identity-
-  accounts-friends slice -> Renewable central owner workspace. Implementation and
-  verification in progress; production Worker/migration need user approval.
+  accounts-friends slice -> Renewable central owner workspace. Rust 1018, frontend 973,
+  desktop 43, Worker 43 and local workerd/D1 boundaries pass. Signed 0.1.6 UI Check
+  retains the existing account/rooms and confirmed-off invite control. Production
+  Worker/migration and actual web >5min + logout flow await user approval; acceptance
+  and its required review remain open.
 
 - 2026-10-04 Finder-launched runtime tool discovery (web verification blocker):
   live UI Check app and both runtime children inherit GUI PATH without Homebrew,

@@ -13038,3 +13038,68 @@ Live process inspection confirmed the desktop (65235), supervisor (65474) and se
 - Gates: tsc, frontend 165 files/967 tests, architecture check and diff check pass.
   External access was turned off afterwards and cloudflared exited. The UI Check
   bundle/data are retained. Windows physical-device verification remains unverified.
+
+## Renewable central owner workspace (2026-10-04)
+
+- User-approved contract separates the 300s entry grant from stable host owner
+  custody. Central authority leases 60s and renews at 20s with an 8s request
+  deadline. Definitive central logout/owner transfer/server or device revocation
+  is normally observed within 28s; central loss cannot authorize beyond the last
+  confirmed 60s lease. Retry delays are 2/4/8s, bounded by that existing deadline.
+- Central Worker commit `fcbfab58` adds migration 0009, exact one-browser entry
+  exchange, immutable connection provenance and atomic current-authority renewal.
+  Endpoint heartbeat preserves an online endpoint's generation; restart, address
+  replacement and offline retirement retain generation changes. Central credentials
+  remain at the central origin. No new compatibility path or gate exception.
+- Rust commits `f5cbe440`, `541a7609`, `73c0a030`, `03ef14f8`, `d39bdead` add schema
+  74 and revalidate renewable parents in authority transactions. One runtime-owned
+  renewal is shared by an owner's directory streams and room sockets, ends on the
+  last disconnect and joins runtime shutdown. Lease updates preserve room tokens,
+  socket/stream connections and mounted drafts; terminal authority closes sockets
+  and blocks the existing workspace above already-open dialogs.
+- The common invite controller/UI represents checking, confirmed and unavailable
+  separately. Failed authentication/status queries do not become confirmed off;
+  retry uses the current room/session and disables ingress-dependent creation
+  while its state is unknown.
+- All-feature Rust workspace: 1,018 tests pass, no ignored tests; all-target/all-
+  feature Clippy passes. After the final socket cancellation change, all four
+  central-owner boundary tests and their Clippy check pass again, including shared
+  renewal with send/receive, revocation of idle sockets, origin/device denial,
+  last-disconnect cancellation and central-failure cutoff. Storage tests include
+  non-destructive upgrades from schemas 70-73 with existing room/pairing custody.
+- Frontend: 166 files / 973 tests pass, plus 13 focused boundary/entry tests after
+  the final native-dialog overlay change; final tsc/vite build passes. Controlled
+  fake-clock use crosses 380s while retaining the same input/draft and component;
+  these checks are not evidence of actual production browser use. Desktop 43
+  checks, Clippy, architecture/source-growth, format/diff and 19 policy/artifact
+  owner tests pass.
+- Central: 43 unit tests pass. Isolated workerd/D1 applied all nine migrations and
+  passed actual signed guest/server setup, exact exchange replay, foreign-browser
+  rejection, stable endpoint generation, renewal and logout -> existing connection
+  401. Temporarily coupling renewal to the expired entry grant makes the >300s
+  regression fail with 401; restored code passes. Worker dry-run bundles the shared
+  frontend (137.66KiB / gzip30.61KiB), without production writes.
+- Full validation grew Cargo artifacts above the unchanged 18GiB gate. Needed
+  bundle retained separately; missing Cargo cache ownership marker was restored
+  from a Cargo-generated marker on the verified project target, then the designated
+  artifact owner removed 40.8GiB and artifact-check passed. The known macOS
+  proc-macro LINKEDIT packaging failure requires the documented invocation-only
+  build-time dependency setting; product profiles and gates are unchanged.
+- Production Worker deployment and additive migration 0009 remain unapproved.
+  Actual signed-in web use past five minutes with send/receive and logout closing
+  the original tab remains unverified pending that approval; acceptance and its
+  required review remain open.
+- Signed packaged `app.agentsassemble.uicheck`0.1.6 (75.35MiB) passes deep/strict
+  signature validation with its existing certificate. Tauri CLI receives the
+  verification identity explicitly via --config; the certificate fingerprint
+  disambiguates the host's two identically named Developer ID certificates.
+  Invocation-only CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=none resolves the
+  recorded proc-macro loader failure. No signing/profile policy file is changed.
+- Direct app manipulation opens the retained Nel Le account's local registration
+  e2ae6075, displays the existing room/message, and opens its invite dialog with
+  confirmed `외부 접속 꺼짐` and enabled `외부 접속 열기`. Public access remains off;
+  checking/error UI and central-owner renewal/revocation are not claimed as native
+  UI proof. The app stays at this off-state dialog for the pending web check, with
+  its bundle and existing data retained. The task-owned local workerd exits; its
+  isolated synthetic state is regenerable. Post-package artifact-check passes
+  with 3.6GiB in the project target, below the unchanged 18GiB bound.
