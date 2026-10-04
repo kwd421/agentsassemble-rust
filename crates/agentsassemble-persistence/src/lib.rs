@@ -1,3 +1,11 @@
+mod host_owner_session;
+#[cfg(test)]
+mod host_owner_session_tests;
+pub use host_owner_session::{
+    HostOwnerSessionAuthorization, HostOwnerSessionRedemption,
+    OWNER_SESSION_PREFIX as HOST_OWNER_SESSION_PREFIX, OwnerAdmission, OwnerAdmissionBinding,
+    OwnerDeviceDescription,
+};
 mod central_owner_session;
 #[cfg(test)]
 mod central_owner_session_tests;

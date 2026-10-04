@@ -20,6 +20,7 @@ pub use attendee_entry::{
 };
 pub use central_owner::{
     CentralOwnerSessionEnd, CentralOwnerSessionGrant, CentralOwnerSessionStatus,
+    OwnerDeviceDescription, OwnerDeviceKind, OwnerDeviceSession, OwnerDevices, RevokeOwnerDevices,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

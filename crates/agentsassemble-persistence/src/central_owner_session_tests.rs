@@ -36,19 +36,23 @@ fn lease(binding: OwnerConnectionBinding) -> Result<OwnerConnectionLease, crate:
 async fn owner_parent_is_room_independent_and_renewal_preserves_room_credential()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, binding) = setup().await?;
-    let first = store.create_owner_session(&lease(binding.clone())?).await?;
-    let replay = store.create_owner_session(&lease(binding.clone())?).await?;
+    let first = store
+        .create_leased_owner_session(&lease(binding.clone())?)
+        .await?;
+    let replay = store
+        .create_leased_owner_session(&lease(binding.clone())?)
+        .await?;
     assert_eq!(first.session_bearer, replay.session_bearer);
     let owner_session = first.authorization;
     assert!(
         store
-            .authorize_owner_session(owner_session.fingerprint(), &[41; 32], &binding.origin)
+            .authorize_leased_owner_session(owner_session.fingerprint(), &[41; 32], &binding.origin)
             .await
             .is_err()
     );
     assert!(
         store
-            .authorize_owner_session(
+            .authorize_leased_owner_session(
                 owner_session.fingerprint(),
                 &[42; 32],
                 "https://other.example.test"
@@ -125,7 +129,9 @@ async fn owner_parent_is_room_independent_and_renewal_preserves_room_credential(
 async fn expired_parent_and_endpoint_replacement_end_authority_without_promoting_pairings()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, binding) = setup().await?;
-    let issued = store.create_owner_session(&lease(binding.clone())?).await?;
+    let issued = store
+        .create_leased_owner_session(&lease(binding.clone())?)
+        .await?;
     let owner_session = issued.authorization;
     sqlx::query("UPDATE central_owner_sessions SET expires_at = ?")
         .bind(Utc::now().timestamp())
@@ -133,7 +139,7 @@ async fn expired_parent_and_endpoint_replacement_end_authority_without_promoting
         .await?;
     assert!(
         store
-            .authorize_owner_session(owner_session.fingerprint(), &[42; 32], &binding.origin)
+            .authorize_leased_owner_session(owner_session.fingerprint(), &[42; 32], &binding.origin)
             .await
             .is_err()
     );
@@ -145,19 +151,19 @@ async fn expired_parent_and_endpoint_replacement_end_authority_without_promoting
     );
     assert!(
         store
-            .create_owner_session(&lease(binding.clone())?)
+            .create_leased_owner_session(&lease(binding.clone())?)
             .await
             .is_err()
     );
     let (store, binding) = setup().await?;
     let owner_session = store
-        .create_owner_session(&lease(binding.clone())?)
+        .create_leased_owner_session(&lease(binding.clone())?)
         .await?
         .authorization;
     store.next_central_endpoint_generation().await?;
     assert!(
         store
-            .authorize_owner_session(owner_session.fingerprint(), &[42; 32], &binding.origin)
+            .authorize_leased_owner_session(owner_session.fingerprint(), &[42; 32], &binding.origin)
             .await
             .is_err()
     );

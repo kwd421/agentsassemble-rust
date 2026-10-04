@@ -2,16 +2,16 @@
 
 ## Active work
 
-- 2026-10-04 renewable owner workspace (user-approved design): separate the short
-  central entry grant from a host-issued renewable server-owner session, preserving
-  sockets/streams and drafts. Central leases 60s, host renewal 20s, request deadline
-  8s; definitive revocation normally <=28s, central loss cutoff <=60s. Correct
-  invite unknown/error presentation in the shared frontend. Contract: identity-
-  accounts-friends slice -> Renewable central owner workspace. Rust 1018, frontend 973,
-  desktop 43, Worker 43 and local workerd/D1 boundaries pass. Signed 0.1.6 UI Check
-  retains the existing account/rooms and confirmed-off invite control. Production
-  Worker/migration and actual web >5min + logout flow await user approval; acceptance
-  and its required review remain open.
+- 2026-10-04 host-owned owner sessions (latest user-approved direction): central
+  checks entry/reconnection only; no owner renewal or central authorization lease.
+  The host and other admitted devices of the same account list identifiable
+  browser/OS/device sessions and revoke one/all, immediately closing dependent
+  transports. Preserve the native recovery owner and isolate account-wide remote
+  revocation after ownership transfer. Contract: identity-accounts-friends slice
+  -> Host-owned owner workspace and devices. Implementation and affected gates,
+  common UI, packaged verification and actual web acceptance are in progress.
+  Production Worker deployment/migrations require user approval. The superseded
+  renewal implementation passed local gates at `274dfda2`; it was never deployed.
 
 - 2026-10-04 Finder-launched runtime tool discovery (web verification blocker):
   live UI Check app and both runtime children inherit GUI PATH without Homebrew,

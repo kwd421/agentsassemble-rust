@@ -9,7 +9,12 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 const TABLES: &[TableDefinition] = &[
     TableDefinition {
         name: "central_owner_sessions",
-        ddl: crate::central_owner_session::DDL,
+        ddl: crate::schema_version::V74_OWNER_SESSIONS_DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
+        name: "host_owner_sessions",
+        ddl: crate::host_owner_session::DDL,
         infrastructure: false,
     },
     TableDefinition {
@@ -143,6 +148,8 @@ const TABLES: &[TableDefinition] = &[
             "target_origin TEXT NOT NULL, expires_at INTEGER NOT NULL, ",
             "central_owner INTEGER NOT NULL DEFAULT 0 CHECK(central_owner IN (0, 1)), ",
             "owner_session_fingerprint BLOB REFERENCES central_owner_sessions(fingerprint) ON DELETE CASCADE, ",
+            "host_owner_session_fingerprint BLOB REFERENCES host_owner_sessions(fingerprint) ON DELETE CASCADE, ",
+            "device_name TEXT NOT NULL DEFAULT '', browser TEXT NOT NULL DEFAULT '', os TEXT NOT NULL DEFAULT '', last_connected_at INTEGER, ",
             "revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0, 1)), ",
             "device_fingerprint BLOB CHECK(device_fingerprint IS NULL OR length(device_fingerprint) = 32), ",
             "session_fingerprint BLOB UNIQUE CHECK(session_fingerprint IS NULL OR length(session_fingerprint) = 32), ",

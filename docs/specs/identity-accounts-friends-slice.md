@@ -187,6 +187,86 @@ socket/directory stream and no page reload, then central logout closes that same
 authority within the bound. Windows physical evidence remains separate. Production
 Worker deployment and central migration require the user's explicit approval.
 
+### Host-owned owner workspace and devices (2026-10-04, supersedes renewal)
+
+Latest user decision: central identity is admission/discovery authority, not an
+ongoing gatekeeper. The entry grant remains short and host-signed redemption checks
+the current session/person/device, owner relation, server and exact endpoint. After
+entry, server-owner and directly derived room authority last until host-owned
+revocation, complete workspace disconnection, ingress replacement or runtime end;
+there is no periodic owner renewal, 60-second lease, or central-expiry timer.
+Central logout, account deletion, device revocation and ownership transfer affect
+the next admission. An already connected owner retains administrative power until
+host revocation or disconnection; the user explicitly accepts this security tradeoff.
+Unreachable central identity blocks a new admission, while admitted workspaces
+continue through central outages. Central credentials/private keys stay on the
+selecting device. The unused central `0009_owner_connections.sql` and its routes,
+tasks and tests are removed before any production deployment.
+
+Reconnection means a new page/workspace or return after every authenticated
+workspace transport has closed, including host restart. A cached owner credential
+cannot open a new workspace after that boundary: a fresh central admission is
+required. Room changes and additional room transports within a still-connected
+workspace require no central request. The host owns admission, live retention and
+disconnect settlement; client flags/storage never confer authority. A bounded
+entry window permits the initial directory/room connection and exact same-device
+issuance retry, but never refreshes an ongoing session. Exact grant replay returns
+the same still-admitted session, rejects a different browser and cannot revive a
+disconnected or revoked session. A different new grant may admit a new session.
+Preserve previously stored data during the local schema upgrade; old leased
+authority is not promoted to new host-owned authority.
+
+Shared settings expose `기기` on the host app and centrally admitted owner
+workspaces, including an empty server or no selected room. Rows show a bounded
+device name or browser/OS, last connection time and a server-derived `이 기기`
+marker. Display metadata is untrusted description, not proof of identity; do not
+expose raw credentials, their fingerprints, central private data or network addresses.
+The current native host is an explicit non-revocable recovery anchor. Native
+authority can list/revoke all remote device sessions; remote authority can only
+list/revoke the exact same central account's sessions. Thus an old owner retained
+across transfer cannot revoke a new owner's sessions. Single and account-wide
+revocation include the caller if selected and settle atomically in storage before
+publishing transport closure. Failed persistence never reports successful revocation.
+
+Direct room sessions and owner-issued operator pairings retain their host owner
+provenance. Revocation also invalidates those dependent credentials/attendee
+authority and closes idle sockets and directory streams without a heartbeat or
+subsequent command. Owner-issued pairing is not an escape from device revocation;
+ordinary native-issued pairing and independently invited guests keep their existing
+authority. Issuer disconnection does not silently revoke a separately paired
+device; explicit issuer revocation still reaches it. Revocation racing a mutation
+is ordered by its authority transaction: already committed work remains committed,
+and later work fails authorization. Closing a waiting socket does not cancel an
+accepted room command or erase its receipt.
+
+Central request budget, excluding retries/login/registration/other product actions:
+connected owner renewal **0 requests and 0 D1 writes per user per day**, independent
+of duration or user count. Each admission uses **2 Worker requests** (grant issue
+and host redemption); fetching the signed server list adds **1**. Their SQL changes
+are **4 logical row writes per admission**, plus **1** for list-request nonce
+custody, before indexes and bounded expired-record cleanup. D1 meters rows, not
+HTTP calls, and indexed writes add to this count; verification records measured
+local D1 metadata rather than presenting logical rows as billed rows. Existing
+5-minute endpoint publication is discovery cost, **288 requests per online server
+per 24 hours**, independent of connected users. The removed 20-second owner loop
+would have used **4,320 requests per user per 24 hours** (23 users: **99,360**),
+before endpoint, entry and other requests. Free allowances currently total
+100,000 Worker requests/day and 100,000 D1 rows written/day:
+[Workers](https://developers.cloudflare.com/workers/platform/pricing/) and
+[D1](https://developers.cloudflare.com/d1/platform/pricing/).
+
+Acceptance: one central admission and zero owner-related central calls across more
+than five minutes of messages, idle time and room changes; central logout leaves
+that admitted workspace usable but its next admission fails. Exercise host and
+same-account other-device list/single/all revoke, self revoke, empty server, foreign
+account denial after transfer, immediate idle socket/stream closure, derived pairing
+revocation, storage failure, disconnected/foreign-device/grant replay denial, runtime
+end and additive data preservation. Common UI keeps drafts and reports loss of
+authority explicitly; checking/unavailable invite status never claims external
+access is off. Run affected tests, mandatory gates and direct signed-package
+manipulation. Actual signed-in web proof and required code review remain open until
+completed. Production Worker deployment and migration require explicit user approval.
+
 ### Central owner server reopening (2026-10-01)
 
 After a current central session is validated, the desktop server chooser may reopen

@@ -165,7 +165,7 @@ async fn renew(
     let binding = authorization.binding();
     let Ok(current) = state
         .store
-        .authorize_owner_session(
+        .authorize_leased_owner_session(
             authorization.fingerprint(),
             &binding.browser_fingerprint,
             &binding.origin,

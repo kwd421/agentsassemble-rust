@@ -97,7 +97,7 @@ async fn exchange(
         )
         .await
         .map_err(|error| CentralOwnerHttpError::central(&error))?;
-    let session = state.store.create_owner_session(&lease).await?;
+    let session = state.store.create_leased_owner_session(&lease).await?;
     Ok(Json(agentsassemble_protocol::CentralOwnerSessionGrant {
         session_token: session.session_bearer,
         server_id: session.authorization.binding().server_id.clone(),
@@ -181,7 +181,7 @@ pub(crate) async fn authorize_directory_owner(
         .ok_or_else(CentralOwnerHttpError::unauthorized)?;
     let owner = state
         .store
-        .authorize_owner_session(&fingerprint, &device, origin)
+        .authorize_leased_owner_session(&fingerprint, &device, origin)
         .await?;
     if owner.binding().generation != generation {
         return Err(CentralOwnerHttpError::unauthorized());

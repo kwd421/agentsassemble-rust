@@ -2,7 +2,18 @@ use sqlx::{Row, SqlitePool};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 74;
+pub const CURRENT_SCHEMA_VERSION: i64 = 75;
+
+// Historical metadata remains only to preserve v74 rows and their foreign keys.
+// It is never promoted or used as current host admission authority.
+pub(crate) const V74_OWNER_SESSIONS_DDL: &str = "CREATE TABLE central_owner_sessions (
+    fingerprint BLOB PRIMARY KEY CHECK(length(fingerprint)=32),
+    connection_id TEXT NOT NULL UNIQUE, server_id TEXT NOT NULL,
+    person_id TEXT NOT NULL, device_id TEXT NOT NULL,
+    browser_fingerprint BLOB NOT NULL CHECK(length(browser_fingerprint)=32),
+    origin TEXT NOT NULL, generation INTEGER NOT NULL,
+    session_expires_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
+    renew_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1))) STRICT";
 
 pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let stored = sqlx::query("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
@@ -65,11 +76,42 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .await?;
     }
     if matches!(version.as_str(), "70" | "71" | "72" | "73") {
-        sqlx::query(crate::central_owner_session::DDL)
+        sqlx::query(V74_OWNER_SESSIONS_DDL)
             .execute(&mut *tx)
             .await?;
         sqlx::query("ALTER TABLE operator_pairings ADD COLUMN owner_session_fingerprint BLOB REFERENCES central_owner_sessions(fingerprint) ON DELETE CASCADE").execute(&mut *tx).await?;
         sqlx::query("UPDATE runtime_metadata SET value = '74' WHERE key = 'schema_version'")
+            .execute(&mut *tx)
+            .await?;
+    }
+    if matches!(version.as_str(), "70" | "71" | "72" | "73" | "74") {
+        sqlx::query(crate::host_owner_session::DDL)
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("ALTER TABLE operator_pairings ADD COLUMN host_owner_session_fingerprint BLOB REFERENCES host_owner_sessions(fingerprint) ON DELETE CASCADE").execute(&mut *tx).await?;
+        sqlx::query(
+            "ALTER TABLE operator_pairings ADD COLUMN device_name TEXT NOT NULL DEFAULT ''",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("ALTER TABLE operator_pairings ADD COLUMN browser TEXT NOT NULL DEFAULT ''")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("ALTER TABLE operator_pairings ADD COLUMN os TEXT NOT NULL DEFAULT ''")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("ALTER TABLE operator_pairings ADD COLUMN last_connected_at INTEGER")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query(
+            "UPDATE operator_pairings SET revoked = 1 WHERE owner_session_fingerprint IS NOT NULL",
+        )
+        .execute(&mut *tx)
+        .await?;
+        sqlx::query("UPDATE central_owner_sessions SET revoked = 1")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '75' WHERE key = 'schema_version'")
             .execute(&mut *tx)
             .await?;
     }
@@ -85,7 +127,7 @@ mod tests {
     #[tokio::test]
     async fn supported_upgrade_preserves_bootstrap_room_and_pairing_authority()
     -> Result<(), Box<dyn std::error::Error>> {
-        for previous in [70, 71, 72, 73] {
+        for previous in [70, 71, 72, 73, 74] {
             let directory = tempfile::tempdir()?;
             let path = directory.path().join("runtime.sqlite3");
             let store = SqliteStore::open_path(&path).await?;
@@ -183,17 +225,119 @@ mod tests {
                 .execute(&store.pool)
                 .await?;
         }
-        sqlx::query("ALTER TABLE operator_pairings DROP COLUMN owner_session_fingerprint")
+        for statement in [
+            "ALTER TABLE operator_pairings DROP COLUMN host_owner_session_fingerprint",
+            "ALTER TABLE operator_pairings DROP COLUMN device_name",
+            "ALTER TABLE operator_pairings DROP COLUMN browser",
+            "ALTER TABLE operator_pairings DROP COLUMN os",
+            "ALTER TABLE operator_pairings DROP COLUMN last_connected_at",
+        ] {
+            sqlx::query(statement).execute(&store.pool).await?;
+        }
+        sqlx::query("DROP TABLE host_owner_sessions")
             .execute(&store.pool)
             .await?;
-        sqlx::query("DROP TABLE central_owner_sessions")
-            .execute(&store.pool)
-            .await?;
+        if previous < 74 {
+            sqlx::query("ALTER TABLE operator_pairings DROP COLUMN owner_session_fingerprint")
+                .execute(&store.pool)
+                .await?;
+            sqlx::query("DROP TABLE central_owner_sessions")
+                .execute(&store.pool)
+                .await?;
+        }
         if previous < 73 {
             sqlx::query("DROP TABLE central_owner_grants")
                 .execute(&store.pool)
                 .await?;
         }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn v74_custody_is_retained_as_history_and_cannot_become_host_authority()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path).await?;
+        store
+            .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Preserved host")
+            .await?;
+        store
+            .create_room_for_local_operator(
+                &uuid::Uuid::new_v4().to_string(),
+                "preserved",
+                "Preserved room",
+            )
+            .await?;
+        let manager = store
+            .authorize_local_room_manager(
+                "preserved",
+                agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+                agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+            )
+            .await?;
+        store
+            .create_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager),
+                &[1; 32],
+                "https://owner.example.test",
+                chrono::Utc::now(),
+            )
+            .await?;
+        let before: String =
+            sqlx::query_scalar("SELECT room_json FROM rooms WHERE room_id = 'preserved'")
+                .fetch_one(&store.pool)
+                .await?;
+        simulate_previous_schema(&store, 74).await?;
+        let server_id = store.local_bootstrap_status().await?.server_id;
+        let now = chrono::Utc::now().timestamp();
+        sqlx::query("INSERT INTO central_owner_sessions (fingerprint, connection_id, server_id, person_id, device_id, browser_fingerprint, origin, generation, session_expires_at, expires_at, renew_at) VALUES (?, ?, ?, 'person', 'device', ?, 'https://owner.example.test', 1, ?, ?, ?)")
+            .bind([33_u8; 32].as_slice()).bind(format!("soc_{}", "a".repeat(43))).bind(server_id)
+            .bind([42_u8; 32].as_slice()).bind(now + 3600).bind(now + 60).bind(now + 20)
+            .execute(&store.pool).await?;
+        sqlx::query(
+            "UPDATE operator_pairings SET owner_session_fingerprint = ?, central_owner = 1",
+        )
+        .bind([33_u8; 32].as_slice())
+        .execute(&store.pool)
+        .await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '74' WHERE key = 'schema_version'")
+            .execute(&store.pool)
+            .await?;
+        drop(store);
+        let reopened = SqliteStore::open_path(&path).await?;
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT revoked FROM central_owner_sessions")
+                .fetch_one(&reopened.pool)
+                .await?,
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT revoked FROM operator_pairings")
+                .fetch_one(&reopened.pool)
+                .await?,
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM host_owner_sessions")
+                .fetch_one(&reopened.pool)
+                .await?,
+            0
+        );
+        assert!(
+            reopened
+                .authorize_owner_session(&[33; 32], &[42; 32], "https://owner.example.test")
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, String>(
+                "SELECT room_json FROM rooms WHERE room_id = 'preserved'"
+            )
+            .fetch_one(&reopened.pool)
+            .await?,
+            before
+        );
         Ok(())
     }
 

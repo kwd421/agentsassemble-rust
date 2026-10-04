@@ -10,14 +10,6 @@ use crate::{
 
 pub const OWNER_SESSION_PREFIX: &str = "aaos1.";
 pub const OWNER_LEASE_SECONDS: i64 = 60;
-pub(crate) const DDL: &str = "CREATE TABLE central_owner_sessions (
-    fingerprint BLOB PRIMARY KEY CHECK(length(fingerprint)=32),
-    connection_id TEXT NOT NULL UNIQUE, server_id TEXT NOT NULL,
-    person_id TEXT NOT NULL, device_id TEXT NOT NULL,
-    browser_fingerprint BLOB NOT NULL CHECK(length(browser_fingerprint)=32),
-    origin TEXT NOT NULL, generation INTEGER NOT NULL,
-    session_expires_at INTEGER NOT NULL, expires_at INTEGER NOT NULL,
-    renew_at INTEGER NOT NULL, revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0,1))) STRICT";
 
 /// Immutable provenance returned only by the configured central host-signed endpoint.
 #[derive(Clone, PartialEq, Eq)]
@@ -125,7 +117,7 @@ impl SqliteStore {
     /// Commits or exactly replays the same centrally exchanged owner connection.
     /// # Errors
     /// Rejects a foreign server/device, stale generation, revoked replay or capacity.
-    pub async fn create_owner_session(
+    pub async fn create_leased_owner_session(
         &self,
         lease: &OwnerConnectionLease,
     ) -> Result<OwnerSessionRedemption, PersistenceError> {
@@ -190,7 +182,7 @@ impl SqliteStore {
 
     /// # Errors
     /// Rejects expired/revoked custody, another device/origin or changed endpoint.
-    pub async fn authorize_owner_session(
+    pub async fn authorize_leased_owner_session(
         &self,
         fingerprint: &[u8; 32],
         device: &[u8; 32],
