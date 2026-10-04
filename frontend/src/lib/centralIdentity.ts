@@ -1,3 +1,5 @@
+import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./centralDirectoryCache";
+import { CentralTemporaryError, fetchCentral } from "./centralConnectionError";
 import {
   controlDesktopCentralLogin,
   fetchDesktopCentralRegistration,
@@ -230,6 +232,7 @@ export function saveSession(
     ...(centralSessionLoggedOut() || (previous?.person.person_id === result.person.person_id && previous.pending_account_switch)
       ? { pending_account_switch: true } : {}),
   };
+  if (previous?.person.person_id !== result.person.person_id) clearCentralDirectoryCache();
   localStorage.setItem(SESSION_KEY, JSON.stringify(session));
   return session;
 }
@@ -288,6 +291,7 @@ export function clearCentralSession(): void {
     devicePromise = undefined;
   }
   localStorage.removeItem(SERVERS_KEY);
+  clearCentralDirectoryCache();
 }
 
 export function centralSessionLoggedOut(): boolean {
@@ -309,25 +313,23 @@ export async function logoutCentral(): Promise<void> {
   devicePromise = undefined;
 }
 
-export function loadCentralServers(): CentralServer[] {
-  try {
-    const value = JSON.parse(
-      localStorage.getItem(SERVERS_KEY) || "[]"
-    ) as CentralServer[];
-    return Array.isArray(value) ? value : [];
-  } catch {
-    return [];
-  }
-}
-
-async function responsePayload<T>(response: Response): Promise<T> {
-  const payload = (await response.json().catch(() => ({}))) as {
+async function responsePayload<T>(response: Response, central = true): Promise<T> {
+  const payload = (await response.json().catch((error) => {
+    if (response.ok) {
+      if (central && (error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError")) {
+        throw new CentralTemporaryError("중앙 서버 응답을 받지 못했어요.");
+      }
+      throw error;
+    }
+    return {};
+  })) as {
     error?: { code?: string; message?: string };
   } & T;
   if (!response.ok) {
     const message =
-      payload.error?.message || `중앙 서버가 HTTP ${response.status}을 반환했습니다.`;
-    if (response.status === 401) throw new CentralAuthError(message, payload.error?.code);
+      payload?.error?.message || `중앙 서버가 HTTP ${response.status}을 반환했습니다.`;
+    if (response.status === 401) throw new CentralAuthError(message, payload?.error?.code);
+    if (central && (response.status === 429 || response.status >= 500)) throw new CentralTemporaryError(message);
     throw new Error(message);
   }
   return payload;
@@ -435,16 +437,18 @@ async function signedRequest<T>(
   session: CentralSession,
   path: string,
   method: "GET" | "POST" | "DELETE",
-  bodyValue?: Record<string, unknown>
+  bodyValue?: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<T> {
-  return responsePayload<T>(await signedFetch(session, path, method, bodyValue));
+  return responsePayload<T>(await signedFetch(session, path, method, bodyValue, signal));
 }
 
 async function signedFetch(
   session: CentralSession,
   path: string,
   method: "GET" | "POST" | "DELETE",
-  bodyValue?: Record<string, unknown>
+  bodyValue?: Record<string, unknown>,
+  signal?: AbortSignal
 ): Promise<Response> {
   const device = await storedDevice();
   if (device.deviceId !== session.device_id) {
@@ -471,7 +475,7 @@ async function signedFetch(
     device.privateKey,
     new TextEncoder().encode(canonical)
   );
-  const response = await fetch(`${configuredUrl()}${path}`, {
+  const response = await fetchCentral(`${configuredUrl()}${path}`, {
     method,
     mode: "cors",
     cache: "no-store",
@@ -487,6 +491,7 @@ async function signedFetch(
       "x-aa-signature": encodeBase64Url(signature),
     },
     body: body || undefined,
+    signal,
   });
   return response;
 }
@@ -605,19 +610,22 @@ export async function loginCentralGoogle(
   }
 }
 
-export async function bootstrapCentral(): Promise<CentralBootstrap | null> {
+export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBootstrap | null> {
   const session = loadCentralSession();
   if (!session) return null;
   try {
     const payload = await signedRequest<CentralBootstrap>(
       session,
       "/v1/bootstrap",
-      "GET"
+      "GET", undefined, signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
     );
+    signal?.throwIfAborted();
+    if (!payload.person || payload.person.person_id !== session.person.person_id || !Array.isArray(payload.servers)) throw new Error("중앙 서버 목록 응답이 올바르지 않습니다.");
     const current = loadCentralSession();
     if (current?.token !== session.token) throw new CentralAuthError("중앙 로그인 상태가 바뀌었습니다. 다시 로그인해 주세요.");
     localStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, person: payload.person }));
-    localStorage.setItem(SERVERS_KEY, JSON.stringify(payload.servers || []));
+    saveCentralDirectoryCache(payload.person.person_id, payload.servers);
+    localStorage.removeItem(SERVERS_KEY);
     return payload;
   } catch (error) {
     if (error instanceof CentralAuthError && loadCentralSession()?.token === session.token) clearCentralSession();
@@ -679,7 +687,7 @@ export async function fetchLocalServerInfo(): Promise<LocalServerInfo> {
   const response = await fetchLocalRuntime("/api/server-info", {
     cache: "no-store",
   });
-  return responsePayload<LocalServerInfo>(response);
+  return responsePayload<LocalServerInfo>(response, false);
 }
 
 export async function registerLocalServer(deviceToken: string): Promise<void> {
@@ -703,7 +711,7 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
   const proofResponse = registration
     ? registration.response
     : await fetch("/api/central-directory/registration-proof", registrationRequest);
-  const payload = await responsePayload<unknown>(proofResponse);
+  const payload = await responsePayload<unknown>(proofResponse, false);
   const local = registration
     ? await verifyCentralRegistrationEnvelope(
         payload,
@@ -756,7 +764,7 @@ export function isCentralAuthenticationError(error: unknown): boolean {
   return error instanceof CentralAuthError;
 }
 
-export async function renameCentralServer(server: CentralServer, name: string): Promise<void> {
+export async function renameCentralServer(server: CentralServerDisplay, name: string): Promise<void> {
   const session = loadCentralSession();
   if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
   if (server.relation !== "owner") throw new Error("서버 소유자만 이름을 바꿀 수 있습니다.");
@@ -792,7 +800,7 @@ async function pngDataUrl(file: File): Promise<string> {
 }
 
 /** Sets (512x512 PNG) or removes (null) a server icon; returns the new reference. */
-export async function setCentralServerIcon(server: CentralServer, icon: File | null): Promise<string> {
+export async function setCentralServerIcon(server: CentralServerDisplay, icon: File | null): Promise<string> {
   const session = loadCentralSession();
   if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
   if (server.relation !== "owner") throw new Error("서버 소유자만 아이콘을 바꿀 수 있습니다.");

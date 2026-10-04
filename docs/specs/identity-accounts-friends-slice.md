@@ -1,5 +1,54 @@
 # Identity, accounts, friends and human admission
 
+## Discord-style rail, step 1 — central outage continuity (2026-10-05)
+
+User-required entry points: `StartupIdentityGate`, explicit this-device selection,
+`CentralServerList`, `RoomRail`, `DisconnectedRoomView`, and the app's live room
+directory. A previously logged-in desktop can open its existing local server when
+central bootstrap fails with a network failure, HTTP 429 or 5xx. Use the last
+account presentation only; local bootstrap/tickets/directory lineage remain the
+sole operator authority. No session, explicit logout, expired/revoked session or
+401 requires login; malformed responses, storage/key failures and other 4xx are
+not transient network failures. A remote account deletion can only be learned
+when central responds; a confirmed rejection clears retained presentation.
+
+Persist the last successful central server directory per account, allowlisting
+ID, name, icon reference, OS and relationship only. Do not persist endpoint,
+bearer, connect grant, recovery code or host proof in this display cache. Account
+switch/logout clears it. Cached entries never authorize open/join: reconnect must
+obtain a fresh central directory and the existing bound connect grant/host checks.
+
+The central observation owner permits one request at a time, ignores stale account
+results, retries transient failures at 1/2/4/8/16/30 seconds (30-second cap), and
+checks a healthy directory every 30 seconds to observe outages/list changes.
+Online/manual retry wakes that owner; unmount cancels its timer/request. Successful
+recovery automatically refreshes the visible directory. Authentication rejection
+stops retries and returns the desktop startup boundary to login.
+
+Connection presentation is per server: connected, connecting, disconnected or
+central-unconfirmed. Local status comes from the existing host directory stream,
+not central health; a stopped runtime dims local rooms too. Local directory stream
+reconnect continues until unmount with 0.5/1/2/4/8/16/30-second capped delays,
+10-second header deadlines and the existing 45-second stream silence deadline.
+Explicit authority rejection stops that attempt. Web owner retry/termination stays unchanged. Saved remote rooms
+remain visible and cannot execute room operations while disconnected. Selecting
+one shows the shared disconnected view, a specific reason and retry action.
+Central-dependent cached servers appear disconnected/central-unconfirmed, never
+online merely because cached metadata or an old lease exists.
+
+Use shared app/web components with subdued server/room icons, a small status dot
+or badge, and one thin top outage banner. Do not add an outage modal. Preserve the
+web owner workspace's existing terminal modal behavior. No member admission,
+provider, meeting or research behavior is added; no deployment, signing, manual
+verification or edits to `.agents/` and `scripts/__pycache__/` in this task.
+
+Acceptance: demonstrate failing pre-fix regressions for transient startup/local
+open, authentication rejection, display-cache isolation/account switch, automatic
+recovery, local-runtime disconnection and disconnected-room retry. Run affected
+frontend tests during work and `make verify` once immediately before scoped
+commits/push. Packaged visual and manual acceptance remain explicitly unverified.
+
+
 Status: Phase 5 locally verified and approved by Daybreak through `1e24adf`, C0/H0/M0/L0.
 
 ## 초대 멤버를 중앙 계정에 묶기 — C1 승인 계약 (2026-10-05)
@@ -232,7 +281,8 @@ claim state until successful registration; startup retries unfinished claims wit
 a fresh native proof. No identity merge, profile retirement, room ACL change,
 server key replacement or registration-conflict fallback is permitted.
 
-Follow-up startup contract: when central login is configured, a completed local
+The outage-continuity section above supersedes only the transient-failure branch
+of this earlier startup contract. When central login is configured, a completed local
 profile never substitutes for a current central login. Validate the saved session
 through `/v1/bootstrap` before opening the room directory; a missing/revoked session
 requires login, and transport failures remain visible. Rejected or expired sessions
@@ -456,7 +506,9 @@ Inspection failure is shown explicitly and disables local opening; it must not
 block validated remote-server entry. Refresh retries the read. The browser never
 infers a local host from a name, OS or endpoint. Selecting the
 local row starts or initializes this installation's existing authority,
-preserves its rooms/profile, and registers it before entering. Local-only builds
+preserves its rooms/profile, and registers it before entering when central is
+available. During a classified temporary central outage, the step-1 contract above
+permits only existing local authority and defers registration. Local-only builds
 retain their existing local entry. No account/profile migration is part of this slice.
 
 Native Google login uses the bundled sidecar in an authentication-only mode with
