@@ -82,6 +82,15 @@ struct RunningServer {
 }
 
 impl RunningServer {
+    async fn stop_and_close(self) {
+        let store = self.state.store.clone();
+        self.stop().await;
+        store
+            .close()
+            .await
+            .unwrap_or_else(|error| panic!("close test writer: {error}"));
+    }
+
     async fn stop(self) {
         self.cancellation.cancel();
         self.task
@@ -101,6 +110,12 @@ impl RunningServer {
             result.is_err(),
             "an interrupted room command must remain visible during shutdown"
         );
+        let store = self.state.store.clone();
+        drop(self.state);
+        store
+            .close()
+            .await
+            .unwrap_or_else(|error| panic!("close interrupted test writer: {error}"));
     }
 }
 
@@ -164,7 +179,7 @@ async fn create_replay_conflict_and_restart_share_one_durable_authority() {
         "command_conflict"
     );
     socket.close().await;
-    first.stop().await;
+    first.stop_and_close().await;
 
     let reopened = SqliteStore::open(&database_url)
         .await
@@ -259,7 +274,7 @@ async fn lifecycle_commands_use_the_owned_codex_app_server_before_committing() {
     assert_eq!(running["result"]["agent_session"]["runtime_status"], "idle");
     assert_session_flag(&running, "provider_session_reused");
     socket.close().await;
-    server.stop().await;
+    server.stop_and_close().await;
     let reopened = SqliteStore::open(&database_url)
         .await
         .unwrap_or_else(|error| panic!("reopen lifecycle store: {error}"));

@@ -193,26 +193,30 @@ pub(super) async fn run(
     signal_result?;
     serving?;
     #[cfg(unix)]
-    {
-        if let Ok(prepared) = restart_receiver.try_recv() {
-            state
-                .store
-                .begin_runtime_restart_drain(&prepared.operation_id, prepared.image.identity())
-                .await?;
-            return Ok(StartupExit {
-                restart: Some(super::runtime_reexec::RuntimeReexec {
-                    prepared,
-                    arguments: args,
-                    http: http_descriptor,
-                    control: private_socket,
-                }),
-            });
-        }
+    let restart = if let Ok(prepared) = restart_receiver.try_recv() {
+        state
+            .store
+            .begin_runtime_restart_drain(&prepared.operation_id, prepared.image.identity())
+            .await?;
+        Some(super::runtime_reexec::RuntimeReexec {
+            prepared,
+            arguments: args,
+            http: http_descriptor,
+            control: private_socket,
+        })
+    } else {
         private_socket.close()?;
-    }
+        None
+    };
+    let store = state.store.clone();
+    drop(state);
+    store
+        .close()
+        .await
+        .context("close runtime database writer")?;
     Ok(StartupExit {
         #[cfg(unix)]
-        restart: None,
+        restart,
     })
 }
 

@@ -127,7 +127,7 @@ async fn rejected_and_previous_generation_launch_retry(
             action,
         )
         .await?;
-    drop(staging_store);
+    staging_store.close().await?;
 
     let previous_owner = SqliteStore::open(&database_url).await?;
     let previous_payload = launch_payload(action, &previous_session);
@@ -142,7 +142,7 @@ async fn rejected_and_previous_generation_launch_retry(
             .await?,
         AgentStartPlan::Start(_)
     ));
-    drop(previous_owner);
+    previous_owner.close().await?;
 
     let reopened = SqliteStore::open(&database_url).await?;
     let second = start(reopened, catalog).await;
@@ -280,7 +280,7 @@ async fn listing_readd_replays_across_socket_reconnect_and_server_restart()
         "command_conflict"
     );
     reconnected.close().await;
-    first.stop().await;
+    first.stop_and_close().await;
     let reopened = SqliteStore::open(&database_url).await?;
     let second = start(reopened, catalog).await;
     let mut socket = connect(&second.base_url, &second.state).await;

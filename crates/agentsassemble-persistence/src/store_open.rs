@@ -11,6 +11,27 @@ use crate::{
 };
 
 impl SqliteStore {
+    /// Closes the pool and explicitly releases the last owner's writer lock.
+    /// Call after joining runtime tasks and dropping their store clones.
+    ///
+    /// # Errors
+    /// Refuses to close a shared file store; reports writer unlock failures.
+    pub async fn close(self) -> Result<(), PersistenceError> {
+        let writer = self
+            .writer_lease
+            .map(Arc::try_unwrap)
+            .transpose()
+            .map_err(|_| PersistenceError::WriterStillShared)?;
+        self.pool.close().await;
+        if let Some(writer) = writer {
+            // A concurrent process spawn may temporarily inherit the open file
+            // description even with CLOEXEC. Closing our fd alone then leaves
+            // flock held until that child execs; explicitly end our ownership.
+            fs2::FileExt::unlock(&writer).map_err(PersistenceError::WriterLease)?;
+        }
+        Ok(())
+    }
+
     /// Opens an explicit `SQLite` URL and verifies its ownership marker.
     ///
     /// # Errors
@@ -59,7 +80,7 @@ impl SqliteStore {
         )?;
         let store = Self {
             pool,
-            _writer_lease: prepared.writer_lease,
+            writer_lease: prepared.writer_lease,
             _database_identity: prepared.identity,
             host_key: Arc::new(host_key),
             runtime_generation: format!("runtime-generation-v1-{}", uuid::Uuid::new_v4()).into(),
@@ -181,6 +202,51 @@ mod tests {
     use crate::LocalBootstrapPhase;
 
     use super::SqliteStore;
+
+    #[tokio::test]
+    async fn close_releases_writer_despite_an_inherited_file_description()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path).await?;
+        // dup shares the same open file description, deterministically modeling
+        // the descriptor a concurrently spawning child holds before exec.
+        let inherited = store
+            .writer_lease
+            .as_ref()
+            .ok_or("missing file writer lease")?
+            .try_clone()?;
+        store.close().await?;
+        let reopened = SqliteStore::open_path(&path).await?;
+        drop(inherited);
+        // Dropping the old description must not release the new writer's lock.
+        assert!(matches!(
+            SqliteStore::open_path(&path).await,
+            Err(crate::PersistenceError::WriterAlreadyActive(_))
+        ));
+        reopened.close().await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn close_rejects_live_store_owners_without_closing_their_pool()
+    -> Result<(), Box<dyn std::error::Error>> {
+        let directory = tempfile::tempdir()?;
+        let path = directory.path().join("runtime.sqlite3");
+        let store = SqliteStore::open_path(&path).await?;
+        assert!(matches!(
+            store.clone().close().await,
+            Err(crate::PersistenceError::WriterStillShared)
+        ));
+        store.host_identity().await?;
+        assert!(matches!(
+            SqliteStore::open_path(&path).await,
+            Err(crate::PersistenceError::WriterAlreadyActive(_))
+        ));
+        store.close().await?;
+        SqliteStore::open_path(&path).await?.close().await?;
+        Ok(())
+    }
 
     #[tokio::test]
     async fn cancelled_bootstrap_rolls_back_before_exact_retry() {

@@ -27,6 +27,8 @@ pub enum PersistenceError {
     UnownedDatabase,
     #[error("another process already owns the database writer lease: {0}")]
     WriterAlreadyActive(PathBuf),
+    #[error("cannot close the database while other store owners remain")]
+    WriterStillShared,
     #[error("writer lease operation failed: {0}")]
     WriterLease(#[source] io::Error),
     #[error("unsafe database authority: {0}")]
@@ -112,7 +114,7 @@ pub struct AgentLaunchFailureCommit {
 #[derive(Clone)]
 pub struct SqliteStore {
     pub(crate) pool: SqlitePool,
-    pub(crate) _writer_lease: Option<Arc<File>>,
+    pub(crate) writer_lease: Option<Arc<File>>,
     pub(crate) _database_identity: Option<Arc<same_file::Handle>>,
     pub(crate) host_key: Arc<crate::host_key_file::HostKeyMaterial>,
     pub(crate) runtime_generation: Arc<str>,

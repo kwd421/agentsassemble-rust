@@ -1294,3 +1294,30 @@ owner, provider execution mode, permission suppression or alternate catalog is
 introduced. Acceptance is deterministic SDK-option verification from a different
 caller directory; whether this eliminates the native music prompt remains unknown
 without independent CLI access evidence.
+
+### Writer release after runtime stop (2026-10-05)
+
+Required behavior: a confirmed runtime stop followed by release of the caller's
+AppState must permit immediate reopening of the same database, including parallel
+runtime tests and concurrent CLI startup. Preserve exclusive writer admission
+while any live store owner remains; do not add sleep, retry, lock-file deletion or
+an authentication/ownership bypass. Inspect runtime_boundary restart, retired
+frame rejection and static frontend restart plus other stop/reopen fixtures.
+Determine whether server cleanup or the test's completion boundary owns the race,
+and correct that owner before claiming shutdown complete. Acceptance is repeated
+parallel runtime_boundary runs (at least ten) and one final make verify; deployment,
+signing and manual verification are excluded.
+
+Diagnosis and owner: stopping the server did drain its Rust store owners. A
+`Weak<File>` diagnostic reached zero while immediate reopen still failed. On macOS,
+concurrent CLI spawn can temporarily inherit the flock open file description;
+last-parent-fd `Drop` alone is not an unlock-completion signal. An isolated Rust
+close/spawn reproduction observed 586 contentions in 142,134 opens; explicit unlock
+observed zero in 137,253 opens. The persistence owner now provides consuming
+`SqliteStore::close`: reject remaining file-store clones, await pool closure, then
+explicitly unlock and propagate failure. Runtime startup uses it after joined
+shutdown and the final restart checkpoint, before returning the handoff. In-process
+restart fixtures use the same boundary; tests retaining a store for post-stop
+inspection close that final owner before reopening. Deterministic duplicate-fd
+coverage models the inherited description and preserves exclusion for live clones
+and replacement writers. This adds no timer, retry, background task or gate change.

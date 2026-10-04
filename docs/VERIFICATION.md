@@ -1,5 +1,40 @@
 # Verification Contract
 
+## Runtime writer shutdown and parallel reopen (2026-10-05)
+
+The original runtime boundary failed under parallel load in both restart recovery
+and retired-frame rejection (one of 40 full-suite runs, then two of 80 diagnostic
+runs excluding the unrelated seven-second header-timeout test). The diagnostic
+confirmed zero remaining Rust writer owners at the failed reopen. A standalone
+Rust concurrent process-spawn/close experiment reproduced 586 lock contentions in
+142,134 opens; explicitly unlocking before close yielded zero in 137,253 opens.
+This isolates the inherited open-file-description lifetime from frontend changes.
+
+`SqliteStore::close` awaits pool closure and explicitly unlocks only the final
+store owner's lease; live store clones and unlock errors fail visibly. Successful
+runtime exit/restart and the affected in-process restart fixtures now use that
+completion boundary. Two deterministic regressions cover a duplicate inherited
+file description, replacement-writer exclusion, and refusal to close a live clone.
+Both passed (the targeted persistence filter passed five tests total).
+
+After correction, ten complete `cargo test -p agentsassemble-server --all-features
+--test runtime_boundary` invocations, with up to four processes concurrently and
+default parallel test execution, passed 10/10 (100 tests, zero failures).
+Affected boundary verification also passed 19 Agent Session, 13 control-pipe and
+10 runtime tests. The requested single `make verify` stopped at its initial artifact
+gate: 34,780,286,976 bytes exceeded the unchanged 18 GiB limit. With no Cargo/Tauri
+build active, the existing `make artifact-prune` owner cleaned the repository
+cache. The equivalent stages then passed architecture/policy/format, workspace
+check, frontend build and all 1,043 tests, desktop 46 tests and the complete
+workspace test suite. Clippy required renaming the now-read writer lease field and
+removing a redundant block; the corrected workspace Clippy passed with warnings
+denied, and the workspace `close_` regression filter passed all five selected tests.
+The final artifact gate again requested maintenance (31,398,891,520 bytes); after
+all Cargo/Tauri work ended, the same owner cleaned the cache and final diff/artifact
+checks passed. `make verify` was invoked exactly once, not rerun. No deployment,
+signing, manual verification, real-provider execution, gate changes or sleeps/retries
+were added. `.agents/` and `scripts/__pycache__/` remain untouched.
+
 
 ## Discord-style rail step 1 — Daybreak M3 corrections (2026-10-05)
 

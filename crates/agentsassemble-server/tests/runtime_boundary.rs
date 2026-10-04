@@ -43,6 +43,12 @@ impl RunningServer {
         self.task
             .await
             .unwrap_or_else(|error| panic!("server task join: {error}"));
+        let store = self.state.store.clone();
+        drop(self.state);
+        store
+            .close()
+            .await
+            .unwrap_or_else(|error| panic!("close test writer: {error}"));
     }
 }
 

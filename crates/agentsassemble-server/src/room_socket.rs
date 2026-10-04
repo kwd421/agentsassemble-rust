@@ -699,6 +699,7 @@ pub(crate) fn persistence_error(error: &PersistenceError) -> (String, String) {
         | PersistenceError::RuntimeAuthorityTask(_)
         | PersistenceError::AuthorityConflict(_)
         | PersistenceError::UnownedDatabase
+        | PersistenceError::WriterStillShared
         | PersistenceError::WriterAlreadyActive(_)
         | PersistenceError::WriterLease(_)
         | PersistenceError::UnsafeDatabasePath(_)
@@ -729,6 +730,7 @@ pub(crate) fn persistence_error_is_internal(error: &PersistenceError) -> bool {
             | PersistenceError::RuntimeAuthorityTask(_)
             | PersistenceError::AuthorityConflict(_)
             | PersistenceError::UnownedDatabase
+            | PersistenceError::WriterStillShared
             | PersistenceError::WriterAlreadyActive(_)
             | PersistenceError::WriterLease(_)
             | PersistenceError::UnsafeDatabasePath(_)
