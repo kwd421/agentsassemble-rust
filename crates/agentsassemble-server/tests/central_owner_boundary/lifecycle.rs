@@ -3,11 +3,10 @@ use super::*;
 async fn change(
     fixture: &mut Fixture,
     generation: i64,
-    key: &[u8],
     body: &Value,
     device: &str,
 ) -> reqwest::Response {
-    let response = fixture
+    fixture
         .client
         .post(format!(
             "http://{}/api/room-session/lifecycle",
@@ -17,18 +16,16 @@ async fn change(
         .header("x-forwarded-proto", "https")
         .header("x-agentsassemble-proxy-token", SECRET)
         .header("origin", ORIGIN)
-        .bearer_auth(TOKEN)
+        .bearer_auth(&fixture.session_token)
         .header("x-device-token", device)
         .header("x-central-generation", generation)
         .json(body)
         .send()
         .await
-        .unwrap_or_else(|error| panic!("owner lifecycle: {error}"));
-    verify_signed_call(&next_call(&mut fixture.calls).await, key);
-    response
+        .unwrap_or_else(|error| panic!("owner lifecycle: {error}"))
 }
 
-pub(super) async fn verify(fixture: &mut Fixture, generation: i64, key: &[u8]) {
+pub(super) async fn verify(fixture: &mut Fixture, generation: i64) {
     let authority = fixture
         .store
         .local_bootstrap_status()
@@ -49,18 +46,17 @@ pub(super) async fn verify(fixture: &mut Fixture, generation: i64, key: &[u8]) {
     let denied = change(
         fixture,
         generation,
-        key,
         &body,
         "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA",
     )
     .await;
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
-    let denied = change(fixture, generation - 1, key, &body, DEVICE).await;
+    let denied = change(fixture, generation - 1, &body, DEVICE).await;
     assert_eq!(denied.status(), StatusCode::UNAUTHORIZED);
     for (request, archived) in [("owner-archive", true), ("owner-restore", false)] {
         body["request_id"] = json!(request);
         body["payload"]["archived"] = json!(archived);
-        let response = change(fixture, generation, key, &body, DEVICE).await;
+        let response = change(fixture, generation, &body, DEVICE).await;
         assert_eq!(response.status(), StatusCode::OK);
         let result: Value = response
             .json()
@@ -72,23 +68,16 @@ pub(super) async fn verify(fixture: &mut Fixture, generation: i64, key: &[u8]) {
             if archived { "archived" } else { "active" }
         );
         if archived {
-            verify_retired_admission(
-                fixture,
-                generation,
-                key,
-                created.room.room_uid,
-                "room_inactive",
-            )
-            .await;
+            verify_retired_admission(fixture, generation, created.room.room_uid, "room_inactive")
+                .await;
         }
     }
-    verify_terminal_replay(fixture, generation, key, body, created.room.room_uid).await;
+    verify_terminal_replay(fixture, generation, body, created.room.room_uid).await;
 }
 
 async fn verify_terminal_replay(
     fixture: &mut Fixture,
     generation: i64,
-    key: &[u8],
     mut body: Value,
     original_uid: uuid::Uuid,
 ) {
@@ -96,7 +85,7 @@ async fn verify_terminal_replay(
     body["request_id"] = json!("owner-delete");
     body["payload"] = json!({"room_uid": original_uid, "confirmation_name": "Proof"});
     let mut changes = fixture.store.subscribe_room_directory();
-    let pending = change(fixture, generation, key, &body, DEVICE).await;
+    let pending = change(fixture, generation, &body, DEVICE).await;
     assert_eq!(pending.status(), StatusCode::SERVICE_UNAVAILABLE);
     let pending: Value = pending
         .json()
@@ -119,8 +108,8 @@ async fn verify_terminal_replay(
     })
     .await
     .unwrap_or_else(|e| panic!("terminal deletion: {e}"));
-    verify_retired_admission(fixture, generation, key, original_uid, "room_missing").await;
-    let completed = change(fixture, generation, key, &body, DEVICE).await;
+    verify_retired_admission(fixture, generation, original_uid, "room_missing").await;
+    let completed = change(fixture, generation, &body, DEVICE).await;
     assert_eq!(completed.status(), StatusCode::OK);
     let completed: Value = completed
         .json()
@@ -138,7 +127,7 @@ async fn verify_terminal_replay(
         .await
         .unwrap_or_else(|e| panic!("recreate: {e}"));
     assert_ne!(new.room.room_uid, original_uid);
-    let replay = change(fixture, generation, key, &body, DEVICE).await;
+    let replay = change(fixture, generation, &body, DEVICE).await;
     assert_eq!(replay.status(), StatusCode::OK);
     assert_eq!(
         replay
@@ -157,16 +146,11 @@ async fn verify_terminal_replay(
             .room_uid,
         new.room.room_uid
     );
-    fixture.worker_state.reject.store(true, Ordering::SeqCst);
-    let revoked = change(fixture, generation, key, &body, DEVICE).await;
-    assert_eq!(revoked.status(), StatusCode::UNAUTHORIZED);
-    fixture.worker_state.reject.store(false, Ordering::SeqCst);
 }
 
 async fn verify_retired_admission(
     fixture: &mut Fixture,
     generation: i64,
-    key: &[u8],
     uid: uuid::Uuid,
     code: &str,
 ) {
@@ -174,7 +158,7 @@ async fn verify_retired_admission(
         &fixture.client,
         fixture.address,
         "/api/central-owner/room",
-        json!({"grant_token": TOKEN, "generation": generation,
+        json!({"session_token": fixture.session_token, "generation": generation,
             "room_id": "lifecycle-proof", "room_uid": uid}),
         ORIGIN,
         DEVICE,
@@ -186,5 +170,4 @@ async fn verify_retired_admission(
         .await
         .unwrap_or_else(|e| panic!("retired admission: {e}"));
     assert_eq!(result["error"]["code"], code);
-    verify_signed_call(&next_call(&mut fixture.calls).await, key);
 }

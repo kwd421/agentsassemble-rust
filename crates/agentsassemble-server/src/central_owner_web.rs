@@ -1,5 +1,6 @@
 use agentsassemble_persistence::{
-    CentralOwnerGrant, CentralOwnerSessionRequest, PersistenceError, ServerOwnerAuthority,
+    CentralOwnerSessionRequest, OWNER_SESSION_PREFIX, OwnerSessionAuthorization, PersistenceError,
+    ServerOwnerAuthority,
 };
 use axum::{
     Json, Router,
@@ -16,12 +17,12 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    central_directory::{CentralDirectoryError, RedeemedConnectGrant},
+    central_directory::CentralDirectoryError,
     http_api::{
         BodyDecodeError, DEVICE_CREDENTIAL_HEADER, PRIVATE_NO_STORE, decode_json_body,
         exact_tauri_cors,
     },
-    operator_pairing_web::{device_fingerprint, require_ready_origin},
+    operator_pairing_web::{device_fingerprint, fingerprint_token, require_ready_origin},
 };
 
 const MAX_BODY: usize = 4096;
@@ -30,6 +31,13 @@ const GRANT_PREFIX: &str = "aacg1.";
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct DirectoryRequest {
+    session_token: String,
+    generation: i64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EntryRequest {
     grant_token: String,
     generation: i64,
 }
@@ -37,7 +45,7 @@ struct DirectoryRequest {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct RoomRequest {
-    grant_token: String,
+    session_token: String,
     generation: i64,
     room_id: String,
     room_uid: String,
@@ -46,7 +54,7 @@ struct RoomRequest {
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 struct CreateRequest {
-    grant_token: String,
+    session_token: String,
     generation: i64,
     request_id: String,
     room_id: String,
@@ -55,11 +63,48 @@ struct CreateRequest {
 
 registered_routes! {
     fn central_owner_routes<AppState>() {
+        same_origin_public "/api/central-owner/session" => post(exchange),
         same_origin_public "/api/central-owner/directory" => post(directory),
         same_origin_public "/api/central-owner/events" => post(directory_events),
         same_origin_public "/api/central-owner/room" => post(room),
         same_origin_public "/api/central-owner/rooms" => post(create),
     }
+}
+
+async fn exchange(
+    State(state): State<AppState>,
+    request: Request,
+) -> Result<Json<agentsassemble_protocol::CentralOwnerSessionGrant>, CentralOwnerHttpError> {
+    let origin = require_ready_origin(&state, request.headers())
+        .map_err(|_| CentralOwnerHttpError::unauthorized())?;
+    let device =
+        device_fingerprint(request.headers()).ok_or_else(CentralOwnerHttpError::unauthorized)?;
+    let body: EntryRequest = decode_json_body(request, MAX_BODY)
+        .await
+        .map_err(CentralOwnerHttpError::body)?;
+    if fingerprint_token(&body.grant_token, GRANT_PREFIX).is_none() || body.generation < 1 {
+        return Err(CentralOwnerHttpError::unauthorized());
+    }
+    let lease = state
+        .central_directory
+        .owner_connection(
+            &state.central_host_identity,
+            "grant_token",
+            &body.grant_token,
+            &origin,
+            body.generation,
+            &device,
+        )
+        .await
+        .map_err(|error| CentralOwnerHttpError::central(&error))?;
+    let session = state.store.create_owner_session(&lease).await?;
+    Ok(Json(agentsassemble_protocol::CentralOwnerSessionGrant {
+        session_token: session.session_bearer,
+        server_id: session.authorization.binding().server_id.clone(),
+        generation: session.authorization.binding().generation,
+        expires_at: session.authorization.expires_at(),
+        session_expires_at: session.authorization.binding().session_expires_at,
+    }))
 }
 
 async fn directory_events(
@@ -85,9 +130,15 @@ async fn directory_events(
         .await
         .map_err(CentralOwnerHttpError::body)?;
     let changes = state.store.subscribe_room_directory();
-    let (owner, expires_at) =
-        redeem_directory_owner(&state, &body.grant_token, &origin, body.generation, device).await?;
-    state.store.validate_server_owner(&owner).await?;
+    let owner = authorize_directory_owner(
+        &state,
+        &body.session_token,
+        &origin,
+        body.generation,
+        device,
+    )
+    .await?;
+    let owner_lease = state.owner_sessions.retain(&state, owner.clone())?;
     let lease = state
         .connection_admission
         .acquire_directory()
@@ -102,24 +153,21 @@ async fn directory_events(
         state,
         changes,
         crate::room_directory_stream::DirectoryStreamAuthority::Central {
-            token: body.grant_token,
-            generation: body.generation,
-            origin,
-            device,
-            expires_at,
+            owner: Box::new(owner),
+            lease: owner_lease,
         },
         lease,
         transport.retain_authenticated_wait(),
     ))
 }
 
-pub(crate) async fn redeem_directory_owner(
+pub(crate) async fn authorize_directory_owner(
     state: &AppState,
     token: &str,
     origin: &str,
     generation: i64,
     device: [u8; 32],
-) -> Result<(ServerOwnerAuthority, DateTime<Utc>), CentralOwnerHttpError> {
+) -> Result<OwnerSessionAuthorization, CentralOwnerHttpError> {
     // The configured ingress origin may have changed since HTTP admission.
     let mut headers = axum::http::HeaderMap::new();
     headers.insert(
@@ -129,15 +177,22 @@ pub(crate) async fn redeem_directory_owner(
             .map_err(|_| CentralOwnerHttpError::unauthorized())?,
     );
     require_ready_origin(state, &headers).map_err(|_| CentralOwnerHttpError::unauthorized())?;
-    let grant = redeem(state, token, origin, generation).await?;
-    let expiry = DateTime::from_timestamp(grant.expires_at, 0)
+    let fingerprint = fingerprint_token(token, OWNER_SESSION_PREFIX)
         .ok_or_else(CentralOwnerHttpError::unauthorized)?;
-    Ok((grant_authority(&grant, token, device)?, expiry))
+    let owner = state
+        .store
+        .authorize_owner_session(&fingerprint, &device, origin)
+        .await?;
+    if owner.binding().generation != generation {
+        return Err(CentralOwnerHttpError::unauthorized());
+    }
+    state.owner_sessions.require_live(&owner)?;
+    Ok(owner)
 }
 
-/// Server-wide profile/friend access uses the same grant as an empty directory.
+/// Server-wide profile/friend access uses the same parent as an empty directory.
 /// Credential-domain dispatch is explicit; rejection never tries a local ticket.
-pub(crate) async fn owner_from_grant_headers(
+pub(crate) async fn owner_from_session_headers(
     state: &AppState,
     headers: &axum::http::HeaderMap,
     origin: Option<&crate::ingress_trust::TrustedIngressOrigin>,
@@ -159,9 +214,9 @@ pub(crate) async fn owner_from_grant_headers(
         .ok_or_else(CentralOwnerHttpError::unauthorized)?
         .as_str();
     let device = device_fingerprint(headers).ok_or_else(CentralOwnerHttpError::unauthorized)?;
-    redeem_directory_owner(state, token, origin, generation, device)
+    authorize_directory_owner(state, token, origin, generation, device)
         .await
-        .map(|(owner, _)| owner)
+        .map(ServerOwnerAuthority::CentralSession)
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -187,8 +242,15 @@ async fn directory(
     let body: DirectoryRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(CentralOwnerHttpError::body)?;
-    let grant = redeem(&state, &body.grant_token, &origin, body.generation).await?;
-    let authority = grant_authority(&grant, &body.grant_token, device)?;
+    let owner = authorize_directory_owner(
+        &state,
+        &body.session_token,
+        &origin,
+        body.generation,
+        device,
+    )
+    .await?;
+    let authority = ServerOwnerAuthority::CentralSession(owner);
     let (bootstrap, rooms, profile_revision) = state
         .store
         .list_room_directory_for_owner(&authority, true)
@@ -207,23 +269,6 @@ async fn directory(
     })))
 }
 
-fn grant_authority(
-    grant: &RedeemedConnectGrant,
-    token: &str,
-    device: [u8; 32],
-) -> Result<ServerOwnerAuthority, PersistenceError> {
-    Ok(ServerOwnerAuthority::CentralGrant(
-        CentralOwnerGrant::verified(
-            grant.server_id.clone(),
-            grant.generation,
-            grant.expires_at,
-            Sha256::digest(token.as_bytes()).into(),
-            device,
-            grant.origin.clone(),
-        )?,
-    ))
-}
-
 async fn create(State(state): State<AppState>, request: Request) -> Response {
     async fn execute(
         state: &AppState,
@@ -236,8 +281,10 @@ async fn create(State(state): State<AppState>, request: Request) -> Response {
         let body: CreateRequest = decode_json_body(request, MAX_BODY)
             .await
             .map_err(CentralOwnerHttpError::body)?;
-        let grant = redeem(state, &body.grant_token, &origin, body.generation).await?;
-        let authority = grant_authority(&grant, &body.grant_token, device)?;
+        let owner =
+            authorize_directory_owner(state, &body.session_token, &origin, body.generation, device)
+                .await?;
+        let authority = ServerOwnerAuthority::CentralSession(owner);
         Ok(crate::room_directory_web::create_room_for_owner(
             state,
             &authority,
@@ -264,17 +311,24 @@ async fn room(
     let body: RoomRequest = decode_json_body(request, MAX_BODY)
         .await
         .map_err(CentralOwnerHttpError::body)?;
-    let grant = redeem(&state, &body.grant_token, &origin, body.generation).await?;
-    let expires_at = DateTime::from_timestamp(grant.expires_at, 0)
+    let owner = authorize_directory_owner(
+        &state,
+        &body.session_token,
+        &origin,
+        body.generation,
+        device,
+    )
+    .await?;
+    let expires_at = DateTime::from_timestamp(owner.binding().session_expires_at, 0)
         .ok_or_else(CentralOwnerHttpError::unauthorized)?;
     let room_incarnation = Uuid::parse_str(&body.room_uid)
         .ok()
         .filter(|value| value.to_string() == body.room_uid)
         .ok_or_else(CentralOwnerHttpError::unauthorized)?;
-    // Each room has distinct custody, while retries of the same grant/room remain exact.
+    // Each room has distinct custody; the stable parent preserves exact retries.
     let mut hash = Sha256::new();
     hash.update(b"agentsassemble.central-owner-room.v1\0");
-    hash.update(body.grant_token.as_bytes());
+    hash.update(owner.fingerprint());
     hash.update(room_incarnation.as_bytes());
     let fingerprint: [u8; 32] = hash.finalize().into();
     let session_request = CentralOwnerSessionRequest::new(
@@ -289,7 +343,7 @@ async fn room(
     let redemption = state
         .store
         .create_central_owner_session(
-            &grant_authority(&grant, &body.grant_token, device)?,
+            &ServerOwnerAuthority::CentralSession(owner),
             &session_request,
         )
         .await?;
@@ -318,28 +372,6 @@ async fn room(
         "server_id": bootstrap.server_id, "authority_lineage_id": bootstrap.authority_lineage_id,
         "server_product_surface": state.server_product_surface.as_ref(),
     })))
-}
-
-async fn redeem(
-    state: &AppState,
-    token: &str,
-    origin: &str,
-    generation: i64,
-) -> Result<RedeemedConnectGrant, CentralOwnerHttpError> {
-    if token.len() != GRANT_PREFIX.len() + 43
-        || !token.starts_with(GRANT_PREFIX)
-        || !token[GRANT_PREFIX.len()..]
-            .bytes()
-            .all(|byte| byte.is_ascii_alphanumeric() || matches!(byte, b'-' | b'_'))
-        || generation < 1
-    {
-        return Err(CentralOwnerHttpError::unauthorized());
-    }
-    state
-        .central_directory
-        .redeem_connect_grant(&state.central_host_identity, token, origin, generation)
-        .await
-        .map_err(|error| CentralOwnerHttpError::central(&error))
 }
 
 pub(crate) struct CentralOwnerHttpError {

@@ -60,6 +60,7 @@ mod app_state;
 mod central_directory;
 mod central_host_identity;
 mod central_login;
+mod central_owner_lifetime;
 mod central_owner_web;
 mod frontend_assets;
 mod frontend_document;

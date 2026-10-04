@@ -200,6 +200,7 @@ dependencies = [
  "fs2",
  "futures-util",
  "governor",
+ "hex",
  "hmac 0.12.1",
  "http-cache-semantics",
  "hyper",

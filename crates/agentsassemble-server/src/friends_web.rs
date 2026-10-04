@@ -51,10 +51,10 @@ async fn authorize(
     remote: bool,
 ) -> Result<ServerOwnerAuthority, Failure> {
     if remote {
-        if crate::http_api::bearer_credential(headers)
-            .is_some_and(|token| token.starts_with("aacg1."))
-        {
-            return crate::central_owner_web::owner_from_grant_headers(state, headers, origin)
+        if crate::http_api::bearer_credential(headers).is_some_and(|token| {
+            token.starts_with(agentsassemble_persistence::OWNER_SESSION_PREFIX)
+        }) {
+            return crate::central_owner_web::owner_from_session_headers(state, headers, origin)
                 .await
                 .map_err(|error| failure(error.status, error.code, error.message));
         }

@@ -6,6 +6,7 @@ license.workspace = true
 default-run = "agentsassemble-server"
 
 [dependencies]
+hex.workspace = true
 agentsassemble-domain = { path = "../agentsassemble-domain" }
 agentsassemble-persistence = { path = "../agentsassemble-persistence" }
 agentsassemble-provider = { path = "../agentsassemble-provider" }

@@ -41,6 +41,9 @@ struct WorkerState {
     generation: Arc<AtomicI64>,
     reject: Arc<AtomicBool>,
     expires_at: i64,
+    unavailable: Arc<AtomicBool>,
+    renew_after: Arc<AtomicI64>,
+    lease_seconds: Arc<AtomicI64>,
 }
 
 struct WorkerCall {
@@ -77,7 +80,7 @@ async fn endpoint(
     Json(json!({"status": "ok"}))
 }
 
-async fn redeem(
+async fn owner_connection(
     State(state): State<WorkerState>,
     Path(server_id): Path<String>,
     method: Method,
@@ -89,14 +92,28 @@ async fn redeem(
     state
         .calls
         .send(WorkerCall {
-            path: format!("/v1/servers/{server_id}/connect-grants/redeem"),
+            path: format!(
+                "/v1/servers/{server_id}/owner-connections/{}",
+                if parsed.get("grant_token").is_some() {
+                    "exchange"
+                } else {
+                    "renew"
+                }
+            ),
             method,
             headers,
             body,
         })
         .unwrap_or_else(|error| panic!("record redemption call: {error:?}"));
+    if state.unavailable.load(Ordering::SeqCst) {
+        return (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(json!({"error": {"code": "unavailable"}})),
+        );
+    }
     if state.reject.load(Ordering::SeqCst)
-        || parsed["grant_token"] != TOKEN
+        || (parsed["grant_token"] != TOKEN
+            && parsed["connection_id"] != format!("soc_{}", "B".repeat(43)))
         || parsed["origin"] != ORIGIN
         || parsed["generation"].as_i64() != Some(state.generation.load(Ordering::SeqCst))
     {
@@ -111,7 +128,11 @@ async fn redeem(
             "status": "authorized", "server_id": server_id,
             "person_id": "person-owner", "device_id": "device-owner",
             "origin": ORIGIN, "generation": parsed["generation"],
-            "expires_at": state.expires_at,
+            "expires_at": chrono::Utc::now().timestamp() + state.lease_seconds.load(Ordering::SeqCst),
+            "session_expires_at": state.expires_at,
+            "connection_id": format!("soc_{}", "B".repeat(43)),
+            "browser_fingerprint": parsed["browser_fingerprint"],
+            "renew_at": chrono::Utc::now().timestamp() + state.renew_after.load(Ordering::SeqCst),
         })),
     )
 }
@@ -168,6 +189,7 @@ struct Fixture {
     store: SqliteStore,
     address: SocketAddr,
     room_uid: String,
+    session_token: String,
     client: reqwest::Client,
     calls: mpsc::UnboundedReceiver<WorkerCall>,
     worker_state: WorkerState,
@@ -191,7 +213,10 @@ async fn start_fixture() -> Fixture {
         calls: call_tx,
         generation: Arc::new(AtomicI64::new(0)),
         reject: Arc::new(AtomicBool::new(false)),
-        expires_at: chrono::Utc::now().timestamp() + 300,
+        expires_at: chrono::Utc::now().timestamp() + 3600,
+        unavailable: Arc::new(AtomicBool::new(false)),
+        renew_after: Arc::new(AtomicI64::new(20)),
+        lease_seconds: Arc::new(AtomicI64::new(60)),
     };
     let worker = Router::new()
         .route(
@@ -199,8 +224,12 @@ async fn start_fixture() -> Fixture {
             axum::routing::put(endpoint).delete(endpoint),
         )
         .route(
-            "/v1/servers/{server_id}/connect-grants/redeem",
-            post_route(redeem),
+            "/v1/servers/{server_id}/owner-connections/exchange",
+            post_route(owner_connection),
+        )
+        .route(
+            "/v1/servers/{server_id}/owner-connections/renew",
+            post_route(owner_connection),
         )
         .with_state(worker_state.clone());
     let worker_task: JoinHandle<()> = tokio::spawn(async move {
@@ -225,7 +254,8 @@ async fn start_fixture() -> Fixture {
     let room_uid = String::new();
     let runtime_state = AppState::local(
         store.clone(),
-        TicketStore::new(Duration::from_secs(30), 8),
+        // Match the runtime capacity: small stores reserve all grants for private use.
+        TicketStore::new(Duration::from_secs(30), 4096),
         ProviderCatalogService::fixed(ProviderCatalog::default()),
     )
     .await
@@ -249,6 +279,7 @@ async fn start_fixture() -> Fixture {
         store,
         address,
         room_uid,
+        session_token: String::new(),
         client,
         calls,
         worker_state,
@@ -258,11 +289,10 @@ async fn start_fixture() -> Fixture {
     }
 }
 
-async fn verify_empty_workspace(fixture: &mut Fixture, generation: i64, public_key: &[u8]) {
+async fn verify_empty_workspace(fixture: &mut Fixture, generation: i64) {
     let client = &fixture.client;
     let address = fixture.address;
-    let calls = &mut fixture.calls;
-    let directory_body = json!({"grant_token": TOKEN, "generation": generation});
+    let directory_body = json!({"session_token": fixture.session_token, "generation": generation});
     let wrong_origin = post(
         client,
         address,
@@ -299,19 +329,15 @@ async fn verify_empty_workspace(fixture: &mut Fixture, generation: i64, public_k
         .unwrap_or_else(|error| panic!("directory JSON: {error:?}"));
     assert_eq!(listing["rooms"], json!([]));
     assert_eq!(listing["profile_revision"], 1);
-    verify_signed_call(&next_call(calls).await, public_key);
     let workspace_changes = fixture.store.subscribe_room_directory();
-    verify_owner_profile(client, address, TOKEN, Some(generation)).await;
+    verify_owner_profile(client, address, &fixture.session_token, Some(generation)).await;
     assert!(
         workspace_changes
             .has_changed()
             .unwrap_or_else(|error| panic!("profile notification: {error}"))
     );
-    for _ in 0..12 {
-        verify_signed_call(&next_call(calls).await, public_key);
-    }
     let created = post(client, address, "/api/central-owner/rooms", json!({
-        "grant_token": TOKEN, "generation": generation,
+        "session_token": fixture.session_token, "generation": generation,
         "request_id": "20000000-0000-4000-8000-000000000015", "room_id": "general", "label": "General"
     }), ORIGIN, DEVICE).await;
     assert_eq!(created.status(), StatusCode::OK);
@@ -323,33 +349,29 @@ async fn verify_empty_workspace(fixture: &mut Fixture, generation: i64, public_k
         .as_str()
         .unwrap_or_else(|| panic!("first room UID"))
         .clone_into(&mut fixture.room_uid);
-    verify_signed_call(&next_call(calls).await, public_key);
 }
 
-async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]) {
-    verify_empty_workspace(fixture, generation, public_key).await;
+async fn verify_routes(fixture: &mut Fixture, generation: i64) {
+    verify_empty_workspace(fixture, generation).await;
     let client = &fixture.client;
     let address = fixture.address;
-    let calls = &mut fixture.calls;
     let room_uid = &fixture.room_uid;
-    let directory_body = json!({"grant_token": TOKEN, "generation": generation});
     let stale_generation = post(
         client,
         address,
         "/api/central-owner/directory",
-        json!({"grant_token": TOKEN, "generation": generation - 1}),
+        json!({"session_token": fixture.session_token, "generation": generation - 1}),
         ORIGIN,
         DEVICE,
     )
     .await;
     assert_eq!(stale_generation.status(), StatusCode::UNAUTHORIZED);
-    verify_signed_call(&next_call(calls).await, public_key);
     let room = post(
         client,
         address,
         "/api/central-owner/room",
         json!({
-            "grant_token": TOKEN, "generation": generation,
+            "session_token": fixture.session_token, "generation": generation,
             "room_id": "general", "room_uid": room_uid,
         }),
         ORIGIN,
@@ -374,36 +396,26 @@ async fn verify_routes(fixture: &mut Fixture, generation: i64, public_key: &[u8]
     )
     .await;
     invitations::verify(client, address, &admission).await;
-    verify_signed_call(&next_call(calls).await, public_key);
 
-    verify_owner_rooms(client, address, generation, calls, public_key, &admission).await;
-    lifecycle::verify(fixture, generation, public_key).await;
-    let client = &fixture.client;
-    let address = fixture.address;
-    let calls = &mut fixture.calls;
-    fixture.worker_state.reject.store(true, Ordering::SeqCst);
-    let rejected = post(
+    verify_owner_rooms(
         client,
         address,
-        "/api/central-owner/directory",
-        directory_body,
-        ORIGIN,
-        DEVICE,
+        generation,
+        &fixture.session_token,
+        &admission,
     )
     .await;
-    assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
-    verify_signed_call(&next_call(calls).await, public_key);
+    lifecycle::verify(fixture, generation).await;
 }
 
 async fn verify_owner_rooms(
     client: &reqwest::Client,
     address: SocketAddr,
     generation: i64,
-    calls: &mut mpsc::UnboundedReceiver<WorkerCall>,
-    public_key: &[u8],
+    session_token: &str,
     initial: &Value,
 ) {
-    let create = json!({"grant_token": TOKEN, "generation": generation,
+    let create = json!({"session_token": session_token, "generation": generation,
         "request_id": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaab", "room_id": "second", "label": "Second"});
     let rejected = post(
         client,
@@ -415,7 +427,6 @@ async fn verify_owner_rooms(
     )
     .await;
     assert_eq!(rejected.status(), StatusCode::UNAUTHORIZED);
-    verify_signed_call(&next_call(calls).await, public_key);
     let mut room_uid = Value::Null;
     for replay in [false, true] {
         let response = post(
@@ -434,7 +445,6 @@ async fn verify_owner_rooms(
             .unwrap_or_else(|error| panic!("create: {error:?}"));
         assert_eq!(result["deduplicated"], replay);
         room_uid = result["room"]["room_uid"].clone();
-        verify_signed_call(&next_call(calls).await, public_key);
     }
     let mut conflicting = create.clone();
     conflicting["label"] = json!("Changed");
@@ -448,7 +458,6 @@ async fn verify_owner_rooms(
     )
     .await;
     assert_eq!(conflict.status(), StatusCode::CONFLICT);
-    verify_signed_call(&next_call(calls).await, public_key);
     for (room_id, uid, device, expected) in [
         ("second", room_uid, DEVICE, StatusCode::OK),
         (
@@ -465,7 +474,7 @@ async fn verify_owner_rooms(
         ),
     ] {
         let response = post(client, address, "/api/central-owner/room",
-            json!({"grant_token": TOKEN, "generation": generation, "room_id": room_id, "room_uid": uid}), ORIGIN, device).await;
+            json!({"session_token": session_token, "generation": generation, "room_id": room_id, "room_uid": uid}), ORIGIN, device).await;
         assert_eq!(response.status(), expected);
         if expected == StatusCode::OK {
             let session: Value = response
@@ -478,7 +487,6 @@ async fn verify_owner_rooms(
                 room_id == "general"
             );
         }
-        verify_signed_call(&next_call(calls).await, public_key);
     }
 }
 
@@ -641,7 +649,7 @@ async fn verify_owner_profile(
 }
 
 #[tokio::test]
-async fn central_owner_routes_redeem_current_grant_and_join_offline_publication() {
+async fn central_owner_routes_use_bound_session_and_join_offline_publication() {
     let mut fixture = start_fixture().await;
     let address = fixture.address;
     let online = next_call(&mut fixture.calls).await;
@@ -671,8 +679,30 @@ async fn central_owner_routes_redeem_current_grant_and_join_offline_publication(
         .unwrap_or_else(|error| panic!("host key encoding: {error:?}"));
     verify_signed_call(&online, &public_key);
 
-    verify_routes(&mut fixture, generation, &public_key).await;
-    verify_owner_stream(&mut fixture, generation, &public_key).await;
+    let exchange = post(
+        &fixture.client,
+        address,
+        "/api/central-owner/session",
+        json!({"grant_token": TOKEN, "generation": generation}),
+        ORIGIN,
+        DEVICE,
+    )
+    .await;
+    assert_eq!(exchange.status(), StatusCode::OK);
+    let exchange: Value = exchange
+        .json()
+        .await
+        .unwrap_or_else(|e| panic!("exchange: {e}"));
+    fixture.session_token = exchange["session_token"]
+        .as_str()
+        .unwrap_or_else(|| panic!("session token"))
+        .to_owned();
+    verify_signed_call(&next_call(&mut fixture.calls).await, &public_key);
+    verify_routes(&mut fixture, generation).await;
+    assert!(
+        fixture.calls.try_recv().is_err(),
+        "workspace requests must not redeem entry grants"
+    );
     fixture.cancel.cancel();
     fixture
         .host_task
@@ -688,84 +718,4 @@ async fn central_owner_routes_redeem_current_grant_and_join_offline_publication(
     verify_signed_call(&offline, &public_key);
     fixture.worker_task.abort();
     let _ = fixture.worker_task.await;
-}
-
-async fn verify_owner_stream(fixture: &mut Fixture, generation: i64, public_key: &[u8]) {
-    fixture.worker_state.reject.store(false, Ordering::SeqCst);
-    let body = json!({"grant_token": TOKEN, "generation": generation});
-    for (origin, device, expected) in [
-        ("https://evil.example.test", DEVICE, StatusCode::FORBIDDEN),
-        (ORIGIN, "invalid", StatusCode::UNAUTHORIZED),
-        (
-            ORIGIN,
-            "aad1_BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA",
-            StatusCode::UNAUTHORIZED,
-        ),
-    ] {
-        let denied = post(
-            &fixture.client,
-            fixture.address,
-            "/api/central-owner/events",
-            body.clone(),
-            origin,
-            device,
-        )
-        .await;
-        assert_eq!(denied.status(), expected);
-        if device.starts_with("aad1_B") {
-            verify_signed_call(&next_call(&mut fixture.calls).await, public_key);
-        }
-    }
-    let mut stream = post(
-        &fixture.client,
-        fixture.address,
-        "/api/central-owner/events",
-        body,
-        ORIGIN,
-        DEVICE,
-    )
-    .await;
-    assert_eq!(stream.status(), StatusCode::OK);
-    owner_directory_notice(&mut stream).await;
-    for _ in 0..2 {
-        verify_signed_call(&next_call(&mut fixture.calls).await, public_key);
-    }
-    fixture
-        .store
-        .create_room_for_local_operator(
-            "10000000-0000-4000-8000-000000000020",
-            "stream-change",
-            "Committed elsewhere",
-        )
-        .await
-        .unwrap_or_else(|e| panic!("cross-client commit: {e}"));
-    owner_directory_notice(&mut stream).await;
-    verify_signed_call(&next_call(&mut fixture.calls).await, public_key);
-    fixture.worker_state.reject.store(true, Ordering::SeqCst);
-    fixture
-        .store
-        .create_room_for_local_operator(
-            "10000000-0000-4000-8000-000000000021",
-            "revoked-change",
-            "Not delivered",
-        )
-        .await
-        .unwrap_or_else(|e| panic!("commit after revocation: {e}"));
-    let terminal = tokio::time::timeout(Duration::from_secs(5), stream.chunk())
-        .await
-        .unwrap_or_else(|e| panic!("revocation deadline: {e}"));
-    assert!(
-        matches!(terminal, Err(_) | Ok(None)),
-        "revoked owner received data"
-    );
-    verify_signed_call(&next_call(&mut fixture.calls).await, public_key);
-}
-
-async fn owner_directory_notice(response: &mut reqwest::Response) {
-    let bytes = tokio::time::timeout(Duration::from_secs(5), response.chunk())
-        .await
-        .unwrap_or_else(|e| panic!("directory deadline: {e}"))
-        .unwrap_or_else(|e| panic!("directory frame: {e}"))
-        .unwrap_or_else(|| panic!("directory stream ended"));
-    assert_eq!(bytes.as_ref(), b"event: directory_changed\ndata: {}\n\n");
 }

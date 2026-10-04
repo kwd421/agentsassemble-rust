@@ -15,11 +15,8 @@ use crate::{
 pub(crate) enum DirectoryStreamAuthority {
     Local,
     Central {
-        token: String,
-        generation: i64,
-        origin: String,
-        device: [u8; 32],
-        expires_at: chrono::DateTime<chrono::Utc>,
+        owner: Box<agentsassemble_persistence::OwnerSessionAuthorization>,
+        lease: crate::central_owner_lifetime::OwnerSessionLease,
     },
 }
 
@@ -27,23 +24,19 @@ impl DirectoryStreamAuthority {
     async fn validate(&self, state: &AppState) -> Result<(), io::Error> {
         let owner = match self {
             Self::Local => ServerOwnerAuthority::LocalOperator,
-            Self::Central {
-                token,
-                generation,
-                origin,
-                device,
-                ..
-            } => {
-                crate::central_owner_web::redeem_directory_owner(
-                    state,
-                    token,
-                    origin,
-                    *generation,
-                    *device,
-                )
-                .await
-                .map_err(|_| io::Error::other("Directory ownership is unavailable."))?
-                .0
+            Self::Central { owner, .. } => {
+                if state
+                    .public_ingress
+                    .ready_snapshot()
+                    .is_none_or(|ready| ready.public_url != owner.binding().origin)
+                {
+                    return Err(io::Error::other("Directory ownership is unavailable."));
+                }
+                state
+                    .owner_sessions
+                    .require_live(owner)
+                    .map_err(|_| io::Error::other("Directory ownership is unavailable."))?;
+                ServerOwnerAuthority::CentralSession(*owner.clone())
             }
         };
         state
@@ -56,21 +49,16 @@ impl DirectoryStreamAuthority {
         Ok(())
     }
 
-    async fn expired(&self) {
+    async fn changed(&mut self) -> Result<(), watch::error::RecvError> {
         match self {
             Self::Local => std::future::pending().await,
-            Self::Central { expires_at, .. } => {
-                let remaining = (*expires_at - chrono::Utc::now())
-                    .to_std()
-                    .unwrap_or(Duration::ZERO);
-                tokio::time::sleep(remaining).await;
-            }
+            Self::Central { lease, .. } => lease.status.changed().await,
         }
     }
 }
 
-// The HTTP body owns both the subscription and admission lease. Dropping the
-// fetch, expiring the grant or shutting down releases them without a spawned task.
+// The authenticated HTTP body retains its owner renewal. Status frames carry no
+// directory data; a successful renewal leaves this exact connection open.
 pub(crate) fn directory_stream(
     state: AppState,
     changes: watch::Receiver<()>,
@@ -79,34 +67,74 @@ pub(crate) fn directory_stream(
     transport_wait: AuthenticatedHttpWait,
 ) -> Response {
     let stream = stream::unfold(
-        (state, changes, authority, lease, transport_wait, true),
-        |(state, mut changes, authority, lease, transport_wait, initial)| async move {
-            if !initial {
-                tokio::select! {
-                    () = state.shutdown.cancelled() => return None,
-                    () = authority.expired() => return None,
-                    result = changes.changed() => if result.is_err() { return None; },
-                }
-            }
-            // Revalidate immediately before every data frame, including admission;
-            // comments carry no authority and the deadline also applies while idle.
-            if state.shutdown.is_cancelled() {
+        (
+            state,
+            changes,
+            authority,
+            lease,
+            transport_wait,
+            0_u8,
+            false,
+        ),
+        |(state, mut changes, mut authority, lease, transport_wait, mut phase, closed)| async move {
+            if closed || state.shutdown.is_cancelled() {
                 return None;
             }
-            let validation = tokio::select! {
-                () = state.shutdown.cancelled() => return None,
-                () = authority.expired() => return None,
-                result = authority.validate(&state) => result,
+            let status_frame = if phase == 0
+                && matches!(&authority, DirectoryStreamAuthority::Central { .. })
+            {
+                phase = 1;
+                true
+            } else if phase < 2 {
+                phase = 2;
+                false
+            } else {
+                tokio::select! {
+                    () = state.shutdown.cancelled() => return None,
+                    result = changes.changed() => { if result.is_err() { return None; } false },
+                    result = authority.changed() => { if result.is_err() { return None; } true },
+                }
             };
-            if let Err(error) = validation {
-                return Some((
-                    Err(error),
-                    (state, changes, authority, lease, transport_wait, false),
-                ));
-            }
+            let mut terminal = false;
+            let frame = if status_frame {
+                let DirectoryStreamAuthority::Central { lease: owner, .. } = &mut authority else {
+                    return None;
+                };
+                let status = owner.status.borrow_and_update().clone();
+                terminal = matches!(
+                    status,
+                    agentsassemble_protocol::CentralOwnerSessionStatus::Ended { .. }
+                );
+                Event::default()
+                    .event("owner_session")
+                    .json_data(status)
+                    .map_err(io::Error::other)
+            } else if let Err(error) = authority.validate(&state).await {
+                if matches!(&authority, DirectoryStreamAuthority::Central { .. }) {
+                    terminal = true;
+                    Event::default()
+                        .event("owner_session")
+                        .json_data(agentsassemble_protocol::CentralOwnerSessionStatus::Ended {
+                            reason: agentsassemble_protocol::CentralOwnerSessionEnd::Unavailable,
+                        })
+                        .map_err(io::Error::other)
+                } else {
+                    Err(error)
+                }
+            } else {
+                Ok(Event::default().event("directory_changed").data("{}"))
+            };
             Some((
-                Ok(Event::default().event("directory_changed").data("{}")),
-                (state, changes, authority, lease, transport_wait, false),
+                frame,
+                (
+                    state,
+                    changes,
+                    authority,
+                    lease,
+                    transport_wait,
+                    phase,
+                    terminal,
+                ),
             ))
         },
     );

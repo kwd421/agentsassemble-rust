@@ -26,24 +26,28 @@ struct CentralDirectoryInner {
     status: RwLock<CentralDirectoryStatus>,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct OwnerConnectionResponse {
+    status: String,
+    connection_id: String,
+    server_id: String,
+    person_id: String,
+    device_id: String,
+    browser_fingerprint: String,
+    origin: String,
+    generation: i64,
+    expires_at: i64,
+    session_expires_at: i64,
+    renew_at: i64,
+}
+
 #[derive(Clone, Serialize)]
 pub(crate) struct CentralDirectoryStatus {
     pub(crate) enabled: bool,
     pub(crate) registered_origin: String,
     pub(crate) last_success_at: i64,
     pub(crate) last_error: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct RedeemedConnectGrant {
-    pub(crate) status: String,
-    pub(crate) server_id: String,
-    pub(crate) person_id: String,
-    pub(crate) device_id: String,
-    pub(crate) origin: String,
-    pub(crate) generation: i64,
-    pub(crate) expires_at: i64,
 }
 
 #[derive(Debug, Error)]
@@ -58,6 +62,8 @@ pub enum CentralDirectoryError {
     Request(#[source] reqwest::Error),
     #[error("central directory rejected the request")]
     Rejected,
+    #[error("central directory is temporarily unavailable")]
+    Unavailable,
     #[error("central directory response is invalid")]
     InvalidResponse,
     #[error("host request signing failed")]
@@ -173,35 +179,54 @@ impl CentralDirectory {
         Ok(())
     }
 
-    pub(crate) async fn redeem_connect_grant(
+    pub(crate) async fn owner_connection(
         &self,
         identity: &CentralHostIdentity,
-        grant_token: &str,
+        field: &str,
+        credential: &str,
         origin: &str,
         generation: i64,
-    ) -> Result<RedeemedConnectGrant, CentralDirectoryError> {
+        device: &[u8; 32],
+    ) -> Result<agentsassemble_persistence::OwnerConnectionLease, CentralDirectoryError> {
         let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
-        let path = format!("/v1/servers/{}/connect-grants/redeem", identity.server_id());
-        let body = serde_json::to_vec(&json!({
-            "grant_token": grant_token,
-            "origin": origin,
-            "generation": generation,
-        }))
+        let operation = if field == "grant_token" {
+            "exchange"
+        } else {
+            "renew"
+        };
+        let path = format!(
+            "/v1/servers/{}/owner-connections/{operation}",
+            identity.server_id()
+        );
+        let body = serde_json::to_vec(&json!({ field: credential, "origin": origin,
+            "generation": generation, "browser_fingerprint": hex::encode(device) }))
         .map_err(|_| CentralDirectoryError::InvalidResponse)?;
         let bytes = send_signed(inner, identity, Method::POST, &path, body).await?;
-        let redeemed: RedeemedConnectGrant =
+        let response: OwnerConnectionResponse =
             serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
-        if redeemed.status != "authorized"
-            || redeemed.server_id != identity.server_id()
-            || redeemed.origin != origin
-            || redeemed.generation != generation
-            || redeemed.expires_at <= Utc::now().timestamp()
-            || redeemed.person_id.is_empty()
-            || redeemed.device_id.is_empty()
+        if response.status != "authorized"
+            || response.server_id != identity.server_id()
+            || response.origin != origin
+            || response.generation != generation
+            || response.browser_fingerprint != hex::encode(device)
         {
             return Err(CentralDirectoryError::InvalidResponse);
         }
-        Ok(redeemed)
+        agentsassemble_persistence::OwnerConnectionLease::verified(
+            agentsassemble_persistence::OwnerConnectionBinding {
+                connection_id: response.connection_id,
+                server_id: response.server_id,
+                person_id: response.person_id,
+                device_id: response.device_id,
+                browser_fingerprint: *device,
+                origin: response.origin,
+                generation: response.generation,
+                session_expires_at: response.session_expires_at,
+            },
+            response.expires_at,
+            response.renew_at,
+        )
+        .map_err(|_| CentralDirectoryError::InvalidResponse)
     }
 }
 
@@ -277,7 +302,15 @@ async fn send_signed(
         .await
         .map_err(CentralDirectoryError::Request)?;
     if response.status() != StatusCode::OK {
-        return Err(CentralDirectoryError::Rejected);
+        return Err(
+            if response.status().is_server_error()
+                || response.status() == StatusCode::TOO_MANY_REQUESTS
+            {
+                CentralDirectoryError::Unavailable
+            } else {
+                CentralDirectoryError::Rejected
+            },
+        );
     }
     if response
         .content_length()
