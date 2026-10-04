@@ -24,6 +24,7 @@ const HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(10);
 const MAX_SUBSCRIPTION_CATCH_UP_EVENTS: i64 = 256;
 
 pub(crate) struct EstablishedSubscription {
+    pub owner_lease: Option<crate::owner_session_lifetime::OwnerSessionLease>,
     pub room_uid: uuid::Uuid,
     pub principal: AuthenticatedPrincipal,
     pub room_session: Option<RoomSessionAuthorization>,
@@ -86,6 +87,12 @@ where
     };
     let mut principal =
         resolve_socket_principal(sender, state, &ticket_principal, &mut room_session).await?;
+    // Register before even an error frame: last-disconnect and retain share the
+    // lifetime lock, so a consumed ticket cannot revive cancelled custody.
+    let owner_lease =
+        crate::owner_session_lifetime::retain_room_owner(state, room_session.as_ref())
+            .await
+            .ok()?;
     let request =
         receive_subscription(sender, receiver, state, &mut principal, &mut room_session).await?;
     let prepared = prepare_snapshot(
@@ -162,6 +169,7 @@ where
     )
     .await?;
     Some(EstablishedSubscription {
+        owner_lease,
         room_uid: prepared.room_uid,
         principal,
         room_session,

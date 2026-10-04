@@ -170,6 +170,8 @@ mod room_session_http_authority;
 mod room_shutdown;
 mod room_socket;
 mod room_socket_direct;
+#[cfg(test)]
+mod room_socket_owner_tests;
 mod room_socket_session;
 mod room_vote_socket;
 mod runtime_reconciliation;

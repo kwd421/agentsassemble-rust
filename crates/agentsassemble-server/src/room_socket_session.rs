@@ -32,6 +32,7 @@ pub(crate) async fn run(
 ) {
     let (mut sender, mut receiver) = socket.split();
     let Some(EstablishedSubscription {
+        mut owner_lease,
         room_uid,
         principal,
         room_session,
@@ -45,11 +46,6 @@ pub(crate) async fn run(
     };
     let mut principal = principal;
     let mut room_session = room_session;
-    let Ok(mut owner_lease) =
-        crate::owner_session_lifetime::retain_room_owner(&state, room_session.as_ref()).await
-    else {
-        return;
-    };
     let mut revocation_principal = principal.clone();
     let mut revocation_session = room_session.clone();
     let (final_leave_tx, final_leave_rx) = tokio::sync::watch::channel(None::<String>);
