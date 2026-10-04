@@ -45,7 +45,7 @@ pub struct AppState {
     pub human_invite_credentials: HumanInviteCredentialAuthority,
     pub(crate) central_host_identity: CentralHostIdentity,
     pub(crate) central_directory: crate::central_directory::CentralDirectory,
-    pub(crate) owner_sessions: crate::central_owner_lifetime::OwnerSessionLifetimes,
+    pub(crate) owner_sessions: crate::owner_session_lifetime::OwnerSessionLifetimes,
     pub(crate) central_login: crate::central_login::CentralLoginBroker,
     pub shutdown: CancellationToken,
     pub connections: TaskTracker,
@@ -139,6 +139,7 @@ impl AppState {
         provider_credentials: ProviderCredentialStore,
     ) -> Result<Self, AppStateBuildError> {
         let persistent_host_identity = store.host_identity().await?;
+        store.disconnect_all_owner_sessions().await?;
         let human_invite_credentials =
             HumanInviteCredentialAuthority::from_persistent(&persistent_host_identity);
         let central_host_identity =
@@ -176,7 +177,7 @@ impl AppState {
             human_invite_credentials,
             central_host_identity,
             central_directory: crate::central_directory::CentralDirectory::disabled(),
-            owner_sessions: crate::central_owner_lifetime::OwnerSessionLifetimes::default(),
+            owner_sessions: crate::owner_session_lifetime::OwnerSessionLifetimes::default(),
             central_login: crate::central_login::CentralLoginBroker::default(),
             shutdown,
             connections: TaskTracker::new(),

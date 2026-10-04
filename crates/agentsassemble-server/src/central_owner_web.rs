@@ -8,7 +8,7 @@ use axum::{
     http::{Method, StatusCode, header},
     response::{IntoResponse, Response},
 };
-use chrono::{DateTime, Utc};
+use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
@@ -40,6 +40,7 @@ struct DirectoryRequest {
 struct EntryRequest {
     grant_token: String,
     generation: i64,
+    device: agentsassemble_protocol::OwnerDeviceDescription,
 }
 
 #[derive(Deserialize)]
@@ -85,11 +86,10 @@ async fn exchange(
     if fingerprint_token(&body.grant_token, GRANT_PREFIX).is_none() || body.generation < 1 {
         return Err(CentralOwnerHttpError::unauthorized());
     }
-    let lease = state
+    let admission = state
         .central_directory
-        .owner_connection(
+        .owner_admission(
             &state.central_host_identity,
-            "grant_token",
             &body.grant_token,
             &origin,
             body.generation,
@@ -97,13 +97,23 @@ async fn exchange(
         )
         .await
         .map_err(|error| CentralOwnerHttpError::central(&error))?;
-    let session = state.store.create_leased_owner_session(&lease).await?;
+    let description = agentsassemble_persistence::OwnerDeviceDescription::verified(
+        body.device.device_name,
+        body.device.browser,
+        body.device.os,
+    )?;
+    let session = state
+        .store
+        .create_owner_session(&admission, &description)
+        .await?;
+    state
+        .owner_sessions
+        .admit(&state, session.authorization.clone())?;
     Ok(Json(agentsassemble_protocol::CentralOwnerSessionGrant {
         session_token: session.session_bearer,
+        session_id: session.authorization.session_id(),
         server_id: session.authorization.binding().server_id.clone(),
         generation: session.authorization.binding().generation,
-        expires_at: session.authorization.expires_at(),
-        session_expires_at: session.authorization.binding().session_expires_at,
     }))
 }
 
@@ -138,7 +148,7 @@ async fn directory_events(
         device,
     )
     .await?;
-    let owner_lease = state.owner_sessions.retain(&state, owner.clone())?;
+    let owner_lease = state.owner_sessions.retain(&owner)?;
     let lease = state
         .connection_admission
         .acquire_directory()
@@ -181,7 +191,7 @@ pub(crate) async fn authorize_directory_owner(
         .ok_or_else(CentralOwnerHttpError::unauthorized)?;
     let owner = state
         .store
-        .authorize_leased_owner_session(&fingerprint, &device, origin)
+        .authorize_owner_session(&fingerprint, &device, origin)
         .await?;
     if owner.binding().generation != generation {
         return Err(CentralOwnerHttpError::unauthorized());
@@ -319,8 +329,6 @@ async fn room(
         device,
     )
     .await?;
-    let expires_at = DateTime::from_timestamp(owner.binding().session_expires_at, 0)
-        .ok_or_else(CentralOwnerHttpError::unauthorized)?;
     let room_incarnation = Uuid::parse_str(&body.room_uid)
         .ok()
         .filter(|value| value.to_string() == body.room_uid)
@@ -331,13 +339,12 @@ async fn room(
     hash.update(owner.fingerprint());
     hash.update(room_incarnation.as_bytes());
     let fingerprint: [u8; 32] = hash.finalize().into();
-    let session_request = CentralOwnerSessionRequest::new(
+    let session_request = CentralOwnerSessionRequest::host_owned(
         &body.room_id,
         room_incarnation,
         &fingerprint,
         &device,
         &origin,
-        expires_at,
         Utc::now(),
     );
     let redemption = state

@@ -95,14 +95,14 @@ impl OwnerAdmission {
 }
 
 #[derive(Clone)]
-pub struct HostOwnerSessionAuthorization {
+pub struct OwnerSessionAuthorization {
     fingerprint: [u8; 32],
     session_id: Uuid,
     binding: OwnerAdmissionBinding,
     admission_expires_at: i64,
 }
 
-impl HostOwnerSessionAuthorization {
+impl OwnerSessionAuthorization {
     #[must_use]
     pub const fn fingerprint(&self) -> &[u8; 32] {
         &self.fingerprint
@@ -119,11 +119,28 @@ impl HostOwnerSessionAuthorization {
     pub const fn admission_expires_at(&self) -> i64 {
         self.admission_expires_at
     }
+
+    pub(crate) async fn revalidate(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+    ) -> Result<Self, PersistenceError> {
+        let current = resolve(
+            tx,
+            &self.fingerprint,
+            &self.binding.browser_fingerprint,
+            &self.binding.origin,
+        )
+        .await?;
+        if current.binding != self.binding || current.session_id != self.session_id {
+            return Err(invalid());
+        }
+        Ok(current)
+    }
 }
 
-pub struct HostOwnerSessionRedemption {
+pub struct OwnerSessionRedemption {
     pub session_bearer: String,
-    pub authorization: HostOwnerSessionAuthorization,
+    pub authorization: OwnerSessionAuthorization,
 }
 
 impl SqliteStore {
@@ -134,7 +151,7 @@ impl SqliteStore {
         &self,
         admission: &OwnerAdmission,
         description: &OwnerDeviceDescription,
-    ) -> Result<HostOwnerSessionRedemption, PersistenceError> {
+    ) -> Result<OwnerSessionRedemption, PersistenceError> {
         let binding = &admission.binding;
         let issued = derive_session_bearer(
             self.host_key.session_hmac_key(),
@@ -185,7 +202,7 @@ impl SqliteStore {
             return Err(invalid());
         }
         tx.commit().await?;
-        Ok(HostOwnerSessionRedemption {
+        Ok(OwnerSessionRedemption {
             session_bearer: issued.bearer,
             authorization,
         })
@@ -198,7 +215,7 @@ impl SqliteStore {
         fingerprint: &[u8; 32],
         device: &[u8; 32],
         origin: &str,
-    ) -> Result<HostOwnerSessionAuthorization, PersistenceError> {
+    ) -> Result<OwnerSessionAuthorization, PersistenceError> {
         let mut tx = self.pool.begin().await?;
         let current = resolve(&mut tx, fingerprint, device, origin).await?;
         tx.commit().await?;
@@ -234,7 +251,7 @@ pub(crate) async fn resolve(
     fingerprint: &[u8; 32],
     device: &[u8; 32],
     origin: &str,
-) -> Result<HostOwnerSessionAuthorization, PersistenceError> {
+) -> Result<OwnerSessionAuthorization, PersistenceError> {
     let row = sqlx::query("SELECT * FROM host_owner_sessions WHERE fingerprint = ?")
         .bind(fingerprint.as_slice())
         .fetch_optional(&mut **tx)
@@ -257,13 +274,27 @@ pub(crate) async fn resolve(
         return Err(invalid());
     }
     validate_binding(tx, &binding).await?;
-    Ok(HostOwnerSessionAuthorization {
+    Ok(OwnerSessionAuthorization {
         fingerprint: *fingerprint,
         session_id: Uuid::parse_str(&row.try_get::<String, _>("session_id")?)
             .map_err(|_| invalid())?,
         binding,
         admission_expires_at: row.try_get("admission_expires_at")?,
     })
+}
+
+/// A delegated device has its own connection lifetime, but cannot outlive issuer revocation.
+pub(crate) async fn require_unrevoked_issuer(
+    tx: &mut Transaction<'_, Sqlite>,
+    fingerprint: &[u8; 32],
+    origin: &str,
+) -> Result<(), PersistenceError> {
+    let live: bool = sqlx::query_scalar("SELECT EXISTS(SELECT 1 FROM host_owner_sessions WHERE fingerprint = ? AND origin = ? AND revoked = 0)")
+        .bind(fingerprint.as_slice()).bind(origin).fetch_one(&mut **tx).await?;
+    if !live {
+        return Err(invalid());
+    }
+    Ok(())
 }
 
 async fn validate_binding(

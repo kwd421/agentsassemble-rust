@@ -31,9 +31,9 @@ impl RoomSessionAuthorization {
     }
 
     #[must_use]
-    pub const fn expires_at(&self) -> DateTime<Utc> {
+    pub const fn expires_at(&self) -> Option<DateTime<Utc>> {
         match self {
-            Self::Human(session) => session.expires_at(),
+            Self::Human(session) => Some(session.expires_at()),
             Self::Operator(session) => session.expires_at(),
         }
     }

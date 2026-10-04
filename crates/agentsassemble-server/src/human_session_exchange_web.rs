@@ -133,15 +133,18 @@ fn session_ticket_ttl(
     state: &AppState,
     authorization: &agentsassemble_persistence::RoomSessionAuthorization,
 ) -> u64 {
-    state.tickets.ttl_seconds().min(
-        authorization
-            .expires_at()
-            .signed_duration_since(Utc::now())
-            .num_seconds()
-            .max(0)
-            .try_into()
-            .unwrap_or(0),
-    )
+    authorization
+        .expires_at()
+        .map_or(state.tickets.ttl_seconds(), |expiry| {
+            state.tickets.ttl_seconds().min(
+                expiry
+                    .signed_duration_since(Utc::now())
+                    .num_seconds()
+                    .max(0)
+                    .try_into()
+                    .unwrap_or(0),
+            )
+        })
 }
 
 #[derive(Debug)]

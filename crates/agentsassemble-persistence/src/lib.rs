@@ -1,17 +1,9 @@
 mod host_owner_session;
 #[cfg(test)]
 mod host_owner_session_tests;
-pub use host_owner_session::{
-    HostOwnerSessionAuthorization, HostOwnerSessionRedemption,
-    OWNER_SESSION_PREFIX as HOST_OWNER_SESSION_PREFIX, OwnerAdmission, OwnerAdmissionBinding,
-    OwnerDeviceDescription,
-};
-mod central_owner_session;
-#[cfg(test)]
-mod central_owner_session_tests;
 mod server_owner_authority;
-pub use central_owner_session::{
-    OWNER_LEASE_SECONDS, OWNER_SESSION_PREFIX, OwnerConnectionBinding, OwnerConnectionLease,
+pub use host_owner_session::{
+    OWNER_SESSION_PREFIX, OwnerAdmission, OwnerAdmissionBinding, OwnerDeviceDescription,
     OwnerSessionAuthorization, OwnerSessionRedemption,
 };
 pub use server_owner_authority::{

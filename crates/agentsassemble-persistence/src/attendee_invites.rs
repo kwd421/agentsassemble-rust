@@ -137,7 +137,11 @@ impl SqliteStore {
                 participant_id: principal.participant_id.clone(),
             },
             parent: Some(*current.session_fingerprint()),
-            expires_at: (now + Duration::minutes(10)).min(current.expires_at()),
+            expires_at: current
+                .expires_at()
+                .map_or(now + Duration::minutes(10), |expiry| {
+                    (now + Duration::minutes(10)).min(expiry)
+                }),
         };
         let hash = canonical_payload_hash(
             &json!({"provider_kind":request.provider_kind,"display_name":request.display_name}),

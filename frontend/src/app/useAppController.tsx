@@ -57,7 +57,7 @@ import { useDismissMenus } from "./useDismissMenus";
 import { useRoomAdmission } from "./useRoomAdmission";
 import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
 import { useRoomCreation } from "./useRoomCreation";
-import { persistCentralOwnerWorkspace } from "../lib/centralOwnerWorkspace";
+import { clearStoredCentralOwnerWorkspace } from "../lib/centralOwnerWorkspace";
 import { useCentralOwnerWorkspace } from "./useCentralOwnerWorkspace";
 import { useRoomDirectory } from "./useRoomDirectory";
 import { useRoomInviteController } from "./useRoomInviteController";
@@ -560,7 +560,7 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   function exitGuestSurface() {
-    persistCentralOwnerWorkspace(null);
+    clearStoredCentralOwnerWorkspace();
     clearGuestSession();
     const url = new URL(window.location.href);
     url.pathname = "/join";

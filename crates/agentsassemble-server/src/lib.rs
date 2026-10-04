@@ -60,13 +60,13 @@ mod app_state;
 mod central_directory;
 mod central_host_identity;
 mod central_login;
-mod central_owner_lifetime;
 mod central_owner_web;
 mod frontend_assets;
 mod frontend_document;
 pub mod frontend_release;
 mod google_accounts;
 mod google_token_verifier;
+mod owner_session_lifetime;
 #[cfg(unix)]
 pub mod runtime_control_socket;
 pub mod runtime_image;

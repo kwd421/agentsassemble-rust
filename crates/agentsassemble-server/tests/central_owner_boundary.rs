@@ -29,14 +29,13 @@ use tokio_util::sync::CancellationToken;
 mod invitations;
 #[path = "central_owner_boundary/lifecycle.rs"]
 mod lifecycle;
-#[path = "central_owner_boundary/lifetimes.rs"]
-mod lifetimes;
 #[path = "support/room_socket_peer.rs"]
 mod room_socket_peer;
 
 const ORIGIN: &str = "https://owner.example.test";
 const SECRET: &str = "central-owner-boundary-proxy-secret-0000001";
 const TOKEN: &str = "aacg1.AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const SECOND_TOKEN: &str = "aacg1.BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBA";
 const DEVICE: &str = "aad1_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
 
 #[derive(Clone)]
@@ -44,10 +43,7 @@ struct WorkerState {
     calls: mpsc::UnboundedSender<WorkerCall>,
     generation: Arc<AtomicI64>,
     reject: Arc<AtomicBool>,
-    expires_at: i64,
     unavailable: Arc<AtomicBool>,
-    renew_after: Arc<AtomicI64>,
-    lease_seconds: Arc<AtomicI64>,
 }
 
 struct WorkerCall {
@@ -96,14 +92,7 @@ async fn owner_connection(
     state
         .calls
         .send(WorkerCall {
-            path: format!(
-                "/v1/servers/{server_id}/owner-connections/{}",
-                if parsed.get("grant_token").is_some() {
-                    "exchange"
-                } else {
-                    "renew"
-                }
-            ),
+            path: format!("/v1/servers/{server_id}/connect-grants/redeem"),
             method,
             headers,
             body,
@@ -116,8 +105,7 @@ async fn owner_connection(
         );
     }
     if state.reject.load(Ordering::SeqCst)
-        || (parsed["grant_token"] != TOKEN
-            && parsed["connection_id"] != format!("soc_{}", "B".repeat(43)))
+        || !matches!(parsed["grant_token"].as_str(), Some(TOKEN | SECOND_TOKEN))
         || parsed["origin"] != ORIGIN
         || parsed["generation"].as_i64() != Some(state.generation.load(Ordering::SeqCst))
     {
@@ -132,11 +120,7 @@ async fn owner_connection(
             "status": "authorized", "server_id": server_id,
             "person_id": "person-owner", "device_id": "device-owner",
             "origin": ORIGIN, "generation": parsed["generation"],
-            "expires_at": chrono::Utc::now().timestamp() + state.lease_seconds.load(Ordering::SeqCst),
-            "session_expires_at": state.expires_at,
-            "connection_id": format!("soc_{}", "B".repeat(43)),
-            "browser_fingerprint": parsed["browser_fingerprint"],
-            "renew_at": chrono::Utc::now().timestamp() + state.renew_after.load(Ordering::SeqCst),
+            "expires_at": chrono::Utc::now().timestamp() + 300,
         })),
     )
 }
@@ -168,6 +152,11 @@ async fn next_call(calls: &mut mpsc::UnboundedReceiver<WorkerCall>) -> WorkerCal
         .unwrap_or_else(|| panic!("central call channel closed"))
 }
 
+fn entry_body(token: &str, generation: i64) -> Value {
+    json!({"grant_token": token, "generation": generation,
+        "device": {"device_name": "Chrome · macOS", "browser": "Chrome", "os": "macOS"}})
+}
+
 async fn post(
     client: &reqwest::Client,
     address: SocketAddr,
@@ -196,7 +185,6 @@ struct Fixture {
     session_token: String,
     client: reqwest::Client,
     calls: mpsc::UnboundedReceiver<WorkerCall>,
-    worker_state: WorkerState,
     worker_task: JoinHandle<()>,
     cancel: CancellationToken,
     host_task: JoinHandle<()>,
@@ -217,10 +205,7 @@ async fn start_fixture() -> Fixture {
         calls: call_tx,
         generation: Arc::new(AtomicI64::new(0)),
         reject: Arc::new(AtomicBool::new(false)),
-        expires_at: chrono::Utc::now().timestamp() + 3600,
         unavailable: Arc::new(AtomicBool::new(false)),
-        renew_after: Arc::new(AtomicI64::new(20)),
-        lease_seconds: Arc::new(AtomicI64::new(60)),
     };
     let worker = Router::new()
         .route(
@@ -228,11 +213,7 @@ async fn start_fixture() -> Fixture {
             axum::routing::put(endpoint).delete(endpoint),
         )
         .route(
-            "/v1/servers/{server_id}/owner-connections/exchange",
-            post_route(owner_connection),
-        )
-        .route(
-            "/v1/servers/{server_id}/owner-connections/renew",
+            "/v1/servers/{server_id}/connect-grants/redeem",
             post_route(owner_connection),
         )
         .with_state(worker_state.clone());
@@ -286,7 +267,6 @@ async fn start_fixture() -> Fixture {
         session_token: String::new(),
         client,
         calls,
-        worker_state,
         worker_task,
         cancel,
         host_task,
@@ -687,7 +667,7 @@ async fn central_owner_routes_use_bound_session_and_join_offline_publication() {
         &fixture.client,
         address,
         "/api/central-owner/session",
-        json!({"grant_token": TOKEN, "generation": generation}),
+        entry_body(TOKEN, generation),
         ORIGIN,
         DEVICE,
     )

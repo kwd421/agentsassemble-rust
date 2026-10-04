@@ -2,7 +2,6 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 
 import { TEST_SERVER_PRODUCT_SURFACE } from "../../test/serverProductSurface";
-import { loadCentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
 
 const mocks = vi.hoisted(() => ({
@@ -43,15 +42,15 @@ it("retries a failed challenge with the in-memory unexpired grant", async () => 
     hostKeyFingerprint: "c".repeat(43),
   };
 
-  const { grantToken: _grantToken, ...binding } = connect;
-  const session = { ...binding, sessionToken: `aaos1.${"d".repeat(43)}`, expiresAt: Math.floor(Date.now() / 1000) + 86400, leaseExpiresAt: Math.floor(Date.now() / 1000) + 60 };
+  const { grantToken: _grantToken, expiresAt: _expiresAt, ...binding } = connect;
+  const session = { ...binding, sessionToken: `aaos1.${"d".repeat(43)}`, sessionId: "30000000-0000-4000-8000-000000000003" };
   mocks.exchange.mockResolvedValue(session);
   const onComplete = vi.fn();
   const view = render(<CentralOwnerConnectGate connect={connect} deviceToken="device-1" onComplete={onComplete} />);
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("네트워크 연결 실패"));
   fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
   await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-  expect(loadCentralOwnerWorkspace()).toEqual(session);
+  expect(sessionStorage.getItem("agentsassemble.central-owner-workspace.v2")).toBeNull();
   expect(mocks.verify).toHaveBeenCalledTimes(2);
   expect(mocks.rooms).toHaveBeenCalledOnce();
   expect(mocks.rooms).toHaveBeenCalledWith(session, "device-1");

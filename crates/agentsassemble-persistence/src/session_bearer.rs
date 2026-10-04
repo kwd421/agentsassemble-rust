@@ -70,7 +70,7 @@ pub(crate) fn derive_session_bearer(
         ),
         SessionBearerPurpose::ServerOwner => (
             b"agentsassemble-server-owner-session-v1\0",
-            crate::central_owner_session::OWNER_SESSION_PREFIX,
+            crate::host_owner_session::OWNER_SESSION_PREFIX,
         ),
     };
     let mut signer = Hmac::<Sha256>::new_from_slice(key)

@@ -21,7 +21,7 @@ type AdmissionSessionBase = RoomSessionSurface & {
   client_type: "browser";
   provider_kind: string;
   connection_kind: string;
-  expires_at: string;
+  expires_at: string | null;
   room_label: string;
   room_topic: string;
   room_created_at: string;
@@ -153,9 +153,10 @@ function validateCommon(
   if (payload.participant_type !== "human" || payload.client_type !== "browser") {
     throw new Error(`${label}의 참가자 또는 클라이언트 유형이 올바르지 않습니다.`);
   }
-  const expiresAt = requiredString(payload, "expires_at", label);
+  const expiresAt = payload.central_owner === true && payload.operator === true && payload.expires_at === null
+    ? null : requiredString(payload, "expires_at", label);
   const roomCreatedAt = requiredString(payload, "room_created_at", label);
-  validateTimestamp(expiresAt, `${label}.expires_at`);
+  if (expiresAt !== null) validateTimestamp(expiresAt, `${label}.expires_at`);
   validateTimestamp(roomCreatedAt, `${label}.room_created_at`);
   return {
     ...surface,

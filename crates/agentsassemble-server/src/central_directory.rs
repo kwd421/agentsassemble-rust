@@ -7,6 +7,7 @@ use parking_lot::RwLock;
 use reqwest::{Client, Method, StatusCode};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use sha2::Digest;
 use thiserror::Error;
 use tokio_util::sync::CancellationToken;
 use url::Url;
@@ -28,18 +29,14 @@ struct CentralDirectoryInner {
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
-pub(crate) struct OwnerConnectionResponse {
+pub(crate) struct OwnerAdmissionResponse {
     status: String,
-    connection_id: String,
     server_id: String,
     person_id: String,
     device_id: String,
-    browser_fingerprint: String,
     origin: String,
     generation: i64,
     expires_at: i64,
-    session_expires_at: i64,
-    renew_at: i64,
 }
 
 #[derive(Clone, Serialize)]
@@ -179,52 +176,40 @@ impl CentralDirectory {
         Ok(())
     }
 
-    pub(crate) async fn owner_connection(
+    pub(crate) async fn owner_admission(
         &self,
         identity: &CentralHostIdentity,
-        field: &str,
         credential: &str,
         origin: &str,
         generation: i64,
         device: &[u8; 32],
-    ) -> Result<agentsassemble_persistence::OwnerConnectionLease, CentralDirectoryError> {
+    ) -> Result<agentsassemble_persistence::OwnerAdmission, CentralDirectoryError> {
         let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
-        let operation = if field == "grant_token" {
-            "exchange"
-        } else {
-            "renew"
-        };
-        let path = format!(
-            "/v1/servers/{}/owner-connections/{operation}",
-            identity.server_id()
-        );
-        let body = serde_json::to_vec(&json!({ field: credential, "origin": origin,
-            "generation": generation, "browser_fingerprint": hex::encode(device) }))
+        let path = format!("/v1/servers/{}/connect-grants/redeem", identity.server_id());
+        let body = serde_json::to_vec(&json!({ "grant_token": credential, "origin": origin,
+            "generation": generation }))
         .map_err(|_| CentralDirectoryError::InvalidResponse)?;
         let bytes = send_signed(inner, identity, Method::POST, &path, body).await?;
-        let response: OwnerConnectionResponse =
+        let response: OwnerAdmissionResponse =
             serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
         if response.status != "authorized"
             || response.server_id != identity.server_id()
             || response.origin != origin
             || response.generation != generation
-            || response.browser_fingerprint != hex::encode(device)
         {
             return Err(CentralDirectoryError::InvalidResponse);
         }
-        agentsassemble_persistence::OwnerConnectionLease::verified(
-            agentsassemble_persistence::OwnerConnectionBinding {
-                connection_id: response.connection_id,
+        agentsassemble_persistence::OwnerAdmission::verified(
+            agentsassemble_persistence::OwnerAdmissionBinding {
+                entry_fingerprint: sha2::Sha256::digest(credential.as_bytes()).into(),
                 server_id: response.server_id,
                 person_id: response.person_id,
                 device_id: response.device_id,
                 browser_fingerprint: *device,
                 origin: response.origin,
                 generation: response.generation,
-                session_expires_at: response.session_expires_at,
             },
             response.expires_at,
-            response.renew_at,
         )
         .map_err(|_| CentralDirectoryError::InvalidResponse)
     }

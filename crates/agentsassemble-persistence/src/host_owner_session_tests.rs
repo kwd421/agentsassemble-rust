@@ -89,3 +89,45 @@ async fn host_admission_has_no_clock_expiry_and_disconnected_entry_cannot_replay
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn direct_owner_room_has_no_deadline_and_ends_with_its_root()
+-> Result<(), Box<dyn std::error::Error>> {
+    use crate::{CentralOwnerSessionRequest, RoomSessionAuthorization, ServerOwnerAuthority};
+    let (store, binding) = setup().await?;
+    let admitted = store
+        .create_owner_session(&admission(binding.clone())?, &description()?)
+        .await?;
+    let owner = ServerOwnerAuthority::CentralSession(admitted.authorization.clone());
+    let room = store
+        .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "room", "Room")
+        .await?;
+    let issued = store
+        .create_central_owner_session(
+            &owner,
+            &CentralOwnerSessionRequest::host_owned(
+                "room",
+                room.room.room_uid,
+                &[17; 32],
+                &[42; 32],
+                &binding.origin,
+                Utc::now(),
+            ),
+        )
+        .await?;
+    assert_eq!(issued.authorization.expires_at(), None);
+    let expected = RoomSessionAuthorization::Operator(issued.authorization);
+    store
+        .revalidate_room_session_authorization(&expected)
+        .await?;
+    store
+        .disconnect_owner_session(admitted.authorization.fingerprint())
+        .await?;
+    assert!(
+        store
+            .revalidate_room_session_authorization(&expected)
+            .await
+            .is_err()
+    );
+    Ok(())
+}

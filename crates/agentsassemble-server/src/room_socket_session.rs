@@ -46,7 +46,7 @@ pub(crate) async fn run(
     let mut principal = principal;
     let mut room_session = room_session;
     let Ok(mut owner_lease) =
-        crate::central_owner_lifetime::retain_room_owner(&state, room_session.as_ref()).await
+        crate::owner_session_lifetime::retain_room_owner(&state, room_session.as_ref()).await
     else {
         return;
     };
@@ -54,7 +54,7 @@ pub(crate) async fn run(
         let expiry = wait_for_session_expiry(
             room_session
                 .as_ref()
-                .map(RoomSessionAuthorization::expires_at),
+                .and_then(RoomSessionAuthorization::expires_at),
         );
         tokio::pin!(expiry);
         loop {
@@ -272,7 +272,7 @@ async fn wait_for_session_expiry(expires_at: Option<chrono::DateTime<chrono::Utc
     tokio::time::sleep(remaining).await;
 }
 
-async fn owner_ended(lease: &mut Option<crate::central_owner_lifetime::OwnerSessionLease>) {
+async fn owner_ended(lease: &mut Option<crate::owner_session_lifetime::OwnerSessionLease>) {
     let Some(lease) = lease else {
         std::future::pending::<()>().await;
         return;

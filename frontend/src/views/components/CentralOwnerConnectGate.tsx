@@ -1,12 +1,12 @@
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
 import { verifyCentralOwnerHost, type CentralOwnerConnect } from "../../lib/centralOwnerConnect";
-import { exchangeCentralOwnerSession, fetchCentralOwnerRooms, persistCentralOwnerWorkspace, type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import { exchangeCentralOwnerSession, fetchCentralOwnerRooms, type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
 import { bindRoomDirectoryAuthority } from "../../lib/roomDirectoryContract";
 import { centralAccountEntryUrl } from "../../lib/centralIdentity";
 
 export default function CentralOwnerConnectGate({ connect, deviceToken, onComplete }: {
-  connect: CentralOwnerConnect | CentralOwnerWorkspace; deviceToken: string; onComplete: (session: CentralOwnerWorkspace) => void;
+  connect: CentralOwnerConnect; deviceToken: string; onComplete: (session: CentralOwnerWorkspace) => void;
 }) {
   const [attempt, setAttempt] = useState(0);
   const [error, setError] = useState("");
@@ -20,10 +20,9 @@ export default function CentralOwnerConnectGate({ connect, deviceToken, onComple
     void (async () => {
       try {
         await verifyCentralOwnerHost(connect);
-        const session = "grantToken" in connect ? await exchangeCentralOwnerSession(connect, deviceToken) : connect;
+        const session = await exchangeCentralOwnerSession(connect, deviceToken);
         const directory = await fetchCentralOwnerRooms(session, deviceToken);
         if (!active || !await bindRoomDirectoryAuthority(directory, null, window.location.origin, () => active)) return;
-        persistCentralOwnerWorkspace(session);
         onComplete(session);
       } catch (reason) {
         if (active) setError(reason instanceof Error ? reason.message : "서버에 연결하지 못했어요.");

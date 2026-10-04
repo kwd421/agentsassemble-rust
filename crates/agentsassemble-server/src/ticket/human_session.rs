@@ -70,11 +70,12 @@ impl TicketStore {
         let session_fingerprint = *authorization.session_fingerprint();
         let mut grants = self.grants.lock().await;
         let now = Instant::now();
-        let session_remaining = authorization
-            .expires_at()
-            .signed_duration_since(Utc::now())
-            .to_std()
-            .map_err(|_| TicketError::Invalid)?;
+        let session_remaining = authorization.expires_at().map_or(Ok(self.ttl), |expiry| {
+            expiry
+                .signed_duration_since(Utc::now())
+                .to_std()
+                .map_err(|_| TicketError::Invalid)
+        })?;
         let mut public_count = 0;
         let mut same_session_count = 0;
         grants.retain(|_, grant| {
@@ -198,7 +199,11 @@ impl TicketStore {
         public: RoomSessionSocketGrant,
         now: chrono::DateTime<Utc>,
     ) -> Result<RoomSessionAuthorization, TicketError> {
-        if public.authorization.expires_at() <= now {
+        if public
+            .authorization
+            .expires_at()
+            .is_some_and(|expiry| expiry <= now)
+        {
             return Err(TicketError::Invalid);
         }
         Ok(public.authorization)

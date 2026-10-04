@@ -221,6 +221,23 @@ impl PublicIngress {
         }
     }
 
+    /// Ends admitted remote transports when the ingress trust that admitted them ends.
+    pub(crate) fn ready_lifetime(&self, origin: &str) -> Option<CancellationToken> {
+        match self.0.as_ref() {
+            PublicIngressKind::Manual(ingress) if ingress.origin.as_ref() == origin => {
+                Some(CancellationToken::new())
+            }
+            PublicIngressKind::Disabled | PublicIngressKind::Manual(_) => None,
+            PublicIngressKind::Managed(ingress) => ingress
+                .projection
+                .read()
+                .trust
+                .as_ref()
+                .filter(|trust| trust.origin.value == origin)
+                .map(|trust| trust.ended.clone()),
+        }
+    }
+
     /// The runtime's own loopback listener origin, available whether or not public access is up.
     pub(crate) fn local_url(&self) -> Option<String> {
         match self.0.as_ref() {
@@ -588,6 +605,13 @@ pub(crate) enum ManagedReadiness {
 struct ManagedTrust {
     origin: CanonicalPublicOrigin,
     origin_host_digest: [u8; 32],
+    ended: CancellationToken,
+}
+
+impl Drop for ManagedTrust {
+    fn drop(&mut self) {
+        self.ended.cancel();
+    }
 }
 
 impl ManagedProjection {
@@ -635,6 +659,7 @@ impl ManagedProjection {
         self.trust = Some(ManagedTrust {
             origin,
             origin_host_digest: Sha256::digest(origin_host.as_bytes()).into(),
+            ended: CancellationToken::new(),
         });
         ManagedReadiness::Changed
     }

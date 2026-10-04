@@ -1,6 +1,6 @@
 import { useCallback, useRef } from "react";
 import type { DesktopManagerRoomAuthority } from "../lib/desktopBridge";
-import type { RoomGuestSession } from "../lib/roomGuestSession";
+import { roomGuestSessionExpired, type RoomGuestSession } from "../lib/roomGuestSession";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { RemoteInviteTransport } from "../api/roomInviteTransport";
 
@@ -18,7 +18,7 @@ export function useRoomInvitationAccess(
     const room = matches.length === 1 ? matches[0] : null;
     const admitted = context.session;
     if (!room || !admitted?.centralOwner || !admitted.sessionToken || !room.roomUid ||
-        !Number.isFinite(Date.parse(admitted.expiresAt)) || Date.parse(admitted.expiresAt) <= Date.now() ||
+        roomGuestSessionExpired(admitted) ||
         room.meetingId !== admitted.meetingId || room.roomUid !== admitted.roomUid ||
         room.serverId !== admitted.serverSurface.server_id) {
       throw new Error("현재 방의 소유자 접속을 확인할 수 없어요. 방을 다시 열어 주세요.");

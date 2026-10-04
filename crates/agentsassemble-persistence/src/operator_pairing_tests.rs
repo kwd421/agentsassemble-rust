@@ -66,7 +66,7 @@ async fn central_owner_session_is_room_device_origin_and_grant_expiry_bound() {
         .await
         .unwrap_or_else(|error| panic!("central replay: {error}"));
     assert_eq!(first.session_bearer, replay.session_bearer);
-    assert_eq!(first.authorization.expires_at(), expires_at);
+    assert_eq!(first.authorization.expires_at(), Some(expires_at));
     verify_owner_profile_authority(&store, &manager, &first.authorization, now).await;
 
     assert_eq!(
@@ -599,7 +599,7 @@ async fn paired_attendee_observes_parent_expiry_membership_and_exact_host_room()
         let invite = store
             .create_companion_attendee_invite(&issuer, request(), now)
             .await?;
-        assert_eq!(invite.expires_at, issuer.expires_at());
+        assert_eq!(Some(invite.expires_at), issuer.expires_at());
         let fingerprint: [u8; 32] = Sha256::digest(invite.invite_bearer.as_bytes()).into();
         let admission = store
             .admit_attendee(
@@ -613,12 +613,15 @@ async fn paired_attendee_observes_parent_expiry_membership_and_exact_host_room()
                 now,
             )
             .await?;
-        assert_eq!(admission.authorization.expires_at(), issuer.expires_at());
+        assert_eq!(
+            Some(admission.authorization.expires_at()),
+            issuer.expires_at()
+        );
         store
             .revalidate_attendee_session(&admission.authorization, now)
             .await?;
         let checked_at = match invalidation {
-            "expiry" => issuer.expires_at(),
+            "expiry" => issuer.expires_at().ok_or("bounded pairing expiry")?,
             "muted" => {
                 sqlx::query("UPDATE participants SET participant_json=json_set(participant_json,'$.muted',json('true')) WHERE participant_id=?")
                     .bind(LOCAL_OPERATOR_PARTICIPANT_ID).execute(&store.pool).await?;

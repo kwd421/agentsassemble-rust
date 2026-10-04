@@ -16,7 +16,7 @@ pub(crate) enum DirectoryStreamAuthority {
     Local,
     Central {
         owner: Box<agentsassemble_persistence::OwnerSessionAuthorization>,
-        lease: crate::central_owner_lifetime::OwnerSessionLease,
+        lease: crate::owner_session_lifetime::OwnerSessionLease,
     },
 }
 
@@ -57,8 +57,8 @@ impl DirectoryStreamAuthority {
     }
 }
 
-// The authenticated HTTP body retains its owner renewal. Status frames carry no
-// directory data; a successful renewal leaves this exact connection open.
+// The authenticated HTTP body retains its host-owned admission. Status frames
+// carry no directory data and do not trigger an authority refresh.
 pub(crate) fn directory_stream(
     state: AppState,
     changes: watch::Receiver<()>,

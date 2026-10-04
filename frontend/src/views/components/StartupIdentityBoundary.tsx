@@ -7,7 +7,7 @@ import {
 import { isBundledDesktopWebview } from "../../lib/desktopBridge";
 import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
 import { consumeCentralOwnerConnectFromUrl } from "../../lib/centralOwnerConnect";
-import { loadCentralOwnerWorkspace, type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import { clearStoredCentralOwnerWorkspace, type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
 import CentralOwnerWorkspaceBoundary from "./CentralOwnerWorkspaceBoundary";
 import {
   joinInviteTokenFromUrl,
@@ -26,7 +26,7 @@ function browserEntranceHasAuthority(): boolean {
     joinInviteTokenFromUrl(url) ||
       operatorPairingTokenFromUrl(url) ||
       guestRecoveryRequestFromUrl(url) ||
-      (guestSession && !roomGuestSessionExpired(guestSession))
+      (guestSession && !guestSession.centralOwner && !roomGuestSessionExpired(guestSession))
   );
 }
 
@@ -35,7 +35,7 @@ export default function StartupIdentityBoundary({
 }: {
   children: (identity: { deviceToken: string; clientId: string }) => ReactNode;
 }) {
-  const [centralOwnerConnect] = useState(() => consumeCentralOwnerConnectFromUrl() || loadCentralOwnerWorkspace());
+  const [centralOwnerConnect] = useState(() => { clearStoredCentralOwnerWorkspace(); return consumeCentralOwnerConnectFromUrl(); });
   const [ownerWorkspace, setOwnerWorkspace] = useState<CentralOwnerWorkspace | null>(null);
   const [desktop] = useState(
     () => isBundledDesktopWebview() && !centralOwnerConnect

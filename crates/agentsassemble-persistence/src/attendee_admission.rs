@@ -17,6 +17,22 @@ pub struct AttendeeAdmissionRequest<'a> {
     pub display_name: &'a str,
 }
 
+impl AttendeeAdmissionRequest<'_> {
+    fn validate(&self) -> Result<(), PersistenceError> {
+        if self.request_id.is_nil()
+            || self.display_name.trim().is_empty()
+            || self.display_name.chars().count() > 120
+            || self.display_name.chars().any(char::is_control)
+        {
+            return Err(rejected(
+                "bad_request",
+                "A request UUID and bounded attendee display name are required.",
+            ));
+        }
+        Ok(())
+    }
+}
+
 /// Only the admission transport receives the credential. Public events contain no bearer.
 pub struct AttendeeAdmission {
     pub session_bearer: String,
@@ -51,16 +67,7 @@ impl SqliteStore {
         request: AttendeeAdmissionRequest<'_>,
         now: DateTime<Utc>,
     ) -> Result<AttendeeAdmission, PersistenceError> {
-        if request.request_id.is_nil()
-            || request.display_name.trim().is_empty()
-            || request.display_name.chars().count() > 120
-            || request.display_name.chars().any(char::is_control)
-        {
-            return Err(rejected(
-                "bad_request",
-                "A request UUID and bounded attendee display name are required.",
-            ));
-        }
+        request.validate()?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let row = sqlx::query("SELECT * FROM room_attendee_invites WHERE token_fingerprint=?")
             .bind(request.invite_fingerprint.as_slice())
@@ -93,8 +100,10 @@ impl SqliteStore {
             ));
         }
         let mut expires_at = now + Duration::hours(1);
-        if let Some(parent) = row.get::<Option<Vec<u8>>, _>("parent_fingerprint") {
-            expires_at = expires_at.min(require_parent(&mut tx, &room_id, &parent, now).await?);
+        if let Some(parent) = row.get::<Option<Vec<u8>>, _>("parent_fingerprint")
+            && let Some(parent_expiry) = require_parent(&mut tx, &room_id, &parent, now).await?
+        {
+            expires_at = expires_at.min(parent_expiry);
         }
         let bearer = derive_session_bearer(
             self.host_key.session_hmac_key(),

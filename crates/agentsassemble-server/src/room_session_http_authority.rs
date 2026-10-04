@@ -65,6 +65,17 @@ pub(crate) async fn resolve_room_session_bearer(
             .authorize_operator_session(&fingerprint, &device, origin)
             .await
             .map_err(RoomSessionBearerError::Persistence)?;
+        if let Some(owner) = state
+            .store
+            .owner_for_operator_session(&session)
+            .await
+            .map_err(RoomSessionBearerError::Persistence)?
+        {
+            state
+                .owner_sessions
+                .require_live(&owner)
+                .map_err(RoomSessionBearerError::Persistence)?;
+        }
         return Ok(RoomSessionBearerResolution::Authorized(Box::new(
             RoomSessionAuthorization::Operator(session),
         )));

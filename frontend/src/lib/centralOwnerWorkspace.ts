@@ -1,4 +1,5 @@
 import { ApiError } from "./apiErrors";
+import { browserDeviceDescription } from "./ownerDeviceDescription";
 import { type CentralOwnerConnect } from "./centralOwnerConnect";
 import { parseStrictRoomDirectory, parseStrictRoomCreateResponse } from "./roomDirectoryContract";
 import { parseOperatorPairingRedeemResponse } from "./roomAdmissionContract";
@@ -6,68 +7,35 @@ import { assertExactKeys, requiredString, strictRecord } from "./strictJsonContr
 
 export type CentralOwnerWorkspace = Omit<CentralOwnerConnect, "grantToken" | "expiresAt"> & {
   sessionToken: string;
-  expiresAt: number;
-  leaseExpiresAt: number;
+  sessionId: string;
 };
 
-const WORKSPACE_KEY = "agentsassemble.central-owner-workspace.v2";
-
-function normalize(value: unknown): CentralOwnerWorkspace | null {
-  try {
-    const record = strictRecord(value, "서버 세션");
-    assertExactKeys(record, ["sessionToken", "serverId", "generation", "expiresAt", "leaseExpiresAt", "hostPublicKeyX", "hostKeyFingerprint"], "서버 세션");
-    const result: CentralOwnerWorkspace = {
-      sessionToken: requiredString(record, "sessionToken", "서버 세션"),
-      serverId: requiredString(record, "serverId", "서버 세션"),
-      generation: Number(record.generation), expiresAt: Number(record.expiresAt),
-      leaseExpiresAt: Number(record.leaseExpiresAt),
-      hostPublicKeyX: requiredString(record, "hostPublicKeyX", "서버 세션"),
-      hostKeyFingerprint: requiredString(record, "hostKeyFingerprint", "서버 세션"),
-    };
-    if (!/^aaos1\.[A-Za-z0-9_-]{43}$/.test(result.sessionToken) ||
-        !/^[A-Za-z0-9._:-]{1,200}$/.test(result.serverId) ||
-        !Number.isSafeInteger(result.generation) || result.generation < 1 ||
-        !Number.isSafeInteger(result.expiresAt) || result.expiresAt <= Date.now() / 1000 ||
-        !Number.isSafeInteger(result.leaseExpiresAt) || result.leaseExpiresAt > result.expiresAt ||
-        !/^[A-Za-z0-9_-]{43}$/.test(result.hostPublicKeyX) ||
-        !/^[A-Za-z0-9_-]{43}$/.test(result.hostKeyFingerprint)) return null;
-    return result;
-  } catch { return null; }
-}
-
-export function loadCentralOwnerWorkspace(): CentralOwnerWorkspace | null {
-  const raw = sessionStorage.getItem(WORKSPACE_KEY);
-  if (!raw) return null;
-  try {
-    const record = JSON.parse(raw);
-    const session = record.origin === window.location.origin ? normalize(record.session) : null;
-    if (session) return session;
-  } catch { /* Invalid custody never becomes local authority. */ }
-  sessionStorage.removeItem(WORKSPACE_KEY);
-  return null;
-}
-
-export function persistCentralOwnerWorkspace(session: CentralOwnerWorkspace | null) {
-  if (!session) { sessionStorage.removeItem(WORKSPACE_KEY); return; }
-  if (!normalize(session)) throw new Error("서버 접속이 만료됐어요.");
-  sessionStorage.setItem(WORKSPACE_KEY, JSON.stringify({ origin: window.location.origin, session }));
+// Previous releases stored root custody. A new page must obtain fresh central proof.
+export function clearStoredCentralOwnerWorkspace() {
+  sessionStorage.removeItem("agentsassemble.central-owner-workspace.v2");
 }
 
 export async function exchangeCentralOwnerSession(connect: CentralOwnerConnect, deviceToken: string): Promise<CentralOwnerWorkspace> {
-  const record = strictRecord(await request("session", deviceToken, { grant_token: connect.grantToken, generation: connect.generation }), "서버 세션");
-  assertExactKeys(record, ["session_token", "server_id", "generation", "expires_at", "session_expires_at"], "서버 세션");
-  const session = normalize({ sessionToken: record.session_token, serverId: record.server_id,
-    generation: record.generation, leaseExpiresAt: record.expires_at, expiresAt: record.session_expires_at,
-    hostPublicKeyX: connect.hostPublicKeyX, hostKeyFingerprint: connect.hostKeyFingerprint });
-  if (!session || session.serverId !== connect.serverId || session.generation !== connect.generation ||
-      session.leaseExpiresAt <= Date.now() / 1000 || session.leaseExpiresAt > Date.now() / 1000 + 60) {
+  const record = strictRecord(await request("session", deviceToken, {
+    grant_token: connect.grantToken, generation: connect.generation, device: browserDeviceDescription(),
+  }), "서버 세션");
+  assertExactKeys(record, ["session_token", "session_id", "server_id", "generation"], "서버 세션");
+  const session: CentralOwnerWorkspace = {
+    sessionToken: requiredString(record, "session_token", "서버 세션"),
+    sessionId: requiredString(record, "session_id", "서버 세션"),
+    serverId: requiredString(record, "server_id", "서버 세션"),
+    generation: Number(record.generation),
+    hostPublicKeyX: connect.hostPublicKeyX, hostKeyFingerprint: connect.hostKeyFingerprint,
+  };
+  if (!/^aaos1\.[A-Za-z0-9_-]{43}$/.test(session.sessionToken) ||
+      !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(session.sessionId) ||
+      session.serverId !== connect.serverId || session.generation !== connect.generation) {
     throw new Error("선택한 서버와 발급된 세션이 일치하지 않습니다.");
   }
   return session;
 }
 
 function sessionBody(session: CentralOwnerWorkspace) {
-  if (!normalize(session)) throw new ApiError(401, "서버 접속이 만료됐어요. 계정에서 서버를 다시 열어 주세요.", "central_session_invalid");
   return { session_token: session.sessionToken, generation: session.generation };
 }
 

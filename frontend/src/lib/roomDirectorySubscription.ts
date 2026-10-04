@@ -92,6 +92,9 @@ export function subscribeRoomDirectory(
         } catch (error) {
           if (lifetime.signal.aborted) return;
           failed(error);
+          if (ownerStatus && error instanceof ApiError && [401, 403].includes(error.status)) {
+            ownerStatus({ state: "ended", reason: "disconnected" });
+          }
           if (attempt === 3 || error instanceof ApiError && [401, 403, 409, 429].includes(error.status)) return;
           await new Promise<void>(resolve => {
             const finish = () => {

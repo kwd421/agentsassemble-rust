@@ -24,7 +24,7 @@ export type RoomGuestSession = {
   displayName: string;
   avatarImage?: string;
   inviteScope: RoomAppearance["inviteScope"];
-  expiresAt: string;
+  expiresAt: string | null;
   joinedAt: string;
   roomLabel?: string;
   roomTopic?: string;
@@ -169,9 +169,10 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
     ) {
       return null;
     }
-    const expiresAt = requiredString(record, "expiresAt", "저장된 방 세션");
+    const expiresAt = record.centralOwner === true && record.operator === true && record.expiresAt === null
+      ? null : requiredString(record, "expiresAt", "저장된 방 세션");
     const joinedAt = requiredString(record, "joinedAt", "저장된 방 세션");
-    if (Number.isNaN(Date.parse(expiresAt)) || Number.isNaN(Date.parse(joinedAt))) {
+    if (expiresAt !== null && Number.isNaN(Date.parse(expiresAt)) || Number.isNaN(Date.parse(joinedAt))) {
       return null;
     }
     return {
@@ -203,6 +204,7 @@ export function roomGuestSessionExpired(
   now: number = Date.now()
 ): boolean {
   if (!session) return true;
+  if (session.expiresAt === null) return false;
   const expiresAt = Date.parse(session.expiresAt || "");
   if (Number.isNaN(expiresAt)) return true;
   return expiresAt <= now;
@@ -211,13 +213,19 @@ export function roomGuestSessionExpired(
 export function loadRoomGuestSession(): RoomGuestSession | null {
   try {
     const raw = window.localStorage.getItem(ROOM_GUEST_SESSION_STORAGE_KEY);
-    return normalizeRoomGuestSession(raw ? JSON.parse(raw) : null);
+    const session = normalizeRoomGuestSession(raw ? JSON.parse(raw) : null);
+    if (session?.centralOwner) {
+      window.localStorage.removeItem(ROOM_GUEST_SESSION_STORAGE_KEY);
+      return null;
+    }
+    return session;
   } catch {
     return null;
   }
 }
 
 export function persistRoomGuestSession(session: RoomGuestSession | null) {
+  if (session?.centralOwner) return;
   if (session) {
     try {
       const serialized = JSON.stringify(session);

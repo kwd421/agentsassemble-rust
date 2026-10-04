@@ -165,7 +165,7 @@ pub(crate) async fn require_parent(
     room_id: &str,
     fingerprint: &[u8],
     now: DateTime<Utc>,
-) -> Result<DateTime<Utc>, PersistenceError> {
+) -> Result<Option<DateTime<Utc>>, PersistenceError> {
     let fingerprint: [u8; 32] = fingerprint
         .try_into()
         .map_err(|_| rejected("invalid_state", "Stored attendee parent is invalid."))?;
@@ -193,7 +193,7 @@ pub(crate) async fn require_parent(
             };
             (
                 authorization.principal().clone(),
-                authorization.expires_at(),
+                Some(authorization.expires_at()),
             )
         }
         [kind] if kind == "operator" => {

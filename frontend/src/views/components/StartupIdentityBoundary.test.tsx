@@ -14,7 +14,7 @@ const deviceMocks = vi.hoisted(() => ({
   ),
   getOrCreateClientId: vi.fn(() => "client-1"),
 }));
-const boundaryMocks = vi.hoisted(() => ({ desktop: true, bundled: true, session: null as { expiresAt: string } | null }));
+const boundaryMocks = vi.hoisted(() => ({ desktop: true, bundled: true, session: null as { expiresAt: string | null; centralOwner?: boolean } | null }));
 
 vi.mock("../../lib/desktopBridge", () => ({
   isDesktopWebview: () => boundaryMocks.desktop,
@@ -34,7 +34,7 @@ vi.mock("./StartupIdentityGate", () => ({
 vi.mock("./CentralOwnerConnectGate", () => ({
   default: ({ deviceToken, connect, onComplete }: { deviceToken: string; connect: { serverId: string; generation: number; hostPublicKeyX: string; hostKeyFingerprint: string }; onComplete: (session: CentralOwnerWorkspace) => void }) => (
     <main aria-label="central owner gate" data-device-token={deviceToken}>
-      <button onClick={() => onComplete({ serverId: connect.serverId, generation: connect.generation, hostPublicKeyX: connect.hostPublicKeyX, hostKeyFingerprint: connect.hostKeyFingerprint, sessionToken: `aaos1.${"d".repeat(43)}`, expiresAt: Math.floor(Date.now() / 1000) + 86400, leaseExpiresAt: Math.floor(Date.now() / 1000) + 60 })}>complete owner entry</button>
+      <button onClick={() => onComplete({ serverId: connect.serverId, generation: connect.generation, hostPublicKeyX: connect.hostPublicKeyX, hostKeyFingerprint: connect.hostKeyFingerprint, sessionToken: `aaos1.${"d".repeat(43)}`, sessionId: "30000000-0000-4000-8000-000000000003" })}>complete owner entry</button>
     </main>
   ),
 }));
@@ -58,6 +58,16 @@ afterEach(() => {
 });
 
 describe("StartupIdentityBoundary", () => {
+  it("requires fresh central entry even when previous root and room credentials were stored", () => {
+    boundaryMocks.desktop = false;
+    boundaryMocks.session = { centralOwner: true, expiresAt: null };
+    sessionStorage.setItem("agentsassemble.central-owner-workspace.v2", JSON.stringify({ sessionToken: "previous-root" }));
+    render(<StartupIdentityBoundary>{() => <main aria-label="product" />}</StartupIdentityBoundary>);
+    expect(screen.getByRole("main", { name: "브라우저 직접 시작 사용 불가" })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: "product" })).toBeNull();
+    expect(sessionStorage.getItem("agentsassemble.central-owner-workspace.v2")).toBeNull();
+    expect(deviceMocks.getOrCreateBrowserCredential).not.toHaveBeenCalled();
+  });
   it("shows central login only on the configured central origin without minting local authority", async () => {
     boundaryMocks.desktop = false;
     vi.resetModules();
@@ -102,7 +112,7 @@ describe("StartupIdentityBoundary", () => {
     for (let elapsed = 20; elapsed <= 320; elapsed += 20) {
       act(() => {
         vi.advanceTimersByTime(20_000);
-        publish({ state: "active", expires_at: Math.floor(Date.now() / 1000) + 60 });
+        publish({ state: "active" });
       });
     }
     expect(screen.getByRole("main", { name: "product" })).toBeTruthy();

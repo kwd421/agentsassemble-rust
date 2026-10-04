@@ -301,7 +301,7 @@ function completedSessionContext(
   if (
     !session ||
     !session.inviteToken ||
-    Number.isNaN(Date.parse(session.expiresAt)) ||
+    (session.expiresAt === null || Number.isNaN(Date.parse(session.expiresAt))) ||
     session.clientId !== context.clientId
   ) {
     return undefined;
