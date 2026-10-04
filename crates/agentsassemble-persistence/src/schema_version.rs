@@ -2,7 +2,7 @@ use sqlx::{Row, SqlitePool};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 75;
+pub const CURRENT_SCHEMA_VERSION: i64 = 76;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -115,6 +115,16 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .execute(&mut *tx)
             .await?;
     }
+    if version.parse::<i64>().is_ok_and(|version| version < 76) {
+        // v72/v73 central room sessions never had historical parent custody.
+        // Also repair databases already opened by v75; native pairings stay valid.
+        sqlx::query("UPDATE operator_pairings SET revoked = 1 WHERE central_owner = 1 AND host_owner_session_fingerprint IS NULL")
+            .execute(&mut *tx)
+            .await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '76' WHERE key = 'schema_version'")
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -207,6 +217,72 @@ mod tests {
             );
             drop(reopened);
             SqliteStore::open_path(&path).await?;
+        }
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn legacy_parentless_central_sessions_are_revoked_on_upgrade()
+    -> Result<(), Box<dyn std::error::Error>> {
+        for previous in [72, 73, 75] {
+            let directory = tempfile::tempdir()?;
+            let path = directory.path().join("runtime.sqlite3");
+            let store = SqliteStore::open_path(&path).await?;
+            store
+                .bootstrap_local_authority(&uuid::Uuid::new_v4().to_string(), "Host")
+                .await?;
+            store
+                .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "room", "Room")
+                .await?;
+            let manager = store
+                .authorize_local_room_manager(
+                    "room",
+                    agentsassemble_domain::LOCAL_OPERATOR_USER_ID,
+                    agentsassemble_domain::LOCAL_OPERATOR_PARTICIPANT_ID,
+                )
+                .await?;
+            for fingerprint in [31, 32] {
+                store
+                    .create_operator_pairing(
+                        &crate::RoomManagerAuthority::Local(manager.clone()),
+                        &[fingerprint; 32],
+                        "https://owner.example.test",
+                        chrono::Utc::now(),
+                    )
+                    .await?;
+            }
+            sqlx::query("UPDATE operator_pairings SET central_owner = 1, session_fingerprint = ?, device_fingerprint = ?, session_expires_at = ? WHERE token_fingerprint = ?")
+                .bind([41_u8; 32].as_slice()).bind([42_u8; 32].as_slice())
+                .bind((chrono::Utc::now() + chrono::Duration::hours(1)).timestamp_micros())
+                .bind([31_u8; 32].as_slice()).execute(&store.pool).await?;
+            if previous < 75 {
+                simulate_previous_schema(&store, previous).await?;
+            }
+            sqlx::query("UPDATE runtime_metadata SET value = ? WHERE key = 'schema_version'")
+                .bind(previous.to_string())
+                .execute(&store.pool)
+                .await?;
+            drop(store);
+            let reopened = SqliteStore::open_path(&path).await?;
+            assert!(
+                reopened
+                    .authorize_operator_session(&[41; 32], &[42; 32], "https://owner.example.test")
+                    .await
+                    .is_err(),
+                "v{previous} authority survived"
+            );
+            let rows: Vec<(i64, i64)> = sqlx::query_as(
+                "SELECT central_owner, revoked FROM operator_pairings ORDER BY central_owner",
+            )
+            .fetch_all(&reopened.pool)
+            .await?;
+            assert_eq!(rows, vec![(0, 0), (1, 1)]);
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM rooms WHERE room_id = 'room'")
+                    .fetch_one(&reopened.pool)
+                    .await?,
+                1
+            );
         }
         Ok(())
     }

@@ -165,6 +165,16 @@ isolated package while preserving the active Windows room.
 - Worker `infra/identity-directory/src/server_connect_grants.js`: atomic current-account admission; no ongoing owner renewal.
 - Worker `infra/identity-directory/test/local_owner_connections.mjs`: isolated workerd/D1 admission and logout verification.
 
+Security review corrections (2026-10-04): upgrades from v72/v73 and already-v75
+must revoke every `central_owner = 1` room session without a host-owned parent,
+while preserving room data and native pairing authority. Socket establishment must
+revalidate and retain host owner custody before any frame, carrying that lease
+through the socket loop; cancellation before retention sends no snapshot. Directory
+recovery has at most four attempts per network-online trigger, with owned listener
+cleanup and no polling. Root-authenticated requests receiving 401/403 end the
+workspace and preserve drafts. Regression tests must fail before each correction;
+production deployment, remote commands and signed/manual app/web checks stay open.
+
 Endpoint publication generation validates new admission only. Recovery after a
 central outage (including publication failure beyond 600 seconds) must not retire
 an admitted owner or its derived room authority. Existing host identity, device,
