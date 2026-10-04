@@ -49,8 +49,9 @@ it("expires only link copying while retaining the exact grant for revocation", a
   const key = hook.result.current.pairings[0].key;
   await act(() => hook.result.current.copy(key));
   expect(copied).toEqual([custody.pairingUrl]);
+  expect(hook.result.current.pairings[0].qrUrl).toBe(custody.pairingUrl);
   act(() => vi.advanceTimersByTime(120_000));
-  expect(hook.result.current.pairings[0]).toMatchObject({ expired: true, copyable: false });
+  expect(hook.result.current.pairings[0]).toMatchObject({ expired: true, copyable: false, qrUrl: undefined });
   api.revoke.mockImplementationOnce(async (_custody, beforeDispatch) => beforeDispatch());
   await act(() => hook.result.current.revoke(key));
   expect(api.revoke).toHaveBeenCalledWith(custody, expect.any(Function), undefined);
@@ -72,12 +73,21 @@ it("keeps uncertain revocation non-copyable and retries the same grant", async (
   const key = hook.result.current.pairings[0].key;
   api.revoke.mockRejectedValueOnce(new Error("connection lost"));
   await act(() => hook.result.current.revoke(key));
-  expect(hook.result.current.pairings[0]).toMatchObject({ state: "unknown", copyable: false });
+  expect(hook.result.current.pairings[0]).toMatchObject({ state: "unknown", copyable: false, qrUrl: undefined });
   await act(() => hook.result.current.copy(key));
   expect(copied).toEqual([]);
   api.revoke.mockResolvedValueOnce(undefined);
   await act(() => hook.result.current.revoke(key));
   expect(api.revoke.mock.calls.map(([grant]) => grant)).toEqual([custody, custody]);
   expect(hook.result.current.pairings[0].state).toBe("revoked");
+  hook.unmount();
+});
+
+it("hides the QR when origin or issuing modal custody retires", () => {
+  const { hook, changeOrigin } = fixture();
+  changeOrigin(); hook.rerender();
+  expect(hook.result.current.pairings[0].qrUrl).toBeUndefined();
+  act(() => hook.result.current.retain(custody, "room-one", false));
+  expect(hook.result.current.pairings[0].qrUrl).toBeUndefined();
   hook.unmount();
 });

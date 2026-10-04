@@ -251,3 +251,15 @@ it.each(["checking", "unavailable"] as const)("does not label %s ingress as off"
     expect(retry).toHaveBeenCalledOnce();
   } else expect(screen.getByText("외부 접속 확인 중")).toBeTruthy();
 });
+
+it("renders a local QR for a usable device link", () => {
+  renderInviteModal({ pairingAvailable: true, operatorPairings: [{ key: "qr", expiresAt: "2099-01-01T00:00:00Z", state: "ready", copyable: true, expired: false, qrUrl: "https://host.example/pair?token=test" }] });
+  fireEvent.click(screen.getByRole("tab", { name: "내 기기" }));
+  expect(screen.getByRole("img", { name: "기기 연결 1 QR 코드" }).tagName.toLowerCase()).toBe("svg");
+});
+
+it.each(["unknown", "revoking", "revoked"] as const)("hides a QR in %s state", state => {
+  renderInviteModal({ pairingAvailable: true, operatorPairings: [{ key: "qr", expiresAt: "2099-01-01T00:00:00Z", state, copyable: false, expired: false, qrUrl: "https://host.example/pair?token=test" }] });
+  fireEvent.click(screen.getByRole("tab", { name: "내 기기" }));
+  expect(screen.queryByRole("img", { name: "기기 연결 1 QR 코드" })).toBeNull();
+});

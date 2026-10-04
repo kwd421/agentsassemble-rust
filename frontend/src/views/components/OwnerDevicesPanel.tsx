@@ -64,18 +64,20 @@ export default function OwnerDevicesPanel({ identity }: { identity: UserProfileI
     {sessions?.length === 0 && <p>연결된 기기가 없어요.</p>}
     <ul className="owner-devices-list">
       {sessions?.map(session => {
+        const os = ({ macos: "macOS", windows: "Windows", linux: "Linux", ios: "iOS", android: "Android" } as Record<string, string>)[session.os.toLowerCase()] || session.os;
+        const generatedName = `${session.browser} · ${session.os}`;
+        const name = (session.device_name === generatedName ? session.browser : session.device_name) || session.browser || "이름 없는 기기";
         const Icon = session.kind === "host" ? Monitor : /Android|iOS/i.test(session.os) ? Smartphone : session.browser ? Globe : Laptop;
         return <li key={session.session_id}>
           <span className="owner-device-icon" aria-hidden><Icon size={26} /></span>
           <div className="owner-device-info">
-            <div className="owner-device-name"><strong>{session.device_name || "이름 없는 기기"}</strong>{session.current && <span className="owner-device-current">이 기기</span>}</div>
-            <p>{[session.browser, session.os].filter(Boolean).join(" · ") || "브라우저·OS 정보 없음"}</p>
-            <p>{session.last_connected_at === null ? "마지막 접속 시각 확인 불가" : <>마지막 접속 <time dateTime={new Date(session.last_connected_at * 1000).toISOString()}>{new Date(session.last_connected_at * 1000).toLocaleString("ko-KR")}</time></>}</p>
+            <div className="owner-device-name"><strong>{name}</strong>{session.current && <span className="owner-device-current">이 기기</span>}</div>
+            <p>{os || "OS 정보 없음"} · {session.last_connected_at === null ? "마지막 접속 시각 확인 불가" : <>마지막 접속 <time dateTime={new Date(session.last_connected_at * 1000).toISOString()}>{new Date(session.last_connected_at * 1000).toLocaleString("ko-KR")}</time></>}</p>
             {session.kind === "pairing" && <p>기기 연결로 입장 · 현재 연결 상태 확인 불가</p>}
             {session.connected === false && <p>연결 종료 · 발급한 기기 연결은 유지 중</p>}
           </div>
-          {session.revocable && <button type="button" className="owner-device-revoke" disabled={busy} aria-label={`${session.device_name || "이름 없는 기기"} 연결 해제`}
-            onClick={() => setSelection({ request: { scope: "session", session_id: session.session_id }, name: session.device_name || "이름 없는 기기", current: session.current })}>연결 해제</button>}
+          {session.revocable && <button type="button" className="owner-device-revoke" disabled={busy} aria-label={`${name} 연결 해제`}
+            onClick={() => setSelection({ request: { scope: "session", session_id: session.session_id }, name, current: session.current })}>연결 해제</button>}
         </li>;
       })}
     </ul>

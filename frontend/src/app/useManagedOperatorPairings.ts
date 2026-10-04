@@ -16,6 +16,7 @@ export type OperatorPairingPresentation = Readonly<{
   key: string;
   expiresAt: string;
   copyable: boolean;
+  qrUrl?: string;
   state: PairingRecord["state"];
   expired: boolean;
 }>;
@@ -136,6 +137,7 @@ export function useManagedOperatorPairings({
   const pairings: OperatorPairingPresentation[] = records
     .filter((record) => record.roomDockId === roomDockId).map((record) => ({
       key: record.key, expiresAt: record.custody.expiresAt,
+      qrUrl: copyable(record, publicOrigin, now) ? record.custody.pairingUrl : undefined,
       copyable: copyable(record, publicOrigin, now), state: record.state,
       expired: record.custody.expiresAtMs <= now,
     })).reverse();

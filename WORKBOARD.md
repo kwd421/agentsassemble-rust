@@ -17,7 +17,9 @@ work is active or waiting, and remove it when it closes.
   was skipped by user decision.
 - Planned (user direction 2026-10-05), in order after the ordered-room stall and
   desktop `/pair` fixes: (1) device pairing without the one-hour session limit,
-  revocable per device from the host, shown as a QR; (2) Tailscale address support
+  revocable per device from the host, shown as a QR (implemented with schema 80;
+  automated evidence in `docs/VERIFICATION.md`, manual verification excluded);
+  (2) Tailscale address support
   so the owner's own devices reach the host with no central request; (3) central
   request hardening: reuse an unexpired connect grant on reload and move abuse rate
   limiting off D1 writes (WAF rules later with a custom domain); (4) Discord-style

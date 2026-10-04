@@ -1,3 +1,4 @@
+import { QRCodeSVG } from "qrcode.react";
 import type { SavedFriendsAuthority } from "../../api/friends";
 import { useFriendsDirectory } from "../../app/useFriendsDirectory";
 import { AttendeeFriendInviteCard, type AttendeeInviteControls } from "./AttendeeFriendInviteCard";
@@ -373,6 +374,13 @@ export default function RoomInviteModal({
                             : "연결 해제만 가능"}
                         </span>
                       </span>
+                      {pairing.copyable && !pairing.expired && pairing.state === "ready" && pairing.qrUrl && (
+                        <div className="dc-pairing-qr">
+                          <QRCodeSVG value={pairing.qrUrl} size={192} marginSize={4} level="M"
+                            role="img" aria-label={`기기 연결 ${index + 1} QR 코드`} />
+                          <p>휴대폰 카메라로 스캔해 연결하세요.</p>
+                        </div>
+                      )}
                       <button type="button" className="dc-invite-row-button"
                         style={{ minWidth: 44, minHeight: 44, flexShrink: 0 }}
                         aria-label={`기기 연결 ${index + 1} 링크 복사`}

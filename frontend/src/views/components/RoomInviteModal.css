@@ -390,3 +390,17 @@ dialog.dc-invite-modal {
     flex-direction: column-reverse;
   }
 }
+
+.dc-pairing-qr {
+  flex-basis: 100%;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 16px;
+}
+
+.dc-pairing-qr svg {
+  max-width: 100%;
+  height: auto;
+  border-radius: 8px;
+}

@@ -1,5 +1,50 @@
 # Verification Contract
 
+## Native device pairing persistence and local QR (2026-10-05)
+
+Contract: `docs/specs/identity-accounts-friends-slice.md`, native device persistence
+and QR acceptance. Before implementation the two-hour same-device replay failed
+with `session_revoked`; shared-screen regressions failed for the missing QR and
+repeated browser/OS title. Schema 80 retains data and credentials, converting only
+unrevoked, still-live native sessions from fixed expiry to 30-day inactivity.
+Already expired/revoked sessions remain denied. The existing device fingerprint,
+room/host authority and central-parent rules remain enforced.
+
+Automated evidence: persistence crate 391 tests passed, including clock-controlled
+one-hour survival, 30-day idle expiry/use refresh, failed-device non-refresh,
+79 -> 80 upgrade/data preservation and reopen, plus central-derived fixed expiry
+and parent revocation. Server `operator_pairing_boundary` covers the original link
+revoke and host single/all device revocation with immediate WS closure, HTTP and
+replay denial, foreign-device refusal and derived attendee admission/reconnect denial.
+The initial five affected frontend suites passed 34 tests. A further regression
+then reproduced the old stored one-hour deadline blocking upgraded credentials;
+operator reconnection now defers lifetime validation to the host. Eight affected
+frontend suites (64 tests) and the frontend build passed after that correction,
+covering admission/storage, local SVG QR rendering/removal, custody expiry and labels.
+QR generation uses pinned `qrcode.react` 4.2.0, with no network service or new timer.
+Last use is stored on authorized traffic through existing transactions; same-second
+updates do not change the row. No new polling or transport owner is introduced.
+
+Production deployment, signed builds, manual/physical-camera verification and phase
+closure reviews were not performed, as requested. Automated tests do not establish
+packaged visual or physical mobile acceptance.
+
+Pre-commit gate: `make verify` was invoked exactly once. Architecture, source growth,
+format, workspace check, frontend build/1,000 tests and desktop check/46 tests passed.
+Its workspace tests stopped at `runtime_boundary::external_client_recovers_committed_command_after_restart`
+when an old temporary writer lease had not yet released. Without changing that test
+or runtime, the same 10-test target passed on rerun. All remaining server targets
+(`runtime_image`, `runtime_restart_socket`, `side_chat_boundary`, `side_chat_live_boundary`)
+and workspace doc tests passed. The late browser-upgrade correction has the separate
+64-test/build evidence above. Clippy's test-function length findings were corrected
+by separating legacy data preparation and revocation-request assertions; the affected
+upgrade and pairing boundary tests then passed, followed by workspace all-targets,
+all-features Clippy with warnings denied. The initial aggregate gate failure is not
+reported as a clean `make verify` pass. Final format/diff checks passed. The final
+artifact check found a 29.25 GiB Cargo cache over the existing 18 GiB limit; with no
+Cargo/Tauri builds running, the existing `make artifact-prune` owner cleaned only
+repository Cargo artifacts, and `make artifact-check` then passed. No gate changed.
+
 ## Daybreak ordered recovery H1/M1 corrections (2026-10-05)
 
 Both findings against `fae521d9` were confirmed in code. Before correction, four

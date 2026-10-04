@@ -21,7 +21,7 @@ it("shows identifiable devices and keeps the host recovery owner outside single/
   expect(screen.queryByRole("button", { name: "Nel의 Mac 연결 해제" })).toBeNull();
   view.rerender(<OwnerDevicesPanel identity={{}} />);
   expect(mocks.list).toHaveBeenCalledOnce();
-  await userEvent.click(screen.getByRole("button", { name: "Chrome · Windows 연결 해제" }));
+  await userEvent.click(screen.getByRole("button", { name: "Chrome 연결 해제" }));
   const confirmation = screen.getByRole("dialog", { name: "기기 연결 해제 확인" });
   expect(within(confirmation).getByRole("button", { name: "취소" })).toBe(document.activeElement);
   await userEvent.click(within(confirmation).getByRole("button", { name: "연결 해제" }));
@@ -39,11 +39,19 @@ it("exposes list and revocation failures and permits an explicit retry", async (
   render(<OwnerDevicesPanel identity={{ centralSession: { sessionToken: "root", generation: 1 }, deviceToken: "device" }} />);
   expect((await screen.findByRole("alert")).textContent).toContain("호스트에 연결하지 못했어요");
   await userEvent.click(screen.getByRole("button", { name: "기기 목록 새로고침" }));
-  await screen.findByRole("button", { name: "Chrome · Windows 연결 해제" });
-  await userEvent.click(screen.getByRole("button", { name: "Chrome · Windows 연결 해제" }));
+  await screen.findByRole("button", { name: "Chrome 연결 해제" });
+  await userEvent.click(screen.getByRole("button", { name: "Chrome 연결 해제" }));
   await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "연결 해제" }));
   await waitFor(() => expect(within(screen.getByRole("dialog")).getByRole("alert").textContent).toContain("저장하지 못했어요"));
   await userEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "연결 해제" }));
   await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
   expect(mocks.revoke).toHaveBeenCalledTimes(2);
+});
+
+it.each([["macos", "macOS"], ["windows", "Windows"], ["linux", "Linux"]])("formats %s and avoids a duplicated browser OS title", async (raw, label) => {
+  mocks.list.mockResolvedValue({ sessions: [{ ...host, os: raw }, chrome] });
+  render(<OwnerDevicesPanel identity={{}} />);
+  await screen.findByText("Nel의 Mac");
+  expect(screen.getAllByRole("listitem")[0].textContent).toContain(label);
+  expect(screen.getByText("Chrome", { selector: "strong" })).toBeTruthy();
 });
