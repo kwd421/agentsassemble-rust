@@ -1,4 +1,11 @@
+mod central_owner_session;
+#[cfg(test)]
+mod central_owner_session_tests;
 mod server_owner_authority;
+pub use central_owner_session::{
+    OWNER_LEASE_SECONDS, OWNER_SESSION_PREFIX, OwnerConnectionBinding, OwnerConnectionLease,
+    OwnerSessionAuthorization, OwnerSessionRedemption,
+};
 pub use server_owner_authority::{
     CentralOwnerGrant, ServerOwnerAuthority, ServerOwnerLifecycleAuthorization,
 };

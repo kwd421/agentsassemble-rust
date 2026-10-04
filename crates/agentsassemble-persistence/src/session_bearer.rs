@@ -25,6 +25,7 @@ pub(crate) enum SessionBearerPurpose {
     ConnectorSession,
     HumanAdmission,
     OperatorPairing,
+    ServerOwner,
     GuestIdentityRecovery,
 }
 
@@ -66,6 +67,10 @@ pub(crate) fn derive_session_bearer(
         SessionBearerPurpose::OperatorPairing => (
             b"agentsassemble-operator-session-bearer-v1\0",
             OPERATOR_SESSION_BEARER_PREFIX,
+        ),
+        SessionBearerPurpose::ServerOwner => (
+            b"agentsassemble-server-owner-session-v1\0",
+            crate::central_owner_session::OWNER_SESSION_PREFIX,
         ),
     };
     let mut signer = Hmac::<Sha256>::new_from_slice(key)

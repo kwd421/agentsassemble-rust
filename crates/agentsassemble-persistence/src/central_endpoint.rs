@@ -6,6 +6,20 @@ use crate::{PersistenceError, SqliteStore};
 const GENERATION_KEY: &str = "central_endpoint_generation";
 
 impl SqliteStore {
+    /// Reads the already-published generation; lease renewal does not replace it.
+    /// # Errors
+    /// Rejects a missing or malformed publication generation.
+    pub async fn current_central_endpoint_generation(&self) -> Result<i64, PersistenceError> {
+        let stored: Option<String> =
+            sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key = ?")
+                .bind(GENERATION_KEY)
+                .fetch_optional(&self.pool)
+                .await?;
+        stored
+            .and_then(|value| value.parse::<i64>().ok())
+            .filter(|value| *value > 0)
+            .ok_or_else(invalid_generation)
+    }
     /// Advances the durable central endpoint generation monotonically.
     ///
     /// # Errors

@@ -8,6 +8,7 @@ pub enum ServerOwnerAuthority {
     LocalOperator,
     CentralOwner(Box<OperatorSessionAuthorization>),
     CentralGrant(CentralOwnerGrant),
+    CentralSession(crate::OwnerSessionAuthorization),
 }
 
 /// A live grant already redeemed by the host against its configured central authority.
@@ -68,6 +69,9 @@ impl ServerOwnerAuthority {
     ) -> Result<crate::LocalBootstrapStatus, PersistenceError> {
         if let Self::CentralOwner(session) = self {
             crate::operator_pairing::revalidate_central_owner_session(transaction, session).await?;
+        }
+        if let Self::CentralSession(session) = self {
+            session.revalidate(transaction).await?;
         }
         let bootstrap =
             crate::bootstrap::require_complete_bootstrap_in_transaction(transaction).await?;

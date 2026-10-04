@@ -143,6 +143,50 @@ startup stays logged out across restart; failed logout is retryable. Verify affe
 Worker, native URL, profile and frontend contracts, mandatory gates and a signed
 isolated package while preserving the active Windows room.
 
+### Renewable central owner workspace (2026-10-04)
+
+User requirement: an opened owned server stays usable beyond the five-minute entry
+grant, without workspace reload, room socket replacement or directory-stream
+replacement during successful renewal. This applies to browser and remote desktop
+owner entry, empty directories, profiles/friends, room creation/deletion recovery,
+room admission, messages and all invitation operations. Ordinary pairing and guest
+authority remain separate. This supersedes the entry-grant lifetime coupling below.
+
+The central Worker owns a single exchange of an entry grant into a host-bound owner
+connection. Exact exchange replay by the same host/browser returns the same connection;
+another browser or endpoint cannot consume it. Its provenance retains the issuing
+central session/person/device and exact server/origin/endpoint generation. The host
+issues a durable opaque server-owner session and room sessions derive authority from
+that parent. No central bearer or device signing key crosses to the host.
+
+Central authorization leases last at most **60 seconds** (also bounded by central
+login expiry and the current endpoint lease). A host-owned background task renews
+each actively connected workspace **every 20 seconds**, with the existing **8-second
+request deadline**. A definitive logout/device/person revocation, ownership transfer,
+server revocation or endpoint replacement ends the parent and dependent sessions as
+soon as renewal rejects, normally within **28 seconds** of the central change.
+Transport failure permits only the unexpired lease: retries at **2, 4, 8 seconds**
+(then capped at 8) never extend authority, and loss of central access ends use no
+later than **60 seconds after the last successful authorization**. Renewal is
+single-flight per owner session; authenticated streams/sockets retain its lifetime,
+last disconnect and runtime shutdown cancel/join it. No timer or client flag grants
+authority. Persisted parent revalidation checks device, origin, endpoint generation,
+expiry and revocation inside every affected transaction. Successful renewal updates
+the same parent; existing sockets and streams observe it without reconnecting.
+
+The common UI keeps drafts and open editors across renewal and temporary failure.
+Confirmed termination disables commands and explains account/server access loss;
+it does not discard the workspace or pretend the tunnel closed. Invite status has
+explicit checking/unavailable/retry states; only a verified closed status says off.
+
+Acceptance: controlled exchange/replay, renewal and transient/definitive failure;
+wrong device/origin/generation, logout, owner transfer and server revocation;
+unchanged ordinary pairing/guest authority; additive schema preservation; actual
+signed-in web message send/receive for more than five minutes with unchanged room
+socket/directory stream and no page reload, then central logout closes that same tab's
+authority within the bound. Windows physical evidence remains separate. Production
+Worker deployment and central migration require the user's explicit approval.
+
 ### Central owner server reopening (2026-10-01)
 
 After a current central session is validated, the desktop server chooser may reopen

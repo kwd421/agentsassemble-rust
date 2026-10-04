@@ -8,6 +8,11 @@ pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS run
 
 const TABLES: &[TableDefinition] = &[
     TableDefinition {
+        name: "central_owner_sessions",
+        ddl: crate::central_owner_session::DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
         name: "central_owner_grants",
         ddl: crate::server_owner_authority::GRANT_DDL,
         infrastructure: false,
@@ -137,6 +142,7 @@ const TABLES: &[TableDefinition] = &[
             "authority_lineage_id TEXT NOT NULL, user_id TEXT NOT NULL, participant_id TEXT NOT NULL, ",
             "target_origin TEXT NOT NULL, expires_at INTEGER NOT NULL, ",
             "central_owner INTEGER NOT NULL DEFAULT 0 CHECK(central_owner IN (0, 1)), ",
+            "owner_session_fingerprint BLOB REFERENCES central_owner_sessions(fingerprint) ON DELETE CASCADE, ",
             "revoked INTEGER NOT NULL DEFAULT 0 CHECK(revoked IN (0, 1)), ",
             "device_fingerprint BLOB CHECK(device_fingerprint IS NULL OR length(device_fingerprint) = 32), ",
             "session_fingerprint BLOB UNIQUE CHECK(session_fingerprint IS NULL OR length(session_fingerprint) = 32), ",

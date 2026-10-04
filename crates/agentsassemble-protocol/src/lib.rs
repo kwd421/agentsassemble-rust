@@ -1,4 +1,5 @@
 mod attendee_entry;
+mod central_owner;
 use agentsassemble_domain::{
     AgentSession, CapabilitySet, Participant, ProviderCatalog, PublicRoomSettings, Room, RoomEvent,
     SnapshotMode,
@@ -16,6 +17,9 @@ pub use agentsassemble_domain::{
 };
 pub use attendee_entry::{
     AttendeeEntryPacket, CreateCompanionAttendeeInvite, CreateFriendAttendeeInvite,
+};
+pub use central_owner::{
+    CentralOwnerSessionEnd, CentralOwnerSessionGrant, CentralOwnerSessionStatus,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;

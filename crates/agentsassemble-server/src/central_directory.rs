@@ -121,7 +121,11 @@ impl CentralDirectory {
             let attempt_due = std::time::Instant::now() >= next_attempt;
             if let Some(origin) = ready {
                 if (origin != registered || renewal_due) && attempt_due {
-                    match publish_online(&inner, &store, &identity, &origin).await {
+                    let renew = origin == registered
+                        && last_success.is_some_and(|at| {
+                            at.elapsed() < Duration::from_secs(LEASE_SECONDS.cast_unsigned())
+                        });
+                    match publish_online(&inner, &store, &identity, &origin, renew).await {
                         Ok(()) => {
                             registered.clone_from(&origin);
                             last_success = Some(std::time::Instant::now());
@@ -210,17 +214,26 @@ async fn publish_online(
     store: &SqliteStore,
     identity: &CentralHostIdentity,
     origin: &str,
+    renew: bool,
 ) -> Result<(), CentralDirectoryError> {
     let now = Utc::now().timestamp();
     let body = serde_json::to_vec(&json!({
         "origin": origin,
-        "generation": store.next_central_endpoint_generation().await?,
+        "generation": if renew { store.current_central_endpoint_generation().await? } else { store.next_central_endpoint_generation().await? },
         "issued_at": now,
         "lease_expires_at": now + LEASE_SECONDS,
     }))
     .map_err(|_| CentralDirectoryError::InvalidResponse)?;
-    let path = format!("/v1/servers/{}/endpoint", identity.server_id());
-    send_signed(inner, identity, Method::PUT, &path, body).await?;
+    let suffix = if renew { "/renew" } else { "" };
+    let path = format!("/v1/servers/{}/endpoint{suffix}", identity.server_id());
+    send_signed(
+        inner,
+        identity,
+        if renew { Method::POST } else { Method::PUT },
+        &path,
+        body,
+    )
+    .await?;
     Ok(())
 }
 

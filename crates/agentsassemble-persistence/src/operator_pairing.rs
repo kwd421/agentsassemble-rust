@@ -133,10 +133,15 @@ pub struct OperatorSessionAuthorization {
     target_origin: String,
     principal: AuthenticatedPrincipal,
     central_owner: bool,
+    owner_session_fingerprint: Option<[u8; 32]>,
     expires_at: DateTime<Utc>,
 }
 
 impl OperatorSessionAuthorization {
+    #[must_use]
+    pub const fn owner_session_fingerprint(&self) -> Option<&[u8; 32]> {
+        self.owner_session_fingerprint.as_ref()
+    }
     /// True only for provenance minted by verified central-owner admission.
     #[must_use]
     pub const fn is_central_owner(&self) -> bool {
@@ -160,6 +165,31 @@ impl OperatorSessionAuthorization {
 }
 
 impl SqliteStore {
+    /// Resolves the renewable parent of a currently admitted room session.
+    /// # Errors
+    /// Rejects changed/expired room or parent authority.
+    pub async fn owner_for_operator_session(
+        &self,
+        expected: &OperatorSessionAuthorization,
+    ) -> Result<Option<crate::OwnerSessionAuthorization>, PersistenceError> {
+        let mut tx = self.pool.begin().await?;
+        let current = revalidate_operator_session(&mut tx, expected, Utc::now()).await?;
+        let owner = match current.owner_session_fingerprint {
+            Some(parent) => Some(
+                crate::central_owner_session::resolve(
+                    &mut tx,
+                    &parent,
+                    &current.device_fingerprint,
+                    &current.target_origin,
+                )
+                .await?,
+            ),
+            None => None,
+        };
+        tx.commit().await?;
+        Ok(owner)
+    }
+
     /// Creates or replays one short room session authorized by a central-owner grant.
     ///
     /// # Errors
@@ -170,8 +200,9 @@ impl SqliteStore {
         request: &CentralOwnerSessionRequest<'_>,
     ) -> Result<OperatorPairingRedemption, PersistenceError> {
         require_origin(request.target_origin)?;
+        let parent = central_session_parent(owner, request)?;
         if request.expires_at <= request.now
-            || request.expires_at > request.now + Duration::minutes(5)
+            || (parent.is_none() && request.expires_at > request.now + Duration::minutes(5))
         {
             return Err(unavailable());
         }
@@ -200,6 +231,7 @@ impl SqliteStore {
                 target_origin: request.target_origin.to_owned(),
                 principal,
                 central_owner: true,
+                owner_session_fingerprint: parent,
                 expires_at: request.expires_at,
             },
         };
@@ -212,6 +244,7 @@ impl SqliteStore {
             let record = PairingRecord::decode(&row)?;
             record.require_origin_and_live(request.target_origin)?;
             if !record.central_owner
+                || record.owner_session_fingerprint != parent
                 || record.manager != manager
                 || record.device_fingerprint.as_ref() != Some(request.device_fingerprint)
                 || record.session_fingerprint.as_ref() != Some(&issued.fingerprint)
@@ -242,8 +275,8 @@ impl SqliteStore {
         sqlx::query(concat!(
             "INSERT INTO operator_pairings (pairing_id, token_fingerprint, room_id, room_uid, ",
             "server_id, authority_lineage_id, user_id, participant_id, target_origin, expires_at, ",
-            "device_fingerprint, session_fingerprint, session_expires_at, central_owner) ",
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)"
+            "device_fingerprint, session_fingerprint, session_expires_at, central_owner, owner_session_fingerprint) ",
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)"
         ))
         .bind(Uuid::new_v4().to_string())
         .bind(request.grant_fingerprint.as_slice())
@@ -258,6 +291,7 @@ impl SqliteStore {
         .bind(request.device_fingerprint.as_slice())
         .bind(issued.fingerprint.as_slice())
         .bind(request.expires_at.timestamp_micros())
+        .bind(parent.as_ref().map(<[u8; 32]>::as_slice))
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;
@@ -381,6 +415,7 @@ impl SqliteStore {
                 target_origin: target_origin.to_owned(),
                 principal,
                 central_owner: record.central_owner,
+                owner_session_fingerprint: record.owner_session_fingerprint,
                 expires_at,
             },
         })
@@ -457,6 +492,7 @@ pub(crate) async fn revalidate_operator_session(
     if current.principal.room_id != expected.principal.room_id
         || current.expires_at != expected.expires_at
         || current.central_owner != expected.central_owner
+        || current.owner_session_fingerprint != expected.owner_session_fingerprint
     {
         return Err(unavailable());
     }
@@ -487,6 +523,12 @@ async fn resolve_operator_session(
         return Err(unavailable());
     }
     let expires_at = record.require_session(fingerprint, now)?;
+    if let Some(parent) = record.owner_session_fingerprint {
+        let owner = crate::central_owner_session::resolve(tx, &parent, device, origin).await?;
+        if !record.central_owner || owner.binding().session_expires_at != expires_at.timestamp() {
+            return Err(unavailable());
+        }
+    }
     let principal = record.resolve_manager(tx).await?;
     Ok(OperatorSessionAuthorization {
         session_fingerprint: *fingerprint,
@@ -494,6 +536,7 @@ async fn resolve_operator_session(
         target_origin: origin.to_owned(),
         principal,
         central_owner: record.central_owner,
+        owner_session_fingerprint: record.owner_session_fingerprint,
         expires_at,
     })
 }
@@ -510,6 +553,10 @@ pub(crate) async fn require_attendee_parent(
         return Err(unavailable());
     }
     let expires_at = record.require_session(fingerprint, now)?;
+    if let Some(parent) = record.owner_session_fingerprint {
+        let device = record.device_fingerprint.as_ref().ok_or_else(unavailable)?;
+        crate::central_owner_session::resolve(tx, &parent, device, &record.target_origin).await?;
+    }
     Ok((record.resolve_manager(tx).await?, expires_at))
 }
 
@@ -528,6 +575,7 @@ async fn session_record(
 struct PairingRecord {
     pairing_id: String,
     central_owner: bool,
+    owner_session_fingerprint: Option<[u8; 32]>,
     manager: LocalRoomManagerAuthority,
     target_origin: String,
     expires_at: DateTime<Utc>,
@@ -543,6 +591,9 @@ impl PairingRecord {
         Ok(Self {
             pairing_id: row.try_get("pairing_id")?,
             central_owner: row.try_get("central_owner")?,
+            owner_session_fingerprint: optional_fingerprint(
+                row.try_get("owner_session_fingerprint")?,
+            )?,
             manager: LocalRoomManagerAuthority {
                 server_id: row.try_get("server_id")?,
                 authority_lineage_id: row.try_get("authority_lineage_id")?,
@@ -602,7 +653,7 @@ impl PairingRecord {
     }
 }
 
-fn require_origin(origin: &str) -> Result<(), PersistenceError> {
+pub(crate) fn require_origin(origin: &str) -> Result<(), PersistenceError> {
     let parsed = url::Url::parse(origin)
         .map_err(|_| rejected("invalid_origin", "Invalid pairing origin."))?;
     if parsed.scheme() != "https" || parsed.origin().ascii_serialization() != origin {
@@ -645,3 +696,22 @@ fn rejected(code: &'static str, message: &str) -> PersistenceError {
 #[cfg(test)]
 #[path = "operator_pairing_tests.rs"]
 mod tests;
+
+fn central_session_parent(
+    owner: &crate::ServerOwnerAuthority,
+    request: &CentralOwnerSessionRequest<'_>,
+) -> Result<Option<[u8; 32]>, PersistenceError> {
+    match owner {
+        crate::ServerOwnerAuthority::CentralSession(session) => {
+            let binding = session.binding();
+            if binding.browser_fingerprint != *request.device_fingerprint
+                || binding.origin != request.target_origin
+                || binding.session_expires_at != request.expires_at.timestamp()
+            {
+                return Err(unavailable());
+            }
+            Ok(Some(*session.fingerprint()))
+        }
+        _ => Ok(None),
+    }
+}

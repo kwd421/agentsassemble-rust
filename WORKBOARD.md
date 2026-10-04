@@ -2,6 +2,14 @@
 
 ## Active work
 
+- 2026-10-04 renewable owner workspace (user-approved design): separate the short
+  central entry grant from a host-issued renewable server-owner session, preserving
+  sockets/streams and drafts. Central leases 60s, host renewal 20s, request deadline
+  8s; definitive revocation normally <=28s, central loss cutoff <=60s. Correct
+  invite unknown/error presentation in the shared frontend. Contract: identity-
+  accounts-friends slice -> Renewable central owner workspace. Implementation and
+  verification in progress; production Worker/migration need user approval.
+
 - 2026-10-04 Finder-launched runtime tool discovery (web verification blocker):
   live UI Check app and both runtime children inherit GUI PATH without Homebrew,
   although macOS `/etc/paths.d/homebrew` registers its installation directory.

@@ -132,6 +132,8 @@ fn export_operational_contracts(
     output: &std::path::Path,
     config: &Config,
 ) -> Result<(), Box<dyn std::error::Error>> {
+    agentsassemble_protocol::CentralOwnerSessionGrant::export_all(config)?;
+    agentsassemble_protocol::CentralOwnerSessionStatus::export_all(config)?;
     agentsassemble_protocol::HostDeviceInfo::export_all(config)?;
     fs::write(
         output.join("PROVIDER_SETUP.ts"),
