@@ -6,12 +6,16 @@
   checks entry/reconnection only; no owner renewal or central authorization lease.
   The host and other admitted devices of the same account list identifiable
   browser/OS/device sessions and revoke one/all, immediately closing dependent
-  transports. Preserve the native recovery owner and isolate account-wide remote
-  revocation after ownership transfer. Contract: identity-accounts-friends slice
-  -> Host-owned owner workspace and devices. Implementation and affected gates,
-  common UI, packaged verification and actual web acceptance are in progress.
-  Production Worker deployment/migrations require user approval. The superseded
-  renewal implementation passed local gates at `274dfda2`; it was never deployed.
+  transports. Native recovery authority remains outside revocation; remote all
+  stays account-scoped across transfer. Six feature commits through `913b4f15`
+  are pushed. Rust 1,022, frontend 978, Desktop 43, Worker 45 and final affected
+  checks/mandatory gates pass; signed 0.1.7 directly verifies native device settings
+  and normal owned shutdown. Contract/evidence: identity-accounts-friends slice
+  and VERIFICATION -> Host-owned owner workspace and devices. Worker `25fad46a`
+  is local only; production deployment and actual web acceptance require approval.
+  Read-only production inspection confirms 0001-0008 only, so no new central
+  migration is needed. Whole-repository review and real web acceptance remain open.
+  The superseded renewal implementation at `274dfda2` was never deployed.
 
 - 2026-10-04 Finder-launched runtime tool discovery (web verification blocker):
   live UI Check app and both runtime children inherit GUI PATH without Homebrew,

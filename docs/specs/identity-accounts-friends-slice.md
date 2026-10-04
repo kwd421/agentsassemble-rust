@@ -143,7 +143,10 @@ startup stays logged out across restart; failed logout is retryable. Verify affe
 Worker, native URL, profile and frontend contracts, mandatory gates and a signed
 isolated package while preserving the active Windows room.
 
-### Renewable central owner workspace (2026-10-04)
+### Renewable central owner workspace (2026-10-04, superseded; never deployed)
+
+Historical contract only. The host-owned contract below replaces its owner lease,
+renewal, central revocation and expiry rules.
 
 User requirement: an opened owned server stays usable beyond the five-minute entry
 grant, without workspace reload, room socket replacement or directory-stream
@@ -221,6 +224,12 @@ workspaces, including an empty server or no selected room. Rows show a bounded
 device name or browser/OS, last connection time and a server-derived `이 기기`
 marker. Display metadata is untrusted description, not proof of identity; do not
 expose raw credentials, their fingerprints, central private data or network addresses.
+Root admission and operator pairing redemption accept that description; operator
+socket-ticket exchange may update it, while a physically empty exchange retains
+the stored description and still records the connection time. Ordinary human
+socket-ticket requests retain their empty-body contract. Malformed or oversized
+metadata fails before its authority/storage effect. Product surface revision 19
+records the additive operator exchange body.
 The current native host is an explicit non-revocable recovery anchor. Native
 authority can list/revoke all remote device sessions; remote authority can only
 list/revoke the exact same central account's sessions. Thus an old owner retained
@@ -268,6 +277,9 @@ manipulation. Actual signed-in web proof and required code review remain open un
 completed. Production Worker deployment and migration require explicit user approval.
 
 ### Central owner server reopening (2026-10-01)
+
+The admission and host-proof boundaries remain current. Its short room-session
+lifetime below is superseded by Host-owned owner workspace and devices.
 
 After a current central session is validated, the desktop server chooser may reopen
 only a server whose current central relation is `owner`. Bookmarks remain discovery
@@ -435,6 +447,10 @@ unapproved differences. A discovered shared cause expands this audit to its othe
 affected flows; these rows are a minimum, not a ceiling on investigation.
 
 ### Remote owner workspace completion (2026-10-02)
+
+Its shared product/transport requirements remain current. The per-request central
+redemption, bounded workspace custody and expiry correction described below are
+historical and superseded by Host-owned owner workspace and devices.
 
 Live directory correction (2026-10-03): retain Claude's current shared UI. Native
 and central-owner web workspaces must receive committed room creation, settings,
