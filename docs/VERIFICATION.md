@@ -1,5 +1,9 @@
 # Verification Contract
 
+## 초대 멤버 중앙 계정 binding — 설계 승인 (2026-10-05)
+
+사용자 제공 승인 이력: Daybreak 6라운드, 설계 5판+보완(H1/H2), 최종 **APPROVE DESIGN 0/0/0/0**. C1은 계약 문서만이며 구현/실행 검증 승인이 아니다.
+
 ## Device idle activity after successful authorization (2026-10-05)
 
 Daybreak M1 on `499636ed` / `5419b2e3`: bearer resolution and attendee-parent

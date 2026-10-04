@@ -27,6 +27,7 @@ work is active or waiting, and remove it when it closes.
   invited members bound to central identity by the host, and the account's server
   list synced across devices. End-to-end encryption over the tunnel is a later
   review item.
+- Planned: 초대 멤버를 중앙 계정에 묶기 — C1 계약 단계 ([소유 계약](docs/specs/identity-accounts-friends-slice.md#초대-멤버를-중앙-계정에-묶기--c1-승인-계약-2026-10-05)); 구현은 C2–C6 순서.
 - Open verification: Windows physical-device checks (recent Discord-style UI,
   server icons, interactive install/update `desktop-v0.1.4`, attendee CLI); full
   app/web parity rows in the final-parity slice; persistent web MCP endpoint

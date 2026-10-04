@@ -5,6 +5,84 @@ claim self-description. The D-02 frame correction and D-03 direct remote HTTP ta
 authorization are implemented. Human admission/session, the one-use WebSocket
 exchange, and desktop private-control purpose tickets remain.
 
+## 중앙 member 입장과 세션 — C1 승인 계약 (2026-10-05)
+
+### 파일 지도
+
+- `crates/agentsassemble-persistence/src/human_invites.rs`, `human_admission.rs`, `human_admission_store.rs`, `human_admission_identity.rs` (같은 디렉터리): 기존 invite/max_uses/admission/profile 생성 권위.
+- `crates/agentsassemble-persistence/src/member_entitlements.rs` (예정): 기존 invite admission 소유자 아래 canonical entitlement/revision.
+- `crates/agentsassemble-persistence/src/member_sessions.rs` (예정): challenge/parent/child 및 durable 재검증; `member_admission_results.rs` (같은 디렉터리, 예정): intent·예약·결과.
+- `crates/agentsassemble-persistence/src/participant_rows.rs`, `participant_roles.rs`, `participant_mute.rs`, `participant_leave.rs`: 기존 participant 상태·revision·권한 변경·leave.
+- `crates/agentsassemble-server/src/human_invite_web.rs`, `human_session_exchange_web.rs`, `human_session_http_authority.rs`, `room_socket.rs`, `room_socket_session.rs`, `ticket/human_session.rs`: HTTP/WS/ticket 경계 및 매 사용 시 재검증.
+- `crates/agentsassemble-server/src/central_member_web.rs` (예정), `crates/agentsassemble-protocol/src/central_member.rs` (예정): member 전용 목적/타입/입장·재입장 경계.
+- `frontend/src/app/useRoomInviteController.ts`, `frontend/src/api/roomInviteTransport.ts`, `frontend/src/lib/centralMemberConnect.ts` (예정): 앱/웹 동일 초대·재시도·세션 흐름.
+- [Identity C1](identity-accounts-friends-slice.md#초대-멤버를-중앙-계정에-묶기--c1-승인-계약-2026-10-05)는 binding/membership/enrollment/중앙 목록/예약 표/삭제/공통 예산/floor/C2–C6를, [lifecycle C1](room-lifecycle-slice.md#중앙-member의-방-local서버-종료--c1-승인-계약-2026-10-05)은 방·서버 종료/receipt를 소유한다.
+
+### 요구 동작과 단일 권위
+
+승인 설계 5판+보완의 구현 전 계약이다. 첫 슬라이스는 중앙 로그인으로 새 로컬 사람 생성 또는 기존 binding 재입장만 제공한다. 기존 익명 입장·1시간 세션은 보존한다. 아래 member distinct-principal/profile/parent 규칙은 익명 계약과 분리된 요구이며 기존 익명 흐름의 사용량·profile 정책을 바꾸지 않는다. 기본 avatar만 사용하며 익명 합치기·scope 변경·reapproval은 제외한다. member는 owner/operator/pairing 생성이나 독립 local account/recovery credential 권위를 얻지 않는다.
+
+기존 participant 행에 canonical local-user binding과 단조 revision만 추가한다. human/member의 status/role/mute/join/leave/kick은 같은 행을 변경한다. 기존 invite admission 소유자 아래 `(binding_id, room_id)` UNIQUE canonical entitlement는 scope·revision·source admission만 저장하고 participant 상태를 복제하지 않는다. child는 **participant와 entitlement 모두** 만족해야 한다.
+
+Invite admission은 `(invite_id, binding_id)` UNIQUE 및 canonical room/scope 입력·결과를 저장한다. 다른 invite라도 현재 entitlement와 scope가 다르면 conflict다. 권한 합집합·최신값 대체·기기별 scope는 허용하지 않는다. 일반 invite/re-entry는 `left/banned` membership이나 `Left/Kicked` participant를 복구하지 않는다. 새 방 admission도 기존 invite 소유자가 현재 membership·canonical participant·room 상태를 검사한다.
+
+최초 성공은 없는 binding을 고정하고 새 membership을 active로 만들며 없는 방 entitlement/admission을 생성한다. 기존 binding/profile은 재사용하고 기존 membership/participant의 종료 상태는 보존한다. 기존 entitlement의 scope/revision을 일반 입장이 교체하지 않으며 재시도는 이미 커밋된 결과를 재사용한다.
+
+### 초대 진입, max_uses와 경쟁/실패 의미
+
+진입 순서는 호스트 challenge → 중앙 로그인·기기 서명·연결/목록 동의 → 중앙 enrollment/grant·용량 예약 → 호스트 durable intent·결과/권위 슬롯 예약 → 등록 호스트 키로 **직접 redeem**이다. member 전용 issue/redeem 경계는 현재 계정/세션/기기·live incarnation·endpoint·목적·challenge/browser·pending을 검사한다. 중앙 통신 동안 호스트 DB 잠금은 유지하지 않는다.
+
+호스트 트랜잭션은 만료·invite·binding·membership/participant·room lifecycle/generation·entitlement·상한을 재검사한다. profile/binding·admission·초대 소비·membership·parent/child·결과·이벤트/outbox를 함께 커밋한다. 초기 profile은 직접 redeem한 중앙 display snapshot을 기존 identity 생성 경로로 정규화/길이 제한하여 한 번만 생성하고 기본 avatar를 쓴다. UNIQUE 경쟁 후 기존 profile을 재사용하며 snapshot 차이는 conflict가 아니다. 이후 `user_profiles`만 권위이고 새 invite/다른 기기/re-entry가 덮어쓰지 않는다.
+
+- 같은 invite/binding의 같은 canonical 입력은 기존 admission을 재사용하여 **distinct-principal 사용량을 한 번만 소비**한다. 다른 입력은 conflict다. 마지막 `max_uses` 슬롯에서도 동일하다. 기존 configured 값/유효 ceiling 계약을 보존한다.
+- 다른 invite의 같은 scope는 기존 entitlement를 재사용하고 해당 invite 사용량은 그 invite 최초 성공 때 한 번만 소비한다. 다른 scope는 소비/entitlement 변경 없이 conflict다.
+- `member_connect`는 invite를 선택하지 않고 현재 canonical entitlement만 사용한다. 후속 scope 변경은 기존 admission 소유자의 명시적 owner CAS 및 해당 방 전 기기 child 폐기로 추가한다.
+- **정확히 같은 grant/challenge/browser/입력** 재시도만 제한된 입장 창에서 같은 살아 있는 parent를 반환한다. 다른 device/browser는 admission만 공유하고 각 결합 parent를 받는다. 종료 parent는 재생성하지 않는다.
+- 응답/DB 장애는 enrollment ID로 중앙 상태와 durable intent/결과를 재조회한다. 미확정은 실패가 아니다. grant 만료 뒤에도 이미 커밋한 성공은 confirm하며 durable 거절은 늦은 커밋을 차단한 뒤에만 가능하다. 중앙 예약/unknown/삭제 경쟁은 identity의 전이표를 따른다.
+
+### Parent/child의 상태, 수명과 재검증
+
+`member_challenges`는 목적·invite/enrollment·입력 fingerprint·browser hash·신뢰 source·incarnation·origin/generation·만료·상태를 저장한다. `member_parents`는 membership/version·device/browser·entry fingerprint·runtime/ingress·연결/폐기 상태를 저장한다. child/ticket은 parent·room incarnation/access generation·participant revision·canonical entitlement revision·scope·만료를 참조한다. room generation은 기존 lifecycle 소유자가 관리한다. 정확한 버전을 참조하는 membership version은 정리하지 않는다.
+
+Member parent는 기존 owner 연결 수명 계약을 따른다. 최초 연결 창 만료, workspace의 모든 인증 transport 종료, ingress 교체, runtime 종료, 호스트 폐기가 parent를 종료한다. endpoint publication 갱신·방 이동·추가 연결·1시간 경과는 중앙 재인증 사유가 아니다. child는 parent보다 오래 살 수 없다. 중앙 logout/기기·계정 폐기는 다음 중앙 입장부터 적용되며 기존 연결을 중앙 장애 때문에 종료하지 않는다.
+
+Parent는 저장 행 조회가 필수인 opaque 권위다. child/ticket 재발급은 중앙 호출 없이 현재 active membership·접근 가능한 방·Joined participant·canonical entitlement·각 revision/generation을 검사한다. HTTP mutation/읽기·WS frame·ticket/child 발급은 폐기와 직렬화하여 stale 접근을 막는다. 기존 human/member 권한 변경은 같은 participant revision을 올리고 해당 사람의 해당 방 전 기기 child/ticket을 폐기한다. 종료 revision은 durable 취소 완료 전에도 진행 작업의 추가 적용을 차단한다. 방-local 종료는 다른 방 parent 권위를 보존하며 서버 종료는 모든 방과 전 기기를 종료한다.
+
+### 호스트 상한과 bounded cleanup
+
+모든 상한은 원자 적용하고 기존 더 엄격한 공유 풀/사용자 데이터를 보존한다. 신규 입장이 기존 세션을 밀어내지 않는다. 포화는 신규 생성만 막으며 종료/폐기·현재 권위 검사·이미 예약한 결과 확정을 막지 않는다.
+
+| 대상 | 승인 상한/정책 |
+| --- | --- |
+| challenge | TTL 300초; 전체 256, invite 8, enrollment 1, 신뢰 source 16, browser 보조 4 |
+| challenge 생성률 | 신뢰 source 10/분, member 전체 60/분; 동일 유효 요청 재사용; 임의 enrollment/browser를 주 공정성 키로 사용하지 않음 |
+| 최초 transport 창 | 30초와 기존 owner 창 중 짧은 값 |
+| parent | binding/account 8, device 2, 서버 128 |
+| child/ticket 합계 | parent 32, 서버 448; 기존 공유 풀도 적용 |
+| 세션/버전/관련 결과 retained | binding/account 1,024행/2MiB, 서버 8,192행/16MiB |
+| child/ticket TTL | 최대 300초, parent 종료가 더 빠르면 즉시 종료 |
+| 일반 종료 기록 | 재시도 창·파생 credential 만료 후 정상 목표 600초 내 정리 |
+| 별도 보존 예약 | leave receipt·미전달 결과·미확정 intent·삭제 provenance는 일반 TTL로 삭제하지 않음 |
+| 생성률 | binding/account 60행/분, 서버 600행/분 |
+| 정리 | hot path 밖 5초 주기, 작업당 100행/1초 이하; 실효 처리량이 최대 생성률을 넘는지 검증; 지연 시 backpressure |
+
+Identity 소유의 host binding/membership 10,000, outbox/intent/결과 및 중앙 grant/enrollment/삭제 provenance 예산도 함께 충족해야 한다. 종료 통지/receipt 슬롯은 admission에서 미리 확보한다. 일반 정리 TTL을 이유로 기존 익명 one-use 결과나 member 미확정 권위를 삭제하지 않는다.
+
+### 후속 요구, 구현 순서와 수용 기준
+
+익명 합치기는 기존 사람 소유 증명 없이 허용하지 않는다. reapproval은 후속이며 person/binding·예상 revision·새 invite·방별 목표·만료에 결합한 단일 소비 owner 승인을 요구한다. 명시된 방만 기존 participant 소유자가 복구한다. scope 변경도 위 owner CAS 없이 허용하지 않는다. bound guest retirement 및 독립 recovery/local credential 차단은 identity의 기존 소유 절에 따르며 admission 우회 권위를 만들지 않는다.
+
+공통 순서는 identity C1의 **C2 limiter/owner 격리→grant 재사용→bounded cleanup, C3 중앙 floor/장벽/내부 경로, C4a host floor, C4b migration/내부 연결, C5 앱·웹 동시 노출, C6 혼재/실기기/리뷰**다. 현재 host 80, member 다음 미사용 번호는 81 예정이며 floor는 81 인식만 하고 80을 그대로 연다. C4b에서 member migration을 수행한다. 81 선점 시 다음 미사용 번호로 계약을 갱신한다. floor 이전 rollback·상위 schema 무조건 허용은 금지한다. 각 커밋은 문서/테스트 포함 1,000줄 미만이다.
+
+필수 테스트/수용 기준:
+
+- Binding 양방향 경쟁과 profile 단일 생성/기본 avatar/비덮어쓰기, 익명·Google 정상 흐름 보존; member의 독립 account/recovery 발급 및 bound user redeem/device binding 거절.
+- 같은 invite/binding 및 마지막 사용 슬롯에서 소비 1회·같은 admission·기기별 parent 격리; 다른 invite 같은 scope 재사용·다른 scope conflict/무소비; canonical entitlement revision 검사.
+- Redeem 전 durable 예약, DB rollback·응답 유실·재시작, 정확한 grant 결합 재시도, 종료 parent 재생성 거절; 잘못된 issuer/incarnation/key/epoch/origin/generation/purpose/device·만료·동시 redeem와 owner/operator 교차 사용 거절.
+- Left/Kicked/banned 일반 복귀 금지; 익명 1시간 만료, member 1시간 이후 **중앙 요청 0**, 모든 parent 종료 원인, child가 parent보다 오래 살지 않음, 권한 downgrade 경쟁과 전 기기 해당 방 폐기.
+- Source/browser/invite 회전, 행/byte/별도 receipt 한도·정리 장애·실효 처리량/backpressure, member 과부하 중 owner 입장/publication 보존 및 중앙 재시도 예산.
+- Lifecycle 계약의 HTTP/WS/읽기/발급 barrier 경쟁과 room/server 종료, identity 계약의 모든 예약·삭제/unknown·floor 행렬, 실제 두 기기 앱/웹 초대→목록 재입장→owner kick 차단을 함께 통과해야 노출/완료가 가능하다. 문서만인 C1은 이 테스트를 구현/실행 완료로 보고하지 않는다.
+
 ## Definition
 
 Audit correction at Rust baseline `8a5f75a`: a remote human already presenting a
