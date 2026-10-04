@@ -12980,3 +12980,35 @@ and sends `{icon, expected_icon}` with a data URL from the square cropper.
   Chrome tab are normally closed; the pre-existing UI-check bundle/data and central
   registrations are retained. This proves Mac/WebKit plus a separate Chrome device
   session on the same Mac; physical Windows verification remains unverified.
+
+## Finder runtime tool discovery (2026-10-04)
+
+Reported blocker: the existing UI Check app's external-access button was disabled.
+Live process inspection confirmed the desktop (65235), supervisor (65474) and server
+(65489) inherited `/usr/bin:/bin:/usr/sbin:/sbin`; cloudflared is installed at
+`/opt/homebrew/bin/cloudflared`, registered by macOS `/etc/paths.d/homebrew`.
+
+- The desktop runtime launcher now asks Apple's absolute `path_helper` for configured
+  system paths once per runtime start and adds them to the child PATH. Explicit
+  inherited order is preserved; provider/Node discovery shares that environment.
+  The helper receives an empty environment, preventing `PATH_HELPER_ROOT` redirection;
+  its escaped output is decoded as native path bytes without a shell or eval.
+  Missing/failed helper output is a launch error. No directory retry, provider
+  execution, ingress bypass, global environment mutation or persistent setting is added.
+- Three focused checks exercise actual OS helper/child executable lookup, override
+  precedence and duplicate suppression, literal metacharacters/non-UTF8 paths, and
+  explicit helper failure. All43 desktop checks, all-target/all-feature Clippy,
+  architecture/source-growth and19 policy/artifact-owner checks pass. One actual
+  OS helper invocation took4.25ms and emitted381bytes; no periodic work is added.
+- Release desktop executable is rebuilt into the existing0.1.6
+  `app.agentsassemble.uicheck` bundle, signed with its original Developer ID and
+  deep/strict verified. The previous verification app and owned runtime children
+  exited normally. Its existing data, rooms and central registration are preserved.
+- A first tool-launched run inherited a full PATH and is not Finder evidence.
+  It was normally quit. Finder then opened the exact bundle (desktop80049), whose
+  PATH remained GUI defaults. Its supervisor80537/server80552 receive the augmented
+  system path including Homebrew. In the existing room, `외부 접속 열기` is enabled.
+- Actual public tunnel startup, signed Chrome room views/profile/crop/members/invite
+  and web menu Esc checks remain pending at-action public-exposure confirmation.
+  External access has not been opened in this run. Windows physical-device
+  verification remains unverified. The signed bundle/data are retained for that work.

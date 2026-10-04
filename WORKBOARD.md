@@ -2,6 +2,19 @@
 
 ## Active work
 
+- 2026-10-04 Finder-launched runtime tool discovery (web verification blocker):
+  live UI Check app and both runtime children inherit GUI PATH without Homebrew,
+  although macOS `/etc/paths.d/homebrew` registers its installation directory.
+  Desktop-owned child environment now uses the configured OS path owner, preserving
+  explicit inherited search order and ingress security/lifecycle. Signed app opened
+  directly by Finder retains GUI PATH; its runtime children receive system paths
+  and the external-access button is enabled. Desktop43, Clippy and mandatory
+  architecture/source/policy19 gates pass. Actual tunnel/web room verification is
+  pending the required at-action public-exposure confirmation; Windows physical
+  verification remains unavailable. Evidence: `docs/VERIFICATION.md` -> Finder
+  runtime tool discovery. Contract:
+  `docs/specs/trusted-public-ingress-slice.md` -> Managed and stable lifecycle.
+
 - 2026-10-04 server icons, frontend (backend `0505b789` by the backend session): the
   server chooser shows each registration's icon via a signed central fetch and a
   local object URL, falling back to initials. Owners click the icon to pick, crop

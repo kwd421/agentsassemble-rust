@@ -82,6 +82,20 @@ Tauri Origin checks.
 
 ## Managed and stable lifecycle
 
+Packaged macOS launches must discover system-installed tools after Finder/Open
+launch, including when the inherited PATH contains only Apple's GUI defaults.
+The desktop runtime launcher owns the child environment: it adds macOS's configured
+system paths from Apple's `path_helper` to the inherited PATH, preserving explicit
+inherited search order. Cloudflared and provider/Node discovery then use the same
+runtime PATH; the server's one executable lookup and ingress authority stay intact.
+No user shell/startup file is executed, no installation directory is guessed, and
+helper output is decoded as path data rather than evaluated as shell commands.
+Helper failure is an explicit launch failure; a genuinely absent cloudflared stays
+unavailable. CLI servers and non-macOS launch environments remain unchanged.
+Acceptance: launch the existing signed verification app through LaunchServices
+without supplying PATH, enable external access, enter its actual room through the
+signed central web chooser, verify the shared views, then close external access.
+
 Managed mode starts only the maintained `cloudflared` executable against the local
 loopback server with a server-owned empty config and a fresh high-entropy origin
 Host. `process-wrap` supplies Unix process-group and Windows job custody plus

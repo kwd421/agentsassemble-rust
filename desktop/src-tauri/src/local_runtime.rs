@@ -23,6 +23,8 @@ mod appearance;
 mod central_login;
 mod control;
 mod control_exchange;
+#[cfg(target_os = "macos")]
+mod environment;
 pub(crate) use central_login::CentralLoginGrant;
 mod human_invite;
 mod message_attachments;
@@ -313,6 +315,8 @@ fn start_runtime(app: &AppHandle) -> Result<RuntimeProcess, String> {
     let stdout_log = open_private_fresh_log(&stdout_path)?;
     let stderr_log = open_private_rotating_log(&stderr_path)?;
     let mut command = runtime_supervisor::command(&executable)?;
+    #[cfg(target_os = "macos")]
+    environment::configure(command.command_mut())?;
     command
         .command_mut()
         .arg("--bind")
