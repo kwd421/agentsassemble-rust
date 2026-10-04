@@ -12852,3 +12852,19 @@ menu) were read from the user's Discord app without changes.
   `git diff --check` pass. Test-facing accessible names are unchanged except the
   add-agent API list label (`API 제공자`), whose test was updated.
 
+Native follow-up (same day): the fixed verification identity
+`app.agentsassemble.uicheck` (signed, deep strict verified) was granted once and
+kept across rebuilds. With `acceptFirstMouse` (now in the product window config)
+background Computer Use clicks reach the webview; the previous isolated package
+without it ignored them. The user approved Google sign-in for the NelLe account and
+completed the browser step. Opening this device registered one more central server
+row for this installation. In the app: the server chooser rows, rail divider,
+`#general에 메시지 보내기` composer, people rows without the type line, friends icon
+actions, add-agent Korean labels and user settings layout render as intended. Found
+and fixed during the run: a duplicated empty-chat sentence under the channel intro,
+the viewer's own message showing an unread bar (regression test fails without the
+fix, passes with it), and the account heading/logout width in settings; the rebuilt
+package shows all three corrected. Return in the composer was not delivered by
+background input; sending used the send button. Signed-in web room views remain
+unverified.
+

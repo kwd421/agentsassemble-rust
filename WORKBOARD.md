@@ -12,8 +12,10 @@
   and actions used by tests are unchanged. Frontend 964, build, architecture and
   diff gates pass. Web login is verified on the real server; chooser, members,
   friends and room settings are verified in a stubbed component preview against
-  a HEAD worktree. Native packaged and signed-in web room views remain unverified
-  (app access not granted during this run). Evidence: `docs/VERIFICATION.md` ->
+  a HEAD worktree. Native packaged views are verified with the fixed
+  `app.agentsassemble.uicheck` identity; that run also fixed the duplicated empty
+  chat line, own messages counted as unread and the settings account heading.
+  Signed-in web room views remain unverified. Evidence: `docs/VERIFICATION.md` ->
   Discord-style frontend pass 2.
 
 - 2026-10-03 shared deletion recovery correction: server-wide web ownership now

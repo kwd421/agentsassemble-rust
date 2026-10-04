@@ -327,3 +327,19 @@ dialog.dc-user-settings-dialog {
     margin: 0 16px 16px;
   }
 }
+
+/* Account blocks rendered inside a section share its heading weight and do not
+   stretch their action across the column. */
+.dc-user-settings-section h4 {
+  margin-bottom: 8px;
+  color: var(--color-text-primary);
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.dc-user-settings-section .dc-guest-recovery-settings > button,
+.dc-user-settings-section .dc-guest-recovery-settings > a {
+  justify-self: start;
+  width: fit-content;
+  margin-top: 8px;
+}

@@ -300,6 +300,39 @@ describe("LobbyView active provider turn", () => {
     expect(scrollIntoView).toHaveBeenCalledTimes(1);
   });
 
+  it("does not count the viewer's own new message as unread", () => {
+    render(
+      <LobbyView
+        activeRoom={room}
+        agents={[]}
+        canonicalEvents={[
+          {
+            id: "read-message",
+            seq: 10,
+            kind: "message",
+            name: "Agent A",
+            message: "이미 읽은 메시지",
+            side: "other",
+            created_at: "2026-07-26T01:00:00Z",
+          },
+          {
+            id: "own-message",
+            seq: 11,
+            kind: "message",
+            name: "Host",
+            message: "다른 기기에서 보낸 내 메시지",
+            side: "mine",
+            created_at: "2026-07-26T01:01:00Z",
+          },
+        ]}
+        canonicalHasMoreHistory={false}
+        headerActions={{ lastReadCursor: "seq:10", onMarkRead: vi.fn() }}
+      />
+    );
+
+    expect(screen.queryByRole("region", { name: "안 읽은 메시지" })).toBeNull();
+  });
+
   it("keeps input status above expandable live thought activity", async () => {
     renderLobby([thought("Bash로 테스트를 실행 중")], [indicator]);
 

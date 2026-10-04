@@ -312,24 +312,21 @@ export default function LobbyView({
     scrollRef,
     onMarkRead: headerActions?.onMarkRead,
   });
-  const firstUnreadEvent = useMemo(
+  // Like Discord, the viewer's own messages (from any device) are never unread.
+  const unreadEvents = useMemo(
     () =>
       headerActions?.onMarkRead
-        ? visibleEvents.find(
-            (event) => Number(event.seq) > lastReadSequence && event.kind !== "thinking"
+        ? visibleEvents.filter(
+            (event) =>
+              Number(event.seq) > lastReadSequence &&
+              event.kind !== "thinking" &&
+              event.side !== "mine"
           )
-        : undefined,
+        : [],
     [headerActions?.onMarkRead, lastReadSequence, visibleEvents]
   );
-  const unreadCount = useMemo(
-    () =>
-      firstUnreadEvent
-        ? visibleEvents.filter(
-            (event) => Number(event.seq) > lastReadSequence && event.kind !== "thinking"
-          ).length
-        : 0,
-    [firstUnreadEvent, lastReadSequence, visibleEvents]
-  );
+  const firstUnreadEvent = unreadEvents[0];
+  const unreadCount = unreadEvents.length;
   function jumpToEvent(eventId: string) {
     const target = Array.from(
       scrollRef.current?.querySelectorAll<HTMLElement>("[data-room-event-id]") || []
@@ -544,9 +541,12 @@ export default function LobbyView({
         {!loaded ? (
           <p className="px-4 text-[13px] text-text-muted">불러오는 중...</p>
         ) : lobbyRows.length === 0 ? (
-          <p className="px-4 text-[13px] text-text-muted preserve-words">
-            아직 채팅 메시지가 없습니다. 첫 메시지를 남겨 보세요.
-          </p>
+          // The channel intro already invites the first message; repeat it only without one.
+          historyWindowActive || hasMoreHistory ? (
+            <p className="px-4 text-[13px] text-text-muted preserve-words">
+              아직 채팅 메시지가 없습니다. 첫 메시지를 남겨 보세요.
+            </p>
+          ) : null
         ) : (
           lobbyRows.map((row) => {
             if (row.type === "divider") {
