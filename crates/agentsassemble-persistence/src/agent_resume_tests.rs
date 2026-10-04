@@ -37,7 +37,7 @@ async fn stopped_resume_reuses_durable_provider_session_and_replays_as_resume() 
         .unwrap_or_else(|error| panic!("authorize resume: {error}"));
     let outcome = store
         .complete_agent_resume(
-            &principal,
+            TrustedPrincipal(&principal),
             "resume-stopped",
             &payload,
             &resume.operation_id,
@@ -89,7 +89,7 @@ async fn start_then_stop(store: &SqliteStore, principal: &AuthenticatedPrincipal
         .unwrap_or_else(|error| panic!("authorize initial start: {error}"));
     store
         .complete_agent_start(
-            principal,
+            TrustedPrincipal(principal),
             "initial-start",
             payload,
             &start.operation_id,
@@ -119,7 +119,7 @@ async fn start_then_stop(store: &SqliteStore, principal: &AuthenticatedPrincipal
         .await
         .unwrap_or_else(|error| panic!("record stop: {error}"));
     store
-        .finalize_agent_stop(principal, "stop-before-resume", payload)
+        .finalize_agent_stop(TrustedPrincipal(principal), "stop-before-resume", payload)
         .await
         .unwrap_or_else(|error| panic!("finalize stop: {error}"));
 }

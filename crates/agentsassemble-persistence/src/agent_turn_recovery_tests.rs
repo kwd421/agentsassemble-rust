@@ -61,7 +61,7 @@ async fn start_fixture_runtime(
         .unwrap_or_else(|error| panic!("authorize recovery start: {error}"));
     store
         .complete_agent_start(
-            principal,
+            TrustedPrincipal(principal),
             request_id,
             &payload,
             &start.operation_id,
@@ -176,7 +176,7 @@ async fn blocking_provider_execution_owns_restart_before_lifecycle_reconciliatio
             .is_empty()
     );
     store
-        .finalize_agent_stop(&principal, "stop-blocking-turn", &payload)
+        .finalize_agent_stop(TrustedPrincipal(&principal), "stop-blocking-turn", &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize blocking-turn stop: {error}"));
 }

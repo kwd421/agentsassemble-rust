@@ -99,6 +99,7 @@ impl SqliteStore {
             let event =
                 resolution_event_in(&mut tx, &principal.room_id, row.get("resolution_event_id"))
                     .await?;
+            authority.record_success(&mut tx).await?;
             tx.commit().await?;
             return Ok(ProviderRequestResolutionCommit {
                 event,
@@ -147,6 +148,7 @@ impl SqliteStore {
             fingerprint,
             resolution: resolution.clone(),
         };
+        authority.record_success(&mut tx).await?;
         tx.commit().await?;
         Ok(ProviderRequestResolutionCommit {
             event,

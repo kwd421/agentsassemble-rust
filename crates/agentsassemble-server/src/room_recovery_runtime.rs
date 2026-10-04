@@ -244,7 +244,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("authorize runtime start: {error}"));
         store
             .complete_agent_start(
-                &principal,
+                agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
                 "start-recovery-publication-agent",
                 &payload,
                 &effect.operation_id,

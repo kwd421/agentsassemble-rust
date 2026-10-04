@@ -254,7 +254,11 @@ async fn startup_repairs_upgraded_quarantine_and_confirmed_stop_receipts() -> Te
                 .await?;
             if stop_stage == 2 {
                 store
-                    .finalize_agent_stop(&principal, "stop", &payload)
+                    .finalize_agent_stop(
+                        crate::RoomMutationAuthority::TrustedPrincipal(&principal),
+                        "stop",
+                        &payload,
+                    )
                     .await?;
             }
         } else {

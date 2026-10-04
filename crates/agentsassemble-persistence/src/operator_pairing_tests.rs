@@ -962,3 +962,6 @@ async fn successful_traffic_recorder_cannot_revive_expired_or_revoked_devices()
     }
     Ok(())
 }
+
+#[path = "operator_activity_tests.rs"]
+mod activity;

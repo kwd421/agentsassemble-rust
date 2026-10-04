@@ -205,7 +205,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         .unwrap_or_else(|error| panic!("authorize start effect: {error}"));
     let outcome = store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-lifecycle",
             &payload,
             &effect.operation_id,
@@ -283,7 +283,7 @@ async fn lifecycle_preserves_provider_identity_and_finalizes_stop_once() {
         AgentStopPlan::Finalize
     ));
     let stopped = store
-        .finalize_agent_stop(&principal, "stop-lifecycle", &payload)
+        .finalize_agent_stop(TrustedPrincipal(&principal), "stop-lifecycle", &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize stop: {error}"));
     assert_eq!(
@@ -328,7 +328,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
     };
     let unowned = store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-without-thread",
             &payload,
             &start.operation_id,
@@ -362,7 +362,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
         .unwrap_or_else(|error| panic!("authorize process-only start: {error}"));
     let invalid = store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-without-thread",
             &payload,
             &start.operation_id,
@@ -383,7 +383,7 @@ async fn provider_process_presence_does_not_imply_a_provider_conversation() {
     ));
     let outcome = store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-without-thread",
             &payload,
             &start.operation_id,
@@ -636,7 +636,7 @@ async fn mark_ambiguous_stop(
         .unwrap_or_else(|error| panic!("authorize start: {error}"));
     store
         .complete_agent_start(
-            principal,
+            TrustedPrincipal(principal),
             "start-before-ambiguous-stop",
             payload,
             &start.operation_id,
@@ -710,7 +710,7 @@ async fn startup_reconciliation_retains_ambiguous_runtime_authority() {
         .unwrap_or_else(|error| panic!("authorize start: {error}"));
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-before-restart",
             &payload,
             &start.operation_id,

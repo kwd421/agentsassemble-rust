@@ -74,7 +74,11 @@ async fn exact_live_stop_releases_its_captured_tombstone_after_commit() {
     ));
     fixture
         .store
-        .finalize_agent_stop(&fixture.principal, "lost-stop-checkpoint", &fixture.payload)
+        .finalize_agent_stop(
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&fixture.principal),
+            "lost-stop-checkpoint",
+            &fixture.payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("finalize exact stop: {error}"));
     let AgentStartPlan::Start(retry) = fixture
@@ -202,7 +206,7 @@ async fn confirmed_absence_fixture(id_suffix: &str) -> ConfirmedAbsenceFixture {
     assert!(failure.runtime_stopped);
     store
         .complete_agent_start(
-            &principal,
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
             &request_id,
             &payload,
             &effect.operation_id,

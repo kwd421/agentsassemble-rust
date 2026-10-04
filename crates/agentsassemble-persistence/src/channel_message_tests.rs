@@ -369,7 +369,7 @@ async fn channel_retirement_closes_history_replay_and_old_identity_reuse_atomica
     let history = checked(
         store
             .room_history_page(
-                &principal,
+                TrustedPrincipal(&principal),
                 RoomHistoryRequest {
                     before_seq: 0,
                     limit: 80,

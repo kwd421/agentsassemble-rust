@@ -154,7 +154,7 @@ async fn started_readd_joins_only_after_exact_effect_and_replays_once()
     };
     let outcome = store
         .complete_agent_launch(
-            &principal,
+            TrustedPrincipal(&principal),
             "readd-start",
             &payload,
             &effect.operation_id,

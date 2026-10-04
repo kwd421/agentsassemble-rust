@@ -399,7 +399,11 @@ async fn normal_confirmed_stop_assigns_the_next_floor_once_with_its_command_resu
         .await
         .unwrap_or_else(|error| panic!("checkpoint normal floor stop: {error}"));
     let finalized = store
-        .finalize_agent_stop(&principal, "normal-stop-floor-owner", &payload)
+        .finalize_agent_stop(
+            TrustedPrincipal(&principal),
+            "normal-stop-floor-owner",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("finalize normal floor stop: {error}"));
     assert_eq!(finalized.assignments.len(), 1);
@@ -408,7 +412,11 @@ async fn normal_confirmed_stop_assigns_the_next_floor_once_with_its_command_resu
         SECOND_AGENT_ID
     );
     let replay = store
-        .finalize_agent_stop(&principal, "normal-stop-floor-owner", &payload)
+        .finalize_agent_stop(
+            TrustedPrincipal(&principal),
+            "normal-stop-floor-owner",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("replay normal floor stop: {error}"));
     assert!(replay.outcome.deduplicated);

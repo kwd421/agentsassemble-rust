@@ -1,5 +1,36 @@
 # Verification Contract
 
+## Atomic room-session device activity — Daybreak M1/L1 (2026-10-05)
+
+Corrections to `7cc8c856`: room-session commands/reads and committed-result retries
+record native device use in their successful transaction before ACK delivery.
+Lifecycle completion retains the originating device provenance while preserving exact
+durable-effect custody; revoked/idle-expired credentials cannot be revived. Pure
+preparatory checks and missing replay results remain read-only. Transport-only
+subscription, Pong, catalog and live delivery retain post-send recording; ACKs do not.
+Side-chat stages at most the existing 200-message window under its owner lock, then
+commits activity before publishing the append. No schema, polling, fallback or gate change.
+Ticket metadata compares actual supplied values: an identical second exchange within
+one minute produces zero UPDATE effects; changed metadata remains writable.
+
+Before implementation, three persistence regressions failed: edit success left use
+unchanged, injected activity-write failure still committed the edit/receipt, and an
+identical metadata exchange produced one UPDATE instead of zero. Retained tests cover
+transaction rollback/retry, room/channel/vote/history/settings, deferred lifecycle
+completion and revocation/expiry, side-chat publication failure, and history completion
+before an ACK can be sent or cancelled. Existing HTTP/ticket/expiry regressions remain.
+
+Validation: affected persistence/server tests passed (708). The single `make verify`
+passed architecture/policy/format, workspace check, frontend 1,001 tests, desktop 46
+and workspace Rust 1,069 tests, then stopped at Clippy: two changed functions exceeded
+100 lines by 2/1. Pending-stop phase resolution and removal-target authorization were
+separated within their existing owners; persistence 400 tests and `make clippy` then
+passed. Final architecture/format/diff checks passed without exceptions. The 31,556,567,040-byte
+build cache exceeded the unchanged 18 GiB gate; after all build/test processes ended,
+the existing artifact maintenance owner cleaned it and `make artifact-check` passed.
+The aggregate `make verify` was not rerun or reported as a clean pass. Deployment,
+signed builds and manual verification were excluded by user instruction.
+
 ## 초대 멤버 중앙 계정 binding — 설계 승인 (2026-10-05)
 
 사용자 제공 승인 이력: Daybreak 6라운드, 설계 5판+보완(H1/H2), 최종 **APPROVE DESIGN 0/0/0/0**. C1은 계약 문서만이며 구현/실행 검증 승인이 아니다.

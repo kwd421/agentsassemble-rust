@@ -381,7 +381,7 @@ async fn deleted_edit_content_is_absent_from_later_public_read_paths() {
         .unwrap_or_else(|error| panic!("snapshot: {error}"));
     let history = store
         .room_history_page(
-            reader,
+            crate::RoomMutationAuthority::TrustedPrincipal(reader),
             agentsassemble_domain::RoomHistoryRequest {
                 before_seq: deleted.event.seq,
                 limit: 200,

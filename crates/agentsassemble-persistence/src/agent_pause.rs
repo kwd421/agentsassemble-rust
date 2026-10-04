@@ -105,6 +105,7 @@ impl SqliteStore {
                     )
                     .await?
                     .ok_or_else(invalid_request_owner)?;
+                    authority.record_success(&mut transaction).await?;
                     transaction.commit().await?;
                     return Ok(AgentResidentPlan::Outcome(Box::new(outcome)));
                 }
@@ -127,6 +128,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentResidentPlan::Outcome(Box::new(outcome)));
         }
@@ -181,6 +183,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(outcome);
         }
@@ -217,6 +220,7 @@ impl SqliteStore {
             events,
         )
         .await?;
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(outcome)
     }
@@ -251,6 +255,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(Some(outcome));
         }
@@ -270,6 +275,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(Some(outcome));
         }
@@ -305,6 +311,7 @@ impl SqliteStore {
             events,
         )
         .await?;
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(Some(outcome))
     }

@@ -70,6 +70,7 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         let current = expected.resolve(&mut transaction).await?;
         let summary = read_vote_summary(&mut transaction, &current, vote_id).await?;
+        expected.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(summary)
     }

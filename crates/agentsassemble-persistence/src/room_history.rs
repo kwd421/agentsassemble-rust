@@ -1,16 +1,16 @@
 use agentsassemble_domain::{
-    AuthenticatedPrincipal, ROOM_HISTORY_MAX_EVENTS, RoomEvent, RoomHistoryPage,
-    RoomHistoryRequest, public_event_for_principal,
+    ROOM_HISTORY_MAX_EVENTS, RoomEvent, RoomHistoryPage, RoomHistoryRequest,
+    public_event_for_principal,
 };
 use sqlx::Row;
 
-use crate::{PersistenceError, SqliteStore, authority::authorize_session};
+use crate::{PersistenceError, RoomMutationAuthority, SqliteStore, authority::authorize_session};
 
 impl SqliteStore {
     /// Reads one current-principal canonical room-history page without mutation admission.
     ///
     /// Authorization, high-water selection, event loading, identity validation, and public
-    /// projection share one `SQLite` read transaction.
+    /// projection share one `SQLite` transaction with successful device-use recording.
     ///
     /// # Errors
     ///
@@ -18,10 +18,12 @@ impl SqliteStore {
     /// failure without returning a partial page.
     pub async fn room_history_page(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request: RoomHistoryRequest,
     ) -> Result<RoomHistoryPage, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
+        let current = authority.resolve(&mut transaction).await?;
+        let principal = current.as_ref();
         authorize_session(&mut transaction, principal).await?;
         if !principal.capabilities.room_history {
             return Err(PersistenceError::CommandRejected {
@@ -82,6 +84,7 @@ impl SqliteStore {
         }
         events.reverse();
         let oldest_seq = events.first().map_or(0, |event| event.seq);
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(RoomHistoryPage {
             events,
@@ -153,7 +156,7 @@ mod tests {
         }
         let newest = store
             .room_history_page(
-                &principal,
+                crate::RoomMutationAuthority::TrustedPrincipal(&principal),
                 RoomHistoryRequest {
                     before_seq: 0,
                     limit: 200,
@@ -170,7 +173,7 @@ mod tests {
 
         let earlier = store
             .room_history_page(
-                &principal,
+                crate::RoomMutationAuthority::TrustedPrincipal(&principal),
                 RoomHistoryRequest {
                     before_seq: newest.oldest_seq,
                     limit: 200,
@@ -225,7 +228,7 @@ mod tests {
 
         let page = store
             .room_history_page(
-                &principal,
+                crate::RoomMutationAuthority::TrustedPrincipal(&principal),
                 RoomHistoryRequest {
                     before_seq: 0,
                     limit: 200,
@@ -256,7 +259,7 @@ mod tests {
         assert!(matches!(
             store
                 .room_history_page(
-                    &denied,
+                    crate::RoomMutationAuthority::TrustedPrincipal(&denied),
                     RoomHistoryRequest {
                         before_seq: 0,
                         limit: 200,

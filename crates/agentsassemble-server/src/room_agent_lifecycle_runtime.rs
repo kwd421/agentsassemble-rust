@@ -263,7 +263,7 @@ async fn complete_agent_start(
     let persisted = persisted_start(started);
     let outcome = store
         .complete_agent_launch(
-            &command.principal,
+            command.mutation_authority(),
             &command.request_id,
             &command.payload,
             &effect.operation_id,
@@ -380,7 +380,11 @@ pub(crate) async fn execute_agent_stop(
         ),
         AgentStopPlan::Finalize => {
             match store
-                .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
+                .finalize_agent_stop(
+                    command.mutation_authority(),
+                    &command.request_id,
+                    &command.payload,
+                )
                 .await
             {
                 Ok(mutation) => CommandExecution::mutation(mutation),
@@ -472,7 +476,11 @@ async fn execute_managed_stop(
         )
         .await;
     match store
-        .finalize_agent_stop(&command.principal, &command.request_id, &command.payload)
+        .finalize_agent_stop(
+            command.mutation_authority(),
+            &command.request_id,
+            &command.payload,
+        )
         .await
     {
         Ok(mutation) => CommandExecution::mutation(mutation),

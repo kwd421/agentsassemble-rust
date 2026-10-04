@@ -390,7 +390,8 @@ where
     send_frame(sender, &state.shutdown, frame).await.ok()?;
     if matches!(
         frame,
-        ServerFrame::Nack(_)
+        ServerFrame::Ack(_)
+            | ServerFrame::Nack(_)
             | ServerFrame::ResyncRequired { .. }
             | ServerFrame::SideChatResyncRequired { .. }
     ) {

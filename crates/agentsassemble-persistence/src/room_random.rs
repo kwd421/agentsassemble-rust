@@ -93,6 +93,7 @@ impl SqliteStore {
             result,
         )
         .await?;
+        authorization.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(outcome)
     }

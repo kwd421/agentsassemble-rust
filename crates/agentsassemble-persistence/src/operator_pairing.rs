@@ -38,6 +38,7 @@ pub(crate) async fn leave_operator_session(
     {
         return Err(PersistenceError::CommandConflict);
     }
+    record_operator_use(tx, &current, Utc::now()).await?;
     sqlx::query("UPDATE operator_pairings SET revoked = 1 WHERE session_fingerprint = ?")
         .bind(current.session_fingerprint().as_slice())
         .execute(&mut **tx)
@@ -556,7 +557,8 @@ pub(crate) async fn record_operator_use(
     expected: &OperatorSessionAuthorization,
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
-    // Caller completed validation and its operation in this same transaction.
+    // Admission or exact durable-effect custody was validated in this transaction.
+    // The UPDATE excludes revoked/idle-expired credentials even during effect completion.
     session_record(tx, expected.session_fingerprint())
         .await?
         .record_use(tx, now)
@@ -692,8 +694,8 @@ impl PairingRecord {
         now: DateTime<Utc>,
     ) -> Result<(), PersistenceError> {
         if self.native_issued() {
-            sqlx::query("UPDATE operator_pairings SET last_connected_at = ? WHERE pairing_id = ? AND (last_connected_at IS NULL OR last_connected_at < ?)")
-                .bind(now.timestamp()).bind(&self.pairing_id).bind(now.timestamp() - ACTIVITY_WRITE_INTERVAL_SECONDS)
+            sqlx::query("UPDATE operator_pairings SET last_connected_at = ? WHERE pairing_id = ? AND revoked = 0 AND last_connected_at > ? AND last_connected_at < ?")
+                .bind(now.timestamp()).bind(&self.pairing_id).bind((now - NATIVE_IDLE_TTL).timestamp()).bind(now.timestamp() - ACTIVITY_WRITE_INTERVAL_SECONDS)
                 .execute(&mut **tx).await?;
         }
         Ok(())

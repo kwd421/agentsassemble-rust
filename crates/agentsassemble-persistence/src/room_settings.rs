@@ -49,6 +49,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authorization.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(outcome);
         }
@@ -115,6 +116,7 @@ impl SqliteStore {
             &outcome.result,
         )
         .await?;
+        authorization.record_success(&mut transaction).await?;
         transaction.commit().await?;
         self.notify_room_directory_changed();
         Ok(outcome)

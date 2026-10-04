@@ -21,7 +21,7 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
     };
     let stale = store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-failed",
             &payload,
             "different-operation",
@@ -81,7 +81,7 @@ async fn stale_completion_fails_closed_and_safe_failure_replays() {
         crate::AgentStopPlan::Finalize
     ));
     let stopped = store
-        .finalize_agent_stop(&principal, stop_request, &payload)
+        .finalize_agent_stop(TrustedPrincipal(&principal), stop_request, &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize failed start: {error}"));
     let replay = store

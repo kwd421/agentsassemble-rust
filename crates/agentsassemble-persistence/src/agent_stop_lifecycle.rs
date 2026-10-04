@@ -67,6 +67,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
@@ -93,6 +94,7 @@ impl SqliteStore {
                 &session.public,
             )
             .await?;
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
@@ -104,24 +106,13 @@ impl SqliteStore {
                 &operation_id,
             )
             .await?;
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentStopPlan::ExternalPending(events));
         }
         crate::room_runtime_cleanup::require_server_custody(&session)?;
         if !lifecycle_intent_is_empty(&session) {
-            require_matching_operation(&session, AgentLifecycleAction::Stop, &operation_id)?;
-            let plan = match session.lifecycle_intent_status {
-                AgentLifecycleIntentStatus::EffectApplied => AgentStopPlan::Finalize,
-                AgentLifecycleIntentStatus::Prepared => AgentStopPlan::Stop(stop_effect(&session)?),
-                AgentLifecycleIntentStatus::EffectInflight
-                | AgentLifecycleIntentStatus::Unconfirmed => return Err(unresolved_effect()),
-                AgentLifecycleIntentStatus::None => {
-                    return Err(rejected(
-                        "invalid_state",
-                        "Stored provider stop intent is invalid.",
-                    ));
-                }
-            };
+            let plan = pending_stop_plan(&session, &operation_id)?;
             transaction.commit().await?;
             return Ok(plan);
         }
@@ -313,10 +304,11 @@ impl SqliteStore {
     /// Returns a stale-effect rejection or persistence failure.
     pub async fn finalize_agent_stop(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
     ) -> Result<RoomCommandMutation, PersistenceError> {
+        let principal = authority.principal();
         let payload_hash = canonical_payload_hash(payload);
         let mut transaction = self.pool.begin().await?;
         active_room_for_principal(&mut transaction, principal).await?;
@@ -330,6 +322,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(RoomCommandMutation {
                 outcome,
@@ -341,11 +334,30 @@ impl SqliteStore {
             finalize_stop_in(&mut transaction, principal, request_id, payload).await?;
         let scheduled = assign_pending_in(&mut transaction, &room, &settings).await?;
         outcome.events.extend(scheduled.events);
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(RoomCommandMutation {
             outcome,
             assignments: scheduled.next_assignments,
         })
+    }
+}
+
+fn pending_stop_plan(
+    session: &DurableAgentSession,
+    operation_id: &str,
+) -> Result<AgentStopPlan, PersistenceError> {
+    require_matching_operation(session, AgentLifecycleAction::Stop, operation_id)?;
+    match session.lifecycle_intent_status {
+        AgentLifecycleIntentStatus::EffectApplied => Ok(AgentStopPlan::Finalize),
+        AgentLifecycleIntentStatus::Prepared => Ok(AgentStopPlan::Stop(stop_effect(session)?)),
+        AgentLifecycleIntentStatus::EffectInflight | AgentLifecycleIntentStatus::Unconfirmed => {
+            Err(unresolved_effect())
+        }
+        AgentLifecycleIntentStatus::None => Err(rejected(
+            "invalid_state",
+            "Stored provider stop intent is invalid.",
+        )),
     }
 }
 

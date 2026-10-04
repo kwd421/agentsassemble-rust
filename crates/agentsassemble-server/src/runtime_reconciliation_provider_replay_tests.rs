@@ -208,7 +208,7 @@ async fn stage_live_scan_fixture() -> LiveScanFixture {
         .unwrap_or_else(|error| panic!("authorize staged runtime: {error}"));
     store
         .complete_agent_start(
-            &principal,
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
             "stage-live-provider",
             &payload,
             &effect.operation_id,

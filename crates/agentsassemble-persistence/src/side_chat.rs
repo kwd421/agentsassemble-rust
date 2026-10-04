@@ -26,6 +26,7 @@ impl SideChatRepository {
     }
 }
 
+#[derive(Clone)]
 struct SideChatRoom {
     generation: Uuid,
     latest_seq: i64,
@@ -34,6 +35,7 @@ struct SideChatRoom {
     updates: broadcast::Sender<SideChatUpdate>,
 }
 
+#[derive(Clone)]
 struct RetainedMessage {
     principal_id: String,
     request_id: String,
@@ -189,7 +191,7 @@ impl SqliteStore {
     ///
     /// # Errors
     /// Rejects read-only/muted/non-human callers, stale generations, conflicting retries
-    /// or an expired retry horizon. A read-transaction completion failure remains unresolved.
+    /// or an expired retry horizon. Activity commit failure never publishes the staged append.
     pub async fn execute_side_chat(
         &self,
         authority: RoomMutationAuthority<'_>,
@@ -200,28 +202,33 @@ impl SqliteStore {
         let request = SideChatSend::from_payload(payload).map_err(rejection)?;
         let mut tx = self.pool.begin().await?;
         let (room_uid, principal, participant) = human_authority(&mut tx, authority, true).await?;
-        let outcome = {
-            let mut rooms = self.side_chat.rooms.lock().await;
-            let room = rooms.entry(room_uid).or_default();
-            room.prune(now);
-            append(
-                room,
-                &principal,
-                &participant,
-                request_id,
-                payload,
-                request,
-                now,
-            )?
-        };
-        // This transaction only read authority. The commit point was the in-memory
-        // append; a lost connection here cannot undo it, and its exact receipt survives.
+        let mut rooms = self.side_chat.rooms.lock().await;
+        let room = rooms.entry(room_uid).or_default();
+        // Stage the bounded ephemeral window while holding its owner lock. Neither
+        // readers nor live subscribers see it if the activity transaction fails.
+        let mut staged = room.clone();
+        staged.prune(now);
+        let outcome = append(
+            &mut staged,
+            &principal,
+            &participant,
+            request_id,
+            payload,
+            request,
+            now,
+        )?;
+        authority.record_success(&mut tx).await?;
         tx.commit()
             .await
             .map_err(|_| PersistenceError::CommandUnresolved {
                 code: "side_chat_result_uncertain".into(),
                 message: "The side-chat result is uncertain; retry the same request.".to_owned(),
             })?;
+        *room = staged;
+        if !outcome.deduplicated {
+            // No listeners is normal; later bootstrap reads the same memory owner.
+            let _ = room.updates.send(outcome.update.clone());
+        }
         Ok(outcome)
     }
 }
@@ -281,8 +288,6 @@ fn append(
         retained_after_seq: room.retained_after_seq,
         message,
     };
-    // No listeners is normal; a later bootstrap reads the same memory owner.
-    let _ = room.updates.send(update.clone());
     Ok(SideChatCommit {
         update,
         deduplicated: false,

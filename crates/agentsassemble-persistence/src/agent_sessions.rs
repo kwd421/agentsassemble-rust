@@ -39,6 +39,9 @@ impl SqliteStore {
             &payload_hash,
         )
         .await?;
+        if outcome.is_some() {
+            authority.record_success(&mut transaction).await?;
+        }
         transaction.commit().await?;
         Ok(outcome)
     }
@@ -72,6 +75,9 @@ impl SqliteStore {
                 &payload_hash,
             )
             .await?;
+            if outcome.is_some() {
+                authority.record_success(&mut transaction).await?;
+            }
             transaction.commit().await?;
             if let Some(outcome) = outcome {
                 return Ok(outcome);
@@ -94,6 +100,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(outcome);
         }
@@ -109,6 +116,7 @@ impl SqliteStore {
             records.committed_events,
         )
         .await?;
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(outcome)
     }

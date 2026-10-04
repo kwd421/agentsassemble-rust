@@ -30,7 +30,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
     .await;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "first-start",
             &payload,
             &first_start.operation_id,
@@ -63,7 +63,11 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
         .await
         .unwrap_or_else(|error| panic!("record stop: {error}"));
     store
-        .finalize_agent_stop(&principal, "stop-between-starts", &payload)
+        .finalize_agent_stop(
+            TrustedPrincipal(&principal),
+            "stop-between-starts",
+            &payload,
+        )
         .await
         .unwrap_or_else(|error| panic!("finalize stop: {error}"));
     let AgentStartPlan::Start(restart) = store
@@ -84,7 +88,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
     .await;
     let mismatch = store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "restart",
             &payload,
             &restart.operation_id,
@@ -97,7 +101,7 @@ async fn provider_session_reuse_requires_exact_durable_identity() {
     ));
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "restart",
             &payload,
             &restart.operation_id,

@@ -182,6 +182,7 @@ impl SqliteStore {
         let current = authorization.resolve(&mut transaction).await?;
         let mutation =
             execute_message_in(&mut transaction, &current, request_id, action, payload).await?;
+        authorization.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(mutation)
     }

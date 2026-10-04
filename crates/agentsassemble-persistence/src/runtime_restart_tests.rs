@@ -189,7 +189,7 @@ async fn start_local_fixture(
         .await?;
     store
         .complete_agent_start(
-            principal,
+            crate::RoomMutationAuthority::TrustedPrincipal(principal),
             "fixture-start",
             &payload,
             &effect.operation_id,

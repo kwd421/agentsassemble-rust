@@ -34,7 +34,7 @@ async fn archive_after_confirmed_shutdown_and_reopen_can_finish_cleanup()
         .await?;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-before-shutdown",
             &payload,
             &start.operation_id,

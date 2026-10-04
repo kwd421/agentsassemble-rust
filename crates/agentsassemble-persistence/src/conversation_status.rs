@@ -20,6 +20,7 @@ impl SqliteStore {
             });
         }
         let status = read_in(&mut tx, &principal, before_seq).await?;
+        authority.record_success(&mut tx).await?;
         tx.commit().await?;
         Ok(status)
     }

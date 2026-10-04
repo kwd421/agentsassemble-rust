@@ -48,11 +48,11 @@ pub(crate) async fn read_history_frame(
             },
         ));
     }
+    let authority = room_session.map_or(
+        RoomMutationAuthority::TrustedPrincipal(principal),
+        RoomSessionAuthorization::mutation_authority,
+    );
     if let Some(channel_id) = channel_id {
-        let authority = room_session.map_or(
-            RoomMutationAuthority::TrustedPrincipal(principal),
-            RoomSessionAuthorization::mutation_authority,
-        );
         let page = store
             .channel_history_page(authority, &channel_id, request)
             .await
@@ -62,7 +62,7 @@ pub(crate) async fn read_history_frame(
         });
     }
     let page = store
-        .room_history_page(principal, request)
+        .room_history_page(authority, request)
         .await
         .map_err(CommandFailure::transactional)?;
     fit_history_ack(request_id, &page)

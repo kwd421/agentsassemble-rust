@@ -48,6 +48,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut tx).await?;
             tx.commit().await?;
             return Ok(outcome);
         }
@@ -75,6 +76,7 @@ impl SqliteStore {
             &result,
         )
         .await?;
+        authority.record_success(&mut tx).await?;
         tx.commit().await?;
         Ok(CommandOutcome {
             result,
@@ -141,6 +143,7 @@ impl SqliteStore {
         events.reverse();
         let oldest_seq = events.first().map_or(0, |event| event.seq);
         let room_id = principal.room_id.clone();
+        authority.record_success(&mut tx).await?;
         tx.commit().await?;
         Ok(ChannelHistoryPage {
             room_id,

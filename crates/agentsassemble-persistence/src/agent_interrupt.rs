@@ -70,6 +70,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentInterruptPlan::Outcome(Box::new(outcome)));
         }
@@ -114,6 +115,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentInterruptMutation {
                 outcome,
@@ -148,6 +150,7 @@ impl SqliteStore {
             events,
         )
         .await?;
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(AgentInterruptMutation {
             outcome,

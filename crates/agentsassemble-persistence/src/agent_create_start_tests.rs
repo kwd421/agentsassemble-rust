@@ -237,7 +237,7 @@ async fn create_start_first_commit_replays_one_intent_and_preserves_result_shape
 
     let commit = store
         .complete_agent_create_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "create-start-1",
             &payload,
             &first.operation_id,
@@ -595,4 +595,143 @@ async fn paired_create_start_rechecks_session_before_replay_and_provider_authori
             Some(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"session_revoked")
         ));
     }
+}
+
+#[tokio::test]
+async fn paired_completion_records_atomically_without_reviving_ended_devices()
+-> Result<(), Box<dyn std::error::Error>> {
+    for ended in ["live", "revoked", "expired"] {
+        let (store, principal, directory) = fixture().await;
+        let manager = store
+            .authorize_local_room_manager(
+                &principal.room_id,
+                &principal.principal_id,
+                &principal.participant_id,
+            )
+            .await?;
+        let now = chrono::Utc::now();
+        let origin = "https://activity.test";
+        let grant = store
+            .create_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager.clone()),
+                &[81; 32],
+                origin,
+                now,
+            )
+            .await?;
+        let paired = store
+            .redeem_operator_pairing(&[81; 32], &[82; 32], origin, now)
+            .await?;
+        let authority = crate::RoomMutationAuthority::OperatorSession(&paired.authorization);
+        let payload = json!({"start":true,"provider_id":"codex"});
+        let AgentCreateStartPlan::Start(effect) = store
+            .prepare_agent_create_start(
+                authority,
+                "activity-start",
+                &payload,
+                &draft(directory.path()),
+            )
+            .await?
+        else {
+            panic!("start effect")
+        };
+        let started = started();
+        store
+            .authorize_agent_create_start_effect(
+                authority,
+                "activity-start",
+                &payload,
+                &effect.operation_id,
+                (
+                    &started.runtime_handle_id,
+                    &started.runtime_owner_id,
+                    &started.runtime_lease_token,
+                ),
+            )
+            .await?;
+        let old = (now
+            - if ended == "expired" {
+                chrono::Duration::days(31)
+            } else {
+                chrono::Duration::minutes(2)
+            })
+        .timestamp();
+        sqlx::query("UPDATE operator_pairings SET last_connected_at = ?")
+            .bind(old)
+            .execute(&store.pool)
+            .await?;
+        if ended == "revoked" {
+            store
+                .revoke_operator_pairing(
+                    &crate::RoomManagerAuthority::Local(manager),
+                    grant.pairing_id,
+                )
+                .await?;
+        }
+        assert_completion_activity(
+            &store,
+            authority,
+            &effect.operation_id,
+            &started,
+            &payload,
+            ended,
+            old,
+        )
+        .await?;
+    }
+    Ok(())
+}
+
+async fn assert_completion_activity(
+    store: &SqliteStore,
+    authority: crate::RoomMutationAuthority<'_>,
+    operation_id: &str,
+    started: &AgentRuntimeStarted,
+    payload: &Value,
+    ended: &str,
+    old: i64,
+) -> Result<(), Box<dyn std::error::Error>> {
+    if ended == "live" {
+        sqlx::query("CREATE TRIGGER fail_activity BEFORE UPDATE OF last_connected_at ON operator_pairings BEGIN SELECT RAISE(ABORT, 'activity write failed'); END").execute(&store.pool).await?;
+        assert!(
+            store
+                .complete_agent_create_start(
+                    authority,
+                    "activity-start",
+                    payload,
+                    operation_id,
+                    started
+                )
+                .await
+                .is_err()
+        );
+        sqlx::query("DROP TRIGGER fail_activity")
+            .execute(&store.pool)
+            .await?;
+    }
+    for retry in [false, true] {
+        sqlx::query("UPDATE operator_pairings SET last_connected_at = ?")
+            .bind(old)
+            .execute(&store.pool)
+            .await?;
+        let commit = store
+            .complete_agent_create_start(
+                authority,
+                "activity-start",
+                payload,
+                operation_id,
+                started,
+            )
+            .await?;
+        assert_eq!(commit.outcome.deduplicated, retry);
+        let used: i64 = sqlx::query_scalar("SELECT last_connected_at FROM operator_pairings")
+            .fetch_one(&store.pool)
+            .await?;
+        if ended == "live" {
+            assert!(used > old);
+        } else {
+            assert_eq!(used, old);
+        }
+    }
+    Ok(())
 }

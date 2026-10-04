@@ -45,19 +45,7 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         let principal = &authorization.resolve(&mut transaction).await?;
         let (status, event_type) = removal_action(action)?;
-        let target_id = removal_target(payload)?;
-        if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.room_manage {
-            return Err(rejected(
-                "permission_denied",
-                "Room moderation permission is required.",
-            ));
-        }
-        if target_id == LOCAL_OPERATOR_PARTICIPANT_ID {
-            return Err(rejected(
-                "owner_removal_denied",
-                "The local room owner cannot be removed.",
-            ));
-        }
+        let target_id = authorized_removal_target(principal, payload)?;
         active_room_for_principal(&mut transaction, principal).await?;
         let payload_hash = canonical_payload_hash(payload);
         if let Some(outcome) = admit_non_lifecycle_command(
@@ -71,6 +59,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authorization.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(ParticipantRemovalMutation {
                 outcome,
@@ -133,6 +122,7 @@ impl SqliteStore {
             events,
         )
         .await?;
+        authorization.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(ParticipantRemovalMutation {
             outcome,
@@ -173,7 +163,10 @@ fn removal_action(action: &str) -> Result<(ParticipantStatus, &'static str), Per
     }
 }
 
-fn removal_target(payload: &Value) -> Result<String, PersistenceError> {
+fn authorized_removal_target(
+    principal: &AuthenticatedPrincipal,
+    payload: &Value,
+) -> Result<String, PersistenceError> {
     let Some(fields) = payload.as_object() else {
         return Err(rejected(
             "bad_request",
@@ -187,6 +180,18 @@ fn removal_target(payload: &Value) -> Result<String, PersistenceError> {
         return Err(rejected(
             "bad_request",
             "Participant removal requires one exact participant_id.",
+        ));
+    }
+    if principal.client_kind == ClientKind::AgentBridge || !principal.capabilities.room_manage {
+        return Err(rejected(
+            "permission_denied",
+            "Room moderation permission is required.",
+        ));
+    }
+    if target == LOCAL_OPERATOR_PARTICIPANT_ID {
+        return Err(rejected(
+            "owner_removal_denied",
+            "The local room owner cannot be removed.",
         ));
     }
     Ok(target.to_owned())

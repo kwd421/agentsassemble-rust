@@ -62,7 +62,7 @@ async fn restart_rejects_a_pre_effect_stop_without_claiming_runtime_shutdown() {
     authorize_start(&store, &principal, &payload, &start).await;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-before-prepared-stop",
             &payload,
             &start.operation_id,
@@ -157,7 +157,7 @@ async fn refused_prepared_stop_releases_only_its_intent_and_preserves_live_runti
     authorize_start(&store, &principal, &payload, &start).await;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-before-prepared-stop",
             &payload,
             &start.operation_id,
@@ -219,7 +219,7 @@ async fn refused_prepared_stop_releases_only_its_intent_and_preserves_live_runti
         .await
         .unwrap_or_else(|error| panic!("record exact stop: {error}"));
     store
-        .finalize_agent_stop(&principal, "fresh-stop", &payload)
+        .finalize_agent_stop(TrustedPrincipal(&principal), "fresh-stop", &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize exact stop: {error}"));
 }

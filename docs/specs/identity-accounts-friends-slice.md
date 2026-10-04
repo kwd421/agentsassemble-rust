@@ -1336,3 +1336,21 @@ minute; metadata changes remain explicit. No polling, schema change or fallback.
 Regression tests must fail before correction, then cover rejected and successful HTTP,
 tickets and frames plus unchanged expiry/revocation. Only affected crate tests during
 work, one make verify before one commit/push; no deployment, signed build or manual QA.
+
+### Atomic device activity correction (Daybreak M1/L1, 2026-10-05)
+
+Room-session commands and reads (including committed-result retries) record native
+operator use before committing their successful persistence transaction. Message,
+channel, settings, participant, agent lifecycle, random/vote, history, provider
+response and side-chat entry points retain exact session authority. A failed activity
+write must roll back durable command state and its receipt; ACK transmission or
+socket cancellation cannot own this write. Preparatory validation alone is not use.
+Deferred external effects retain their originating device through completion without
+reviving revoked/idle-expired credentials or discarding durable effect custody.
+Post-send recording remains for subscription, Pong, catalog and live-event delivery,
+not command ACKs. Existing revocation, expiry and failure/retry semantics remain.
+Ticket metadata writes occur only for stale activity or actually changed supplied
+fields; identical metadata within one minute affects zero rows. Regressions must
+fail on the prior code and cover rollback, successful retry/read, and metadata write
+counts. One commit/push, affected crate tests, then one make verify; no deployment,
+signed build, manual verification, or changes to .agents/ and scripts/__pycache__/.

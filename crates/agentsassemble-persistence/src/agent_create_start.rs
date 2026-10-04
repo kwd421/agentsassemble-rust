@@ -80,6 +80,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentCreateStartPlan::Outcome(Box::new(outcome)));
         }
@@ -127,6 +128,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentCreateStartPlan::Outcome(Box::new(outcome)));
         }
@@ -173,6 +175,7 @@ impl SqliteStore {
             newly_committed_events,
             prepared_result_json,
         };
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(AgentCreateStartPlan::Start(Box::new(effect)))
     }
@@ -244,12 +247,13 @@ impl SqliteStore {
     /// Returns stale-effect, request-conflict, authority, or persistence failures.
     pub async fn complete_agent_create_start(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
         started: &AgentRuntimeStarted,
     ) -> Result<AgentCreateStartCommit, PersistenceError> {
+        let principal = authority.principal();
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, CREATE);
         if operation_id != expected_operation_id {
@@ -270,6 +274,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentCreateStartCommit {
                 outcome,
@@ -324,14 +329,11 @@ impl SqliteStore {
         let launch_events =
             append_launch_events(&mut transaction, principal, &session, &participant, joined)
                 .await?;
-        prepared_result["start"] = launch_result(&session, started.runtime_reused, &launch_events);
-        let mut committed_events = prepared_events(&prepared_result)?;
-        committed_events.extend(launch_events.clone());
-        prepared_result["events"] = serde_json::to_value(&committed_events)?;
-        prepared_result["event"] = serde_json::to_value(committed_events.last())?;
-        prepared_result["event_seq"] = committed_events
-            .last()
-            .map_or(Value::Null, |event| Value::from(event.seq));
+        let committed_events = complete_creation_result(
+            &mut prepared_result,
+            launch_result(&session, started.runtime_reused, &launch_events),
+            &launch_events,
+        )?;
         let outcome = store_result(
             &mut transaction,
             principal,
@@ -342,6 +344,7 @@ impl SqliteStore {
             committed_events.clone(),
         )
         .await?;
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(AgentCreateStartCommit {
             outcome,
@@ -538,6 +541,23 @@ fn validate_prepared_result(result: &Value, session_id: &str) -> Result<(), Pers
             "Prepared create result is inconsistent with its Agent Session.",
         ))
     }
+}
+
+// Keep the original creation projection and its nested launch result in one receipt.
+fn complete_creation_result(
+    result: &mut Value,
+    start: Value,
+    launch_events: &[RoomEvent],
+) -> Result<Vec<RoomEvent>, PersistenceError> {
+    let mut events = prepared_events(result)?;
+    events.extend_from_slice(launch_events);
+    result["start"] = start;
+    result["events"] = serde_json::to_value(&events)?;
+    result["event"] = serde_json::to_value(events.last())?;
+    result["event_seq"] = events
+        .last()
+        .map_or(Value::Null, |event| Value::from(event.seq));
+    Ok(events)
 }
 
 fn prepared_events(result: &Value) -> Result<Vec<RoomEvent>, PersistenceError> {

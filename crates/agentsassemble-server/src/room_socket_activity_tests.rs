@@ -48,7 +48,7 @@ async fn native_fixture()
 }
 
 #[tokio::test]
-async fn nack_only_established_traffic_is_read_only_and_ack_pong_refresh()
+async fn only_transport_success_records_activity_after_send()
 -> Result<(), Box<dyn std::error::Error>> {
     for frame in [
         ServerFrame::Pong {
@@ -120,14 +120,51 @@ async fn nack_only_established_traffic_is_read_only_and_ack_pong_refresh()
                 .await
                 .is_some()
         );
-        assert!(
-            store
-                .owner_device_sessions(&ServerOwnerAuthority::LocalOperator)
-                .await?[0]
-                .last_connected_at
-                > Some(old)
-        );
+        let recorded = store
+            .owner_device_sessions(&ServerOwnerAuthority::LocalOperator)
+            .await?[0]
+            .last_connected_at;
+        if matches!(frame, ServerFrame::Ack(_)) {
+            assert_eq!(
+                recorded,
+                Some(old),
+                "ACK must not own a second activity transaction"
+            );
+        } else {
+            assert!(recorded > Some(old));
+        }
         state.rooms.shutdown().await?;
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn history_command_records_before_ack_can_be_cancelled()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (state, session, old) = native_fixture().await?;
+    let room_uid = state.store.snapshot("general", 0, 1).await?.room.room_uid;
+    let frame = crate::room_socket_direct::command_frame(
+        &state,
+        session.principal(),
+        room_uid,
+        Some(&session),
+        "758fc907-4477-45ab-a3b5-4aab092e051b",
+        agentsassemble_protocol::RoomAction::RoomHistory,
+        &json!({"before_seq":0,"limit":50}),
+    )
+    .await
+    .ok_or("history not dispatched")?
+    .map_err(|failure| failure.error)?;
+    assert!(matches!(frame, ServerFrame::Ack(_)));
+    // No sink or post-send recorder runs: dropping the response cannot lose use.
+    assert!(
+        state
+            .store
+            .owner_device_sessions(&ServerOwnerAuthority::LocalOperator)
+            .await?[0]
+            .last_connected_at
+            > Some(old)
+    );
+    state.rooms.shutdown().await?;
     Ok(())
 }

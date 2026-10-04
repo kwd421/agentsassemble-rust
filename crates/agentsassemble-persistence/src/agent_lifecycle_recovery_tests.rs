@@ -103,7 +103,7 @@ async fn live_looking_start_requires_supervisor_confirmation_before_success() {
     .await;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "first-observed-start",
             &payload,
             &first.operation_id,
@@ -276,7 +276,7 @@ async fn runtime_reconciliation_uses_exact_cas_and_gone_stop_finalizes_without_r
     .await;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-before-observation",
             &payload,
             &start.operation_id,
@@ -503,7 +503,7 @@ async fn start_completion_derives_its_request_operation_binding() {
     assert!(matches!(
         store
             .complete_agent_start(
-                &principal,
+                TrustedPrincipal(&principal),
                 "substituted-request",
                 &payload,
                 &start.operation_id,
@@ -523,7 +523,7 @@ async fn start_completion_derives_its_request_operation_binding() {
     .await;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "owned-request",
             &payload,
             &start.operation_id,
@@ -570,7 +570,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
     .await;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "owned-start",
             &payload,
             &start.operation_id,
@@ -616,7 +616,7 @@ async fn only_the_originating_operation_can_resume_or_replace_an_intent() {
         .unwrap_or_else(|error| panic!("record owned stop: {error}"));
     assert!(matches!(
         store
-            .finalize_agent_stop(&principal, "different-stop", &payload)
+            .finalize_agent_stop(TrustedPrincipal(&principal), "different-stop", &payload)
             .await,
         Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"stale_stop_confirmation")
     ));
@@ -651,7 +651,7 @@ async fn confirmed_stop_checkpoint_survives_restart_and_finalizes_without_an_eff
     .await;
     store
         .complete_agent_start(
-            &principal,
+            TrustedPrincipal(&principal),
             "start-before-stop",
             &payload,
             &start.operation_id,

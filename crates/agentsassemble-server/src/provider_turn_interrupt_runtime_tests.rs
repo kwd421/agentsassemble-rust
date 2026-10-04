@@ -129,7 +129,7 @@ async fn stage_pre_slot_interrupt() -> PreSlotFixture {
         .unwrap_or_else(|error| panic!("authorize pre-slot runtime: {error}"));
     store
         .complete_agent_start(
-            &principal,
+            agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal(&principal),
             "start-pre-slot-interrupt-agent",
             &payload,
             &start.operation_id,

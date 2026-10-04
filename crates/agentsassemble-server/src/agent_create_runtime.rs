@@ -160,7 +160,7 @@ async fn execute_agent_create_start(
         Ok(started) => {
             complete_created_agent_start(
                 store,
-                principal,
+                command.mutation_authority(),
                 request_id,
                 payload,
                 &authorized,
@@ -279,7 +279,7 @@ async fn fail_created_agent_start_before_effect(
 
 async fn complete_created_agent_start(
     store: &SqliteStore,
-    principal: &AuthenticatedPrincipal,
+    authority: agentsassemble_persistence::RoomMutationAuthority<'_>,
     request_id: &str,
     payload: &Value,
     effect: &AgentCreateStartEffect,
@@ -287,7 +287,7 @@ async fn complete_created_agent_start(
 ) -> Result<AgentCreateExecution, CommandFailure> {
     let commit = store
         .complete_agent_create_start(
-            principal,
+            authority,
             request_id,
             payload,
             &effect.operation_id,

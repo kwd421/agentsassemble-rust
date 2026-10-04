@@ -131,7 +131,7 @@ async fn runtime_gone_checkpoint_yields_to_an_inflight_stop_owner() {
         .await
         .unwrap_or_else(|error| panic!("replay checkpointed stop confirmation: {error}"));
     let finalized = store
-        .finalize_agent_stop(&principal, "stop-gone-owner", &payload)
+        .finalize_agent_stop(TrustedPrincipal(&principal), "stop-gone-owner", &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize stop-race owner: {error}"));
     assert_eq!(finalized.assignments.len(), 1);
@@ -272,7 +272,7 @@ async fn a_failed_session_whose_runtime_is_gone_can_still_be_stopped() {
         .unwrap_or_else(|error| panic!("prepare stop: {error}"));
     assert!(matches!(plan, crate::AgentStopPlan::Finalize));
     store
-        .finalize_agent_stop(&principal, "stop-stranded", &payload)
+        .finalize_agent_stop(TrustedPrincipal(&principal), "stop-stranded", &payload)
         .await
         .unwrap_or_else(|error| panic!("finalize: {error}"));
     let stored = stored_session(&store).await;
@@ -336,7 +336,7 @@ async fn failed_turn_stop_uses_confirmed_exit_but_never_skips_retained_runtime()
         }
         assert!(matches!(plan, crate::AgentStopPlan::Finalize));
         let stopped = store
-            .finalize_agent_stop(&principal, "stop-failed", &payload)
+            .finalize_agent_stop(TrustedPrincipal(&principal), "stop-failed", &payload)
             .await
             .unwrap_or_else(|error| panic!("finalize: {error}"));
         let stored = stored_session(&store).await;

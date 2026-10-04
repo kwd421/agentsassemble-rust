@@ -50,7 +50,7 @@ async fn stop(
         .await
         .unwrap_or_else(|error| panic!("test operation: {error}"));
     store
-        .finalize_agent_stop(principal, "stop", &payload)
+        .finalize_agent_stop(TrustedPrincipal(principal), "stop", &payload)
         .await
         .unwrap_or_else(|error| panic!("test operation: {error}"))
 }
@@ -177,7 +177,11 @@ async fn ordered_confirmed_stop_hands_off_ordinary_but_preserves_addressed_input
         assert_eq!(session.pending_inputs.len(), usize::from(addressed));
         assert!(session.public.active_turn_id.is_empty());
         let replay = store
-            .finalize_agent_stop(&principal, "stop", &json!({"agent_id": start.session_id}))
+            .finalize_agent_stop(
+                TrustedPrincipal(&principal),
+                "stop",
+                &json!({"agent_id": start.session_id}),
+            )
             .await
             .unwrap_or_else(|error| panic!("test operation: {error}"));
         assert!(replay.assignments.is_empty());
@@ -382,7 +386,13 @@ async fn resume_stopped(
         )
         .await?;
     store
-        .complete_agent_resume(principal, "resume", payload, &resume.operation_id, &runtime)
+        .complete_agent_resume(
+            TrustedPrincipal(principal),
+            "resume",
+            payload,
+            &resume.operation_id,
+            &runtime,
+        )
         .await?;
     Ok(())
 }

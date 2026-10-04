@@ -2,8 +2,8 @@ use crate::participant_rows::save_participant_exact as save_participant;
 use crate::room_runtime_cleanup::load_launch_session;
 use agentsassemble_domain::{
     AgentLifecycleAction, AgentLifecycleIntentStatus, AgentRuntimeStatus, AgentSessionStatus,
-    AuthenticatedPrincipal, CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant,
-    ParticipantStatus, RoomEvent, canonical_payload_hash,
+    CURRENT_RUNTIME_PROFILE_VERSION, DurableAgentSession, Participant, ParticipantStatus,
+    RoomEvent, canonical_payload_hash,
 };
 use chrono::Utc;
 use serde_json::Value;
@@ -131,6 +131,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentStartPlan::Outcome(Box::new(outcome)));
         }
@@ -195,6 +196,7 @@ impl SqliteStore {
                 &mut participant,
             )
             .await?;
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(AgentStartPlan::Outcome(Box::new(outcome)));
         }
@@ -216,13 +218,13 @@ impl SqliteStore {
     /// Returns a stale-effect rejection or persistence failure.
     pub async fn complete_agent_start(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
         started: &AgentRuntimeStarted,
     ) -> Result<CommandOutcome, PersistenceError> {
-        self.complete_agent_launch(principal, request_id, payload, operation_id, started, START)
+        self.complete_agent_launch(authority, request_id, payload, operation_id, started, START)
             .await
     }
 
@@ -233,14 +235,14 @@ impl SqliteStore {
     /// Returns a stale-effect rejection or persistence failure.
     pub async fn complete_agent_resume(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
         started: &AgentRuntimeStarted,
     ) -> Result<CommandOutcome, PersistenceError> {
         self.complete_agent_launch(
-            principal,
+            authority,
             request_id,
             payload,
             operation_id,
@@ -256,13 +258,14 @@ impl SqliteStore {
     /// Returns malformed payload, stale effect, authority or storage failures.
     pub async fn complete_agent_launch(
         &self,
-        principal: &AuthenticatedPrincipal,
+        authority: RoomMutationAuthority<'_>,
         request_id: &str,
         payload: &Value,
         operation_id: &str,
         started: &AgentRuntimeStarted,
         command_action: &'static str,
     ) -> Result<CommandOutcome, PersistenceError> {
+        let principal = authority.principal();
         let (agent_id, _) = launch_payload(payload, command_action)?;
         let payload_hash = canonical_payload_hash(payload);
         let expected_operation_id = lifecycle_operation_id(principal, request_id, command_action);
@@ -284,6 +287,7 @@ impl SqliteStore {
         )
         .await?
         {
+            authority.record_success(&mut transaction).await?;
             transaction.commit().await?;
             return Ok(outcome);
         }
@@ -332,6 +336,7 @@ impl SqliteStore {
             command_action,
         )
         .await?;
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(outcome)
     }
