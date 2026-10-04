@@ -31,3 +31,11 @@
   border-radius: 1px;
   background: rgba(78, 80, 88, 0.48);
 }
+
+.dc-server-btn[data-connection-state="central-unconfirmed"],
+.dc-server-btn[data-connection-state="connecting"] {
+  opacity: 0.5;
+}
+.dc-server-btn[data-connection-state="connecting"] .dc-server-connection-dot {
+  background: #e9b949;
+}

@@ -1,0 +1,11 @@
+.dc-connection-banner {
+  position: fixed;
+  inset: 0 0 auto;
+  z-index: 450;
+  padding: 6px 24px;
+  background: #55432b;
+  color: #fff0d3;
+  font-size: 12px;
+  line-height: 20px;
+  text-align: center;
+}

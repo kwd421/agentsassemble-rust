@@ -25,7 +25,7 @@ it("matches the local installation by ID, opens it explicitly and keeps rename",
   const openLocal = vi.fn().mockResolvedValue(undefined);
   function Harness() {
     const [servers, setServers] = useState([host]);
-    return <CentralServerList servers={servers} busy={false} localHost={{ server_id: host.server_id, host_name: "Different computer name", host_os: "macos" }} onOpenLocal={openLocal} onOpen={async () => { throw new Error("offline host must not open"); }} onRefresh={async () => { setServers([{ ...host, alias: "내 서버" }]); }} />;
+    return <CentralServerList servers={servers} liveServers={servers} busy={false} localHost={{ server_id: host.server_id, host_name: "Different computer name", host_os: "macos" }} onOpenLocal={openLocal} onOpen={async () => { throw new Error("offline host must not open"); }} onRefresh={async () => { setServers([{ ...host, alias: "내 서버" }]); }} />;
   }
   render(<Harness />);
   expect((screen.getByRole("button", { name: "Mac Studio 서버 열기" }) as HTMLButtonElement).disabled).toBe(false);
@@ -45,7 +45,7 @@ it("matches the local installation by ID, opens it explicitly and keeps rename",
 it("retains failed edits and excludes bookmarks from owner controls", async () => {
   const user = userEvent.setup();
   vi.mocked(renameCentralServer).mockRejectedValue(new Error("목록이 바뀌었습니다"));
-  render(<CentralServerList servers={[host, { ...host, server_id: "bookmark-0002", relation: "bookmark", alias: "Friend" }]} busy={false} onOpen={async () => {}} onRefresh={async () => {}} />);
+  render(<CentralServerList servers={[host, { ...host, server_id: "bookmark-0002", relation: "bookmark", alias: "Friend" }]} liveServers={[host]} busy={false} onOpen={async () => {}} onRefresh={async () => {}} />);
   expect((screen.getByRole("button", { name: "Mac Studio 서버 열기" }) as HTMLButtonElement).disabled).toBe(true);
   expect(screen.queryByRole("button", { name: "Friend 이름 변경" })).toBeNull();
   await user.click(screen.getByRole("button", { name: /이름 변경/ }));
@@ -66,7 +66,7 @@ it("uses the refreshed name when retrying a conflicting edit", async () => {
   function Harness() {
     const [servers, setServers] = useState([host]);
     const refresh = async () => { setServers([{ ...host, alias: stored }]); };
-    return <><CentralServerList servers={servers} busy={false} onOpen={async () => {}} onRefresh={refresh} />
+    return <><CentralServerList servers={servers} liveServers={servers} busy={false} onOpen={async () => {}} onRefresh={refresh} />
       <button onClick={() => void refresh()}>새로고침</button></>;
   }
   render(<Harness />);
@@ -87,7 +87,7 @@ it("lets only the owner replace a server icon with the cropped image and then re
   vi.mocked(setCentralServerIcon).mockResolvedValue("/v1/servers/server-0001/icon/abc.png");
   const onRefresh = vi.fn().mockResolvedValue(undefined);
   render(<CentralServerList servers={[{ ...host, icon: "/v1/servers/server-0001/icon/old.png" }, { ...host, server_id: "bookmark-0002", relation: "bookmark", alias: "Friend" }]}
-    busy={false} onOpen={async () => {}} onRefresh={onRefresh} />);
+    liveServers={[host]} busy={false} onOpen={async () => {}} onRefresh={onRefresh} />);
   expect(screen.queryByRole("button", { name: "Friend 아이콘 변경" })).toBeNull();
   await user.click(screen.getByRole("button", { name: "Mac Studio 아이콘 변경" }));
   const picked = new File(["png"], "icon.png", { type: "image/png" });
@@ -95,4 +95,14 @@ it("lets only the owner replace a server icon with the cropped image and then re
   await user.click(screen.getByRole("button", { name: "적용" }));
   expect(setCentralServerIcon).toHaveBeenCalledWith(expect.objectContaining({ server_id: "server-0001", icon: "/v1/servers/server-0001/icon/old.png" }), picked);
   expect(onRefresh).toHaveBeenCalledOnce();
+});
+
+it("dims central-dependent cached servers while keeping this-device open available", () => {
+  render(<CentralServerList servers={[host, { ...host, server_id: "remote", alias: "Other Mac" }]}
+    liveServers={[]} centralUnavailable busy={false}
+    localHost={{ server_id: host.server_id, host_name: "Mac", host_os: "macos" }}
+    onOpenLocal={async () => {}} onOpen={async () => {}} onRefresh={async () => {}} />);
+  expect(screen.getByRole("button", { name: "Mac Studio 서버 열기" })).toHaveProperty("disabled", false);
+  expect(screen.getByRole("button", { name: "Other Mac 서버 열기" })).toHaveProperty("disabled", true);
+  expect(screen.getByText(/연결 끊김 · 중앙 확인 불가/).closest(".dc-server-row")?.getAttribute("data-state")).toBe("central-unconfirmed");
 });

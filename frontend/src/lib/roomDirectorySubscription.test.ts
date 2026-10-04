@@ -97,3 +97,28 @@ describe("room directory transport", () => {
     expect(open).toHaveBeenCalledTimes(2);
   });
 });
+
+it("reconnects a stopped local runtime after the old four-attempt budget, with a capped delay and cleanup", async () => {
+  vi.useFakeTimers();
+  const open = vi.fn().mockRejectedValue(new Error("runtime stopped"));
+  const changed = vi.fn();
+  const subscription = subscribeRoomDirectory(open, changed, vi.fn(), undefined, true);
+  await vi.advanceTimersByTimeAsync(0);
+  for (const delay of [500, 1000, 2000, 4000, 8000, 16000, 30000]) {
+    const calls = open.mock.calls.length;
+    await vi.advanceTimersByTimeAsync(delay - 1);
+    expect(open).toHaveBeenCalledTimes(calls);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(open).toHaveBeenCalledTimes(calls + 1);
+  }
+  const stream = new ReadableStream({ start(controller) {
+    controller.enqueue(new TextEncoder().encode('event: directory_changed\ndata: {}\n\n'));
+  } });
+  open.mockResolvedValue(new Response(stream, { headers: { "content-type": "text/event-stream", "cache-control": "private, no-store" } }));
+  await vi.advanceTimersByTimeAsync(30_000);
+  expect(changed).toHaveBeenCalledOnce();
+  subscription.close();
+  const calls = open.mock.calls.length;
+  await vi.advanceTimersByTimeAsync(60_000);
+  expect(open).toHaveBeenCalledTimes(calls);
+});

@@ -1,3 +1,4 @@
+import ServerRailEntries from "../views/components/ServerRailEntries";
 import { isDesktopWebview } from "../lib/desktopBridge";
 import { useCompanionInvites } from "./useCompanionInvites";
 import CreateChannelModal from "../views/components/CreateChannelModal";
@@ -161,10 +162,16 @@ export default function AppView({ controller }: { controller: AppController }) {
       onPointerCancel={cancelMobileShellPointer}
     >
       <RoomSyncNotice
+        connectionMessage={roomDirectorySyncIssue ? "서버 연결을 확인하고 있어요. 연결이 끊긴 방에서 다시 시도할 수 있어요."
+          : controller.centralDirectory?.status === "central-unconfirmed" ? "중앙 연결이 끊겼어요. 이 기기의 서버는 계속 사용할 수 있어요."
+          : controller.serverConnectionError}
         issue={canonicalRoom.syncIssue || roomDirectorySyncIssue}
         lifecycle={roomLifecycle.enabled ? roomLifecycle : undefined}
       />
       <RoomRail
+        serverEntries={<ServerRailEntries directory={controller.centralDirectory}
+          localServerIds={[controller.localServerId || ""]}
+          connectingId={controller.connectingServerId} onOpen={controller.openRailServer} />}
         rooms={rooms}
         activeRoom={activeRoom}
         roomAppearances={roomAppearances}
@@ -386,7 +393,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           ) : adminOpen ? (
             <AdminPanel onClose={() => setAdminOpen(false)} />
           ) : activeRoomDisconnected ? (
-            <DisconnectedRoomView room={activeRoom} />
+            <DisconnectedRoomView key={activeRoom.id} room={activeRoom} onRetry={() => controller.retryRoomConnection(activeRoom)} />
           ) : !hasRoom ? (
             <section className="dc-disconnected-room" aria-labelledby="empty-room-title" style={{ padding: 24 }}>
               <h1 id="empty-room-title">열려 있는 방이 없어요</h1>

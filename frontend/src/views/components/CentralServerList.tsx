@@ -1,3 +1,4 @@
+import type { CentralServerDisplay } from "../../lib/centralDirectoryCache";
 import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import { useEffect, useRef, useState } from "react";
 import { Camera, Pencil } from "lucide-react";
@@ -13,17 +14,20 @@ import ImageCropDialog from "./ImageCropDialog";
 const OS_LABELS = { macos: "macOS", windows: "Windows", linux: "Linux", other: "기타 OS" };
 
 type Props = {
-  servers: CentralServer[];
+  servers: CentralServerDisplay[];
+  liveServers: CentralServer[];
+  centralUnavailable?: boolean;
+  connectingServerId?: string;
   busy: boolean;
   localHost?: HostDeviceInfo | null;
   onOpenLocal?: () => Promise<void>;
-  onOpen: (server: CentralServer) => Promise<void>;
+  onOpen: (server: CentralServerDisplay) => Promise<void>;
   onRefresh: () => Promise<void>;
 };
 
 // Icons are signed central resources: fetch once per reference and show a local URL.
 // A failed fetch falls back to the initials and says so on hover.
-function ServerIcon({ reference, name }: { reference?: string; name: string }) {
+export function ServerIcon({ reference, name }: { reference?: string; name: string }) {
   const [url, setUrl] = useState("");
   const [failed, setFailed] = useState(false);
   useEffect(() => {
@@ -49,24 +53,24 @@ function ServerIcon({ reference, name }: { reference?: string; name: string }) {
     : <span title={failed ? "아이콘을 불러오지 못했어요" : undefined}>{roomInitials(name)}</span>;
 }
 
-export default function CentralServerList({ servers, busy, localHost, onOpenLocal, onOpen, onRefresh }: Props) {
+export default function CentralServerList({ servers, busy, localHost, onOpenLocal, onOpen, onRefresh, liveServers, centralUnavailable = false, connectingServerId }: Props) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editingName, setName] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const operation = useRef(false);
   const iconInputRef = useRef<HTMLInputElement>(null);
-  const [iconTarget, setIconTarget] = useState<CentralServer | null>(null);
+  const [iconTarget, setIconTarget] = useState<CentralServerDisplay | null>(null);
   const [iconFile, setIconFile] = useState<File | null>(null);
   const [iconStatus, setIconStatus] = useState("");
 
-  function pickIcon(server: CentralServer) {
+  function pickIcon(server: CentralServerDisplay) {
     setIconTarget(server);
     setError("");
     iconInputRef.current?.click();
   }
 
-  async function applyIcon(server: CentralServer, icon: File | null) {
+  async function applyIcon(server: CentralServerDisplay, icon: File | null) {
     if (busy || operation.current) return;
     operation.current = true; setSaving(true); setIconStatus(icon ? "아이콘 저장 중..." : ""); setError("");
     try {
@@ -106,23 +110,24 @@ export default function CentralServerList({ servers, busy, localHost, onOpenLoca
       </div>}
     {servers.map((server) => {
       const isLocal = Boolean(localHost?.server_id === server.server_id && onOpenLocal);
-      const online = server.relation === "owner" && server.endpoint?.status === "likely_online" && server.endpoint.lease_expires_at > Date.now() / 1000;
+      const live = liveServers.find(item => item.server_id === server.server_id);
+      const online = !centralUnavailable && server.relation === "owner" && live?.endpoint?.status === "likely_online" && live.endpoint.lease_expires_at > Date.now() / 1000;
       const name = server.alias || server.server_id;
       const openable = isLocal || online;
-      const state = server.relation !== "owner" ? "invited" : isLocal ? "local" : online ? "online" : "offline";
+      const state = connectingServerId === server.server_id ? "connecting" : isLocal ? "local" : centralUnavailable ? "central-unconfirmed" : server.relation !== "owner" ? "invited" : online ? "online" : "offline";
       return <div key={server.server_id} className="dc-server-row" data-state={state}>
         {server.relation === "owner"
           ? <button type="button" className="dc-server-row-icon dc-server-row-icon-edit" aria-label={`${name} 아이콘 변경`} title="아이콘 변경"
-              disabled={busy || saving} onClick={() => pickIcon(server)}>
-              <ServerIcon reference={server.icon} name={name} />
+              disabled={busy || saving || centralUnavailable} onClick={() => pickIcon(server)}>
+              <ServerIcon reference={centralUnavailable ? undefined : server.icon} name={name} />
               <span className="dc-server-row-icon-overlay" aria-hidden><Camera size={16} /></span>
             </button>
-          : <span className="dc-server-row-icon" aria-hidden><ServerIcon reference={server.icon} name={name} /></span>}
+          : <span className="dc-server-row-icon" aria-hidden><ServerIcon reference={centralUnavailable ? undefined : server.icon} name={name} /></span>}
         <div className="dc-server-row-copy">
           <strong className="break-all"><span>{name}</span>{isLocal && " · 이 기기"}</strong>
           <span className="dc-server-row-meta">
             <span className="dc-server-row-dot" aria-hidden />
-            {state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기에서 열 수 있어요" : state === "online" ? "온라인" : "꺼져 있음"}
+            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 중앙 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기에서 열 수 있어요" : state === "online" ? "연결 가능" : "연결 끊김"}
             {" · "}<span aria-label="호스트 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span>
             {" · "}{server.server_id.slice(0, 8)}
           </span>
@@ -139,7 +144,7 @@ export default function CentralServerList({ servers, busy, localHost, onOpenLoca
           </form>}
         </div>
         {editingId !== server.server_id && <div className="dc-server-row-actions">
-          {server.relation === "owner" && <button type="button" className="dc-server-row-icon-button" aria-label={`${name} 이름 변경`} title="이름 변경" disabled={busy || saving} onClick={() => { setEditingId(server.server_id); setName(server.alias); setError(""); }}><Pencil size={16} /></button>}
+          {server.relation === "owner" && <button type="button" className="dc-server-row-icon-button" aria-label={`${name} 이름 변경`} title="이름 변경" disabled={busy || saving || centralUnavailable} onClick={() => { setEditingId(server.server_id); setName(server.alias); setError(""); }}><Pencil size={16} /></button>}
           <button type="button" className={openable ? "ops-cta dc-server-row-open" : "ops-button dc-server-row-open"} aria-label={`${name} 서버 열기`} disabled={busy || saving || !openable} onClick={() => { if (isLocal && onOpenLocal) void onOpenLocal(); else void onOpen(server); }}>열기</button>
         </div>}
       </div>;

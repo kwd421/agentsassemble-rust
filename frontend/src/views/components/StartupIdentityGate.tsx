@@ -1,3 +1,7 @@
+import { useCentralDirectory } from "../../app/useCentralDirectory";
+import { isCentralTemporaryError } from "../../lib/centralConnectionError";
+import type { CentralServerDisplay } from "../../lib/centralDirectoryCache";
+import ConnectionBanner from "./ConnectionBanner";
 import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import CentralServerList from "./CentralServerList";
 import CentralAccountSettings from "./CentralAccountSettings";
@@ -16,12 +20,10 @@ import {
 } from "lucide-react";
 
 import {
-  bootstrapCentral,
   centralIdentityConfigured,
   isCentralWebEntry,
   centralSessionLoggedOut,
   type CentralPerson,
-  type CentralServer,
   clearPendingCentralRecoveryCode,
   createCentralGuest,
   isCentralAuthenticationError,
@@ -29,7 +31,6 @@ import {
   loadPendingCentralRecoveryCode,
   loginCentralGoogle,
   logoutCentral,
-  type CentralBootstrap,
   openCentralOwnedServer,
   recoverCentralGuest,
   registerLocalServer,
@@ -122,8 +123,11 @@ export default function StartupIdentityGate({
   const [issuedRecoveryCode, setIssuedRecoveryCode] = useState("");
   const [localHostError, setLocalHostError] = useState("");
   const [localHost, setLocalHost] = useState<HostDeviceInfo | null>(null);
-  const [centralServers, setCentralServers] = useState<CentralServer[]>([]);
-  const [centralPerson, setCentralPerson] = useState<CentralPerson | null>(null);
+  const { directory, refresh: refreshCentral } = useCentralDirectory();
+  const [connectingServerId, setConnectingServerId] = useState("");
+  const centralUnavailable = directory?.status === "central-unconfirmed" || directory?.status === "error";
+  const centralPerson = directory?.person;
+  const centralServers = directory?.servers || [];
   const [savedRecoveryCode, setSavedRecoveryCode] = useState(false);
   const [copied, setCopied] = useState(false);
   const [checking, setChecking] = useState(true);
@@ -177,39 +181,54 @@ export default function StartupIdentityGate({
     onComplete();
   }
 
-  const showCentralServers = useCallback((refreshed: CentralBootstrap) => {
-    setCentralPerson(refreshed.person);
-    setCentralServers(refreshed.servers.filter((server) => server.relation === "owner"));
-    setScreen("servers");
-    setChecking(false);
-  }, []);
-
   const finishCentralStartup = useCallback(async () => {
-    const refreshed = await bootstrapCentral();
-    if (!refreshed) throw new Error("중앙 로그인 상태가 사라졌습니다. 다시 로그인해 주세요.");
-    showCentralServers(refreshed);
-  }, [showCentralServers]);
+    const result = await refreshCentral();
+    if (!result.person) throw result.error || new Error("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+    setScreen("servers"); setChecking(false);
+  }, [refreshCentral]);
 
-  async function selectCentralServer(server?: CentralServer) {
+  useEffect(() => {
+    if (screen !== "servers" || !directory) return;
+    if (directory.status === "authentication-required") {
+      setScreen("choice");
+      setError("중앙 로그인이 만료됐습니다. 다시 로그인해 주세요.");
+    } else if (directory.status === "error") {
+      setError(failureMessage(directory.error, "중앙 서버 목록을 확인하지 못했어요."));
+    }
+  }, [directory, screen]);
+
+  async function selectCentralServer(server?: CentralServerDisplay) {
     if (busy || !centralPerson) return;
+    setConnectingServerId(server?.server_id || localHost?.server_id || "local");
     setBusy(true);
     setError("");
     try {
-      if (server) await openCentralOwnedServer(server);
+      if (server) {
+        const current = await refreshCentral();
+        const live = current.live?.servers.find(item => item.server_id === server.server_id);
+        if (!live) throw new Error("서버 연결이 끊겼어요. 중앙 연결을 다시 확인해 주세요.");
+        await openCentralOwnedServer(live);
+      }
       else {
         if (webEntry) throw new Error("서버를 실행하려면 이 기기의 앱을 열어 주세요.");
         // Local authority is touched only after the explicit hosting choice.
-        const current = await bootstrapCentral();
-        if (!current) throw new Error("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
-        const authority = await saveLocalProfile(current.person.display_name, bootstrapRequestId.current, current.person);
-        await registerLocalServer(deviceToken);
-        await enterApplication(authority);
+        const current = await refreshCentral();
+        if (!current.person) throw current.error || new Error("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+        if (current.status === "central-unconfirmed") {
+          // Cached identity is presentation only; never initialize a new operator from it.
+          await enterApplication(await requestDesktopBootstrapStatus());
+        } else {
+          const authority = await saveLocalProfile(current.person.display_name, bootstrapRequestId.current, current.person);
+          try { await registerLocalServer(deviceToken); }
+          catch (reason) { if (!isCentralTemporaryError(reason)) throw reason; }
+          await enterApplication(authority);
+        }
       }
     } catch (reason) {
       setChecking(false);
       setError(failureMessage(reason, "서버를 열지 못했습니다."));
     } finally {
-      setBusy(false);
+      setConnectingServerId(""); setBusy(false);
     }
   }
 
@@ -237,7 +256,7 @@ export default function StartupIdentityGate({
     setBusy(true); setError("");
     try {
       await logoutCentral();
-      setCentralPerson(null); setCentralServers([]); setScreen("choice");
+      setScreen("choice");
     } catch (reason) { setError(failureMessage(reason, "로그아웃하지 못했습니다.")); }
     finally { setBusy(false); }
   }
@@ -312,12 +331,13 @@ export default function StartupIdentityGate({
       }
       try {
         setStatus("중앙 신원과 방 목록을 확인하는 중");
-        const central = await bootstrapCentral();
-        if (!central) {
-          if (active) setChecking(false);
-          return;
+        const central = await refreshCentral();
+        if (!active) return;
+        if (!central.person) {
+          if (central.error) throw central.error;
+          setChecking(false); return;
         }
-        if (active) showCentralServers(central);
+        setScreen("servers"); setChecking(false);
       } catch (reason) {
         if (isCentralAuthenticationError(reason)) {
           if (active) {
@@ -336,7 +356,7 @@ export default function StartupIdentityGate({
     return () => {
       active = false;
     };
-  }, [centralEnabled, deviceToken, onComplete, webEntry, showCentralServers]);
+  }, [centralEnabled, deviceToken, onComplete, webEntry, refreshCentral]);
 
   async function createGuest() {
     const name = displayName.trim();
@@ -506,6 +526,8 @@ export default function StartupIdentityGate({
 
   return (
     <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
+      {centralUnavailable && <ConnectionBanner message={directory?.error ? "중앙 연결이 끊겼고 저장된 서버 목록을 읽지 못했어요. 서버 목록을 다시 확인해 주세요."
+        : webEntry ? "중앙 연결이 끊겼어요. 연결을 다시 확인하고 있어요." : "중앙 연결이 끊겼어요. 이 기기의 서버는 계속 사용할 수 있어요."} />}
       <main
         className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
         aria-label="시작 로그인"
@@ -585,7 +607,7 @@ export default function StartupIdentityGate({
             </div>
             {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
             {localHostError && <p role="alert" className="text-sm text-red-300">이 기기 · {localHostError} 서버 목록 새로고침으로 다시 확인해 주세요.</p>}
-            <CentralServerList key={centralPerson?.person_id} servers={centralServers} busy={busy} localHost={localHost} onOpenLocal={!webEntry ? () => selectCentralServer() : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
+            <CentralServerList key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} localHost={localHost} onOpenLocal={!webEntry ? () => selectCentralServer() : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}

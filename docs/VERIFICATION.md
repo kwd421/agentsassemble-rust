@@ -1,5 +1,52 @@
 # Verification Contract
 
+
+## Discord-style rail step 1 — central outage continuity (2026-10-05)
+
+The identity contract now records temporary outage versus authentication failure,
+display-only cache ownership, retry budgets and the local authority boundary before
+implementation. Pre-fix regression runs failed for this-device startup during a
+central network outage (1 failed / 16 passed) and a disconnected local-runtime room
+(1 failed / 9 passed). Both regressions now pass.
+
+`StartupIdentityGate` permits an existing native host after a classified central
+network/429/5xx failure with a retained session. It still requires the native
+completed bootstrap, room directory and matching lineage; cached account metadata
+cannot initialize a local operator. Missing/revoked/expired sessions require login.
+Remote open refreshes the live central directory before the unchanged bound grant
+flow. The new per-account directory cache stores only ID/name/icon reference/OS/
+relationship; account change/logout clears it, with no endpoint or secret stored.
+
+`useCentralDirectory` owns one abortable request and one timer (10s request deadline,
+1/2/4/8/16/30s transient backoff, 30s healthy observation); account changes and unmount
+retire stale results. The existing local directory stream reconnects at a 30s cap
+until unmount, reusing its 10s admission/45s silence bounds and live invalidation.
+No extra local polling, process, provider call or new authority was added. Cost is
+one central request per 30s per active signed-in surface when healthy, one cache
+projection per successful directory, and existing stream reconnection while down.
+
+Shared UI: `CentralServerList` retains cached rows and dims unavailable entries;
+`ServerRailEntries` adds retained central servers to `RoomRail` with status dots;
+local rooms derive their connection state from the host directory stream.
+`DisconnectedRoomView` identifies the reason and offers retry. `ConnectionBanner`
+provides the thin top notice and is reused for room synchronization notices. The
+web owner workspace's terminal modal and bounded retry behavior are unchanged.
+Central lease availability is labeled '연결 가능', not an established connection.
+
+Automated verification: pre-fix failures were observed, then the full frontend
+suite passed 1,031 tests; the final notice correction additionally passed all six
+notice tests (including the retained five regressions). TypeScript and the final
+production frontend build passed. The one
+`make verify` run passed architecture/policy/format, workspace check, frontend
+build/tests, desktop 46 tests, workspace Rust 1,069 tests, Clippy and diff checks;
+its final artifact check rejected 31,162,482,688 bytes against the unchanged 18 GiB
+limit. After the verification process exited and no Cargo/rustc/Tauri build remained,
+the existing `make artifact-prune` owner cleaned the exact repository target and
+`make artifact-check` passed. No gate change or full verification rerun. No backend
+source change.
+Packaged visual/manual acceptance, signing and deployment were excluded by the user
+and were not performed. `.agents/` and `scripts/__pycache__/` are untouched.
+
 ## Atomic room-session device activity — Daybreak M1/L1 (2026-10-05)
 
 Corrections to `7cc8c856`: room-session commands/reads and committed-result retries

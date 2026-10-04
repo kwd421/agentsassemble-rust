@@ -4,6 +4,7 @@ import { persistRoomGuestSession, type RoomGuestSession } from "./roomGuestSessi
 import { consumeOperatorPairingTokenFromUrl } from "./roomGuestSession";
 import {
   createStartupRoute,
+  createFreshRoom, roomIsDisconnected,
   mergeServerRoomsIntoDock,
   roomDockIdentity,
 } from "./roomDockModel";
@@ -149,4 +150,8 @@ describe("durable room identity", () => {
       new Set(["server-a:room-uid-a", "server-b:room-uid-b"])
     );
   });
+});
+
+it("marks a disconnected local runtime room as disconnected too", () => {
+  expect(roomIsDisconnected({ ...createFreshRoom(), connectionState: "disconnected" })).toBe(true);
 });

@@ -27,7 +27,7 @@ afterEach(() => { cleanup(); vi.resetAllMocks(); mocks.session = null; mocks.cal
 
 it("requires live validation and exposes an owner grant failure without entering a room", async () => {
   mocks.session = {};
-  mocks.bootstrap.mockRejectedValueOnce(new Error("session revoked")).mockResolvedValueOnce(account);
+  mocks.bootstrap.mockRejectedValueOnce(new Error("session revoked")).mockResolvedValue(account);
   mocks.open.mockRejectedValue(new Error("host went offline"));
   render(<StartupIdentityGate deviceToken="" onComplete={completeStartup} />);
   expect((await screen.findByRole("alert")).textContent).toContain("session revoked");
@@ -35,7 +35,7 @@ it("requires live validation and exposes an owner grant failure without entering
   fireEvent.click(screen.getByRole("button", { name: "다시 확인" }));
   const open = await screen.findByRole("button", { name: "My Mac 서버 열기" });
   expect(screen.getByRole("button", { name: "My Windows 서버 열기" })).toHaveProperty("disabled", true);
-  expect(screen.queryByRole("button", { name: "Invited server 서버 열기" })).toBeNull();
+  expect(screen.getByRole("button", { name: "Invited server 서버 열기" })).toHaveProperty("disabled", true);
   fireEvent.click(open);
   expect(await screen.findByRole("alert")).toHaveProperty("textContent", "host went offline");
   mocks.logout.mockResolvedValue(undefined);

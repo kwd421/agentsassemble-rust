@@ -69,7 +69,8 @@ export async function readDirectoryStream(
 
 export function subscribeRoomDirectory(
   open: OpenDirectoryStream, changed: () => Promise<void>, failed: (error: unknown) => void,
-  ownerStatus?: (status: CentralOwnerSessionStatus) => void
+  ownerStatus?: (status: CentralOwnerSessionStatus) => void,
+  reconnectUntilClosed = false
 ) {
   const lifetime = new AbortController();
   let running = false;
@@ -78,9 +79,10 @@ export function subscribeRoomDirectory(
     if (running || terminal || lifetime.signal.aborted) return;
     running = true;
     void (async () => {
-      // Four admissions total per recovery attempt; no directory polling. Every
+      // Local hosts reconnect until closed, with a 30s delay cap. Web owner
+      // workspaces retain four admissions per recovery attempt. Every
       // admitted connection starts with an invalidation to cover the missed gap.
-      for (let attempt = 0; attempt < 4 && !lifetime.signal.aborted; attempt += 1) {
+      for (let attempt = 0; (reconnectUntilClosed || attempt < 4) && !lifetime.signal.aborted; attempt += 1) {
         const admission = new AbortController();
         const abort = () => admission.abort();
         lifetime.signal.addEventListener("abort", abort, { once: true });
@@ -97,14 +99,14 @@ export function subscribeRoomDirectory(
             terminal = true;
             ownerStatus({ state: "ended", reason: "disconnected" });
           }
-          if (attempt === 3 || error instanceof ApiError && [401, 403, 409, 429].includes(error.status)) return;
+          if ((!reconnectUntilClosed && attempt === 3) || error instanceof ApiError && [401, 403, 409, 429].includes(error.status)) return;
           await new Promise<void>(resolve => {
             const finish = () => {
               clearTimeout(timer);
               lifetime.signal.removeEventListener("abort", finish);
               resolve();
             };
-            const timer = setTimeout(finish, 500 * 2 ** attempt);
+            const timer = setTimeout(finish, Math.min(30_000, 500 * 2 ** Math.min(attempt, 6)));
             lifetime.signal.addEventListener("abort", finish, { once: true });
           });
         } finally {

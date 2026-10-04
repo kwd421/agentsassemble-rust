@@ -596,7 +596,8 @@ export function useRoomDirectory({
         publishSyncIssue({ category: "room_directory_unavailable",
           message: error instanceof Error ? error.message : "방 목록 변경 연결을 확인하지 못했어요." });
       },
-      remoteOwner?.onStatus
+      remoteOwner?.onStatus,
+      !remoteOwner
     );
     subscriptionRef.current = subscription;
     return () => {

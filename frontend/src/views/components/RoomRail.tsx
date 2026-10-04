@@ -1,3 +1,5 @@
+import type { ReactNode } from "react";
+import { CONNECTION_LABELS } from "../../lib/serverConnectionState";
 import type { MouseEvent as ReactMouseEvent } from "react";
 import { Activity, Check, LogOut, Plus, Settings, UserPlus, Users } from "lucide-react";
 import {
@@ -25,7 +27,7 @@ export type RoomMenuState = {
 export const MOBILE_ROOM_RAIL_WIDTH = 68;
 
 export default function RoomRail({
-  rooms,
+  rooms, serverEntries,
   activeRoom,
   roomAppearances,
   guestLocked,
@@ -50,6 +52,7 @@ export default function RoomRail({
   onLeaveRoom,
 }: {
   rooms: RoomDockItem[];
+  serverEntries?: ReactNode;
   activeRoom: RoomDockItem;
   roomAppearances: Record<string, RoomAppearance>;
   guestLocked: boolean;
@@ -87,6 +90,7 @@ export default function RoomRail({
       {onOpenFriends && <button type="button" className="dc-server-btn" style={buttonStyle} aria-label="친구" title="친구" aria-pressed={friendsOpen} data-active={friendsOpen} onClick={onOpenFriends}><Users size={20} /></button>}
       {onOpenFriends && <span className="dc-rail-divider" aria-hidden />}
       <div className="dc-room-stack min-h-0 flex-1 overflow-y-auto chat-scroll" aria-label="방 목록">
+        {serverEntries}
         {rooms.map((room) => {
           const active = !adminOpen && !friendsOpen && activeRoom.id === room.id;
           const disconnected = roomIsDisconnected(room);
@@ -105,11 +109,11 @@ export default function RoomRail({
               data-active={active}
               data-tone={room.tone}
               data-has-image={Boolean(roomAppearance.iconImage)}
-              data-connection-state={disconnected ? "disconnected" : room.connectionState || "local"}
+              data-connection-state={room.connectionState || "local"}
               style={{ ...roomAppearanceStyle(roomAppearance), ...buttonStyle }}
               className="dc-server-btn"
               aria-label={`${room.label}${disconnected ? " · 연결이 끊긴 방" : ""}`}
-              title={`${room.label} · ${disconnected ? "연결이 끊긴 방" : room.topic}`}
+              title={`${room.label} · ${room.connectionState && room.connectionState !== "local" ? CONNECTION_LABELS[room.connectionState] : "연결됨"}`}
             >
               {roomAppearance.iconImage ? null : (
                 <span className="dc-server-initials" aria-hidden>

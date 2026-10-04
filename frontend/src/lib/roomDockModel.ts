@@ -1,3 +1,4 @@
+import type { ServerConnectionState } from "./serverConnectionState";
 import type { LucideIcon } from "lucide-react";
 import { Bot, Gamepad2, LayoutDashboard, Radio, Sparkles, Users } from "lucide-react";
 import {
@@ -24,7 +25,7 @@ export type RoomDockItem = {
   serverId?: string;
   roomOrigin?: "local" | "remote_server";
   serverOrigin?: string;
-  connectionState?: "local" | "connected" | "disconnected";
+  connectionState?: "local" | ServerConnectionState;
   topic: string;
   shortLabel: string;
   appearance?: RoomGlobalAppearance;
@@ -132,7 +133,8 @@ export function hydratePersistedRoom(room: PersistedRoomDockItem): RoomDockItem 
 }
 
 export function roomIsDisconnected(room: RoomDockItem) {
-  return room.roomOrigin === "remote_server" && room.connectionState !== "connected";
+  return room.connectionState === "disconnected" || room.connectionState === "central-unconfirmed" ||
+    room.connectionState === "connecting" || (room.roomOrigin === "remote_server" && room.connectionState !== "connected");
 }
 
 export function roomDockIdentity(

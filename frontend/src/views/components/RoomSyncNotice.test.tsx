@@ -70,3 +70,14 @@ describe("RoomSyncNotice", () => {
   });
 
 });
+
+it("keeps room-management feedback usable alongside a single outage banner", () => {
+  const dismissNotice = vi.fn();
+  const { container } = render(<RoomSyncNotice connectionMessage="중앙 연결이 끊겼어요."
+    issue={{ category: "room_directory_unavailable", message: "offline" }}
+    lifecycle={{ pending: null, busy: false, notice: "방 관리 결과", error: "", retry: vi.fn(), dismissNotice }} />);
+  expect(container.querySelectorAll(".dc-connection-banner")).toHaveLength(1);
+  expect(screen.getByText("방 관리 결과")).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "닫기" }));
+  expect(dismissNotice).toHaveBeenCalledOnce();
+});

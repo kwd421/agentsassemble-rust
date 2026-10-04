@@ -1,3 +1,7 @@
+import { useCentralDirectory } from "./useCentralDirectory";
+import { projectRoomConnections } from "../lib/serverConnectionState";
+import { openCentralOwnedServer } from "../lib/centralIdentity";
+import type { CentralServerDisplay } from "../lib/centralDirectoryCache";
 import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
 import { Hash } from "lucide-react";
 import { isCustomChannelId } from "../lib/customChannelId";
@@ -38,7 +42,7 @@ import {
 } from "../lib/roomDockModel";
 import { consumeOperatorPairingTokenFromUrl } from "../lib/roomGuestSession";
 import { roomPostingState } from "../lib/roomGuestPosting";
-import { currentServerProductSurface } from "../lib/roomDirectoryContract";
+import { currentRoomDirectoryAuthority, currentServerProductSurface } from "../lib/roomDirectoryContract";
 import { roomRailMenuPosition } from "../lib/roomRailMenuPosition";
 import {
   CHANNELS,
@@ -97,7 +101,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     !operatorPairingToken &&
     !guestRecoveryRequest;
   const {
-    rooms, managementRooms, ownerProfileRevision,
+    rooms: directoryRooms, managementRooms, ownerProfileRevision,
     replaceRooms, mergeFlowRoom,
     removeRoom,
     updateRoom,
@@ -114,6 +118,32 @@ export function useAppController(deviceToken: string, clientId: string) {
     hostEnabled: startupHostEnabled,
     remoteOwner: ownerWorkspace.remoteDirectory,
   });
+  const { directory: centralDirectory, refresh: refreshCentralDirectory } = useCentralDirectory(startupHostEnabled);
+  const rooms = useMemo(() => projectRoomConnections(directoryRooms, startupHostEnabled
+    ? roomDirectorySyncIssue ? roomDirectorySyncIssue.category === "room_directory_unconfirmed" ? "connecting" : "disconnected" : "connected"
+    : null, centralDirectory?.status === "central-unconfirmed"), [directoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory]);
+  const [connectingServerId, setConnectingServerId] = useState("");
+  const [serverConnectionError, setServerConnectionError] = useState("");
+  useEffect(() => { if (centralDirectory?.status === "connected") setServerConnectionError(""); }, [centralDirectory]);
+  const serverOpening = useRef(false);
+  async function openRailServer(server: CentralServerDisplay) {
+    if (serverOpening.current) return;
+    serverOpening.current = true; setConnectingServerId(server.server_id); setServerConnectionError("");
+    try {
+      const current = await refreshCentralDirectory();
+      const live = current.live?.servers.find(item => item.server_id === server.server_id);
+      if (!live) throw new Error("서버 연결이 끊겼어요. 중앙 연결을 다시 확인하고 있어요.");
+      await openCentralOwnedServer(live);
+    } catch (error) { setServerConnectionError(error instanceof Error ? error.message : "서버 연결이 끊겼어요."); }
+    finally { serverOpening.current = false; setConnectingServerId(""); }
+  }
+  async function retryRoomConnection(room: RoomDockItem) {
+    if (room.roomOrigin === "remote_server") {
+      await openRailServer({ server_id: room.serverId || "", alias: room.label, relation: "owner", host_os: null });
+    } else {
+      await refreshRoomDirectory(captureRoomDirectoryContinuity());
+    }
+  }
   const [activeRoomId, setActiveRoomId] = useState(() => startupRoute.activeRoomId);
   const [roomMenu, setRoomMenu] = useState<RoomMenuState>(null);
   const [channelMenu, setChannelMenu] = useState<ChannelMenuState>(null);
@@ -668,6 +698,8 @@ export function useAppController(deviceToken: string, clientId: string) {
   }
 
   return {
+    localServerId: startupHostEnabled ? currentRoomDirectoryAuthority()?.server_id : undefined,
+    centralDirectory, refreshCentralDirectory, openRailServer, connectingServerId, serverConnectionError, retryRoomConnection,
     roomLifecycle, pairedRoomLifecycle, roomChannels, activeCustomChannel, channelTranscript,
     acceptRecoveredSession, activeAppearance,
     activeChannelDisplay, activeChannelSettings,

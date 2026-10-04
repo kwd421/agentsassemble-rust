@@ -154,3 +154,12 @@
   color: #f23f43;
   text-decoration: underline;
 }
+
+.dc-server-row[data-state="central-unconfirmed"] .dc-server-row-icon,
+.dc-server-row[data-state="central-unconfirmed"] .dc-server-row-copy,
+.dc-server-row[data-state="offline"] .dc-server-row-icon {
+  opacity: 0.5;
+}
+.dc-server-row[data-state="connecting"] .dc-server-row-dot {
+  background: #e9b949;
+}

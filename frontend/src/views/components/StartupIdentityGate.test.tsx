@@ -1,3 +1,4 @@
+import { CentralTemporaryError } from "../../lib/centralConnectionError";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -110,6 +111,20 @@ describe("StartupIdentityGate", () => {
     render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
     await screen.findByRole("button", { name: "Google로 계속" });
     expect(onComplete).not.toHaveBeenCalled();
+  });
+
+  it("opens this device with a saved account during a central network outage", async () => {
+    centralMocks.configured = true;
+    centralMocks.session = { person: { display_name: "Cached name" } };
+    centralMocks.bootstrap.mockRejectedValue(new CentralTemporaryError("Failed to fetch"));
+    desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+    desktopMocks.fetchOperatorRuntime.mockResolvedValue(Response.json(directory()));
+    const onComplete = vi.fn();
+    render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+    await userEvent.click(await screen.findByRole("button", { name: /이 기기 서버 열기/ }));
+    await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
+    expect(centralMocks.register).not.toHaveBeenCalled();
+    expect(desktopMocks.initializeBootstrap).not.toHaveBeenCalled();
   });
 
   it("keeps a completed local profile out of the app when central validation fails", async () => {
@@ -395,4 +410,20 @@ describe("StartupIdentityGate", () => {
       "runtime tickets are available only to the bundled desktop UI"
     );
   });
+});
+
+it("requires login after authentication rejection even with an existing local host", async () => {
+  centralMocks.configured = true;
+  centralMocks.session = { person: { display_name: "Cached name" } };
+  centralMocks.bootstrap.mockImplementation(async () => {
+    centralMocks.session = null;
+    throw new Error("중앙 로그인이 만료됐습니다. 다시 로그인해 주세요.");
+  });
+  desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+  const onComplete = vi.fn();
+  render(<StartupIdentityGate deviceToken="device-1" onComplete={onComplete} />);
+  await screen.findByRole("button", { name: "Google로 계속" });
+  expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
+  expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
+  expect(onComplete).not.toHaveBeenCalled();
 });
