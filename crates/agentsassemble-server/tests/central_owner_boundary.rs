@@ -33,6 +33,8 @@ mod devices;
 mod invitations;
 #[path = "central_owner_boundary/lifecycle.rs"]
 mod lifecycle;
+#[path = "central_owner_boundary/lifetimes.rs"]
+mod lifetimes;
 #[path = "support/room_socket_peer.rs"]
 mod room_socket_peer;
 
@@ -189,9 +191,11 @@ struct Fixture {
     session_token: String,
     client: reqwest::Client,
     calls: mpsc::UnboundedReceiver<WorkerCall>,
+    worker_state: WorkerState,
     worker_task: JoinHandle<()>,
     cancel: CancellationToken,
     host_task: JoinHandle<()>,
+    connections: tokio_util::task::TaskTracker,
     tickets: TicketStore,
 }
 
@@ -254,6 +258,7 @@ async fn start_fixture() -> Fixture {
     .unwrap_or_else(|error| panic!("public ingress: {error:?}"))
     .with_central_directory(&worker_url)
     .unwrap_or_else(|error| panic!("central directory: {error:?}"));
+    let connections = runtime_state.connections.clone();
     let tickets = runtime_state.tickets.clone();
     let cancel = CancellationToken::new();
     let owner_cancel = cancel.clone();
@@ -273,9 +278,11 @@ async fn start_fixture() -> Fixture {
         session_token: String::new(),
         client,
         calls,
+        worker_state,
         worker_task,
         cancel,
         host_task,
+        connections,
         tickets,
     }
 }

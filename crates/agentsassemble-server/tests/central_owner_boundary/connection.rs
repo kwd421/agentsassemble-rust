@@ -3,6 +3,31 @@ use room_socket_peer::RoomSocketPeer;
 
 pub(super) type Peer = RoomSocketPeer<tokio_tungstenite::MaybeTlsStream<tokio::net::TcpStream>>;
 
+pub(super) async fn room_socket(fixture: &Fixture, generation: i64) -> Peer {
+    let admission = post(
+        &fixture.client,
+        fixture.address,
+        "/api/central-owner/room",
+        json!({"session_token": fixture.session_token, "generation": generation,
+            "room_id": "general", "room_uid": fixture.room_uid}),
+        ORIGIN,
+        DEVICE,
+    )
+    .await;
+    assert_eq!(admission.status(), StatusCode::OK);
+    let admission: Value = admission
+        .json()
+        .await
+        .unwrap_or_else(|e| panic!("room: {e}"));
+    socket_for_session(
+        fixture,
+        admission["session_token"]
+            .as_str()
+            .unwrap_or_else(|| panic!("room bearer")),
+    )
+    .await
+}
+
 pub(super) async fn socket_for_session(fixture: &Fixture, bearer: &str) -> Peer {
     let ticket: Value = fixture
         .client
@@ -35,6 +60,26 @@ pub(super) async fn socket_for_session(fixture: &Fixture, bearer: &str) -> Peer 
     assert_eq!(socket.subscribe(0).await["op"], "subscribed");
     assert_eq!(socket.receive_json().await["op"], "snapshot");
     socket
+}
+
+pub(super) async fn message(socket: &mut Peer, request: &str) {
+    socket.send_json(&json!({"op":"command", "request_id":request, "action":"message.send", "payload":{"content":request}})).await;
+    let mut ack = false;
+    let mut received = false;
+    for _ in 0..2 {
+        let frame = socket
+            .receive_json_with_timeout(Duration::from_secs(5))
+            .await;
+        if frame["op"] == "ack" {
+            assert_eq!(frame["accepted"], true);
+            ack = true;
+        }
+        if frame["op"] == "event" {
+            assert_eq!(frame["events"][0]["content"], request);
+            received = true;
+        }
+    }
+    assert!(ack && received, "message send/receive failed");
 }
 
 pub(super) async fn stream(fixture: &Fixture, generation: i64) -> reqwest::Response {
@@ -72,6 +117,31 @@ pub(super) async fn status(response: &mut reqwest::Response, expected: &str) {
     })
     .await
     .unwrap_or_else(|e| panic!("owner state deadline: {e}"));
+}
+
+pub(super) async fn authed(
+    fixture: &Fixture,
+    generation: i64,
+    path: &str,
+    body: Option<Value>,
+) -> reqwest::Response {
+    let url = format!("http://{}{path}", fixture.address);
+    let builder = if let Some(body) = body {
+        fixture.client.post(url).json(&body)
+    } else {
+        fixture.client.get(url)
+    };
+    builder
+        .header("host", "owner.example.test")
+        .header("x-forwarded-proto", "https")
+        .header("x-agentsassemble-proxy-token", SECRET)
+        .header("origin", ORIGIN)
+        .header("x-device-token", DEVICE)
+        .header("x-central-generation", generation)
+        .bearer_auth(&fixture.session_token)
+        .send()
+        .await
+        .unwrap_or_else(|e| panic!("owner request: {e}"))
 }
 
 pub(super) async fn admitted_fixture() -> (Fixture, i64) {
