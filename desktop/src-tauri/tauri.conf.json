@@ -35,7 +35,8 @@
         "width": 1440,
         "height": 900,
         "minWidth": 900,
-        "minHeight": 620
+        "minHeight": 620,
+        "acceptFirstMouse": true
       }
     ],
     "security": {
