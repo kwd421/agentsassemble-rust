@@ -112,3 +112,45 @@
   gap: 8px;
   margin-top: 8px;
 }
+
+.dc-server-row-icon {
+  position: relative;
+  overflow: hidden;
+}
+
+.dc-server-row-icon-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.dc-server-row-icon-edit {
+  cursor: pointer;
+}
+
+.dc-server-row-icon-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.dc-server-row-icon-edit:hover .dc-server-row-icon-overlay,
+.dc-server-row-icon-edit:focus-visible .dc-server-row-icon-overlay {
+  opacity: 1;
+}
+
+.dc-server-row-text-button {
+  min-height: 44px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.dc-server-row-text-button:hover:not(:disabled) {
+  color: #f23f43;
+  text-decoration: underline;
+}

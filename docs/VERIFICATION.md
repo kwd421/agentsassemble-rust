@@ -12934,3 +12934,21 @@ map checks. Rust architecture/source/policy/format/diff gates pass. Central-owne
 source maps retain the small regenerated infrastructure count update. This is backend
 request/storage proof, not frontend UI or production deployment proof. No automated
 security scan or subagent was used. Production migration/deployment are not performed.
+
+## Server icons frontend (2026-10-04)
+
+Contract: `/Users/seinel/Projects/AgentsAssemble/infra/identity-directory/README.md`
+-> Server icons. The client reuses the existing signed device request, accepts only
+the directory's relative `/v1/servers/<id>/icon/<hash>.png` reference for fetching,
+and sends `{icon, expected_icon}` with a data URL from the square cropper.
+
+- Owner-only control and upload of the cropped file with the observed reference,
+  followed by a list reload, are covered by a new test; it fails when the dialog
+  uploads nothing instead of the cropped file (temporary mutation, restored).
+- Packaged `app.agentsassemble.uicheck`: hovering an owned server icon shows the
+  change overlay; clicking opens the file panel and then `서버 아이콘 편집` with a
+  square frame. Cancelled without upload.
+- Not verified: actual upload, fetch and display, because production has neither
+  migration 0008 nor the new Worker. Whether WebKit's canvas PNG passes the
+  directory's strict PNG validator is unknown until then.
+

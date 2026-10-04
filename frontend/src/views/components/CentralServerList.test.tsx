@@ -3,9 +3,19 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import CentralServerList from "./CentralServerList";
-import { renameCentralServer, type CentralServer } from "../../lib/centralIdentity";
+import "../../test/nativeDialog";
+import { fetchCentralServerIcon, renameCentralServer, setCentralServerIcon, type CentralServer } from "../../lib/centralIdentity";
 
-vi.mock("../../lib/centralIdentity", () => ({ renameCentralServer: vi.fn() }));
+vi.mock("../../lib/centralIdentity", () => ({
+  renameCentralServer: vi.fn(),
+  setCentralServerIcon: vi.fn(),
+  fetchCentralServerIcon: vi.fn(),
+}));
+vi.mock("./ImageCropper", () => ({
+  default: ({ file, onCropped }: { file: File; onCropped: (file: File) => void }) => (
+    <button type="button" onClick={() => onCropped(file)}>적용</button>
+  ),
+}));
 afterEach(() => { cleanup(); vi.resetAllMocks(); });
 const host: CentralServer = { server_id: "server-0001", alias: "Mac Studio", host_os: "macos", relation: "owner", endpoint: null, host_public_key_jwk: {}, host_key_fingerprint: "test" };
 
@@ -69,4 +79,20 @@ it("uses the refreshed name when retrying a conflicting edit", async () => {
   expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("My chosen name");
   await user.click(screen.getByRole("button", { name: "이름 저장" }));
   expect(await screen.findByRole("button", { name: "My chosen name 이름 변경" })).toBeTruthy();
+});
+
+it("lets only the owner replace a server icon with the cropped image and then reloads the list", async () => {
+  const user = userEvent.setup();
+  vi.mocked(fetchCentralServerIcon).mockReturnValue(new Promise(() => {}));
+  vi.mocked(setCentralServerIcon).mockResolvedValue("/v1/servers/server-0001/icon/abc.png");
+  const onRefresh = vi.fn().mockResolvedValue(undefined);
+  render(<CentralServerList servers={[{ ...host, icon: "/v1/servers/server-0001/icon/old.png" }, { ...host, server_id: "bookmark-0002", relation: "bookmark", alias: "Friend" }]}
+    busy={false} onOpen={async () => {}} onRefresh={onRefresh} />);
+  expect(screen.queryByRole("button", { name: "Friend 아이콘 변경" })).toBeNull();
+  await user.click(screen.getByRole("button", { name: "Mac Studio 아이콘 변경" }));
+  const picked = new File(["png"], "icon.png", { type: "image/png" });
+  await user.upload(screen.getByLabelText("서버 아이콘 이미지 선택"), picked);
+  await user.click(screen.getByRole("button", { name: "적용" }));
+  expect(setCentralServerIcon).toHaveBeenCalledWith(expect.objectContaining({ server_id: "server-0001", icon: "/v1/servers/server-0001/icon/old.png" }), picked);
+  expect(onRefresh).toHaveBeenCalledOnce();
 });

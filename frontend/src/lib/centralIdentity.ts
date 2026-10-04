@@ -37,6 +37,8 @@ export type CentralServer = {
   server_id: string;
   relation: "owner" | "bookmark";
   alias: string;
+  /** Versioned reference to the server icon on the central origin; "" when unset. */
+  icon?: string;
   host_os: HostOs | null;
   host_public_key_jwk: JsonWebKey;
   host_key_fingerprint: string;
@@ -435,6 +437,15 @@ async function signedRequest<T>(
   method: "GET" | "POST" | "DELETE",
   bodyValue?: Record<string, unknown>
 ): Promise<T> {
+  return responsePayload<T>(await signedFetch(session, path, method, bodyValue));
+}
+
+async function signedFetch(
+  session: CentralSession,
+  path: string,
+  method: "GET" | "POST" | "DELETE",
+  bodyValue?: Record<string, unknown>
+): Promise<Response> {
   const device = await storedDevice();
   if (device.deviceId !== session.device_id) {
     if (loadCentralSession()?.token === session.token) clearCentralSession();
@@ -477,7 +488,7 @@ async function signedRequest<T>(
     },
     body: body || undefined,
   });
-  return responsePayload<T>(response);
+  return response;
 }
 
 export async function authDeviceBody(displayName?: string): Promise<Record<string, unknown>> {
@@ -753,4 +764,44 @@ export async function renameCentralServer(server: CentralServer, name: string): 
     name, expected_name: server.alias || server.server_id,
   });
   if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었습니다. 다시 확인해 주세요.");
+}
+
+const SERVER_ICON_REFERENCE = /^\/v1\/servers\/[^/?#]+\/icon\/[^/?#]+\.png$/;
+
+/**
+ * Server icons are served only to signed central requests, so the image is fetched
+ * here and shown through a local object URL. Only the directory's own relative
+ * reference is accepted, so credentials never go to another origin.
+ */
+export async function fetchCentralServerIcon(reference: string): Promise<Blob> {
+  const session = loadCentralSession();
+  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!SERVER_ICON_REFERENCE.test(reference)) throw new Error("서버 아이콘 주소가 올바르지 않습니다.");
+  const response = await signedFetch(session, reference, "GET");
+  if (!response.ok) await responsePayload<never>(response);
+  return response.blob();
+}
+
+async function pngDataUrl(file: File): Promise<string> {
+  const bytes = new Uint8Array(await file.arrayBuffer());
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return `data:image/png;base64,${btoa(binary)}`;
+}
+
+/** Sets (512x512 PNG) or removes (null) a server icon; returns the new reference. */
+export async function setCentralServerIcon(server: CentralServer, icon: File | null): Promise<string> {
+  const session = loadCentralSession();
+  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (server.relation !== "owner") throw new Error("서버 소유자만 아이콘을 바꿀 수 있습니다.");
+  const result = await signedRequest<{ icon: string }>(
+    session,
+    `/v1/servers/${encodeURIComponent(server.server_id)}/icon`,
+    "POST",
+    { icon: icon ? await pngDataUrl(icon) : "", expected_icon: server.icon || "" }
+  );
+  if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었습니다. 다시 확인해 주세요.");
+  return String(result.icon || "");
 }

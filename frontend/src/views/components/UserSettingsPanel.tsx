@@ -184,10 +184,9 @@ export default function UserSettingsPanel({
                         <Camera size={20} />
                       </span>
                     </button>
+                    {/* The tile is the single way in, as in Discord; removal is the only extra action. */}
                     <div className="dc-user-settings-avatar-actions">
-                      <button type="button" className="ops-cta min-h-11 px-4" disabled={saving} onClick={onEditAvatar}>
-                        사진 변경
-                      </button>
+                      <span className="dc-user-settings-avatar-hint">사진을 눌러 바꿔요.</span>
                       {draft.avatarImage && (
                         <button
                           type="button"
