@@ -15,10 +15,6 @@ work is active or waiting, and remove it when it closes.
   the corrections through `f2dda814` at C0/H0/M0/L0; signed 0.1.8 at `03756b43`
   re-verified the schema 75 -> 77 upgrade and revocation. Central logout acceptance
   was skipped by user decision.
-- Open defect from the 2026-10-05 real-provider chat: one agent in provider-turn
-  recovery stalls the ordered room, so other agents never get a turn. (Codex
-  `gpt-5.6-luna` Low skipping the room-observation tool is treated as model
-  capability, not a product defect, by user decision.)
 - Open verification: Windows physical-device checks (recent Discord-style UI,
   server icons, interactive install/update `desktop-v0.1.4`, attendee CLI); full
   app/web parity rows in the final-parity slice; persistent web MCP endpoint

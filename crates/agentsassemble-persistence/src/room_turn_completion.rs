@@ -47,6 +47,11 @@ pub(super) async fn complete_message(
     let (room, settings) = load_active_room(transaction, room_id).await?;
     let mut session = load_session(transaction, room_id, session_id).await?;
     require_active_turn(&session, turn_id)?;
+    validate_input_cursor(transaction, &session).await?;
+    if crate::ordered_turn_release::has_released_inputs(transaction, &session).await? {
+        return complete_released_turn(transaction, &room, &settings, &mut session, authority)
+            .await;
+    }
     crate::provider_turn_execution::terminalize_ordinary_execution(
         transaction,
         &session,
@@ -54,7 +59,6 @@ pub(super) async fn complete_message(
         crate::ProviderTurnExecutionPhase::Completed,
     )
     .await?;
-    validate_input_cursor(transaction, &session).await?;
     validate_publication_target(transaction, &session, target_agent_id).await?;
     apply_provider_session_transition(&mut session, provider_session_id)?;
     crate::message_replies::validate_reply_target(
@@ -115,6 +119,10 @@ pub(super) async fn complete_vote(
     require_active_turn(&session, turn_id)?;
     validate_input_cursor(transaction, &session).await?;
     apply_provider_session_transition(&mut session, provider_session_id)?;
+    if crate::ordered_turn_release::has_released_inputs(transaction, &session).await? {
+        return complete_released_turn(transaction, &room, &settings, &mut session, authority)
+            .await;
+    }
     let participant = load_participant(
         transaction,
         &session.public.room_id,
@@ -303,4 +311,33 @@ pub(super) async fn fail(
         events,
         next_assignments,
     })
+}
+
+/// Retires a proven late success without repeating its room publication or vote effect.
+async fn complete_released_turn(
+    transaction: &mut sqlx::Transaction<'_, sqlx::Sqlite>,
+    room: &agentsassemble_domain::Room,
+    settings: &agentsassemble_domain::RoomSettings,
+    session: &mut agentsassemble_domain::DurableAgentSession,
+    authority: ProviderTurnAuthority<'_>,
+) -> Result<AgentTurnCommit, PersistenceError> {
+    crate::provider_turn_execution::terminalize_ordinary_execution(
+        transaction,
+        session,
+        authority,
+        crate::ProviderTurnExecutionPhase::Completed,
+    )
+    .await?;
+    apply_provider_session_transition(session, authority.provider_session_id)?;
+    ProviderTurnFinalization {
+        room,
+        settings,
+        turn_id: authority.turn_id,
+        provider_turn_id: authority.provider_turn_id,
+        disposition: ProviderTurnDisposition::Completed {
+            route_first_event: false,
+        },
+    }
+    .apply(transaction, session, Vec::new())
+    .await
 }

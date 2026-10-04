@@ -2,7 +2,7 @@ use sqlx::{Row, SqlitePool};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 77;
+pub const CURRENT_SCHEMA_VERSION: i64 = 78;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -135,6 +135,13 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
         .execute(&mut *tx)
         .await?;
         sqlx::query("UPDATE runtime_metadata SET value = '77' WHERE key = 'schema_version'")
+            .execute(&mut *tx)
+            .await?;
+    }
+    if version.parse::<i64>().is_ok_and(|version| version < 78) {
+        sqlx::query("ALTER TABLE provider_turn_executions ADD COLUMN released_input_ids TEXT CHECK(released_input_ids IS NULL OR (json_valid(released_input_ids) AND json_type(released_input_ids) = 'array'))")
+            .execute(&mut *tx).await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '78' WHERE key = 'schema_version'")
             .execute(&mut *tx)
             .await?;
     }
@@ -390,6 +397,10 @@ mod tests {
         let origin = "https://owner.example.test";
         if previous < 75 {
             simulate_previous_schema(&store, previous).await?;
+        } else {
+            sqlx::query("ALTER TABLE provider_turn_executions DROP COLUMN released_input_ids")
+                .execute(&store.pool)
+                .await?;
         }
         sqlx::query("UPDATE runtime_metadata SET value = ? WHERE key = 'schema_version'")
             .bind(previous.to_string())
@@ -496,6 +507,9 @@ mod tests {
         store: &SqliteStore,
         previous: i32,
     ) -> Result<(), sqlx::Error> {
+        sqlx::query("ALTER TABLE provider_turn_executions DROP COLUMN released_input_ids")
+            .execute(&store.pool)
+            .await?;
         if previous == 70 {
             sqlx::query("DROP TABLE room_connector_uploads")
                 .execute(&store.pool)

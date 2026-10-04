@@ -147,6 +147,19 @@ impl SqliteStore {
         let mut session =
             load_launch_session(&mut transaction, &principal.room_id, &agent_id).await?;
         require_valid_turn_authority(&session)?;
+        if session.public.recovery_required
+            && crate::provider_turn_execution::blocking_execution_exists(
+                &mut transaction,
+                &principal.room_id,
+                &agent_id,
+            )
+            .await?
+        {
+            return Err(rejected(
+                "provider_turn_recovery_required",
+                "Retire the quarantined provider execution before resuming this session.",
+            ));
+        }
         let mut participant =
             load_participant(&mut transaction, &principal.room_id, &agent_id).await?;
         if participant.status == ParticipantStatus::Exported {
@@ -399,6 +412,7 @@ pub(crate) async fn merged_turn_queue(
             .chain(&session.pending_inputs),
     )
     .map_err(|_| invalid_turn_queue())?;
+    let released = crate::ordered_turn_release::released_inputs(transaction, session).await?;
     let mut restored = Vec::with_capacity(merged.len());
     for input in merged {
         let event = crate::room_turns::support::load_event(
@@ -410,7 +424,7 @@ pub(crate) async fn merged_turn_queue(
         .ok_or_else(invalid_turn_queue)?;
         let deleted = event.extra.get("message_deleted") == Some(&serde_json::Value::Bool(true));
         let stale = Utc::now().signed_duration_since(event.created_at) > QUEUED_INPUT_MAX_AGE;
-        if !deleted && !stale {
+        if !deleted && !stale && !released.contains(&input.event_id) {
             restored.push(input);
         }
     }

@@ -140,6 +140,16 @@ without creating a second interrupt owner.
   copied client exposes the recovery requirement and cannot offer a knowingly stale interrupt;
   live reconciliation retains the already-classified result until runtime-gone proof rather than
   attempting the same terminal classification on every watcher pass.
+- Quarantine retains exact execution/inflight/runtime recovery custody but releases the ordered
+  room floor; it cannot receive another assignment. Quarantine and confirmed Stop atomically
+  hand undirected ordered inputs to the next eligible speaker once, using the existing selector,
+  prior-holder exclusions and cursor checks. Addressed inputs remain with their named agent.
+  Durable per-execution handoff receipts survive retries/restart, suppress late publication for
+  handed-off inputs and exclude them from restored queues. Resume requires definitive retirement
+  of the old execution before a new generation; explicit `agent.interrupt` still does not
+  immediately rerun restored input. Entry points are quarantine, confirmed Stop, result commit,
+  queue restoration and resume. Regression coverage uses three-agent ordered rooms for immediate
+  progression, targeting, late success, restart/replay and resume; no live/manual verification.
 - Verification covers exact replay/conflict, invalid/non-busy and stale authority, pre-dispatch and
   running-turn interruption, runtime-retained and runtime-gone outcomes, restart recovery, no
   immediate re-run, WebSocket projection/ACK ordering, and one packaged real-provider busy-turn

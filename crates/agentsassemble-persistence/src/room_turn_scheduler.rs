@@ -85,7 +85,9 @@ pub(super) async fn assign_available_pending(
     let mut candidates = Vec::new();
     let mut empty_schedule_requests = Vec::new();
     for session in load_room_sessions(transaction, &room.room_id).await? {
-        any_active |= turn_authority_is_active(&session)?;
+        let active = turn_authority_is_active(&session)?;
+        any_active |=
+            active && !crate::ordered_turn_release::is_quarantined(transaction, &session).await?;
         if !session_is_assignable(&session)
             || !crate::attendee_ready::is_available(transaction, &session).await?
         {
@@ -150,8 +152,33 @@ pub(super) async fn route_declined_floor(
     if settings.conversation_mode != "ordered" || !is_routable_message(event)? {
         return Ok(());
     }
-    let held = floor_holders(transaction, &event.room_id, &event.id).await?;
+    route_next_floor(transaction, settings, event, false)
+        .await
+        .map(|_| ())
+}
+
+pub(crate) async fn route_released_floor(
+    transaction: &mut Transaction<'_, Sqlite>,
+    settings: &RoomSettings,
+    event: &RoomEvent,
+) -> Result<bool, PersistenceError> {
+    route_next_floor(transaction, settings, event, true).await
+}
+
+async fn route_next_floor(
+    transaction: &mut Transaction<'_, Sqlite>,
+    settings: &RoomSettings,
+    event: &RoomEvent,
+    preserve_target: bool,
+) -> Result<bool, PersistenceError> {
+    if settings.conversation_mode != "ordered" || !is_routable_message(event)? {
+        return Ok(false);
+    }
     let mut sessions = route_sessions(transaction, event).await?;
+    if preserve_target && direct_target(event, &sessions, &BTreeSet::new()).is_some() {
+        return Ok(false);
+    }
+    let held = floor_holders(transaction, &event.room_id, &event.id).await?;
     // A delayed decline can concern history already covered by another turn,
     // including a newer observation still in flight after a room-mode change.
     sessions.retain(|(session, _)| {
@@ -161,12 +188,12 @@ pub(super) async fn route_declined_floor(
                 .last_provider_sync_seq
                 .max(session.input_up_to_seq)
     });
-    for (session_id, delivery_kind) in
-        ordered_targets(transaction, settings, event, &sessions, &held).await?
-    {
+    let targets = ordered_targets(transaction, settings, event, &sessions, &held).await?;
+    let handed = !targets.is_empty();
+    for (session_id, delivery_kind) in targets {
         queue_input(transaction, event, &session_id, delivery_kind).await?;
     }
-    Ok(())
+    Ok(handed)
 }
 
 /// Every session that has already been given the floor for this exact message.
@@ -176,8 +203,12 @@ async fn floor_holders(
     source_event_id: &str,
 ) -> Result<BTreeSet<String>, PersistenceError> {
     let rows = sqlx::query_scalar::<_, String>(
-        "SELECT DISTINCT json_extract(event_json, '$.session_id') FROM room_events          WHERE room_id = ? AND json_extract(event_json, '$.type') = 'turn_started'          AND json_extract(event_json, '$.source_event_id') = ?",
+        "SELECT DISTINCT json_extract(event_json, '$.session_id') FROM room_events          WHERE room_id = ? AND json_extract(event_json, '$.type') = 'turn_started'          AND json_extract(event_json, '$.source_event_id') = ? \
+         UNION SELECT session_id FROM provider_turn_executions, json_each(released_input_ids) \
+         WHERE room_id = ? AND json_each.value = ?",
     )
+    .bind(room_id)
+    .bind(source_event_id)
     .bind(room_id)
     .bind(source_event_id)
     .fetch_all(&mut **transaction)
@@ -192,32 +223,7 @@ async fn ordered_targets(
     sessions: &[(DurableAgentSession, Participant)],
     excluded: &BTreeSet<String>,
 ) -> Result<Vec<(String, RoomInputDeliveryKind)>, PersistenceError> {
-    let content = event.content.as_deref().unwrap_or_default();
-    let structured_target = event
-        .extra
-        .get("target_agent_id")
-        .and_then(Value::as_str)
-        .filter(|target| {
-            sessions.iter().any(|(session, _)| {
-                session.public.session_id == *target
-                    && !is_actor(session, event)
-                    && !excluded.contains(&session.public.session_id)
-            })
-        })
-        .map(str::to_owned);
-    // The structured handoff is the earliest direct target. A later explicit
-    // mention in the message body owns the floor, matching the product's
-    // final-mention rule for model recaps followed by a next-speaker call.
-    let direct = last_direct_target(
-        content,
-        sessions
-            .iter()
-            .filter(|(session, _)| {
-                !is_actor(session, event) && !excluded.contains(&session.public.session_id)
-            })
-            .map(|(session, _)| session),
-    )
-    .or(structured_target);
+    let direct = direct_target(event, sessions, excluded);
     let selected = if let Some(direct) = direct {
         let participant = sessions
             .iter()
@@ -275,6 +281,39 @@ async fn ordered_targets(
             .ok_or_else(|| rejected("ordered_floor_empty", "No ordered floor target remained."))?
     };
     Ok(vec![(selected, RoomInputDeliveryKind::OrderedObservation)])
+}
+
+fn direct_target(
+    event: &RoomEvent,
+    sessions: &[(DurableAgentSession, Participant)],
+    excluded: &BTreeSet<String>,
+) -> Option<String> {
+    let content = event.content.as_deref().unwrap_or_default();
+    let structured_target = event
+        .extra
+        .get("target_agent_id")
+        .and_then(Value::as_str)
+        .filter(|target| {
+            sessions.iter().any(|(session, _)| {
+                session.public.session_id == *target
+                    && !is_actor(session, event)
+                    && !excluded.contains(&session.public.session_id)
+            })
+        })
+        .map(str::to_owned);
+    // The structured handoff is the earliest direct target. A later explicit
+    // mention in the message body owns the floor, matching the product's
+    // final-mention rule for model recaps followed by a next-speaker call.
+    last_direct_target(
+        content,
+        sessions
+            .iter()
+            .filter(|(session, _)| {
+                !is_actor(session, event) && !excluded.contains(&session.public.session_id)
+            })
+            .map(|(session, _)| session),
+    )
+    .or(structured_target)
 }
 
 fn ambient_targets(
@@ -390,6 +429,7 @@ fn is_actor(session: &DurableAgentSession, event: &RoomEvent) -> bool {
 fn route_session_is_eligible(session: &DurableAgentSession, participant: &Participant) -> bool {
     participant.status == ParticipantStatus::Joined
         && !participant.muted
+        && !session.public.recovery_required
         && session.public.enabled
         && session.public.status == AgentSessionStatus::Attached
         && matches!(
@@ -464,7 +504,8 @@ async fn pending_input_sequences(
 }
 
 fn session_is_assignable(session: &DurableAgentSession) -> bool {
-    session.public.enabled
+    !session.public.recovery_required
+        && session.public.enabled
         && session.public.status == AgentSessionStatus::Attached
         && session.public.runtime_status == AgentRuntimeStatus::Idle
         && session.public.provider_session_active

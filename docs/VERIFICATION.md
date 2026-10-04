@@ -1,5 +1,34 @@
 # Verification Contract
 
+## Ordered recovery floor isolation (2026-10-05)
+
+The persistence owner separates a quarantined execution's recovery custody from
+ordered floor custody. Quarantine and confirmed Stop atomically queue ordinary
+inflight inputs to the existing next-speaker selector once; addressed inputs stay
+with their agent. Schema 78 adds a nullable per-execution input receipt without
+rewriting existing execution/session rows. Receipts suppress late message/vote
+publication, exclude handed-off inputs from restored queues, and retain prior-holder
+exclusions after restart. Mixed observations retain their addressed portion. Resume
+rejects unresolved quarantine and uses a new generation after definitive retirement;
+explicit interrupt's no-immediate-rerun behavior remains covered by existing tests.
+
+Before implementation, three new regressions failed (zero assignments instead of
+one) for quarantine, confirmed Stop, and unrelated work behind an addressed
+quarantine. Seven new regression tests now cover those flows plus late success,
+restart/replay, Stop/resume/new generation, mixed inputs, and schema 77 -> 78
+identity preservation and quarantine after room archive. Final persistence tests:
+375 passed. The single `make verify` invocation passed architecture/format, policy
+19, frontend 991 (168 files), desktop/workspace Rust 1,079, Clippy and diff checks;
+it exited 2 only on the final artifact limit (35,457,257,472 bytes > 18 GiB).
+After all Cargo/Tauri work ended and no process used this target, the existing
+`make artifact-prune` owner cleaned the project cache; `make artifact-check` passed.
+The final archive-race/selector corrections passed all 375 persistence tests and
+workspace Clippy; the full gate was not rerun. No real provider run, deployment,
+remote database mutation, signed app build, or manual validation was performed.
+This is automated persistence evidence, not packaged/runtime acceptance
+or closure of Phase 9. The user's separate decision still treats Codex
+`gpt-5.6-luna` Low skipping room observation as model capability, not a product defect.
+
 ## Whole-source c2d1a117 submission and requested stop (2026-09-15)
 
 At22:57 KST the existing in-app Pro conversation visibly contains the complete

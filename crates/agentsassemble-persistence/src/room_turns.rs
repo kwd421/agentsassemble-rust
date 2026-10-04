@@ -542,7 +542,7 @@ mod finalization;
 #[path = "room_turn_routing.rs"]
 mod routing;
 #[path = "room_turn_scheduler.rs"]
-mod scheduler;
+pub(crate) mod scheduler;
 #[path = "room_turn_support.rs"]
 pub(crate) mod support;
 

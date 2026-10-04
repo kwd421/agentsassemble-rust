@@ -295,12 +295,24 @@ impl SqliteStore {
         };
         session.public.updated_at = Utc::now();
         save_session(&mut transaction, &session).await?;
+        crate::ordered_turn_release::release_inputs(&mut transaction, &session).await?;
         let state = session_state_event(&mut transaction, &session).await?;
+        let (room, settings) = crate::room_turns::support::load_room_with_settings(
+            &mut transaction,
+            &authority.room_id,
+        )
+        .await?;
+        let mut commit = if room.status == agentsassemble_domain::RoomStatus::Active {
+            crate::room_turns::assign_pending_in(&mut transaction, &room, &settings).await?
+        } else {
+            AgentTurnCommit {
+                events: Vec::new(),
+                next_assignments: Vec::new(),
+            }
+        };
+        commit.events.insert(0, state);
         transaction.commit().await?;
-        Ok(AgentTurnCommit {
-            events: vec![state],
-            next_assignments: Vec::new(),
-        })
+        Ok(commit)
     }
 
     /// Loads one exact durable execution for reconciliation and verification.

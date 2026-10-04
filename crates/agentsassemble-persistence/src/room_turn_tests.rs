@@ -28,6 +28,8 @@ mod message_mutation_queue_tests;
 mod message_search_index_tests;
 #[path = "message_search_provider_tests.rs"]
 mod message_search_provider_tests;
+#[path = "ordered_recovery_tests.rs"]
+mod ordered_recovery_tests;
 #[path = "persona_turn_tests.rs"]
 mod persona_turn_tests;
 #[path = "provider_turn_completion_recovery_tests.rs"]

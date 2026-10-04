@@ -129,7 +129,13 @@ Mode transitions never delete or cancel active/inflight work.
 - `ordered` to or from `ambient` preserves every queued delivery kind.
 - Multiple active turns are valid after a transition. Each session tuple remains
   strict; ordered scheduling merely refrains from a new assignment while
-  `active_count >= 1` and does not call `active_count > 1` corruption.
+  `active_count >= 1` and does not call `active_count > 1` corruption. A quarantined
+  execution retains recovery custody but does not count as an ordered floor holder and cannot
+  receive new work. Quarantine and confirmed Stop hand ordinary inputs on once in the same
+  transaction, reusing decline's prior-speaker exclusion and cursor checks; named targets stay
+  with their agent. Durable handoff receipts prevent late publication and automatic reuse on
+  resume, which requires definitive old-execution retirement and a new generation. Explicit
+  `agent.interrupt` retains its no-immediate-rerun contract.
 
 Routing preserves the original distinction between addressed and unaddressed work.
 

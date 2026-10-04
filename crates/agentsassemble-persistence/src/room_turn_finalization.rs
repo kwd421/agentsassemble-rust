@@ -55,8 +55,11 @@ impl ProviderTurnFinalization<'_> {
         };
         let input_event_id = session.input_up_to_event_id.clone();
         let input_seq = session.input_up_to_seq;
+        let released_ids =
+            crate::ordered_turn_release::released_inputs(transaction, session).await?;
+        let released = !released_ids.is_empty();
         let declined_source_event_id =
-            matches!(self.disposition, ProviderTurnDisposition::Declined { .. })
+            (matches!(self.disposition, ProviderTurnDisposition::Declined { .. }) && !released)
                 .then(|| session.active_source_event_id.clone())
                 .filter(|id| !id.is_empty());
         let finished = turn_finished_event(
@@ -68,7 +71,22 @@ impl ProviderTurnFinalization<'_> {
             reason_code,
         )
         .await?;
-        complete_session_state(session, &input_event_id, input_seq);
+        if released
+            && session
+                .inflight_inputs
+                .iter()
+                .any(|input| !released_ids.contains(&input.event_id))
+        {
+            // A mixed observation's late result cannot publish, but its addressed portion
+            // still belongs to this agent in a fresh generation after exact retirement.
+            session.pending_inputs =
+                crate::agent_lifecycle::merged_turn_queue(transaction, session).await?;
+            let previous_id = session.public.last_provider_sync_event_id.clone();
+            let previous_seq = session.public.last_provider_sync_seq;
+            complete_session_state(session, &previous_id, previous_seq);
+        } else {
+            complete_session_state(session, &input_event_id, input_seq);
+        }
         save_session(transaction, session).await?;
         let state = session_state_event(transaction, session).await?;
         if route_first_event {

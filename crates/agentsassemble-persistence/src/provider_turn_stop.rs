@@ -33,6 +33,7 @@ pub(crate) async fn terminalize_confirmed_stop_turn(
     if exact_stop_turn_is_terminal(session, &execution, effect.as_ref())? {
         return Ok(None);
     }
+    crate::ordered_turn_release::release_inputs(transaction, session).await?;
     let now = Utc::now().to_rfc3339_opts(SecondsFormat::Micros, true);
     let execution_changed = sqlx::query(
         "UPDATE provider_turn_executions SET phase = 'interrupted', requeue_finalized = 1, \
