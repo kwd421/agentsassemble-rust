@@ -488,3 +488,6 @@ async fn ordered_quarantine_after_archive_retains_custody_without_scheduling()
     );
     Ok(())
 }
+
+#[path = "ordered_release_entry_tests.rs"]
+mod entry_tests;

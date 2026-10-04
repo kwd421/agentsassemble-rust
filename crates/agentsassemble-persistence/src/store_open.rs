@@ -73,6 +73,9 @@ impl SqliteStore {
             store.host_identity().await?;
             crate::schema_version::upgrade_schema(&store.pool).await?;
         }
+        // Startup repair owns a large transactional scheduler future; keep it out of every
+        // caller's open/bootstrap state machine (observed downstream future: 16,824 bytes).
+        Box::pin(crate::ordered_turn_release::repair_startup(&store.pool)).await?;
         Ok(store)
     }
 }

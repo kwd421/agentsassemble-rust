@@ -245,72 +245,24 @@ impl SqliteStore {
         {
             return Err(stale_execution());
         }
-        if execution.phase == ProviderTurnExecutionPhase::RecoveryRequired {
-            if !session.public.recovery_required {
-                return Err(invalid_execution());
-            }
-            // Retrying the same retained result must not publish duplicate recovery
-            // events. Keep the first diagnostic until completion or operator recovery.
-            return Ok(AgentTurnCommit {
-                events: Vec::new(),
-                next_assignments: Vec::new(),
-            });
+        if execution.phase != ProviderTurnExecutionPhase::RecoveryRequired {
+            "provider_turn_recovery_required".clone_into(&mut session.public.last_error_code);
+            // The recovery state is what the room acts on, but the failure that caused it
+            // is the only thing that explains the quarantine later. Keep both.
+            // The cause can carry provider stderr, so it goes through the same redaction as
+            // every other persisted diagnostic before it is stored.
+            let cause = cause
+                .map(|cause| agentsassemble_domain::redact_persisted_diagnostic_text(cause, 400))
+                .filter(|cause| !cause.is_empty());
+            session.public.last_error = match cause {
+                Some(cause) => format!(
+                    "The exact provider turn remains quarantined pending recovery. Cause: {cause}"
+                ),
+                None => "The exact provider turn remains quarantined pending recovery.".to_owned(),
+            };
         }
-        let updated = sqlx::query(
-            "UPDATE provider_turn_executions SET phase = 'recovery_required', updated_at = ? \
-             WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
-             AND execution_id = ? AND turn_id = ? \
-             AND phase IN ('start_dispatching', 'running') AND start_dispatch_nonce = ? \
-             AND runtime_handle_id = ? AND runtime_owner_id = ? AND runtime_lease_token = ?",
-        )
-        .bind(canonical_now())
-        .bind(&authority.room_id)
-        .bind(&authority.session_id)
-        .bind(generation_i64(authority.turn_generation)?)
-        .bind(&authority.execution_id)
-        .bind(&authority.turn_id)
-        .bind(&authority.start_dispatch_nonce)
-        .bind(&authority.runtime_handle_id)
-        .bind(&authority.runtime_owner_id)
-        .bind(&authority.runtime_lease_token)
-        .execute(&mut *transaction)
-        .await?;
-        if updated.rows_affected() != 1 {
-            return Err(stale_execution());
-        }
-        session.public.recovery_required = true;
-        "provider_turn_recovery_required".clone_into(&mut session.public.last_error_code);
-        // The recovery state is what the room acts on, but the failure that caused it
-        // is the only thing that explains the quarantine later. Keep both.
-        // The cause can carry provider stderr, so it goes through the same redaction as
-        // every other persisted diagnostic before it is stored.
-        let cause = cause
-            .map(|cause| agentsassemble_domain::redact_persisted_diagnostic_text(cause, 400))
-            .filter(|cause| !cause.is_empty());
-        session.public.last_error = match cause {
-            Some(cause) => format!(
-                "The exact provider turn remains quarantined pending recovery. Cause: {cause}"
-            ),
-            None => "The exact provider turn remains quarantined pending recovery.".to_owned(),
-        };
-        session.public.updated_at = Utc::now();
-        save_session(&mut transaction, &session).await?;
-        crate::ordered_turn_release::release_inputs(&mut transaction, &session).await?;
-        let state = session_state_event(&mut transaction, &session).await?;
-        let (room, settings) = crate::room_turns::support::load_room_with_settings(
-            &mut transaction,
-            &authority.room_id,
-        )
-        .await?;
-        let mut commit = if room.status == agentsassemble_domain::RoomStatus::Active {
-            crate::room_turns::assign_pending_in(&mut transaction, &room, &settings).await?
-        } else {
-            AgentTurnCommit {
-                events: Vec::new(),
-                next_assignments: Vec::new(),
-            }
-        };
-        commit.events.insert(0, state);
+        let commit =
+            crate::ordered_turn_release::quarantine(&mut transaction, &mut session).await?;
         transaction.commit().await?;
         Ok(commit)
     }
@@ -455,7 +407,7 @@ async fn quarantine_dispatched_task_death(
            SELECT 1 FROM provider_turn_effects effect WHERE effect.room_id = ? \
            AND effect.session_id = ? AND effect.turn_generation = ? \
            AND effect.phase = 'dispatching') THEN 'interrupt_ambiguous' \
-           ELSE 'recovery_required' END, updated_at = ? \
+           ELSE phase END, updated_at = ? \
          WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
          AND execution_id = ? AND phase = ? AND runtime_handle_id = ? \
          AND runtime_owner_id = ? AND runtime_lease_token = ?",
@@ -489,15 +441,9 @@ async fn quarantine_dispatched_task_death(
     .bind(generation_i64(execution.turn_generation)?)
     .execute(&mut *transaction)
     .await?;
-    session.public.recovery_required = true;
-    session.public.updated_at = Utc::now();
-    save_session(&mut transaction, &session).await?;
-    let state = session_state_event(&mut transaction, &session).await?;
+    let commit = crate::ordered_turn_release::quarantine(&mut transaction, &mut session).await?;
     transaction.commit().await?;
-    Ok(AgentTurnCommit {
-        events: vec![state],
-        next_assignments: Vec::new(),
-    })
+    Ok(commit)
 }
 
 pub(crate) async fn terminalize_ordinary_execution(

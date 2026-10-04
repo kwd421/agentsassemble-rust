@@ -150,6 +150,18 @@ without creating a second interrupt owner.
   immediately rerun restored input. Entry points are quarantine, confirmed Stop, result commit,
   queue restoration and resume. Regression coverage uses three-agent ordered rooms for immediate
   progression, targeting, late success, restart/replay and resume; no live/manual verification.
+- Review correction acceptance (Daybreak H1/M1, 2026-10-05): every quarantine entry,
+  including dispatched reconciliation-task death, unissued interrupt handback and lost
+  interrupt quiescence, uses one transaction owner for execution/public recovery, the
+  release receipt, input transfer and floor progression. Startup repairs receipt-less
+  recovery and confirmed-stop executions before admission; replay cannot skip this repair.
+  A phase alone never releases the floor without a durable receipt. Initial ordered
+  routing persists the selected session and direct/ordinary classification; rename or
+  removal cannot change that classification at release. Required regressions fail on
+  the reviewed code for task death, both interrupt paths, upgraded quarantine/stop rows,
+  and target rename/removal. Only affected crate tests run during correction; the full
+  gate runs once immediately before feature commits and push. Deployment, signed builds
+  and manual verification are outside this correction.
 - Verification covers exact replay/conflict, invalid/non-busy and stale authority, pre-dispatch and
   running-turn interruption, runtime-retained and runtime-gone outcomes, restart recovery, no
   immediate re-run, WebSocket projection/ACK ordering, and one packaged real-provider busy-turn

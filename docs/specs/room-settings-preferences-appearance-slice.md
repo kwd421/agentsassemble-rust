@@ -137,6 +137,14 @@ Mode transitions never delete or cancel active/inflight work.
   resume, which requires definitive old-execution retirement and a new generation. Explicit
   `agent.interrupt` retains its no-immediate-rerun contract.
 
+Quarantine entry has one transactional owner across result failure, reconciliation task
+death and interrupt recovery. Startup repairs missing release receipts, including confirmed
+Stop checkpoints. The scheduler excludes an execution only with a durable release receipt;
+recovery phase alone is insufficient. The first ordered routing decision persists its exact
+target and direct/ordinary classification. Release reads this immutable decision even after
+profile rename or participant/session removal. Regression acceptance includes each of these
+entry points and schema-upgraded rows, without provider or manual runs.
+
 Routing preserves the original distinction between addressed and unaddressed work.
 
 - Ordered direct targeting treats a structured handoff as the earliest target and

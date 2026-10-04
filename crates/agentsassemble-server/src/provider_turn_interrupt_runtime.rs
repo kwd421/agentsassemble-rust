@@ -25,10 +25,10 @@ pub(crate) async fn apply_exact_interrupt(
     let mut control = match provider_adapter.begin_exact_turn(&authority).await {
         Ok(control) => control,
         Err(error) => {
-            store
+            tracing::warn!(code = %error.code, "exact interrupt entered recovery before dispatch");
+            return store
                 .handoff_unissued_provider_interrupt_claim(&claim)
-                .await?;
-            return Err(unresolved(error.code, error.message));
+                .await;
         }
     };
     let waiting = match control.disposition {
@@ -42,8 +42,8 @@ pub(crate) async fn apply_exact_interrupt(
             match store.mark_provider_interrupt_issued(&dispatched).await {
                 Ok(waiting) => waiting,
                 Err(error) => {
-                    store.mark_provider_interrupt_ambiguous(&dispatched).await?;
-                    return Err(error);
+                    tracing::warn!(%error, "exact interrupt dispatch requires recovery");
+                    return store.mark_provider_interrupt_ambiguous(&dispatched).await;
                 }
             }
         }
@@ -51,10 +51,10 @@ pub(crate) async fn apply_exact_interrupt(
     let quiescence = match control.wait_quiesced(QUIESCENCE_TIMEOUT).await {
         Ok(quiescence) => quiescence,
         Err(error) => {
-            store
+            tracing::warn!(code = %error.code, "exact interrupt quiescence requires recovery");
+            return store
                 .mark_provider_interrupt_recovery_required(&waiting)
-                .await?;
-            return Err(unresolved(error.code, error.message));
+                .await;
         }
     };
     finalize_exact_quiescence(store, provider_adapter, &authority, &waiting, quiescence).await
@@ -97,10 +97,11 @@ pub(crate) async fn resume_exact_interrupt(
     let quiescence = match control.wait_quiesced(QUIESCENCE_TIMEOUT).await {
         Ok(quiescence) => quiescence,
         Err(error) => {
-            store
+            tracing::warn!(code = %error.code, "exact interrupt quiescence requires recovery");
+            return store
                 .mark_provider_interrupt_recovery_required(&waiting)
-                .await?;
-            return Err(unresolved(error.code, error.message));
+                .await
+                .map(Some);
         }
     };
     finalize_exact_quiescence(store, provider_adapter, &authority, &waiting, quiescence)

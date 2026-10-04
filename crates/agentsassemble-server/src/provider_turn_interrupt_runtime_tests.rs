@@ -1,7 +1,7 @@
 use agentsassemble_persistence::RoomMutationAuthority::TrustedPrincipal;
 use agentsassemble_persistence::{
-    AgentRuntimeStarted, AgentStartPlan, PersistenceError, ProviderTurnEffectPhase,
-    ProviderTurnInterruptEffect, SqliteStore,
+    AgentRuntimeStarted, AgentStartPlan, ProviderTurnEffectPhase, ProviderTurnInterruptEffect,
+    SqliteStore,
 };
 use agentsassemble_provider::{ProviderAdapter, ProviderStartReservation};
 use serde_json::json;
@@ -21,15 +21,20 @@ struct PreSlotFixture {
 #[tokio::test]
 async fn pre_slot_interrupt_hands_claim_to_recovery_without_ttl_wait() {
     let fixture = stage_pre_slot_interrupt().await;
-    assert!(matches!(
-        Box::pin(apply_exact_interrupt(
-            &fixture.store,
-            &ProviderAdapter::new(),
-            &fixture.effect,
-        ))
-        .await,
-        Err(PersistenceError::CommandUnresolved { .. })
-    ));
+    let commit = Box::pin(apply_exact_interrupt(
+        &fixture.store,
+        &ProviderAdapter::new(),
+        &fixture.effect,
+    ))
+    .await
+    .unwrap_or_else(|error| panic!("commit recovery: {error}"));
+    assert!(
+        commit
+            .events
+            .iter()
+            .any(|event| event.event_type == "agent_session_state"
+                && event.extra["agent_session"]["recovery_required"] == json!(true))
+    );
     let handed_off = fixture
         .store
         .provider_turn_interrupt_effect(

@@ -361,7 +361,7 @@ impl SqliteStore {
     pub async fn mark_provider_interrupt_ambiguous(
         &self,
         dispatched: &ProviderTurnInterruptEffect,
-    ) -> Result<(), PersistenceError> {
+    ) -> Result<crate::AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let effect_changed = sqlx::query(
             "UPDATE provider_turn_effects SET phase = 'interrupt_ambiguous', updated_at = ? \
@@ -393,8 +393,16 @@ impl SqliteStore {
         if effect_changed.rows_affected() != 1 || execution_changed.rows_affected() != 1 {
             return Err(stale_effect());
         }
+        let mut session = crate::agent_lifecycle::load_session(
+            &mut transaction,
+            &dispatched.room_id,
+            &dispatched.session_id,
+        )
+        .await?;
+        let commit =
+            crate::ordered_turn_release::quarantine(&mut transaction, &mut session).await?;
         transaction.commit().await?;
-        Ok(())
+        Ok(commit)
     }
 
     /// Hands an unissued interrupt claim back to recovery without retaining its lease.
@@ -405,7 +413,7 @@ impl SqliteStore {
     pub async fn handoff_unissued_provider_interrupt_claim(
         &self,
         claim: &ProviderTurnEffectClaim,
-    ) -> Result<(), PersistenceError> {
+    ) -> Result<crate::AgentTurnCommit, PersistenceError> {
         transition_to_recovery_required(self, &claim.effect, Some(&claim.claim_owner)).await
     }
 
@@ -417,7 +425,7 @@ impl SqliteStore {
     pub async fn mark_provider_interrupt_recovery_required(
         &self,
         expected: &ProviderTurnInterruptEffect,
-    ) -> Result<(), PersistenceError> {
+    ) -> Result<crate::AgentTurnCommit, PersistenceError> {
         transition_to_recovery_required(self, expected, None).await
     }
 
@@ -666,7 +674,7 @@ async fn transition_to_recovery_required(
     store: &SqliteStore,
     expected: &ProviderTurnInterruptEffect,
     release_claim_owner: Option<&str>,
-) -> Result<(), PersistenceError> {
+) -> Result<crate::AgentTurnCommit, PersistenceError> {
     let mut transaction = store.pool.begin().await?;
     let current = load_effect_in(
         &mut transaction,
@@ -728,28 +736,18 @@ async fn transition_to_recovery_required(
         .execute(&mut *transaction)
         .await?
     };
-    let execution_changed = sqlx::query(
-        "UPDATE provider_turn_executions SET phase = 'recovery_required', updated_at = ? \
-         WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
-         AND execution_id = ? AND phase = ? AND runtime_handle_id = ? \
-         AND runtime_owner_id = ? AND runtime_lease_token = ? AND requeue_finalized = 0",
-    )
-    .bind(&now)
-    .bind(&execution.room_id)
-    .bind(&execution.session_id)
-    .bind(generation_i64(execution.turn_generation)?)
-    .bind(&execution.execution_id)
-    .bind(execution.phase.as_str())
-    .bind(&execution.runtime_handle_id)
-    .bind(&execution.runtime_owner_id)
-    .bind(&execution.runtime_lease_token)
-    .execute(&mut *transaction)
-    .await?;
-    if effect_changed.rows_affected() != 1 || execution_changed.rows_affected() != 1 {
+    if effect_changed.rows_affected() != 1 {
         return Err(stale_effect());
     }
+    let mut session = crate::agent_lifecycle::load_session(
+        &mut transaction,
+        &current.room_id,
+        &current.session_id,
+    )
+    .await?;
+    let commit = crate::ordered_turn_release::quarantine(&mut transaction, &mut session).await?;
     transaction.commit().await?;
-    Ok(())
+    Ok(commit)
 }
 
 pub(crate) async fn load_optional_effect_in(
