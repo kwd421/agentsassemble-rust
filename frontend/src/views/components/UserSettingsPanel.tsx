@@ -8,8 +8,10 @@ import GoogleAccountSettings from "./GoogleAccountSettings";
 import CentralAccountSettings from "./CentralAccountSettings";
 import { centralIdentityConfigured } from "../../lib/centralIdentity";
 import GuestRecoverySettings from "./GuestRecoverySettings";
+import OwnerDevicesPanel from "./OwnerDevicesPanel";
+import { isDesktopWebview } from "../../lib/desktopBridge";
 
-export type UserSettingsSection = "account" | "profile" | "voice" | "recovery";
+export type UserSettingsSection = "account" | "profile" | "voice" | "recovery" | "devices";
 
 const USER_SETTINGS_SECTIONS: Array<{
   id: UserSettingsSection;
@@ -19,6 +21,7 @@ const USER_SETTINGS_SECTIONS: Array<{
   { id: "profile", label: "프로필" },
   { id: "voice", label: "음성" },
   { id: "recovery", label: "복구" },
+  { id: "devices", label: "기기" },
 ];
 
 export default function UserSettingsPanel({
@@ -54,9 +57,10 @@ export default function UserSettingsPanel({
     const dialog = dialogRef.current; dialog?.showModal();
     return () => { dialog?.close(); returnFocusRef.current?.focus(); };
   }, [returnFocusRef]);
-  const sections = profileIdentity?.sessionToken && !profileIdentity.centralOwner
-    ? USER_SETTINGS_SECTIONS
-    : USER_SETTINGS_SECTIONS.filter((section) => section.id !== "recovery");
+  const canManageDevices = Boolean(profileIdentity?.centralSession) || (!profileIdentity?.sessionToken && isDesktopWebview());
+  const sections = USER_SETTINGS_SECTIONS.filter(section => section.id === "recovery"
+    ? profileIdentity?.sessionToken && !profileIdentity.centralOwner
+    : section.id !== "devices" || canManageDevices);
   const draftAvatarUrl = resolveAttachmentReference(
     draft.avatarImage,
     displayResourceBase
@@ -303,6 +307,7 @@ export default function UserSettingsPanel({
           {settingsSection === "recovery" && profileIdentity?.sessionToken && (
             <GuestRecoverySettings identity={profileIdentity} />
           )}
+          {settingsSection === "devices" && canManageDevices && <OwnerDevicesPanel identity={profileIdentity ?? {}} />}
         </section>
         {profileError && <p className="dc-user-settings-error" role="alert" style={{ position: "relative", inset: "auto", padding: "12px 32px", whiteSpace: "normal", overflow: "visible", overflowWrap: "anywhere" }}>{profileError}</p>}
         {/* Discord's save bar: it appears only once there is something to save. */}

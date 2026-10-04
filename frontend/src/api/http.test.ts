@@ -353,7 +353,9 @@ describe("browser session WebSocket ticket routing", () => {
       headers: {
         Authorization: `Bearer ${sessionToken}`,
         ...(deviceToken ? { "X-Device-Token": deviceToken } : {}),
+        ...(sessionToken.startsWith("aops1.") ? { "Content-Type": "application/json" } : {}),
       },
+      ...(sessionToken.startsWith("aops1.") ? { body: expect.any(String) } : {}),
     });
     expect(grant).toEqual({
       ticket: "c".repeat(64),

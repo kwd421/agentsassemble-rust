@@ -38,7 +38,7 @@ pub use local_control::{
 };
 
 pub const PROTOCOL_VERSION: u32 = 1;
-pub const PRODUCT_SURFACE_REVISION: u32 = 18;
+pub const PRODUCT_SURFACE_REVISION: u32 = 19;
 pub const MAX_ROOM_SOCKET_MESSAGE_BYTES: usize = 256 * 1024;
 pub const BROWSER_CREDENTIAL_PREFIX: &str = "aad1_";
 pub const BROWSER_CREDENTIAL_BYTES: usize = 32;

@@ -7,15 +7,15 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use chrono::Utc;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
     AppState,
     http_api::{
-        BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body, ensure_empty_body,
-        exact_tauri_cors,
+        BodyDecodeError, PRIVATE_NO_STORE, bearer_credential, decode_json_body,
+        decode_optional_json_body, exact_tauri_cors,
     },
     room_command_result::CommandFailure,
     room_session_http_authority::{
@@ -30,6 +30,12 @@ const MAX_EXCHANGE_BODY_BYTES: usize = 4 * 1024;
 struct SessionTicketResponse {
     ticket: String,
     ttl_seconds: u64,
+}
+
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct SocketDeviceRequest {
+    device: agentsassemble_protocol::OwnerDeviceDescription,
 }
 
 #[derive(Serialize)]
@@ -108,15 +114,32 @@ async fn authorize_exchange(
 ) -> Result<agentsassemble_persistence::RoomSessionAuthorization, SessionExchangeError> {
     let authorization =
         authorize_presented_session(state, request.headers(), request.extensions().get()).await?;
-    ensure_empty_body(request, MAX_EXCHANGE_BODY_BYTES)
-        .await
-        .map_err(SessionExchangeError::from_body)?;
-    if let agentsassemble_persistence::RoomSessionAuthorization::Operator(operator) = &authorization
-    {
-        state
-            .store
-            .record_operator_connection(operator, None)
-            .await?;
+    let metadata: Option<SocketDeviceRequest> =
+        decode_optional_json_body(request, MAX_EXCHANGE_BODY_BYTES)
+            .await
+            .map_err(SessionExchangeError::from_body)?;
+    match (&authorization, metadata) {
+        (agentsassemble_persistence::RoomSessionAuthorization::Operator(operator), metadata) => {
+            let description = metadata
+                .map(|metadata| {
+                    agentsassemble_persistence::OwnerDeviceDescription::verified(
+                        metadata.device.device_name,
+                        metadata.device.browser,
+                        metadata.device.os,
+                    )
+                })
+                .transpose()?;
+            state
+                .store
+                .record_operator_connection(operator, description.as_ref())
+                .await?;
+        }
+        (_, Some(_)) => {
+            return Err(SessionExchangeError::from_body(
+                BodyDecodeError::InvalidJson,
+            ));
+        }
+        (_, None) => {}
     }
     Ok(authorization)
 }
@@ -192,8 +215,8 @@ impl SessionExchangeError {
             },
             BodyDecodeError::InvalidJson | BodyDecodeError::NonEmpty => Self {
                 status: StatusCode::BAD_REQUEST,
-                code: "body_not_empty".to_owned(),
-                message: "Session ticket requests must not contain a body.".to_owned(),
+                code: "invalid_socket_device".to_owned(),
+                message: "Socket device metadata is invalid.".to_owned(),
             },
         }
     }

@@ -92,10 +92,7 @@ pub(crate) async fn ensure_empty_body(
     request: Request,
     limit: usize,
 ) -> Result<(), BodyDecodeError> {
-    reject_declared_oversize(request.headers(), limit)?;
-    let encoded = body::to_bytes(request.into_body(), limit)
-        .await
-        .map_err(|error| classify_body_read_error(&error))?;
+    let encoded = read_body(request, limit).await?;
     if encoded.is_empty() {
         Ok(())
     } else {
@@ -107,11 +104,29 @@ pub(crate) async fn decode_json_body<T: serde::de::DeserializeOwned>(
     request: Request,
     limit: usize,
 ) -> Result<T, BodyDecodeError> {
-    reject_declared_oversize(request.headers(), limit)?;
-    let encoded = body::to_bytes(request.into_body(), limit)
-        .await
-        .map_err(|error| classify_body_read_error(&error))?;
+    let encoded = read_body(request, limit).await?;
     serde_json::from_slice(&encoded).map_err(|_| BodyDecodeError::InvalidJson)
+}
+
+pub(crate) async fn decode_optional_json_body<T: serde::de::DeserializeOwned>(
+    request: Request,
+    limit: usize,
+) -> Result<Option<T>, BodyDecodeError> {
+    let encoded = read_body(request, limit).await?;
+    if encoded.is_empty() {
+        Ok(None)
+    } else {
+        serde_json::from_slice(&encoded)
+            .map(Some)
+            .map_err(|_| BodyDecodeError::InvalidJson)
+    }
+}
+
+async fn read_body(request: Request, limit: usize) -> Result<axum::body::Bytes, BodyDecodeError> {
+    reject_declared_oversize(request.headers(), limit)?;
+    body::to_bytes(request.into_body(), limit)
+        .await
+        .map_err(|error| classify_body_read_error(&error))
 }
 
 fn classify_body_read_error(error: &axum::Error) -> BodyDecodeError {

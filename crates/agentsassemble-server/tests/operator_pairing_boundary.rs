@@ -272,6 +272,42 @@ async fn create_with_boundary_checks(
     created
 }
 
+async fn exchange_with_device_description(
+    client: &Client,
+    state: &AppState,
+    base: &str,
+    session: &str,
+    device: &str,
+) -> reqwest::Response {
+    let malformed = public(client.post(format!("{base}/api/session-tickets/socket")))
+        .bearer_auth(session)
+        .header("x-device-token", device)
+        .json(&json!({"device": {"device_name": "Paired laptop", "browser": "Firefox", "os": "Linux"}, "extra": true}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("malformed device: {error}"));
+    assert_eq!(malformed.status(), StatusCode::BAD_REQUEST);
+    let exchanged = public(client.post(format!("{base}/api/session-tickets/socket")))
+        .bearer_auth(session)
+        .header("x-device-token", device)
+        .json(&json!({"device": {"device_name": "Paired laptop", "browser": "Firefox", "os": "Linux"}}))
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("exchange: {error}"));
+    assert_eq!(exchanged.status(), StatusCode::OK);
+    let devices = state
+        .store
+        .owner_device_sessions(&agentsassemble_persistence::ServerOwnerAuthority::LocalOperator)
+        .await
+        .unwrap_or_else(|error| panic!("devices: {error}"));
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].device_name, "Paired laptop");
+    assert_eq!(devices[0].browser, "Firefox");
+    assert_eq!(devices[0].os, "Linux");
+    assert!(devices[0].last_connected_at.is_some());
+    exchanged
+}
+
 #[tokio::test]
 async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
     let PairingServer {
@@ -319,13 +355,8 @@ async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
         .await
         .unwrap_or_else(|error| panic!("foreign exchange: {error}"));
     assert_eq!(wrong.status(), StatusCode::UNAUTHORIZED);
-    let exchanged = public(client.post(format!("{base}/api/session-tickets/socket")))
-        .bearer_auth(&session)
-        .header("x-device-token", &device)
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("exchange: {error}"));
-    assert_eq!(exchanged.status(), StatusCode::OK);
+    let exchanged =
+        exchange_with_device_description(&client, &state, &base, &session, &device).await;
     let exchanged: Value = exchanged
         .json()
         .await

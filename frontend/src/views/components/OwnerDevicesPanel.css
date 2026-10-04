@@ -1,0 +1,23 @@
+.owner-devices { display: grid; gap: 16px; }
+.owner-devices-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.owner-devices-heading p { margin: 0; }
+.owner-devices-refresh { display: grid; place-items: center; width: 44px; height: 44px; border-radius: 6px; }
+.owner-devices-caption, .owner-device-info p { margin: 0; color: var(--color-text-muted); font-size: 13px; }
+.owner-devices-list { padding: 0; margin: 0; list-style: none; }
+.owner-devices-list li { display: flex; align-items: center; gap: 16px; padding: 20px 0; border-bottom: 1px solid #ffffff12; }
+.owner-device-icon { display: grid; place-items: center; flex-shrink: 0; width: 48px; height: 48px; border-radius: 50%; background: #ffffff09; }
+.owner-device-info { flex: 1; min-width: 0; display: grid; gap: 5px; overflow-wrap: anywhere; }
+.owner-device-name { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.owner-device-current { color: #77dca4; background: #77dca416; padding: 2px 6px; border-radius: 4px; font-size: 11px; }
+.owner-device-revoke { flex-shrink: 0; min-height: 44px; padding: 0 12px; border: 1px solid #ffffff20; border-radius: 5px; font-size: 13px; }
+.owner-devices-revoke-all { justify-self: start; min-height: 44px; padding: 8px 16px; border: 1px solid #ff858566; color: #ffaaa9; border-radius: 5px; }
+.owner-devices button:disabled, .owner-device-confirm button:disabled { opacity: .5; cursor: default; }
+.owner-devices-error { color: #ffb4b5; overflow-wrap: anywhere; }
+.owner-device-confirm { margin: auto; width: min(440px, calc(100vw - 32px)); border-radius: 12px; padding: 24px; color: var(--color-text-primary); background: #232428; }
+.owner-device-confirm::backdrop { background: #0009; }
+.owner-device-confirm h3 { font-size: 19px; font-weight: 700; margin-bottom: 16px; }
+.owner-device-confirm p { line-height: 1.6; color: var(--color-text-muted); }
+.owner-device-confirm > div { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
+.owner-device-confirm button { min-height: 44px; min-width: 64px; padding: 8px 16px; border-radius: 6px; }
+.owner-device-confirm button:last-child { background: #a93239; color: white; }
+@media (max-width: 600px) { .owner-devices-list li { gap: 10px; flex-wrap: wrap; } .owner-device-revoke { margin-left: 58px; } }

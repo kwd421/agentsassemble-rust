@@ -197,7 +197,7 @@ describe("room directory contracts", () => {
           ...authority,
           server_product_surface: {
             ...surface,
-            digest: "90563590c05a6be447fb533fda511c63be072a704937d0957c08eaefc19f325b",
+            digest: "d1a4716e55db92d7177cdbf074173074421d60c4fba967fc1247d27636acfb9e",
             websocket_streams: [],
           },
         }),

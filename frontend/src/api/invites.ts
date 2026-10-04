@@ -1,3 +1,4 @@
+import { browserDeviceDescription } from "../lib/ownerDeviceDescription";
 import {
   parseOperatorPairingRedeemResponse,
   parseRoomInviteAdmissionResponse,
@@ -101,7 +102,7 @@ export function redeemOperatorPairing({
 }) {
   return postJsonWithIdentity<unknown>(
     "/api/operator-pairing/redeem",
-    { pairing_token: pairingToken },
+    { pairing_token: pairingToken, device: browserDeviceDescription() },
     { deviceToken }
   ).then(parseOperatorPairingRedeemResponse);
 }
