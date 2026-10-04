@@ -15,10 +15,10 @@ work is active or waiting, and remove it when it closes.
   the corrections through `f2dda814` at C0/H0/M0/L0. Open: a signed build of
   `f2dda814` (schema 77, socket custody order, directory recovery) is not yet
   manually re-verified; central logout acceptance was skipped by user decision.
-- Open defects from the 2026-10-05 real-provider chat: Codex `gpt-5.6-luna` at Low
-  ends turns without confirming the room observation (`room_observation_unconfirmed`,
-  quarantined twice) while the same CLI model runs directly; and one agent in
-  recovery stalls the ordered room so other agents never get a turn.
+- Open defect from the 2026-10-05 real-provider chat: one agent in provider-turn
+  recovery stalls the ordered room, so other agents never get a turn. (Codex
+  `gpt-5.6-luna` Low skipping the room-observation tool is treated as model
+  capability, not a product defect, by user decision.)
 - Open verification: Windows physical-device checks (recent Discord-style UI,
   server icons, interactive install/update `desktop-v0.1.4`, attendee CLI); full
   app/web parity rows in the final-parity slice; persistent web MCP endpoint
