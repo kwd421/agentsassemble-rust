@@ -49,6 +49,8 @@ struct RevokeRequest {
 #[serde(deny_unknown_fields)]
 struct RedeemRequest {
     pairing_token: String,
+    #[serde(default)]
+    device: Option<agentsassemble_protocol::OwnerDeviceDescription>,
 }
 
 registered_routes! {
@@ -179,9 +181,23 @@ async fn redeem(
         .map_err(PairingHttpError::body)?;
     let fingerprint = fingerprint_token(&body.pairing_token, PAIRING_PREFIX)
         .ok_or_else(PairingHttpError::unauthorized)?;
+    let description = body
+        .device
+        .map(|description| {
+            agentsassemble_persistence::OwnerDeviceDescription::verified(
+                description.device_name,
+                description.browser,
+                description.os,
+            )
+        })
+        .transpose()?;
     let redemption = state
         .store
         .redeem_operator_pairing(&fingerprint, &device, &origin, Utc::now())
+        .await?;
+    state
+        .store
+        .record_operator_connection(&redemption.authorization, description.as_ref())
         .await?;
     let principal = redemption.authorization.principal();
     let snapshot = state

@@ -100,6 +100,19 @@ impl OwnerSessionLifetimes {
             status: entry.status.subscribe(),
         })
     }
+
+    /// Called only with the fingerprints returned by committed host revocation.
+    pub(crate) fn revoke(&self, fingerprints: &[[u8; 32]]) {
+        let entries = self.0.lock();
+        for fingerprint in fingerprints {
+            if let Some(entry) = entries.get(fingerprint) {
+                entry.status.send_replace(CentralOwnerSessionStatus::Ended {
+                    reason: CentralOwnerSessionEnd::Revoked,
+                });
+                entry.cancel.cancel();
+            }
+        }
+    }
 }
 
 pub(crate) async fn retain_room_owner(

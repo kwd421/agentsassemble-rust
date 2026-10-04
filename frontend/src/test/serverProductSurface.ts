@@ -5,7 +5,7 @@ import { ROOM_STREAMS } from "../types/generated/ROOM_STREAMS";
 
 export const TEST_SERVER_PRODUCT_SURFACE: ServerProductSurface = {
   revision: PRODUCT_SURFACE_REVISION,
-  digest: "07afa38d34a3cc1cc6896c49d3caa4cc79c19444befca2df8af8d7677155f891",
+  digest: "2c8637e4833be3dcf882019333ce2354b1f9dd8dfee7019f9792ab6c545b9f0b",
   http_routes: [],
   websocket_streams: [...ROOM_STREAMS],
   websocket_actions: [...ROOM_ACTIONS],

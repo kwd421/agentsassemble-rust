@@ -22,7 +22,7 @@ pub(crate) async fn handle_human_admission(
     store: &SqliteStore,
     room_id: &str,
     events: &broadcast::Sender<RoomEvent>,
-    session_revocations: &broadcast::Sender<[u8; 32]>,
+    session_revocations: &broadcast::Sender<crate::SessionRevocation>,
     command: HumanAdmissionCommand,
 ) -> HumanAdmissionPublication {
     let mut publication = HumanAdmissionPublication {
@@ -34,7 +34,7 @@ pub(crate) async fn handle_human_admission(
         .await;
     if let Ok(HumanAdmissionDecision::Admitted(commit)) = &decision {
         for fingerprint in commit.replaced_session_fingerprints() {
-            let _ = session_revocations.send(*fingerprint);
+            let _ = session_revocations.send((*fingerprint).into());
         }
         publication.other_active_rooms.extend(
             commit
@@ -107,7 +107,7 @@ mod tests {
                 .await
                 .unwrap_or_else(|_| panic!("session replacement notification timed out"))
                 .unwrap_or_else(|error| panic!("receive session replacement: {error}")),
-            first_fingerprint
+            first_fingerprint.into()
         );
         let updated = timeout(Duration::from_secs(1), events.recv())
             .await

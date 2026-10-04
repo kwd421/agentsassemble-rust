@@ -57,8 +57,37 @@ async fn run_connected(
     socket: WebSocket,
     state: &AppState,
     connection: &AttendeeConnectionAuthorization,
+    events: broadcast::Receiver<agentsassemble_domain::RoomEvent>,
+    mut revocations: broadcast::Receiver<crate::SessionRevocation>,
+) {
+    let revoked = async {
+        loop {
+            match revocations.recv().await {
+                Ok(signal) if &signal.fingerprint == connection.session().session_fingerprint() => {
+                    return;
+                }
+                Ok(_) | Err(broadcast::error::RecvError::Lagged(_)) => {
+                    if state
+                        .store
+                        .revalidate_attendee_connection(connection, chrono::Utc::now())
+                        .await
+                        .is_err()
+                    {
+                        return;
+                    }
+                }
+                Err(broadcast::error::RecvError::Closed) => return,
+            }
+        }
+    };
+    tokio::select! { () = revoked => {}, () = run_session(socket, state, connection, events) => {} }
+}
+
+async fn run_session(
+    socket: WebSocket,
+    state: &AppState,
+    connection: &AttendeeConnectionAuthorization,
     mut events: broadcast::Receiver<agentsassemble_domain::RoomEvent>,
-    mut revocations: broadcast::Receiver<[u8; 32]>,
 ) {
     let (mut sender, mut receiver) = socket.split();
     let remaining = connection
@@ -121,9 +150,6 @@ async fn run_connected(
             event = events.recv() => {
                 if matches!(event, Err(broadcast::error::RecvError::Closed)) { break; }
                 // A lagged wake still reloads the one canonical outstanding assignment below.
-            }
-            signal = revocations.recv() => {
-                if matches!(signal, Err(broadcast::error::RecvError::Closed)) { break; }
             }
         }
         if state

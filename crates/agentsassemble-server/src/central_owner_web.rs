@@ -86,6 +86,11 @@ async fn exchange(
     if fingerprint_token(&body.grant_token, GRANT_PREFIX).is_none() || body.generation < 1 {
         return Err(CentralOwnerHttpError::unauthorized());
     }
+    let description = agentsassemble_persistence::OwnerDeviceDescription::verified(
+        body.device.device_name,
+        body.device.browser,
+        body.device.os,
+    )?;
     let admission = state
         .central_directory
         .owner_admission(
@@ -97,11 +102,7 @@ async fn exchange(
         )
         .await
         .map_err(|error| CentralOwnerHttpError::central(&error))?;
-    let description = agentsassemble_persistence::OwnerDeviceDescription::verified(
-        body.device.device_name,
-        body.device.browser,
-        body.device.os,
-    )?;
+
     let session = state
         .store
         .create_owner_session(&admission, &description)

@@ -66,6 +66,7 @@ mod frontend_document;
 pub mod frontend_release;
 mod google_accounts;
 mod google_token_verifier;
+mod owner_devices_web;
 mod owner_session_lifetime;
 #[cfg(unix)]
 pub mod runtime_control_socket;
@@ -162,6 +163,8 @@ mod room_preferences_web;
 mod room_random_runtime;
 mod room_recovery_runtime;
 mod room_runtime;
+mod session_revocation;
+pub use session_revocation::SessionRevocation;
 mod room_runtime_cleanup;
 mod room_session_http_authority;
 mod room_shutdown;

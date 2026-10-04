@@ -27,7 +27,7 @@ pub(crate) async fn run(
     socket: WebSocket,
     state: AppState,
     grant: ConsumedSocketTicket,
-    mut revocations: Option<broadcast::Receiver<[u8; 32]>>,
+    mut revocations: Option<broadcast::Receiver<crate::SessionRevocation>>,
     _lease: ConnectionLease,
 ) {
     let (mut sender, mut receiver) = socket.split();
@@ -50,6 +50,37 @@ pub(crate) async fn run(
     else {
         return;
     };
+    let mut revocation_principal = principal.clone();
+    let mut revocation_session = room_session.clone();
+    let (final_leave_tx, final_leave_rx) = tokio::sync::watch::channel(None::<String>);
+    let revoked = async {
+        loop {
+            let signal = receive_revocation(&mut revocations).await;
+            // Only this socket's exact committed self-leave may send its final ACK.
+            // Other sockets, and independent revocations while it waits, close immediately.
+            if let Ok(signal) = &signal
+                && revocation_session
+                    .as_ref()
+                    .is_some_and(|session| session.session_fingerprint() == &signal.fingerprint)
+                && signal
+                    .final_leave_request
+                    .as_ref()
+                    .is_some_and(|request| final_leave_rx.borrow().as_ref() == Some(request))
+            {
+                continue;
+            }
+            if !session_remains_authorized_after_revocation_signal(
+                &state,
+                &mut revocation_principal,
+                &mut revocation_session,
+                signal,
+            )
+            .await
+            {
+                return;
+            }
+        }
+    };
     let connected = async {
         let expiry = wait_for_session_expiry(
             room_session
@@ -61,16 +92,6 @@ pub(crate) async fn run(
             tokio::select! {
                 () = state.shutdown.cancelled() => return,
                 () = &mut expiry => return,
-                revoked = receive_revocation(&mut revocations), if revocations.is_some() => {
-                    if !session_remains_authorized_after_revocation_signal(
-                        &state,
-                        &mut principal,
-                        &mut room_session,
-                        revoked,
-                    ).await {
-                        return;
-                    }
-                }
                 incoming = tokio::time::timeout(SOCKET_IDLE_TIMEOUT, receiver.next()) => {
                     let Ok(Some(Ok(message))) = incoming else { return; };
                     let (frame_bytes, control_frame) = match &message {
@@ -126,6 +147,9 @@ pub(crate) async fn run(
                                 action == RoomAction::ParticipantLeave
                                     && room_session.is_some();
                             let action_name = action.as_str().to_owned();
+                            if closes_room_session {
+                                final_leave_tx.send_replace(Some(request_id.clone()));
+                            }
                             let outcome = if let Some(authorization) = &room_session {
                                 state.rooms.execute_room_session(
                                     authorization, request_id.clone(), action, payload,
@@ -135,6 +159,9 @@ pub(crate) async fn run(
                                     principal.clone(), Some(room_uid), request_id.clone(), action, payload,
                                 ).await
                             };
+                            if outcome.is_err() {
+                                final_leave_tx.send_replace(None);
+                            }
                             match outcome {
                                 Ok(outcome) => {
                                     let frame = ServerFrame::Ack(CommandAck {
@@ -256,6 +283,7 @@ pub(crate) async fn run(
     tokio::select! {
         () = state.shutdown.cancelled() => {},
         () = owner_ended(&mut owner_lease) => {},
+        () = revoked => {},
         () = connected => {},
     }
 }
@@ -289,8 +317,8 @@ async fn owner_ended(lease: &mut Option<crate::owner_session_lifetime::OwnerSess
 }
 
 async fn receive_revocation(
-    revocations: &mut Option<broadcast::Receiver<[u8; 32]>>,
-) -> Result<[u8; 32], broadcast::error::RecvError> {
+    revocations: &mut Option<broadcast::Receiver<crate::SessionRevocation>>,
+) -> Result<crate::SessionRevocation, broadcast::error::RecvError> {
     match revocations {
         Some(receiver) => receiver.recv().await,
         None => std::future::pending().await,
@@ -301,12 +329,12 @@ async fn session_remains_authorized_after_revocation_signal(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
     room_session: &mut Option<RoomSessionAuthorization>,
-    signal: Result<[u8; 32], broadcast::error::RecvError>,
+    signal: Result<crate::SessionRevocation, broadcast::error::RecvError>,
 ) -> bool {
     match signal {
-        Ok(fingerprint) => room_session
+        Ok(signal) => room_session
             .as_ref()
-            .is_none_or(|authorization| authorization.session_fingerprint() != &fingerprint),
+            .is_none_or(|authorization| authorization.session_fingerprint() != &signal.fingerprint),
         Err(broadcast::error::RecvError::Lagged(_)) => {
             refresh_room_session(state, principal, room_session)
                 .await
@@ -417,10 +445,10 @@ mod tests {
             .unwrap_or_else(|error| panic!("update profile before lag signal: {error}"));
         let (lag_tx, lag_rx) = broadcast::channel(1);
         lag_tx
-            .send([0x11; 32])
+            .send([0x11; 32].into())
             .unwrap_or_else(|error| panic!("send first lag signal: {error}"));
         lag_tx
-            .send([0x22; 32])
+            .send([0x22; 32].into())
             .unwrap_or_else(|error| panic!("send second lag signal: {error}"));
         let mut lag_rx = Some(lag_rx);
         let lagged = receive_revocation(&mut lag_rx).await;
@@ -451,7 +479,7 @@ mod tests {
             )
             .await
             .unwrap_or_else(|error| panic!("update profile before closed signal: {error}"));
-        let (closed_tx, closed_rx) = broadcast::channel::<[u8; 32]>(1);
+        let (closed_tx, closed_rx) = broadcast::channel::<crate::SessionRevocation>(1);
         drop(closed_tx);
         let mut closed_rx = Some(closed_rx);
         let closed = receive_revocation(&mut closed_rx).await;

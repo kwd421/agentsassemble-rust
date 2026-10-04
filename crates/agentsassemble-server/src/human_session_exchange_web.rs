@@ -111,6 +111,13 @@ async fn authorize_exchange(
     ensure_empty_body(request, MAX_EXCHANGE_BODY_BYTES)
         .await
         .map_err(SessionExchangeError::from_body)?;
+    if let agentsassemble_persistence::RoomSessionAuthorization::Operator(operator) = &authorization
+    {
+        state
+            .store
+            .record_operator_connection(operator, None)
+            .await?;
+    }
     Ok(authorization)
 }
 

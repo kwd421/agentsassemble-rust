@@ -1,11 +1,13 @@
 mod host_owner_session;
 #[cfg(test)]
 mod host_owner_session_tests;
+mod owner_devices;
 mod server_owner_authority;
 pub use host_owner_session::{
     OWNER_SESSION_PREFIX, OwnerAdmission, OwnerAdmissionBinding, OwnerDeviceDescription,
     OwnerSessionAuthorization, OwnerSessionRedemption,
 };
+pub use owner_devices::{OwnerDeviceSession, OwnerDevicesRevocation};
 pub use server_owner_authority::{
     CentralOwnerGrant, ServerOwnerAuthority, ServerOwnerLifecycleAuthorization,
 };

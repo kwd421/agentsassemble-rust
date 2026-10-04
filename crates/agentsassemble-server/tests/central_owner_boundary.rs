@@ -25,6 +25,10 @@ use sha2::{Digest, Sha256};
 use tokio::{net::TcpListener, sync::mpsc, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
+#[path = "central_owner_boundary/connection.rs"]
+mod connection;
+#[path = "central_owner_boundary/devices.rs"]
+mod devices;
 #[path = "central_owner_boundary/invitations.rs"]
 mod invitations;
 #[path = "central_owner_boundary/lifecycle.rs"]
@@ -188,6 +192,7 @@ struct Fixture {
     worker_task: JoinHandle<()>,
     cancel: CancellationToken,
     host_task: JoinHandle<()>,
+    tickets: TicketStore,
 }
 
 async fn start_fixture() -> Fixture {
@@ -249,6 +254,7 @@ async fn start_fixture() -> Fixture {
     .unwrap_or_else(|error| panic!("public ingress: {error:?}"))
     .with_central_directory(&worker_url)
     .unwrap_or_else(|error| panic!("central directory: {error:?}"));
+    let tickets = runtime_state.tickets.clone();
     let cancel = CancellationToken::new();
     let owner_cancel = cancel.clone();
     let host_task = tokio::spawn(async move {
@@ -270,6 +276,7 @@ async fn start_fixture() -> Fixture {
         worker_task,
         cancel,
         host_task,
+        tickets,
     }
 }
 

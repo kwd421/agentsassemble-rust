@@ -177,6 +177,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::frontend_assets::routes())
         .merge(crate::server_identity_web::routes())
         .merge(crate::central_owner_web::routes())
+        .merge(crate::owner_devices_web::routes())
         .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())
         .merge(crate::human_invite_manager_web::routes())

@@ -167,7 +167,7 @@ async fn public_recovery_retires_old_session_preserves_scope_and_retries_exactly
         checked(checked(
             tokio::time::timeout(Duration::from_secs(1), revoked.recv()).await
         )),
-        expected
+        expected.into()
     );
     assert!(
         server

@@ -69,7 +69,7 @@ use agentsassemble_domain::runtime_shutdown::ROOM_DRAIN_TIMEOUT as ROOM_SHUTDOWN
 struct RoomHandle {
     mutations: mpsc::Sender<RoomMutation>,
     events: broadcast::Sender<RoomEvent>,
-    human_session_revocations: broadcast::Sender<[u8; 32]>,
+    human_session_revocations: broadcast::Sender<crate::SessionRevocation>,
     publication_wake: mpsc::Sender<RoomPublicationWake>,
     provider_recovery: mpsc::Sender<RecoveredAssignments>,
     provider_requests: mpsc::Sender<RequestCommand>,
@@ -87,7 +87,7 @@ struct RoomTaskContext {
     provider_adapter: ProviderAdapter,
     cancellation: CancellationToken,
     event_tx: broadcast::Sender<RoomEvent>,
-    human_session_revocation_tx: broadcast::Sender<[u8; 32]>,
+    human_session_revocation_tx: broadcast::Sender<crate::SessionRevocation>,
     ingress: ProviderTurnIngress,
     lifecycle_commands: LifecycleCommandTracker,
     active_rooms: Arc<Mutex<HashMap<String, RoomHandle>>>,
@@ -186,7 +186,10 @@ impl RoomRuntime {
     }
 
     /// Subscribes to post-commit replacement of human session fingerprints.
-    pub async fn session_revocations(&self, room_id: &str) -> broadcast::Receiver<[u8; 32]> {
+    pub async fn session_revocations(
+        &self,
+        room_id: &str,
+    ) -> broadcast::Receiver<crate::SessionRevocation> {
         self.handle(room_id)
             .await
             .human_session_revocations
@@ -205,10 +208,20 @@ impl RoomRuntime {
         if let Some(fingerprint) = fingerprint {
             let rooms = self.rooms.lock().await;
             if let Some(handle) = rooms.get(manager.room_id()) {
-                let _ = handle.human_session_revocations.send(fingerprint);
+                let _ = handle.human_session_revocations.send(fingerprint.into());
             }
         }
         Ok(())
+    }
+
+    /// Publishes only fingerprints returned by a committed host revocation.
+    pub(crate) async fn publish_session_revocations(&self, sessions: &[(String, [u8; 32])]) {
+        let rooms = self.rooms.lock().await;
+        for (room_id, fingerprint) in sessions {
+            if let Some(handle) = rooms.get(room_id) {
+                let _ = handle.human_session_revocations.send((*fingerprint).into());
+            }
+        }
     }
 
     pub(crate) async fn recover_guest_identity(
@@ -222,7 +235,7 @@ impl RoomRuntime {
         let rooms = self.rooms.lock().await;
         if let Some(handle) = rooms.get(&commit.result.meeting_id) {
             for fingerprint in &commit.replaced_session_fingerprints {
-                let _ = handle.human_session_revocations.send(*fingerprint);
+                let _ = handle.human_session_revocations.send((*fingerprint).into());
             }
         }
         Ok(commit)
@@ -249,7 +262,7 @@ impl RoomRuntime {
             let rooms = self.rooms.lock().await;
             for (room_id, fingerprint) in &commit.revoked_sessions {
                 if let Some(handle) = rooms.get(room_id) {
-                    let _ = handle.human_session_revocations.send(*fingerprint);
+                    let _ = handle.human_session_revocations.send((*fingerprint).into());
                 }
             }
         }
@@ -675,7 +688,7 @@ async fn abort_provider_turns(turn_tasks: &mut JoinSet<ProviderTurnTaskResult>) 
 async fn handle_room_mutation(
     owners: RoomCommandOwners<'_>,
     room_id: &str,
-    session_revocations: &broadcast::Sender<[u8; 32]>,
+    session_revocations: &broadcast::Sender<crate::SessionRevocation>,
     active_rooms: &Mutex<HashMap<String, RoomHandle>>,
     mutation: RoomMutation,
 ) -> Option<PublicationAttempt> {
@@ -729,7 +742,7 @@ async fn notify_active_room_publications(
 
 async fn handle_room_command(
     owners: RoomCommandOwners<'_>,
-    session_revocations: &broadcast::Sender<[u8; 32]>,
+    session_revocations: &broadcast::Sender<crate::SessionRevocation>,
     command: RoomCommand,
 ) -> Option<PublicationAttempt> {
     let RoomCommandOwners {
@@ -797,7 +810,19 @@ async fn handle_room_command(
         );
     }
     for fingerprint in revoked_human_sessions {
-        let _ = session_revocations.send(fingerprint);
+        let final_leave_request = match &command.session {
+            Some(RoomCommandSession::Browser(session))
+                if command.action == agentsassemble_protocol::RoomAction::ParticipantLeave
+                    && session.session_fingerprint() == &fingerprint =>
+            {
+                Some(command.request_id.clone())
+            }
+            _ => None,
+        };
+        let _ = session_revocations.send(crate::SessionRevocation {
+            fingerprint,
+            final_leave_request,
+        });
     }
     let reply = match reply {
         Ok(outcome) => {

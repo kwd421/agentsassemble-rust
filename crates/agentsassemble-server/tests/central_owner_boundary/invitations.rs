@@ -4,7 +4,7 @@ use reqwest::{Client, RequestBuilder};
 use serde_json::{Value, json};
 use std::net::SocketAddr;
 
-fn authorized(request: RequestBuilder, session: &str, device: &str) -> RequestBuilder {
+pub(super) fn authorized(request: RequestBuilder, session: &str, device: &str) -> RequestBuilder {
     request
         .header("host", "owner.example.test")
         .header("x-forwarded-proto", "https")
@@ -14,7 +14,7 @@ fn authorized(request: RequestBuilder, session: &str, device: &str) -> RequestBu
         .bearer_auth(session)
 }
 
-async fn sent(request: RequestBuilder, status: StatusCode) -> Value {
+pub(super) async fn sent(request: RequestBuilder, status: StatusCode) -> Value {
     let response = request
         .send()
         .await

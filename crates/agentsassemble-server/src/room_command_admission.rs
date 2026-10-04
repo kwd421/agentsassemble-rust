@@ -192,7 +192,10 @@ mod tests {
             revocations
                 .try_recv()
                 .unwrap_or_else(|error| panic!("revocation: {error}")),
-            *sessions[0].session_fingerprint()
+            crate::SessionRevocation {
+                fingerprint: *sessions[0].session_fingerprint(),
+                final_leave_request: Some("paired-leave".to_owned()),
+            }
         );
         assert!(
             runtime
@@ -229,7 +232,7 @@ mod tests {
             revocations
                 .try_recv()
                 .unwrap_or_else(|error| panic!("archive revocation: {error}")),
-            *sessions[1].session_fingerprint()
+            (*sessions[1].session_fingerprint()).into()
         );
         runtime
             .shutdown()
