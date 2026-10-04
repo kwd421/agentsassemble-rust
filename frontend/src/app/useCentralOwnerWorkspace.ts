@@ -1,22 +1,25 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { createCentralOwnerRoom, enterCentralOwnerRoom, fetchCentralOwnerRooms, loadCentralOwnerWorkspace, openCentralOwnerDirectoryStream } from "../lib/centralOwnerConnect";
+import { CentralOwnerWorkspaceContext } from "../lib/centralOwnerWorkspaceContext";
+import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
+import { createCentralOwnerRoom, enterCentralOwnerRoom, fetchCentralOwnerRooms, openCentralOwnerDirectoryStream } from "../lib/centralOwnerWorkspace";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { OperatorPairingRedeemResponse } from "../lib/roomAdmissionContract";
 import type { createRoom } from "../api";
 
 export function useCentralOwnerWorkspace(deviceToken: string) {
-  const [connect] = useState(loadCentralOwnerWorkspace);
+  const workspace = useContext(CentralOwnerWorkspaceContext);
+  const connect = workspace?.session;
   const active = useRef(false);
   const inFlight = useRef(false);
   useEffect(() => { active.current = true; return () => { active.current = false; }; }, []);
   const remoteDirectory = useMemo(() => connect ? {
     serverId: connect.serverId,
+    onStatus: workspace.onStatus,
     openStream: (signal: AbortSignal) => openCentralOwnerDirectoryStream(connect, deviceToken, signal),
     fetchRooms: (beforeDispatch: () => void, signal?: AbortSignal) => {
       beforeDispatch();
       return fetchCentralOwnerRooms(connect, deviceToken, signal);
     },
-  } : undefined, [connect, deviceToken]);
+  } : undefined, [connect, deviceToken, workspace]);
   const create = useMemo<typeof createRoom | undefined>(() => connect
     ? (requestId, roomId, label = "", beforeDispatch) => {
         beforeDispatch?.();

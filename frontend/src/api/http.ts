@@ -5,10 +5,10 @@ import {
   isDesktopWebview,
 } from "../lib/desktopBridge";
 
-export type ServerOwnerGrantCredential = { grantToken: string; generation: number };
-type IdentityHttpAuthority = { sessionToken?: string; deviceToken?: string; roomId?: string; centralGrant?: ServerOwnerGrantCredential };
-export function serverOwnerGrantHeaders(grant: ServerOwnerGrantCredential, deviceToken: string): Record<string, string> {
-  return { Authorization: `Bearer ${grant.grantToken}`, "X-Device-Token": deviceToken,
+export type ServerOwnerSessionCredential = { sessionToken: string; generation: number };
+type IdentityHttpAuthority = { sessionToken?: string; deviceToken?: string; roomId?: string; centralSession?: ServerOwnerSessionCredential };
+export function serverOwnerSessionHeaders(grant: ServerOwnerSessionCredential, deviceToken: string): Record<string, string> {
+  return { Authorization: `Bearer ${grant.sessionToken}`, "X-Device-Token": deviceToken,
     "X-Central-Generation": String(grant.generation) };
 }
 
@@ -215,21 +215,21 @@ export async function postJsonWithToken<T>(url: string, body: object, sessionTok
 
 export async function fetchJsonWithIdentity<T>(
   url: string,
-  { sessionToken = "", deviceToken = "", roomId = "", centralGrant }: IdentityHttpAuthority
+  { sessionToken = "", deviceToken = "", roomId = "", centralSession }: IdentityHttpAuthority
 ): Promise<T> {
-  if (centralGrant && (sessionToken || !isServerWideProfileRoute(url))) throw new Error("서버 프로필 권위와 방 권위를 함께 사용할 수 없어요.");
+  if (centralSession && (sessionToken || !isServerWideProfileRoute(url))) throw new Error("서버 프로필 권위와 방 권위를 함께 사용할 수 없어요.");
   const profileRequest = isServerWideProfileRoute(url) ? { cache: "no-store" as const, redirect: "error" as const, credentials: "omit" as const, referrerPolicy: "no-referrer" as const } : {};
-  if (!centralGrant && !sessionToken && isDesktopWebview() && isServerWideProfileRoute(url)) {
+  if (!centralSession && !sessionToken && isDesktopWebview() && isServerWideProfileRoute(url)) {
     const res = await fetchDesktopOperatorRuntime(url, profileRequest);
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
-  if (!centralGrant && roomId && !sessionToken && isDesktopWebview()) {
+  if (!centralSession && roomId && !sessionToken && isDesktopWebview()) {
     const res = await fetchDesktopRuntime(roomId, url, profileRequest);
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
-  const headers: Record<string, string> = centralGrant ? serverOwnerGrantHeaders(centralGrant, deviceToken) : {};
+  const headers: Record<string, string> = centralSession ? serverOwnerSessionHeaders(centralSession, deviceToken) : {};
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
   const res = await fetch(url, { ...profileRequest, headers });
@@ -240,11 +240,11 @@ export async function fetchJsonWithIdentity<T>(
 export async function postJsonWithIdentity<T>(
   url: string,
   body: object,
-  { sessionToken = "", deviceToken = "", roomId = "", centralGrant }: IdentityHttpAuthority
+  { sessionToken = "", deviceToken = "", roomId = "", centralSession }: IdentityHttpAuthority
 ): Promise<T> {
-  if (centralGrant && (sessionToken || !isServerWideProfileRoute(url))) throw new Error("서버 프로필 권위와 방 권위를 함께 사용할 수 없어요.");
+  if (centralSession && (sessionToken || !isServerWideProfileRoute(url))) throw new Error("서버 프로필 권위와 방 권위를 함께 사용할 수 없어요.");
   const profileRequest = isServerWideProfileRoute(url) ? { cache: "no-store" as const, redirect: "error" as const, credentials: "omit" as const, referrerPolicy: "no-referrer" as const } : {};
-  if (!centralGrant && !sessionToken && isDesktopWebview() && isServerWideProfileRoute(url)) {
+  if (!centralSession && !sessionToken && isDesktopWebview() && isServerWideProfileRoute(url)) {
     const res = await fetchDesktopOperatorRuntime(url, {
       ...profileRequest,
       method: "POST",
@@ -254,7 +254,7 @@ export async function postJsonWithIdentity<T>(
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
-  if (!centralGrant && roomId && !sessionToken && isDesktopWebview()) {
+  if (!centralSession && roomId && !sessionToken && isDesktopWebview()) {
     const res = await fetchDesktopRuntime(roomId, url, {
       ...profileRequest,
       method: "POST",
@@ -264,7 +264,7 @@ export async function postJsonWithIdentity<T>(
     if (!res.ok) throw await responseError(res);
     return res.json();
   }
-  const headers: Record<string, string> = { ...(centralGrant ? serverOwnerGrantHeaders(centralGrant, deviceToken) : {}), "Content-Type": "application/json" };
+  const headers: Record<string, string> = { ...(centralSession ? serverOwnerSessionHeaders(centralSession, deviceToken) : {}), "Content-Type": "application/json" };
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
   const res = await fetch(url, {

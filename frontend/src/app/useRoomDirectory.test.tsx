@@ -117,7 +117,7 @@ describe("useRoomDirectory", () => {
 
   it("reconciles an empty remote workspace on invalidation without superseding foreground continuity", async () => {
     const remoteFetch = vi.fn().mockResolvedValue({ server_id: serverId, authority_lineage_id: lineageId, profile_revision: 1, rooms: [] });
-    const remoteOwner = { serverId, fetchRooms: remoteFetch, openStream: vi.fn() };
+    const remoteOwner = { serverId, fetchRooms: remoteFetch, onStatus: vi.fn(), openStream: vi.fn() };
     const hook = renderHook(() => useRoomDirectory({ initialRooms: [], hostEnabled: false, remoteOwner }));
     await waitFor(() => expect(hook.result.current.syncIssue).toBeNull());
     const continuity = hook.result.current.captureRoomDirectoryContinuity();
@@ -196,7 +196,7 @@ describe("useRoomDirectory", () => {
       authority_lineage_id: lineageId,
     });
     const remoteFetch = vi.fn().mockResolvedValue(verifiedDirectory("general"));
-    const remoteOwner = { serverId, fetchRooms: remoteFetch, openStream: vi.fn() };
+    const remoteOwner = { serverId, fetchRooms: remoteFetch, onStatus: vi.fn(), openStream: vi.fn() };
 
     const remote = renderHook(() =>
       useRoomDirectory({ initialRooms: [remoteRoom], hostEnabled: false, remoteOwner })

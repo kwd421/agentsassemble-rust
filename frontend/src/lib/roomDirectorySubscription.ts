@@ -1,6 +1,8 @@
 import { ApiError } from "./apiErrors";
 import { isPrivateNoStoreResponse, responseError } from "../api/http";
 import { fetchDesktopOperatorRuntime } from "./desktopBridge";
+import { parseOwnerSessionStatus } from "./centralOwnerWorkspaceStatus";
+import type { CentralOwnerSessionStatus } from "../types/generated/CentralOwnerSessionStatus";
 
 export type OpenDirectoryStream = (signal: AbortSignal) => Promise<Response>;
 
@@ -12,7 +14,7 @@ export const openNativeDirectoryStream: OpenDirectoryStream = signal =>
 // Only the server's fixed, empty invalidation is accepted. No directory data,
 // credential, event cursor or client-selected authority is carried by this stream.
 export async function readDirectoryStream(
-  response: Response, signal: AbortSignal, changed: () => Promise<void>
+  response: Response, signal: AbortSignal, changed: () => Promise<void>, ownerStatus?: (status: CentralOwnerSessionStatus) => void
 ) {
   if (!response.ok) throw await responseError(response);
   if (!isPrivateNoStoreResponse(response, "text/event-stream") || !response.body) {
@@ -41,11 +43,17 @@ export async function readDirectoryStream(
         if (frame.length > 4096) throw new Error("방 목록 변경 알림이 너무 커요.");
         const fields = frame.split("\n").filter(line => !line.startsWith(":"));
         if (fields.length) {
-          if (fields.length !== 2 || fields[0] !== "event: directory_changed" || fields[1] !== "data: {}") {
+          if (fields.length === 2 && fields[0] === "event: owner_session" && fields[1].startsWith("data: ") && ownerStatus) {
+            const status = parseOwnerSessionStatus(JSON.parse(fields[1].slice(6)));
+            signal.throwIfAborted();
+            ownerStatus(status);
+            if (status.state === "ended") throw new ApiError(401, "서버 연결이 종료됐어요.", "central_session_ended");
+          } else if (fields.length === 2 && fields[0] === "event: directory_changed" && fields[1] === "data: {}") {
+            signal.throwIfAborted();
+            await changed();
+          } else {
             throw new Error("방 목록 변경 알림이 올바르지 않아요.");
           }
-          signal.throwIfAborted();
-          await changed();
         }
         end = pending.indexOf("\n\n");
       }
@@ -60,7 +68,8 @@ export async function readDirectoryStream(
 }
 
 export function subscribeRoomDirectory(
-  open: OpenDirectoryStream, changed: () => Promise<void>, failed: (error: unknown) => void
+  open: OpenDirectoryStream, changed: () => Promise<void>, failed: (error: unknown) => void,
+  ownerStatus?: (status: CentralOwnerSessionStatus) => void
 ) {
   const lifetime = new AbortController();
   let running = false;
@@ -79,7 +88,7 @@ export function subscribeRoomDirectory(
           headerDeadline = setTimeout(abort, 10_000);
           const response = await open(admission.signal);
           clearTimeout(headerDeadline);
-          await readDirectoryStream(response, admission.signal, changed);
+          await readDirectoryStream(response, admission.signal, changed, ownerStatus);
         } catch (error) {
           if (lifetime.signal.aborted) return;
           failed(error);

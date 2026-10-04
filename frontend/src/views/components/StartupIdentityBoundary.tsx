@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type ReactNode } from "react";
+import { useCallback, useState, type ReactNode } from "react";
 
 import {
   getOrCreateBrowserCredential,
@@ -6,7 +6,9 @@ import {
 } from "../../lib/deviceIdentity";
 import { isBundledDesktopWebview } from "../../lib/desktopBridge";
 import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
-import { consumeCentralOwnerConnectFromUrl, loadCentralOwnerWorkspace } from "../../lib/centralOwnerConnect";
+import { consumeCentralOwnerConnectFromUrl } from "../../lib/centralOwnerConnect";
+import { loadCentralOwnerWorkspace, type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import CentralOwnerWorkspaceBoundary from "./CentralOwnerWorkspaceBoundary";
 import {
   joinInviteTokenFromUrl,
   loadRoomGuestSession,
@@ -34,6 +36,7 @@ export default function StartupIdentityBoundary({
   children: (identity: { deviceToken: string; clientId: string }) => ReactNode;
 }) {
   const [centralOwnerConnect] = useState(() => consumeCentralOwnerConnectFromUrl() || loadCentralOwnerWorkspace());
+  const [ownerWorkspace, setOwnerWorkspace] = useState<CentralOwnerWorkspace | null>(null);
   const [desktop] = useState(
     () => isBundledDesktopWebview() && !centralOwnerConnect
   );
@@ -63,26 +66,10 @@ export default function StartupIdentityBoundary({
     }
   });
 
-  const finishOwnerEntry = useCallback(() => setReady(true), []);
-
-  // The workspace and its room sessions share the grant's exact lifetime. Drop
-  // the mounted workspace at that boundary instead of presenting an expired
-  // owner as an invitation guest. Server-side checks remain authoritative.
-  useEffect(() => {
-    if (!centralOwnerConnect || !ready) return;
-    const expiresIn = centralOwnerConnect.expiresAt * 1000 - Date.now();
-    const checkExpiry = () => {
-      if (Date.now() >= centralOwnerConnect.expiresAt * 1000) setReady(false);
-    };
-    const timeout = window.setTimeout(checkExpiry, Math.max(0, expiresIn));
-    window.addEventListener("focus", checkExpiry);
-    document.addEventListener("visibilitychange", checkExpiry);
-    return () => {
-      window.clearTimeout(timeout);
-      window.removeEventListener("focus", checkExpiry);
-      document.removeEventListener("visibilitychange", checkExpiry);
-    };
-  }, [centralOwnerConnect, ready]);
+  const finishOwnerEntry = useCallback((session: CentralOwnerWorkspace) => {
+    setOwnerWorkspace(session);
+    setReady(true);
+  }, []);
 
   if (isCentralWebEntry()) return <StartupIdentityGate deviceToken="" onComplete={finishCentralEntry} />;
 
@@ -140,10 +127,8 @@ export default function StartupIdentityBoundary({
   }
 
   if (ready) {
-    return children({
-      deviceToken: browserIdentity.deviceToken,
-      clientId: browserIdentity.clientId,
-    });
+    const content = children({ deviceToken: browserIdentity.deviceToken, clientId: browserIdentity.clientId });
+    return ownerWorkspace ? <CentralOwnerWorkspaceBoundary session={ownerWorkspace}>{content}</CentralOwnerWorkspaceBoundary> : content;
   }
   return (
     <StartupIdentityGate

@@ -60,7 +60,7 @@ describe("canonical user profile provenance", () => {
     );
 
     await requestDesktopHostProductSurface();
-    const identity = web ? { centralGrant: { grantToken: "aacg1." + "A".repeat(43), generation: 3 }, deviceToken: "owner-device" } : {};
+    const identity = web ? { centralSession: { sessionToken: "aaos1." + "A".repeat(43), generation: 3 }, deviceToken: "owner-device" } : {};
     if (web) Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     const snapshot = await fetchUserProfile(identity);
 
@@ -72,7 +72,7 @@ describe("canonical user profile provenance", () => {
     if (web) {
       const request = vi.mocked(fetch).mock.calls.at(-1)?.[1];
       const headers = new Headers(request?.headers);
-      expect(headers.get("Authorization")).toBe("Bearer " + identity.centralGrant!.grantToken);
+      expect(headers.get("Authorization")).toBe("Bearer " + identity.centralSession!.sessionToken);
       expect(headers.get("X-Central-Generation")).toBe("3");
       expect(headers.get("X-Device-Token")).toBe("owner-device");
       expect(invoke).toHaveBeenCalledTimes(1);
@@ -139,7 +139,7 @@ describe("canonical user profile provenance", () => {
     vi.stubGlobal("fetch", fetchMock);
 
     await requestDesktopHostProductSurface();
-    const identity = web ? { centralGrant: { grantToken: "aacg1." + "A".repeat(43), generation: 3 }, deviceToken: "owner-device" } : {};
+    const identity = web ? { centralSession: { sessionToken: "aaos1." + "A".repeat(43), generation: 3 }, deviceToken: "owner-device" } : {};
     if (web) Reflect.deleteProperty(window, "__TAURI_INTERNALS__");
     const avatar = await uploadUserProfileAvatar(
       new File(["avatar"], "avatar.png", { type: "image/png" }), identity
@@ -153,7 +153,7 @@ describe("canonical user profile provenance", () => {
     const request = fetchMock.mock.calls[0]?.[1] as RequestInit;
     expect(request.method).toBe("POST");
     const headers = new Headers(request.headers);
-    expect(headers.get("Authorization")).toBe(web ? "Bearer " + identity.centralGrant!.grantToken : `Bearer ${"f".repeat(64)}`);
+    expect(headers.get("Authorization")).toBe(web ? "Bearer " + identity.centralSession!.sessionToken : `Bearer ${"f".repeat(64)}`);
     expect(headers.get("Content-Type")).toBe("application/json");
     expect(headers.has("X-Host-Token")).toBe(false);
     expect(JSON.parse(String(request.body))).toEqual({

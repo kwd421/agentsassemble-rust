@@ -2,16 +2,16 @@ import type { SaveFriend } from "../types/generated/SaveFriend";
 import type { SavedFriend } from "../types/generated/SavedFriend";
 import type { RoomHttpAuthority } from "./roomHttpAuthority";
 import { fetchDesktopOperatorRuntime } from "../lib/desktopBridge";
-import { responseError, serverOwnerGrantHeaders, type ServerOwnerGrantCredential } from "./http";
+import { responseError, serverOwnerSessionHeaders, type ServerOwnerSessionCredential } from "./http";
 
-export type SavedFriendsAuthority = RoomHttpAuthority | { kind: "central_grant"; credential: ServerOwnerGrantCredential; deviceToken: string };
+export type SavedFriendsAuthority = RoomHttpAuthority | { kind: "server_owner"; credential: ServerOwnerSessionCredential; deviceToken: string };
 
 async function request<T>(authority: SavedFriendsAuthority, method: string, body?: object, query = ""): Promise<T> {
   const init: RequestInit = {
     method, cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer",
     headers: { ...(body ? { "Content-Type": "application/json" } : {}),
       ...(authority.kind === "remote" ? { Authorization: `Bearer ${authority.sessionToken}`,
-        "X-Device-Token": authority.deviceToken || "" } : authority.kind === "central_grant" ? serverOwnerGrantHeaders(authority.credential, authority.deviceToken) : {}) },
+        "X-Device-Token": authority.deviceToken || "" } : authority.kind === "server_owner" ? serverOwnerSessionHeaders(authority.credential, authority.deviceToken) : {}) },
     ...(body ? { body: JSON.stringify(body) } : {}),
   };
   const response = authority.kind === "local"

@@ -57,7 +57,7 @@ import { useDismissMenus } from "./useDismissMenus";
 import { useRoomAdmission } from "./useRoomAdmission";
 import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
 import { useRoomCreation } from "./useRoomCreation";
-import { persistCentralOwnerWorkspace } from "../lib/centralOwnerConnect";
+import { persistCentralOwnerWorkspace } from "../lib/centralOwnerWorkspace";
 import { useCentralOwnerWorkspace } from "./useCentralOwnerWorkspace";
 import { useRoomDirectory } from "./useRoomDirectory";
 import { useRoomInviteController } from "./useRoomInviteController";
@@ -239,8 +239,8 @@ export function useAppController(deviceToken: string, clientId: string) {
     onCreated: onRoomCreated,
   });
   const ownerLifecycleTransport = useMemo(() => ownerWorkspace.connect ? {
-    kind: "central_grant" as const,
-    credential: { grantToken: ownerWorkspace.connect.grantToken, generation: ownerWorkspace.connect.generation }, deviceToken,
+    kind: "server_owner" as const,
+    credential: { sessionToken: ownerWorkspace.connect.sessionToken, generation: ownerWorkspace.connect.generation }, deviceToken,
   } : undefined, [ownerWorkspace.connect, deviceToken]);
   const roomLifecycle = useRoomLifecycle({
     enabled: Boolean(ownerLifecycleTransport || !guestLocked) && Boolean(serverProductSurface?.http_routes.some((route) => route.method === "POST" && route.path === (ownerLifecycleTransport ? "/api/room-session/lifecycle" : "/api/rooms/lifecycle"))),
@@ -688,7 +688,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     guestPreflightRetryable, guestJoinRetryable,
     profileAuthorityReady: startupHostEnabled || Boolean(ownerWorkspace.connect) || Boolean(admittedSessionToken),
     ownerProfileRevision,
-    ownerProfileGrant: ownerWorkspace.connect ? { grantToken: ownerWorkspace.connect.grantToken, generation: ownerWorkspace.connect.generation } : undefined,
+    ownerProfileSession: ownerWorkspace.connect ? { sessionToken: ownerWorkspace.connect.sessionToken, generation: ownerWorkspace.connect.generation } : undefined,
     guestLocked, canCreateRoom, canInviteRooms, guestPanelProfile, guestRecoveryRequest, guestSession,
     handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteCopyStatus, inviteModalAppearance,

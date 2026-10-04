@@ -54,7 +54,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     channelSidebarWidth, closeMobileRoomInfo, closeMobileSidebar, collapsedChannelSections,
     deviceToken, exitGuestSurface,
     expireGuestSession, goToChannel,
-    guestExpired, guestLocked, canCreateRoom, canInviteRooms, profileAuthorityReady, ownerProfileGrant, ownerProfileRevision,
+    guestExpired, guestLocked, canCreateRoom, canInviteRooms, profileAuthorityReady, ownerProfileSession, ownerProfileRevision,
     guestPanelProfile, guestSession, handleMobileShellPointerDown, handleMobileShellPointerEnd,
     inviteRoom,
     loadCanonicalRoomHistory, lobbyPostingState, markChannelRead, channelReadReady,
@@ -80,8 +80,8 @@ export default function AppView({ controller }: { controller: AppController }) {
     currentChannelScope.current = channelScope;
     return () => { currentChannelScope.current = ""; };
   }, [channelScope]);
-  const canManageFriends = roomLifecycle.enabled || Boolean(ownerProfileGrant) || Boolean(guestSession?.centralOwner && admittedSessionToken && !guestExpired);
-  const friendAuthority = ownerProfileGrant ? { kind: "central_grant" as const, credential: ownerProfileGrant, deviceToken } : roomHttpAuthority;
+  const canManageFriends = roomLifecycle.enabled || Boolean(ownerProfileSession) || Boolean(guestSession?.centralOwner && admittedSessionToken && !guestExpired);
+  const friendAuthority = ownerProfileSession ? { kind: "server_owner" as const, credential: ownerProfileSession, deviceToken } : roomHttpAuthority;
   const canCreateChannel = canManageActiveRoom && canonicalRoom.connectionState === "connected";
   const canPostHumanMessage = lobbyPostingState.canPost && Boolean(canonicalRoom.capabilities["message.send"]) &&
     canonicalRoom.participants.some((participant) => participant.participant_id === (guestSession?.agentId || "operator-local") &&
@@ -129,7 +129,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         agentCount={scopedAgents.length || 0}
         hasBackendError={Boolean(canonicalRoom.syncIssue || roomDirectorySyncIssue)}
         profileAuthorityReady={profileAuthorityReady}
-        guestProfile={ownerProfileGrant ? undefined : guestPanelProfile}
+        guestProfile={ownerProfileSession ? undefined : guestPanelProfile}
         pairedRoomSession={guestLocked && guestSession?.operator === true && guestSession?.centralOwner !== true}
         publishedProfileRevision={canonicalRoom.events.reduce((revision, event) => {
           const value = event.profile_revision;
@@ -137,9 +137,9 @@ export default function AppView({ controller }: { controller: AppController }) {
             ? Math.max(revision, value) : revision;
         }, ownerProfileRevision)}
         profileIdentity={{
-          centralOwner: Boolean(ownerProfileGrant) || guestSession?.centralOwner === true,
-          centralGrant: ownerProfileGrant,
-          sessionToken: ownerProfileGrant ? "" : admittedSessionToken,
+          centralOwner: Boolean(ownerProfileSession) || guestSession?.centralOwner === true,
+          centralSession: ownerProfileSession,
+          sessionToken: ownerProfileSession ? "" : admittedSessionToken,
           deviceToken,
         }}
         onGuestExit={guestExpired ? exitGuestSurface : undefined}
@@ -377,7 +377,7 @@ export default function AppView({ controller }: { controller: AppController }) {
         <Suspense fallback={<DeferredViewFallback />}>
           {friendsOpen && canManageFriends ? (
             <FriendsView authority={friendAuthority} userArea={userArea} onClose={() => setFriendsOpen(false)} />
-          ) : guestExpired && !ownerProfileGrant ? (
+          ) : guestExpired && !ownerProfileSession ? (
             <section className="dc-disconnected-room" role="status" style={{ padding: 24 }}>
               <h1>방 접속이 끝났어요</h1>
               <p>{GUEST_SESSION_EXPIRED_MESSAGE}</p>

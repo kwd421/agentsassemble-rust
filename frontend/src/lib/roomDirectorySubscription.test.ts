@@ -5,6 +5,21 @@ const headers = { "content-type": "text/event-stream", "cache-control": "private
 afterEach(() => vi.useRealTimers());
 
 describe("room directory transport", () => {
+  it("consumes renewal controls on one stream without reloading the directory and stops on revocation", async () => {
+    const now = Math.floor(Date.now() / 1000);
+    const statuses = vi.fn();
+    const changed = vi.fn();
+    const frames = ['event: directory_changed\ndata: {}\n\n',
+      ...[{ state: "active", expires_at: now + 60 }, { state: "retrying", expires_at: now + 60 },
+        { state: "active", expires_at: now + 60 }, { state: "ended", reason: "revoked" }]
+        .map(status => `event: owner_session\ndata: ${JSON.stringify(status)}\n\n`)];
+    const response = new Response(frames.join(""), { headers });
+    await expect(readDirectoryStream(response, new AbortController().signal, changed, statuses)).rejects.toMatchObject({ status: 401 });
+    expect(changed).toHaveBeenCalledOnce();
+    expect(statuses).toHaveBeenCalledTimes(4);
+    expect(statuses).toHaveBeenLastCalledWith({ state: "ended", reason: "revoked" });
+    await expect(readDirectoryStream(new Response(frames[1], { headers }), new AbortController().signal, changed)).rejects.toThrow("알림이 올바르지");
+  });
   it("accepts a fragmented empty invalidation and cancels its owned body on exit", async () => {
     const abort = new AbortController();
     const cancel = vi.fn();

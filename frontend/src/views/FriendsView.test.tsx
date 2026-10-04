@@ -16,7 +16,7 @@ beforeEach(() => {
 
 it.each([false, true])("keeps failed creation custody and cancels edits (server grant: %s)", async (grant) => {
   api.save.mockRejectedValueOnce(new Error("저장 실패"));
-  const authority = grant ? { kind: "central_grant" as const, credential: { grantToken: "owner-grant", generation: 3 }, deviceToken: "owner-device" } : { kind: "remote" as const, sessionToken: "owner-session", deviceToken: "owner-device" };
+  const authority = grant ? { kind: "server_owner" as const, credential: { sessionToken: "owner-grant", generation: 3 }, deviceToken: "owner-device" } : { kind: "remote" as const, sessionToken: "owner-session", deviceToken: "owner-device" };
   render(<FriendsView authority={authority} onClose={vi.fn()} />);
   const add = screen.getByRole("button", { name: "친구 추가" });
   await waitFor(() => expect((add as HTMLButtonElement).disabled).toBe(false));

@@ -1,7 +1,4 @@
-import { ApiError } from "./apiErrors";
-import { parseStrictRoomDirectory, parseStrictRoomCreateResponse } from "./roomDirectoryContract";
 import { decodeCanonicalBase64Url, encodeBase64Url } from "./base64Url";
-import { parseOperatorPairingRedeemResponse } from "./roomAdmissionContract";
 import {
   assertExactKeys,
   requiredString,
@@ -120,7 +117,7 @@ async function responseJson(response: Response, label: string): Promise<unknown>
 }
 
 export async function verifyCentralOwnerHost(
-  connect: CentralOwnerConnect
+  connect: Pick<CentralOwnerConnect, "serverId" | "hostPublicKeyX" | "hostKeyFingerprint">
 ): Promise<void> {
   const challenge = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const response = await fetch("/api/server-info/challenge", {
@@ -210,85 +207,4 @@ export async function verifyCentralOwnerHost(
   ) {
     throw new Error("중앙 서버 서명을 확인하지 못했습니다.");
   }
-}
-
-export async function fetchCentralOwnerRooms(connect: CentralOwnerConnect, deviceToken: string, signal?: AbortSignal) {
-  const payload = parseStrictRoomDirectory(await ownerRequest(connect, deviceToken, "directory", {}, signal));
-  if (payload.server_id !== connect.serverId) throw new Error("선택한 서버와 방 목록이 일치하지 않습니다.");
-  return payload;
-}
-
-export function openCentralOwnerDirectoryStream(
-  connect: CentralOwnerConnect, deviceToken: string, signal: AbortSignal
-) {
-  if (!normalize(connect)) throw new ApiError(401, "서버 접속이 만료됐어요. 계정에서 서버를 다시 열어 주세요.", "central_connect_invalid");
-  signal.throwIfAborted();
-  return fetch("/api/central-owner/events", {
-    method: "POST", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
-    headers: { "content-type": "application/json", "x-device-token": deviceToken },
-    body: JSON.stringify({ grant_token: connect.grantToken, generation: connect.generation }),
-  });
-}
-
-export async function createCentralOwnerRoom(
-  connect: CentralOwnerConnect, deviceToken: string,
-  requestId: string, roomId: string, label: string
-) {
-  const payload = parseStrictRoomCreateResponse(await ownerRequest(connect, deviceToken, "rooms", {
-    request_id: requestId, room_id: roomId, label,
-  }));
-  if (payload.server_id !== connect.serverId) throw new Error("선택한 서버와 생성된 방이 일치하지 않습니다.");
-  return payload;
-}
-
-async function ownerRequest(
-  connect: CentralOwnerConnect, deviceToken: string, route: string, body: Record<string, unknown> = {}, signal?: AbortSignal
-): Promise<unknown> {
-  if (!normalize(connect)) throw new ApiError(401, "서버 접속이 만료됐어요. 계정에서 서버를 다시 열어 주세요.", "central_connect_invalid");
-  const response = await fetch(`/api/central-owner/${route}`, {
-    method: "POST", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
-    headers: { "content-type": "application/json", "x-device-token": deviceToken },
-    body: JSON.stringify({ grant_token: connect.grantToken, generation: connect.generation, ...body }),
-  });
-  const payload = await response.json().catch(() => null);
-  if (!response.ok) throw new ApiError(response.status,
-    typeof payload?.error === "string" ? payload.error : payload?.error?.message || "서버 작업을 완료하지 못했어요.",
-    payload?.code || payload?.error?.code || "");
-  return payload;
-}
-
-const WORKSPACE_KEY = "agentsassemble.central-owner-workspace.v1";
-
-export function loadCentralOwnerWorkspace(): CentralOwnerConnect | null {
-  const raw = sessionStorage.getItem(WORKSPACE_KEY);
-  if (!raw) return null;
-  try {
-    const record = JSON.parse(raw);
-    const connect = record.origin === window.location.origin ? normalize(record.connect) : null;
-    if (connect) return connect;
-  } catch { /* Invalid custody is removed; it never becomes local authority. */ }
-  sessionStorage.removeItem(WORKSPACE_KEY);
-  return null;
-}
-
-export function persistCentralOwnerWorkspace(connect: CentralOwnerConnect | null) {
-  if (!connect) { sessionStorage.removeItem(WORKSPACE_KEY); return; }
-  if (!normalize(connect)) throw new Error("서버 접속이 만료됐어요.");
-  sessionStorage.setItem(WORKSPACE_KEY, JSON.stringify({ origin: window.location.origin, connect }));
-}
-
-export async function enterCentralOwnerRoom(
-  connect: CentralOwnerConnect,
-  deviceToken: string,
-  roomId: string,
-  roomUid: string
-) {
-  const payload = parseOperatorPairingRedeemResponse(await ownerRequest(connect, deviceToken, "room", {
-    room_id: roomId, room_uid: roomUid,
-  }));
-  if (payload.central_owner !== true || payload.server_id !== connect.serverId ||
-      payload.meeting_id !== roomId || payload.room_uid !== roomUid) {
-    throw new Error("선택한 서버·방과 발급된 접속권이 일치하지 않습니다.");
-  }
-  return payload;
 }

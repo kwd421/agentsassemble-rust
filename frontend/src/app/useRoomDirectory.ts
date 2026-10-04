@@ -1,3 +1,4 @@
+import type { CentralOwnerSessionStatus } from "../types/generated/CentralOwnerSessionStatus";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { fetchRooms } from "../api";
 import { openNativeDirectoryStream, subscribeRoomDirectory, type OpenDirectoryStream } from "../lib/roomDirectorySubscription";
@@ -30,7 +31,7 @@ import {
 type UseRoomDirectoryOptions = {
   initialRooms: RoomDockItem[];
   hostEnabled: boolean;
-  remoteOwner?: { serverId: string; fetchRooms: (beforeDispatch: () => void, signal?: AbortSignal) => Promise<StrictRoomDirectory>; openStream: OpenDirectoryStream };
+  remoteOwner?: { serverId: string; fetchRooms: (beforeDispatch: () => void, signal?: AbortSignal) => Promise<StrictRoomDirectory>; openStream: OpenDirectoryStream; onStatus: (status: CentralOwnerSessionStatus) => void };
 };
 
 type RoomDirectorySyncIssue = {
@@ -594,7 +595,8 @@ export function useRoomDirectory({
         managerSnapshotRef.current = null;
         publishSyncIssue({ category: "room_directory_unavailable",
           message: error instanceof Error ? error.message : "방 목록 변경 연결을 확인하지 못했어요." });
-      }
+      },
+      remoteOwner?.onStatus
     );
     subscriptionRef.current = subscription;
     return () => {

@@ -21,7 +21,7 @@ describe("room lifecycle request ownership", () => {
       beforeDispatch();
       return new Promise((_resolve, fail) => { reject = fail; });
     });
-    const transport = { kind: "central_grant" as const, credential: { grantToken: "aacg1.owner", generation: 2 }, deviceToken: "device" };
+    const transport = { kind: "server_owner" as const, credential: { sessionToken: "aaos1.owner", generation: 2 }, deviceToken: "device" };
     const { result, rerender } = renderHook(({ rooms }) => useRoomLifecycle({ enabled: true, authorityReady: true, managementRooms: rooms, transport,
       captureRoomDirectoryContinuity: () => continuity, validateRoomDirectoryContinuity: vi.fn(), refreshRoomDirectory }), { initialProps: { rooms: [room] } });
     act(() => { result.current.change(room, "archive"); result.current.onRoomLifecycle(); });

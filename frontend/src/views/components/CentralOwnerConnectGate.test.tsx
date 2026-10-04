@@ -2,24 +2,27 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, expect, it, vi } from "vitest";
 
 import { TEST_SERVER_PRODUCT_SURFACE } from "../../test/serverProductSurface";
-import { loadCentralOwnerWorkspace } from "../../lib/centralOwnerConnect";
+import { loadCentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
 
 const mocks = vi.hoisted(() => ({
   verify: vi.fn(),
-  rooms: vi.fn(),
+  rooms: vi.fn(), exchange: vi.fn(),
 }));
 
-vi.mock("../../lib/centralOwnerConnect", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/centralOwnerConnect")>()),
-  verifyCentralOwnerHost: mocks.verify,
+vi.mock("../../lib/centralOwnerWorkspace", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/centralOwnerWorkspace")>()),
+  exchangeCentralOwnerSession: mocks.exchange,
   fetchCentralOwnerRooms: mocks.rooms,
 }));
+
+vi.mock("../../lib/centralOwnerConnect", () => ({ verifyCentralOwnerHost: mocks.verify }));
 
 afterEach(() => {
   cleanup();
   mocks.verify.mockReset();
   mocks.rooms.mockReset();
+  mocks.exchange.mockReset();
   sessionStorage.clear();
 });
 
@@ -40,15 +43,18 @@ it("retries a failed challenge with the in-memory unexpired grant", async () => 
     hostKeyFingerprint: "c".repeat(43),
   };
 
+  const { grantToken: _grantToken, ...binding } = connect;
+  const session = { ...binding, sessionToken: `aaos1.${"d".repeat(43)}`, expiresAt: Math.floor(Date.now() / 1000) + 86400, leaseExpiresAt: Math.floor(Date.now() / 1000) + 60 };
+  mocks.exchange.mockResolvedValue(session);
   const onComplete = vi.fn();
   const view = render(<CentralOwnerConnectGate connect={connect} deviceToken="device-1" onComplete={onComplete} />);
   await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("네트워크 연결 실패"));
   fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
   await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-  expect(loadCentralOwnerWorkspace()).toEqual(connect);
+  expect(loadCentralOwnerWorkspace()).toEqual(session);
   expect(mocks.verify).toHaveBeenCalledTimes(2);
   expect(mocks.rooms).toHaveBeenCalledOnce();
-  expect(mocks.rooms).toHaveBeenCalledWith(connect, "device-1");
+  expect(mocks.rooms).toHaveBeenCalledWith(session, "device-1");
   view.unmount();
   render(<CentralOwnerConnectGate connect={{ ...connect, expiresAt: Math.floor(Date.now() / 1000) - 1 }} deviceToken="device-1" onComplete={onComplete} />);
   expect(screen.getByRole("alert").textContent).toContain("접속이 만료");

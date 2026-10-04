@@ -2,6 +2,10 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { centralOwnerServerUrl } from "../../lib/centralOwnerConnect";
+import type { CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import { useContext } from "react";
+import { CentralOwnerWorkspaceContext } from "../../lib/centralOwnerWorkspaceContext";
+import type { CentralOwnerSessionStatus } from "../../types/generated/CentralOwnerSessionStatus";
 import StartupIdentityBoundary from "./StartupIdentityBoundary";
 
 const deviceMocks = vi.hoisted(() => ({
@@ -28,9 +32,9 @@ vi.mock("./StartupIdentityGate", () => ({
   default: () => <main aria-label="authoritative startup gate" />,
 }));
 vi.mock("./CentralOwnerConnectGate", () => ({
-  default: ({ deviceToken, onComplete }: { deviceToken: string; onComplete: () => void }) => (
+  default: ({ deviceToken, connect, onComplete }: { deviceToken: string; connect: { serverId: string; generation: number; hostPublicKeyX: string; hostKeyFingerprint: string }; onComplete: (session: CentralOwnerWorkspace) => void }) => (
     <main aria-label="central owner gate" data-device-token={deviceToken}>
-      <button onClick={onComplete}>complete owner entry</button>
+      <button onClick={() => onComplete({ serverId: connect.serverId, generation: connect.generation, hostPublicKeyX: connect.hostPublicKeyX, hostKeyFingerprint: connect.hostKeyFingerprint, sessionToken: `aaos1.${"d".repeat(43)}`, expiresAt: Math.floor(Date.now() / 1000) + 86400, leaseExpiresAt: Math.floor(Date.now() / 1000) + 60 })}>complete owner entry</button>
     </main>
   ),
 }));
@@ -49,6 +53,7 @@ afterEach(() => {
   boundaryMocks.bundled = true;
   boundaryMocks.session = null;
   window.localStorage.clear();
+  window.sessionStorage.clear();
   window.history.replaceState({}, "", "/");
 });
 
@@ -78,9 +83,11 @@ describe("StartupIdentityBoundary", () => {
     ).hash;
     window.history.replaceState({}, "", `/app${hash}`);
 
+    let publish!: (status: CentralOwnerSessionStatus) => void;
+    function Product() { publish = useContext(CentralOwnerWorkspaceContext)!.onStatus; return <main aria-label="product" />; }
     render(
       <StartupIdentityBoundary>
-        {() => <main aria-label="product" />}
+        {() => <Product />}
       </StartupIdentityBoundary>
     );
 
@@ -92,9 +99,14 @@ describe("StartupIdentityBoundary", () => {
     expect(window.location.hash).toBe("");
     fireEvent.click(screen.getByRole("button", { name: "complete owner entry" }));
     expect(screen.getByRole("main", { name: "product" })).toBeTruthy();
-    act(() => { vi.advanceTimersByTime(300_000); });
-    expect(screen.queryByRole("main", { name: "product" })).toBeNull();
-    expect(screen.getByRole("main", { name: "central owner gate" })).toBeTruthy();
+    for (let elapsed = 20; elapsed <= 320; elapsed += 20) {
+      act(() => {
+        vi.advanceTimersByTime(20_000);
+        publish({ state: "active", expires_at: Math.floor(Date.now() / 1000) + 60 });
+      });
+    }
+    expect(screen.getByRole("main", { name: "product" })).toBeTruthy();
+    expect(screen.queryByRole("main", { name: "central owner gate" })).toBeNull();
     expect(screen.queryByRole("main", { name: "authoritative startup gate" })).toBeNull();
   });
 
