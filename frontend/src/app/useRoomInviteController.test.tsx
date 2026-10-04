@@ -645,3 +645,22 @@ describe("useRoomInviteController", () => {
     }
   });
 });
+
+it("keeps failed remote authentication distinct from confirmed off and retries its exact session", async () => {
+  vi.resetAllMocks();
+  apiMocks.fetchRemoteInviteOrigin.mockRejectedValueOnce(new Error("인증이 만료됐어요"));
+  const remote = { sessionToken: "aops1.owner", deviceToken: "device", meetingId: "general" };
+  const hook = renderHook(() => useRoomInviteController({ localOperatorEligible: false, remote, resolveManagerRoomAuthority: () => managerAuthority }));
+  act(() => hook.result.current.open(room.id));
+  await waitFor(() => expect(hook.result.current.publicAccessQuery).toBe("unavailable"));
+  expect(hook.result.current.invitePublicUrl).toBe("");
+  const pending = deferred<{ remote: true; public_url: string }>();
+  apiMocks.fetchRemoteInviteOrigin.mockReturnValueOnce(pending.promise);
+  act(() => hook.result.current.retryPublicInviteState());
+  expect(hook.result.current.publicAccessQuery).toBe("checking");
+  await act(async () => pending.resolve({ remote: true, public_url: "https://room.example.test" }));
+  expect(hook.result.current.publicAccessQuery).toBe("confirmed");
+  expect(hook.result.current.invitePublicUrl).toBe("https://room.example.test");
+  expect(apiMocks.fetchRemoteInviteOrigin).toHaveBeenLastCalledWith(remote, expect.any(Function));
+  hook.unmount();
+});

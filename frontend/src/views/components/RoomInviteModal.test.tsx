@@ -24,6 +24,7 @@ it("uses a saved human name for human admission while excluding AI contacts", as
 
 function renderInviteModal({
   publicAccess = true,
+  query = "confirmed",
   activeWithoutUrl = false,
   phase,
   requestState = "idle",
@@ -32,6 +33,7 @@ function renderInviteModal({
   operatorPairings = [],
 }: {
   publicAccess?: boolean;
+  query?: "checking" | "confirmed" | "unavailable";
   activeWithoutUrl?: boolean;
   phase?: "stopped" | "starting" | "running" | "stopping" | "error";
   requestState?: "idle" | "starting" | "stopping";
@@ -39,6 +41,7 @@ function renderInviteModal({
   pairingAvailable?: boolean;
   operatorPairings?: OperatorPairingPresentation[];
 } = {}) {
+  const retry = vi.fn();
   const onGenerateSecureInvite = vi.fn();
   const onCreatePairing = vi.fn();
   const onCopyPairing = vi.fn();
@@ -58,6 +61,8 @@ function renderInviteModal({
       onRevokePairing={pairingAvailable ? onRevokePairing : undefined}
       publicUrl={publicAccess ? "https://room.example.com" : ""}
       publicAccessTransition={requestState}
+      publicAccessQuery={query}
+      onRetryPublicAccess={retry}
       tunnelStatus={{
         available: true,
         running: tunnelActive,
@@ -76,7 +81,7 @@ function renderInviteModal({
   );
   return {
     onGenerateSecureInvite, onCreatePairing, onCopyPairing, onRevokePairing,
-    onStopTunnel,
+    retry, onStopTunnel,
     onCopyHumanInvite,
     onRevokeHumanInvite,
   };
@@ -234,4 +239,15 @@ describe("RoomInviteModal", () => {
     expect(screen.queryByText("고급 연결 설정")).toBeNull();
     expect(screen.queryByRole("button", { name: "운영자 기기 연결 링크 생성" })).toBeNull();
   });
+});
+
+it.each(["checking", "unavailable"] as const)("does not label %s ingress as off", query => {
+  const { retry } = renderInviteModal({ publicAccess: false, query });
+  expect(screen.queryByText("외부 접속 꺼짐")).toBeNull();
+  expect(screen.queryByRole("button", { name: "외부 접속 열기" })).toBeNull();
+  expect((screen.getByRole("button", { name: "사람 초대 링크 생성" }) as HTMLButtonElement).disabled).toBe(true);
+  if (query === "unavailable") {
+    fireEvent.click(screen.getByRole("button", { name: "상태 다시 확인" }));
+    expect(retry).toHaveBeenCalledOnce();
+  } else expect(screen.getByText("외부 접속 확인 중")).toBeTruthy();
 });

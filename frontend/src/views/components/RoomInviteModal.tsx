@@ -8,6 +8,7 @@ import type { PublicInviteStatus } from "../../api";
 import type {
   HumanInviteOptions,
   PublicAccessTransition,
+  PublicAccessQuery,
 } from "../../app/useRoomInviteController";
 import type { HumanInvitePresentation } from "../../app/useManagedHumanInvites";
 import type { OperatorPairingPresentation } from "../../app/useManagedOperatorPairings";
@@ -54,6 +55,8 @@ export default function RoomInviteModal({
   onRevokePairing,
   publicUrl,
   publicAccessTransition = "idle",
+  publicAccessQuery,
+  onRetryPublicAccess,
   tunnelStatus,
   inviteScope = "room",
   copyStatus,
@@ -77,6 +80,8 @@ export default function RoomInviteModal({
   onRevokePairing?: (key: string) => void;
   publicUrl?: string;
   publicAccessTransition?: PublicAccessTransition;
+  publicAccessQuery: PublicAccessQuery;
+  onRetryPublicAccess?: () => void;
   tunnelStatus?: PublicInviteStatus["tunnel"];
   inviteScope?: RoomAppearance["inviteScope"];
   copyStatus?: string;
@@ -115,10 +120,11 @@ export default function RoomInviteModal({
     publicAccessTransition === "starting" || tunnelStatus?.phase === "starting";
   const publicAccessStopping =
     publicAccessTransition === "stopping" || tunnelStatus?.phase === "stopping";
-  const publicAccessRunning = Boolean(publicUrl || tunnelStatus?.public_url);
+  const publicAccessKnown = publicAccessQuery === "confirmed";
+  const publicAccessRunning = publicAccessKnown && Boolean(publicUrl || tunnelStatus?.public_url);
   const publicTunnelActive = Boolean(tunnelStatus?.running);
   const publicAccessControllable = Boolean(tunnelStatus?.available);
-  const publicAccessBusy = publicAccessStarting || publicAccessStopping;
+  const publicAccessBusy = publicAccessStarting || publicAccessStopping || !publicAccessKnown;
   // One hosting control at a time: an open or opening tunnel offers only Stop.
   const showStopTunnel =
     publicAccessStarting || publicAccessStopping || publicTunnelActive || publicAccessRunning;
@@ -207,7 +213,7 @@ export default function RoomInviteModal({
               <input
                 className="dc-invite-link-input"
                 value={secureInviteReady ? "초대 링크가 준비됐어요" : ""}
-                placeholder={publicAccessRunning ? "링크를 만들면 바로 복사할 수 있어요" : "링크를 만들 때 외부 접속을 함께 열어요"}
+                placeholder={!publicAccessKnown ? "외부 접속 상태를 확인해 주세요" : publicAccessRunning ? "링크를 만들면 바로 복사할 수 있어요" : "링크를 만들 때 외부 접속을 함께 열어요"}
                 readOnly
                 aria-label="사람 초대 링크"
               />
@@ -352,7 +358,7 @@ export default function RoomInviteModal({
                 onClick={onCreatePairing}>
                 {pairingCreating ? "링크 만드는 중" : "연결 링크 만들기"}
               </button>
-              {!publicAccessRunning && <p>외부 접속을 연 뒤 연결할 수 있어요.</p>}
+              {publicAccessKnown && !publicAccessRunning && <p>외부 접속을 연 뒤 연결할 수 있어요.</p>}
               {operatorPairings.length > 0 && (
                 <div className="grid gap-2" role="list" aria-label="이 앱에서 발급한 기기 연결">
                   {operatorPairings.map((pairing, index) => (
@@ -399,12 +405,18 @@ export default function RoomInviteModal({
                 ? "공개 준비 중"
                 : publicAccessStopping
                   ? "외부 접속 닫는 중"
-                  : publicAccessRunning
+                  : publicAccessQuery === "checking"
+                    ? "외부 접속 확인 중"
+                    : publicAccessQuery === "unavailable"
+                      ? "외부 접속 상태 확인 필요"
+                      : publicAccessRunning
                     ? "외부 접속 열림"
                     : "외부 접속 꺼짐"}
             </p>
             <p className="dc-invite-hosting-detail">
-              {publicAccessRunning
+              {!publicAccessKnown
+                ? publicAccessQuery === "checking" ? "접속 상태를 확인하고 있어요." : "접속 상태를 불러오지 못했어요. 다시 확인해 주세요."
+                : publicAccessRunning
                 ? publicUrl || tunnelStatus?.public_url || "외부 주소가 연결되어 있어요."
                 : "이 컴퓨터에서는 계속 대화할 수 있어요."}
             </p>
@@ -412,7 +424,8 @@ export default function RoomInviteModal({
               <p className="dc-invite-hosting-error preserve-words">{tunnelStatus.last_error}</p>
             )}
           </div>
-          {canControlIngress && (showStopTunnel ? (
+          {publicAccessQuery === "unavailable" && onRetryPublicAccess && <button type="button" className="dc-invite-row-button" onClick={onRetryPublicAccess}>상태 다시 확인</button>}
+          {canControlIngress && publicAccessKnown && (showStopTunnel ? (
             <button
               type="button"
               className="dc-invite-row-button"

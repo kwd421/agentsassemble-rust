@@ -63,6 +63,8 @@ export default function AppOverlays({ controller, companionInvites }: { controll
             onRevokePairing={(key) => void roomInvite.revokePairing(key)}
             publicUrl={invitePublicUrl}
             publicAccessTransition={roomInvite.publicAccessTransition}
+            publicAccessQuery={roomInvite.publicAccessQuery}
+            onRetryPublicAccess={roomInvite.retryPublicInviteState}
             tunnelStatus={publicInviteStatus?.tunnel}
             inviteScope={inviteModalAppearance?.inviteScope || inviteModalRoom.inviteScope || "room"}
             copyStatus={inviteCopyStatus}

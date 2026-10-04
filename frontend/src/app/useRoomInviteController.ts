@@ -23,6 +23,7 @@ import { useManagedOperatorPairings } from "./useManagedOperatorPairings";
 type InviteModalState = { roomId: string } | null;
 
 export type PublicAccessTransition = "idle" | "starting" | "stopping";
+export type PublicAccessQuery = "checking" | "confirmed" | "unavailable";
 
 export type HumanInviteOptions = {
   maxUses: number;
@@ -46,6 +47,7 @@ export function useRoomInviteController({
   const [modal, setModal] = useState<InviteModalState>(null);
   const [copyStatus, setCopyStatus] = useState("");
   const [publicInviteStatus, setPublicInviteStatus] = useState<PublicInviteStatus | { public_url: string; remote: true } | null>(null);
+  const [publicAccessQuery, setPublicAccessQuery] = useState<PublicAccessQuery>("checking");
   const [publicAccessTransition, setPublicAccessTransition] =
     useState<PublicAccessTransition>("idle");
   const ingressGenerationRef = useRef(0);
@@ -176,6 +178,7 @@ export function useRoomInviteController({
     setModal({ roomId });
     setCopyStatus("");
     setPublicInviteStatus(null);
+    setPublicAccessQuery("checking");
     setPublicAccessTransition("idle");
   }
 
@@ -193,6 +196,7 @@ export function useRoomInviteController({
       retireIngressOperation();
       setPublicAccessTransition("idle");
       setPublicInviteStatus(null);
+      setPublicAccessQuery("unavailable");
       setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
       return;
     }
@@ -210,6 +214,28 @@ export function useRoomInviteController({
   }, [localOperatorEligible, remote?.sessionToken, remote?.deviceToken, modal?.roomId]);
 
   async function refreshPublicInviteState(generation: number) {
+    assertIngressOperation(generation);
+    setPublicAccessQuery("checking");
+    try {
+      const status = await queryPublicInviteState(generation);
+      assertIngressOperation(generation);
+      setPublicAccessQuery("confirmed");
+      return status;
+    } catch (error) {
+      if (ingressOperationIsCurrent(generation)) setPublicAccessQuery("unavailable");
+      throw error;
+    }
+  }
+
+  function retryPublicInviteState() {
+    const generation = beginIngressOperation();
+    setCopyStatus("");
+    void refreshPublicInviteState(generation).catch(error => {
+      if (ingressOperationIsCurrent(generation)) setCopyStatus(error instanceof Error ? error.message : "외부 접속 상태를 확인하지 못했어요.");
+    });
+  }
+
+  async function queryPublicInviteState(generation: number) {
     if (remote) {
       assertIngressOperation(generation);
       const status = await fetchRemoteInviteOrigin(remote, () => assertIngressOperation(generation));
@@ -444,6 +470,8 @@ export function useRoomInviteController({
     humanInvites: managedHumanInvites.humanInvites,
     publicInviteStatus: publicInviteStatus && "tunnel" in publicInviteStatus ? publicInviteStatus : null,
     publicAccessTransition,
+    publicAccessQuery,
+    retryPublicInviteState,
     invitePublicUrl:
       (publicInviteStatus && "stable_url" in publicInviteStatus ? publicInviteStatus.stable_url : "") || publicInviteStatus?.public_url || "",
     open,
