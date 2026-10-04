@@ -15,19 +15,22 @@ work is active or waiting, and remove it when it closes.
   the corrections through `f2dda814` at C0/H0/M0/L0; signed 0.1.8 at `03756b43`
   re-verified the schema 75 -> 77 upgrade and revocation. Central logout acceptance
   was skipped by user decision.
-- Planned (user direction 2026-10-05), in order after the ordered-room stall and
-  desktop `/pair` fixes: (1) device pairing without the one-hour session limit,
-  revocable per device from the host, shown as a QR (implemented with schema 80;
-  automated evidence in `docs/VERIFICATION.md`, manual verification excluded);
-  (2) Tailscale address support
-  so the owner's own devices reach the host with no central request; (3) central
-  request hardening: reuse an unexpired connect grant on reload and move abuse rate
-  limiting off D1 writes (WAF rules later with a custom domain); (4) Discord-style
-  multi-server rail: app opens and serves the local server when central is down,
-  invited members bound to central identity by the host, and the account's server
-  list synced across devices. End-to-end encryption over the tunnel is a later
-  review item.
-- Planned: 초대 멤버를 중앙 계정에 묶기 — C1 계약 및 C4a host floor 구현 ([소유 계약](docs/specs/identity-accounts-friends-slice.md#초대-멤버를-중앙-계정에-묶기--c1-승인-계약-2026-10-05)). C4a는 80 생성/81 인식만 제공하며 미배포; C2/C3 장벽·C4b migration·C5 노출·C6 검증은 남아 있다.
+- Status (2026-10-05, user direction; Daybreak Blue `xhigh` reviewed each item):
+  ordered-room stall fixed through `c29eaeed` (approved); desktop `/pair` owner
+  navigation fixed `b10b5791`; native device pairing without the one-hour limit,
+  30-day idle expiry, QR and device labels through `cdd87e9d` (approved); central
+  abuse hardening deployed as Worker `e93c5c82` (rollback `80a4eabf`, migrations
+  0009/0010; owner grant/redeem and endpoint renewal smoke pending a host with
+  public ingress); rail stage 1 (app opens and serves the local server during
+  central outages, display-only server cache, per-server connection state) through
+  `4778b5dc` (approved); SQLite writer close race fixed `ed1e74b0` (approved).
+  Open: manual packaged acceptance and Astra frontend visual review for these
+  changes (screen was locked); Tailscale support is deferred by the user.
+- Central member binding (approved design, six rounds): C1 contracts `e5134655`
+  (approved), schema 81 floor contract `e8b242e9` and C4a host floor `67d46320`
+  (not yet reviewed). Remaining: Daybreak review of C4a, C3a central floor, C3b
+  barrier, C3c, C4b migration, C5 exposure, C6 verification.
+  [Owning contract](docs/specs/identity-accounts-friends-slice.md#초대-멤버를-중앙-계정에-묶기--c1-승인-계약-2026-10-05).
 - Open verification: Windows physical-device checks (recent Discord-style UI,
   server icons, interactive install/update `desktop-v0.1.4`, attendee CLI); full
   app/web parity rows in the final-parity slice; persistent web MCP endpoint

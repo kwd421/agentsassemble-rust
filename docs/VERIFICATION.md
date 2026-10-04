@@ -13621,3 +13621,10 @@ contract and evidence below replace that implementation; no migration 0009 is ne
   Web entry through the production Worker, a web message delivered to the app,
   single device revocation ended the web tab, and reload returned to login. The app
   was quit normally; tunnel and children exited.
+
+## Central identity Worker hardening deployment (2026-10-04 UTC)
+
+- Reviewed release: Worker branch `codex/owner-session-renewal` at `dc67f291` (source identical to Daybreak-approved `0cbe1bed`; 0010 rewritten for Wrangler's splitter and separately approved). Shared frontend assets built from Rust `cdd87e9d` in a clean worktree.
+- Runbook: recorded rollback version `80a4eabf-bf07-4160-8413-a24d3a4fad21` (25fad46a code), remote migrations 0001-0008; cron disabled 22:31 UTC with the generated cleanup-off config and the full 15-minute wait; 0009 applied; first 0010 attempt failed atomically (`incomplete input: SQLITE_ERROR 7500`, Wrangler 4.98 joined trigger bodies); dc67f291 rewrote the triggers (`SELECT RAISE(...) WHERE ...`, 17 statements / 10 triggers, Daybreak-confirmed equivalent including NULL handling); 0010 applied; deployed `e93c5c82-091d-4a57-bd13-eee48d1778d3` with all nine rate-limit bindings; restored the single `17 3 * * *` trigger.
+- Smoke: root 200, unauthenticated bootstrap 401, unsigned endpoint renew 400, signed-in web server chooser bootstrap through the new Worker succeeded. Owner grant/redeem and endpoint renewal smoke are pending a host with public ingress (the Mac screen was locked).
+- Rollback: disable cron, wait 15 minutes, `wrangler rollback 80a4eabf-bf07-4160-8413-a24d3a4fad21`, keep 0009/0010 and cleanup disabled until the budget-fixed release returns.
