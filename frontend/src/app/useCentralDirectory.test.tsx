@@ -5,6 +5,7 @@ import { saveCentralDirectoryCache } from "../lib/centralDirectoryCache";
 import { useCentralDirectory } from "./useCentralDirectory";
 const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), session: null as object | null }));
 vi.mock("../lib/centralIdentity", () => ({ bootstrapCentral: mocks.bootstrap,
+  CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => true, loadCentralSession: () => mocks.session,
   isCentralAuthenticationError: (e: Error) => e.message === "401",
 }));
@@ -87,4 +88,18 @@ it("keeps cached servers visible across startup-to-app handoff while rechecking"
   const { result } = renderHook(() => useCentralDirectory(true));
   expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", servers: [server], live: null });
   expect(mocks.bootstrap).toHaveBeenCalledOnce();
+});
+
+it("rejects a successful flight when the session is cleared before publication", async () => {
+  mocks.session = { token: "old", person };
+  let complete!: (value: object) => void;
+  mocks.bootstrap.mockImplementation(() => new Promise((resolve) => { complete = resolve; }));
+  const { result } = renderHook(() => useCentralDirectory());
+  await act(async () => {
+    const pending = result.current.refresh();
+    complete({ person, servers: [server], server_time: 1 });
+    mocks.session = null;
+    await expect(pending).rejects.toMatchObject({ name: "AbortError" });
+  });
+  expect(result.current.directory).toBeNull();
 });

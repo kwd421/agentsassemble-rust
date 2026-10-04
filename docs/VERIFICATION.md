@@ -1,6 +1,43 @@
 # Verification Contract
 
 
+## Discord-style rail step 1 — Daybreak M3 corrections (2026-10-05)
+
+Follow-up authorized verification: `npm --prefix frontend test` passed all
+1,043 tests (174 files), `make architecture-check` and `git diff --check` passed.
+The frontend correction is committed and pushed separately before investigating
+the Rust shutdown/reopen race; the final full verify belongs to that follow-up.
+
+The three Medium findings on `0866b39c` / `eb9b500f` were confirmed in code.
+Before implementation, seeded-cache, signed-operation and controlled successful
+flight regressions failed: 9 failed / 9 passed. After correction, the same 18
+passed. The full frontend suite then passed 174 files / 1,042 tests; an additional
+401-header/error-body ordering regression passed with all nine auth integration
+tests. Tests use fixture keys/local mocked transport, not real providers.
+
+Legacy full-directory data is deleted during session access/account replacement
+and before unsigned/native login or local identity network work, including offline
+upgrade. It is never migrated. The shared signed-fetch boundary invalidates only
+the currently rejected token on HTTP 401, before consuming the error body. Session
+clearing immediately notifies the directory owner, clears its presentation, aborts
+pending observation and stops retries. Tests cover bootstrap, icon read/write,
+rename, registration, a late old-token 401 preserving the new account, and null
+session rejection before successful directory publication. Existing signed request
+and local registration authorities are preserved; no new polling or network call.
+
+The single pre-commit `make verify` run failed in the existing Rust integration
+case `structurally_valid_retired_authenticated_envelope_has_no_compatibility_decoder`
+(`crates/agentsassemble-server/tests/runtime_boundary.rs:559`): reopening the test
+store found its database writer lease still owned. Architecture/policy/format,
+workspace check, frontend build and all 1,043 frontend tests, and desktop 46 tests
+passed before that failure. Workspace tests did not finish; the subsequent workspace
+Clippy, diff and final artifact gates were not reached. No rerun, commit or push
+was performed pending authorization to investigate and verify outside the user's
+frontend-only/one-verify limit. The Rust failure is not claimed fixed or unrelated
+without further verification.
+Deployment, signing and manual verification were explicitly excluded and were not
+performed. `.agents/` and `scripts/__pycache__/` remain untouched.
+
 ## Discord-style rail step 1 — central outage continuity (2026-10-05)
 
 The identity contract now records temporary outage versus authentication failure,

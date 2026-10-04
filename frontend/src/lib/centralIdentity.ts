@@ -13,6 +13,7 @@ import { centralOwnerServerUrl } from "./centralOwnerConnect";
 import { type HostOs, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
+export const CENTRAL_SESSION_CLEARED_EVENT = "agentsassemble:central-session-cleared";
 const SERVERS_KEY = "agentsassemble.centralServers.v1";
 const PENDING_RECOVERY_KEY = "agentsassemble.pendingRecoveryCode.v1";
 const DB_NAME = "agentsassemble-central-identity-v1";
@@ -270,6 +271,8 @@ export function clearPendingCentralRecoveryCode(): void {
 }
 
 export function loadCentralSession(): CentralSession | null {
+  // The legacy directory has no account owner and contains connection material.
+  localStorage.removeItem(SERVERS_KEY);
   try {
     const parsed = JSON.parse(
       localStorage.getItem(SESSION_KEY) || "null"
@@ -292,6 +295,7 @@ export function clearCentralSession(): void {
   }
   localStorage.removeItem(SERVERS_KEY);
   clearCentralDirectoryCache();
+  window.dispatchEvent(new Event(CENTRAL_SESSION_CLEARED_EVENT));
 }
 
 export function centralSessionLoggedOut(): boolean {
@@ -340,6 +344,7 @@ export async function unsignedPost<T>(
   body: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<T> {
+  localStorage.removeItem(SERVERS_KEY);
   const response = await fetch(`${configuredUrl()}${path}`, {
     method: "POST",
     mode: "cors",
@@ -355,6 +360,7 @@ export async function unsignedPost<T>(
 }
 
 function fetchLocalRuntime(path: string, init: RequestInit = {}): Promise<Response> {
+  localStorage.removeItem(SERVERS_KEY);
   return isDesktopWebview()
     ? fetchDesktopOperatorRuntime(path, init)
     : fetch(path, init);
@@ -493,6 +499,7 @@ async function signedFetch(
     body: body || undefined,
     signal,
   });
+  if (response.status === 401 && loadCentralSession()?.token === session.token) clearCentralSession();
   return response;
 }
 
@@ -528,6 +535,7 @@ export async function loginCentralGoogle(
   status?: (message: string) => void,
   signal?: AbortSignal
 ): Promise<CentralSession> {
+  localStorage.removeItem(SERVERS_KEY);
   throwIfGoogleLoginAborted(signal);
   const state = randomUrlToken(32);
   const verifier = randomUrlToken(32);
@@ -613,24 +621,18 @@ export async function loginCentralGoogle(
 export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBootstrap | null> {
   const session = loadCentralSession();
   if (!session) return null;
-  try {
-    const payload = await signedRequest<CentralBootstrap>(
-      session,
-      "/v1/bootstrap",
-      "GET", undefined, signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
-    );
-    signal?.throwIfAborted();
-    if (!payload.person || payload.person.person_id !== session.person.person_id || !Array.isArray(payload.servers)) throw new Error("중앙 서버 목록 응답이 올바르지 않습니다.");
-    const current = loadCentralSession();
-    if (current?.token !== session.token) throw new CentralAuthError("중앙 로그인 상태가 바뀌었습니다. 다시 로그인해 주세요.");
-    localStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, person: payload.person }));
-    saveCentralDirectoryCache(payload.person.person_id, payload.servers);
-    localStorage.removeItem(SERVERS_KEY);
-    return payload;
-  } catch (error) {
-    if (error instanceof CentralAuthError && loadCentralSession()?.token === session.token) clearCentralSession();
-    throw error;
-  }
+  const payload = await signedRequest<CentralBootstrap>(
+    session,
+    "/v1/bootstrap",
+    "GET", undefined, signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
+  );
+  signal?.throwIfAborted();
+  if (!payload.person || payload.person.person_id !== session.person.person_id || !Array.isArray(payload.servers)) throw new Error("중앙 서버 목록 응답이 올바르지 않습니다.");
+  const current = loadCentralSession();
+  if (current?.token !== session.token) throw new CentralAuthError("중앙 로그인 상태가 바뀌었습니다. 다시 로그인해 주세요.");
+  localStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, person: payload.person }));
+  saveCentralDirectoryCache(payload.person.person_id, payload.servers);
+  return payload;
 }
 
 export async function openCentralOwnedServer(server: CentralServer): Promise<void> {

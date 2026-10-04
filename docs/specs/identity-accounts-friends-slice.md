@@ -48,6 +48,20 @@ recovery, local-runtime disconnection and disconnected-room retry. Run affected
 frontend tests during work and `make verify` once immediately before scoped
 commits/push. Packaged visual and manual acceptance remain explicitly unverified.
 
+Daybreak M3 correction contract (2026-10-05): delete the unscoped legacy
+`agentsassemble.centralServers.v1` directory (including endpoint origins and host
+keys) before network work, including offline upgrade and every account transition;
+never migrate it. At the shared signed-fetch boundary, any HTTP 401 clears the
+session and display cache only while the rejected token is still current. Notify
+`useCentralDirectory` immediately so bootstrap, icon reads/writes, rename and
+registration all require authentication without waiting for polling. A late 401
+for an old token must preserve the new session/cache/directory. A successful
+bootstrap must not publish if the current token differs, including a null session.
+Seed legacy storage and control response completion to demonstrate pre-fix failures.
+This correction is one commit and push; frontend tests only during implementation,
+then one `make verify` immediately before commit/push. Manual verification,
+deployment and signing remain excluded.
+
 
 Status: Phase 5 locally verified and approved by Daybreak through `1e24adf`, C0/H0/M0/L0.
 

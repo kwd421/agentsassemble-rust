@@ -72,6 +72,7 @@ vi.mock("../../lib/deviceIdentity", () => ({
   rememberGuestProfile: vi.fn(),
 }));
 vi.mock("../../lib/centralIdentity", () => ({
+  CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => centralMocks.configured,
   isCentralWebEntry: () => false,
   centralSessionLoggedOut: () => centralMocks.loggedOut,

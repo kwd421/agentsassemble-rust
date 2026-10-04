@@ -27,3 +27,13 @@ it("does not display a cache belonging to another account", () => {
   expect(loadCentralDirectoryCache("account-two")).toEqual([]);
   expect(localStorage.getItem("agentsassemble.centralDirectoryDisplay.v1")).toBeNull();
 });
+
+it("deletes the unscoped legacy directory on every account transition", () => {
+  for (const account of ["account-one", "account-two", "account-two"]) {
+    localStorage.setItem("agentsassemble.centralServers.v1", JSON.stringify([
+      { ...server, host_public_key_jwk: { x: "old-host-key" } },
+    ]));
+    saveSession({ person: { ...person, person_id: account }, session });
+    expect(localStorage.getItem("agentsassemble.centralServers.v1")).toBeNull();
+  }
+});

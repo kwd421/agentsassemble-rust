@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { bootstrapCentral, centralIdentityConfigured, loadCentralSession, isCentralAuthenticationError,
+import { CENTRAL_SESSION_CLEARED_EVENT, bootstrapCentral, centralIdentityConfigured, loadCentralSession, isCentralAuthenticationError,
   type CentralBootstrap, type CentralPerson, type CentralSession } from "../lib/centralIdentity";
 import { loadCentralDirectoryCache, type CentralServerDisplay } from "../lib/centralDirectoryCache";
 import { isCentralTemporaryError } from "../lib/centralConnectionError";
@@ -57,7 +57,7 @@ export function useCentralDirectory(autoStart = false) {
         }
       }
       const currentToken = loadCentralSession()?.token;
-      if (abort.signal.aborted || (currentToken && currentToken !== session?.token)) {
+      if (abort.signal.aborted || currentToken !== session?.token) {
         throw new DOMException("중앙 확인 요청이 바뀌었어요.", "AbortError");
       }
       if (active.current && controller.current === abort) setDirectory(next);
@@ -66,6 +66,17 @@ export function useCentralDirectory(autoStart = false) {
     flight.current = request;
     void request.finally(() => { if (flight.current === request) flight.current = null; }).catch(() => undefined);
     return request;
+  }, []);
+
+  useEffect(() => {
+    const cleared = () => {
+      controller.current?.abort();
+      flight.current = null;
+      failures.current = 0;
+      setDirectory({ status: "authentication-required", person: null, servers: [], live: null });
+    };
+    window.addEventListener(CENTRAL_SESSION_CLEARED_EVENT, cleared);
+    return () => window.removeEventListener(CENTRAL_SESSION_CLEARED_EVENT, cleared);
   }, []);
 
   useEffect(() => {
