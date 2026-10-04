@@ -71,22 +71,27 @@ fn caller_is_bundled_ui(window: &WebviewWindow) -> Result<(), String> {
 #[tauri::command]
 async fn open_central_owned_server(window: WebviewWindow, url: String) -> Result<(), String> {
     caller_is_bundled_ui(&window)?;
-    let parsed = url::Url::parse(&url).map_err(|_| "central server URL is invalid".to_owned())?;
+    let parsed = central_owned_server_url(&url)?;
+    window
+        .navigate(parsed)
+        .map_err(|error| format!("cannot open central server: {error}"))
+}
+
+fn central_owned_server_url(url: &str) -> Result<url::Url, String> {
+    let parsed = url::Url::parse(url).map_err(|_| "central server URL is invalid".to_owned())?;
     let fragment = parsed.fragment().unwrap_or_default();
     if parsed.scheme() != "https"
         || parsed.host_str().is_none()
         || !parsed.username().is_empty()
         || parsed.password().is_some()
         || parsed.query().is_some()
-        || parsed.path() != "/app"
+        || parsed.path() != "/pair"
         || !fragment.starts_with("central-owner=")
         || fragment.len() > 16_384
     {
         return Err("central server URL is outside the owned-server boundary".to_owned());
     }
-    window
-        .navigate(parsed)
-        .map_err(|error| format!("cannot open central server: {error}"))
+    Ok(parsed)
 }
 
 #[tauri::command]
@@ -592,7 +597,57 @@ pub fn run_runtime_supervisor_if_requested() -> Option<i32> {
 
 #[cfg(test)]
 mod tests {
-    use super::{registered_host_product_surface, workspace_selection};
+    use super::{central_owned_server_url, registered_host_product_surface, workspace_selection};
+
+    #[test]
+    fn central_owner_navigation_accepts_public_pairing_shell() {
+        let url = "https://home.example.test/pair#central-owner=fixture";
+        let parsed = central_owned_server_url(url)
+            .unwrap_or_else(|error| panic!("accept frontend owner entry: {error}"));
+        assert_eq!(parsed.as_str(), url);
+    }
+
+    #[test]
+    fn central_owner_navigation_rejects_outside_boundary() {
+        for url in [
+            "https://home.example.test/app#central-owner=fixture",
+            "https://home.example.test/#central-owner=fixture",
+            "https://home.example.test/pair/#central-owner=fixture",
+            "https://home.example.test/pair/other#central-owner=fixture",
+            "http://home.example.test/pair#central-owner=fixture",
+            "file:///pair#central-owner=fixture",
+            "https://user@home.example.test/pair#central-owner=fixture",
+            "https://:password@home.example.test/pair#central-owner=fixture",
+            "https://home.example.test/pair?query=1#central-owner=fixture",
+            "https://home.example.test/pair?#central-owner=fixture",
+            "https://home.example.test/pair",
+            "https://home.example.test/pair#",
+            "https://home.example.test/pair#other=fixture",
+            "https://home.example.test/pair#central-owner",
+            "https://home.example.test/pair#prefix-central-owner=fixture",
+        ] {
+            assert_eq!(
+                central_owned_server_url(url).err().as_deref(),
+                Some("central server URL is outside the owned-server boundary"),
+                "unexpected acceptance: {url}"
+            );
+        }
+        assert_eq!(
+            central_owned_server_url("not a URL").err().as_deref(),
+            Some("central server URL is invalid")
+        );
+    }
+
+    #[test]
+    fn central_owner_navigation_preserves_fragment_length_limit() {
+        let fragment = format!(
+            "central-owner={}",
+            "a".repeat(16_384 - "central-owner=".len())
+        );
+        let url = format!("https://home.example.test/pair#{fragment}");
+        assert!(central_owned_server_url(&url).is_ok());
+        assert!(central_owned_server_url(&format!("{url}a")).is_err());
+    }
 
     #[test]
     fn workspace_selection_is_canonical_and_cancel_is_empty() {

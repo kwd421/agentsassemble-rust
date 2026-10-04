@@ -293,6 +293,17 @@ revocation, owner transfer, endpoint replacement, lease expiry or server revocat
 invalidates it. The central bearer and device private key never leave the selecting
 device and are never sent to the remote room host.
 
+Desktop reopening passes the frontend-generated `/pair#central-owner=...` URL
+through `open_central_owned_server`. Its bundled-UI caller check remains required;
+the URL boundary permits only HTTPS with a host, no userinfo or query, the exact
+`/pair` path, and a `central-owner=` fragment of at most 16,384 bytes. `/app` and
+other paths are rejected. This uses the same public pairing shell as web reopening;
+grant redemption and host proof remain the authority owners. Desktop regression
+tests must accept `/pair`, reject `/app` and unsafe URLs, and cover the fragment
+length boundary. For this path correction, run desktop and related frontend tests,
+then one pre-commit `make verify`; deployment, signed builds and manual flows are
+outside the requested verification scope.
+
 The selected host redeems the opaque grant directly with the fixed central Worker,
 signing the exact request with its durable Ed25519 host key. The Worker revalidates
 all mutable authority and the current endpoint lease before returning the authorized
