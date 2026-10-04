@@ -449,7 +449,7 @@ async fn expiry_origin_and_room_incarnation_fail_without_consuming_grant() {
     assert_eq!(
         code(
             store
-                .redeem_operator_pairing(&[1; 32], &[2; 32], ORIGIN, now + SESSION_TTL)
+                .redeem_operator_pairing(&[1; 32], &[2; 32], ORIGIN, now + super::NATIVE_IDLE_TTL)
                 .await
         ),
         "session_revoked"
@@ -590,7 +590,20 @@ async fn paired_attendee_observes_parent_expiry_membership_and_exact_host_room()
         let paired = store
             .redeem_operator_pairing(&[1; 32], &[2; 32], ORIGIN, paired_at)
             .await?;
-        let issuer = RoomSessionAuthorization::Operator(paired.authorization);
+        // Retain coverage of bounded (central-derived) parent lifetime separately
+        // from native idle expiry, which is exercised below.
+        sqlx::query("UPDATE operator_pairings SET session_expires_at = ?")
+            .bind((paired_at + SESSION_TTL).timestamp_micros())
+            .execute(&store.pool)
+            .await?;
+        let authorization = store
+            .authorize_operator_session(
+                paired.authorization.session_fingerprint(),
+                &[2; 32],
+                ORIGIN,
+            )
+            .await?;
+        let issuer = RoomSessionAuthorization::Operator(authorization);
         let request = || CompanionInviteRequest {
             request_id: Uuid::new_v4(),
             provider_kind: "codex_live_session",
@@ -658,5 +671,236 @@ async fn paired_attendee_observes_parent_expiry_membership_and_exact_host_room()
             "{invalidation}"
         );
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_pairing_survives_hour_and_expires_after_thirty_idle_days()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, manager) = fixture("sqlite::memory:").await;
+    let now = Utc::now();
+    store
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager),
+            &[91; 32],
+            ORIGIN,
+            now,
+        )
+        .await?;
+    let first = store
+        .redeem_operator_pairing(&[91; 32], &[92; 32], ORIGIN, now)
+        .await?;
+    let later = now + Duration::hours(2);
+    let retry = store
+        .redeem_operator_pairing(&[91; 32], &[92; 32], ORIGIN, later)
+        .await?;
+    assert_eq!(first.session_bearer, retry.session_bearer);
+    assert_eq!(retry.authorization.expires_at(), None);
+    let mut rejected_tx = store.pool.begin().await?;
+    assert!(
+        super::resolve_operator_session(
+            &mut rejected_tx,
+            first.authorization.session_fingerprint(),
+            &[93; 32],
+            ORIGIN,
+            later + Duration::days(29)
+        )
+        .await
+        .is_err()
+    );
+    rejected_tx.commit().await?;
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT last_connected_at FROM operator_pairings")
+            .fetch_one(&store.pool)
+            .await?,
+        later.timestamp()
+    );
+    let mut tx = store.pool.begin().await?;
+    revalidate_operator_session(&mut tx, &first.authorization, later + Duration::days(29)).await?;
+    tx.commit().await?;
+    assert!(
+        store
+            .redeem_operator_pairing(&[91; 32], &[92; 32], ORIGIN, later + Duration::days(59))
+            .await
+            .is_err()
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn native_pairing_upgrade_preserves_credentials_and_never_revives_ended_sessions()
+-> Result<(), Box<dyn std::error::Error>> {
+    let directory = tempfile::tempdir()?;
+    let url = format!("sqlite://{}", directory.path().join("upgrade.db").display());
+    let (store, manager) = fixture(&url).await;
+    let now = Utc::now();
+    let bearers = seed_v79_native_pairings(&store, manager, now).await?;
+    drop(store);
+    let store = SqliteStore::open(&url).await?;
+    let replay = store
+        .redeem_operator_pairing(&[71; 32], &[81; 32], ORIGIN, now + Duration::hours(2))
+        .await?;
+    assert_eq!(replay.session_bearer, bearers[0]);
+    assert_eq!(replay.authorization.expires_at(), None);
+    for token in [72, 73] {
+        assert!(
+            store
+                .redeem_operator_pairing(&[token; 32], &[81; 32], ORIGIN, now)
+                .await
+                .is_err()
+        );
+    }
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM operator_pairings")
+            .fetch_one(&store.pool)
+            .await?,
+        4
+    );
+    let devices = store.owner_device_sessions(&LOCAL).await?;
+    assert_eq!(devices.len(), 1);
+    assert_eq!(devices[0].device_name, "Preserved phone");
+    assert_eq!(devices[0].os, "iOS");
+    assert_eq!(
+        devices[0].last_connected_at,
+        Some((now + Duration::hours(2)).timestamp())
+    );
+    // Ordinary admission after a second reopen keeps the same credential.
+    drop(store);
+    let store = SqliteStore::open(&url).await?;
+    store
+        .authorize_operator_session(
+            replay.authorization.session_fingerprint(),
+            &[81; 32],
+            ORIGIN,
+        )
+        .await?;
+    assert!(
+        store
+            .authorize_operator_session(
+                replay.authorization.session_fingerprint(),
+                &[82; 32],
+                ORIGIN
+            )
+            .await
+            .is_err()
+    );
+    store
+        .revoke_owner_devices(&LOCAL, Some(devices[0].session_id))
+        .await?;
+    assert!(
+        store
+            .authorize_operator_session(
+                replay.authorization.session_fingerprint(),
+                &[81; 32],
+                ORIGIN
+            )
+            .await
+            .is_err()
+    );
+    assert!(
+        store
+            .redeem_operator_pairing(&[71; 32], &[81; 32], ORIGIN, now)
+            .await
+            .is_err()
+    );
+    Ok(())
+}
+
+// Owns the legacy schema/data fixture; the test above owns upgrade and user flow assertions.
+async fn seed_v79_native_pairings(
+    store: &SqliteStore,
+    manager: LocalRoomManagerAuthority,
+    now: chrono::DateTime<Utc>,
+) -> Result<Vec<String>, Box<dyn std::error::Error>> {
+    let mut bearers = Vec::new();
+    for token in [71, 72, 73] {
+        store
+            .create_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager.clone()),
+                &[token; 32],
+                ORIGIN,
+                now,
+            )
+            .await?;
+        let paired = store
+            .redeem_operator_pairing(&[token; 32], &[81; 32], ORIGIN, now)
+            .await?;
+        bearers.push(paired.session_bearer);
+    }
+    // Reproduce v79 data: active, expired and revoked sessions, plus an unused link.
+    store
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager),
+            &[74; 32],
+            ORIGIN,
+            now,
+        )
+        .await?;
+    sqlx::query("UPDATE operator_pairings SET session_expires_at = ?, last_connected_at = NULL, device_name = 'Preserved phone', os = 'iOS' WHERE session_fingerprint IS NOT NULL")
+        .bind((now + Duration::hours(1)).timestamp_micros()).execute(&store.pool).await?;
+    sqlx::query("UPDATE operator_pairings SET session_expires_at = ? WHERE token_fingerprint = ?")
+        .bind((now - Duration::seconds(1)).timestamp_micros())
+        .bind([72_u8; 32].as_slice())
+        .execute(&store.pool)
+        .await?;
+    sqlx::query("UPDATE operator_pairings SET revoked = 1 WHERE token_fingerprint = ?")
+        .bind([73_u8; 32].as_slice())
+        .execute(&store.pool)
+        .await?;
+    sqlx::query("UPDATE runtime_metadata SET value = '79' WHERE key = 'schema_version'")
+        .execute(&store.pool)
+        .await?;
+    Ok(bearers)
+}
+
+#[tokio::test]
+async fn native_idle_expiry_denies_access_and_device_listing_without_refresh()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, manager) = fixture("sqlite::memory:").await;
+    let now = Utc::now();
+    let before = now - Duration::days(30);
+    store
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager.clone()),
+            &[61; 32],
+            ORIGIN,
+            before,
+        )
+        .await?;
+    let paired = store
+        .redeem_operator_pairing(&[61; 32], &[62; 32], ORIGIN, before)
+        .await?;
+    assert!(store.owner_device_sessions(&LOCAL).await?.is_empty());
+    assert!(
+        store
+            .authorize_operator_session(
+                paired.authorization.session_fingerprint(),
+                &[62; 32],
+                ORIGIN
+            )
+            .await
+            .is_err()
+    );
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT last_connected_at FROM operator_pairings")
+            .fetch_one(&store.pool)
+            .await?,
+        before.timestamp()
+    );
+    // Grant creation exercises idle cleanup without reviving the removed credential.
+    store
+        .create_operator_pairing(
+            &crate::RoomManagerAuthority::Local(manager),
+            &[63; 32],
+            ORIGIN,
+            now,
+        )
+        .await?;
+    assert!(
+        store
+            .redeem_operator_pairing(&[61; 32], &[62; 32], ORIGIN, now)
+            .await
+            .is_err()
+    );
     Ok(())
 }

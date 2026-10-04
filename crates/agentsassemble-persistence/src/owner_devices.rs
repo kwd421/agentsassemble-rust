@@ -56,8 +56,8 @@ impl SqliteStore {
                 pairing: false,
             });
         }
-        let pairings = sqlx::query("SELECT * FROM operator_pairings WHERE central_owner = 0 AND revoked = 0 AND session_fingerprint IS NOT NULL AND session_expires_at > ? AND (? IS NULL OR EXISTS (SELECT 1 FROM host_owner_sessions WHERE fingerprint = operator_pairings.host_owner_session_fingerprint AND person_id = ?)) ORDER BY last_connected_at DESC, pairing_id")
-            .bind(Utc::now().timestamp_micros()).bind(person).bind(person).fetch_all(&mut *tx).await?;
+        let pairings = sqlx::query("SELECT * FROM operator_pairings WHERE central_owner = 0 AND revoked = 0 AND session_fingerprint IS NOT NULL AND (session_expires_at > ? OR (session_expires_at = 0 AND host_owner_session_fingerprint IS NULL AND last_connected_at > ?)) AND (? IS NULL OR EXISTS (SELECT 1 FROM host_owner_sessions WHERE fingerprint = operator_pairings.host_owner_session_fingerprint AND person_id = ?)) ORDER BY last_connected_at DESC, pairing_id")
+            .bind(Utc::now().timestamp_micros()).bind((Utc::now() - crate::operator_pairing::NATIVE_IDLE_TTL).timestamp()).bind(person).bind(person).fetch_all(&mut *tx).await?;
         for row in pairings {
             sessions.push(OwnerDeviceSession {
                 session_id: Uuid::parse_str(&row.try_get::<String, _>("pairing_id")?)

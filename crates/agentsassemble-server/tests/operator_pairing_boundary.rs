@@ -144,6 +144,7 @@ async fn redeem_with_boundary_checks(
             .await
             .unwrap_or_else(|error| panic!("redeem response: {error}"));
         assert_eq!(redeemed["operator"], true);
+        assert_eq!(redeemed.get("expires_at"), Some(&Value::Null));
         let bearer = redeemed["session_token"]
             .as_str()
             .unwrap_or_else(|| panic!("session missing"));
@@ -310,6 +311,12 @@ async fn exchange_with_device_description(
 
 #[tokio::test]
 async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
+    pairing_device_revocation(None).await;
+    pairing_device_revocation(Some(false)).await;
+    pairing_device_revocation(Some(true)).await;
+}
+
+async fn pairing_device_revocation(all: Option<bool>) {
     let PairingServer {
         state,
         authority,
@@ -370,14 +377,7 @@ async fn pairing_http_binds_room_origin_device_and_revokes_active_socket() {
     let mut socket = RoomSocketPeer::new(wire);
     assert_eq!(socket.subscribe(0).await["op"], "subscribed");
     assert_eq!(socket.receive_json().await["op"], "snapshot");
-    let revoked = client
-        .post(format!("{base}/api/operator-pairing/revoke"))
-        .bearer_auth(operator_ticket(&state).await)
-        .json(&json!({"authority": authority, "pairing_id": created["pairing_id"]}))
-        .send()
-        .await
-        .unwrap_or_else(|error| panic!("revoke: {error}"));
-    assert_eq!(revoked.status(), StatusCode::OK);
+    revoke_paired_device(&client, &state, &base, &authority, &created, all).await;
     assert!(
         tokio::time::timeout(Duration::from_secs(2), socket.wait_closed())
             .await
@@ -540,4 +540,33 @@ async fn assert_paired_lifecycle_result(
         );
     }
     Ok(())
+}
+
+async fn revoke_paired_device(
+    client: &Client,
+    state: &AppState,
+    base: &str,
+    authority: &Value,
+    created: &Value,
+    all: Option<bool>,
+) {
+    let revoked = client
+        .post(format!(
+            "{base}{}",
+            if all.is_some() {
+                "/api/owner-sessions/revoke"
+            } else {
+                "/api/operator-pairing/revoke"
+            }
+        ))
+        .bearer_auth(operator_ticket(state).await)
+        .json(&match all {
+            Some(true) => json!({"scope": "all"}),
+            Some(false) => json!({"scope": "session", "session_id": created["pairing_id"]}),
+            None => json!({"authority": authority, "pairing_id": created["pairing_id"]}),
+        })
+        .send()
+        .await
+        .unwrap_or_else(|error| panic!("revoke: {error}"));
+    assert_eq!(revoked.status(), StatusCode::OK);
 }

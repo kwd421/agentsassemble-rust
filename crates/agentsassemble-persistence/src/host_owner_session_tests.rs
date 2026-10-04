@@ -200,6 +200,18 @@ async fn separately_paired_device_survives_disconnect_but_not_issuer_revocation(
     let paired = store
         .redeem_operator_pairing(&[7; 32], &[8; 32], &binding.origin, Utc::now())
         .await?;
+    assert!(paired.authorization.expires_at().is_some());
+    assert!(
+        store
+            .redeem_operator_pairing(
+                &[7; 32],
+                &[8; 32],
+                &binding.origin,
+                Utc::now() + Duration::hours(1)
+            )
+            .await
+            .is_err()
+    );
     store
         .record_operator_connection(&paired.authorization, Some(&description()?))
         .await?;

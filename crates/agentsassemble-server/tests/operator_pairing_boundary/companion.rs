@@ -54,9 +54,9 @@ async fn paired_companion_packet_retains_device_origin_and_revocable_parent() ->
     assert_eq!(snapshot.agent_sessions.len(), 1);
     assert!(snapshot.agent_sessions[0].external_owned);
     client
-        .post(format!("{}/api/operator-pairing/revoke", server.base))
+        .post(format!("{}/api/owner-sessions/revoke", server.base))
         .bearer_auth(operator_ticket(&server.state).await)
-        .json(&json!({"authority":server.authority,"pairing_id":created["pairing_id"]}))
+        .json(&json!({"scope":"session","session_id":created["pairing_id"]}))
         .send()
         .await?
         .error_for_status()?;

@@ -169,7 +169,7 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
     ) {
       return null;
     }
-    const expiresAt = record.centralOwner === true && record.operator === true && record.expiresAt === null
+    const expiresAt = record.operator === true && record.expiresAt === null
       ? null : requiredString(record, "expiresAt", "저장된 방 세션");
     const joinedAt = requiredString(record, "joinedAt", "저장된 방 세션");
     if (expiresAt !== null && Number.isNaN(Date.parse(expiresAt)) || Number.isNaN(Date.parse(joinedAt))) {
@@ -200,11 +200,13 @@ export function normalizeRoomGuestSession(value: unknown): RoomGuestSession | nu
 }
 
 export function roomGuestSessionExpired(
-  session: Pick<RoomGuestSession, "expiresAt"> | null | undefined,
+  session: Pick<RoomGuestSession, "expiresAt" | "operator"> | null | undefined,
   now: number = Date.now()
 ): boolean {
   if (!session) return true;
-  if (session.expiresAt === null) return false;
+  // The host owns operator lifetime, including upgraded stored one-hour projections.
+  // Reconnection still requires device-bound server admission and fails closed there.
+  if (session.operator || session.expiresAt === null) return false;
   const expiresAt = Date.parse(session.expiresAt || "");
   if (Number.isNaN(expiresAt)) return true;
   return expiresAt <= now;

@@ -11,6 +11,7 @@ use crate::{
 
 const PAIRING_TTL: Duration = Duration::seconds(120);
 const SESSION_TTL: Duration = Duration::hours(1);
+pub(crate) const NATIVE_IDLE_TTL: Duration = Duration::days(30);
 const MAX_PAIRINGS: i64 = 128;
 const MAX_ROOM_PAIRINGS: i64 = 32;
 
@@ -408,26 +409,34 @@ impl SqliteStore {
                     "This pairing was used by another device.",
                 ));
             }
-            record
-                .require_session(&issued.fingerprint, now)?
-                .ok_or_else(invalid_state)?
+            record.require_session(&issued.fingerprint, now)?
         } else {
             if record.expires_at <= now {
                 return Err(unavailable());
             }
-            let expires_at = now + SESSION_TTL;
+            let expires_at = if record.native_issued() {
+                None
+            } else {
+                Some(now + SESSION_TTL)
+            };
             sqlx::query(concat!(
                 "UPDATE operator_pairings SET device_fingerprint = ?, ",
-                "session_fingerprint = ?, session_expires_at = ? WHERE pairing_id = ?"
+                "session_fingerprint = ?, session_expires_at = ?, last_connected_at = ? WHERE pairing_id = ?"
             ))
             .bind(device_fingerprint.as_slice())
             .bind(issued.fingerprint.as_slice())
-            .bind(expires_at.timestamp_micros())
+            .bind(expires_at.map_or(0, |expiry| expiry.timestamp_micros()))
+            .bind(now.timestamp())
             .bind(&record.pairing_id)
             .execute(&mut *tx)
             .await?;
             expires_at
         };
+        if let Some(parent) = record.owner_session_fingerprint {
+            crate::host_owner_session::require_unrevoked_issuer(&mut tx, &parent, target_origin)
+                .await?;
+        }
+        record.record_use(&mut tx, now).await?;
         tx.commit().await?;
         Ok(OperatorPairingRedemption {
             session_bearer: issued.bearer,
@@ -438,7 +447,7 @@ impl SqliteStore {
                 principal,
                 central_owner: record.central_owner,
                 owner_session_fingerprint: record.owner_session_fingerprint,
-                expires_at: Some(expires_at),
+                expires_at,
             },
         })
     }
@@ -502,8 +511,8 @@ async fn cleanup_pairings(
     tx: &mut Transaction<'_, Sqlite>,
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
-    sqlx::query("DELETE FROM operator_pairings WHERE (COALESCE(session_expires_at, expires_at) <= ? AND NOT (central_owner = 1 AND host_owner_session_fingerprint IS NOT NULL)) OR (central_owner = 1 AND host_owner_session_fingerprint IS NOT NULL AND EXISTS (SELECT 1 FROM host_owner_sessions WHERE fingerprint = operator_pairings.host_owner_session_fingerprint AND (connected = 0 OR revoked = 1)))")
-        .bind(now.timestamp_micros()).execute(&mut **tx).await?;
+    sqlx::query("DELETE FROM operator_pairings WHERE (COALESCE(session_expires_at, expires_at) > 0 AND COALESCE(session_expires_at, expires_at) <= ?) OR (central_owner = 0 AND host_owner_session_fingerprint IS NULL AND session_expires_at = 0 AND last_connected_at <= ?) OR (central_owner = 1 AND host_owner_session_fingerprint IS NOT NULL AND EXISTS (SELECT 1 FROM host_owner_sessions WHERE fingerprint = operator_pairings.host_owner_session_fingerprint AND (connected = 0 OR revoked = 1)))")
+        .bind(now.timestamp_micros()).bind((now - NATIVE_IDLE_TTL).timestamp()).execute(&mut **tx).await?;
     Ok(())
 }
 
@@ -565,6 +574,7 @@ async fn resolve_operator_session(
         }
     }
     let principal = record.resolve_manager(tx).await?;
+    record.record_use(tx, now).await?;
     Ok(OperatorSessionAuthorization {
         session_fingerprint: *fingerprint,
         device_fingerprint: *device,
@@ -597,7 +607,9 @@ pub(crate) async fn require_attendee_parent(
                 .await?;
         }
     }
-    Ok((record.resolve_manager(tx).await?, expires_at))
+    let principal = record.resolve_manager(tx).await?;
+    record.record_use(tx, now).await?;
+    Ok((principal, expires_at))
 }
 
 async fn session_record(
@@ -623,6 +635,7 @@ struct PairingRecord {
     device_fingerprint: Option<[u8; 32]>,
     session_fingerprint: Option<[u8; 32]>,
     session_expires_at: Option<DateTime<Utc>>,
+    last_connected_at: Option<i64>,
 }
 
 impl PairingRecord {
@@ -651,16 +664,28 @@ impl PairingRecord {
             session_fingerprint: optional_fingerprint(row.try_get("session_fingerprint")?)?,
             session_expires_at: row
                 .try_get::<Option<i64>, _>("session_expires_at")?
-                .filter(|value| {
-                    *value != 0
-                        || !row.get::<bool, _>("central_owner")
-                        || row
-                            .get::<Option<Vec<u8>>, _>("host_owner_session_fingerprint")
-                            .is_none()
-                })
+                .filter(|value| *value != 0)
                 .map(timestamp)
                 .transpose()?,
+            last_connected_at: row.try_get("last_connected_at")?,
         })
+    }
+
+    fn native_issued(&self) -> bool {
+        !self.central_owner && self.owner_session_fingerprint.is_none()
+    }
+
+    async fn record_use(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        now: DateTime<Utc>,
+    ) -> Result<(), PersistenceError> {
+        if self.native_issued() {
+            sqlx::query("UPDATE operator_pairings SET last_connected_at = ? WHERE pairing_id = ? AND (last_connected_at IS NULL OR last_connected_at < ?)")
+                .bind(now.timestamp()).bind(&self.pairing_id).bind(now.timestamp())
+                .execute(&mut **tx).await?;
+        }
+        Ok(())
     }
 
     fn require_origin_and_live(&self, origin: &str) -> Result<(), PersistenceError> {
@@ -679,7 +704,11 @@ impl PairingRecord {
         if self.session_fingerprint.as_ref() != Some(fingerprint)
             || expires.is_some_and(|value| value <= now)
             || (expires.is_none()
-                && !(self.central_owner && self.owner_session_fingerprint.is_some()))
+                && !(self.central_owner && self.owner_session_fingerprint.is_some())
+                && !(self.native_issued()
+                    && self
+                        .last_connected_at
+                        .is_some_and(|last| last > (now - NATIVE_IDLE_TTL).timestamp())))
         {
             return Err(unavailable());
         }

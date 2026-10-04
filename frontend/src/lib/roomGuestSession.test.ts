@@ -6,7 +6,10 @@ import {
   persistRoomGuestSession,
   roomGuestSessionExpired,
   roomGuestSessionFromJoinPayload,
+  roomGuestSessionFromPairingPayload,
 } from "./roomGuestSession";
+
+import { parseOperatorPairingRedeemResponse } from "./roomAdmissionContract";
 
 describe("guest room projection", () => {
   const serverSurface = {
@@ -43,6 +46,24 @@ describe("guest room projection", () => {
       session: { expires_in_seconds: 3600, rejoin: "Request another invite." },
     },
   };
+
+  it("restores native pairing with no fixed expiry after browser reopening", () => {
+    const { request_id: _request, guide: _guide, client_id: _client, owner_display_name: _ownerName, ...common } = joinResponse;
+    const admitted = parseOperatorPairingRedeemResponse({ ...common, operator: true, stable_identity: true, expires_at: null });
+    const session = roomGuestSessionFromPairingPayload(admitted);
+    persistRoomGuestSession(session);
+    expect(loadRoomGuestSession()).toEqual(session);
+    expect(roomGuestSessionExpired(loadRoomGuestSession(), Date.now() + 86_400_000)).toBe(false);
+    persistRoomGuestSession(null);
+  });
+
+  it("lets the host revalidate a stored operator deadline after upgrade", () => {
+    const session = { ...roomGuestSessionFromJoinPayload("", joinResponse), operator: true };
+    persistRoomGuestSession(session);
+    expect(roomGuestSessionExpired(loadRoomGuestSession(), Date.parse(joinResponse.expires_at) + 1)).toBe(false);
+    expect(roomGuestSessionExpired({ ...session, operator: false }, Date.parse(joinResponse.expires_at) + 1)).toBe(true);
+    persistRoomGuestSession(null);
+  });
 
   it("uses canonical room metadata and does not hide pre-join history", () => {
     const session = roomGuestSessionFromJoinPayload("aaj1_test", {

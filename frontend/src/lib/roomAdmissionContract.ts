@@ -142,7 +142,8 @@ function parseInvitePreflightContext(
 
 function validateCommon(
   payload: Record<string, unknown>,
-  label: string
+  label: string,
+  allowNoExpiry = false
 ): AdmissionSessionBase {
   const surface = parseRoomSessionSurface({
     server_id: payload.server_id,
@@ -153,7 +154,7 @@ function validateCommon(
   if (payload.participant_type !== "human" || payload.client_type !== "browser") {
     throw new Error(`${label}의 참가자 또는 클라이언트 유형이 올바르지 않습니다.`);
   }
-  const expiresAt = payload.central_owner === true && payload.operator === true && payload.expires_at === null
+  const expiresAt = allowNoExpiry && payload.operator === true && payload.expires_at === null
     ? null : requiredString(payload, "expires_at", label);
   const roomCreatedAt = requiredString(payload, "room_created_at", label);
   if (expiresAt !== null) validateTimestamp(expiresAt, `${label}.expires_at`);
@@ -369,7 +370,7 @@ export function parseOperatorPairingRedeemResponse(
   }
   if (payload.central_owner !== undefined && typeof payload.central_owner !== "boolean") throw new Error("운영자 연결 권한이 올바르지 않습니다.");
   return {
-    ...validateCommon(payload, label),
+    ...validateCommon(payload, label, true),
     status: "admitted",
     owner_id: requiredString(payload, "owner_id", label),
     stable_identity: true,

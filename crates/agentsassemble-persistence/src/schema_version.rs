@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 79;
+pub const CURRENT_SCHEMA_VERSION: i64 = 80;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -139,6 +139,14 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .await?;
     }
     upgrade_turn_custody(&mut tx, &version).await?;
+    if version.parse::<i64>().is_ok_and(|version| version < 80) {
+        // Preserve expired/revoked rows. Only still-live native custody gains idle expiry.
+        sqlx::query("UPDATE operator_pairings SET last_connected_at = COALESCE(last_connected_at, (session_expires_at / 1000000) - 3600), session_expires_at = 0 WHERE central_owner = 0 AND host_owner_session_fingerprint IS NULL AND revoked = 0 AND session_expires_at > ?")
+            .bind(chrono::Utc::now().timestamp_micros()).execute(&mut *tx).await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '80' WHERE key = 'schema_version'")
+            .execute(&mut *tx)
+            .await?;
+    }
     tx.commit().await?;
     Ok(())
 }
@@ -335,7 +343,8 @@ mod tests {
             .await?
             .authorization;
         // Reproduce the old central owner issuing an unmarked pairing and grant.
-        sqlx::query("UPDATE operator_pairings SET central_owner = 1")
+        sqlx::query("UPDATE operator_pairings SET central_owner = 1, session_expires_at = ?")
+            .bind((Utc::now() + chrono::Duration::hours(1)).timestamp_micros())
             .execute(&store.pool)
             .await?;
         let root = store

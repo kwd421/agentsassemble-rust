@@ -730,15 +730,18 @@ that point must terminate its prepared intent through the existing failure owner
 The clean schema stores one pairing grant and its optional consumed session in one
 `operator_pairings` row. Creation revalidates the exact local manager; redemption
 serializes device selection in a write transaction. The grant expires in 120 seconds,
-and the consumed session expires one hour after redemption. A still-live same-device
-retry returns the same bearer even after grant expiry; another device, revocation,
+and native-issued consumed sessions have no fixed one-hour expiry. They expire
+after 30 days without authenticated use, measured by durable last-use time.
+Central-owner-derived pairings retain their one-hour and parent-revocation rules.
+A still-live same-device retry returns the same bearer even after grant expiry; another device, revocation,
 expired session, changed room incarnation or changed host lineage cannot redeem it.
 The ordinary human bearer remains unchanged; a distinct operator prefix and HMAC
 context use the same existing derivation mechanism. Only fingerprints are persisted.
 
 The record cap is 128 per server and 32 per room. Creation removes expired records
-before checking capacity; revoked consumed records remain until session expiry so a
-retry cannot revive them. There is no background task. Current manager resolution
+before checking capacity; revoked consumed records cannot be redeemed again.
+Cleanup follows fixed or idle expiry and never revives a consumed grant. There is no
+background task. Current manager resolution
 loads the membership once and shares its bootstrap/profile proof with the principal
 projection. Queued room mutations accept persistence-issued paired provenance and
 revalidate it in their transaction. Public HTTP and socket admission are connected
@@ -847,8 +850,10 @@ uses the existing private server-operator HTTP transport, resolves the current e
 manager after ready-ingress refresh, and guards dispatch again after ticket issuance.
 A confirmed response arriving after modal closure is retained for revocation, with
 copy disabled. Clipboard dispatch rechecks the current origin, manager, link expiry
-and grant state; the UI never renders the raw pairing URL. An unknown revocation
-stays non-copyable and retries the same recorded grant rather than minting another.
+and grant state. The shared app/web own-device tab also renders a browser-local
+QR of the exact link, only while these same presentation checks permit copying.
+No external QR service receives the link; expiry, retirement and revocation remove
+it. An unknown revocation stays non-copyable and retries the same recorded grant rather than minting another.
 
 A single nearest-expiry UI deadline disables expired links and is cancelled on
 owner unmount. It neither polls ingress nor infers that the grant was redeemed.
@@ -1160,3 +1165,36 @@ proves cross-device lists/image bytes, owner-only set/remove, stale/replay/revoc
 rejection, atomic rollback, preservation across registration and cleanup. Local
 workerd/D1 verifies runtime/storage compatibility; production deployment and migration
 remain separate authorized operations. No frontend or room-icon modifications.
+
+### Native device persistence and QR acceptance (2026-10-05)
+
+Required entry points: native pairing create, public `/pair` redemption and browser
+credential/session restoration, device-bound HTTP and WS admission, queued commands,
+attendee parent validation, native single/all device revocation, shared invite modal
+and device settings. The persistence owner stores last authenticated use; successful
+use refreshes it atomically after authority/device/origin validation. Failed
+authority/device/origin checks and merely listing devices do not extend it. An open authenticated connection counts
+as use when it exchanges authorized traffic. No new polling owner is introduced.
+Native sessions survive host restart/browser reopen with the same browser credential;
+30 days without use denies replay/admission. Revocation commits before the existing
+HTTP/WS/derived-session notifications and cannot be undone by reconnect or retry.
+Room incarnation, host lineage and room lifecycle security invalidation still apply.
+The 120-second, single-device grant and central parent custody remain unchanged.
+
+Schema upgrades preserve records and metadata, promote only still-live, unrevoked
+native sessions, and never revive already expired/revoked authority. Browser-stored
+operator deadlines are not admission authority: reconnect presents the retained
+credential to the host, including after upgrade from an old one-hour projection.
+The host still rejects expired central-derived pairings and revoked/idle native
+sessions through the existing admission failure flow. The shared device
+list displays macOS/Windows/Linux with proper casing, a device name or browser title,
+and OS plus last-use time without duplicate browser/OS titles. The QR uses a maintained
+local React library and retains Discord-style settings spacing and existing controls.
+
+Regression acceptance: before/after failures for native persistence beyond one hour,
+30-day inactivity and refresh, reopen, migration, device bearer rejection, single/all
+revocation and derived denial, unchanged central-parent rules, QR rendering/removal,
+and OS/title presentation. During this task run affected crate/screen tests only and
+run `make verify` once immediately before feature commits/push. Production deployment,
+signed app builds and manual verification are excluded by user direction; automated
+evidence does not claim physical camera or packaged visual acceptance.
