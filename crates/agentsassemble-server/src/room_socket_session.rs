@@ -45,204 +45,218 @@ pub(crate) async fn run(
     };
     let mut principal = principal;
     let mut room_session = room_session;
-    let expiry = wait_for_session_expiry(
-        room_session
-            .as_ref()
-            .map(RoomSessionAuthorization::expires_at),
-    );
-    tokio::pin!(expiry);
-    loop {
-        tokio::select! {
-            () = state.shutdown.cancelled() => return,
-            () = &mut expiry => return,
-            revoked = receive_revocation(&mut revocations), if revocations.is_some() => {
-                if !session_remains_authorized_after_revocation_signal(
-                    &state,
-                    &mut principal,
-                    &mut room_session,
-                    revoked,
-                ).await {
-                    return;
-                }
-            }
-            incoming = tokio::time::timeout(SOCKET_IDLE_TIMEOUT, receiver.next()) => {
-                let Ok(Some(Ok(message))) = incoming else { return; };
-                let (frame_bytes, control_frame) = match &message {
-                    Message::Text(raw) => (raw.len(), false),
-                    Message::Binary(raw) => (raw.len(), false),
-                    Message::Ping(raw) | Message::Pong(raw) => (raw.len(), true),
-                    Message::Close(_) => return,
-                };
-                if !state.socket_admission.admit_frame(&principal, frame_bytes, control_frame) {
-                    let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded."))).await;
-                    return;
-                }
-                let Message::Text(raw) = message else {
-                    if matches!(message, Message::Binary(_)) {
-                        let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("binary_frame_unsupported", "Binary WebSocket frames are not supported."))).await;
+    let Ok(mut owner_lease) =
+        crate::central_owner_lifetime::retain_room_owner(&state, room_session.as_ref()).await
+    else {
+        return;
+    };
+    let connected = async {
+        let expiry = wait_for_session_expiry(
+            room_session
+                .as_ref()
+                .map(RoomSessionAuthorization::expires_at),
+        );
+        tokio::pin!(expiry);
+        loop {
+            tokio::select! {
+                () = state.shutdown.cancelled() => return,
+                () = &mut expiry => return,
+                revoked = receive_revocation(&mut revocations), if revocations.is_some() => {
+                    if !session_remains_authorized_after_revocation_signal(
+                        &state,
+                        &mut principal,
+                        &mut room_session,
+                        revoked,
+                    ).await {
                         return;
                     }
-                    continue;
-                };
-                let Ok((client_frame, _product_bytes)) = decode_client_frame(raw.as_str())
-                else {
-                    let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("frame_schema_invalid", "WebSocket frame was invalid."))).await;
-                    return;
-                };
-                if refresh_room_session(&state, &mut principal, &mut room_session).await.is_none() {
-                    return;
                 }
-                if room_session.is_none() && state.store.require_room_incarnation(&principal.room_id, room_uid).await.is_err() {
-                    return;
-                }
-                match client_frame {
-                    ClientFrame::Command { request_id, action, payload } => {
-                        if !action.supports_websocket() {
-                            if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), CommandResolution::Rejected, ProtocolError::new("unsupported_transport", "This action uses the authenticated HTTP management endpoint."))).await.is_none() { return; }
-                            continue;
+                incoming = tokio::time::timeout(SOCKET_IDLE_TIMEOUT, receiver.next()) => {
+                    let Ok(Some(Ok(message))) = incoming else { return; };
+                    let (frame_bytes, control_frame) = match &message {
+                        Message::Text(raw) => (raw.len(), false),
+                        Message::Binary(raw) => (raw.len(), false),
+                        Message::Ping(raw) | Message::Pong(raw) => (raw.len(), true),
+                        Message::Close(_) => return,
+                    };
+                    if !state.socket_admission.admit_frame(&principal, frame_bytes, control_frame) {
+                        let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("ingress_limited", "WebSocket ingress budget exceeded."))).await;
+                        return;
+                    }
+                    let Message::Text(raw) = message else {
+                        if matches!(message, Message::Binary(_)) {
+                            let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("binary_frame_unsupported", "Binary WebSocket frames are not supported."))).await;
+                            return;
                         }
-                        if let Some(result) = crate::room_socket_direct::command_frame(&state, &principal, room_uid, room_session.as_ref(), &request_id, action, &payload).await {
-                            match result {
-                                Ok(frame) => {
+                        continue;
+                    };
+                    let Ok((client_frame, _product_bytes)) = decode_client_frame(raw.as_str())
+                    else {
+                        let _ = send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "frame", CommandResolution::Unresolved, ProtocolError::new("frame_schema_invalid", "WebSocket frame was invalid."))).await;
+                        return;
+                    };
+                    if refresh_room_session(&state, &mut principal, &mut room_session).await.is_none() {
+                        return;
+                    }
+                    if room_session.is_none() && state.store.require_room_incarnation(&principal.room_id, room_uid).await.is_err() {
+                        return;
+                    }
+                    match client_frame {
+                        ClientFrame::Command { request_id, action, payload } => {
+                            if !action.supports_websocket() {
+                                if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), CommandResolution::Rejected, ProtocolError::new("unsupported_transport", "This action uses the authenticated HTTP management endpoint."))).await.is_none() { return; }
+                                continue;
+                            }
+                            if let Some(result) = crate::room_socket_direct::command_frame(&state, &principal, room_uid, room_session.as_ref(), &request_id, action, &payload).await {
+                                match result {
+                                    Ok(frame) => {
+                                        if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
+                                    }
+                                    Err(failure) => {
+                                        if persistence_error_is_internal(&failure.error) {
+                                            tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "direct room command failed");
+                                        }
+                                        let (code, message) = persistence_error(&failure.error);
+                                        if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                    }
+                                }
+                                continue;
+                            }
+                            let closes_room_session =
+                                action == RoomAction::ParticipantLeave
+                                    && room_session.is_some();
+                            let action_name = action.as_str().to_owned();
+                            let outcome = if let Some(authorization) = &room_session {
+                                state.rooms.execute_room_session(
+                                    authorization, request_id.clone(), action, payload,
+                                ).await
+                            } else {
+                                state.rooms.execute(
+                                    principal.clone(), Some(room_uid), request_id.clone(), action, payload,
+                                ).await
+                            };
+                            match outcome {
+                                Ok(outcome) => {
+                                    let frame = ServerFrame::Ack(CommandAck {
+                                        request_id,
+                                        accepted: true,
+                                        resolution: CommandResolution::Committed,
+                                        action: action_name,
+                                        result: outcome.result,
+                                        deduplicated: outcome.deduplicated,
+                                    });
+                                    if closes_room_session {
+                                        // This exact committed ACK is the final frame authorized by
+                                        // the command that revoked the session. Revalidation would
+                                        // suppress it and leave the copied browser flow unresolved.
+                                        let _ = send_frame(&mut sender, &state.shutdown, &frame).await;
+                                        return;
+                                    }
                                     if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
                                 }
                                 Err(failure) => {
                                     if persistence_error_is_internal(&failure.error) {
-                                        tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action.as_str(), "direct room command failed");
+                                        tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action_name, "room command persistence failed");
                                     }
                                     let (code, message) = persistence_error(&failure.error);
-                                    if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, action.as_str(), failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
+                                    if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, &action_name, failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
                                 }
-                            }
-                            continue;
-                        }
-                        let closes_room_session =
-                            action == RoomAction::ParticipantLeave
-                                && room_session.is_some();
-                        let action_name = action.as_str().to_owned();
-                        let outcome = if let Some(authorization) = &room_session {
-                            state.rooms.execute_room_session(
-                                authorization, request_id.clone(), action, payload,
-                            ).await
-                        } else {
-                            state.rooms.execute(
-                                principal.clone(), Some(room_uid), request_id.clone(), action, payload,
-                            ).await
-                        };
-                        match outcome {
-                            Ok(outcome) => {
-                                let frame = ServerFrame::Ack(CommandAck {
-                                    request_id,
-                                    accepted: true,
-                                    resolution: CommandResolution::Committed,
-                                    action: action_name,
-                                    result: outcome.result,
-                                    deduplicated: outcome.deduplicated,
-                                });
-                                if closes_room_session {
-                                    // This exact committed ACK is the final frame authorized by
-                                    // the command that revoked the session. Revalidation would
-                                    // suppress it and leave the copied browser flow unresolved.
-                                    let _ = send_frame(&mut sender, &state.shutdown, &frame).await;
-                                    return;
-                                }
-                                if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
-                            }
-                            Err(failure) => {
-                                if persistence_error_is_internal(&failure.error) {
-                                    tracing::error!(error = ?failure.error, room_id = %principal.room_id, action = %action_name, "room command persistence failed");
-                                }
-                                let (code, message) = persistence_error(&failure.error);
-                                if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, (&request_id, &action_name, failure.resolution, ProtocolError::new(code, message))).await.is_none() { return; }
                             }
                         }
-                    }
-                    ClientFrame::Ping { nonce } => {
-                        if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &ServerFrame::Pong { nonce }).await.is_none() { return; }
-                    }
-                    ClientFrame::Subscribe { .. } => {
-                        if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "subscribe", CommandResolution::Unresolved, ProtocolError::new("already_subscribed", "This socket is already subscribed."))).await.is_none() { return; }
+                        ClientFrame::Ping { nonce } => {
+                            if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &ServerFrame::Pong { nonce }).await.is_none() { return; }
+                        }
+                        ClientFrame::Subscribe { .. } => {
+                            if send_authorized_nack(&state, &mut principal, &mut room_session, &mut sender, ("", "subscribe", CommandResolution::Unresolved, ProtocolError::new("already_subscribed", "This socket is already subscribed."))).await.is_none() { return; }
+                        }
                     }
                 }
-            }
-            published = events.recv() => {
-                match published {
-                    Ok(event) => {
-                        if event.seq <= delivered_seq {
-                            continue;
+                published = events.recv() => {
+                    match published {
+                        Ok(event) => {
+                            if event.seq <= delivered_seq {
+                                continue;
+                            }
+                            if event.seq != delivered_seq.saturating_add(1) {
+                                let frame = ServerFrame::ResyncRequired {
+                                    stream: "room_events",
+                                    reason: "live room event sequence is not contiguous".to_owned(),
+                                    latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(delivered_seq, |snapshot| snapshot.last_seq),
+                                };
+                                let _ = send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await;
+                                return;
+                            }
+                            if room_session.is_none() && principal.is_operator &&
+                                matches!(event.event_type.as_str(), "room_closed" | "room_archived") {
+                                send_terminal_room_event(&state, &principal, room_uid, &mut sender, &event).await;
+                                return;
+                            }
+                            let current_principal = if room_session.is_some() {
+                                if refresh_room_session(&state, &mut principal, &mut room_session).await.is_none() {
+                                    return;
+                                }
+                                principal.clone()
+                            } else {
+                                match state.store.resolve_principal(&principal).await {
+                                    Ok(principal) => principal,
+                                    Err(error) => {
+                                        if persistence_error_is_internal(&error) {
+                                            tracing::error!(error = ?error, room_id = %principal.room_id, "live principal resolution failed");
+                                        }
+                                        let (code, message) = persistence_error(&error);
+                                        let _ = send_authorized_nack(
+                                            &state,
+                                            &mut principal,
+                                            &mut room_session,
+                                            &mut sender,
+                                            ("", "session", CommandResolution::Unresolved, ProtocolError::new(code, message)),
+                                        ).await;
+                                        return;
+                                    }
+                                }
+                            };
+                            let latest_seq = event.seq;
+                            let frame = ServerFrame::Event {
+                                stream: "room_events",
+                                events: vec![public_event_for_principal(&event, &current_principal)],
+                                latest_seq,
+                            };
+                            if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
+                            delivered_seq = latest_seq;
                         }
-                        if event.seq != delivered_seq.saturating_add(1) {
+                        Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
                             let frame = ServerFrame::ResyncRequired {
                                 stream: "room_events",
-                                reason: "live room event sequence is not contiguous".to_owned(),
-                                latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(delivered_seq, |snapshot| snapshot.last_seq),
+                                reason: "subscriber fell behind the room event stream".to_owned(),
+                                latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(0, |snapshot| snapshot.last_seq),
                             };
                             let _ = send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await;
                             return;
                         }
-                        if room_session.is_none() && principal.is_operator &&
-                            matches!(event.event_type.as_str(), "room_closed" | "room_archived") {
-                            send_terminal_room_event(&state, &principal, room_uid, &mut sender, &event).await;
-                            return;
-                        }
-                        let current_principal = if room_session.is_some() {
-                            if refresh_room_session(&state, &mut principal, &mut room_session).await.is_none() {
-                                return;
-                            }
-                            principal.clone()
-                        } else {
-                            match state.store.resolve_principal(&principal).await {
-                                Ok(principal) => principal,
-                                Err(error) => {
-                                    if persistence_error_is_internal(&error) {
-                                        tracing::error!(error = ?error, room_id = %principal.room_id, "live principal resolution failed");
-                                    }
-                                    let (code, message) = persistence_error(&error);
-                                    let _ = send_authorized_nack(
-                                        &state,
-                                        &mut principal,
-                                        &mut room_session,
-                                        &mut sender,
-                                        ("", "session", CommandResolution::Unresolved, ProtocolError::new(code, message)),
-                                    ).await;
-                                    return;
-                                }
-                            }
-                        };
-                        let latest_seq = event.seq;
-                        let frame = ServerFrame::Event {
-                            stream: "room_events",
-                            events: vec![public_event_for_principal(&event, &current_principal)],
-                            latest_seq,
-                        };
-                        if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
-                        delivered_seq = latest_seq;
+                        Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
-                        let frame = ServerFrame::ResyncRequired {
-                            stream: "room_events",
-                            reason: "subscriber fell behind the room event stream".to_owned(),
-                            latest_seq: state.store.snapshot(&principal.room_id, 0, 1).await.map_or(0, |snapshot| snapshot.last_seq),
-                        };
-                        let _ = send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await;
+                }
+                update = crate::side_chat_socket::receive_update(&mut side_chat), if side_chat.is_some() => {
+                    if crate::side_chat_socket::deliver_update(&state, &mut principal, &mut room_session, room_uid, &mut sender, update).await.is_none() { return; }
+                }
+                changed = catalog_updates.changed() => {
+                    if changed.is_err() {
                         return;
                     }
-                    Err(tokio::sync::broadcast::error::RecvError::Closed) => return,
+                    let frame = ServerFrame::ProviderCatalogUpdated {
+                        catalog: catalog_updates.borrow_and_update().clone(),
+                    };
+                    if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
                 }
-            }
-            update = crate::side_chat_socket::receive_update(&mut side_chat), if side_chat.is_some() => {
-                if crate::side_chat_socket::deliver_update(&state, &mut principal, &mut room_session, room_uid, &mut sender, update).await.is_none() { return; }
-            }
-            changed = catalog_updates.changed() => {
-                if changed.is_err() {
-                    return;
-                }
-                let frame = ServerFrame::ProviderCatalogUpdated {
-                    catalog: catalog_updates.borrow_and_update().clone(),
-                };
-                if send_authorized_frame(&state, &mut principal, &mut room_session, &mut sender, &frame).await.is_none() { return; }
             }
         }
+    };
+    // Dropping this connection's response wait preserves the room actor's accepted
+    // command and receipt ownership while closing revoked access immediately.
+    tokio::select! {
+        () = state.shutdown.cancelled() => {},
+        () = owner_ended(&mut owner_lease) => {},
+        () = connected => {},
     }
 }
 
@@ -256,6 +270,22 @@ async fn wait_for_session_expiry(expires_at: Option<chrono::DateTime<chrono::Utc
         .to_std()
         .unwrap_or(Duration::ZERO);
     tokio::time::sleep(remaining).await;
+}
+
+async fn owner_ended(lease: &mut Option<crate::central_owner_lifetime::OwnerSessionLease>) {
+    let Some(lease) = lease else {
+        std::future::pending::<()>().await;
+        return;
+    };
+    loop {
+        if matches!(
+            *lease.status.borrow(),
+            agentsassemble_protocol::CentralOwnerSessionStatus::Ended { .. }
+        ) || lease.status.changed().await.is_err()
+        {
+            return;
+        }
+    }
 }
 
 async fn receive_revocation(

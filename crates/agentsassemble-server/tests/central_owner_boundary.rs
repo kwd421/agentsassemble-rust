@@ -29,6 +29,10 @@ use tokio_util::sync::CancellationToken;
 mod invitations;
 #[path = "central_owner_boundary/lifecycle.rs"]
 mod lifecycle;
+#[path = "central_owner_boundary/lifetimes.rs"]
+mod lifetimes;
+#[path = "support/room_socket_peer.rs"]
+mod room_socket_peer;
 
 const ORIGIN: &str = "https://owner.example.test";
 const SECRET: &str = "central-owner-boundary-proxy-secret-0000001";

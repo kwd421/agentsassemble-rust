@@ -8,7 +8,9 @@ use std::{
     time::Duration,
 };
 
-use agentsassemble_persistence::{OwnerSessionAuthorization, PersistenceError};
+use agentsassemble_persistence::{
+    OwnerSessionAuthorization, PersistenceError, RoomSessionAuthorization,
+};
 use agentsassemble_protocol::{CentralOwnerSessionEnd, CentralOwnerSessionStatus};
 use parking_lot::Mutex;
 use tokio::sync::watch;
@@ -108,6 +110,21 @@ impl OwnerSessionLifetimes {
             owner: entry,
         })
     }
+}
+
+pub(crate) async fn retain_room_owner(
+    state: &AppState,
+    room: Option<&RoomSessionAuthorization>,
+) -> Result<Option<OwnerSessionLease>, PersistenceError> {
+    let Some(RoomSessionAuthorization::Operator(session)) = room else {
+        return Ok(None);
+    };
+    state
+        .store
+        .owner_for_operator_session(session)
+        .await?
+        .map(|owner| state.owner_sessions.retain(state, owner))
+        .transpose()
 }
 
 fn invalid() -> PersistenceError {
