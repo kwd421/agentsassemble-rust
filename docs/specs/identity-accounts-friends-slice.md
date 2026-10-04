@@ -161,6 +161,54 @@ Signed enrollment/incarnation/revision/state/event ID에서 같은 revision/내�
 
 각 구현 커밋은 문서/테스트 포함 1,000줄 미만으로 독립 빌드·검증·허용 floor rollback이 가능해야 한다. 중앙 floor와 host floor는 별도 장벽이며 구 Worker 잔존이나 미확정 보존 예산 미결정은 기능 노출을 막는다.
 
+### C4a: schema 81 최소 저장 계약 (2026-10-05)
+
+C1 `e5134655`는 테이블 의미만 정했고 정확한 열/DDL은 정하지 않았다.
+C4a 착수 시 실제 schema owner는 80이며 81 migration은 없다. 81은 member용으로
+예약한다. C4a는 `CURRENT_SCHEMA_VERSION = 80`을 유지하고 정확히 81만 추가로
+인식한다. 82 이상은 거절한다. 새 DB/기존 80 DB에 member DDL이나 migration을
+실행하지 않는다. 다음 정의는 **C4b migration의 필수 최소 정의**이며 그대로
+사용해야 한다 (추가 member 테이블은 각 소유 계약에서 구현 전에 확정한다).
+
+```sql
+CREATE TABLE central_identity_bindings (
+    binding_id TEXT PRIMARY KEY NOT NULL,
+    issuer TEXT NOT NULL,
+    person_id TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES user_profiles(user_id) ON DELETE RESTRICT,
+    created_at INTEGER NOT NULL,
+    UNIQUE(issuer, person_id),
+    UNIQUE(issuer, user_id)
+) STRICT;
+CREATE INDEX central_identity_bindings_user ON central_identity_bindings(user_id);
+```
+
+`binding_id`는 불변 host 식별자, `issuer`는 검증된 중앙 issuer의 canonical 식별자,
+`person_id`는 해당 issuer의 불변 person, `user_id`는 기존 local profile ID,
+`created_at`은 UTC Unix microseconds다. binding은 membership 종료/중앙 삭제에도
+존재 표식으로 보존하며 이동/익명 전환하지 않는다. floor는 membership 상태와
+무관하게 **어느 issuer든 해당 user_id 행 존재**만으로 미지원 member를 판정한다.
+81인데 이 테이블/필수 열이 없으면 DB 열기를 실패시키며 익명으로 간주하지 않는다.
+
+C4b는 기존 80 테이블/열/credential 의미를 바꾸지 않는 additive migration이어야
+한다. member 전용 parent/child/결과는 익명/owner 권위 행으로 인코딩하지 않는다.
+추가 member 테이블의 FK/trigger는 floor의 기존 쓰기가 member 권위·revision·폐기·
+결과를 삭제/재활성화하지 않도록 해야 한다. floor는 member 전용 테이블을 쓰거나
+정리하지 않는다. C4b는 실제 전체 migration DB로 이 호환 행렬을 재실행해야 한다.
+
+영향 진입점은 DB open, 기존 human invite 최초/정확 재시도, human session 조회/
+재검증, account device 해석·binding, recovery 발급/최초 redeem/정확 재시도,
+Google 연결 및 guest retirement다. 각 기존 소유자 트랜잭션에서 binding을 검사해
+`central_member_unsupported`로 거절하며 독립 credential/입장 결과를 반환하지 않는다.
+새 member route나 입장 API는 만들지 않는다. binding 없는 익명/Google 및 native
+pairing의 idle 수명·last-use·30일 미사용 만료·단일/전체 revocation은 보존한다.
+
+C4a 자동 검증은 변경 전 실패 재현 후 80의 schema/데이터 보존, 최소 81 DDL 및
+추가 member 상태 행 보존, member 입장/기존 session 재사용 거절, recovery 발급 및
+최초/재시도 redeem·새 device/Google binding 거절, 익명 정상, 82 이상/잘못된 81
+거절과 native pairing 회귀다. C4a에서는 배포·서명 빌드·수동 검증을 하지 않으며
+C6의 실제 migration/혼재/두 기기 검증 완료로 보고하지 않는다.
+
 ### 필수 테스트와 수용 기준
 
 - Binding 양방향 UNIQUE 경쟁, 자동 병합/독립 익명 권위 재발급 금지, 기존 익명/Google 흐름 보존; 두 기기 snapshot이 달라도 단일 local profile·기본 avatar·재입장 비덮어쓰기.
