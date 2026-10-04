@@ -321,3 +321,65 @@ async fn failed_revocation_does_not_report_committed_closure_and_restart_ends_cu
     );
     Ok(())
 }
+
+#[tokio::test]
+async fn publication_recovery_generation_only_gates_new_admission()
+-> Result<(), Box<dyn std::error::Error>> {
+    let (store, binding) = setup().await?;
+    let root = store
+        .create_owner_session(&admission(binding.clone())?, &description()?)
+        .await?;
+    let owner = ServerOwnerAuthority::CentralSession(root.authorization.clone());
+    let room = store
+        .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "room", "Room")
+        .await?;
+    let direct = store
+        .create_central_owner_session(
+            &owner,
+            &CentralOwnerSessionRequest::host_owned(
+                "room",
+                room.room.room_uid,
+                &[17; 32],
+                &[42; 32],
+                &binding.origin,
+                Utc::now(),
+            ),
+        )
+        .await?;
+    let room_session = RoomSessionAuthorization::Operator(direct.authorization);
+    // Publication recovery after a >600s outage advances this durable generation.
+    // It is discovery/admission state, not a revocation of an admitted workspace.
+    let generation = store.next_central_endpoint_generation().await?;
+    assert!(generation > binding.generation);
+    store
+        .authorize_owner_session(root.authorization.fingerprint(), &[42; 32], &binding.origin)
+        .await?;
+    store.validate_server_owner(&owner).await?;
+    store
+        .revalidate_room_session_authorization(&room_session)
+        .await?;
+    assert_eq!(store.owner_device_sessions(&owner).await?.len(), 1);
+    let mut next = binding;
+    next.entry_fingerprint = [3; 32];
+    assert!(
+        store
+            .create_owner_session(&admission(next.clone())?, &description()?)
+            .await
+            .is_err()
+    );
+    next.generation = generation;
+    store
+        .create_owner_session(&admission(next)?, &description()?)
+        .await?;
+    store
+        .revoke_owner_devices(&owner, Some(root.authorization.session_id()))
+        .await?;
+    assert!(store.validate_server_owner(&owner).await.is_err());
+    assert!(
+        store
+            .revalidate_room_session_authorization(&room_session)
+            .await
+            .is_err()
+    );
+    Ok(())
+}

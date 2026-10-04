@@ -111,6 +111,15 @@ async fn connected_session_survives_five_minutes_and_central_logout_with_zero_ow
             .path
             .ends_with("/connect-grants/redeem")
     );
+    // Central publication recovery rotates admission generation, not live custody.
+    fixture
+        .store
+        .next_central_endpoint_generation()
+        .await
+        .unwrap_or_else(|e| panic!("publication recovery: {e}"));
+    message(&mut socket, "after-publication-recovery").await;
+    let additional_room_socket = room_socket(&fixture, generation).await;
+    drop(additional_room_socket);
     revoke_current_and_check_closed(&fixture, generation, &mut stream, &mut socket).await;
     drop(stream);
     drop(socket);

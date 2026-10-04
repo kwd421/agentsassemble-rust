@@ -143,54 +143,34 @@ startup stays logged out across restart; failed logout is retryable. Verify affe
 Worker, native URL, profile and frontend contracts, mandatory gates and a signed
 isolated package while preserving the active Windows room.
 
-### Renewable central owner workspace (2026-10-04, superseded; never deployed)
-
-Historical contract only. The host-owned contract below replaces its owner lease,
-renewal, central revocation and expiry rules.
-
-User requirement: an opened owned server stays usable beyond the five-minute entry
-grant, without workspace reload, room socket replacement or directory-stream
-replacement during successful renewal. This applies to browser and remote desktop
-owner entry, empty directories, profiles/friends, room creation/deletion recovery,
-room admission, messages and all invitation operations. Ordinary pairing and guest
-authority remain separate. This supersedes the entry-grant lifetime coupling below.
-
-The central Worker owns a single exchange of an entry grant into a host-bound owner
-connection. Exact exchange replay by the same host/browser returns the same connection;
-another browser or endpoint cannot consume it. Its provenance retains the issuing
-central session/person/device and exact server/origin/endpoint generation. The host
-issues a durable opaque server-owner session and room sessions derive authority from
-that parent. No central bearer or device signing key crosses to the host.
-
-Central authorization leases last at most **60 seconds** (also bounded by central
-login expiry and the current endpoint lease). A host-owned background task renews
-each actively connected workspace **every 20 seconds**, with the existing **8-second
-request deadline**. A definitive logout/device/person revocation, ownership transfer,
-server revocation or endpoint replacement ends the parent and dependent sessions as
-soon as renewal rejects, normally within **28 seconds** of the central change.
-Transport failure permits only the unexpired lease: retries at **2, 4, 8 seconds**
-(then capped at 8) never extend authority, and loss of central access ends use no
-later than **60 seconds after the last successful authorization**. Renewal is
-single-flight per owner session; authenticated streams/sockets retain its lifetime,
-last disconnect and runtime shutdown cancel/join it. No timer or client flag grants
-authority. Persisted parent revalidation checks device, origin, endpoint generation,
-expiry and revocation inside every affected transaction. Successful renewal updates
-the same parent; existing sockets and streams observe it without reconnecting.
-
-The common UI keeps drafts and open editors across renewal and temporary failure.
-Confirmed termination disables commands and explains account/server access loss;
-it does not discard the workspace or pretend the tunnel closed. Invite status has
-explicit checking/unavailable/retry states; only a verified closed status says off.
-
-Acceptance: controlled exchange/replay, renewal and transient/definitive failure;
-wrong device/origin/generation, logout, owner transfer and server revocation;
-unchanged ordinary pairing/guest authority; additive schema preservation; actual
-signed-in web message send/receive for more than five minutes with unchanged room
-socket/directory stream and no page reload, then central logout closes that same tab's
-authority within the bound. Windows physical evidence remains separate. Production
-Worker deployment and central migration require the user's explicit approval.
-
 ### Host-owned owner workspace and devices (2026-10-04, supersedes renewal)
+
+이 기능을 맡는 파일 (paths relative to this repository unless marked Worker):
+
+- `crates/agentsassemble-persistence/src/host_owner_session.rs`: durable admission, live custody and transactional revalidation.
+- `crates/agentsassemble-persistence/src/owner_devices.rs`: account-scoped device listing and atomic dependent revocation.
+- `crates/agentsassemble-server/src/central_directory.rs`: signed central admission and endpoint publication generations.
+- `crates/agentsassemble-server/src/central_owner_web.rs`: browser admission, owner directory/room HTTP and event stream entry.
+- `crates/agentsassemble-server/src/owner_session_lifetime.rs`: transport retention, last-disconnect, ingress/runtime end and closure.
+- `crates/agentsassemble-server/src/owner_devices_web.rs`: native/remote device HTTP routes and committed revocation publication.
+- `crates/agentsassemble-protocol/src/central_owner.rs`: canonical owner/device wire types; `frontend/src/types/generated/` derives from these.
+- `frontend/src/lib/centralOwnerWorkspace.ts`: in-memory owner credential exchange, device description and room requests.
+- `frontend/src/views/components/CentralOwnerConnectGate.tsx`: verified new-entry gate without an ongoing lease timer.
+- `frontend/src/views/components/CentralOwnerWorkspaceBoundary.tsx`: active/ended workspace presentation preserving drafts.
+- `frontend/src/views/components/UserSettingsPanel.tsx`: shared native and remote owner settings entry, including empty servers.
+- `frontend/src/views/components/OwnerDevicesPanel.tsx`: identifiable device rows and single/all revocation confirmation.
+- `frontend/src/api/ownerDevices.ts`: shared settings transport and strict device response decoding.
+- `crates/agentsassemble-persistence/src/host_owner_session_tests.rs`: durable lifetime, generation recovery and account-scope regressions.
+- `crates/agentsassemble-server/tests/central_owner_boundary/`: HTTP/socket/stream and dependent revocation acceptance.
+- Worker `infra/identity-directory/src/server_connect_grants.js`: atomic current-account admission; no ongoing owner renewal.
+- Worker `infra/identity-directory/test/local_owner_connections.mjs`: isolated workerd/D1 admission and logout verification.
+
+Endpoint publication generation validates new admission only. Recovery after a
+central outage (including publication failure beyond 600 seconds) must not retire
+an admitted owner or its derived room authority. Existing host identity, device,
+origin, revocation, disconnect and ingress/runtime lifetime checks remain in force.
+Regression verification advances the publication generation with active authority,
+rejects stale new admission, and confirms explicit revocation still ends access.
 
 Latest user decision: central identity is admission/discovery authority, not an
 ongoing gatekeeper. The entry grant remains short and host-signed redemption checks

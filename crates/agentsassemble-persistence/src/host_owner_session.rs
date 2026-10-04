@@ -159,7 +159,7 @@ impl SqliteStore {
             SessionBearerPurpose::ServerOwner,
         );
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        validate_binding(&mut tx, binding).await?;
+        validate_admission(&mut tx, binding).await?;
         let exists: bool = sqlx::query_scalar(
             "SELECT EXISTS(SELECT 1 FROM host_owner_sessions WHERE entry_fingerprint = ?)",
         )
@@ -209,7 +209,7 @@ impl SqliteStore {
     }
 
     /// # Errors
-    /// Rejects disconnected/revoked custody or a different browser/origin/generation.
+    /// Rejects disconnected/revoked custody or a different server/browser/origin.
     pub async fn authorize_owner_session(
         &self,
         fingerprint: &[u8; 32],
@@ -273,7 +273,12 @@ pub(crate) async fn resolve(
     {
         return Err(invalid());
     }
-    validate_binding(tx, &binding).await?;
+    // Publication recovery may advance discovery generation while this host-owned
+    // workspace stays connected. Only a new admission checks that generation.
+    let bootstrap = crate::bootstrap::require_complete_bootstrap_in_transaction(tx).await?;
+    if bootstrap.server_id != binding.server_id {
+        return Err(invalid());
+    }
     Ok(OwnerSessionAuthorization {
         fingerprint: *fingerprint,
         session_id: Uuid::parse_str(&row.try_get::<String, _>("session_id")?)
@@ -297,7 +302,7 @@ pub(crate) async fn require_unrevoked_issuer(
     Ok(())
 }
 
-async fn validate_binding(
+async fn validate_admission(
     tx: &mut Transaction<'_, Sqlite>,
     binding: &OwnerAdmissionBinding,
 ) -> Result<(), PersistenceError> {
