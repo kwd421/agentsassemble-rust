@@ -10,7 +10,7 @@ work is active or waiting, and remove it when it closes.
   Phases 1-8 are closed (Phase 8 through `f776e2e`); closing reviews and evidence are
   linked from the product plan and `docs/VERIFICATION.md`.
 - Waiting for user approval: host-owned owner sessions. Local work is complete and
-  pushed through `77603a81`; central Worker change `25fad46a` is on
+  pushed with all three Daybreak findings corrected; central Worker change `25fad46a` is on
   `codex/owner-session-renewal` (local only; production already has migrations
   0001-0008, so no new migration). Still needed: production Worker deployment, signed
   build, actual app/web acceptance (use past five minutes with messages, logout,

@@ -13181,3 +13181,19 @@ contract and evidence below replace that implementation; no migration 0009 is ne
   actual app/web manual acceptance and required external review remain unverified
   and outside this authorized local closeout. `.agents/` and `scripts/__pycache__/`
   are untouched. No folder reorganization is needed for this correction.
+
+## Host owner security review corrections (2026-10-04)
+
+- High: confirmed and corrected by v76 migration. The pre-fix regression failed
+  with `v72 authority survived`; v72/v73/v75 upgrades now revoke parentless central
+  sessions while preserving rooms/native pairings. Persistence: 365 passed.
+- Medium: confirmed and corrected by pre-frame owner retention carried through
+  the socket loop. The first-send disconnect barrier failed before the fix;
+  retention, cancelled-ticket silence and abandoned-handshake cleanup now pass.
+  Server unit tests: 116; owner/pairing/human socket boundary tests: 11 passed.
+- Low: confirmed and corrected with bounded online-triggered recovery and exact
+  root-session HTTP 401/403 termination across rooms, devices, profile, friends and
+  lifecycle. Pre-fix: 11 failing tests; drafts remain mounted. Final local tests:
+  Rust 1,070, frontend 991, policy 19 passed; builds/Clippy passed. `make verify`
+  ran once and stopped only at the final 18GiB artifact cap; owner cleanup and
+  `make artifact-check` then passed. Production and signed/manual proof remain open.

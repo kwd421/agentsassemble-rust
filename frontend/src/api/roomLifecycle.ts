@@ -1,3 +1,4 @@
+import { fetchOwnerSession } from "../lib/ownerSessionTransport";
 import type { RoomEvent } from "../api";
 import type { Room } from "../types/generated/Room";
 import { publicRoomEventIsValid } from "../lib/roomSocketValidation";
@@ -30,7 +31,7 @@ export async function changeRoomLifecycle(intent: RoomLifecycleIntent, beforeDis
   if (session) {
     if (!session.deviceToken || (session.kind === "remote" ? !session.sessionToken : !session.credential.sessionToken)) throw new Error("현재 기기의 방 세션 권위를 사용할 수 없습니다.");
     beforeDispatch();
-    const response = await fetch("/api/room-session/lifecycle", {
+    const response = await fetchOwnerSession(session.kind === "server_owner" ? session.credential.sessionToken : undefined, "/api/room-session/lifecycle", {
       method: "POST", cache: "no-store", redirect: "error", credentials: "omit", referrerPolicy: "no-referrer",
       headers: { "Content-Type": "application/json", ...(session.kind === "server_owner" ? serverOwnerSessionHeaders(session.credential, session.deviceToken) : { Authorization: `Bearer ${session.sessionToken}`, "X-Device-Token": session.deviceToken }) },
       body: JSON.stringify(body),

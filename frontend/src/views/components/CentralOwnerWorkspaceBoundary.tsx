@@ -1,3 +1,4 @@
+import { observeOwnerSessionRejection } from "../../lib/ownerSessionTransport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { centralAccountEntryUrl } from "../../lib/centralIdentity";
 import { CentralOwnerWorkspaceContext } from "../../lib/centralOwnerWorkspaceContext";
@@ -12,6 +13,8 @@ export default function CentralOwnerWorkspaceBoundary({ session, children }: { s
     current.current = next;
     setStatus(next);
   }, []);
+  useEffect(() => observeOwnerSessionRejection(session.sessionToken,
+    () => onStatus({ state: "ended", reason: "disconnected" })), [session.sessionToken, onStatus]);
   const context = useMemo(() => ({ session, onStatus }), [session, onStatus]);
   const ended = status?.state === "ended";
   return <CentralOwnerWorkspaceContext.Provider value={context}>

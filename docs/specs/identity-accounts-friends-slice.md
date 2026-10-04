@@ -147,14 +147,18 @@ isolated package while preserving the active Windows room.
 
 이 기능을 맡는 파일 (paths relative to this repository unless marked Worker):
 
+- `crates/agentsassemble-persistence/src/schema_version.rs`: additive upgrades and retirement of historical owner authority.
 - `crates/agentsassemble-persistence/src/host_owner_session.rs`: durable admission, live custody and transactional revalidation.
 - `crates/agentsassemble-persistence/src/owner_devices.rs`: account-scoped device listing and atomic dependent revocation.
 - `crates/agentsassemble-server/src/central_directory.rs`: signed central admission and endpoint publication generations.
 - `crates/agentsassemble-server/src/central_owner_web.rs`: browser admission, owner directory/room HTTP and event stream entry.
 - `crates/agentsassemble-server/src/owner_session_lifetime.rs`: transport retention, last-disconnect, ingress/runtime end and closure.
+- `crates/agentsassemble-server/src/room_socket.rs` and `room_socket_session.rs`: pre-frame retention through socket-loop exit.
 - `crates/agentsassemble-server/src/owner_devices_web.rs`: native/remote device HTTP routes and committed revocation publication.
 - `crates/agentsassemble-protocol/src/central_owner.rs`: canonical owner/device wire types; `frontend/src/types/generated/` derives from these.
 - `frontend/src/lib/centralOwnerWorkspace.ts`: in-memory owner credential exchange, device description and room requests.
+- `frontend/src/lib/ownerSessionTransport.ts`: root HTTP rejection notification owned by the mounted workspace boundary.
+- `frontend/src/lib/roomDirectorySubscription.ts`: bounded stream recovery and network-online listener cleanup.
 - `frontend/src/views/components/CentralOwnerConnectGate.tsx`: verified new-entry gate without an ongoing lease timer.
 - `frontend/src/views/components/CentralOwnerWorkspaceBoundary.tsx`: active/ended workspace presentation preserving drafts.
 - `frontend/src/views/components/UserSettingsPanel.tsx`: shared native and remote owner settings entry, including empty servers.

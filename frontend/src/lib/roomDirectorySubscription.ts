@@ -73,8 +73,9 @@ export function subscribeRoomDirectory(
 ) {
   const lifetime = new AbortController();
   let running = false;
+  let terminal = false;
   const retry = () => {
-    if (running || lifetime.signal.aborted) return;
+    if (running || terminal || lifetime.signal.aborted) return;
     running = true;
     void (async () => {
       // Four admissions total per recovery attempt; no directory polling. Every
@@ -93,6 +94,7 @@ export function subscribeRoomDirectory(
           if (lifetime.signal.aborted) return;
           failed(error);
           if (ownerStatus && error instanceof ApiError && [401, 403].includes(error.status)) {
+            terminal = true;
             ownerStatus({ state: "ended", reason: "disconnected" });
           }
           if (attempt === 3 || error instanceof ApiError && [401, 403, 409, 429].includes(error.status)) return;
@@ -113,6 +115,11 @@ export function subscribeRoomDirectory(
       }
     })().finally(() => { running = false; });
   };
+  // Network recovery starts one bounded burst; events during a burst coalesce.
+  window.addEventListener("online", retry);
   retry();
-  return { retry, close: () => lifetime.abort() };
+  return { retry, close: () => {
+    window.removeEventListener("online", retry);
+    lifetime.abort();
+  } };
 }

@@ -1,3 +1,4 @@
+import { fetchOwnerSession } from "./ownerSessionTransport";
 import { ApiError } from "./apiErrors";
 import { browserDeviceDescription } from "./ownerDeviceDescription";
 import { type CentralOwnerConnect } from "./centralOwnerConnect";
@@ -41,14 +42,14 @@ function sessionBody(session: CentralOwnerWorkspace) {
 
 export function openCentralOwnerDirectoryStream(session: CentralOwnerWorkspace, deviceToken: string, signal: AbortSignal) {
   signal.throwIfAborted();
-  return fetch("/api/central-owner/events", { method: "POST", cache: "no-store", credentials: "omit",
+  return fetchOwnerSession(session.sessionToken, "/api/central-owner/events", { method: "POST", cache: "no-store", credentials: "omit",
     redirect: "error", referrerPolicy: "no-referrer", signal,
     headers: { "content-type": "application/json", "x-device-token": deviceToken },
     body: JSON.stringify(sessionBody(session)) });
 }
 
 async function request(route: string, deviceToken: string, body: Record<string, unknown>, signal?: AbortSignal): Promise<unknown> {
-  const response = await fetch(`/api/central-owner/${route}`, { method: "POST", cache: "no-store",
+  const response = await fetchOwnerSession(typeof body.session_token === "string" ? body.session_token : undefined, `/api/central-owner/${route}`, { method: "POST", cache: "no-store",
     credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
     headers: { "content-type": "application/json", "x-device-token": deviceToken }, body: JSON.stringify(body) });
   const payload = await response.json().catch(() => null);

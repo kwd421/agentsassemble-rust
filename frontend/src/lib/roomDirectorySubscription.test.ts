@@ -43,6 +43,43 @@ describe("room directory transport", () => {
     expect(changed).not.toHaveBeenCalled();
   });
 
+  it("recovers on online after four failures, bounds each burst and removes the trigger on close", async () => {
+    vi.useFakeTimers();
+    const open = vi.fn().mockRejectedValue(new Error("offline"));
+    const status = vi.fn();
+    const subscription = subscribeRoomDirectory(open, vi.fn(), vi.fn(), status);
+    await vi.runAllTimersAsync();
+    expect(open).toHaveBeenCalledTimes(4);
+    expect(status).not.toHaveBeenCalled();
+    window.dispatchEvent(new Event("online"));
+    window.dispatchEvent(new Event("online"));
+    await vi.runAllTimersAsync();
+    expect(open).toHaveBeenCalledTimes(8);
+    open.mockResolvedValue(new Response("{}", { status: 401 }));
+    window.dispatchEvent(new Event("online"));
+    await vi.runAllTimersAsync();
+    expect(status).toHaveBeenLastCalledWith({ state: "ended", reason: "disconnected" });
+    expect(open).toHaveBeenCalledTimes(9);
+    window.dispatchEvent(new Event("online"));
+    subscription.retry();
+    await vi.runAllTimersAsync();
+    expect(open).toHaveBeenCalledTimes(9);
+    subscription.close();
+    window.dispatchEvent(new Event("online"));
+    expect(open).toHaveBeenCalledTimes(9);
+  });
+
+  it("removes the online trigger while a failed workspace unmounts", async () => {
+    vi.useFakeTimers();
+    const open = vi.fn().mockRejectedValue(new Error("offline"));
+    const subscription = subscribeRoomDirectory(open, vi.fn(), vi.fn());
+    await vi.runAllTimersAsync();
+    subscription.close();
+    window.dispatchEvent(new Event("online"));
+    await vi.runAllTimersAsync();
+    expect(open).toHaveBeenCalledTimes(4);
+  });
+
   it("stops on rejected ownership and cancels a pending bounded reconnect", async () => {
     vi.useFakeTimers();
     const open = vi.fn().mockResolvedValue(new Response('{"code":"permission_denied","error":"denied"}', { status: 403 }));

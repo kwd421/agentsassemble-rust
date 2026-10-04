@@ -1,3 +1,4 @@
+import { fetchOwnerSession } from "../lib/ownerSessionTransport";
 import type { UserProfileIdentity } from "./userProfile";
 import type { OwnerDevices } from "../types/generated/OwnerDevices";
 import type { OwnerDeviceSession } from "../types/generated/OwnerDeviceSession";
@@ -38,7 +39,7 @@ function parseDevices(value: unknown): OwnerDevices {
 
 export async function listOwnerDevices(identity: UserProfileIdentity, signal?: AbortSignal): Promise<OwnerDevices> {
   if (!identity.centralSession) return parseDevices(await fetchJsonServerOperator("/api/owner-sessions", undefined, signal));
-  const response = await fetch("/api/central-owner/sessions", {
+  const response = await fetchOwnerSession(identity.centralSession.sessionToken, "/api/central-owner/sessions", {
     cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer", signal,
     headers: serverOwnerSessionHeaders(identity.centralSession, identity.deviceToken || ""),
   });
@@ -49,7 +50,7 @@ export async function listOwnerDevices(identity: UserProfileIdentity, signal?: A
 export async function revokeOwnerDevices(identity: UserProfileIdentity, body: RevokeOwnerDevices) {
   let payload: unknown;
   if (identity.centralSession) {
-    const response = await fetch("/api/central-owner/sessions/revoke", {
+    const response = await fetchOwnerSession(identity.centralSession.sessionToken, "/api/central-owner/sessions/revoke", {
       method: "POST", cache: "no-store", credentials: "omit", redirect: "error", referrerPolicy: "no-referrer",
       headers: { ...serverOwnerSessionHeaders(identity.centralSession, identity.deviceToken || ""), "Content-Type": "application/json" },
       body: JSON.stringify(body),

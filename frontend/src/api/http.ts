@@ -1,3 +1,4 @@
+import { fetchOwnerSession } from "../lib/ownerSessionTransport";
 import { ApiError } from "../lib/apiErrors";
 import { browserDeviceDescription } from "../lib/ownerDeviceDescription";
 import {
@@ -235,7 +236,7 @@ export async function fetchJsonWithIdentity<T>(
   const headers: Record<string, string> = centralSession ? serverOwnerSessionHeaders(centralSession, deviceToken) : {};
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
-  const res = await fetch(url, { ...profileRequest, headers });
+  const res = await fetchOwnerSession(centralSession?.sessionToken, url, { ...profileRequest, headers });
   if (!res.ok) throw await responseError(res);
   return res.json();
 }
@@ -270,7 +271,7 @@ export async function postJsonWithIdentity<T>(
   const headers: Record<string, string> = { ...(centralSession ? serverOwnerSessionHeaders(centralSession, deviceToken) : {}), "Content-Type": "application/json" };
   if (sessionToken) headers.Authorization = `Bearer ${sessionToken}`;
   if (deviceToken) headers["X-Device-Token"] = deviceToken;
-  const res = await fetch(url, {
+  const res = await fetchOwnerSession(centralSession?.sessionToken, url, {
     ...profileRequest,
     method: "POST",
     headers,

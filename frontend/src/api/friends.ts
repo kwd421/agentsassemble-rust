@@ -1,3 +1,4 @@
+import { fetchOwnerSession } from "../lib/ownerSessionTransport";
 import type { SaveFriend } from "../types/generated/SaveFriend";
 import type { SavedFriend } from "../types/generated/SavedFriend";
 import type { RoomHttpAuthority } from "./roomHttpAuthority";
@@ -16,7 +17,7 @@ async function request<T>(authority: SavedFriendsAuthority, method: string, body
   };
   const response = authority.kind === "local"
     ? await fetchDesktopOperatorRuntime(`/api/room-friends${query}`, init)
-    : await fetch(`/api/central-owner/friends${query}`, init);
+    : await fetchOwnerSession(authority.kind === "server_owner" ? authority.credential.sessionToken : undefined, `/api/central-owner/friends${query}`, init);
   if (!response.ok) throw await responseError(response);
   return response.json();
 }

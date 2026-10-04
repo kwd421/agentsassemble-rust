@@ -5,9 +5,14 @@ import { afterEach, expect, it, vi } from "vitest";
 import { CentralOwnerWorkspaceContext } from "../../lib/centralOwnerWorkspaceContext";
 import type { CentralOwnerSessionStatus } from "../../types/generated/CentralOwnerSessionStatus";
 import { type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import { createCentralOwnerRoom, enterCentralOwnerRoom, fetchCentralOwnerRooms } from "../../lib/centralOwnerWorkspace";
+import { listOwnerDevices, revokeOwnerDevices } from "../../api/ownerDevices";
+import { fetchJsonWithIdentity, postJsonWithIdentity } from "../../api/http";
+import { fetchSavedFriends } from "../../api/friends";
+import { changeRoomLifecycle } from "../../api/roomLifecycle";
 import CentralOwnerWorkspaceBoundary from "./CentralOwnerWorkspaceBoundary";
 
-afterEach(() => { cleanup(); vi.useRealTimers(); sessionStorage.clear(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); sessionStorage.clear(); vi.unstubAllGlobals(); });
 
 it("keeps the workspace and draft mounted across five minutes without renewal, then blocks revoked access", () => {
   vi.useFakeTimers();
@@ -52,4 +57,46 @@ it("blocks on a host disconnect and never restarts from a late active event", ()
   expect(screen.getByRole("alert").textContent).toContain("연결이 끊겼어요");
   act(() => publish({ state: "active" }));
   expect(screen.getByRole("alert")).toBeTruthy();
+});
+
+const rejectedSession: CentralOwnerWorkspace = { sessionToken: `aaos1.${"E".repeat(43)}`, serverId: "server", generation: 1,
+  sessionId: "30000000-0000-4000-8000-000000000003", hostPublicKeyX: "B".repeat(43), hostKeyFingerprint: "C".repeat(43) };
+const identity = { centralSession: rejectedSession, deviceToken: "device" };
+const rootRequests: Array<[string, () => Promise<unknown>]> = [
+  ["directory", () => fetchCentralOwnerRooms(rejectedSession, "device")],
+  ["create", () => createCentralOwnerRoom(rejectedSession, "device", "request", "room", "Room")],
+  ["enter", () => enterCentralOwnerRoom(rejectedSession, "device", "room", "uid")],
+  ["devices", () => listOwnerDevices(identity)],
+  ["revoke", () => revokeOwnerDevices(identity, { scope: "all" })],
+  ["profile", () => fetchJsonWithIdentity("/api/user-profile", identity)],
+  ["profile edit", () => postJsonWithIdentity("/api/user-profile", {}, identity)],
+  ["avatar", () => postJsonWithIdentity("/api/attachments", {}, identity)],
+  ["friends", () => fetchSavedFriends({ kind: "server_owner", credential: rejectedSession, deviceToken: "device" })],
+  ["lifecycle", () => changeRoomLifecycle({ serverId: "server", authorityLineageId: "lineage", requestId: "request", roomId: "room", roomUid: "uid", action: "room.close" }, vi.fn(),
+    { kind: "server_owner", credential: rejectedSession, deviceToken: "device" })],
+];
+
+it.each(rootRequests)("ends the workspace on rejected root %s requests, preserving drafts", async (_, request) => {
+  for (const status of [401, 403]) {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{"error":"denied"}', { status })));
+    const view = render(<CentralOwnerWorkspaceBoundary session={rejectedSession}><input aria-label="draft" defaultValue="kept" /></CentralOwnerWorkspaceBoundary>);
+    const draft = screen.getByRole("textbox") as HTMLInputElement;
+    await act(async () => { await expect(request()).rejects.toBeTruthy(); });
+    expect(screen.getByRole("alert").textContent).toContain("연결이 끊겼어요");
+    expect(draft.closest("[inert]")).not.toBeNull();
+    expect(draft.value).toBe("kept");
+    view.unmount();
+  }
+});
+
+it("ignores transient errors and foreign-session rejection, and removes the listener on unmount", async () => {
+  const view = render(<CentralOwnerWorkspaceBoundary session={rejectedSession}><input aria-label="draft" /></CentralOwnerWorkspaceBoundary>);
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{}', { status: 503 })));
+  await act(async () => { await expect(fetchCentralOwnerRooms(rejectedSession, "device")).rejects.toBeTruthy(); });
+  expect(screen.queryByRole("alert")).toBeNull();
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response('{}', { status: 401 })));
+  await act(async () => { await expect(fetchCentralOwnerRooms({ ...rejectedSession, sessionToken: "another-session" }, "device")).rejects.toBeTruthy(); });
+  expect(screen.queryByRole("alert")).toBeNull();
+  view.unmount();
+  await expect(fetchCentralOwnerRooms(rejectedSession, "device")).rejects.toBeTruthy();
 });
