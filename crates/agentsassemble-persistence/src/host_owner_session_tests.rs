@@ -53,7 +53,7 @@ async fn connected_owner_has_no_clock_expiry_and_disconnected_entry_cannot_repla
             .await
             .is_err()
     );
-    let owner = ServerOwnerAuthority::CentralSession(first.authorization.clone());
+    let owner = ServerOwnerAuthority::CentralSession(Box::new(first.authorization.clone()));
     assert!(
         store
             .list_room_directory_for_owner(&owner, true)
@@ -130,7 +130,7 @@ async fn remote_all_is_account_scoped_and_native_remains_recovery_authority()
     let next = store
         .create_owner_session(&admission(transferred)?, &description()?)
         .await?;
-    let owner = ServerOwnerAuthority::CentralSession(first.authorization);
+    let owner = ServerOwnerAuthority::CentralSession(Box::new(first.authorization));
     assert_eq!(store.owner_device_sessions(&owner).await?.len(), 2);
     assert!(
         store
@@ -145,7 +145,7 @@ async fn remote_all_is_account_scoped_and_native_remains_recovery_authority()
             .owner_fingerprints
             .contains(second.authorization.fingerprint())
     );
-    let next_owner = ServerOwnerAuthority::CentralSession(next.authorization);
+    let next_owner = ServerOwnerAuthority::CentralSession(Box::new(next.authorization));
     store.validate_server_owner(&next_owner).await?;
     assert!(store.validate_server_owner(&owner).await.is_err());
     assert_eq!(
@@ -172,7 +172,7 @@ async fn separately_paired_device_survives_disconnect_but_not_issuer_revocation(
     let issued = store
         .create_owner_session(&admission(binding.clone())?, &description()?)
         .await?;
-    let owner = ServerOwnerAuthority::CentralSession(issued.authorization.clone());
+    let owner = ServerOwnerAuthority::CentralSession(Box::new(issued.authorization.clone()));
     let room = store
         .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "room", "Room")
         .await?;
@@ -290,7 +290,7 @@ async fn failed_revocation_does_not_report_committed_closure_and_restart_ends_cu
     let (store, binding) = setup().await?;
     let entry = admission(binding)?;
     let issued = store.create_owner_session(&entry, &description()?).await?;
-    let owner = ServerOwnerAuthority::CentralSession(issued.authorization.clone());
+    let owner = ServerOwnerAuthority::CentralSession(Box::new(issued.authorization.clone()));
     sqlx::query("CREATE TRIGGER reject_revoke BEFORE UPDATE OF revoked ON host_owner_sessions BEGIN SELECT RAISE(ABORT, 'write failed'); END")
         .execute(&store.pool).await?;
     assert!(
@@ -326,10 +326,10 @@ async fn failed_revocation_does_not_report_committed_closure_and_restart_ends_cu
 async fn publication_recovery_generation_only_gates_new_admission()
 -> Result<(), Box<dyn std::error::Error>> {
     let (store, binding) = setup().await?;
-    let root = store
+    let admitted = store
         .create_owner_session(&admission(binding.clone())?, &description()?)
         .await?;
-    let owner = ServerOwnerAuthority::CentralSession(root.authorization.clone());
+    let owner = ServerOwnerAuthority::CentralSession(Box::new(admitted.authorization.clone()));
     let room = store
         .create_room_for_local_operator(&uuid::Uuid::new_v4().to_string(), "room", "Room")
         .await?;
@@ -352,7 +352,11 @@ async fn publication_recovery_generation_only_gates_new_admission()
     let generation = store.next_central_endpoint_generation().await?;
     assert!(generation > binding.generation);
     store
-        .authorize_owner_session(root.authorization.fingerprint(), &[42; 32], &binding.origin)
+        .authorize_owner_session(
+            admitted.authorization.fingerprint(),
+            &[42; 32],
+            &binding.origin,
+        )
         .await?;
     store.validate_server_owner(&owner).await?;
     store
@@ -372,7 +376,7 @@ async fn publication_recovery_generation_only_gates_new_admission()
         .create_owner_session(&admission(next)?, &description()?)
         .await?;
     store
-        .revoke_owner_devices(&owner, Some(root.authorization.session_id()))
+        .revoke_owner_devices(&owner, Some(admitted.authorization.session_id()))
         .await?;
     assert!(store.validate_server_owner(&owner).await.is_err());
     assert!(

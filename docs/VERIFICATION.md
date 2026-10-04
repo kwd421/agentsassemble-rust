@@ -13039,71 +13039,11 @@ Live process inspection confirmed the desktop (65235), supervisor (65474) and se
   External access was turned off afterwards and cloudflared exited. The UI Check
   bundle/data are retained. Windows physical-device verification remains unverified.
 
-## Renewable central owner workspace (2026-10-04, superseded; never deployed)
+## Superseded owner renewal implementation
 
-- User-approved contract separates the 300s entry grant from stable host owner
-  custody. Central authority leases 60s and renews at 20s with an 8s request
-  deadline. Definitive central logout/owner transfer/server or device revocation
-  is normally observed within 28s; central loss cannot authorize beyond the last
-  confirmed 60s lease. Retry delays are 2/4/8s, bounded by that existing deadline.
-- Central Worker commit `fcbfab58` adds migration 0009, exact one-browser entry
-  exchange, immutable connection provenance and atomic current-authority renewal.
-  Endpoint heartbeat preserves an online endpoint's generation; restart, address
-  replacement and offline retirement retain generation changes. Central credentials
-  remain at the central origin. No new compatibility path or gate exception.
-- Rust commits `f5cbe440`, `541a7609`, `73c0a030`, `03ef14f8`, `d39bdead` add schema
-  74 and revalidate renewable parents in authority transactions. One runtime-owned
-  renewal is shared by an owner's directory streams and room sockets, ends on the
-  last disconnect and joins runtime shutdown. Lease updates preserve room tokens,
-  socket/stream connections and mounted drafts; terminal authority closes sockets
-  and blocks the existing workspace above already-open dialogs.
-- The common invite controller/UI represents checking, confirmed and unavailable
-  separately. Failed authentication/status queries do not become confirmed off;
-  retry uses the current room/session and disables ingress-dependent creation
-  while its state is unknown.
-- All-feature Rust workspace: 1,018 tests pass, no ignored tests; all-target/all-
-  feature Clippy passes. After the final socket cancellation change, all four
-  central-owner boundary tests and their Clippy check pass again, including shared
-  renewal with send/receive, revocation of idle sockets, origin/device denial,
-  last-disconnect cancellation and central-failure cutoff. Storage tests include
-  non-destructive upgrades from schemas 70-73 with existing room/pairing custody.
-- Frontend: 166 files / 973 tests pass, plus 13 focused boundary/entry tests after
-  the final native-dialog overlay change; final tsc/vite build passes. Controlled
-  fake-clock use crosses 380s while retaining the same input/draft and component;
-  these checks are not evidence of actual production browser use. Desktop 43
-  checks, Clippy, architecture/source-growth, format/diff and 19 policy/artifact
-  owner tests pass.
-- Central: 43 unit tests pass. Isolated workerd/D1 applied all nine migrations and
-  passed actual signed guest/server setup, exact exchange replay, foreign-browser
-  rejection, stable endpoint generation, renewal and logout -> existing connection
-  401. Temporarily coupling renewal to the expired entry grant makes the >300s
-  regression fail with 401; restored code passes. Worker dry-run bundles the shared
-  frontend (137.66KiB / gzip30.61KiB), without production writes.
-- Full validation grew Cargo artifacts above the unchanged 18GiB gate. Needed
-  bundle retained separately; missing Cargo cache ownership marker was restored
-  from a Cargo-generated marker on the verified project target, then the designated
-  artifact owner removed 40.8GiB and artifact-check passed. The known macOS
-  proc-macro LINKEDIT packaging failure requires the documented invocation-only
-  build-time dependency setting; product profiles and gates are unchanged.
-- Production Worker deployment and additive migration 0009 remain unapproved.
-  Actual signed-in web use past five minutes with send/receive and logout closing
-  the original tab remains unverified pending that approval; acceptance and its
-  required review remain open.
-- Signed packaged `app.agentsassemble.uicheck`0.1.6 (75.35MiB) passes deep/strict
-  signature validation with its existing certificate. Tauri CLI receives the
-  verification identity explicitly via --config; the certificate fingerprint
-  disambiguates the host's two identically named Developer ID certificates.
-  Invocation-only CARGO_PROFILE_RELEASE_BUILD_OVERRIDE_STRIP=none resolves the
-  recorded proc-macro loader failure. No signing/profile policy file is changed.
-- Direct app manipulation opens the retained Nel Le account's local registration
-  e2ae6075, displays the existing room/message, and opens its invite dialog with
-  confirmed `외부 접속 꺼짐` and enabled `외부 접속 열기`. Public access remains off;
-  checking/error UI and central-owner renewal/revocation are not claimed as native
-  UI proof. The app stays at this off-state dialog for the pending web check, with
-  its bundle and existing data retained. The task-owned local workerd exits; its
-  isolated synthetic state is regenerable. Post-package artifact-check passes
-  with 3.6GiB in the project target, below the unchanged 18GiB bound.
-
+The undeployed renewal implementation and its old acceptance evidence are retained
+in git history (`c2dd0158`). They are not current acceptance criteria. The host-owned
+contract and evidence below replace that implementation; no migration 0009 is needed.
 
 ## Host-owned owner workspace and devices (2026-10-04)
 
@@ -13195,3 +13135,49 @@ Live process inspection confirmed the desktop (65235), supervisor (65474) and se
   at-action approval to open the isolated app's temporary Quick Tunnel. Required
   whole-repository review also remains open; local passing checks are not acceptance
   of those missing flows. Windows physical verification is separate and unverified.
+
+## Host-owned owner session publication recovery (2026-10-04 continuation)
+
+- Confirmed starting state: Rust feature commits through `913b4f15` were already
+  pushed, with shared device settings, admission device descriptions, generated
+  types and no connected-owner timer. Central Worker `25fad46a` was local only;
+  this continuation pushed it to `codex/owner-session-renewal` without deploying.
+- The new persistence regression failed on the unchanged implementation with
+  `central_owner_session_invalid` after advancing endpoint publication generation.
+  `cee337ad` retains generation checks at admission, while existing host-owned
+  custody checks server/browser/origin, connected state and explicit revocation.
+  Five owner persistence cases pass; full affected persistence suite passes 364.
+- Five local HTTP/socket boundary cases pass, including messages on the original
+  socket and additional room admission after publication generation changes,
+  then immediate host revocation of the idle socket and directory stream. The
+  controlled generation transition models recovery after the 600-second endpoint
+  publication window; this is not an actual 600-second network outage experiment.
+- Shared entry/device/boundary frontend: 5 files / 9 cases pass. Worker: 45 tests
+  pass. Fresh isolated workerd/D1 applies 0001-0008 and passes signed entry, exact
+  replay, wrong generation, stable endpoint renewal and logout denying next entry.
+  The task-owned local worker and its disposable data were removed afterward.
+- Removed unused `CentralOwnerGrant` authority and old renewal instructions/evidence.
+  Historical table DDL and upgrade tests remain to preserve stored user data;
+  no destructive migration, alternate authority, timer or recurring request added.
+- First `make verify` passed Rust 1,023, frontend 978, Desktop 43 and policy 19
+  tests, then correctly rejected three new Clippy findings. Fixed similar test
+  names, an exhaustive variant match and boxed the remaining large owner variant;
+  affected all-target/all-feature Clippy passes without lint exceptions. Completed
+  builds retained over 18GiB, so the existing artifact owner pruned only Cargo
+  output after checking no build was active. Final verification uses invocation-only
+  `CARGO_PROFILE_DEV_DEBUG=0 CARGO_PROFILE_TEST_DEBUG=0` plus
+  `CARGO_PROFILE_DEV_BUILD_OVERRIDE_STRIP=none` and
+  `CARGO_PROFILE_TEST_BUILD_OVERRIDE_STRIP=none`. Without the build overrides,
+  macOS rejected a sqlx proc macro with `mis-aligned LINKEDIT`; the existing
+  documented strip workaround resolved it. Gates and repository profiles are
+  unchanged. The next full run exposed an existing provider-request test waiting
+  on real SQLite with Tokio time paused (`PoolTimedOut`). Resume immediately after
+  advancing the deadline, keeping the same expiry/event/storage assertions;
+  provider-request boundary 6/6 passes. Final `make verify` exits 0: Rust 1,023,
+  frontend 168 files / 978 tests, Desktop 43 and policy/artifact tests 19 pass.
+  All-target/all-feature Clippy, architecture, formatting, generated types/build,
+  diff and artifact gates pass; final Cargo allocation is 13,502,509,056 bytes
+  (12.58GiB), below 18GiB. No full verification is repeated after this success. Production deployment, remote D1, signed build,
+  actual app/web manual acceptance and required external review remain unverified
+  and outside this authorized local closeout. `.agents/` and `scripts/__pycache__/`
+  are untouched. No folder reorganization is needed for this correction.

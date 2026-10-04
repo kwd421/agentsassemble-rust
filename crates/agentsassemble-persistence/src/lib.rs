@@ -8,9 +8,7 @@ pub use host_owner_session::{
     OwnerSessionAuthorization, OwnerSessionRedemption,
 };
 pub use owner_devices::{OwnerDeviceSession, OwnerDevicesRevocation};
-pub use server_owner_authority::{
-    CentralOwnerGrant, ServerOwnerAuthority, ServerOwnerLifecycleAuthorization,
-};
+pub use server_owner_authority::{ServerOwnerAuthority, ServerOwnerLifecycleAuthorization};
 mod attendee_interrupt;
 #[cfg(test)]
 mod attendee_interrupt_tests;

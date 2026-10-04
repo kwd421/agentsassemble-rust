@@ -36,7 +36,7 @@ impl DirectoryStreamAuthority {
                     .owner_sessions
                     .require_live(owner)
                     .map_err(|_| io::Error::other("Directory ownership is unavailable."))?;
-                ServerOwnerAuthority::CentralSession(*owner.clone())
+                ServerOwnerAuthority::CentralSession(owner.clone())
             }
         };
         state

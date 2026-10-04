@@ -227,6 +227,7 @@ pub(crate) async fn owner_from_session_headers(
     let device = device_fingerprint(headers).ok_or_else(CentralOwnerHttpError::unauthorized)?;
     authorize_directory_owner(state, token, origin, generation, device)
         .await
+        .map(Box::new)
         .map(ServerOwnerAuthority::CentralSession)
 }
 
@@ -261,7 +262,7 @@ async fn directory(
         device,
     )
     .await?;
-    let authority = ServerOwnerAuthority::CentralSession(owner);
+    let authority = ServerOwnerAuthority::CentralSession(Box::new(owner));
     let (bootstrap, rooms, profile_revision) = state
         .store
         .list_room_directory_for_owner(&authority, true)
@@ -295,7 +296,7 @@ async fn create(State(state): State<AppState>, request: Request) -> Response {
         let owner =
             authorize_directory_owner(state, &body.session_token, &origin, body.generation, device)
                 .await?;
-        let authority = ServerOwnerAuthority::CentralSession(owner);
+        let authority = ServerOwnerAuthority::CentralSession(Box::new(owner));
         Ok(crate::room_directory_web::create_room_for_owner(
             state,
             &authority,
@@ -351,7 +352,7 @@ async fn room(
     let redemption = state
         .store
         .create_central_owner_session(
-            &ServerOwnerAuthority::CentralSession(owner),
+            &ServerOwnerAuthority::CentralSession(Box::new(owner)),
             &session_request,
         )
         .await?;

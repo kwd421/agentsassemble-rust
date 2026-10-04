@@ -141,6 +141,9 @@ async fn stored_deadline_expires_the_live_recipient() -> TestResult {
     let mut native = opened.exchange.ok_or("exchange missing")?;
     tokio::time::pause();
     tokio::time::advance(Duration::from_secs(16)).await;
+    // The deadline is now due; resume before waiting on real SQLite work so
+    // auto-advancing virtual time cannot exhaust the pool acquisition timeout.
+    tokio::time::resume();
     assert!(native.receive().await.is_err());
     let closed = loop {
         let event = events.recv().await?;
@@ -155,7 +158,6 @@ async fn stored_deadline_expires_the_live_recipient() -> TestResult {
             .await?
             .is_empty()
     );
-    tokio::time::resume();
     rooms.shutdown().await?;
     Ok(())
 }

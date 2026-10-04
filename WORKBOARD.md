@@ -2,6 +2,23 @@
 
 ## Active work
 
+- 2026-10-04 host-owned owner session continuation: `cee337ad` separates endpoint
+  publication generation from admitted session authority. Regression failed before
+  the fix; durable owner/derived-room authority and real local socket messages now
+  survive publication recovery, while stale new admission and revoked replay fail.
+  Shared device settings, device propagation, generated types and timer removal
+  were already committed; focused frontend tests confirm them. Removed the unused
+  legacy grant authority API and superseded renewal contract/evidence; historical
+  schema/data-preservation tests remain. The contract section now maps owning files.
+  Final `make verify` passes: Rust 1,023, frontend 978, Desktop 43 and policy 19;
+  Clippy/structure/format/diff and 12.58GiB artifact custody pass. Fixed the exposed
+  paused-clock SQLite test race without changing its expiry assertions. Worker
+  `25fad46a` is pushed on `codex/owner-session-renewal`; 45 tests and fresh local
+  workerd/D1 migrations 0001-0008 plus admission/replay/logout verification pass.
+  Production deployment, remote migration, signed build and actual app/web manual
+  acceptance are explicitly deferred for approval; required external review remains
+  open. No production writes or manual UI verification in this continuation.
+
 - 2026-10-04 host-owned owner sessions (latest user-approved direction): central
   checks entry/reconnection only; no owner renewal or central authorization lease.
   The host and other admitted devices of the same account list identifiable

@@ -152,7 +152,7 @@ async fn scope<'a>(
     match owner {
         ServerOwnerAuthority::LocalOperator => Ok(None),
         ServerOwnerAuthority::CentralSession(session) => Ok(Some(&session.binding().person_id)),
-        _ => Err(invalid()),
+        ServerOwnerAuthority::CentralOwner(_) => Err(invalid()),
     }
 }
 
