@@ -431,7 +431,8 @@ async fn quarantine_dispatched_task_death(
     }
     sqlx::query(
         "UPDATE provider_turn_effects SET phase = CASE WHEN phase = 'dispatching' \
-         THEN 'interrupt_ambiguous' ELSE 'recovery_required' END, updated_at = ? \
+         THEN 'interrupt_ambiguous' ELSE 'recovery_required' END, claim_owner = '', \
+         claim_expires_at = NULL, updated_at = ? \
          WHERE room_id = ? AND session_id = ? AND turn_generation = ? \
          AND phase IN ('prepared', 'claimed', 'dispatching', 'issued_waiting_quiescence')",
     )

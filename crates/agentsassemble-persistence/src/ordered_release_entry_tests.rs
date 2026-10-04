@@ -68,8 +68,25 @@ async fn interrupt_task_death_releases_floor() -> TestResult {
     interrupt_recovery(3).await
 }
 
+#[tokio::test]
+async fn interrupt_claimed_task_death_releases_floor() -> TestResult {
+    interrupt_recovery(4).await
+}
+
+#[tokio::test]
+async fn interrupt_issued_task_death_releases_floor() -> TestResult {
+    interrupt_recovery(5).await
+}
+
 async fn interrupt_recovery(stage: u8) -> TestResult {
-    let (store, principal, _directory) = fixture().await;
+    for reopen in [false, true] {
+        interrupt_recovery_once(stage, reopen).await?;
+    }
+    Ok(())
+}
+
+async fn interrupt_recovery_once(stage: u8, reopen: bool) -> TestResult {
+    let (store, principal, directory) = fixture().await;
     let first = store
         .execute_message_with_turn(
             &principal,
@@ -91,7 +108,16 @@ async fn interrupt_recovery(stage: u8) -> TestResult {
     let claim = store
         .claim_provider_turn_interrupt(&effect, "10000000-0000-4000-8000-000000000099")
         .await?;
-    if stage != 0 {
+    if stage == 4 {
+        store
+            .record_provider_turn_task_death(
+                "general",
+                AGENT_ID,
+                start.turn_generation,
+                &start.execution_id,
+            )
+            .await?;
+    } else if stage != 0 {
         let dispatch = store.authorize_provider_interrupt_dispatch(&claim).await?;
         if stage == 1 {
             let waiting = store.mark_provider_interrupt_issued(&dispatch).await?;
@@ -101,6 +127,9 @@ async fn interrupt_recovery(stage: u8) -> TestResult {
         } else if stage == 2 {
             store.mark_provider_interrupt_ambiguous(&dispatch).await?;
         } else {
+            if stage == 5 {
+                store.mark_provider_interrupt_issued(&dispatch).await?;
+            }
             store
                 .record_provider_turn_task_death(
                     "general",
@@ -135,6 +164,59 @@ async fn interrupt_recovery(stage: u8) -> TestResult {
         )
         .await?;
     assert!(stored_session(&store).await.pending_inputs.is_empty());
+    let store = if reopen {
+        store.pool.close().await;
+        drop(store);
+        SqliteStore::open_path(&directory.path().join("runtime.sqlite3")).await?
+    } else {
+        store
+    };
+    assert_recovery_handoff(store, &effect, stage).await
+}
+
+async fn assert_recovery_handoff(
+    store: SqliteStore,
+    effect: &crate::ProviderTurnInterruptEffect,
+    stage: u8,
+) -> TestResult {
+    let recovered = store
+        .provider_turn_interrupt_effect("general", AGENT_ID, effect.turn_generation)
+        .await?;
+    assert_eq!(recovered.effect_id, effect.effect_id);
+    assert_eq!(
+        recovered.phase,
+        if matches!(stage, 2 | 3) {
+            crate::ProviderTurnEffectPhase::InterruptAmbiguous
+        } else {
+            crate::ProviderTurnEffectPhase::RecoveryRequired
+        }
+    );
+    let lease: (String, Option<i64>) = sqlx::query_as(
+        "SELECT claim_owner, claim_expires_at FROM provider_turn_effects WHERE effect_id = ?",
+    )
+    .bind(&effect.effect_id)
+    .fetch_one(&store.pool)
+    .await?;
+    assert_eq!(
+        lease,
+        (String::new(), None),
+        "ended claimant retained lease"
+    );
+    let recovery = store
+        .claim_provider_turn_interrupt_recovery(&recovered, "10000000-0000-4000-8000-000000000201")
+        .await?;
+    assert!(
+        store
+            .claim_provider_turn_interrupt_recovery(
+                &recovered,
+                "10000000-0000-4000-8000-000000000202"
+            )
+            .await
+            .is_err()
+    );
+    store
+        .release_provider_interrupt_recovery_claim(&recovery)
+        .await?;
     Ok(())
 }
 

@@ -1,5 +1,29 @@
 # Verification Contract
 
+## Ended interrupt claimant recovery handoff (2026-10-05)
+
+Daybreak Low follow-up to `fae521d9..a2667359`: task death after claim, dispatch
+or issue, explicit dispatch ambiguity, and lost quiescence retained the ended
+claimant's 30-second lease. The five expanded persistence regressions failed before
+the fix with the old owner and non-null expiry still stored. The same CAS updates
+now clear both claim fields while preserving recovery/ambiguous phase and existing
+execution, runtime and dispatch fences. No schema or provider replay changes.
+
+`cargo test -p agentsassemble-persistence -p agentsassemble-server --lib` passed:
+393 persistence and 116 server tests. Each handoff case tests immediate acquisition
+by a different recovery UUID both live and after reopening the store, phase/effect
+identity preservation, and competing-owner rejection, without sleeps or expiry edits.
+Existing ordered-floor release and unissued handoff assertions remain covered.
+Deployment, signed builds and manual verification were excluded by user instruction.
+
+Pre-commit `make verify` was invoked once: architecture/source-growth/policy gates,
+format, workspace check, frontend build/1,001 tests, desktop check/46 tests, all
+workspace tests/doc tests, Clippy and diff-check passed. The final artifact check
+failed because the completed build left 31,553,605,632 bytes over the 18 GiB gate.
+After confirming no Cargo/Tauri compiler work remained, the existing
+`make artifact-prune` owner cleaned the build cache; `make artifact-check` passed.
+The aggregate invocation exited 2 and was not rerun or reported as a clean pass.
+
 ## Native device pairing persistence and local QR (2026-10-05)
 
 Contract: `docs/specs/identity-accounts-friends-slice.md`, native device persistence

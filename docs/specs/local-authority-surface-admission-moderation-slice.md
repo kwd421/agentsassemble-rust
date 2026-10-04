@@ -449,6 +449,17 @@ pre-I/O `NotStarted` takes the safe failure path; death after start dispatch rec
 `InterruptAmbiguous` or `RecoveryRequired`. Post-I/O task death retains inflight
 ownership and requeues zero inputs.
 
+When the claimant has ended, `record_provider_turn_task_death` (claimed,
+dispatching or issued), `mark_provider_interrupt_ambiguous`, and
+`mark_provider_interrupt_recovery_required` must clear `claim_owner` and
+`claim_expires_at` in the same CAS transaction that preserves the ambiguous or
+recovery phase. This hands custody to live reconciliation or startup recovery
+immediately, without waiting for the dead owner's 30-second lease. Existing exact
+execution/runtime/dispatch fences and rejection of competing live claims remain.
+Regression acceptance: each transition allows a different recovery UUID immediately
+and after reopening the store, preserves effect identity/phase, and rejects a
+second claimant. No provider replay, schema, transport or timer changes are needed.
+
 ### Terminal finalizers and restart custody
 
 Every ordinary success, decline, tool, and terminal-publication transaction CASes

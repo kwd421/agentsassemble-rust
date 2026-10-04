@@ -364,7 +364,8 @@ impl SqliteStore {
     ) -> Result<crate::AgentTurnCommit, PersistenceError> {
         let mut transaction = self.pool.begin().await?;
         let effect_changed = sqlx::query(
-            "UPDATE provider_turn_effects SET phase = 'interrupt_ambiguous', updated_at = ? \
+            "UPDATE provider_turn_effects SET phase = 'interrupt_ambiguous', claim_owner = '', \
+             claim_expires_at = NULL, updated_at = ? \
              WHERE room_id = ? AND effect_id = ? AND phase = 'dispatching' \
              AND dispatch_nonce = ?",
         )
@@ -727,7 +728,8 @@ async fn transition_to_recovery_required(
         .await?
     } else {
         sqlx::query(
-            "UPDATE provider_turn_effects SET phase = 'recovery_required', updated_at = ? \
+            "UPDATE provider_turn_effects SET phase = 'recovery_required', claim_owner = '', \
+             claim_expires_at = NULL, updated_at = ? \
              WHERE room_id = ? AND effect_id = ? AND phase = 'issued_waiting_quiescence'",
         )
         .bind(&now)
