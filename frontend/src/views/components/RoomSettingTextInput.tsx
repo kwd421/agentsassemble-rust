@@ -2,13 +2,14 @@ import { useState } from "react";
 
 // Keep an editing draft across canonical echoes. Commit when focus leaves rather than
 // issuing a room command for every keystroke and replacing text with its ACK.
-export default function RoomSettingTextInput({ value, normalize, onCommit }: {
+export default function RoomSettingTextInput({ value, normalize, onCommit, placeholder }: {
   value: string;
   normalize: (value: string) => string;
   onCommit: (value: string) => void;
+  placeholder?: string;
 }) {
   const [draft, setDraft] = useState<string | null>(null);
-  return <input className="ops-input" value={draft ?? value}
+  return <input className="ops-input" value={draft ?? value} placeholder={placeholder}
     onFocus={() => setDraft(value)}
     onChange={(event) => setDraft(normalize(event.target.value))}
     onBlur={() => {

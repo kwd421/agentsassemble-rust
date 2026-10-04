@@ -2,6 +2,20 @@
 
 ## Active work
 
+- 2026-10-04 profile and image-picking UX (user request, Discord as reference): the
+  own-profile popout drops its two close buttons and fake badges; custom status
+  sits in a bubble beside the avatar and actions are one card (`프로필 편집`,
+  status ›). Every identity image (profile photo, room icon, room banner; agent
+  and guest pickers share the cropper) opens the file picker directly, then one
+  `이미지 편집` dialog with a circle/square/banner frame, zoom slider, reset,
+  cancel and apply. The cropper preview now matches the exported crop for
+  non-square images. Profile settings gain an avatar tile, remove action, Korean
+  banner names and a live preview card; room appearance buttons stay one row and
+  the icon-label field shows the initials in use. Popout and cropper styles live in
+  their own stylesheets so the look can diverge from Discord later. Server icons
+  need a central-directory field and are handed to the backend session. Evidence:
+  `docs/VERIFICATION.md` -> Profile and image picking (2026-10-04).
+
 - 2026-10-03 Discord-style frontend pass 2 (user request, app and web): shared
   secondary buttons get Discord sizing/colour with layered defaults; the web login
   is one primary Google action; the server chooser uses icon/name/status rows,

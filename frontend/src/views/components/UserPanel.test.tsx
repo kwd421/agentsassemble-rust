@@ -236,8 +236,10 @@ describe("UserPanel", () => {
 
     expect(within(view.container).queryByLabelText("아바타 이미지 URL")).toBeNull();
     fireEvent.click(within(view.container).getByRole("button", { name: "프로필 사진 변경" }));
+    fireEvent.change(within(view.container).getByLabelText("이미지 선택"), {
+      target: { files: [new File(["source"], "source.png", { type: "image/png" })] },
+    });
     expect(within(view.container).getByRole("dialog", { name: "프로필 사진 수정" })).toBeTruthy();
-    expect(within(view.container).getByLabelText("이미지 선택")).toBeTruthy();
   });
 
   it("admits only one complete avatar upload and bind submission at a time", async () => {

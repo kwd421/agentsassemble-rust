@@ -6,6 +6,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DEFAULT_ROOM_APPEARANCE } from "../../lib/roomAppearance";
 import RoomSettingsModal from "./RoomSettingsModal";
 
+// The crop step is exercised in the real cropper; here "적용" passes the picked file through.
+vi.mock("./ImageCropper", () => ({
+  default: ({ file, onCropped }: { file: File; onCropped: (file: File) => void }) => (
+    <button type="button" onClick={() => onCropped(file)}>적용</button>
+  ),
+}));
+
 afterEach(cleanup);
 
 const room = {
@@ -104,6 +111,7 @@ describe("RoomSettingsModal conversation mode", () => {
 
     const file = new File(["png"], "banner.png", { type: "image/png" });
     await userEvent.upload(screen.getByLabelText("배너 이미지"), file);
+    await userEvent.click(screen.getByRole("button", { name: "적용" }));
 
     expect(onAppearanceUpload).toHaveBeenCalledWith(file, "banner");
     expect(onAppearanceChange).not.toHaveBeenCalled();
@@ -144,10 +152,12 @@ describe("RoomSettingsModal conversation mode", () => {
       screen.getByLabelText("배너 이미지"),
       new File(["first"], "first.png", { type: "image/png" })
     );
+    await userEvent.click(screen.getByRole("button", { name: "적용" }));
     await userEvent.upload(
       screen.getByLabelText("배너 이미지"),
       new File(["second"], "second.png", { type: "image/png" })
     );
+    await userEvent.click(screen.getByRole("button", { name: "적용" }));
     second.resolve(true);
     expect(await screen.findByText("배너 이미지 저장됨")).toBeTruthy();
     first.resolve(false);

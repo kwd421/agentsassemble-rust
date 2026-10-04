@@ -70,6 +70,22 @@
   display: none;
 }
 
+/* Settings labels are grids; an upload button stays one row: icon, then text. */
+.dc-settings-section label.dc-upload-button {
+  display: inline-flex;
+  min-height: 44px;
+  border-radius: 8px;
+  background: #4e5058;
+  padding: 0 14px;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.dc-settings-section label.dc-upload-button:hover {
+  background: #6d6f78;
+}
+
 .dc-channel-settings-list {
   display: grid;
   overflow: hidden;

@@ -14,3 +14,5 @@ import "../views/components/RoomRail.css";
 import "../views/FriendsView.css";
 import "../views/components/room/RoomLifecycle.css";
 import "../views/components/CentralServerList.css";
+import "../views/components/ImageCropper.css";
+import "../views/components/ProfilePopout.css";

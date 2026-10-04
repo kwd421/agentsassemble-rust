@@ -128,42 +128,6 @@ dialog.dc-user-settings-dialog {
   gap: 16px;
 }
 
-.dc-user-settings-avatar-action {
-  display: grid;
-  grid-template-columns: 38px minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 10px;
-  border-radius: 7px;
-  background: #1e1f22;
-  padding: 9px;
-  color: var(--color-text-secondary);
-  text-align: left;
-}
-
-.dc-user-settings-avatar-action:hover,
-.dc-user-settings-avatar-action:focus-visible {
-  background: #2b2d31;
-  color: #fff;
-  outline: none;
-}
-
-.dc-user-settings-avatar-action > span:nth-child(2) {
-  display: grid;
-  gap: 2px;
-}
-
-.dc-user-settings-avatar-action strong {
-  color: var(--color-text-primary);
-  font-size: 12px;
-  font-weight: 900;
-}
-
-.dc-user-settings-avatar-action small {
-  color: var(--color-text-muted);
-  font-size: 10px;
-  font-weight: 750;
-}
-
 .dc-user-settings-avatar-preview {
   display: grid;
   width: 38px;
@@ -342,4 +306,146 @@ dialog.dc-user-settings-dialog {
   justify-self: start;
   width: fit-content;
   margin-top: 8px;
+}
+
+/* Profile section: the form on the left and a live card on the right, as Discord's
+   profile editor does. */
+.dc-user-settings-profile-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  align-items: start;
+  gap: 32px;
+}
+
+.dc-user-settings-field-label {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.dc-user-settings-avatar-field {
+  display: grid;
+  gap: 8px;
+}
+
+.dc-user-settings-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.dc-user-settings-avatar-tile {
+  position: relative;
+  display: grid;
+  width: 80px;
+  height: 80px;
+  flex-shrink: 0;
+  place-items: center;
+  border-radius: 50%;
+}
+
+.dc-user-settings-avatar-tile .dc-user-settings-avatar-preview {
+  width: 80px;
+  height: 80px;
+  font-size: 22px;
+}
+
+.dc-user-settings-avatar-overlay {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgba(0, 0, 0, 0.55);
+  color: #fff;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.dc-user-settings-avatar-tile:hover .dc-user-settings-avatar-overlay,
+.dc-user-settings-avatar-tile:focus-visible .dc-user-settings-avatar-overlay {
+  opacity: 1;
+}
+
+.dc-user-settings-avatar-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.dc-user-settings-text-button {
+  min-height: 44px;
+  color: var(--color-text-secondary);
+  font-size: 14px;
+}
+
+.dc-user-settings-text-button:hover:not(:disabled) {
+  color: var(--color-text-primary);
+  text-decoration: underline;
+}
+
+.dc-user-settings-preview {
+  display: grid;
+  gap: 8px;
+}
+
+.dc-user-settings-preview-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 10px;
+  background: #232428;
+}
+
+.dc-user-settings-preview-card .dc-profile-banner {
+  height: 72px;
+}
+
+.dc-user-settings-preview-avatar {
+  position: absolute;
+  top: 36px;
+  left: 14px;
+  display: grid;
+  width: 72px;
+  height: 72px;
+  place-items: center;
+  border: 6px solid #232428;
+  border-radius: 50%;
+  background: var(--profile-accent, var(--color-accent));
+  background-position: center;
+  background-size: cover;
+  color: #fff;
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.dc-user-settings-preview-body {
+  display: grid;
+  gap: 2px;
+  padding: 44px 16px 16px;
+}
+
+.dc-user-settings-preview-body strong {
+  color: var(--color-text-primary);
+  font-size: 18px;
+  font-weight: 700;
+}
+
+.dc-user-settings-preview-body small {
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+.dc-user-settings-preview-body p {
+  margin-top: 10px;
+  border-radius: 8px;
+  background: #2b2d31;
+  padding: 8px 10px;
+  color: var(--color-text-secondary);
+  font-size: 13px;
+}
+
+@media (max-width: 900px) {
+  .dc-user-settings-profile-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

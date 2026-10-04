@@ -12868,3 +12868,26 @@ package shows all three corrected. Return in the composer was not delivered by
 background input; sending used the send button. Signed-in web room views remain
 unverified.
 
+## Profile and image picking (2026-10-04)
+
+Reference: the user's Discord app (own-profile popout, profile editor), read only.
+Packaged `app.agentsassemble.uicheck`, NelLe account, this device's server:
+
+- The popout shows banner, avatar, status bubble, name/handle and one card with
+  `프로필 편집` and the status row; no close buttons. Outside click/Escape still close it.
+- Clicking the popout avatar (foreground) opens the native file panel directly; a
+  1024×512 test image (scratch copy of the app icon with padding) opens the
+  `프로필 사진 수정` dialog with a circular frame showing the centred square; the zoom
+  slider enlarges it. Cancelled without applying, so the profile was not changed.
+- Room settings `배너 이미지` opens the panel and then `배너 이미지 편집` with a 5:2
+  frame; cancelled without upload. Appearance buttons render on one row; the icon
+  label field shows `새회` as placeholder.
+- User settings profile section shows the avatar tile, `사진 변경`/`사진 제거`, Korean
+  banner names and a live preview card.
+- Background (non-frontmost) clicks did not open the file panel or activate menu
+  items reliably; these checks used foreground control.
+- 165 files / 965 frontend tests, `tsc`, `make architecture-check` and
+  `git diff --check` pass. Applying a crop and uploading were not exercised in the
+  packaged app to avoid changing the account's profile; upload paths are unchanged
+  and covered by existing tests with the cropper stubbed.
+

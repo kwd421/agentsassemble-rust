@@ -15,6 +15,7 @@ import {
 import type { RoomDockItem } from "../../lib/roomDockModel";
 import RoomDeleteDialog, { type RoomLifecycleController } from "./room/RoomDeleteDialog";
 import RoomSettingTextInput from "./RoomSettingTextInput";
+import ImageCropDialog from "./ImageCropDialog";
 
 const CHANNEL_NOTIFICATION_LABELS: Array<{
   value: ChannelNotificationSetting;
@@ -94,6 +95,7 @@ export default function RoomSettingsModal({
   onRetryAppearance: () => void;
 }) {
   const [uploadStatus, setUploadStatus] = useState("");
+  const [appearanceCrop, setAppearanceCrop] = useState<{ file: File; slot: "banner" | "icon" } | null>(null);
   const [deleteOpen, setDeleteOpen] = useState(false);
   const dialogRef = useRef<HTMLDialogElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
@@ -134,10 +136,14 @@ export default function RoomSettingsModal({
     body.scrollTop = Math.max(0, target.offsetTop - body.offsetTop);
   }, [initialSectionId]);
 
-  async function handleBannerFile(event: ChangeEvent<HTMLInputElement>) {
+  // Picking a file opens the crop step first, as Discord does for server icons and banners.
+  function pickAppearanceFile(event: ChangeEvent<HTMLInputElement>, slot: "banner" | "icon") {
     const file = event.currentTarget.files?.[0];
     event.currentTarget.value = "";
-    if (!file) return;
+    if (file) setAppearanceCrop({ file, slot });
+  }
+
+  async function uploadBanner(file: File) {
     setUploadStatus("배너 업로드 중...");
     try {
       if (await onAppearanceUpload(file, "banner")) {
@@ -148,10 +154,7 @@ export default function RoomSettingsModal({
     }
   }
 
-  async function handleIconFile(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.[0];
-    event.currentTarget.value = "";
-    if (!file) return;
+  async function uploadIcon(file: File) {
     setUploadStatus("아이콘 업로드 중...");
     try {
       if (await onAppearanceUpload(file, "icon")) {
@@ -347,6 +350,7 @@ export default function RoomSettingsModal({
                 <p className="text-[12px] text-text-muted preserve-words">{room.topic}</p>
               </div>
             </div>
+            <p className="dc-settings-field-label">배너 색상</p>
             <div className="dc-preset-grid">
               {(["default", "forest", "midnight", "ember"] as RoomAppearance["bannerPreset"][]).map(
                 (preset) => (
@@ -371,17 +375,18 @@ export default function RoomSettingsModal({
               <label className="dc-upload-button">
                 <ImageIcon size={15} />
                 배너 이미지
-                <input type="file" accept="image/*" onChange={handleBannerFile} />
+                <input type="file" accept="image/*" onChange={(event) => pickAppearanceFile(event, "banner")} />
               </label>
               <label className="dc-upload-button">
                 <ImageIcon size={15} />
                 채팅방 아이콘
-                <input type="file" accept="image/*" onChange={handleIconFile} />
+                <input type="file" accept="image/*" onChange={(event) => pickAppearanceFile(event, "icon")} />
               </label>
               <label className="min-w-0 flex-1">
                 아이콘 글자
                 <RoomSettingTextInput
                   value={appearance.iconLabel || room.shortLabel}
+                  placeholder={roomInitials(room.label)}
                   normalize={(value) => value.slice(0, 2).toUpperCase()}
                   onCommit={(iconLabel) => {
                     void onAppearanceChange({ iconLabel }).catch(() => undefined);
@@ -523,6 +528,19 @@ export default function RoomSettingsModal({
           </section>
           </div>
         </div>
+        {appearanceCrop && (
+          <ImageCropDialog
+            title={appearanceCrop.slot === "banner" ? "배너 이미지 편집" : "채팅방 아이콘 편집"}
+            file={appearanceCrop.file}
+            shape={appearanceCrop.slot === "banner" ? "banner" : "square"}
+            onCancel={() => setAppearanceCrop(null)}
+            onApply={(file) => {
+              const slot = appearanceCrop.slot;
+              setAppearanceCrop(null);
+              void (slot === "banner" ? uploadBanner(file) : uploadIcon(file));
+            }}
+          />
+        )}
       </dialog>
       {lifecycleController && deleteOpen && (
         <RoomDeleteDialog

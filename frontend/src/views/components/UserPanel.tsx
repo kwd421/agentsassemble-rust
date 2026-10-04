@@ -1,14 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ChevronDown,
+  ChevronRight,
   Headphones,
   LogOut,
   Mic,
   MicOff,
   Pencil,
+  Plus,
   Settings,
-  UserPen,
-  X,
 } from "lucide-react";
 
 import {
@@ -26,7 +26,7 @@ import {
   profileStatusClass,
   profileStatusLabel,
 } from "../../lib/userProfileModel";
-import ImageCropper from "./ImageCropper";
+import ImageCropDialog from "./ImageCropDialog";
 import UserSettingsPanel, { type UserSettingsSection } from "./UserSettingsPanel";
 
 export default function UserPanel({
@@ -79,14 +79,15 @@ export default function UserPanel({
   const [settingsSection, setSettingsSection] = useState<UserSettingsSection>("account");
   const [statusMenuOpen, setStatusMenuOpen] = useState(false);
   const [avatarCropFile, setAvatarCropFile] = useState<File | null>(null);
-  const [avatarEditorOpen, setAvatarEditorOpen] = useState(false);
   const [avatarStatus, setAvatarStatus] = useState("");
   const [saving, setSaving] = useState(false);
   const [profileError, setProfileError] = useState("");
   const [profileHydrated, setProfileHydrated] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
   const settingsButtonRef = useRef<HTMLButtonElement>(null);
-  const avatarDialogRef = useRef<HTMLDialogElement>(null);
+  const avatarInputRef = useRef<HTMLInputElement>(null);
+  // The crop dialog is the avatar editor; it opens once a file has been picked.
+  const avatarEditorOpen = avatarCropFile !== null;
   const profileSnapshotRef = useRef<UserProfileSnapshot | null>(null);
   const profileScopeGeneration = useRef(0);
   const profileIntentGeneration = useRef(0);
@@ -192,7 +193,7 @@ export default function UserPanel({
         setProfileOpen(false);
         setSettingsOpen(false);
         setStatusMenuOpen(false);
-        setAvatarEditorOpen(false);
+        if (!avatarSubmissionInFlight.current) setAvatarCropFile(null);
       }
     }
     function closeOnEscape(event: KeyboardEvent) {
@@ -200,7 +201,7 @@ export default function UserPanel({
         setProfileOpen(false);
         setSettingsOpen(false);
         setStatusMenuOpen(false);
-        setAvatarEditorOpen(false);
+        if (!avatarSubmissionInFlight.current) setAvatarCropFile(null);
       }
     }
     window.addEventListener("mousedown", closeOnOutside);
@@ -210,13 +211,6 @@ export default function UserPanel({
       window.removeEventListener("keydown", closeOnEscape);
     };
   }, [avatarEditorOpen, profileOpen, settingsOpen]);
-
-  useEffect(() => {
-    if (!avatarEditorOpen) return;
-    const dialog = avatarDialogRef.current;
-    dialog?.showModal();
-    return () => { dialog?.close(); settingsButtonRef.current?.focus(); };
-  }, [avatarEditorOpen]);
 
   function openProfile() {
     setDraft(profile);
@@ -232,12 +226,12 @@ export default function UserPanel({
     setSettingsSection(section);
   }
 
+  // Like Discord, changing the photo goes straight to the file picker; the crop
+  // dialog opens only after a file is chosen.
   function openAvatarEditor() {
     setProfileOpen(false);
-    setSettingsOpen(false);
-    setAvatarCropFile(null);
     setAvatarStatus("");
-    setAvatarEditorOpen(true);
+    avatarInputRef.current?.click();
   }
 
   async function enqueueProfileOperation(
@@ -357,7 +351,6 @@ export default function UserPanel({
         return;
       }
       setAvatarCropFile(null);
-      setAvatarEditorOpen(false);
       setAvatarStatus("");
     } catch (error) {
       setAvatarStatus(error instanceof Error ? error.message : "프로필 사진 저장 실패");
@@ -464,17 +457,6 @@ export default function UserPanel({
           />
           <button
             type="button"
-            className="dc-profile-close"
-            onClick={() => {
-              setProfileOpen(false);
-              setSettingsOpen(false);
-            }}
-            aria-label="프로필 닫기"
-          >
-            <X size={16} />
-          </button>
-          <button
-            type="button"
             className="dc-profile-avatar-wrap"
             onClick={openAvatarEditor}
             aria-label="프로필 사진 편집"
@@ -487,44 +469,26 @@ export default function UserPanel({
             </span>
             <span className={`dc-profile-status ${statusClass}`} aria-hidden />
           </button>
+          {/* Discord puts the custom status in a bubble beside the avatar. */}
+          <button
+            type="button"
+            className="dc-profile-status-bubble"
+            data-empty={!profile.customStatus}
+            onClick={() => openSettings("profile")}
+            aria-label={profile.customStatus ? `사용자 지정 상태: ${profile.customStatus}` : "사용자 지정 상태 추가하기"}
+          >
+            {profile.customStatus ? (
+              <span className="preserve-words">{profile.customStatus}</span>
+            ) : (
+              <>
+                <Plus size={14} aria-hidden />
+                <span>상태 추가하기</span>
+              </>
+            )}
+          </button>
           <div className="dc-profile-body">
-            <div className="dc-profile-card-title">
-              <div>
-                <h2>{profile.displayName}</h2>
-              </div>
-            </div>
-            <p>{profile.handle}</p>
-            <div className="dc-profile-badges">
-              {profile.customStatus && <span>{profile.customStatus}</span>}
-              <span>#room-client</span>
-            </div>
-            <button
-              type="button"
-              className="dc-profile-status-row"
-              onClick={() => openSettings("profile")}
-            >
-              <span className="dc-profile-status-add">+</span>
-              <span>
-                <strong>사용자 지정 상태</strong>
-                <small>{profile.customStatus || "방금 플레이를 마쳤어요..."}</small>
-              </span>
-            </button>
-            <div className="dc-profile-card-actions">
-              <button type="button" onClick={() => openSettings("profile")}>
-                <UserPen size={15} />
-                프로필 편집
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setProfileOpen(false);
-                  setSettingsOpen(false);
-                }}
-              >
-                <X size={15} />
-                닫기
-              </button>
-            </div>
+            <h2 className="dc-profile-name preserve-words">{profile.displayName}</h2>
+            <p className="dc-profile-handle preserve-words">{profile.handle}</p>
             {profileError && (
               <p className="dc-profile-notice" role="status">
                 {profileError}
@@ -535,15 +499,20 @@ export default function UserPanel({
               <strong>{onlineCount}명 온라인</strong>
               <small>{agentCount}명 참가자/에이전트 표시 중</small>
             </div>
-            <div className="dc-profile-menu">
+            <div className="dc-profile-menu-card">
+              <button type="button" onClick={() => openSettings("profile")}>
+                <Pencil size={16} aria-hidden />
+                <span>프로필 편집</span>
+              </button>
+              <span className="dc-profile-menu-card-separator" aria-hidden />
               <button
                 type="button"
                 aria-expanded={statusMenuOpen}
                 onClick={() => setStatusMenuOpen((value) => !value)}
               >
                 <span className={`dc-profile-menu-dot ${statusClass}`} aria-hidden />
-                내 상태: {profileStatusLabel(profile.status)}
-                <ChevronDown size={16} />
+                <span>{profileStatusLabel(profile.status)}</span>
+                <ChevronRight size={16} aria-hidden className="dc-profile-menu-card-chevron" />
               </button>
               {statusMenuOpen && (
                 <div className="dc-profile-status-options" aria-label="빠른 상태 변경">
@@ -570,58 +539,34 @@ export default function UserPanel({
         </section>
       )}
 
-      {avatarEditorOpen && (
-        <dialog
-          ref={avatarDialogRef}
-          className="dc-profile-avatar-modal"
-          aria-label="프로필 사진 수정"
-          style={{ position: "fixed", inset: 0, margin: "auto", width: "min(420px, calc(100vw - 32px))", maxHeight: "calc(100dvh - 32px)", padding: 24, color: "var(--color-text-primary)" }}
-          onKeyDown={(event) => { if (event.key === "Escape") event.stopPropagation(); }}
-          onCancel={(event) => { event.preventDefault(); if (!saving) setAvatarEditorOpen(false); }}
-          onClick={(event) => { if (event.target === event.currentTarget && !saving) setAvatarEditorOpen(false); }}
-        >
-          <header>
-            <h2>프로필 사진 수정</h2>
-            <button
-              type="button"
-              className="dc-modal-close"
-              onClick={() => {
-                setAvatarEditorOpen(false);
-                setAvatarCropFile(null);
-              }}
-              aria-label="프로필 사진 수정 닫기"
-              disabled={saving}
-              style={{ minWidth: 44, minHeight: 44 }}
-            >
-              <X size={18} />
-            </button>
-          </header>
-          <fieldset disabled={saving} style={{ border: 0, margin: 0, padding: 0, minWidth: 0 }}>
-          <label className="dc-profile-avatar-upload">
-            이미지 선택
-            <input
-              type="file"
-              accept="image/*"
-              style={{ minHeight: 44, width: "100%" }}
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0] || null;
-                if (file) setAvatarCropFile(file);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
-          {avatarCropFile ? (
-            <ImageCropper
-              file={avatarCropFile}
-              onCancel={() => setAvatarCropFile(null)}
-              onCropped={(file) => void handleAvatarCropped(file)}
-            />
-          ) : (
-            <p>사진을 고른 뒤 표시할 영역을 조정해요.</p>
-          )}
-          </fieldset>
-          {avatarStatus && <p role="status" style={{ marginTop: 12, overflowWrap: "anywhere" }}>{avatarStatus}</p>}
-        </dialog>
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/*"
+        hidden
+        aria-label="이미지 선택"
+        onChange={(event) => {
+          const file = event.currentTarget.files?.[0] || null;
+          event.currentTarget.value = "";
+          if (file) {
+            setAvatarStatus("");
+            setAvatarCropFile(file);
+          }
+        }}
+      />
+      {avatarCropFile && (
+        <ImageCropDialog
+          title="프로필 사진 수정"
+          file={avatarCropFile}
+          shape="circle"
+          busy={saving}
+          status={avatarStatus}
+          onCancel={() => {
+            setAvatarCropFile(null);
+            setAvatarStatus("");
+          }}
+          onApply={(file) => void handleAvatarCropped(file)}
+        />
       )}
 
       {settingsOpen && (

@@ -3,6 +3,7 @@ import { X, Camera, Headphones, Mic, MicOff } from "lucide-react";
 
 import type { UserProfile, UserProfileIdentity } from "../../api";
 import { resolveAttachmentReference } from "../../lib/attachmentReference";
+import { profileCssVars } from "../../lib/userProfileModel";
 import GoogleAccountSettings from "./GoogleAccountSettings";
 import CentralAccountSettings from "./CentralAccountSettings";
 import { centralIdentityConfigured } from "../../lib/centralIdentity";
@@ -157,35 +158,49 @@ export default function UserSettingsPanel({
 
           {settingsSection === "profile" && (
             <>
-              <p className="dc-user-settings-lead">프로필 카드의 배너와 상태 문구를 바꿔요.</p>
+              <p className="dc-user-settings-lead">프로필 카드의 사진, 배너와 상태 문구를 바꿔요.</p>
+              <div className="dc-user-settings-profile-layout">
               <div className="dc-user-settings-grid">
-                <button
-                  type="button"
-                  className="dc-user-settings-avatar-action"
-                  style={{ minHeight: 44 }} disabled={saving}
-                  onClick={onEditAvatar}
-                  aria-label="프로필 사진 변경"
-                >
-                  <span
-                    className="dc-user-settings-avatar-preview"
-                    data-has-image={Boolean(draftAvatarUrl)}
-                    style={
-                      draftAvatarUrl
-                        ? {
-                            backgroundImage: `url(${draftAvatarUrl})`,
-                          }
-                        : undefined
-                    }
-                    aria-hidden
-                  >
-                    {draftAvatarUrl ? null : draft.avatarLabel}
-                  </span>
-                  <span>
-                    <strong>프로필 사진 변경</strong>
-                    <small>사진을 고르고 표시할 영역을 조정해요.</small>
-                  </span>
-                  <Camera size={17} aria-hidden />
-                </button>
+                <div className="dc-user-settings-avatar-field">
+                  <span className="dc-user-settings-field-label">프로필 사진</span>
+                  <div className="dc-user-settings-avatar-row">
+                    <button
+                      type="button"
+                      className="dc-user-settings-avatar-tile"
+                      disabled={saving}
+                      onClick={onEditAvatar}
+                      aria-label="프로필 사진 변경"
+                      title="프로필 사진 변경"
+                    >
+                      <span
+                        className="dc-user-settings-avatar-preview"
+                        data-has-image={Boolean(draftAvatarUrl)}
+                        style={draftAvatarUrl ? { backgroundImage: `url(${draftAvatarUrl})` } : undefined}
+                        aria-hidden
+                      >
+                        {draftAvatarUrl ? null : draft.avatarLabel}
+                      </span>
+                      <span className="dc-user-settings-avatar-overlay" aria-hidden>
+                        <Camera size={20} />
+                      </span>
+                    </button>
+                    <div className="dc-user-settings-avatar-actions">
+                      <button type="button" className="ops-cta min-h-11 px-4" disabled={saving} onClick={onEditAvatar}>
+                        사진 변경
+                      </button>
+                      {draft.avatarImage && (
+                        <button
+                          type="button"
+                          className="dc-user-settings-text-button"
+                          disabled={saving}
+                          onClick={() => onDraftChange({ ...draft, avatarImage: "" })}
+                        >
+                          사진 제거
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </div>
                 <label>
                   사용자 지정 상태
                   <input
@@ -209,11 +224,11 @@ export default function UserSettingsPanel({
                       })
                     }
                   >
-                    <option value="default">Discord blue</option>
-                    <option value="forest">Forest</option>
-                    <option value="midnight">Midnight</option>
-                    <option value="ember">Ember</option>
-                    <option value="custom">사용자 색상</option>
+                    <option value="default">기본</option>
+                    <option value="forest">그린</option>
+                    <option value="midnight">미드나잇</option>
+                    <option value="ember">엠버</option>
+                    <option value="custom">포인트 색상</option>
                   </select>
                 </label>
                 <label>
@@ -236,6 +251,26 @@ export default function UserSettingsPanel({
                     onChange={(event) => onDraftChange({ ...draft, accentColor: event.target.value })}
                   />
                 </label>
+              </div>
+              {/* Discord edits beside a live card; this one follows the unsaved draft. */}
+              <aside className="dc-user-settings-preview" aria-label="프로필 미리보기">
+                <span className="dc-user-settings-field-label">미리보기</span>
+                <div className="dc-user-settings-preview-card" style={profileCssVars(draft, displayResourceBase)}>
+                  <div className="dc-profile-banner" data-preset={draft.bannerPreset} />
+                  <span
+                    className="dc-user-settings-preview-avatar"
+                    style={draftAvatarUrl ? { backgroundImage: `url(${draftAvatarUrl})` } : undefined}
+                    aria-hidden
+                  >
+                    {draftAvatarUrl ? null : draft.avatarLabel}
+                  </span>
+                  <div className="dc-user-settings-preview-body">
+                    <strong className="preserve-words">{draft.displayName || "이름 없음"}</strong>
+                    <small className="preserve-words">{draft.handle}</small>
+                    {draft.customStatus && <p className="preserve-words">{draft.customStatus}</p>}
+                  </div>
+                </div>
+              </aside>
               </div>
             </>
           )}
