@@ -9,8 +9,12 @@
   removal sits in the edit row; bookmarks get no control. The duplicate profile
   `사진 변경` button is removed; the avatar tile is the single entry. Frontend 966,
   architecture and diff gates pass; packaged chooser shows the hover control and
-  crop dialog. Upload/display against production is unverified: migration 0008 and
-  the Worker deployment are not applied yet. Evidence: `docs/VERIFICATION.md` ->
+  crop dialog. Approved migration 0008 and the shared web bundle are deployed;
+  actual Mac upload -> separate signed Chrome list/image -> web removal -> Mac
+  refresh pass. WebKit's 68-byte eXIf initially caused `invalid_server_icon`; the
+  central codec now accepts one bounded uncompressed Exif chunk while retaining
+  CRC/expansion and authority checks. Worker39 checks pass; original blank icon
+  and zero stored blobs are restored. Windows UI remains unverified. Evidence: `docs/VERIFICATION.md` ->
   Server icons frontend (2026-10-04).
 
 - 2026-10-04 central server icons (backend-only user request): implement a bounded

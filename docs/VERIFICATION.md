@@ -12948,7 +12948,35 @@ and sends `{icon, expected_icon}` with a data URL from the square cropper.
 - Packaged `app.agentsassemble.uicheck`: hovering an owned server icon shows the
   change overlay; clicking opens the file panel and then `서버 아이콘 편집` with a
   square frame. Cancelled without upload.
-- Not verified: actual upload, fetch and display, because production has neither
-  migration 0008 nor the new Worker. Whether WebKit's canvas PNG passes the
-  directory's strict PNG validator is unknown until then.
+- Initial verification stopped before upload because migration 0008 and the new
+  Worker were not yet deployed. The approved follow-through below resolves this.
 
+### Server icons production follow-through (2026-10-04)
+
+- Applied additive migration `0008_server_icons.sql`; remote migration listing
+  reports no pending migrations. Deployed the Worker and the shared frontend at
+  Rust `e348f00a`. Production index bytes match the package/frontend index SHA-256
+  `323830dbe342471be5b9694a0c1d9ba93f4e874d32b364fbeabbf481ddfcb8dd`.
+- Actual packaged Mac square crop/upload initially returned `invalid_server_icon`.
+  The WebKit canvas exporter produces a 7098-byte 512x512 8-bit RGBA PNG with
+  IHDR, sRGB(1), eXIf(68), IDAT(6948), IEND. The central codec rejected eXIf.
+  Corrected that owner (`92d1e630`) to allow one uncompressed pre-IDAT Exif chunk of 8–4096
+  bytes; fast-png skips its payload and verifies CRC. Image/file/expansion bounds,
+  compressed ancillary rejection and signed ownership/revision rules remain.
+- Retried the same actual Mac crop and observed its rendered icon on the existing
+  verification registration `e2ae6075`; a separate Chrome device session rendered
+  the same icon after server-list refresh. The host endpoint was offline; icon
+  editing/display uses the central directory independently of room ingress.
+- Chrome's owner edit row removed the icon; Mac refresh and both visible lists
+  returned to initials. Read-only production D1 query confirms `servers.icon=''`
+  and zero stored icon blobs for that registration. Its original icon was empty.
+  No additional server, room or account was created by this verification.
+- Worker39 checks pass, including bounded Exif count/placement/size/corrupt CRC
+  rejection without modifying the current icon. Clean canonical owner checkout
+  architecture/source-growth and regenerated-map checks pass; the unrelated
+  pre-existing deletions in the legacy checkout remain outside this patch.
+- Final deployed Worker version: `a41c6fd2-6e7b-41ec-aecd-95d23dcfcc31`. Temporary
+  metadata-only diagnosis logging is removed. The exact verification app and this
+  Chrome tab are normally closed; the pre-existing UI-check bundle/data and central
+  registrations are retained. This proves Mac/WebKit plus a separate Chrome device
+  session on the same Mac; physical Windows verification remains unverified.

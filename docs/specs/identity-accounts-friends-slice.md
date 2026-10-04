@@ -961,6 +961,14 @@ review. This does not claim Windows or live remote-room verification.
 
 ## Central server icons, backend only (2026-10-04)
 
+Operational follow-through (2026-10-04): the shared app/web square cropper's actual
+512x512 PNG must pass the central owner API; app upload, another device's web list
+and removal are required user flows. After approved migration/deployment, the
+packaged macOS cropper reproduced `invalid_server_icon`. Correct the incompatible
+PNG boundary at its owner while preserving bounded decoding, signed authority,
+ownership and observed-reference writes; do not bypass validation or substitute
+a client-only icon.
+
 User request: persist a server icon in the central directory and return it in each
 CentralServer projection, including another signed-in device. Frontend UI/types and
 room appearance are outside this slice. The existing Worker remains the authority;
@@ -986,7 +994,11 @@ Upload contract: exactly 512x512 static, noninterlaced, 8-bit RGB/RGBA PNG, at m
 1,100,000 decoded-file bytes. Bound the upload stream and decompressed scanlines
 before the maintained PNG decoder verifies checksums and pixel structure. Reject
 external/SVG/JPEG URLs, animation, malformed/truncated PNG, wrong dimensions,
-oversize bodies and compressed expansion. Icon removal leaves no orphan blob;
+oversize bodies and compressed expansion.
+WebKit's real canvas output includes a 68-byte uncompressed eXIf chunk. Permit
+one pre-IDAT eXIf chunk of 8–4096 bytes; the PNG decoder skips this bounded opaque
+metadata and verifies its checksum without parsing or inflating it. Compressed
+ancillary metadata remains rejected. Icon removal leaves no orphan blob;
 registration/account deletion cascades the icon row. Server lists contain only the
 small image reference, not repeated image data.
 
