@@ -74,6 +74,11 @@ impl SqliteStore {
         .bind((now + PENDING_APPEARANCE_TTL).timestamp())
         .execute(&mut *transaction)
         .await?;
+        if let RoomManagerAuthority::Operator(session) = authority {
+            crate::RoomMutationAuthority::OperatorSession(session)
+                .record_success(&mut transaction)
+                .await?;
+        }
         transaction.commit().await?;
         Ok(asset_metadata(
             asset_id,
@@ -162,6 +167,10 @@ impl SqliteStore {
         let asset =
             read_bound_room_appearance_asset(&mut transaction, &principal.room_id, asset_id)
                 .await?;
+        authorization
+            .mutation_authority()
+            .record_success(&mut transaction)
+            .await?;
         transaction.commit().await?;
         Ok(asset)
     }

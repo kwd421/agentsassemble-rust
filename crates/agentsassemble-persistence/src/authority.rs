@@ -21,6 +21,17 @@ pub enum RoomMutationAuthority<'a> {
 }
 
 impl<'a> RoomMutationAuthority<'a> {
+    pub(crate) async fn record_success(
+        self,
+        transaction: &mut Transaction<'_, Sqlite>,
+    ) -> Result<(), PersistenceError> {
+        if let Self::OperatorSession(session) = self {
+            crate::operator_pairing::record_operator_use(transaction, session, chrono::Utc::now())
+                .await?;
+        }
+        Ok(())
+    }
+
     pub(crate) const fn principal(self) -> &'a AuthenticatedPrincipal {
         match self {
             Self::TrustedPrincipal(principal) => principal,

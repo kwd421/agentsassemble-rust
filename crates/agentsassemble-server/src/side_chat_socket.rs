@@ -40,13 +40,16 @@ pub(crate) async fn deliver_update(
         return None;
     }
     match update {
-        Ok(update) => send_frame(
-            sender,
-            &state.shutdown,
-            &ServerFrame::SideChatUpdated { update },
-        )
-        .await
-        .ok(),
+        Ok(update) => {
+            send_frame(
+                sender,
+                &state.shutdown,
+                &ServerFrame::SideChatUpdated { update },
+            )
+            .await
+            .ok()?;
+            crate::room_socket::record_session_traffic(state, session.as_ref()).await
+        }
         Err(broadcast::error::RecvError::Lagged(_)) => {
             let _ = send_frame(
                 sender,

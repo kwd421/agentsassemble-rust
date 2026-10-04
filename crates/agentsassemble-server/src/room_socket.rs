@@ -63,7 +63,11 @@ where
         () = state.shutdown.cancelled() => None,
         result = tokio::time::timeout(
             HANDSHAKE_TIMEOUT,
-            establish_before_deadline(sender, receiver, state, grant),
+            async {
+                let subscription = establish_before_deadline(sender, receiver, state, grant).await?;
+                record_session_traffic(state, subscription.room_session.as_ref()).await?;
+                Some(subscription)
+            },
         ) => result.ok().flatten(),
     }
 }
@@ -195,6 +199,19 @@ where
         return Some(principal);
     }
     resolve_principal(sender, state, ticket_principal).await
+}
+
+pub(crate) async fn record_session_traffic(
+    state: &AppState,
+    session: Option<&RoomSessionAuthorization>,
+) -> Option<()> {
+    if let Some(RoomSessionAuthorization::Operator(operator)) = session
+        && let Err(error) = state.store.record_operator_connection(operator, None).await
+    {
+        log_internal_persistence_error(&error, "successful room traffic recording failed");
+        return None;
+    }
+    Some(())
 }
 
 pub(crate) async fn refresh_room_session(

@@ -80,6 +80,11 @@ impl SqliteStore {
             .bind(&raster.content).bind(size).bind(now.to_rfc3339())
             .bind((now + PENDING_TTL).timestamp()).execute(&mut *transaction).await?;
         let metadata = metadata(id, raster.filename, raster.content.len())?;
+        if let RoomManagerAuthority::Operator(session) = authority {
+            crate::RoomMutationAuthority::OperatorSession(session)
+                .record_success(&mut transaction)
+                .await?;
+        }
         transaction.commit().await?;
         Ok(metadata)
     }

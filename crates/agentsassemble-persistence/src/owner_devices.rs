@@ -126,7 +126,7 @@ impl SqliteStore {
         Ok(commit)
     }
 
-    /// Records an authenticated connection and optional description without changing authority.
+    /// Records successful authorized traffic and optional connection metadata.
     /// # Errors
     /// Rejects stale pairing authority and propagates metadata persistence failure.
     pub async fn record_operator_connection(
@@ -134,11 +134,13 @@ impl SqliteStore {
         expected: &crate::OperatorSessionAuthorization,
         description: Option<&crate::OwnerDeviceDescription>,
     ) -> Result<(), PersistenceError> {
-        let mut tx = self.pool.begin().await?;
-        crate::operator_pairing::revalidate_operator_session(&mut tx, expected, Utc::now()).await?;
-        sqlx::query("UPDATE operator_pairings SET device_name = COALESCE(?, device_name), browser = COALESCE(?, browser), os = COALESCE(?, os), last_connected_at = ? WHERE session_fingerprint = ?")
-            .bind(description.map(|value| value.device_name.as_str())).bind(description.map(|value| value.browser.as_str())).bind(description.map(|value| value.os.as_str())).bind(Utc::now().timestamp())
-            .bind(expected.session_fingerprint().as_slice()).execute(&mut *tx).await?;
+        let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
+        let now = Utc::now();
+        crate::operator_pairing::revalidate_operator_session(&mut tx, expected, now).await?;
+        let cutoff = now.timestamp() - crate::operator_pairing::ACTIVITY_WRITE_INTERVAL_SECONDS;
+        sqlx::query("UPDATE operator_pairings SET device_name = COALESCE(?, device_name), browser = COALESCE(?, browser), os = COALESCE(?, os), last_connected_at = CASE WHEN last_connected_at IS NULL OR last_connected_at < ? THEN ? ELSE last_connected_at END WHERE session_fingerprint = ? AND (? OR last_connected_at IS NULL OR last_connected_at < ?)")
+            .bind(description.map(|value| value.device_name.as_str())).bind(description.map(|value| value.browser.as_str())).bind(description.map(|value| value.os.as_str())).bind(cutoff).bind(now.timestamp())
+            .bind(expected.session_fingerprint().as_slice()).bind(description.is_some()).bind(cutoff).execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(())
     }

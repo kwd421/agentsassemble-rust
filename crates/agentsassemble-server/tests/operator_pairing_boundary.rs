@@ -19,6 +19,8 @@ use room_socket_peer::RoomSocketPeer;
 const ORIGIN: &str = "https://pairing.example.test";
 const PROXY: &str = "pairing-test-proxy-secret-00000000001";
 
+#[path = "operator_pairing_boundary/activity.rs"]
+mod activity;
 #[path = "operator_pairing_boundary/companion.rs"]
 mod companion;
 

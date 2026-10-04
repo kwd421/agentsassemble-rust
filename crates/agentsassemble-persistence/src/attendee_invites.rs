@@ -150,6 +150,7 @@ impl SqliteStore {
             .replay_attendee_invite(&mut tx, &owner, request.request_id, &hash, now)
             .await?
         {
+            issuer.mutation_authority().record_success(&mut tx).await?;
             tx.commit().await?;
             return Ok(invite);
         }
@@ -164,6 +165,7 @@ impl SqliteStore {
         let invite = self
             .insert_attendee_invite(&mut tx, &owner, &request, &hash)
             .await?;
+        issuer.mutation_authority().record_success(&mut tx).await?;
         tx.commit().await?;
         Ok(invite)
     }

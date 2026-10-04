@@ -376,24 +376,39 @@ async fn send_terminal_room_event(
     let _ = send_frame(sender, &state.shutdown, &frame).await;
 }
 
-async fn send_authorized_frame(
+async fn send_authorized_frame<S>(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
     room_session: &mut Option<RoomSessionAuthorization>,
-    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    sender: &mut S,
     frame: &ServerFrame,
-) -> Option<()> {
+) -> Option<()>
+where
+    S: futures_util::Sink<Message, Error = axum::Error> + Unpin,
+{
     refresh_room_session(state, principal, room_session).await?;
-    send_frame(sender, &state.shutdown, frame).await.ok()
+    send_frame(sender, &state.shutdown, frame).await.ok()?;
+    if matches!(
+        frame,
+        ServerFrame::Nack(_)
+            | ServerFrame::ResyncRequired { .. }
+            | ServerFrame::SideChatResyncRequired { .. }
+    ) {
+        return Some(());
+    }
+    crate::room_socket::record_session_traffic(state, room_session.as_ref()).await
 }
 
-async fn send_authorized_nack(
+async fn send_authorized_nack<S>(
     state: &AppState,
     principal: &mut agentsassemble_domain::AuthenticatedPrincipal,
     room_session: &mut Option<RoomSessionAuthorization>,
-    sender: &mut futures_util::stream::SplitSink<WebSocket, Message>,
+    sender: &mut S,
     nack: (&str, &str, CommandResolution, ProtocolError),
-) -> Option<()> {
+) -> Option<()>
+where
+    S: futures_util::Sink<Message, Error = axum::Error> + Unpin,
+{
     refresh_room_session(state, principal, room_session).await?;
     send_nack(sender, &state.shutdown, nack.0, nack.1, nack.2, nack.3)
         .await
@@ -497,3 +512,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("shutdown socket revocation state: {error}"));
     }
 }
+
+#[cfg(test)]
+#[path = "room_socket_activity_tests.rs"]
+mod activity_tests;

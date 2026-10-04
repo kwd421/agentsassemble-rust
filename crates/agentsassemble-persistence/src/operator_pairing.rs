@@ -12,6 +12,7 @@ use crate::{
 const PAIRING_TTL: Duration = Duration::seconds(120);
 const SESSION_TTL: Duration = Duration::hours(1);
 pub(crate) const NATIVE_IDLE_TTL: Duration = Duration::days(30);
+pub(crate) const ACTIVITY_WRITE_INTERVAL_SECONDS: i64 = 60;
 const MAX_PAIRINGS: i64 = 128;
 const MAX_ROOM_PAIRINGS: i64 = 32;
 
@@ -550,6 +551,18 @@ pub(crate) async fn revalidate_central_owner_session(
     Ok(current)
 }
 
+pub(crate) async fn record_operator_use(
+    tx: &mut Transaction<'_, Sqlite>,
+    expected: &OperatorSessionAuthorization,
+    now: DateTime<Utc>,
+) -> Result<(), PersistenceError> {
+    // Caller completed validation and its operation in this same transaction.
+    session_record(tx, expected.session_fingerprint())
+        .await?
+        .record_use(tx, now)
+        .await
+}
+
 async fn resolve_operator_session(
     tx: &mut Transaction<'_, Sqlite>,
     fingerprint: &[u8; 32],
@@ -574,7 +587,6 @@ async fn resolve_operator_session(
         }
     }
     let principal = record.resolve_manager(tx).await?;
-    record.record_use(tx, now).await?;
     Ok(OperatorSessionAuthorization {
         session_fingerprint: *fingerprint,
         device_fingerprint: *device,
@@ -608,7 +620,6 @@ pub(crate) async fn require_attendee_parent(
         }
     }
     let principal = record.resolve_manager(tx).await?;
-    record.record_use(tx, now).await?;
     Ok((principal, expires_at))
 }
 
@@ -682,7 +693,7 @@ impl PairingRecord {
     ) -> Result<(), PersistenceError> {
         if self.native_issued() {
             sqlx::query("UPDATE operator_pairings SET last_connected_at = ? WHERE pairing_id = ? AND (last_connected_at IS NULL OR last_connected_at < ?)")
-                .bind(now.timestamp()).bind(&self.pairing_id).bind(now.timestamp())
+                .bind(now.timestamp()).bind(&self.pairing_id).bind(now.timestamp() - ACTIVITY_WRITE_INTERVAL_SECONDS)
                 .execute(&mut **tx).await?;
         }
         Ok(())

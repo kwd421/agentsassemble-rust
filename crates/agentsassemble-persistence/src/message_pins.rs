@@ -81,6 +81,10 @@ impl SqliteStore {
         )?;
         require_message_channel(&mut transaction, &principal.room_id, channel_id).await?;
         let pins = load_pins(&mut transaction, &principal.room_id, channel_id).await?;
+        expected
+            .mutation_authority()
+            .record_success(&mut transaction)
+            .await?;
         transaction.commit().await?;
         Ok(pins)
     }
@@ -145,6 +149,10 @@ impl SqliteStore {
         )
         .await?;
         let pins = load_pins(&mut transaction, &principal.room_id, channel_id).await?;
+        expected
+            .mutation_authority()
+            .record_success(&mut transaction)
+            .await?;
         transaction.commit().await?;
         Ok(pins)
     }

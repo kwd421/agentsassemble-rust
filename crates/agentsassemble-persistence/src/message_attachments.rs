@@ -338,6 +338,7 @@ impl SqliteStore {
         let principal = authority.resolve(&mut transaction).await?;
         require_current_message_writer(&mut transaction, &principal).await?;
         let metadata = store_pending_in_transaction(&mut transaction, &principal, prepared).await?;
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(metadata)
     }
@@ -390,6 +391,7 @@ impl SqliteStore {
         let attachment =
             read_bound_message_attachment(&mut transaction, &principal.room_id, attachment_id)
                 .await?;
+        authority.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(attachment)
     }

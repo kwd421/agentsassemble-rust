@@ -113,6 +113,10 @@ impl SqliteStore {
             &principal.room_id,
         )
         .await?;
+        expected
+            .mutation_authority()
+            .record_success(&mut transaction)
+            .await?;
         transaction.commit().await?;
         Ok(snapshot)
     }
@@ -170,6 +174,10 @@ impl SqliteStore {
             patch,
         )
         .await?;
+        expected
+            .mutation_authority()
+            .record_success(&mut transaction)
+            .await?;
         transaction.commit().await?;
         Ok(snapshot)
     }

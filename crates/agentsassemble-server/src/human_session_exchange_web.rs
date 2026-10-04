@@ -94,13 +94,23 @@ async fn issue_socket_ticket(
     State(state): State<AppState>,
     request: Request,
 ) -> Result<Response, SessionExchangeError> {
-    let authorization = authorize_exchange(&state, request).await?;
+    let (authorization, description) = authorize_exchange(&state, request).await?;
     let ttl_seconds = session_ticket_ttl(&state, &authorization);
     let issued = state
         .tickets
-        .issue_room_session_socket(authorization)
+        .issue_room_session_socket(authorization.clone())
         .await
         .map_err(|_| SessionExchangeError::capacity())?;
+    if let agentsassemble_persistence::RoomSessionAuthorization::Operator(operator) = &authorization
+        && let Err(error) = state
+            .store
+            .record_operator_connection(operator, description.as_ref())
+            .await
+    {
+        // The undisclosed ticket must not occupy capacity after persistence failed.
+        let _ = state.tickets.consume_socket(&issued.ticket).await;
+        return Err(error.into());
+    }
     Ok(Json(SessionTicketResponse {
         ticket: issued.ticket,
         ttl_seconds,
@@ -111,37 +121,37 @@ async fn issue_socket_ticket(
 async fn authorize_exchange(
     state: &AppState,
     request: Request,
-) -> Result<agentsassemble_persistence::RoomSessionAuthorization, SessionExchangeError> {
+) -> Result<
+    (
+        agentsassemble_persistence::RoomSessionAuthorization,
+        Option<agentsassemble_persistence::OwnerDeviceDescription>,
+    ),
+    SessionExchangeError,
+> {
     let authorization =
         authorize_presented_session(state, request.headers(), request.extensions().get()).await?;
     let metadata: Option<SocketDeviceRequest> =
         decode_optional_json_body(request, MAX_EXCHANGE_BODY_BYTES)
             .await
             .map_err(SessionExchangeError::from_body)?;
-    match (&authorization, metadata) {
-        (agentsassemble_persistence::RoomSessionAuthorization::Operator(operator), metadata) => {
-            let description = metadata
-                .map(|metadata| {
-                    agentsassemble_persistence::OwnerDeviceDescription::verified(
-                        metadata.device.device_name,
-                        metadata.device.browser,
-                        metadata.device.os,
-                    )
-                })
-                .transpose()?;
-            state
-                .store
-                .record_operator_connection(operator, description.as_ref())
-                .await?;
-        }
+    let description = match (&authorization, metadata) {
+        (agentsassemble_persistence::RoomSessionAuthorization::Operator(_), metadata) => metadata
+            .map(|metadata| {
+                agentsassemble_persistence::OwnerDeviceDescription::verified(
+                    metadata.device.device_name,
+                    metadata.device.browser,
+                    metadata.device.os,
+                )
+            })
+            .transpose()?,
         (_, Some(_)) => {
             return Err(SessionExchangeError::from_body(
                 BodyDecodeError::InvalidJson,
             ));
         }
-        (_, None) => {}
-    }
-    Ok(authorization)
+        (_, None) => None,
+    };
+    Ok((authorization, description))
 }
 
 async fn authorize_presented_session(

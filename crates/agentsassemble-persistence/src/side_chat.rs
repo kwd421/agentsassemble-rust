@@ -123,6 +123,7 @@ impl SqliteStore {
         let snapshot = self
             .side_chat_snapshot_in_memory(room_uid, principal.room_id, now)
             .await;
+        authority.record_success(&mut tx).await?;
         tx.commit().await?;
         Ok(snapshot)
     }

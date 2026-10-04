@@ -1,5 +1,46 @@
 # Verification Contract
 
+## Device idle activity after successful authorization (2026-10-05)
+
+Daybreak M1 on `499636ed` / `5419b2e3`: bearer resolution and attendee-parent
+validation no longer record use. HTTP preferences, pins, search/context, attachment
+and avatar operations, side-chat reads and companion invitations record successful
+use in their existing transaction. Socket exchange records only after capacity
+admission issues a ticket; recording failure removes the undisclosed ticket.
+Successful subscription, ACK/Pong and live room/side-chat frames record current
+exact session authority; NACK and resync/error traffic do not. Writes of last use
+are coalesced over one minute, without polling or changing expiry/revocation rules.
+
+Before correction, four regression tests failed on the original implementation:
+rejected profile, malformed ticket body, central-only/foreign-room requests, NACK
+traffic and exhausted ticket capacity changed the controlled old last-use value;
+use within one minute also rewrote it. Final server tests arrange timestamps through the persistence API
+and use protocol ordering barriers, without SQL access, time sleeps or production data.
+
+Affected verification passed: `cargo test -p agentsassemble-persistence --lib
+operator_pairing` (11 tests) and `cargo test -p agentsassemble-server --test
+operator_pairing_boundary` (8 tests), plus the established-socket NACK/ACK/Pong
+unit regression. This includes denied posting/companion
+permissions, successful HTTP reads/mutation, ticket issuance, socket ACK/Pong,
+read-only parent validation, 30-day expiry, and rejection of attempts to revive
+expired/revoked devices. Deployment, signed builds and manual verification remain
+excluded by user instruction.
+
+The single `make verify` invocation stopped at the architecture gate because the
+initial server test fixture imported SQLx directly. That dependency was removed;
+the final fixture uses existing persistence APIs. `make test` then passed the
+unchanged architecture/source-growth/policy gates, formatting, workspace check,
+frontend build/1,001 tests, desktop check/46 tests, and all workspace tests/doc tests
+(including 394 persistence, 290 provider and 117 server unit tests).
+Clippy found the subscription function over its line limit; recording was moved
+to its existing completion wrapper inside the same timeout/cancellation boundary.
+Five affected socket unit tests and the wire regression passed after that correction;
+`make clippy` and final architecture/format/diff checks passed without gate exceptions.
+The artifact check found 31,904,276,480 bytes against the unchanged 18 GiB limit.
+After confirming no repository build or executable remained active, the existing
+`make artifact-prune` owner cleaned the cache and `make artifact-check` passed.
+The aggregate `make verify` was not rerun and is not reported as a clean pass.
+
 ## Ended interrupt claimant recovery handoff (2026-10-05)
 
 Daybreak Low follow-up to `fae521d9..a2667359`: task death after claim, dispatch

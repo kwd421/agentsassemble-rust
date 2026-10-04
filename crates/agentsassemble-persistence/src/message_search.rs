@@ -62,6 +62,7 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         let principal = expected.resolve(&mut transaction).await?;
         let page = search_in(&mut transaction, &principal, channel_id, query, cursor).await?;
+        expected.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(page)
     }
@@ -98,6 +99,7 @@ impl SqliteStore {
         let mut transaction = self.pool.begin().await?;
         let principal = expected.resolve(&mut transaction).await?;
         let context = context_in(&mut transaction, &principal, channel_id, event_id).await?;
+        expected.record_success(&mut transaction).await?;
         transaction.commit().await?;
         Ok(context)
     }

@@ -717,6 +717,26 @@ async fn native_pairing_survives_hour_and_expires_after_thirty_idle_days()
     );
     let mut tx = store.pool.begin().await?;
     revalidate_operator_session(&mut tx, &first.authorization, later + Duration::days(29)).await?;
+    super::require_attendee_parent(
+        &mut tx,
+        first.authorization.session_fingerprint(),
+        "general",
+        later + Duration::days(29),
+    )
+    .await?;
+    tx.commit().await?;
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT last_connected_at FROM operator_pairings")
+            .fetch_one(&store.pool)
+            .await?,
+        later.timestamp()
+    );
+    let mut tx = store.pool.begin().await?;
+    revalidate_operator_session(&mut tx, &first.authorization, later + Duration::days(29)).await?;
+    super::record_operator_use(&mut tx, &first.authorization, later + Duration::days(29)).await?;
+    tx.commit().await?;
+    let mut tx = store.pool.begin().await?;
+    revalidate_operator_session(&mut tx, &first.authorization, later + Duration::days(31)).await?;
     tx.commit().await?;
     assert!(
         store
@@ -902,5 +922,43 @@ async fn native_idle_expiry_denies_access_and_device_listing_without_refresh()
             .await
             .is_err()
     );
+    Ok(())
+}
+
+#[tokio::test]
+async fn successful_traffic_recorder_cannot_revive_expired_or_revoked_devices()
+-> Result<(), Box<dyn std::error::Error>> {
+    for expired in [false, true] {
+        let (store, manager) = fixture("sqlite::memory:").await;
+        let now = Utc::now() - Duration::days(if expired { 31 } else { 1 });
+        let pairing = store
+            .create_operator_pairing(
+                &crate::RoomManagerAuthority::Local(manager),
+                &[91; 32],
+                ORIGIN,
+                now,
+            )
+            .await?;
+        let paired = store
+            .redeem_operator_pairing(&[91; 32], &[92; 32], ORIGIN, now)
+            .await?;
+        if !expired {
+            store
+                .revoke_owner_devices(&LOCAL, Some(pairing.pairing_id))
+                .await?;
+        }
+        assert!(
+            store
+                .record_operator_connection(&paired.authorization, None)
+                .await
+                .is_err()
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT last_connected_at FROM operator_pairings")
+                .fetch_one(&store.pool)
+                .await?,
+            now.timestamp()
+        );
+    }
     Ok(())
 }

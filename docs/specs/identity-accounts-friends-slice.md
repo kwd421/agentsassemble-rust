@@ -1198,3 +1198,19 @@ and OS/title presentation. During this task run affected crate/screen tests only
 run `make verify` once immediately before feature commits/push. Production deployment,
 signed app builds and manual verification are excluded by user direction; automated
 evidence does not claim physical camera or packaged visual acceptance.
+
+### Device idle-use correction (Daybreak M1, 2026-10-05)
+
+Bearer resolution, authority revalidation and attendee-parent validation are read-only.
+Only completed authorized product operations refresh native device last_connected_at:
+HTTP reads/mutations after body, room, permission and capacity checks; socket ticket
+exchange after successful issuance; successful authorized WebSocket traffic. Rejected
+profiles, malformed ticket metadata, denied permissions, exhausted capacity and
+NACK-only traffic must not extend the 30-day deadline. Successful transactional
+operations record use in their transaction where available; transport-only success
+revalidates the exact device/origin/session before recording. Revocation/expiry cannot
+be revived by the success recorder. Coalesce native use writes to at most once per
+minute; metadata changes remain explicit. No polling, schema change or fallback.
+Regression tests must fail before correction, then cover rejected and successful HTTP,
+tickets and frames plus unchanged expiry/revocation. Only affected crate tests during
+work, one make verify before one commit/push; no deployment, signed build or manual QA.
