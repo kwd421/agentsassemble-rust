@@ -403,6 +403,7 @@ describe("useRoomAdmission", () => {
       session: null,
       status: "",
     });
+    expect(result.current.guestInviteRoomLabel).toBe("Room Two");
     expect(result.current.pendingGuestDisplayName).toBe("Remembered Guest");
     expect(result.current.pendingGuestAvatarImage).toBe("data:image/png;base64,remembered");
     expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();

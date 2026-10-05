@@ -183,6 +183,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
           !guestExpired && (
           memberJoin && (memberSelected || memberJoin.callback) ? <MemberJoinPanel
             host={memberJoin} onCancel={memberJoin.callback ? undefined : () => setMemberSelected(false)} /> : <GuestJoinProfilePanel
+            roomLabel={controller.guestInviteRoomLabel}
             onMemberJoin={memberJoin ? () => setMemberSelected(true) : undefined}
             pairing={operatorPairingPending}
             pairingState={operatorPairingState}

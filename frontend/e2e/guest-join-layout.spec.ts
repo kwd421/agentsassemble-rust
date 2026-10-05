@@ -17,7 +17,7 @@ for (const admission of ["anonymous", "central"] as const) {
     await page.goto("/join?token=layout-test-invite");
     await page.getByRole("textbox", { name: "이름" }).fill("Layout Guest");
 
-    for (const name of ["입장", "중앙 계정으로 입장"]) {
+    for (const name of ["게스트로 참가", "로그인하고 참가"]) {
       const button = page.getByRole("button", { name, exact: true });
       await expect(button).toBeEnabled();
       expect(await button.evaluate((element) => {
@@ -41,10 +41,10 @@ for (const admission of ["anonymous", "central"] as const) {
 
     if (admission === "anonymous") {
       const request = page.waitForRequest("**/api/room-invite/join");
-      await page.getByRole("button", { name: "입장", exact: true }).click();
+      await page.getByRole("button", { name: "게스트로 참가", exact: true }).click();
       expect((await request).postDataJSON()).toMatchObject({ display_name: "Layout Guest" });
     } else {
-      await page.getByRole("button", { name: "중앙 계정으로 입장", exact: true }).click();
+      await page.getByRole("button", { name: "로그인하고 참가", exact: true }).click();
       await expect(page.getByRole("region", { name: "중앙 계정 입장", exact: true })).toBeVisible();
     }
   });

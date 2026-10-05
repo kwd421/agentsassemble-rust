@@ -22,11 +22,17 @@ describe("GuestJoinProfilePanel", () => {
 
   it("offers central admission without changing the anonymous join action", () => {
     const onJoin = vi.fn(); const onMemberJoin = vi.fn();
-    render(<GuestJoinProfilePanel displayName="Guest" onJoin={onJoin} onMemberJoin={onMemberJoin}
+    render(<GuestJoinProfilePanel roomLabel="수다방" displayName="Guest" onJoin={onJoin} onMemberJoin={onMemberJoin}
       onDisplayNameChange={vi.fn()} onAvatarImageChange={vi.fn()} />);
-    fireEvent.click(screen.getByRole("button", { name: /^입장$/ }));
+    expect(screen.getByRole("heading", { name: "‘수다방’에 초대받았어요" })).toBeTruthy();
+    expect(screen.getByText("로그인하면 다른 기기에서도 같은 사람으로 참가할 수 있어요.")).toBeTruthy();
+    const buttons = screen.getAllByRole("button");
+    expect(buttons[0].textContent).toContain("로그인하고 참가");
+    expect(buttons[0].className).toBe("dc-guest-join-button");
+    expect(buttons[1].getAttribute("data-active")).toBe("false");
+    fireEvent.click(screen.getByRole("button", { name: "게스트로 참가" }));
     expect(onJoin).toHaveBeenCalledOnce(); expect(onMemberJoin).not.toHaveBeenCalled();
-    fireEvent.click(screen.getByRole("button", { name: "중앙 계정으로 입장" }));
+    fireEvent.click(screen.getByRole("button", { name: "로그인하고 참가" }));
     expect(onMemberJoin).toHaveBeenCalledOnce(); expect(onJoin).toHaveBeenCalledOnce();
   });
 

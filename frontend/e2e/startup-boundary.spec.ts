@@ -111,7 +111,7 @@ test("retains the server-owned invite entrance", async ({ page }) => {
   );
   await page.goto("/join?token=invite-token");
 
-  await expect(page.getByRole("region", { name: "입장 프로필" })).toBeVisible();
+  await expect(page.getByRole("region", { name: /에 초대받았어요/ })).toBeVisible();
   await expect(
     page.getByRole("main", { name: "브라우저 직접 시작 사용 불가" })
   ).toHaveCount(0);

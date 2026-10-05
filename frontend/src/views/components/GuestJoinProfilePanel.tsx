@@ -6,6 +6,8 @@ import ImageCropper from "./ImageCropper";
 
 type GuestJoinProfilePanelProps = {
   children?: ReactNode;
+  title?: string;
+  roomLabel?: string;
   onMemberJoin?: () => void;
   displayName: string;
   avatarImage?: string;
@@ -22,6 +24,8 @@ type GuestJoinProfilePanelProps = {
 
 export default function GuestJoinProfilePanel({
   children,
+  title,
+  roomLabel,
   onMemberJoin,
   displayName,
   avatarImage,
@@ -58,6 +62,9 @@ export default function GuestJoinProfilePanel({
     }
   }
 
+  const heading = title || (pairing ? "운영자 기기 연결" : children ? "로그인하고 참가"
+    : retryMode ? "입장 확인" : roomLabel ? `‘${roomLabel}’에 초대받았어요` : "참가를 준비하고 있어요");
+
   return (
     <div className="dc-guest-join-panel">
       <section
@@ -67,11 +74,11 @@ export default function GuestJoinProfilePanel({
             ? "운영자 기기 연결"
             : retryMode
             ? retryMode === "preflight" ? "입장 확인 재시도" : "입장 재시도"
-            : "입장 프로필"
+            : heading
         }
       >
         <h1>
-          {pairing ? "운영자 기기 연결" : children ? "중앙 계정으로 입장" : retryMode ? "입장 확인" : "입장 프로필"}
+          {heading}
         </h1>
         {!children && !pairing && !retryMode && (
           <div className="dc-guest-avatar-row">
@@ -140,19 +147,21 @@ export default function GuestJoinProfilePanel({
                 placeholder="방에서 보일 이름"
               />
             </label>
+            {onMemberJoin && <button type="button" className="dc-guest-join-button"
+              disabled={busy || avatarPreparing} onClick={onMemberJoin}>
+              <LogIn size={16} /> 로그인하고 참가
+            </button>}
             <button
               type="button"
-              className="dc-guest-join-button"
+              className="dc-member-session-button"
+              data-active="false"
               disabled={busy || avatarPreparing || !displayName.trim()}
               onClick={onJoin}
             >
               <LogIn size={16} />
-              입장
+              게스트로 참가
             </button>
-            {onMemberJoin && <button type="button" className="dc-member-session-button"
-              disabled={busy || avatarPreparing} onClick={onMemberJoin}>
-              <LogIn size={16} /> 중앙 계정으로 입장
-            </button>}
+            {onMemberJoin && <p className="text-sm text-text-muted">로그인하면 다른 기기에서도 같은 사람으로 참가할 수 있어요.</p>}
           </>
         )}
         {children}

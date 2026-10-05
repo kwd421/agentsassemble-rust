@@ -96,6 +96,7 @@ export function useRoomAdmission({
   const preflightAttemptedTokenRef = useRef("");
   const pairingAttemptedTokenRef = useRef("");
   const expectedInviteRoomIdRef = useRef("");
+  const inviteRoomLabelRef = useRef("");
   const admissionGenerationRef = useRef(0);
   const onPairingTokenConsumedRef = useRef(onPairingTokenConsumed);
   useEffect(() => {
@@ -539,6 +540,7 @@ export function useRoomAdmission({
           return;
         }
         expectedInviteRoomIdRef.current = decision.room_id;
+        inviteRoomLabelRef.current = decision.room_label;
         if (decision.status === "existing_session" && guestSession) {
           if (guestSession.meetingId !== expectedInviteRoomIdRef.current) {
             throw new Error("기존 세션이 초대가 가리키는 방과 일치하지 않습니다.");
@@ -750,6 +752,7 @@ export function useRoomAdmission({
     pendingGuestDisplayName,
     pendingGuestAvatarImage,
     guestJoinStatus,
+    guestInviteRoomLabel: inviteRoomLabelRef.current,
     guestAdmissionBusy,
     guestLocked,
     guestMeetingId,
