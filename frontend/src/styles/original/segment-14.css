@@ -79,7 +79,12 @@
   outline: none;
 }
 
-.dc-guest-avatar-row,
+.dc-guest-avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
 .dc-guest-join-panel {
   position: fixed;
   inset: 0;
