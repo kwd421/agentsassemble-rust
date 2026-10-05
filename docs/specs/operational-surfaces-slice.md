@@ -786,6 +786,13 @@ Direct packaged whole-phase proof remains pending.
 
 ## Served frontend release custody
 
+2026-10-05 lock follow-up: investigate the recorded source-replacement test OS 35
+WouldBlock against ed1e74b0/cd3d3aaa. Release publication owns its lock until
+success or error, and must explicitly release it even if a spawning child still
+shares its file description. Keep concurrent publication exclusion and corruption
+rejection; verify duplicate-descriptor ownership deterministically, with no sleeps
+or retries masking contention. No signing, manual verification or deployment.
+
 The executable currently serves mutable build output directly. Startup will instead
 materialize a private, content-addressed copy beneath the runtime state directory,
 then serve only that copy. Hash every relative file name and byte, reject links and

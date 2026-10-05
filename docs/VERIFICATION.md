@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 frontend release lock: same inherited-file-description lifetime as ed1e74b0/cd3d3aaa; close-only control deterministically reproduced OS 35 WouldBlock, explicit unlock covers successful publication and corruption failure while preserving next-owner exclusion; original release and duplicate-descriptor regressions passed; no sleeps/retries, signing, manual verification or deployment.
+
 - 2026-10-05 invite expiry: human invite rows use local today/tomorrow/short-date and Korean hour/minute labels, including year changes; affected modal/controller regressions 39/39 passed; no signing, manual verification or deployment.
 
 - 2026-10-05 external-access failure copy: shared invite status, explicit open and invite-triggered startup use safe Korean retry text; raw generation failures stay in host diagnostics. Controller/modal regressions 35/35 and Rust public_ingress 8/8 passed; no signing, manual verification or deployment.

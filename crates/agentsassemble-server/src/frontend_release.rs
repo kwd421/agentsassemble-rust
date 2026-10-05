@@ -79,41 +79,51 @@ impl FrontendRelease {
             .read(true)
             .write(true)
             .open(releases.join(".lock"))?;
+        Self::materialize_locked(&source, &releases, &lock)
+    }
+
+    fn materialize_locked(source: &Path, releases: &Path, lock: &File) -> io::Result<Self> {
         lock.try_lock_exclusive()?;
-        let staging = tempfile::Builder::new()
-            .prefix(".staging-")
-            .tempdir_in(&releases)?;
-        let files = list_files(&source)?;
-        for relative in &files {
-            let destination = staging.path().join(relative);
-            if let Some(parent) = destination.parent() {
-                fs::create_dir_all(parent)?;
+        let result = (|| {
+            let staging = tempfile::Builder::new()
+                .prefix(".staging-")
+                .tempdir_in(releases)?;
+            let files = list_files(source)?;
+            for relative in &files {
+                let destination = staging.path().join(relative);
+                if let Some(parent) = destination.parent() {
+                    fs::create_dir_all(parent)?;
+                }
+                fs::copy(source.join(relative), &destination)?;
             }
-            fs::copy(source.join(relative), &destination)?;
-        }
-        let build_id = fingerprint(staging.path())?;
-        if fingerprint(&source)? != build_id {
-            return Err(io::Error::other("frontend build changed during snapshot"));
-        }
-        let index_html = crate::frontend_document::render(staging.path(), &build_id)?;
-        let root = releases.join(&build_id);
-        if root.exists() {
-            if !root.symlink_metadata()?.file_type().is_dir() {
-                return Err(io::Error::other(
-                    "retained frontend release is not a directory",
-                ));
+            let build_id = fingerprint(staging.path())?;
+            if fingerprint(source)? != build_id {
+                return Err(io::Error::other("frontend build changed during snapshot"));
             }
-            if fingerprint(&root)? != build_id {
-                return Err(io::Error::other("retained frontend release is corrupt"));
+            let index_html = crate::frontend_document::render(staging.path(), &build_id)?;
+            let root = releases.join(&build_id);
+            if root.exists() {
+                if !root.symlink_metadata()?.file_type().is_dir() {
+                    return Err(io::Error::other(
+                        "retained frontend release is not a directory",
+                    ));
+                }
+                if fingerprint(&root)? != build_id {
+                    return Err(io::Error::other("retained frontend release is corrupt"));
+                }
+            } else {
+                fs::rename(staging.path(), &root)?;
             }
-        } else {
-            fs::rename(staging.path(), &root)?;
-        }
-        Ok(Self {
-            root,
-            build_id,
-            index_html,
-        })
+            Ok(Self {
+                root,
+                build_id,
+                index_html,
+            })
+        })();
+        // A concurrently spawning child can retain this file description until
+        // exec, even with CLOEXEC. Release ownership on success AND failure.
+        FileExt::unlock(lock)?;
+        result
     }
 }
 
@@ -174,6 +184,56 @@ fn fingerprint(root: &Path) -> io::Result<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn publication_releases_inherited_description_on_success_and_error() -> io::Result<()> {
+        let source = tempfile::tempdir()?;
+        let state = tempfile::tempdir()?;
+        fs::create_dir(source.path().join("assets"))?;
+        fs::write(source.path().join("assets/app.js"), "fixture")?;
+        fs::write(
+            source.path().join("index.html"),
+            "<html><head><script src=\"./assets/app.js\"></script></head></html>",
+        )?;
+        let releases = state.path().join("frontend-releases");
+        fs::create_dir(&releases)?;
+        let path = releases.join(".lock");
+        for corrupt in [false, true] {
+            let owner = OpenOptions::new()
+                .create(true)
+                .truncate(false)
+                .read(true)
+                .write(true)
+                .open(&path)?;
+            let inherited = owner.try_clone()?;
+            let contender = OpenOptions::new().read(true).write(true).open(&path)?;
+            owner.try_lock_exclusive()?;
+            assert!(
+                matches!(contender.try_lock_exclusive(), Err(error) if error.kind() == io::ErrorKind::WouldBlock)
+            );
+            FileExt::unlock(&owner)?;
+            let result = FrontendRelease::materialize_locked(source.path(), &releases, &owner);
+            assert_eq!(
+                result.is_err(),
+                corrupt,
+                "publication error: {:?}",
+                result.as_ref().err()
+            );
+            drop(owner);
+            // dup models a child that has not reached exec; no scheduling/sleep.
+            contender.try_lock_exclusive()?;
+            drop(inherited);
+            let competing = OpenOptions::new().read(true).write(true).open(&path)?;
+            assert!(
+                matches!(competing.try_lock_exclusive(), Err(error) if error.kind() == io::ErrorKind::WouldBlock)
+            );
+            FileExt::unlock(&contender)?;
+            if let Ok(release) = result {
+                fs::write(release.root.join("index.html"), "corrupt")?;
+            }
+        }
+        Ok(())
+    }
 
     #[test]
     fn source_replacement_retains_release_and_corruption_is_rejected() -> io::Result<()> {
