@@ -121,10 +121,12 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
       </label>
       {namePreview(editingName.trim(), server?.server_id || localHost?.server_id)}
       <div className="flex flex-wrap items-center gap-2">
-        <button type="submit" className="ops-cta min-h-11 px-4" disabled={busy || saving || !editingName.trim() || editingName.trim().length > 80}>이름 저장</button>
-        <button type="button" className="ops-button" disabled={saving} onClick={() => { setEditingId(null); setError(""); }}>취소</button>
-        <button type="button" className="dc-server-row-text-button" disabled={busy || saving || !defaultName}
-          onClick={() => void save(true)}>기본 이름으로 되돌리기</button>
+        <div className="flex items-center gap-2">
+          <button type="submit" className="ops-cta min-h-11 px-4" disabled={busy || saving || !editingName.trim() || editingName.trim().length > 80}>이름 저장</button>
+          <button type="button" className="ops-button" disabled={saving} onClick={() => { setEditingId(null); setError(""); }}>취소</button>
+        </div>
+        {defaultName && (editingName.trim() !== defaultName || (server ? server.name_is_default === false : Boolean(localName))) && <button type="button" className="dc-server-row-text-button" disabled={busy || saving}
+          onClick={() => void save(true)}>기본 이름으로 되돌리기</button>}
         {server?.icon && <button type="button" className="dc-server-row-text-button" disabled={busy || saving}
           onClick={() => void applyIcon(server, null)}>아이콘 제거</button>}
       </div>
@@ -136,17 +138,17 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
       <div className="dc-server-row" data-state="local">
         <span className="dc-server-row-icon" aria-hidden>{roomInitials(localName || localDefaultName)}</span>
         <div className="dc-server-row-copy">
-          <strong className="break-all">서버 이름 · {localName || localDefaultName || "프로필 이름 확인 중"}</strong>
+          <strong className="break-all">{localName || localDefaultName || "프로필 이름 확인 중"}</strong>
           <span className="dc-server-row-meta">
-            {localHost.server_id ? "이 계정에 아직 등록되지 않았어요" : "새 서버"} · <span aria-label="호스트 운영체제">{OS_LABELS[localHost.host_os as keyof typeof OS_LABELS]}</span>
+            <span className="dc-server-row-dot" aria-hidden />이 기기 · <span aria-label="호스트 운영체제">{OS_LABELS[localHost.host_os as keyof typeof OS_LABELS]}</span>
           </span>
-          {editingId === "local" ? nameEditor(localDefaultName) : namePreview(localName || localDefaultName, localHost.server_id)}
+          {editingId === "local" && nameEditor(localDefaultName)}
         </div>
-        <div className="dc-server-row-actions">
-          <button type="button" className="ops-button min-h-11" disabled={busy || saving || !localDefaultName}
-            onClick={() => { setEditingId("local"); setName(localName || localDefaultName); setError(""); }}>편집</button>
-          <button type="button" className="ops-cta dc-server-row-open" aria-label="이 기기 서버 열기" disabled={busy || saving || editingId === "local" || !localDefaultName} onClick={() => void onOpenLocal(localName)}>열기</button>
-        </div>
+        {editingId !== "local" && <div className="dc-server-row-actions">
+          <button type="button" className="dc-server-row-icon-button" aria-label={`${localName || localDefaultName} 이름 변경`} title="이름 변경" disabled={busy || saving || !localDefaultName}
+            onClick={() => { setEditingId("local"); setName(localName || localDefaultName); setError(""); }}><Pencil size={16} /></button>
+          <button type="button" className="ops-cta dc-server-row-open" aria-label="이 기기 서버 열기" disabled={busy || saving || !localDefaultName} onClick={() => void onOpenLocal(localName)}>열기</button>
+        </div>}
       </div>}
     {servers.map((server) => {
       const isLocal = Boolean(localHost?.server_id === server.server_id && onOpenLocal);
@@ -164,10 +166,10 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
             </button>
           : <span className="dc-server-row-icon" aria-hidden><ServerIcon reference={centralUnavailable ? undefined : server.icon} name={name} /></span>}
         <div className="dc-server-row-copy">
-          <strong className="break-all"><span>{name}</span>{isLocal && " · 이 기기"}</strong>
+          <strong className="break-all">{name}</strong>
           <span className="dc-server-row-meta">
             <span className="dc-server-row-dot" aria-hidden />
-            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기에서 열 수 있어요" : state === "online" ? "연결 가능" : "연결 끊김"}
+            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기" : state === "online" ? "연결 가능" : "연결 끊김"}
             {" · "}<span aria-label="호스트 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span>
           </span>
           {editingId === server.server_id && nameEditor(server.default_name, server)}

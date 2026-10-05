@@ -147,11 +147,11 @@
 .dc-server-row-text-button {
   min-height: 44px;
   color: var(--color-text-secondary);
-  font-size: 14px;
+  font-size: 12px;
 }
 
 .dc-server-row-text-button:hover:not(:disabled) {
-  color: #f23f43;
+  color: var(--color-text-primary);
   text-decoration: underline;
 }
 
