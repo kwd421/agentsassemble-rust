@@ -61,7 +61,7 @@ async function signedFixture(claimOwnership = false, epoch?: string): Promise<{
     },
     envelope: {
       ...(epoch === undefined ? {} : { registration_epoch: epoch }),
-      host_name: "Test Mac",
+      host_name: "Test Mac", name_revision: 1,
       host_os: "macos",
       server_id: SERVER_ID,
       host_public_key_jwk: jwk,

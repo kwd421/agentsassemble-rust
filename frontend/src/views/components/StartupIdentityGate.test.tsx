@@ -25,7 +25,7 @@ const desktopMocks = vi.hoisted(() => ({
   initializeBootstrap: vi.fn(),
   requestBootstrapStatus: vi.fn(),
   requestHostProductSurface: vi.fn(),
-  requestHostDeviceInfo: vi.fn().mockResolvedValue({ server_id: null, host_name: "Test Mac", host_os: "macos" }),
+  requestHostDeviceInfo: vi.fn().mockResolvedValue({ server_id: null, host_name: "Test Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: null }),
 }));
 const SERVER_ID = "30000000-0000-4000-8000-000000000001";
 const LINEAGE_ID = "30000000-0000-4000-8000-000000000002";
@@ -166,7 +166,7 @@ describe("StartupIdentityGate", () => {
     expect(centralMocks.register).not.toHaveBeenCalled();
     await userEvent.click(host);
     await vi.waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-    expect(centralMocks.register).toHaveBeenCalledWith("device-1");
+    expect(centralMocks.register).toHaveBeenCalledWith("device-1", undefined);
     expect(desktopMocks.initializeBootstrap).not.toHaveBeenCalled();
   });
 

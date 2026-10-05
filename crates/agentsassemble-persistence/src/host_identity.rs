@@ -2,11 +2,13 @@ use sqlx::Row;
 
 use crate::{PersistenceError, SqliteStore};
 
-/// Reads only an existing installation's public ID without creating or migrating it.
+/// Reads only an existing installation's public ID and saved profile name without creating or migrating it.
 ///
 /// # Errors
 /// Rejects unsafe paths, unreadable databases and missing or inconsistent identity.
-pub async fn inspect_server_id(path: &std::path::Path) -> Result<Option<String>, PersistenceError> {
+pub async fn inspect_host_identity(
+    path: &std::path::Path,
+) -> Result<Option<(String, Option<String>)>, PersistenceError> {
     use sqlx::{Connection, SqliteConnection, sqlite::SqliteConnectOptions};
     let metadata = match path.symlink_metadata() {
         Ok(metadata) => metadata,
@@ -51,8 +53,17 @@ pub async fn inspect_server_id(path: &std::path::Path) -> Result<Option<String>,
     {
         return Err(PersistenceError::InvalidHostIdentity);
     }
+    let profile_json: Option<String> =
+        sqlx::query_scalar("SELECT profile_json FROM user_profiles WHERE user_id = ?")
+            .bind(agentsassemble_domain::LOCAL_OPERATOR_USER_ID)
+            .fetch_optional(&mut connection)
+            .await?;
+    let profile_name = profile_json
+        .map(|value| serde_json::from_str::<agentsassemble_domain::UserProfile>(&value))
+        .transpose()?
+        .map(|profile| profile.display_name);
     connection.close().await?;
-    Ok(Some(server_id))
+    Ok(Some((server_id, profile_name)))
 }
 
 /// Persistent private signing identity bound to one server authority.
@@ -109,6 +120,7 @@ impl SqliteStore {
                 .execute(&self.pool)
                 .await?;
         }
+        self.notify_room_directory_changed();
         Ok(())
     }
 
@@ -200,7 +212,7 @@ mod tests {
         let directory = tempfile::tempdir().unwrap_or_else(|error| panic!("tempdir: {error}"));
         let path = directory.path().join("runtime.sqlite3");
         assert_eq!(
-            super::inspect_server_id(&path)
+            super::inspect_host_identity(&path)
                 .await
                 .unwrap_or_else(|error| panic!("inspect absent: {error}")),
             None
@@ -232,10 +244,10 @@ mod tests {
 
         let before = std::fs::read(&path).unwrap_or_else(|error| panic!("read existing: {error}"));
         assert_eq!(
-            super::inspect_server_id(&path)
+            super::inspect_host_identity(&path)
                 .await
                 .unwrap_or_else(|error| panic!("inspect existing: {error}")),
-            Some(first_server_id.clone())
+            Some((first_server_id.clone(), None))
         );
         assert_eq!(
             std::fs::read(&path).unwrap_or_else(|error| panic!("read inspected: {error}")),

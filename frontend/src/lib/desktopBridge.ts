@@ -201,9 +201,11 @@ export async function requestDesktopHostDeviceInfo(): Promise<HostDeviceInfo> {
   const tauri = tauriInternals();
   if (!tauri) throw new Error("이 기기의 앱에서 서버 정보를 확인해 주세요.");
   requireDesktopHostCommand("host_device_info");
-  const info = exactObject(await tauri.invoke<unknown>("host_device_info"), ["server_id", "host_name", "host_os"], "이 기기 서버");
+  const info = exactObject(await tauri.invoke<unknown>("host_device_info"), ["server_id", "host_name", "host_os", "device_kind", "profile_name"], "이 기기 서버");
   if ((info.server_id !== null && (typeof info.server_id !== "string" || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(info.server_id))) ||
       typeof info.host_name !== "string" || !info.host_name.trim() || info.host_name.length > 80 || /[\x00-\x1f\x7f]/.test(info.host_name) ||
+      typeof info.device_kind !== "string" || !info.device_kind.trim() || info.device_kind.length > 80 || /\p{Cc}/u.test(info.device_kind) ||
+      (info.profile_name !== null && (typeof info.profile_name !== "string" || !info.profile_name.trim() || info.profile_name.length > 240 || /\p{Cc}/u.test(info.profile_name))) ||
       !["macos", "windows", "linux", "other"].includes(String(info.host_os))) {
     throw new Error("이 기기의 서버 정보가 올바르지 않습니다.");
   }

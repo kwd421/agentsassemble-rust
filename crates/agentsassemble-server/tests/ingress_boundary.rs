@@ -112,6 +112,7 @@ async fn identity_probe_uses_the_persistent_key_and_exact_local_origin() {
             "registered_origin": "",
             "last_success_at": 0,
             "last_error": "",
+            "name_sync_error": "",
         })
     );
 

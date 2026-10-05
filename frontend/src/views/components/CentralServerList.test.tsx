@@ -25,7 +25,7 @@ it("matches the local installation by ID, opens it explicitly and keeps rename",
   const openLocal = vi.fn().mockResolvedValue(undefined);
   function Harness() {
     const [servers, setServers] = useState([host]);
-    return <CentralServerList servers={servers} liveServers={servers} busy={false} localHost={{ server_id: host.server_id, host_name: "Different computer name", host_os: "macos" }} onOpenLocal={openLocal} onOpen={async () => { throw new Error("offline host must not open"); }} onRefresh={async () => { setServers([{ ...host, alias: "내 서버" }]); }} />;
+    return <CentralServerList servers={servers} liveServers={servers} busy={false} localHost={{ server_id: host.server_id, host_name: "Different computer name", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner" }} onOpenLocal={openLocal} onOpen={async () => { throw new Error("offline host must not open"); }} onRefresh={async () => { setServers([{ ...host, alias: "내 서버" }]); }} />;
   }
   render(<Harness />);
   expect((screen.getByRole("button", { name: "Mac Studio 서버 열기" }) as HTMLButtonElement).disabled).toBe(false);
@@ -61,7 +61,7 @@ it("uses the refreshed name when retrying a conflicting edit", async () => {
   let stored = "Other device's new name";
   vi.mocked(renameCentralServer).mockImplementation(async (server, name) => {
     if (server.alias !== stored) throw new Error("목록이 바뀌었습니다");
-    stored = name;
+    stored = name === null ? "Mac Studio" : name;
   });
   function Harness() {
     const [servers, setServers] = useState([host]);
@@ -100,7 +100,7 @@ it("lets only the owner replace a server icon with the cropped image and then re
 it("dims central-dependent cached servers while keeping this-device open available", () => {
   render(<CentralServerList servers={[host, { ...host, server_id: "remote", alias: "Other Mac" }]}
     liveServers={[]} centralUnavailable busy={false}
-    localHost={{ server_id: host.server_id, host_name: "Mac", host_os: "macos" }}
+    localHost={{ server_id: host.server_id, host_name: "Mac", host_os: "macos", device_kind: "Mac Studio", profile_name: "Owner" }}
     onOpenLocal={async () => {}} onOpen={async () => {}} onRefresh={async () => {}} />);
   expect(screen.getByRole("button", { name: "Mac Studio 서버 열기" })).toHaveProperty("disabled", false);
   expect(screen.getByRole("button", { name: "Other Mac 서버 열기" })).toHaveProperty("disabled", true);
@@ -113,4 +113,49 @@ it("does not expose full or shortened server IDs in the saved chooser", () => {
   expect(screen.getByText("이름 없는 서버")).toBeTruthy();
   expect(document.body.textContent).not.toContain(server.server_id.slice(0, 8));
   expect(screen.getByRole("button", { name: "이름 없는 서버 서버 열기" })).toBeTruthy();
+});
+
+
+it("edits the first host name before opening and can return to the profile default", async () => {
+  const user = userEvent.setup();
+  const opened: Array<string | undefined> = [];
+  render(<CentralServerList servers={[]} liveServers={[]} busy={false} profileName="Account Name"
+    localHost={{ server_id: null, host_name: "Private hostname", host_os: "macos", device_kind: "MacBook Air", profile_name: "Edited Profile" }}
+    onOpenLocal={async name => { opened.push(name); }} onOpen={async () => {}} onRefresh={async () => {}} />);
+  expect(document.body.textContent).toContain("Edited Profile의 MacBook Air");
+  expect(document.body.textContent).not.toContain("Private hostname");
+  await user.click(screen.getByRole("button", { name: "편집" }));
+  await user.clear(screen.getByRole("textbox", { name: "서버 이름" }));
+  await user.type(screen.getByRole("textbox", { name: "서버 이름" }), "작업용 컴퓨터");
+  await user.click(screen.getByRole("button", { name: "이름 저장" }));
+  await user.click(screen.getByRole("button", { name: "이 기기 서버 열기" }));
+  expect(opened).toEqual(["작업용 컴퓨터"]);
+  await user.click(screen.getByRole("button", { name: "편집" }));
+  await user.click(screen.getByRole("button", { name: "기본 이름으로 되돌리기" }));
+  await user.click(screen.getByRole("button", { name: "이 기기 서버 열기" }));
+  expect(opened).toEqual(["작업용 컴퓨터", undefined]);
+  expect(document.body.textContent).toContain("Edited Profile의 MacBook Air");
+});
+
+it("restores a fixed server name only after the existing rename operation succeeds", async () => {
+  const user = userEvent.setup();
+  const initial = { ...host, alias: "작업용", default_name: "Owner의 Mac Studio", name_is_default: false };
+  let saved = initial;
+  vi.mocked(renameCentralServer).mockRejectedValueOnce(new Error("저장 실패"))
+    .mockImplementationOnce(async (_server, name) => {
+      if (name !== null) throw new Error("Reset must restore automatic naming");
+      saved = { ...initial, alias: initial.default_name, name_is_default: true };
+    });
+  function Harness() {
+    const [server, setServer] = useState(initial);
+    return <CentralServerList servers={[server]} liveServers={[server]} busy={false} onOpen={async () => {}}
+      onRefresh={async () => { setServer(saved); }} />;
+  }
+  render(<Harness />);
+  await user.click(screen.getByRole("button", { name: "작업용 이름 변경" }));
+  await user.click(screen.getByRole("button", { name: "기본 이름으로 되돌리기" }));
+  await screen.findByRole("alert");
+  expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("작업용");
+  await user.click(screen.getByRole("button", { name: "기본 이름으로 되돌리기" }));
+  expect(await screen.findByRole("button", { name: "Owner의 Mac Studio 이름 변경" })).toBeTruthy();
 });

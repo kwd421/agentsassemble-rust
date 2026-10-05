@@ -197,7 +197,7 @@ export default function StartupIdentityGate({
     }
   }, [directory, screen]);
 
-  async function selectCentralServer(server?: CentralServerDisplay) {
+  async function selectCentralServer(server?: CentralServerDisplay, name?: string) {
     if (busy || !centralPerson) return;
     setConnectingServerId(server?.server_id || localHost?.server_id || "local");
     setBusy(true);
@@ -219,7 +219,7 @@ export default function StartupIdentityGate({
           await enterApplication(await requestDesktopBootstrapStatus());
         } else {
           const authority = await saveLocalProfile(current.person.display_name, bootstrapRequestId.current, current.person);
-          try { await registerLocalServer(deviceToken); }
+          try { await registerLocalServer(deviceToken, name); }
           catch (reason) { if (!isCentralTemporaryError(reason)) throw reason; }
           await enterApplication(authority);
         }
@@ -608,7 +608,7 @@ export default function StartupIdentityGate({
             </div>
             {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
             {localHostError && <p role="alert" className="text-sm text-red-300">이 기기 · {localHostError} 서버 목록 새로고침으로 다시 확인해 주세요.</p>}
-            <CentralServerList key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} localHost={localHost} onOpenLocal={!webEntry ? () => selectCentralServer() : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
+            <CentralServerList key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={localHost} onOpenLocal={!webEntry ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
           </section>
         )}

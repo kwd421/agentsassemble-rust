@@ -24,7 +24,7 @@ const HOST_REQUEST_CONTEXT: &str = "AA-HOST-1";
 ///
 /// # Errors
 /// Rejects unavailable or invalid computer names.
-pub fn host_device_info(
+pub async fn host_device_info(
     server_id: Option<String>,
 ) -> Result<agentsassemble_protocol::HostDeviceInfo, HostIdentityError> {
     // macOS hostnames may be supplied by router DNS; use its display name.
@@ -43,6 +43,8 @@ pub fn host_device_info(
     Ok(agentsassemble_protocol::HostDeviceInfo {
         server_id,
         host_name,
+        device_kind: device_kind().await.to_owned(),
+        profile_name: None,
         host_os: match std::env::consts::OS {
             "macos" => "macos",
             "windows" => "windows",
@@ -51,6 +53,67 @@ pub fn host_device_info(
         }
         .to_owned(),
     })
+}
+
+// Read the hardware marketing name once per host process, never a network or
+// System Configuration computer name. The unknown-model value is product policy.
+async fn device_kind() -> &'static str {
+    static MODEL: tokio::sync::OnceCell<String> = tokio::sync::OnceCell::const_new();
+    MODEL
+        .get_or_init(|| async {
+            #[cfg(target_os = "macos")]
+            let model = {
+                let output = tokio::time::timeout(
+                    std::time::Duration::from_secs(3),
+                    tokio::process::Command::new("/usr/sbin/system_profiler")
+                        .args([
+                            "SPHardwareDataType",
+                            "-json",
+                            "-detailLevel",
+                            "mini",
+                            "-timeout",
+                            "2",
+                        ])
+                        .kill_on_drop(true)
+                        .output(),
+                )
+                .await;
+                output
+                    .ok()
+                    .and_then(Result::ok)
+                    .filter(|output| output.status.success())
+                    .and_then(|output| serde_json::from_slice::<Value>(&output.stdout).ok())
+                    .and_then(|value| {
+                        value["SPHardwareDataType"][0]["machine_name"]
+                            .as_str()
+                            .map(str::to_owned)
+                    })
+            };
+            #[cfg(target_os = "windows")]
+            let model = sysinfo::Product::name();
+            #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+            let model: Option<String> = None;
+            model
+                .map(|value| value.trim().to_owned())
+                .filter(|value| {
+                    !value.is_empty()
+                        && value.encode_utf16().count() <= 80
+                        && !value.chars().any(char::is_control)
+                        && !matches!(
+                            value.to_ascii_lowercase().as_str(),
+                            "system product name"
+                                | "to be filled by o.e.m."
+                                | "default string"
+                                | "unknown"
+                        )
+                })
+                .unwrap_or_else(|| "컴퓨터".to_owned())
+        })
+        .await
+}
+
+pub(crate) async fn default_server_name(profile_name: &str) -> String {
+    format!("{profile_name}의 {}", device_kind().await)
 }
 
 #[derive(Debug, Error)]
@@ -95,6 +158,7 @@ pub struct HostRegistrationProof {
 #[derive(Serialize)]
 pub struct HostRegistrationEnvelope {
     host_name: String,
+    name_revision: i64,
     host_os: String,
     server_id: String,
     host_public_key_jwk: HostPublicJwk,
@@ -251,11 +315,12 @@ impl CentralHostIdentity {
     /// # Errors
     ///
     /// Returns an entropy error when the OS random source is unavailable.
-    pub fn registration_envelope(
+    pub async fn registration_envelope(
         &self,
         owner_person_id: &str,
         claim_ownership: bool,
         registration_epoch: Option<&str>,
+        profile: &agentsassemble_domain::UserProfile,
     ) -> Result<HostRegistrationEnvelope, HostIdentityError> {
         let issued_at = Utc::now().timestamp();
         let mut nonce_bytes = [0_u8; REGISTRATION_NONCE_BYTES];
@@ -278,10 +343,11 @@ impl CentralHostIdentity {
             transcript.push_str(epoch);
         }
         let signature = URL_SAFE_NO_PAD.encode(self.key_pair.sign(transcript.as_bytes()).as_ref());
-        let device = host_device_info(Some(self.server_id.to_string()))?;
+        let device = host_device_info(Some(self.server_id.to_string())).await?;
         Ok(HostRegistrationEnvelope {
             registration_epoch: registration_epoch.map(str::to_owned),
-            host_name: device.host_name,
+            host_name: default_server_name(&profile.display_name).await,
+            name_revision: profile.revision,
             host_os: device.host_os,
             server_id: self.server_id.to_string(),
             host_public_key_jwk: self.public_jwk.clone(),
@@ -394,7 +460,13 @@ mod tests {
             .unwrap_or_else(|e| panic!("key: {e}"));
         for claim in [false, true] {
             let envelope = identity
-                .registration_envelope("per_owner_12345678", claim, Some("epoch-worker-opaque"))
+                .registration_envelope(
+                    "per_owner_12345678",
+                    claim,
+                    Some("epoch-worker-opaque"),
+                    &agentsassemble_domain::UserProfile::defaults(chrono::Utc::now()),
+                )
+                .await
                 .unwrap_or_else(|e| panic!("proof: {e}"));
             let proof = &envelope.host_registration_proof;
             // Same independent join as Worker test/server_epoch.test.mjs registrationBody.
@@ -440,23 +512,23 @@ mod tests {
             .unwrap_or_else(|error| panic!("derive host identity: {error}"));
         let owner = "per_central-owner_123456";
         let envelope = identity
-            .registration_envelope(owner, false, None)
+            .registration_envelope(
+                owner,
+                false,
+                None,
+                &agentsassemble_domain::UserProfile::defaults(chrono::Utc::now()),
+            )
+            .await
             .unwrap_or_else(|error| panic!("create registration proof: {error}"));
 
-        #[cfg(target_os = "macos")]
-        {
-            let configured_name = std::process::Command::new("/usr/sbin/scutil")
-                .args(["--get", "ComputerName"])
-                .output()
-                .unwrap_or_else(|error| panic!("read macOS computer name: {error}"));
-            assert!(configured_name.status.success());
-            assert_eq!(
-                envelope.host_name,
-                String::from_utf8(configured_name.stdout)
-                    .unwrap_or_else(|error| panic!("decode macOS computer name: {error}"))
-                    .trim()
-            );
-        }
+        assert_eq!(
+            envelope.host_name,
+            super::default_server_name(
+                &agentsassemble_domain::UserProfile::defaults(chrono::Utc::now()).display_name
+            )
+            .await
+        );
+        assert_eq!(envelope.name_revision, 1);
 
         let public_key = URL_SAFE_NO_PAD
             .decode(&envelope.host_public_key_jwk.x)
@@ -496,11 +568,18 @@ mod tests {
                 "host_os",
                 "host_public_key_jwk",
                 "host_registration_proof",
+                "name_revision",
                 "server_id",
             ]
         );
         let claimed = identity
-            .registration_envelope(owner, true, None)
+            .registration_envelope(
+                owner,
+                true,
+                None,
+                &agentsassemble_domain::UserProfile::defaults(chrono::Utc::now()),
+            )
+            .await
             .unwrap_or_else(|error| panic!("create ownership claim: {error}"));
         let claim_transcript = format!(
             "AA-HOST-CLAIM-1\n{}\n{owner}\n{}\n{}",
@@ -539,10 +618,22 @@ mod tests {
         let identity = CentralHostIdentity::from_persistent(&persistent)
             .unwrap_or_else(|error| panic!("derive host identity: {error}"));
         let first = identity
-            .registration_envelope("per_owner_12345678", false, None)
+            .registration_envelope(
+                "per_owner_12345678",
+                false,
+                None,
+                &agentsassemble_domain::UserProfile::defaults(chrono::Utc::now()),
+            )
+            .await
             .unwrap_or_else(|error| panic!("first proof: {error}"));
         let second = identity
-            .registration_envelope("per_owner_12345678", false, None)
+            .registration_envelope(
+                "per_owner_12345678",
+                false,
+                None,
+                &agentsassemble_domain::UserProfile::defaults(chrono::Utc::now()),
+            )
+            .await
             .unwrap_or_else(|error| panic!("second proof: {error}"));
 
         assert_eq!(first.server_id, second.server_id);

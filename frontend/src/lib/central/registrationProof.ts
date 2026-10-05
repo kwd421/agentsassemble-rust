@@ -18,6 +18,7 @@ export type HostOs = "macos" | "windows" | "linux" | "other";
 export type HostRegistrationEnvelope = {
   registration_epoch?: string;
   host_name: string;
+  name_revision: number;
   host_os: HostOs;
   server_id: string;
   host_public_key_jwk: HostPublicJwk;
@@ -94,6 +95,7 @@ export async function verifyCentralRegistrationEnvelope(
     [
       "server_id",
       "host_name",
+      "name_revision",
       "host_os",
       "host_public_key_jwk",
       "host_key_fingerprint",
@@ -111,6 +113,9 @@ export async function verifyCentralRegistrationEnvelope(
   if (envelope.registration_epoch !== undefined &&
     (typeof envelope.registration_epoch !== "string" || !envelope.registration_epoch)) {
     throw new Error("서버 등록 epoch가 올바르지 않습니다.");
+  }
+  if (!Number.isSafeInteger(envelope.name_revision) || Number(envelope.name_revision) < 1) {
+    throw new Error("서버 기본 이름의 프로필 revision이 올바르지 않습니다.");
   }
   validateHostName(envelope.host_name);
   validateHostOs(envelope.host_os);
@@ -169,7 +174,7 @@ export async function verifyCentralRegistrationEnvelope(
 }
 
 export function validateHostName(value: unknown): asserts value is string {
-  if (typeof value !== "string" || !value.trim() || value.length > 80 || /\p{Cc}/u.test(value)) {
+  if (typeof value !== "string" || !value.trim() || value.length > 400 || /\p{Cc}/u.test(value)) {
     throw new Error("컴퓨터 이름을 확인하지 못했습니다.");
   }
 }

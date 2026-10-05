@@ -1703,3 +1703,17 @@ MemberJoinPanel과 useRoomAdmission → memberConnect fragment 경로는 방 이
 VERIFICATION.md 건별 한 줄을 남긴다. 서명 빌드·수동 검증·배포는 금지되어 이번 작업의
 검증 범위 밖이다. 자동 이름/고정/복원/기존 이름 보존/실패 및 재시도와 공용 진입점의
 자동 검증을 실행하고 실제 화면·운영 배포 검증은 미확인으로 보고한다.
+
+구현 소유: 호스트 저장 프로필 revision과 모델이 기본 label을 결정한다. 중앙의 빈
+owner alias는 자동 모드이고 nonempty alias는 고정 모드다. 기존 데이터에 alias가 있으면
+자동 유래처럼 보여도 보존한다(문자열 비교로 추정하지 않음). 호스트는 기존 directory
+작업과 profile/epoch 변경 알림·bounded retry를 재사용하여 `/name`에 AA-HOST-1 서명
+PUT을 보내며, 중앙의 additive name_revision으로 지연된 옛 프로필 쓰기를 거부한다.
+POST 이름 편집은 동일 소유권·epoch·관측 이름 검사에서 reset_default를 처리한다.
+새 루프/서비스/인증은 추가하지 않는다. 프로필 변경은 호스트에 먼저 영속화되어 중앙
+일시 장애나 재시작 후에도 최신 revision을 다시 보낼 수 있고 name_sync_error로 실패를
+노출한다. 표시 이름은 권한에 쓰지 않는다. 새 호스트 기본명은 400 UTF-16 단위까지,
+수동 별칭은 기존 80 단위까지다. 전체 프로필 이름과 모델을 보존하기 위한 한도 확장이다.
+중앙 기존 클라이언트의 revision 없는 등록은 수용하지만 갱신된 기본 label을 되돌리지
+않는다. 중앙 0013은 로컬 검증만 하며 배포/운영 migration은 별도다. 최초 선택 화면의
+기존 설치 프로필은 DB를 읽기 전용으로 검사하고, 최초 설치는 로그인 프로필을 사용한다.

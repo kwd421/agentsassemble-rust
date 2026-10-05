@@ -293,6 +293,8 @@ pub struct HostDeviceInfo {
     pub server_id: Option<String>,
     pub host_name: String,
     pub host_os: String,
+    pub device_kind: String,
+    pub profile_name: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]

@@ -89,9 +89,20 @@ async fn issue_registration_proof(
         .registration_epoch()
         .await
         .map_err(|_| RegistrationHttpError::persistence())?;
+    let profile = state
+        .store
+        .local_operator_profile()
+        .await
+        .map_err(|_| RegistrationHttpError::persistence())?;
     state
         .central_host_identity
-        .registration_envelope(owner_person_id, payload.claim_ownership, epoch.as_deref())
+        .registration_envelope(
+            owner_person_id,
+            payload.claim_ownership,
+            epoch.as_deref(),
+            &profile,
+        )
+        .await
         .and_then(|envelope| serde_json::to_value(envelope).map_err(HostIdentityError::Json))
         .map(Json)
         .map_err(|error| RegistrationHttpError::from_identity(&error))

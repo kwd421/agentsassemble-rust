@@ -86,13 +86,15 @@ async fn list(
         .map_err(storage_error)?;
     let mut sessions = Vec::new();
     if matches!(owner, ServerOwnerAuthority::LocalOperator) {
-        let host = crate::central::host_identity::host_device_info(None).map_err(|_| {
-            failure(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                "host_device_unavailable",
-                "The host device description is unavailable.",
-            )
-        })?;
+        let host = crate::central::host_identity::host_device_info(None)
+            .await
+            .map_err(|_| {
+                failure(
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "host_device_unavailable",
+                    "The host device description is unavailable.",
+                )
+            })?;
         sessions.push(OwnerDeviceSession {
             session_id: "host".to_owned(),
             device_name: host.host_name,

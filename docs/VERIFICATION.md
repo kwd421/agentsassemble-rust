@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 서버 기본 이름/편집: 호스트 프로필+기기 모델, 중앙 기본 label 갱신·고정 별칭 보존·기본 복원·최초 열기 미리보기; 영향 frontend 39, Rust central 11/persistence 8/directory HTTP 6, TypeScript·server Clippy 통과, 중앙 이름/epoch/member preview 68 통과(경로 제거 mutation에서 실패 확인); 중앙 0013 로컬 검증만, 서명·수동 검증·배포 없음.
+
 - 2026-10-05 방 중심 참가 확인 (보안 리뷰 대상): 표시 전용 room_name fragment·정규화/80단위 제한·중앙 preview 서버/주소·기존 callback 상관관계를 유지했고 참가/fragment/admission 영향 테스트 50/50 통과; 서명·수동 검증·배포 없음.
 
 - 2026-10-05 member multi-device correction (233019d8 review): schema 83 preserves v82 live authority; one active session per admission/browser, 8 devices with usage-based LRU, prune ended history to 32 per admission on reentry (40 total rows), challenge-bound keys and replay high-water prevent old bearer revival; member persistence/C4a 24/24 and HTTP/WS two-device integration passed; one pre-push make verify passed Rust 1,102, frontend 1,117 and desktop 47 tests then stopped at Clippy function length; expression-only correction passed affected admission 11/11, workspace Clippy and architecture/format/diff/artifact gates without exceptions; retry history uses the existing 300-second challenge window, not permanent UUID storage; no signed build, manual verification or deployment.

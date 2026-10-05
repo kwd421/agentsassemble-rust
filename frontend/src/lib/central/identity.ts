@@ -44,6 +44,8 @@ export type CentralServer = {
   registration_epoch?: string;
   relation: "owner" | "bookmark";
   alias: string;
+  default_name?: string;
+  name_is_default?: boolean;
   /** Versioned reference to the server icon on the central origin; "" when unset. */
   icon?: string;
   host_os: HostOs | null;
@@ -734,7 +736,7 @@ async function updateLocalRegistrationEpoch(serverId: string, epoch: string | nu
   await responsePayload(response, false);
 }
 
-export async function registerLocalServer(deviceToken: string): Promise<void> {
+export async function registerLocalServer(deviceToken: string, name?: string): Promise<void> {
   const session = loadCentralSession();
   if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
   for (let attempt = 0; attempt < 2; attempt++) {
@@ -757,7 +759,7 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
     let registered: { registration_epoch?: string };
     try {
       registered = await signedRequest(session, "/v1/servers", "POST", {
-        server_id: local.server_id, label: local.host_name, host_os: local.host_os,
+        server_id: local.server_id, label: local.host_name, host_os: local.host_os, name_revision: local.name_revision,
         host_public_key_jwk: local.host_public_key_jwk,
         host_registration_proof: local.host_registration_proof,
         registration_epoch: local.registration_epoch,
@@ -771,6 +773,12 @@ export async function registerLocalServer(deviceToken: string): Promise<void> {
     }
     if (registered.registration_epoch !== undefined) {
       await updateLocalRegistrationEpoch(local.server_id, registered.registration_epoch, deviceToken);
+    }
+    if (name !== undefined) {
+      const current = await bootstrapCentral();
+      const server = current?.servers.find(item => item.server_id === local.server_id);
+      if (!server) throw new Error("등록한 서버를 확인하지 못했어요. 목록을 새로고침해 주세요.");
+      await renameCentralServer(server, name);
     }
     break;
   }
@@ -799,12 +807,15 @@ export function isCentralAuthenticationError(error: unknown): boolean {
   return error instanceof CentralAuthError;
 }
 
-export async function renameCentralServer(server: CentralServerDisplay, name: string): Promise<void> {
+export async function renameCentralServer(server: CentralServerDisplay, name: string | null): Promise<void> {
   const session = loadCentralSession();
   if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
   if (server.relation !== "owner") throw new Error("서버 소유자만 이름을 바꿀 수 있습니다.");
   await signedRequest(session, `/v1/servers/${encodeURIComponent(server.server_id)}/name`, "POST", {
-    registration_epoch: server.registration_epoch, name, expected_name: server.alias || server.server_id,
+    registration_epoch: server.registration_epoch,
+    ...(name === null ? { reset_default: true } : { name }),
+    expected_name: server.alias || server.server_id,
+    expected_name_is_default: server.name_is_default,
   });
   if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었습니다. 다시 확인해 주세요.");
 }

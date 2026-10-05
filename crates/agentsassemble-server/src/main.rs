@@ -109,9 +109,11 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     }
     if let Some(database) = &args.inspect_host_device {
-        let server_id =
-            runtime.block_on(agentsassemble_persistence::inspect_server_id(database))?;
-        let device = agentsassemble_server::host_device_info(server_id)?;
+        let (server_id, profile_name) = runtime
+            .block_on(agentsassemble_persistence::inspect_host_identity(database))?
+            .map_or((None, None), |(id, name)| (Some(id), name));
+        let mut device = runtime.block_on(agentsassemble_server::host_device_info(server_id))?;
+        device.profile_name = profile_name;
         println!("{}", serde_json::to_string(&device)?);
         runtime.shutdown_timeout(Duration::from_secs(1));
         return Ok(());

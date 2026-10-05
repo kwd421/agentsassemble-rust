@@ -3,4 +3,4 @@
 /**
  * Read-only installation identity for the native server chooser; grants no authority.
  */
-export type HostDeviceInfo = { server_id: string | null, host_name: string, host_os: string, };
+export type HostDeviceInfo = { server_id: string | null, host_name: string, host_os: string, device_kind: string, profile_name: string | null, };
