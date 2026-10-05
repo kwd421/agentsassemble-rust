@@ -3,6 +3,16 @@
 Status: published contract owner; implementation reopened by the 2026-09-01
 repository audit before further Agent Session work
 
+## Codex path-only grouping (2026-10-05)
+
+Move the 11 provider `codex_*` files into `codex/`, dropping file prefixes.
+Keep the existing `codex.rs` driver, filesystem executable owner and nested test
+ownership; adjust only file/module/import paths and preserve exact visibility.
+Driver launch/stop, identity, configuration, requests, turns, protocol and usage
+retain their authority, state transitions and retry/failure behavior. No aliases
+or fallback. Verify the provider crate with existing build/tests and one final
+pre-push `make verify`; no live provider, deployment, signing or manual checks.
+
 ## Shared agent creation presentation (2026-10-05)
 
 App/web `AgentCreateModal` shows all providers once under 구독 에이전트, API 키,

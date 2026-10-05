@@ -23,11 +23,6 @@ mod claude_sdk_client;
 mod claude_sdk_runtime;
 mod claude_usage;
 mod codex;
-#[cfg(unix)]
-mod codex_code_mode_host;
-mod codex_identity;
-#[cfg(not(unix))]
-mod codex_process;
 mod configuration;
 mod credential_provider;
 mod credentials;

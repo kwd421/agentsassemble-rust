@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 path-only grouping 2: server connector 13, persistence attendee 26 and provider codex 11 files moved with git mv; crate build/tests passed (server 311, persistence 411, provider 290); one final pre-push make verify exited 0 (workspace Rust 1,083, frontend 1,061, desktop 47; architecture/format/Clippy/diff/artifact gates passed); existing visibility/ownership retained, no behavior changes or compatibility aliases; no deployment, signed build or manual verification.
+
 - 2026-10-05 path-only grouping: server attendee 23 + central 6 and frontend central 17 files moved with git mv; server 311 tests and frontend TypeScript + 1,061 tests passed; one final pre-push make verify exited 0 (workspace Rust 1,083, frontend 1,061, desktop 47; architecture/format/Clippy/diff/artifact gates passed); no behavior changes, compatibility aliases, deployment, signed build or manual verification.
 
 - 2026-10-05 Daybreak Finding 1 (`4ade27b5`): restored content-bound local surface digest verification for remote/native lifetime pins; A then same-revision/digest B reproduced as accepted before correction and rejected afterwards through binding and real admission recovery (verified cache never publishes/stores B); exactKeys expansion and receipt cleanup retained; affected frontend 90/90 and TypeScript passed, one pre-push `make verify` exited 0 (frontend 1,061, desktop 47, workspace Rust 1,083, all gates); no deployment, signed build or manual verification.

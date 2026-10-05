@@ -11,7 +11,7 @@ use agentsassemble_domain::{stable_content_identity, stable_identity_hash};
 use same_file::Handle;
 use tokio::sync::{Semaphore, oneshot};
 
-#[path = "codex_executable.rs"]
+#[path = "codex/executable.rs"]
 mod codex_executable;
 #[cfg(target_os = "macos")]
 #[path = "macho_host.rs"]

@@ -208,5 +208,5 @@ fn window(
 }
 
 #[cfg(test)]
-#[path = "codex_usage_tests.rs"]
+#[path = "usage_tests.rs"]
 mod tests;

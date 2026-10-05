@@ -165,7 +165,7 @@ async fn start_turn(
         Err(error) => return poison(driver, error),
     };
     if observed_model.is_some_and(|model| model != session.public.model) {
-        return poison(driver, crate::codex_identity::provider_model_mismatch());
+        return poison(driver, crate::codex::identity::provider_model_mismatch());
     }
     let provider_turn_id = match provider_turn_id_from_response(&response) {
         Ok(Some(value)) => value,
@@ -255,7 +255,7 @@ async fn read_turn(
             Err(error) => return poison(driver, error),
         };
         if observed_model.is_some_and(|model| model != configured_model) {
-            return poison(driver, crate::codex_identity::provider_model_mismatch());
+            return poison(driver, crate::codex::identity::provider_model_mismatch());
         }
         let active = driver
             .turn_state

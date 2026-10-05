@@ -754,7 +754,7 @@ fn run_provider_launcher(lease_token: &str) -> io::Result<()> {
         .codex_code_mode_host
         .as_deref()
         .map(|executable| {
-            crate::codex_code_mode_host::CodexCodeModeHost::start(
+            crate::codex::code_mode_host::CodexCodeModeHost::start(
                 Path::new(executable),
                 working_directory,
                 lease_token,

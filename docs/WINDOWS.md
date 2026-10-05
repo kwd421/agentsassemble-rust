@@ -141,7 +141,7 @@ fetch/HTTP join 금지를 포함하고, 도구 이름은 MCP 서버 지시에 �
 복구 문구 없이 대기 상태로 들어갔다. 다만 수정 전후의 실패 지점을 런타임 로그로 직접 비교하지는
 않았으므로, 이 변경이 그 증상의 유일한 원인이었다고 단정하지는 않는다.
 
-#### 8-2. Codex 가 npm 의 Windows 래퍼를 네이티브 실행 파일로 오인함 (`codex_executable.rs`)
+#### 8-2. Codex 가 npm 의 Windows 래퍼를 네이티브 실행 파일로 오인함 (`codex/executable.rs`)
 
 Windows 의 PATHEXT 탐색은 확장자 붙은 후보만 보므로 npm 전역 설치에서 `codex.cmd` 가 선택된다.
 해석기는 첫 두 바이트가 `#!` 가 아니면 네이티브로 보고 `.cmd` **옆에서** 동반 실행 파일
@@ -174,7 +174,7 @@ npm 업데이트는 실행 전에 "지금 찾은 런처가 npm 전역 prefix 가
 비교 시 Windows 래퍼를 그 래퍼가 실행하는 스크립트로 따라가도록 바꿨다. 수정 뒤 UI 가
 "업데이트" 버튼을 제공하는 것까지 확인했고, 실제 업데이트 실행은 하지 않았다.
 
-#### 8-5. Claude 모델 디스커버리가 Windows 에서 항상 실패 (`claude.rs`, `codex_executable.rs`)
+#### 8-5. Claude 모델 디스커버리가 Windows 에서 항상 실패 (`claude.rs`, `codex/executable.rs`)
 
 Claude Code 를 npm 으로 설치한 뒤에도 에이전트 추가 창에 `provider model discovery failed` 가 떴다.
 `claude auth status` 는 로그인 상태(exit 0)로 정상이었다.

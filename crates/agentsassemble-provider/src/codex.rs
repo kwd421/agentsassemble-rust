@@ -1,3 +1,8 @@
+#[cfg(unix)]
+pub(crate) mod code_mode_host;
+pub(crate) mod identity;
+#[cfg(not(unix))]
+pub(crate) mod process;
 use std::{collections::VecDeque, time::Duration};
 
 use agentsassemble_domain::DurableAgentSession;
@@ -11,7 +16,7 @@ use tokio::{
 };
 
 use crate::{
-    codex_identity::{
+    codex::identity::{
         checked_provider_session_id, observed_model_id_from_response,
         provider_session_id_from_response, provider_session_mismatch, provider_session_unconfirmed,
     },
@@ -130,7 +135,7 @@ impl CodexDriver {
         }
         #[cfg(not(unix))]
         {
-            let (child, stdin, stdout, stderr) = crate::codex_process::start(
+            let (child, stdin, stdout, stderr) = crate::codex::process::start(
                 &executable,
                 &arguments,
                 std::path::Path::new(&session.workspace),
@@ -446,7 +451,7 @@ impl CodexDriver {
         #[cfg(unix)]
         let process = self.process_group.stop().await;
         #[cfg(not(unix))]
-        let process = crate::codex_process::stop(self.child.as_mut()).await;
+        let process = crate::codex::process::stop(self.child.as_mut()).await;
         self.stderr_task.abort();
         let _ = (&mut self.stderr_task).await;
         let portal = self.room_portal.shutdown().await.map_err(DriverError::from);
@@ -736,20 +741,20 @@ const fn notification_overflow() -> DriverError {
     )
 }
 
-#[path = "codex_turn.rs"]
+#[path = "codex/turn.rs"]
 mod turn;
 
-#[path = "codex_requests.rs"]
+#[path = "codex/requests.rs"]
 mod requests;
 
-#[path = "codex_config.rs"]
+#[path = "codex/config.rs"]
 pub(crate) mod config;
 
 #[cfg(test)]
-#[path = "codex_command_tests.rs"]
+#[path = "codex/command_tests.rs"]
 mod tests;
 
-#[path = "codex_protocol.rs"]
+#[path = "codex/protocol.rs"]
 mod protocol;
-#[path = "codex_usage.rs"]
+#[path = "codex/usage.rs"]
 pub(crate) mod usage;

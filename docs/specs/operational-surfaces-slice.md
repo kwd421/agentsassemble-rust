@@ -1234,7 +1234,7 @@ Unsupported means no original retained account operation, not missing installati
 
 | Provider | Local login | Account usage owner |
 | --- | --- | --- |
-| Codex | `codex login`, browser OAuth | `codex_usage.rs`, native app-server rate limits |
+| Codex | `codex login`, browser OAuth | `codex/usage.rs`, native app-server rate limits |
 | Claude | `claude auth login`, browser OAuth | `claude_usage.rs`, native SDK usage |
 | OpenCode | `opencode auth login`, operator terminal | `opencode_usage.rs`, Go quota HTTPS |
 | Cursor | `cursor-agent login`, browser OAuth | Unsupported |
