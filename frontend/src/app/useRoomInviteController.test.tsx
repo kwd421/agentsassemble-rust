@@ -664,3 +664,15 @@ it("keeps failed remote authentication distinct from confirmed off and retries i
   expect(apiMocks.fetchRemoteInviteOrigin).toHaveBeenLastCalledWith(remote, expect.any(Function));
   hook.unmount();
 });
+
+  it.each(["status", "request"])("hides raw external-access %s failures", async (source) => {
+    const failed = { ...stoppedStatus, tunnel: { ...stoppedStatus.tunnel, last_error: "cloudflared closed its output before exiting" } };
+    if (source === "request") apiMocks.startPublicInviteTunnel.mockRejectedValue(new Error(failed.tunnel.last_error));
+    else {
+      apiMocks.startPublicInviteTunnel.mockResolvedValue(failed);
+      apiMocks.fetchPublicInviteStatus.mockResolvedValue(failed);
+    }
+    const hook = renderInviteController();
+    await act(() => hook.result.current.startTunnel());
+    expect(hook.result.current.copyStatus).toBe("외부 접속을 열지 못했어요. 잠시 후 다시 시도해 주세요.");
+  });

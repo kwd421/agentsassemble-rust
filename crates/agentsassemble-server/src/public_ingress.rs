@@ -684,6 +684,9 @@ impl ManagedProjection {
             return;
         }
         self.trust = None;
+        if let Some(error) = &outcome.error {
+            tracing::warn!(%generation, %error, "managed public ingress failed");
+        }
         self.last_error = outcome.error;
         self.cleanup_failed = outcome.cleanup_failed;
         self.phase = if self.last_error.is_some() {

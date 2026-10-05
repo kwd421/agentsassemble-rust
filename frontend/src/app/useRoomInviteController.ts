@@ -1,3 +1,4 @@
+import { PUBLIC_INGRESS_START_ERROR } from "../lib/publicIngressStatus";
 import { fetchRemoteInviteOrigin, type RemoteInviteTransport } from "../api/roomInviteTransport";
 import { copyText } from "../lib/copyInviteText";
 import { useEffect, useRef, useState } from "react";
@@ -269,22 +270,22 @@ export function useRoomInviteController({
     let status = await refreshPublicInviteState(generation);
     if (status.public_url) return status;
     if (!("tunnel" in status) || !status.tunnel.available) {
-      throw new Error("공개 URL을 만들 수 없습니다. cloudflared 설치 상태를 확인하세요.");
+      throw new Error(PUBLIC_INGRESS_START_ERROR);
     }
     assertIngressOperation(generation);
     setCopyStatus("공개 터널 준비 중...");
     status = await startPublicInviteTunnel(() =>
       assertIngressOperation(generation)
-    );
+    ).catch(() => {
+      assertIngressOperation(generation);
+      throw new Error(PUBLIC_INGRESS_START_ERROR);
+    });
     assertIngressOperation(generation);
     setPublicInviteStatus(status);
     if (status.public_url && "tunnel" in status && status.tunnel.phase === "running") return status;
     const readyStatus = await waitForTunnelReady(generation);
     if (readyStatus.public_url && "tunnel" in readyStatus && readyStatus.tunnel.phase === "running") return readyStatus;
-    throw new Error(
-      ("tunnel" in readyStatus ? readyStatus.tunnel.last_error : "") ||
-        "공개 터널이 아직 초대 URL을 보고하지 않았습니다. 잠시 후 다시 눌러 주세요."
-    );
+    throw new Error(PUBLIC_INGRESS_START_ERROR);
   }
 
   async function requirePublicInviteReady(
@@ -376,11 +377,11 @@ export function useRoomInviteController({
       setCopyStatus(
         latest.public_url
           ? "서버가 공개되었습니다. 이제 외부 초대 링크를 만들 수 있습니다."
-          : ("tunnel" in latest ? latest.tunnel.last_error : "") || "외부 접속 주소가 아직 준비되지 않았습니다."
+          : PUBLIC_INGRESS_START_ERROR
       );
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
-      setCopyStatus(error instanceof Error ? error.message : "서버 공개 실패");
+      setCopyStatus(PUBLIC_INGRESS_START_ERROR);
     } finally {
       if (ingressOperationIsCurrent(generation)) {
         setPublicAccessTransition("idle");

@@ -1,3 +1,5 @@
+export const PUBLIC_INGRESS_START_ERROR = "외부 접속을 열지 못했어요. 잠시 후 다시 시도해 주세요.";
+
 export type PublicIngressMode = "unconfigured" | "manual" | "managed";
 export type PublicIngressPhase =
   | "stopped"

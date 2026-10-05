@@ -27,11 +27,13 @@ function renderInviteModal({
   query = "confirmed",
   activeWithoutUrl = false,
   phase,
+  lastError,
   requestState = "idle",
   humanInvites = [],
   pairingAvailable = false,
   operatorPairings = [],
 }: {
+  lastError?: string;
   publicAccess?: boolean;
   query?: "checking" | "confirmed" | "unavailable";
   activeWithoutUrl?: boolean;
@@ -64,6 +66,7 @@ function renderInviteModal({
       publicAccessQuery={query}
       onRetryPublicAccess={retry}
       tunnelStatus={{
+        last_error: lastError,
         available: true,
         running: tunnelActive,
         phase: tunnelPhase,
@@ -262,4 +265,10 @@ it.each(["unknown", "revoking", "revoked"] as const)("hides a QR in %s state", s
   renderInviteModal({ pairingAvailable: true, operatorPairings: [{ key: "qr", expiresAt: "2099-01-01T00:00:00Z", state, copyable: false, expired: false, qrUrl: "https://host.example/pair?token=test" }] });
   fireEvent.click(screen.getByRole("tab", { name: "내 기기" }));
   expect(screen.queryByRole("img", { name: "기기 연결 1 QR 코드" })).toBeNull();
+});
+
+it("shows safe external-access failure copy", () => {
+  renderInviteModal({ publicAccess: false, phase: "error", lastError: "cloudflared closed its output before exiting" });
+  expect(screen.getByText("외부 접속을 열지 못했어요. 잠시 후 다시 시도해 주세요.")).toBeTruthy();
+  expect(screen.queryByText(/cloudflared/)).toBeNull();
 });

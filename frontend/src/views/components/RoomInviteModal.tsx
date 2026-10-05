@@ -1,3 +1,4 @@
+import { PUBLIC_INGRESS_START_ERROR } from "../../lib/publicIngressStatus";
 import { QRCodeSVG } from "qrcode.react";
 import type { SavedFriendsAuthority } from "../../api/friends";
 import { useFriendsDirectory } from "../../app/useFriendsDirectory";
@@ -429,7 +430,7 @@ export default function RoomInviteModal({
                 : "이 컴퓨터에서는 계속 대화할 수 있어요."}
             </p>
             {tunnelStatus?.last_error && (
-              <p className="dc-invite-hosting-error preserve-words">{tunnelStatus.last_error}</p>
+              <p className="dc-invite-hosting-error preserve-words">{PUBLIC_INGRESS_START_ERROR}</p>
             )}
           </div>
           {publicAccessQuery === "unavailable" && onRetryPublicAccess && <button type="button" className="dc-invite-row-button" onClick={onRetryPublicAccess}>상태 다시 확인</button>}

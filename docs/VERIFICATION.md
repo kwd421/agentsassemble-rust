@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 external-access failure copy: shared invite status, explicit open and invite-triggered startup use safe Korean retry text; raw generation failures stay in host diagnostics. Controller/modal regressions 35/35 and Rust public_ingress 8/8 passed; no signing, manual verification or deployment.
+
 - 2026-10-05 member consent: prescribed server title/account/origin/help and primary join/secondary cancel, safe Korean progress/errors, no UUID/raw parser detail; member/entry screen tests 32/32 passed including native/web consent, cancel and unsafe-error cases; one pre-push make verify passed for all three fixes (frontend 1,100, desktop 47, Rust workspace 1,092; architecture/format/build/Clippy/diff/artifact gates); no signed build, manual verification or deployment.
 
 - 2026-10-05 invite card: shared app/web room label from preflight, prescribed title/help text, login-first primary and guest secondary actions retain avatar/name; affected profile/admission tests 32/32 passed; no signed build, manual verification or deployment.
