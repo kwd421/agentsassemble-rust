@@ -162,7 +162,6 @@ export default function GuestJoinProfilePanel({
               disabled={busy || avatarPreparing || !displayName.trim()}
               onClick={onJoin}
             >
-              <LogIn size={16} />
               게스트로 참가
             </button>
             {onMemberJoin && <p className="text-sm text-text-muted">로그인하면 다른 기기에서도 같은 사람으로 참가할 수 있어요.</p>}

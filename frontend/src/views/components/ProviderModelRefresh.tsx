@@ -55,11 +55,11 @@ export default function ProviderModelRefresh({ title, compact = false, providerI
       {!compact && <p className="dc-agent-section-title">{title}</p>}
       {desktop && <button
         type="button"
-        className="ops-button"
+        className={compact ? undefined : "ops-button"}
         aria-label={compact ? "제공자 다시 확인" : "모델 목록 새로고침"}
         title={compact ? "제공자 다시 확인" : "모델 목록 새로고침"}
         aria-busy={busy}
-        style={{ width: 44, height: 44, flex: "0 0 auto", display: "grid", placeItems: "center" }}
+        style={compact ? undefined : { width: 44, height: 44, flex: "0 0 auto", display: "grid", placeItems: "center" }}
         disabled={busy || !providerId || !automaticAllowed}
         onClick={() => void refresh(true)}
       >

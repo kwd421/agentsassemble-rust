@@ -336,6 +336,9 @@
 }
 
 .dc-guest-avatar:focus-within { outline: 2px solid var(--color-accent); outline-offset: 3px; }
+.dc-guest-avatar { transition: box-shadow 120ms ease; }
+.dc-guest-avatar:hover { box-shadow: 0 0 0 3px var(--color-panel-separator), 0 0 0 5px var(--color-accent); }
+.dc-guest-join-card { padding: 28px 24px 24px; }
 .dc-join-identity-icon {
   display: grid;
   place-items: center;
@@ -349,7 +352,7 @@
   font-weight: 900;
 }
 .dc-join-server-label { color: var(--color-text-muted); font-size: 13px; }
-.dc-guest-avatar-row { margin-top: 8px; }
+.dc-guest-avatar-row { margin-top: 12px; }
 .dc-guest-join-card .dc-member-session-button { justify-content: center; background: transparent; }
 .dc-join-cancel { min-height: 44px; color: var(--color-text-secondary); font-size: 13px; }
 .dc-join-cancel:hover { text-decoration: underline; }

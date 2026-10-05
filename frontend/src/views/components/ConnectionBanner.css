@@ -3,11 +3,18 @@
   inset: 0 0 auto;
   z-index: 450;
   padding: 6px 24px;
-  background: #55432b;
-  color: #fff0d3;
+  border-bottom: 1px solid rgba(240, 178, 50, 0.28);
+  background: linear-gradient(rgba(240, 178, 50, 0.1), rgba(240, 178, 50, 0.1)) var(--color-sidebar);
+  color: #f3dcae;
   font-size: 12px;
+  font-weight: 600;
   line-height: 20px;
   text-align: center;
+}
+
+.dc-connection-banner > span {
+  margin-right: 4px;
+  color: #f0b232;
 }
 
 .dc-app-layout {
