@@ -32,7 +32,7 @@ it("keeps failed text, clears only on the send receipt and restores input focus"
   expect(input.value).toBe("retained text");
   fireEvent.click(screen.getByRole("button", { name: "채널 메시지 보내기" }));
   await waitFor(() => expect(input.value).toBe(""));
-  expect(document.activeElement).toBe(input);
+  await waitFor(() => expect(document.activeElement).toBe(input));
   expect(options.transcript.send).toHaveBeenLastCalledWith("retained text");
 });
 

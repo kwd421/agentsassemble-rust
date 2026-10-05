@@ -3,7 +3,9 @@
 ## C4a Daybreak corrections (2026-10-05)
 
 - H1 confirmed: bound browser one-use admission failed before correction; admission-boundary guard now rejects fresh/repeated and pre-binding exact replay without writes (4 attempts). Persistence: 411 passed.
-- M1 confirmed: non-STRICT v81 was accepted before correction; read-only schema/PRAGMA validation now rejects 13 malformed structures. Valid v80/v81 schema/data and native pairing retention passed in the same 411-test run.
+- M1 confirmed: non-STRICT v81 was accepted before correction; read-only schema/PRAGMA validation now rejects 13 malformed structures. Valid v80/v81 schema/data and native pairing retention passed with persistence 411/411 in the final verify run.
+- Focus wait: unchanged activeElement assertion now awaits the focus effect; CustomChannelView 11/11 and frontend 1,043/1,043 (174 files) passed.
+- Final `make verify` ran once and exited 0: workspace Rust 1,080, desktop 46, policy tests 19; architecture/format/build/check/Clippy/diff/artifact gates passed. No deployment, signed build or manual verification.
 
 ## Server integration harness and artifact footprint (2026-10-05)
 
