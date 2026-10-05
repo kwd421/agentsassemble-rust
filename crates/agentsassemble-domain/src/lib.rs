@@ -116,7 +116,7 @@ pub use model::{
 pub use persona::{
     MAX_PERSONA_CONTEXT_CHARACTERS, MAX_PERSONA_ID_CHARACTERS, MAX_PERSONA_LORE_CHARACTERS,
     PersonaAssetKind, PersonaAssetSummary, PersonaCard, PersonaLoreEntry, PersonaLoreSettings,
-    canonical_persona_id, render_persona_context,
+    canonical_persona_id, render_persona_context, render_persona_context_parts,
 };
 pub use persona_text::{persona_card_keywords, trim_persona_card_text};
 pub use profile::{UserProfile, UserProfilePatch, avatar_attachment_id, canonical_avatar_url};

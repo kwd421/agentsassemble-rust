@@ -108,6 +108,7 @@ async fn api_fixture(
 
 fn room_request(session_id: &str) -> ProviderTurnRequest {
     ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "turn".to_owned(),
         turn_generation: 1,
@@ -260,6 +261,7 @@ async fn room_turn_with_observation(
         .await
         .unwrap_or_else(|error| panic!("attach session: {error}"));
     let mut request = room_request(&session.public.session_id);
+    request.session_instructions = Some("room rules and fixed card".to_owned());
     if let Some(observation) = observation {
         request.room_observation = Some(observation);
     }
@@ -310,6 +312,11 @@ async fn room_turn_with_observation(
     while let Ok(body) = captured.try_recv() {
         assert_eq!(body["model"], requested_model);
         assert_eq!(body["max_tokens"], 4096);
+        assert_eq!(
+            body["messages"][0],
+            json!({"role": "system", "content": "room rules and fixed card"})
+        );
+        assert_eq!(body["messages"][1]["role"], "user");
         bodies.push(body);
     }
     (outcome, bodies)
@@ -353,9 +360,9 @@ async fn routed_custom_response_preserves_selection_and_reaches_room_publication
             })
         );
         assert_eq!(requests.len(), 2);
-        assert_eq!(requests[1]["messages"][2]["name"], "read_discussion");
+        assert_eq!(requests[1]["messages"][3]["name"], "read_discussion");
         assert!(
-            requests[1]["messages"][2]["content"]
+            requests[1]["messages"][3]["content"]
                 .as_str()
                 .unwrap_or_else(|| panic!("read result"))
                 .contains("#1 Human: reply once")

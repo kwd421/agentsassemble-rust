@@ -37,6 +37,8 @@ async fn correlates_session_and_turn_receipts() {
             .unwrap_or_default()
             .unwrap_or_default();
         let turn: serde_json::Value = serde_json::from_str(&turn).unwrap_or_default();
+        assert_eq!(turn["session_instructions"], "fixed card");
+        assert_eq!(turn["input"], "hello");
         output.send(serde_json::json!({"type":"turn_result","turn_id":turn["turn_id"],"provider_turn_id":"provider-turn-1","session_id":"6a1843af-3a9d-44d3-8b0c-41672c83e0dd","content":"answer"}).to_string()).await.unwrap_or_else(|error| panic!("send turn: {error}"));
     });
     let (mut client, attachment) = super::ClaudeSdkClient::connect(
@@ -58,6 +60,7 @@ async fn correlates_session_and_turn_receipts() {
         .turn(
             "room-session",
             &crate::driver::ProviderTurnRequest {
+                session_instructions: Some("fixed card".to_owned()),
                 request_ingress: None,
                 turn_id: "turn-1".to_owned(),
                 turn_generation: 7,
@@ -102,6 +105,7 @@ async fn owner_answers_wait_for_native_delivery_and_durable_receipts() {
         .unwrap_or_else(|error| panic!("connect request host: {error:?}"));
         let (ingress, mut commands) = ProviderRequestIngress::channel(4);
         let request = crate::driver::ProviderTurnRequest {
+            session_instructions: None,
             request_ingress: Some(ingress),
             turn_id: "turn-1".to_owned(),
             turn_generation: 7,

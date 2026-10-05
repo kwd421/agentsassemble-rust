@@ -263,65 +263,92 @@ async function session(sdk, claudePath, command, commands) {
   const resume = command.resume_session_id ?? "";
   const id = resume ? requireString(resume, "resume session") : randomUUID();
   if (!SESSION_ID.test(id)) throw new Error("invalid session ID");
-  const queue = new InputQueue();
   const configured = sessionOptions(command, claudePath, id);
-  const delivery = new NativeDelivery();
-  configured.options.spawnClaudeCodeProcess = delivery.spawn;
   const state = { id, ...configured, shuttingDown: false, active: null, failed: false };
+  let hasCompletedTurn = false;
+  let instructions;
+  let current;
   const fail = () => {
     state.failed = true;
     emitFatal("claude_sdk_request_failed").catch(() => {});
     process.stdin.destroy();
   };
-  const requests = new OwnerRequests(state, delivery, emit, fail);
-  configured.options.hooks = {
-    ...requests.hooks,
-    // SDK-hosted init frames omit effort. The native Stop hook reports the
-    // applied effort for this turn, including provider-side downgrades.
-    Stop: [{ hooks: [async (input) => {
-      if (state.failed || state.shuttingDown || !state.active?.initialized ||
-          input.hook_event_name !== "Stop" || input.session_id !== state.id ||
-          input.agent_id !== undefined || input.effort?.level !== state.effort) {
-        fail();
-        throw new Error("invalid SDK applied effort receipt");
-      }
-      state.active.effortVerified = true;
-      return {};
-    }] }],
-  };
-  configured.options.canUseTool = requests.canUseTool;
-  const query = sdk.query({ prompt: queue, options: configured.options });
-  const initialization = await query.initializationResult();
-  validateInitialization(initialization.models, configured.model, configured.effort, configured.tier);
-  await emit({ type: "ready", session_id: id, reused: Boolean(resume), model: configured.model });
-
-  const reader = (async () => {
-    for await (const message of query) {
-      if (message?.type === "system" && message.subtype === "init") {
-        if (!validInit(message, state.active, state)) throw new Error("invalid SDK initialization");
-        state.active.initialized = true;
-      } else if (message?.type === "result") {
-        const active = state.active;
-        if (!validResult(message, active, state)) throw new Error("invalid SDK result");
-        active.closing = true;
-        await requests.finishTurn();
-        if (state.failed || state.shuttingDown) throw new Error("request custody ended");
-        await emit({
-          type: "turn_result",
-          turn_id: active.turnId,
-          provider_turn_id: message.uuid,
-          session_id: state.id,
-          content: message.result,
-        });
-        state.active = null;
-      }
+  async function startQuery(append, preflight = false) {
+    const queue = new InputQueue();
+    const delivery = new NativeDelivery();
+    const options = { ...configured.options,
+      spawnClaudeCodeProcess: delivery.spawn,
+      // snapshot:true would ignore a changed append on resume until compaction.
+      systemPrompt: { ...configured.options.systemPrompt, ...(append === null ? {} : { append, snapshot: false }) },
+      ...(preflight ? { persistSession: false } : {}),
+    };
+    if (hasCompletedTurn) {
+      delete options.sessionId;
+      options.resume = id;
     }
-    if (!state.shuttingDown) throw new Error("SDK stream ended");
-  })().catch(async () => {
-    state.failed = true;
-    await emitFatal("claude_sdk_protocol_failed").catch(() => {});
-    process.stdin.destroy();
-  });
+    let closing = false;
+    const requests = new OwnerRequests(state, delivery, emit, fail);
+    options.hooks = {
+      ...requests.hooks,
+      // SDK-hosted init frames omit effort. The native Stop hook reports the
+      // applied effort for this turn, including provider-side downgrades.
+      Stop: [{ hooks: [async (input) => {
+        if (state.failed || state.shuttingDown || !state.active?.initialized ||
+            input.hook_event_name !== "Stop" || input.session_id !== state.id ||
+            input.agent_id !== undefined || input.effort?.level !== state.effort) {
+          fail();
+          throw new Error("invalid SDK applied effort receipt");
+        }
+        state.active.effortVerified = true;
+        return {};
+      }] }],
+    };
+    options.canUseTool = requests.canUseTool;
+    const query = sdk.query({ prompt: queue, options });
+    const initialization = await query.initializationResult();
+    validateInitialization(initialization.models, configured.model, configured.effort, configured.tier);
+
+    const reader = (async () => {
+      for await (const message of query) {
+        if (message?.type === "system" && message.subtype === "init") {
+          if (!validInit(message, state.active, state)) throw new Error("invalid SDK initialization");
+          state.active.initialized = true;
+        } else if (message?.type === "result") {
+          const active = state.active;
+          if (!validResult(message, active, state)) throw new Error("invalid SDK result");
+          active.closing = true;
+          await requests.finishTurn();
+          if (state.failed || state.shuttingDown) throw new Error("request custody ended");
+          await emit({
+            type: "turn_result",
+            turn_id: active.turnId,
+            provider_turn_id: message.uuid,
+            session_id: state.id,
+            content: message.result,
+          });
+          hasCompletedTurn = true;
+          state.active = null;
+        }
+      }
+      if (!state.shuttingDown && !closing) throw new Error("SDK stream ended");
+    })().catch(async () => {
+      if (closing) return;
+      state.failed = true;
+      await emitFatal("claude_sdk_protocol_failed").catch(() => {});
+      process.stdin.destroy();
+    });
+
+    return { queue, requests, async close() {
+      closing = true;
+      requests.close();
+      queue.close();
+      query.close();
+      await reader;
+      delivery.close();
+    }};
+  }
+  current = await startQuery(null, true);
+  await emit({ type: "ready", session_id: id, reused: Boolean(resume), model: configured.model });
 
   try {
     for await (const line of commands) {
@@ -330,22 +357,27 @@ async function session(sdk, claudePath, command, commands) {
         if (state.active || state.failed) throw new Error("turn already active");
         const turnId = requireString(next.turn_id, "turn ID");
         const input = requireString(next.input, "turn input");
+        const nextInstructions = next.session_instructions ?? null;
+        if (nextInstructions !== null) requireString(nextInstructions, "session instructions");
+        if (nextInstructions !== instructions) {
+          await current.close();
+          current = await startQuery(nextInstructions);
+          instructions = nextInstructions;
+        }
         const sdkTurnId = randomUUID();
         state.active = { turnId, sdkTurnId, initialized: false };
-        queue.push({
+        current.queue.push({
           type: "user",
           message: { role: "user", content: input },
           parent_tool_use_id: null,
           uuid: sdkTurnId,
           session_id: state.id,
         });
-      } else if (requests.accept(next)) {
+      } else if (current.requests.accept(next)) {
         continue;
       } else if (next.type === "shutdown") {
         state.shuttingDown = true;
-        requests.close();
-        queue.close();
-        query.close();
+        await current.close();
         await emit({ type: "stopped" });
         break;
       } else {
@@ -354,11 +386,7 @@ async function session(sdk, claudePath, command, commands) {
     }
   } finally {
     state.shuttingDown = true;
-    requests.close();
-    delivery.close();
-    queue.close();
-    query.close();
-    await reader;
+    await current.close();
   }
   if (state.failed) throw new Error("SDK reader failed");
 }

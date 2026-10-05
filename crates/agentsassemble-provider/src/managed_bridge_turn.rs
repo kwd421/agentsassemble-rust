@@ -10,6 +10,7 @@ pub(super) struct TurnInput {
     pub(super) turn_generation: u64,
     pub(super) execution_id: String,
     pub(super) input: String,
+    pub(super) session_instructions: Option<String>,
     pub(super) requests: bool,
     pub(super) observation: Option<Observation>,
 }
@@ -35,6 +36,7 @@ impl TurnInput {
             turn_generation: self.turn_generation,
             execution_id: self.execution_id,
             input: self.input,
+            session_instructions: self.session_instructions,
             room_observation: self.observation.map(|observation| ProviderRoomObservation {
                 session_id: observation.session_id,
                 input_up_to_seq: observation.input_up_to_seq,
@@ -56,6 +58,7 @@ impl From<&ProviderTurnRequest> for TurnInput {
             turn_generation: request.turn_generation,
             execution_id: request.execution_id.clone(),
             input: request.input.clone(),
+            session_instructions: request.session_instructions.clone(),
             requests: request.request_ingress.is_some(),
             observation: request
                 .room_observation

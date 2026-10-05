@@ -634,6 +634,7 @@ async fn write(output: &mut DuplexStream, message: Value) {
 
 fn turn(id: &str, input: &str, observed: bool) -> crate::driver::ProviderTurnRequest {
     crate::driver::ProviderTurnRequest {
+        session_instructions: None,
         turn_id: id.to_owned(),
         turn_generation: 7,
         execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),

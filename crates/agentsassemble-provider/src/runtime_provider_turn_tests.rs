@@ -42,6 +42,7 @@ async fn codex_turn_uses_original_settings_and_returns_one_canonical_final() {
         .unwrap_or_else(|error| panic!("start provider turn fixture: {error}"));
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
         turn_generation: 1,
@@ -144,6 +145,7 @@ async fn nullable_hook_turn_identity_does_not_poison_an_active_turn() {
         .send_turn(
             &active,
             &ProviderTurnRequest {
+                session_instructions: None,
                 request_ingress: None,
                 turn_id: "room-turn-1".to_owned(),
                 turn_generation: 1,
@@ -188,6 +190,7 @@ async fn cancelled_codex_turn_start_continues_without_retransmission() {
         .unwrap_or_else(|error| panic!("start cancelled provider-turn fixture: {error}"));
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
         turn_generation: 1,
@@ -253,6 +256,7 @@ async fn verify_exact_codex_interrupt(terminal_receipt: bool) {
         .unwrap_or_else(|error| panic!("start exact interrupt fixture: {error}"));
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
         turn_generation: 1,
@@ -339,6 +343,7 @@ async fn owned_stop_cancels_a_blocked_turn_without_waiting_for_inactivity() {
         .unwrap_or_else(|error| panic!("start blocked provider-turn fixture: {error}"));
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
         turn_generation: 1,
@@ -483,6 +488,7 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
         .send_turn(
             &first,
             &ProviderTurnRequest {
+                session_instructions: None,
                 request_ingress: None,
                 turn_id: "room-turn-1".to_owned(),
                 turn_generation: 1,
@@ -495,6 +501,7 @@ async fn reused_codex_provider_turn_identity_is_poisoned() {
         .unwrap_or_else(|error| panic!("complete first provider turn: {error}"));
     let second = active_session(&session, &started, "room-turn-2");
     let request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-2".to_owned(),
         turn_generation: 1,
@@ -557,6 +564,7 @@ async fn assert_turn_error(
         .unwrap_or_else(|error| panic!("start failed provider-turn fixture: {error}"));
     let active = active_session(&session, &started, "room-turn-1");
     let request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "room-turn-1".to_owned(),
         turn_generation: 1,
@@ -727,4 +735,90 @@ fn shell_quote(path: &Path) -> String {
 
 fn shell_quote_text(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\\''"))
+}
+
+#[tokio::test]
+async fn codex_persistent_instructions_refresh_before_fresh_and_resumed_turns()
+-> Result<(), Box<dyn std::error::Error>> {
+    let _serial = super::tests::RUNTIME_TEST_LOCK.lock().await;
+    for resume in [false, true] {
+        let directory = tempfile::tempdir()?;
+        let script = r"#!/usr/bin/env python3
+import json, sys
+turn = 0
+subscribed = False
+for line in sys.stdin:
+    message = json.loads(line)
+    with open('instructions.jsonl', 'a') as log:
+        log.write(line)
+    method = message.get('method')
+    if 'id' not in message:
+        continue
+    result = {}
+    if method == 'thread/unsubscribe':
+        subscribed = False
+        result = {'status':'unsubscribed'}
+    if method in ('thread/start', 'thread/resume'):
+        if message['params'].get('config') and subscribed:
+            raise RuntimeError('live resume ignores instruction overrides')
+        subscribed = True
+        result = {'thread': {'id': 'thread-1'}}
+    if method == 'turn/start':
+        turn += 1
+        result = {'turn': {'id': f'provider-turn-{turn}'}}
+    print(json.dumps({'id': message['id'], 'result': result}), flush=True)
+    if method == 'turn/start':
+        print(json.dumps({'method':'item/completed','params':{'threadId':'thread-1',
+            'turnId':f'provider-turn-{turn}','item':{'type':'agentMessage','text':'done'}}}), flush=True)
+        print(json.dumps({'method':'turn/completed','params':{'threadId':'thread-1',
+            'turn':{'id':f'provider-turn-{turn}','status':'completed','items':[
+                {'type':'agentMessage','text':'done'}]}}}), flush=True)
+";
+        let mut session = fixture_session(directory.path(), script).await;
+        if resume {
+            session.provider_session_id = "thread-1".to_owned();
+        }
+        let adapter = ProviderAdapter::new();
+        let started = adapter.start(&session).await?;
+        let mut active = active_session(&session, &started, "room-turn-0");
+        for (index, fixed) in ["old card", "old card", "changed card"].iter().enumerate() {
+            active.public.active_turn_id = format!("room-turn-{index}");
+            let request = ProviderTurnRequest {
+                session_instructions: Some((*fixed).to_owned()),
+                request_ingress: None,
+                turn_id: active.public.active_turn_id.clone(),
+                turn_generation: active.turn_generation,
+                execution_id: uuid::Uuid::new_v4().to_string(),
+                input: "dynamic context only".to_owned(),
+                room_observation: None,
+            };
+            let completed = adapter.send_turn(&active, &request).await?;
+            assert_message(&completed, "done");
+        }
+        stop_and_release(&adapter, &active, &started).await;
+        let recorded = requests(&directory.path().join("instructions.jsonl"));
+        let updates = recorded
+            .iter()
+            .filter_map(|value| value["params"]["config"]["developer_instructions"].as_str())
+            .collect::<Vec<_>>();
+        assert_eq!(updates, ["old card", "changed card"]);
+        let mut applied = "";
+        let mut turn_instructions = Vec::new();
+        for value in &recorded {
+            if let Some(text) = value["params"]["config"]["developer_instructions"].as_str() {
+                applied = text;
+            }
+            if value["method"] == "turn/start" {
+                turn_instructions.push(applied);
+            }
+        }
+        assert_eq!(turn_instructions, ["old card", "old card", "changed card"]);
+        for value in recorded
+            .iter()
+            .filter(|value| value["method"] == "turn/start")
+        {
+            assert!(!value.to_string().contains("card"));
+        }
+    }
+    Ok(())
 }

@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 방 지속 지시: Codex unsubscribe/resume developer_instructions·Claude SDK append(snapshot:false)·OpenCode 격리 agent prompt·API/LM Studio/Ollama 매 요청 system으로 방 규칙/고정 카드 이동, Cursor/Grok 유지; lore/history·동결 복구·카드 교체 및 요청/설정 검증 통과, 일반 방 턴 약 702자(API 953자)+고정 카드 분량 감소; make verify 1회는 구형 통합 fixture 4건에서 중단했고 수정 후 통합 188/188·최종 Codex/API/주사위 회귀·SDK 16/16·Clippy 및 나머지 게이트 통과(누적 workspace Rust 1,105, frontend 1,119, desktop 47); 실제 제공자·서명·수동 검증·배포 없음.
+
 - 2026-10-06 공용 app/web·호스트 문구: 사용자 표시 234곳 해요체·방/서버 용어 정리, 영향 frontend 773 통과; 푸시 전 make verify 1회는 desktop 문구 포맷에서 중단, 포맷·이름 동기화 상태 assertion 수정 후 실패 검사와 미실행 검사 완료(frontend 1,119/Rust 1,103/desktop 47, doc tests·architecture·format·Clippy·diff·artifact 통과); 서명·수동 검증·배포 없음.
 
 - 2026-10-06 서버 기본 이름/편집: 호스트 프로필+기기 모델, 중앙 기본 label 갱신·고정 별칭 보존·기본 복원·최초 열기 미리보기; 영향 frontend 39, Rust central 11/persistence 8/directory HTTP 6, TypeScript·server Clippy 통과, 중앙 이름/epoch/member preview 68 통과(경로 제거 mutation에서 실패 확인); 중앙 0013 로컬 검증만, 서명·수동 검증·배포 없음.

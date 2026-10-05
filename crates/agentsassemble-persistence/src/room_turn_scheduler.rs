@@ -588,6 +588,7 @@ async fn prepare_assignment(
     save_session(transaction, &session).await?;
     let assignment_envelope = crate::provider_turn_execution::ProviderTurnAssignmentEnvelope {
         delivery_kind,
+        session_instructions: prepared_input.session_instructions,
         provider_input: prepared_input.provider_input,
         room_view: prepared_input.room_view,
         attachment_ids: prepared_input.attachment_ids,
@@ -611,6 +612,7 @@ async fn prepare_assignment(
             turn_generation: execution.turn_generation,
             execution_id: execution.execution_id,
             delivery_kind,
+            session_instructions: assignment_envelope.session_instructions,
             provider_input: assignment_envelope.provider_input,
             room_view: assignment_envelope.room_view,
             attachment_ids: assignment_envelope.attachment_ids,

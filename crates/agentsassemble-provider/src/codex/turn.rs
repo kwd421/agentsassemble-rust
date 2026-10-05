@@ -73,6 +73,7 @@ pub(super) async fn send_turn(
             });
         }
     } else {
+        apply_session_instructions(driver, session, request, &thread_id).await?;
         start_turn(driver, session, request, &thread_id).await?;
     }
     read_turn(
@@ -82,6 +83,46 @@ pub(super) async fn send_turn(
         &session.public.session_id,
     )
     .await
+}
+
+async fn apply_session_instructions(
+    driver: &mut CodexDriver,
+    session: &DurableAgentSession,
+    request: &ProviderTurnRequest,
+    thread_id: &str,
+) -> Result<(), DriverError> {
+    if driver.session_instructions != request.session_instructions {
+        // A subscribed loaded thread ignores resume config overrides. Release our
+        // sole subscription so resume replaces its idle configuration from disk.
+        if driver
+            .pending_request
+            .as_ref()
+            .is_none_or(|pending| pending.method != "thread/resume")
+        {
+            let response = driver
+                .request("thread/unsubscribe", json!({"threadId": thread_id}))
+                .await?;
+            if !matches!(
+                response.pointer("/result/status").and_then(Value::as_str),
+                Some("unsubscribed" | "notSubscribed" | "notLoaded")
+            ) {
+                return Err(protocol_error());
+            }
+        }
+        let mut params = super::thread_resume_params(session, thread_id)?;
+        params["config"] = json!({"developer_instructions": request.session_instructions.as_deref().unwrap_or_default()});
+        let response = driver.request("thread/resume", params).await?;
+        if super::provider_session_id_from_response(&response)? != Some(thread_id)
+            || super::observed_model_id_from_response(&response)?
+                .is_some_and(|model| model != session.public.model)
+        {
+            return Err(protocol_error());
+        }
+        driver
+            .session_instructions
+            .clone_from(&request.session_instructions);
+    }
+    Ok(())
 }
 
 pub(super) async fn interrupt_turn(
@@ -98,6 +139,14 @@ pub(super) async fn interrupt_turn(
         return Ok(());
     }
     let thread_id = validate_attached_thread(driver, session)?.to_owned();
+    if driver.pending_request.as_ref().is_some_and(|pending| {
+        matches!(
+            pending.method.as_str(),
+            "thread/unsubscribe" | "thread/resume"
+        )
+    }) {
+        apply_session_instructions(driver, session, request, &thread_id).await?;
+    }
     if driver.turn_state.active.is_none() {
         let pending_start = driver
             .pending_request

@@ -262,7 +262,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Roll dice with server-side randomness (tabletop mode). Does not end your turn."
+        description = "Roll dice with server-side randomness (tabletop mode). Results are shown in the room. Does not end your turn."
     )]
     async fn roll_dice(&self, Parameters(input): Parameters<RollDice>) -> Result<String, String> {
         let request = RoomRandomRequest::parse(
@@ -274,7 +274,7 @@ impl RoomPortalMcp {
     }
 
     #[tool(
-        description = "Pick one of the given options with server-side randomness (tabletop mode). Does not end your turn."
+        description = "Pick one of the given options with server-side randomness (tabletop mode). Results are shown in the room. Does not end your turn."
     )]
     async fn choose_random(
         &self,

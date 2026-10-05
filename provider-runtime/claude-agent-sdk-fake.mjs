@@ -27,7 +27,7 @@ class FakeQuery {
       this.options.strictMcpConfig !== true ||
       this.options.allowedTools[0] !== "mcp__agentsassemble_room__*" ||
       this.options.mcpServers.agentsassemble_room.headers.Authorization !== "Bearer fixture-token" ||
-      this.options.systemPrompt.snapshot !== true ||
+      this.options.systemPrompt.snapshot !== (this.options.systemPrompt.append === undefined) ||
       (this.options.permissionMode === "dontAsk" && JSON.stringify(this.options.tools) !== '["AskUserQuestion"]')
     ) {
       throw new Error("unexpected SDK options");
@@ -59,6 +59,13 @@ class FakeQuery {
   async *[Symbol.asyncIterator]() {
     for await (const input of this.prompt) {
       const session = this.options.sessionId ?? this.options.resume;
+      if (input.message.content.startsWith("inspect instructions:")) {
+        const expected = JSON.parse(input.message.content.slice("inspect instructions:".length));
+        if (this.options.systemPrompt.append !== expected.append ||
+            Boolean(this.options.resume) !== expected.resume || this.options.persistSession === false) {
+          throw new Error("incorrect persistent instruction or resume options");
+        }
+      }
       yield {
         type: "system",
         subtype: "init",

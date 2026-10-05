@@ -14,18 +14,35 @@ printf '%s\n' '{{"jsonrpc":"2.0","id":2,"result":{{"thread":{{"id":"thread-1"}}}
 IFS= read -r name
 printf '%s\n' "$name" >> {log}
 printf '%s\n' '{{"jsonrpc":"2.0","id":3,"result":{{}}}}'
+request_id=4
 IFS= read -r turn
+while :; do
+    case "$turn" in
+        *'"method":"thread/unsubscribe"'*)
+            printf '%s\n' "$turn" >> {log}
+            printf '{{"id":%s,"result":{{"status":"unsubscribed"}}}}\n' "$request_id"
+            ;;
+        *'"method":"thread/resume"'*)
+            printf '%s\n' "$turn" >> {log}
+            printf '{{"id":%s,"result":{{"thread":{{"id":"thread-1"}}}}}}\n' "$request_id"
+            ;;
+        *) break ;;
+    esac
+    request_id=$((request_id + 1))
+    IFS= read -r turn
+done
 printf '%s\n' "$turn" >> {log}
-printf '%s\n' '{{"jsonrpc":"2.0","id":4,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}'
+printf '{{"jsonrpc":"2.0","id":%s,"result":{{"turn":{{"id":"provider-turn-1"}}}}}}\n' "$request_id"
 printf seen > {seen}
+request_id=$((request_id + 1))
 IFS= read -r interrupt
 printf '%s\n' "$interrupt" >> {log}
 if [ {reject} = 1 ]; then
-    printf '%s\n' '{{"jsonrpc":"2.0","id":5,"error":{{"code":-32000,"message":"fixture rejected interrupt"}}}}'
+    printf '{{"jsonrpc":"2.0","id":%s,"error":{{"code":-32000,"message":"fixture rejected interrupt"}}}}\n' "$request_id"
     IFS= read -r forever
     exit 0
 fi
-printf '%s\n' '{{"jsonrpc":"2.0","id":5,"result":{{}}}}'
+printf '{{"jsonrpc":"2.0","id":%s,"result":{{}}}}\n' "$request_id"
 printf '%s\n' '{{"jsonrpc":"2.0","method":"turn/completed","params":{{"threadId":"thread-1","turn":{{"id":"provider-turn-1","status":"interrupted","items":[]}}}}}}'
 IFS= read -r forever
 "#,

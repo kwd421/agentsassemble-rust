@@ -268,6 +268,7 @@ impl SqliteStore {
             turn_generation: execution.turn_generation,
             execution_id: execution.execution_id,
             delivery_kind: assignment.delivery_kind,
+            session_instructions: assignment.session_instructions,
             provider_input: assignment.provider_input,
             room_view: assignment.room_view,
             attachment_ids: assignment.attachment_ids,
@@ -669,6 +670,14 @@ async fn validate_assignment_envelope(
             .iter()
             .any(|input| input.delivery_kind != assignment.delivery_kind)
         || !is_provider_input(&assignment.provider_input)
+        || !is_provider_input(&format!(
+            "{}{}",
+            assignment
+                .session_instructions
+                .as_deref()
+                .unwrap_or_default(),
+            assignment.provider_input
+        ))
         || !is_room_observation_view(&assignment.room_view)
         || !readable_attachments_match(&assignment.attachment_ids, &expected_attachment_ids)
         || assignment.room_agent_ids.len() > MAX_ROOM_OBSERVATION_AGENT_IDS

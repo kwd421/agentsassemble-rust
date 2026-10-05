@@ -168,6 +168,7 @@ fn provider_request(
         turn_generation: assignment.turn_generation,
         execution_id: assignment.execution_id.clone(),
         input: assignment.provider_input.clone(),
+        session_instructions: assignment.session_instructions.clone(),
         room_observation,
     }
 }

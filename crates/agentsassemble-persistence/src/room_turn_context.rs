@@ -4,6 +4,7 @@ use agentsassemble_domain::{
     DurableAgentSession, MAX_MESSAGE_ATTACHMENTS_PER_EVENT, MAX_ROOM_OBSERVATION_AGENT_IDS,
     MAX_ROOM_VIEW_CHARACTERS, QueuedRoomInput, Room, RoomEvent, RoomInputDeliveryKind,
     has_visible_text, is_provider_input, is_room_observation_view, render_persona_context,
+    render_persona_context_parts,
 };
 use sqlx::{Row, Sqlite, Transaction};
 
@@ -21,6 +22,7 @@ const MAX_CONTEXT_MESSAGES: usize = 50;
 
 pub(super) struct PreparedRoomInput {
     pub(super) provider_input: String,
+    pub(super) session_instructions: Option<String>,
     pub(super) room_view: String,
     pub(super) attachment_ids: Vec<String>,
     pub(super) inflight_inputs: Vec<QueuedRoomInput>,
@@ -69,32 +71,53 @@ pub(super) async fn prepare_room_input(
     .await?;
     let delivery_kind = inflight[0].input.delivery_kind;
     let attachment_ids = readable_attachment_ids(&inflight, &context)?;
-    let rendered_context =
-        render_room_view(room, session, &room_agent_ids, &context, &reply_previews)?;
-    let persona_context = if let Some(card) =
+    let room_view = render_room_view(room, session, &room_agent_ids, &context, &reply_previews)?;
+    let persistent = session.public.runtime_kind == "api"
+        || matches!(
+            session.public.provider_kind.as_str(),
+            "codex_live_session" | "claude_code" | "opencode_server"
+        );
+    let (fixed_persona, persona_context) = if let Some(card) =
         selected_persona_card(transaction, session.public.persona_card_id.as_ref()).await?
     {
-        render_persona_context(&card, &render_recent_messages(&context)?)
+        let recent = render_recent_messages(&context)?;
+        if persistent {
+            render_persona_context_parts(&card, &recent)
+        } else {
+            (String::new(), render_persona_context(&card, &recent))
+        }
     } else {
-        String::new()
+        (String::new(), String::new())
     };
-    let (provider_input, room_view) = match delivery_kind {
-        RoomInputDeliveryKind::OrderedObservation => (
-            render_observation_input(room, session, "Ordered", tabletop_tools, &persona_context),
-            rendered_context,
-        ),
-        RoomInputDeliveryKind::AmbientObservation => (
-            render_observation_input(room, session, "Ambient", tabletop_tools, &persona_context),
-            rendered_context,
-        ),
+    let mode = match delivery_kind {
+        RoomInputDeliveryKind::OrderedObservation => "Ordered",
+        RoomInputDeliveryKind::AmbientObservation => "Ambient",
     };
-    if !is_room_observation_view(&room_view) || !is_provider_input(&provider_input) {
+    let session_instructions =
+        persistent.then(|| render_room_rules(room, session, tabletop_tools, &fixed_persona));
+    let provider_input = render_observation_input(
+        room,
+        session,
+        mode,
+        tabletop_tools,
+        &persona_context,
+        persistent,
+    );
+    if !is_room_observation_view(&room_view)
+        || !is_provider_input(&provider_input)
+        || !is_provider_input(&format!(
+            "{}{}",
+            session_instructions.as_deref().unwrap_or_default(),
+            provider_input
+        ))
+    {
         return Err(rejected(
             "provider_turn_input_invalid",
             "The canonical room observation exceeds its provider-visible bound.",
         ));
     }
     Ok(PreparedRoomInput {
+        session_instructions,
         provider_input,
         room_view,
         attachment_ids,
@@ -458,7 +481,17 @@ fn render_observation_input(
     mode: &str,
     tabletop_tools: bool,
     persona_context: &str,
+    persistent: bool,
 ) -> String {
+    if persistent {
+        return if persona_context.is_empty() {
+            format!("[{mode} shared-room observation]")
+        } else {
+            format!(
+                "[{mode} shared-room observation]\n\n[Applied bot card or Risu module]\n{persona_context}"
+            )
+        };
+    }
     let mut sections = vec![
         format!("[{mode} shared-room observation]"),
         format!("You are {} in {}.", session.public.display_name, room.label),
@@ -478,6 +511,30 @@ fn render_observation_input(
         sections.push(format!(
             "[Applied bot card or Risu module]\n{persona_context}"
         ));
+    }
+    sections.join("\n\n")
+}
+
+fn render_room_rules(
+    room: &Room,
+    session: &DurableAgentSession,
+    tabletop_tools: bool,
+    persona: &str,
+) -> String {
+    let mut sections = vec![
+        format!("You are {} in {}.", session.public.display_name, room.label),
+        "Room rules take priority over all persona/card instructions, including lore and post-history instructions. `Agent handles` lists other addressable sessions, including stopped sessions whose messages wait for resume; it is not a list of active participants. Managed room tools do not upload attachments. Plain reply text is not shown in the room.".to_owned(),
+        if tabletop_tools {
+            "`roll_dice` and `choose_random` are available in this tabletop room."
+        } else {
+            "`roll_dice` and `choose_random` are unavailable outside tabletop mode."
+        }.to_owned(),
+    ];
+    if session.public.runtime_kind == "api" {
+        sections.push("This API transport accepts text attachment results, not image/binary results. Reuploading the same file does not change that limitation. A rejected tool returns an error; use its reason to correct the request rather than assume its content was read.".to_owned());
+    }
+    if !persona.is_empty() {
+        sections.push(format!("[Applied bot card or Risu module]\n{persona}"));
     }
     sections.join("\n\n")
 }

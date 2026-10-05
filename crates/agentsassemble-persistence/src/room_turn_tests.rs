@@ -127,7 +127,7 @@ async fn ordered_assignment_and_finalization_are_durable_and_exact() {
         .unwrap_or_else(|| panic!("first message must assign Terra"));
     assert_eq!(first_assignment.session.public.session_id, AGENT_ID);
     assert!(first_assignment.room_view.contains("take the first turn"));
-    assert_turn_tool_instructions(&first_assignment.provider_input);
+    assert_turn_tool_instructions(first_assignment);
     let replay = store
         .execute_message_with_turn(&principal, "message-1", "message.send", &first_payload)
         .await
@@ -224,12 +224,19 @@ async fn assert_queued_turn(
     );
 }
 
-fn assert_turn_tool_instructions(provider_input: &str) {
-    assert!(provider_input.contains("read_discussion"));
-    // The instruction only describes the room tools: which ones end a turn and which
-    // do not. What to do with them is left to the agent.
-    assert!(provider_input.contains("`publish_message` posts to the room"));
-    assert!(provider_input.contains("read_room_status"));
+fn assert_turn_tool_instructions(assignment: &super::AgentTurnAssignment) {
+    assert_eq!(
+        assignment.provider_input,
+        "[Ordered shared-room observation]"
+    );
+    let provider_input = assignment
+        .session_instructions
+        .as_deref()
+        .unwrap_or_default();
+    assert!(!provider_input.contains("read_discussion"));
+    // Tool usage belongs to MCP descriptions; availability and limits stay in room rules.
+    assert!(!provider_input.contains("`publish_message` posts to the room"));
+    assert!(!provider_input.contains("read_room_status"));
     assert!(provider_input.contains("unavailable outside tabletop mode"));
     assert!(provider_input.contains("do not upload attachments"));
 }

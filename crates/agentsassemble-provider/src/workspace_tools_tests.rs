@@ -119,6 +119,7 @@ async fn writes_require_exact_owner_response_and_delivery_receipt() -> Result<()
             .map_err(|_| "workspace")?;
     let (ingress, mut commands) = ProviderRequestIngress::channel(1);
     let request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: Some(ingress),
         turn_id: "turn".to_owned(),
         turn_generation: 9,
@@ -232,6 +233,7 @@ async fn file_result_budget_preserves_unicode_and_escaped_partial_results()
             .await
             .map_err(|_| "workspace")?;
     let request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "turn".to_owned(),
         turn_generation: 1,

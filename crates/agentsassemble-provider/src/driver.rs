@@ -121,6 +121,7 @@ pub struct ProviderTurnRequest {
     pub turn_generation: u64,
     pub execution_id: String,
     pub input: String,
+    pub session_instructions: Option<String>,
     pub room_observation: Option<ProviderRoomObservation>,
 }
 

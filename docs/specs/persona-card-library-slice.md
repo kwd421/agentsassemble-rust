@@ -618,3 +618,31 @@ current slice is reopened only for the separate D-04 fixed-host network-policy d
   the active `Standing project workflow` in `AGENTS.md`, with structure,
   duplicate policy, overimplementation, lifecycle, performance evidence, and security
   included in both critical-web and Daybreaker Blue High review requests.
+
+## Persistent room instructions (2026-10-06)
+
+The room assignment owner splits bounded fixed card fields and common room rules
+(identity, handles, publication/upload/API limits, tabletop availability) from the
+turn's active lore, recent context and post-history placement. Room rules outrank
+all card content. Tool descriptions own tool usage. Cursor/Grok retain their full
+existing turn input and receive no persistent instructions.
+Codex applies developer_instructions through thread resume configuration, first
+unsubscribing its sole idle connection so a loaded thread cannot ignore overrides;
+Claude SDK uses systemPrompt.append; OpenCode uses an isolated dedicated agent
+prompt; API/LM Studio/Ollama prepend system on every request. Claude uses
+`snapshot: false` with append because an existing
+snapshot ignores changed append until compaction; its initial capability preflight
+is non-persistent, and subsequent changed text resumes the same conversation.
+OpenCode reloads only its isolated instance/config and re-registers the existing
+portal; it never writes project configuration. Reapply before the
+first model turn after start/restart and when the assigned fixed text changes.
+The existing private assignment envelope freezes both instruction and turn text;
+retries never reread a replaced card. Optional instructions are absent for legacy
+already-assigned turns and providers retaining inline instructions. No persona-library cache,
+provider abstraction, migration, tool authority or public prompt projection.
+Failures applying instructions fail the turn; no inline fallback. Existing driver
+serialization/cancellation remains authoritative. Verify request/config bytes,
+provider selection, dynamic placement, replacement and recovery with local tests.
+Only changed-crate tests during work; make verify once immediately before push.
+Real providers, signed builds, manual verification and deployment are excluded by
+this task; runtime compaction behavior remains unverified.

@@ -500,7 +500,13 @@ pub(super) fn validate_request(
             "The durable provider turn is not in an active phase.",
         ));
     }
-    if !is_provider_input(&request.input) {
+    if !is_provider_input(&request.input)
+        || !is_provider_input(&format!(
+            "{}{}",
+            request.session_instructions.as_deref().unwrap_or_default(),
+            request.input
+        ))
+    {
         return Err(DriverError::new(
             "provider_turn_input_invalid",
             "The provider turn input is empty or exceeds its bound.",

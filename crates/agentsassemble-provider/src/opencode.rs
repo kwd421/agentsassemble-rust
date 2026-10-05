@@ -63,7 +63,8 @@ pub(crate) struct OpenCodeDriver {
     stderr_task: JoinHandle<()>,
     http: LoopbackHttp,
     room_portal: RoomPortal,
-    _config_root: tempfile::TempDir,
+    config_root: tempfile::TempDir,
+    session_instructions: Option<String>,
     attached_session_id: Option<String>,
     attached_reused: bool,
     session_creation: SessionCreationAuthority,
@@ -157,7 +158,8 @@ impl OpenCodeDriver {
             stderr_task,
             http,
             room_portal,
-            _config_root: config_root,
+            config_root,
+            session_instructions: None,
             attached_session_id: None,
             attached_reused: false,
             session_creation: SessionCreationAuthority::default(),
@@ -389,6 +391,29 @@ impl OpenCodeDriver {
         } else {
             self.active_turn = Some(request.clone());
         }
+        if self.session_instructions != request.session_instructions {
+            let config = json!({"agent": {"agentsassemble_room": {
+                "description": "Managed room participant", "mode": "primary",
+                "prompt": request.session_instructions.as_deref().unwrap_or_default(),
+            }}});
+            std::fs::write(
+                self.config_root.path().join("opencode.json"),
+                config.to_string(),
+            )
+            .map_err(|_| config_error())?;
+            let response = self
+                .connect_owned_peer()
+                .await?
+                .post_json("/instance/dispose", &json!({}), STARTUP_TIMEOUT)
+                .await
+                .map_err(http_driver_error)?;
+            if !response.status.is_success() || response.value != json!(true) {
+                return Err(config_error());
+            }
+            self.register_room_portal().await?;
+            self.session_instructions
+                .clone_from(&request.session_instructions);
+        }
         let event_response = self
             .connect_owned_peer()
             .await?
@@ -403,6 +428,9 @@ impl OpenCodeDriver {
             },
             "parts": [{"type": "text", "text": request.input}],
         });
+        if request.session_instructions.is_some() {
+            payload["agent"] = json!("agentsassemble_room");
+        }
         if !session.public.variant.is_empty() {
             payload["variant"] = json!(session.public.variant);
         }

@@ -43,35 +43,61 @@ async fn opencode_native_permission_waits_for_exact_http_and_room_receipts()
     ]);
     let adapter = ProviderAdapter::new();
     let started = adapter.start(&session).await?;
-    let active = active_session(&session, &started, "room-turn-1");
-    let (ingress, mut commands) = ProviderRequestIngress::channel(1);
-    let request = ProviderTurnRequest {
-        request_ingress: Some(ingress),
-        turn_id: "room-turn-1".to_owned(),
-        turn_generation: 1,
-        execution_id: "11111111-1111-4111-8111-111111111111".to_owned(),
-        input: "Ask".to_owned(),
-        room_observation: None,
-    };
-    let turn_adapter = adapter.clone();
-    let turn_session = active.clone();
-    let turn = tokio::spawn(async move { turn_adapter.send_turn(&turn_session, &request).await });
-    let command = tokio::time::timeout(Duration::from_secs(10), commands.recv())
-        .await?
-        .ok_or("request channel closed")?;
-    assert_eq!(command.session_id, active.public.session_id);
-    let (exchange, mut responder, mut delivery) = ProviderRequestExchange::channel();
-    command.complete(Ok(exchange));
-    responder.respond(ProviderRequestResolution::Option {
-        option_id: "once".to_owned(),
-    })?;
-    assert!(delivery.completion().await);
-    assert!(!turn.is_finished());
-    delivery.finish(Ok(()));
-    assert_eq!(turn.await??.provider_turn_id, "assistant-1");
-    let reply: serde_json::Value =
-        serde_json::from_slice(&std::fs::read(directory.path().join("native-reply.json"))?)?;
-    assert_eq!(reply, json!({"reply": "once"}));
+    let mut active = active_session(&session, &started, "room-turn-1");
+    for (index, instructions) in [
+        "fixed room instructions",
+        "fixed room instructions",
+        "changed card",
+    ]
+    .iter()
+    .enumerate()
+    {
+        active.public.active_turn_id = format!("room-turn-{index}");
+        let (ingress, mut commands) = ProviderRequestIngress::channel(1);
+        let request = ProviderTurnRequest {
+            session_instructions: Some((*instructions).to_owned()),
+            request_ingress: Some(ingress),
+            turn_id: active.public.active_turn_id.clone(),
+            turn_generation: 1,
+            execution_id: uuid::Uuid::new_v4().to_string(),
+            input: "Ask".to_owned(),
+            room_observation: None,
+        };
+        let turn_adapter = adapter.clone();
+        let turn_session = active.clone();
+        let turn =
+            tokio::spawn(async move { turn_adapter.send_turn(&turn_session, &request).await });
+        let command = tokio::time::timeout(Duration::from_secs(10), commands.recv())
+            .await?
+            .ok_or("request channel closed")?;
+        assert_eq!(command.session_id, active.public.session_id);
+        let (exchange, mut responder, mut delivery) = ProviderRequestExchange::channel();
+        command.complete(Ok(exchange));
+        responder.respond(ProviderRequestResolution::Option {
+            option_id: "once".to_owned(),
+        })?;
+        assert!(delivery.completion().await);
+        assert!(!turn.is_finished());
+        delivery.finish(Ok(()));
+        assert_eq!(turn.await??.provider_turn_id, "assistant-1");
+        let reply: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(directory.path().join("native-reply.json"))?)?;
+        assert_eq!(reply, json!({"reply": "once"}));
+        let prompt: serde_json::Value =
+            serde_json::from_slice(&std::fs::read(directory.path().join("agent-prompt.json"))?)?;
+        assert_eq!(
+            prompt["agent"]["agentsassemble_room"]["prompt"],
+            *instructions
+        );
+        let message: serde_json::Value = serde_json::from_slice(&std::fs::read(
+            directory.path().join("prompt-request.json"),
+        )?)?;
+        assert_eq!(message["agent"], "agentsassemble_room");
+        assert_eq!(message["parts"][0]["text"], "Ask");
+        assert!(!directory.path().join("opencode.json").exists());
+    }
+    let refreshes = std::fs::read_to_string(directory.path().join("agent-refreshes.jsonl"))?;
+    assert_eq!(refreshes.lines().count(), 2);
     stop_and_release(&adapter, &active, &started).await;
     Ok(())
 }

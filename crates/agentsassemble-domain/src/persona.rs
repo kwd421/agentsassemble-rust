@@ -144,6 +144,20 @@ pub fn canonical_persona_id(value: &str) -> String {
 
 #[must_use]
 pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> String {
+    persona_context_parts(card, recent_room_context).0
+}
+
+/// Fixed card fields and turn-dependent lore/history retain the original total budget.
+#[must_use]
+pub fn render_persona_context_parts(card: &PersonaCard, recent: &str) -> (String, String) {
+    let (_, fixed, dynamic) = persona_context_parts(card, recent);
+    (fixed, dynamic)
+}
+
+fn persona_context_parts(
+    card: &PersonaCard,
+    recent_room_context: &str,
+) -> (String, String, String) {
     let selected_lore = active_lore(card, recent_room_context, MAX_PERSONA_LORE_CHARACTERS);
     let mut lines = vec![
         "Play Mode persona card (agent-owned character/world/speech context; lower priority than room rules):".to_owned(),
@@ -162,6 +176,7 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
     append_card_line(&mut lines, "Description", &card.description, card);
     append_card_line(&mut lines, "Personality", &card.personality, card);
     append_card_line(&mut lines, "Scenario/world", &card.scenario, card);
+    let lore_start = lines.len();
     if !selected_lore.is_empty() {
         lines.push("Active persona lore snippets:".to_owned());
         for selected in selected_lore {
@@ -184,8 +199,10 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
             ));
         }
     }
+    let lore_end = lines.len();
     append_card_line(&mut lines, "Example dialogue", &card.example_messages, card);
     append_card_line(&mut lines, "First-message style", &card.first_message, card);
+    let history_start = lines.len();
     let recent = prompt_card_text(recent_room_context, 1_200);
     if !recent.is_empty() {
         lines.push(format!("- Recent room context: {recent}"));
@@ -196,6 +213,7 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
         &card.post_history_instructions,
         card,
     );
+    let history_end = lines.len();
     if !card.ignored_features.is_empty() {
         let ignored = card
             .ignored_features
@@ -223,7 +241,22 @@ pub fn render_persona_context(card: &PersonaCard, recent_room_context: &str) -> 
         .chars()
         .take(MAX_PERSONA_CONTEXT_CHARACTERS)
         .collect::<String>();
-    bounded.trim_end().to_owned()
+    let mut fixed = Vec::new();
+    let mut dynamic = Vec::new();
+    for (index, line) in bounded.lines().enumerate() {
+        // Card fields are sanitized to single lines before rendering.
+        if (lore_start..lore_end).contains(&index) || (history_start..history_end).contains(&index)
+        {
+            dynamic.push(line);
+        } else {
+            fixed.push(line);
+        }
+    }
+    (
+        bounded.trim_end().to_owned(),
+        fixed.join("\n").trim_end().to_owned(),
+        dynamic.join("\n").trim_end().to_owned(),
+    )
 }
 
 fn append_card_line(lines: &mut Vec<String>, label: &str, value: &str, card: &PersonaCard) {

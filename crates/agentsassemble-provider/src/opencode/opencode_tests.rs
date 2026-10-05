@@ -190,6 +190,7 @@ async fn tool_only_completion_preserves_portal_validation_and_native_authority()
         "http_sse",
     );
     let mut request = ProviderTurnRequest {
+        session_instructions: None,
         request_ingress: None,
         turn_id: "turn".to_owned(),
         turn_generation: 1,

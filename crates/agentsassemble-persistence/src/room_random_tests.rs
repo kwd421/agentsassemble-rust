@@ -110,8 +110,7 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
         )
         .await
         .unwrap_or_else(|error| panic!("authorize provider room turn: {error}"));
-    assert!(assignment.tabletop_tools);
-    assert!(assignment.provider_input.contains("roll_dice"));
+    assert_tabletop_instructions(assignment);
     let request = RoomRandomRequest::Choose {
         options: vec!["north".to_owned(), "south".to_owned()],
         reason: String::new(),
@@ -185,6 +184,16 @@ async fn provider_room_random_revalidates_turn_and_enforces_durable_budget() {
         &store, &principal, assignment, &start, &request, &result,
     )
     .await;
+}
+
+fn assert_tabletop_instructions(assignment: &crate::AgentTurnAssignment) {
+    let instructions = assignment
+        .session_instructions
+        .as_deref()
+        .unwrap_or_default();
+    assert!(assignment.tabletop_tools);
+    assert!(instructions.contains("roll_dice"));
+    assert!(!assignment.provider_input.contains("roll_dice"));
 }
 
 async fn assert_late_random_rejected_after_mute(

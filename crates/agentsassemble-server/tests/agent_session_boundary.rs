@@ -476,18 +476,18 @@ async fn verify_room_turn_publication(first_status: &str) {
         .filter(|request| request["method"] == "turn/start")
         .collect::<Vec<_>>();
     assert_eq!(turns.len(), 2);
-    assert!(
-        turns[0]["params"]["input"][0]["text"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("read_discussion")
-    );
-    assert!(
-        turns[1]["params"]["input"][0]["text"]
-            .as_str()
-            .unwrap_or_default()
-            .contains("read_discussion")
-    );
+    for turn in turns {
+        assert_eq!(
+            turn["params"]["input"][0]["text"],
+            "[Ordered shared-room observation]"
+        );
+    }
+    let instructions = requests
+        .iter()
+        .filter_map(|request| request["params"]["config"]["developer_instructions"].as_str())
+        .collect::<Vec<_>>();
+    assert_eq!(instructions.len(), 1);
+    assert!(instructions[0].contains("Plain reply text is not shown in the room"));
     server.stop().await;
 }
 

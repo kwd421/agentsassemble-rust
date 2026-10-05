@@ -153,6 +153,7 @@ where
     ) -> Result<ClaudeSdkTurn, DriverError> {
         self.send(&serde_json::json!({
             "type": "turn", "turn_id": request.turn_id, "input": request.input,
+            "session_instructions": request.session_instructions,
         }))
         .await?;
         match requests::run(self, session_id, request).await {

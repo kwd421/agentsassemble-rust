@@ -159,3 +159,34 @@ for (const receipt of ["missing", "mismatch", "foreign"]) {
     assert.equal(await exit, 1);
   });
 }
+
+test("persistent append reaches fresh, reused, changed-card and restarted queries", async () => {
+  let id = "";
+  for (const restart of [false, true]) {
+    const runtime = start("session");
+    const exit = closed(runtime.child);
+    runtime.child.stdin.write(`${JSON.stringify({
+      type: "initialize", workspace: "/fixture/workspace", model: "claude-sonnet-5",
+      reasoning_effort: "high", service_tier: "default", permission_mode: "meeting_read_only",
+      resume_session_id: id,
+      room_portal: { url: "http://127.0.0.1:43210/mcp", bearer_token: "fixture-token" },
+    })}\n`);
+    const ready = await runtime.next();
+    assert.equal(ready.type, "ready");
+    assert.equal(ready.reused, restart);
+    if (restart) assert.equal(ready.session_id, id);
+    id = ready.session_id;
+    for (const [index, append] of ["old card", "old card", "new card"].entries()) {
+      runtime.child.stdin.write(`${JSON.stringify({ type: "turn", turn_id: `turn-${index}`,
+        session_instructions: append,
+        input: `inspect instructions:${JSON.stringify({ append, resume: restart || index === 2 })}`,
+      })}\n`);
+      const result = await runtime.next();
+      assert.equal(result.type, "turn_result");
+      assert.equal(result.session_id, id);
+    }
+    runtime.child.stdin.write(`${JSON.stringify({ type: "shutdown" })}\n`);
+    assert.deepEqual(await runtime.next(), { type: "stopped" });
+    assert.equal(await exit, 0);
+  }
+});

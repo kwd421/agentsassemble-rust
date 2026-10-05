@@ -203,6 +203,9 @@ impl RemoteOpenAiDriver {
         let observation = request.room_observation.as_ref();
         let tools = self.turn_tools(session, request);
         let mut messages = vec![json!({"role": "user", "content": request.input})];
+        if let Some(instructions) = &request.session_instructions {
+            messages.insert(0, json!({"role": "system", "content": instructions}));
+        }
         for round in 0..=MAX_TOOL_ROUNDS {
             let response = self
                 .api

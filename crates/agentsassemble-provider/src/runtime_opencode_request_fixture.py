@@ -2,6 +2,7 @@
 """Local protocol fixture; never loads a provider or records authentication headers."""
 import http.server
 import json
+import os
 import pathlib
 import queue
 import sys
@@ -52,6 +53,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
     def do_POST(self):
         path = urllib.parse.urlparse(self.path).path
         payload = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+        if path == "/instance/dispose":
+            config = pathlib.Path(os.environ["OPENCODE_CONFIG_DIR"]) / "opencode.json"
+            pathlib.Path("agent-prompt.json").write_text(config.read_text())
+            with open("agent-refreshes.jsonl", "a") as log:
+                log.write(config.read_text() + "\n")
+            return self.reply(True)
         if path == "/mcp":
             return self.reply({"agentsassemble_room": {"status": "connected"}})
         if path == "/session":
@@ -63,6 +70,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
             return
         if path != "/session/session-1/message":
             return self.send_error(404)
+        answered.clear()
+        pathlib.Path("prompt-request.json").write_text(json.dumps(payload))
         event("message.updated", info={"id": "user-1", "role": "user"})
         event("permission.asked", id="permission-1", permission="bash", patterns=["echo fixture"], always=[])
         if not answered.wait(10):
