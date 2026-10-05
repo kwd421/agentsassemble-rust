@@ -8,8 +8,10 @@ const CENTRAL_KEY = "agentsassemble.pendingMember.v1";
 const HASH = /^[A-Za-z0-9_-]{43}$/;
 export type MemberTargetRequest = {
   server_id: string; registration_epoch: string; challenge_hash: string; handoff_state: string;
+  /** Untrusted presentation only; excluded from grants and callback correlation. */
+  room_name?: string;
 };
-export type MemberChallenge = Omit<MemberTargetRequest, "handoff_state"> & {
+export type MemberChallenge = Omit<MemberTargetRequest, "handoff_state" | "room_name"> & {
   challenge_id: string; expires_at: number;
 };
 export type MemberHandoff = MemberTargetRequest & {
@@ -21,6 +23,11 @@ export type MemberGrant = {
 };
 export type MemberReturn = { record?: MemberHandoff; grant?: MemberGrant; error?: string; retry?: boolean };
 
+export function memberRoomName(value: unknown): string {
+  if (typeof value !== "string") return "";
+  return value.normalize("NFC").replace(/[\p{Cc}\p{Cf}]/gu, " ").replace(/\s+/gu, " ").trim().slice(0, 80).replace(/[\uD800-\uDBFF]$/u, "");
+}
+
 function liveExpiry(value: unknown): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value <= Date.now() / 1000) {
     throw new Error("입장 요청이 만료됐어요. 다시 시도해 주세요.");
@@ -30,7 +37,7 @@ function liveExpiry(value: unknown): number {
 
 export function parseMemberTargetRequest(value: unknown): MemberTargetRequest {
   const r = strictRecord(value, "서버 입장 요청");
-  assertExactKeys(r, ["server_id", "registration_epoch", "challenge_hash", "handoff_state"], "서버 입장 요청");
+  assertExactKeys(r, ["server_id", "registration_epoch", "challenge_hash", "handoff_state"], "서버 입장 요청", ["room_name"]);
   const request = {
     server_id: requiredString(r, "server_id", "서버 입장 요청"),
     registration_epoch: requiredString(r, "registration_epoch", "서버 입장 요청"),
@@ -41,7 +48,7 @@ export function parseMemberTargetRequest(value: unknown): MemberTargetRequest {
       request.server_id.length > 200 || request.registration_epoch.length > 200) {
     throw new Error("서버 입장 요청을 확인하지 못했어요.");
   }
-  return request;
+  return { ...request, ...(r.room_name === undefined ? {} : { room_name: memberRoomName(r.room_name) }) };
 }
 
 export function parseMemberChallenge(value: unknown): MemberChallenge {
@@ -81,7 +88,7 @@ function decode(value: string): unknown {
   try { return JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(bytes)); }
   catch { throw new Error("입장 응답을 확인하지 못했어요."); }
 }
-export function memberTargetRequest(record: MemberHandoff): MemberTargetRequest {
+export function memberTargetRequest(record: MemberTargetRequest): MemberTargetRequest {
   const { server_id, registration_epoch, challenge_hash, handoff_state } = record;
   return { server_id, registration_epoch, challenge_hash, handoff_state };
 }
@@ -104,10 +111,10 @@ export function centralMemberEntryUrl(centralOrigin: string, request: MemberTarg
   return `${exactCentralServerOrigin(centralOrigin)}/member-join#member-request=${encode(request)}`;
 }
 export function memberCallbackUrl(grant: MemberGrant, request: MemberTargetRequest): string {
-  return `${exactCentralServerOrigin(grant.endpoint_origin)}/join#central-member=${encode({ ...request, grant })}`;
+  return `${exactCentralServerOrigin(grant.endpoint_origin)}/join#central-member=${encode({ ...memberTargetRequest(request), grant })}`;
 }
 export function memberRetryUrl(origin: string, request: MemberTargetRequest): string {
-  return `${exactCentralServerOrigin(origin)}/join#central-member=${encode({ ...request, retry: true })}`;
+  return `${exactCentralServerOrigin(origin)}/join#central-member=${encode({ ...memberTargetRequest(request), retry: true })}`;
 }
 
 /** Called by main before React startup; even malformed grants leave browser history first. */
@@ -131,7 +138,7 @@ export function consumeMemberReturn(): MemberReturn | undefined {
       "challenge_id", "expires_at", "invite_token", "meeting_id"], "입장 기록");
     for (const field of ["challenge_id", "invite_token", "meeting_id"]) requiredString(saved, field, "입장 기록");
     record = saved as MemberHandoff;
-    if (JSON.stringify(memberTargetRequest(record)) !== JSON.stringify(request)) {
+    if (JSON.stringify(memberTargetRequest(record)) !== JSON.stringify(memberTargetRequest(request))) {
       record = undefined;
       throw new Error("입장 기록이 일치하지 않아요. 원래 초대 링크를 다시 열어 주세요.");
     }

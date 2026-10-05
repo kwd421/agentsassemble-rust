@@ -10,13 +10,13 @@ import {
 import { completeCentralWebGoogleReturn, startCentralWebGoogle } from "../../lib/central/webGoogle";
 import {
   centralMemberEntryUrl, clearCentralMemberRequest, createMemberHandoff, memberCallbackUrl,
-  memberRetryUrl, memberTargetRequest, storeMemberHandoff,
+  memberRetryUrl, memberTargetRequest, memberRoomName, storeMemberHandoff,
   type MemberGrant, type MemberHandoff, type MemberReturn, type MemberTargetRequest,
 } from "../../lib/central/memberConnect";
 import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
 
 export type MemberJoinHost = {
-  inviteToken: string; meetingId: string; deviceToken: string; clientId: string;
+  inviteToken: string; meetingId: string; roomName?: string; deviceToken: string; clientId: string;
   callback?: MemberReturn; onComplete: (payload: RoomInviteJoinResponse) => Promise<boolean>;
 };
 type Consent = {
@@ -92,7 +92,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
       const challenge = await challengeRoomMember(host.inviteToken, host.deviceToken);
       if (!active.current) return;
       record.current = createMemberHandoff(challenge, host.inviteToken, host.meetingId);
-      targetRequest = memberTargetRequest(record.current);
+      targetRequest = { ...memberTargetRequest(record.current), room_name: memberRoomName(host.roomName) };
       if (!isDesktopWebview()) {
         const central = centralAccountEntryUrl();
         if (!central) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
@@ -165,17 +165,21 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
     else window.history.back();
   }
 
+  const roomName = consent?.request.room_name;
+  const title = roomName ? `‘${roomName}’에 참가할까요?` : "이 방에 참가할까요?";
+
   return <GuestJoinProfilePanel displayName="" busy={busy} status={error || status}
-    title={consent && !error ? `${consent.target.label}에 참가할까요?` : "로그인하고 참가"}
-    identityLabel={consent && !error ? consent.target.label : undefined}
-    titleContent={consent && !error ? <><strong>{consent.target.label}</strong>에 참가할까요?</> : undefined}
+    title={consent && !error ? title : "로그인하고 참가"}
+    identityLabel={consent && !error ? roomName : undefined}
+    serverLabel={consent && !error ? `${consent.target.label} 서버에서 열린 방` : undefined}
+    titleContent={consent && !error ? <>{roomName ? <>‘<strong>{roomName}</strong>’에 참가할까요?</> : title}</> : undefined}
     retryMode={error ? "join" : undefined} onJoin={retry}
     onDisplayNameChange={() => {}} onAvatarImageChange={() => {}}>
-    <section aria-label="서버 참가" className="grid gap-3 text-text-primary">
+    <section aria-label="방 참가" className="grid gap-3 text-text-primary">
       {consent && !error && <>
         <p className="text-sm preserve-words">{consent.account} 계정으로 참가</p>
         <p className="truncate text-xs text-text-muted">{consent.target.endpoint_origin}</p>
-        <p className="text-sm text-text-muted">참가하면 이 서버에 내 이름과 프로필이 보여요.</p>
+        <p className="text-sm text-text-muted">참가하면 이 방에 내 이름과 프로필이 보여요.</p>
         <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>참가하기</button>
       </>}
       {!host && !busy && !error && !consent && <button type="button" className="dc-guest-join-button"

@@ -739,6 +739,7 @@ export function useRoomAdmission({
 
   return {
     memberJoin: admissionState.kind === "profile_required" ? {
+      roomName: inviteRoomLabelRef.current,
       inviteToken: guestJoinToken, meetingId: memberReturn?.record?.meeting_id || expectedInviteRoomIdRef.current,
       deviceToken, clientId, callback: memberReturn, onComplete: acceptMemberSession,
     } : undefined,

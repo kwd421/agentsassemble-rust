@@ -23,7 +23,7 @@ const challenge = { server_id: "server", registration_epoch: "epoch", challenge_
 const target = { server_id: "server", label: "친구의 서버", endpoint_origin: "https://host.test", endpoint_generation: 7 };
 const grant = { ...target, label: undefined, registration_epoch: "epoch", grant_token: `aamg1.${"g".repeat(43)}`, expires_at: challenge.expires_at };
 const session = { token: "central-private-session", person: { display_name: "Hihi", person_id: "person" } };
-const host = () => ({ inviteToken: "private-invite", meetingId: "room", deviceToken: "browser-credential", clientId: "client",
+const host = () => ({ inviteToken: "private-invite", meetingId: "room", roomName: "친구들과 대화", deviceToken: "browser-credential", clientId: "client",
   onComplete: vi.fn().mockResolvedValue(true) });
 const realWindow = window;
 
@@ -52,9 +52,9 @@ describe("member invite screen", () => {
   it("requires explicit consent, displays canonical account/server/origin, and admits natively once", async () => {
     const props = host(); render(<StrictMode><MemberJoinPanel host={props} /></StrictMode>);
     await screen.findByText("Hihi 계정으로 참가");
-    expect(screen.getByRole("heading", { name: "친구의 서버에 참가할까요?" })).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "‘친구들과 대화’에 참가할까요?" })).toBeTruthy();
     expect(screen.getByText("Hihi 계정으로 참가")).toBeTruthy();
-    expect(screen.getByText("참가하면 이 서버에 내 이름과 프로필이 보여요.")).toBeTruthy();
+    expect(screen.getByText("참가하면 이 방에 내 이름과 프로필이 보여요.")).toBeTruthy();
     expect(screen.queryByText(/중앙|입장 프로필|\(server\)/)).toBeNull();
     expect(screen.getByText("https://host.test")).toBeTruthy();
     expect(mocks.issue).not.toHaveBeenCalled(); expect(mocks.join).not.toHaveBeenCalled();
@@ -147,7 +147,7 @@ describe("member invite screen", () => {
     first.unmount(); sessionStorage.clear();
     realWindow.history.replaceState({}, "", `/member-join${destination.hash}`);
     const request = consumeCentralMemberRequest()!;
-    expect(Object.keys(request).sort()).toEqual(["challenge_hash", "handoff_state", "registration_epoch", "server_id"]);
+    expect(Object.keys(request).sort()).toEqual(["challenge_hash", "handoff_state", "registration_epoch", "room_name", "server_id"]);
     mocks.session.mockReturnValue(null);
     const central = render(<MemberJoinPanel request={request} />);
     fireEvent.click(await screen.findByRole("button", { name: "Google로 계속" }));
