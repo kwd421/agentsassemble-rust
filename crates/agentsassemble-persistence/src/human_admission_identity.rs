@@ -45,7 +45,6 @@ pub(super) async fn resolve_identity(
         .await?
         {
             let user_id = row.get::<String, _>("user_id");
-            crate::central_identity_bindings::require_unbound_user(transaction, &user_id).await?;
             let participant_id = row.get::<String, _>("participant_id");
             let profile = decode_bound_profile(
                 row.get::<&str, _>("participant_id"),

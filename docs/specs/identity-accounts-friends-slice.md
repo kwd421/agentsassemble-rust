@@ -204,7 +204,9 @@ floor가 이해하는 기존 bootstrap 계약 revision 80을 사용한다. boots
 재검증, account device 해석·binding, recovery 발급/최초 redeem/정확 재시도,
 Google 연결 및 guest retirement다. 각 기존 소유자 트랜잭션에서 binding을 검사해
 `central_member_unsupported`로 거절하며 독립 credential/입장 결과를 반환하지 않는다.
-새 member route나 입장 API는 만들지 않는다. binding 없는 익명/Google 및 native
+브라우저 credential의 기존 user binding 검사는 초대 종류 및 정확 재시도 분기보다 먼저
+수행한다. 1회용 최초 입장·동일 요청 반복과 binding 전 사용한 초대의 정확 재시도도
+무변경 거절한다. 새 member route나 입장 API는 만들지 않는다. binding 없는 익명/Google 및 native
 pairing의 idle 수명·last-use·30일 미사용 만료·단일/전체 revocation은 보존한다.
 
 C4a 자동 검증은 변경 전 실패 재현 후 80의 schema/데이터 보존, 최소 81 DDL 및

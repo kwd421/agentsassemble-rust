@@ -269,6 +269,39 @@ async fn floor_denies_bound_human_admission_and_session_reuse() -> TestResult {
 }
 
 #[tokio::test]
+async fn floor_denies_bound_browser_one_use_first_and_replay() -> TestResult {
+    for replay in [false, true] {
+        let (store, now) = fixture().await;
+        let (_, identity) = guest(&store).await?;
+        insert_invite(&store, [11; 32], [12; 32], "one-use", 1, now).await;
+        let request = prepared(
+            [12; 32],
+            [3; 32],
+            "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb",
+            "Guest",
+        );
+        if replay {
+            admitted(store.admit_human(&request, now).await?);
+        }
+        install_v81(&store).await?;
+        bind(
+            &store,
+            &identity
+                .user()
+                .unwrap_or_else(|| panic!("guest user"))
+                .user_id,
+        )
+        .await?;
+        let before = snapshot(&store).await?;
+        for _ in 0..2 {
+            unsupported(store.admit_human(&request, now).await);
+            assert_eq!(snapshot(&store).await?, before);
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
 async fn floor_denies_bound_recovery_issue() -> TestResult {
     let (store, _) = fixture().await;
     let (_, identity) = guest(&store).await?;

@@ -1,5 +1,9 @@
 # Verification Contract
 
+## C4a Daybreak corrections (2026-10-05)
+
+- H1 confirmed: bound browser one-use admission failed before correction; admission-boundary guard now rejects fresh/repeated and pre-binding exact replay without writes (4 attempts). Persistence: 411 passed.
+
 ## Server integration harness and artifact footprint (2026-10-05)
 
 The 49 server integration targets now share `tests/integration/main.rs`; original

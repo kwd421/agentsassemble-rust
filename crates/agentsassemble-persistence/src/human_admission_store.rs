@@ -85,6 +85,17 @@ async fn admit_human_in_transaction(
     };
     require_credential_binding(&invite, request.credential())?;
 
+    // Browser authority must be checked before either invite kind can replay or mint a session.
+    if let Some(user_id) = sqlx::query_scalar::<_, String>(
+        "SELECT user_id FROM human_device_credentials WHERE credential_fingerprint = ?",
+    )
+    .bind(request.browser_credential_fingerprint().as_slice())
+    .fetch_optional(&mut **transaction)
+    .await?
+    {
+        crate::central_identity_bindings::require_unbound_user(transaction, &user_id).await?;
+    }
+
     let payload_hash = request.payload_hash();
     if !invite.is_reusable() {
         let admission_key = request.one_use_admission_key();
