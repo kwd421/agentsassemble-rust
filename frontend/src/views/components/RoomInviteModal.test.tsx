@@ -272,3 +272,20 @@ it("shows safe external-access failure copy", () => {
   expect(screen.getByText("외부 접속을 열지 못했어요. 잠시 후 다시 시도해 주세요.")).toBeTruthy();
   expect(screen.queryByText(/cloudflared/)).toBeNull();
 });
+
+it.each([0, 1, 3, 370])("formats expiry %s local calendar days away without raw ISO", (days) => {
+  vi.useFakeTimers();
+  try {
+    const now = new Date(2026, 9, 5, 23, 30);
+    vi.setSystemTime(now);
+    const expiry = new Date(2026, 9, 5 + days, 20, 40);
+    const iso = expiry.toISOString();
+    renderInviteModal({ humanInvites: [{ key: "expiry", displayName: "Guest", maxUses: 1, ttlSeconds: 86400,
+      expiresAt: iso, expired: false, retired: false, originCurrent: true, authorityCurrent: true,
+      revocation: "idle", copyUrl: "https://host.example/join?token=fixture" }] });
+    const day = days === 0 ? "오늘" : days === 1 ? "내일"
+      : expiry.toLocaleDateString("ko-KR", { ...(days === 370 ? { year: "numeric" as const } : {}), month: "long", day: "numeric" });
+    expect(screen.getByText(new RegExp(`${day} 오후 8:40 만료`))).toBeTruthy();
+    expect(document.body.textContent).not.toContain(iso);
+  } finally { vi.useRealTimers(); }
+});

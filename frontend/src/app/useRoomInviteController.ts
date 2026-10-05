@@ -267,25 +267,24 @@ export function useRoomInviteController({
   }
 
   async function preparePublicInvite(generation: number) {
-    let status = await refreshPublicInviteState(generation);
-    if (status.public_url) return status;
-    if (!("tunnel" in status) || !status.tunnel.available) {
+    try {
+      let status = await refreshPublicInviteState(generation);
+      if (status.public_url) return status;
+      if (!("tunnel" in status) || !status.tunnel.available) throw new Error(PUBLIC_INGRESS_START_ERROR);
+      assertIngressOperation(generation);
+      setCopyStatus("외부 접속 주소를 준비하는 중...");
+      status = await startPublicInviteTunnel(() => assertIngressOperation(generation));
+      assertIngressOperation(generation);
+      setPublicInviteStatus(status);
+      if (status.public_url && "tunnel" in status && status.tunnel.phase === "running") return status;
+      const readyStatus = await waitForTunnelReady(generation);
+      if (readyStatus.public_url && "tunnel" in readyStatus && readyStatus.tunnel.phase === "running") return readyStatus;
       throw new Error(PUBLIC_INGRESS_START_ERROR);
-    }
-    assertIngressOperation(generation);
-    setCopyStatus("공개 터널 준비 중...");
-    status = await startPublicInviteTunnel(() =>
-      assertIngressOperation(generation)
-    ).catch(() => {
+    } catch (error) {
+      if (error === RETIRED_INGRESS_OPERATION) throw error;
       assertIngressOperation(generation);
       throw new Error(PUBLIC_INGRESS_START_ERROR);
-    });
-    assertIngressOperation(generation);
-    setPublicInviteStatus(status);
-    if (status.public_url && "tunnel" in status && status.tunnel.phase === "running") return status;
-    const readyStatus = await waitForTunnelReady(generation);
-    if (readyStatus.public_url && "tunnel" in readyStatus && readyStatus.tunnel.phase === "running") return readyStatus;
-    throw new Error(PUBLIC_INGRESS_START_ERROR);
+    }
   }
 
   async function requirePublicInviteReady(

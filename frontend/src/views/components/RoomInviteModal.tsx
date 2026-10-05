@@ -36,6 +36,17 @@ function humanInviteUseLabel(maxUses: number) {
   return maxUses === 0 ? "인원 제한 없음" : `${maxUses}명`;
 }
 
+function inviteExpiryLabel(value: string) {
+  const expiry = new Date(value);
+  if (!Number.isFinite(expiry.getTime())) return "만료 시각 확인 불가";
+  const now = new Date();
+  const tomorrow = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const day = expiry.toDateString() === now.toDateString() ? "오늘"
+    : expiry.toDateString() === tomorrow.toDateString() ? "내일"
+    : expiry.toLocaleDateString("ko-KR", { ...(expiry.getFullYear() !== now.getFullYear() ? { year: "numeric" as const } : {}), month: "long", day: "numeric" });
+  return `${day} ${expiry.toLocaleTimeString("ko-KR", { hour: "numeric", minute: "2-digit", hour12: true })} 만료`;
+}
+
 const HUMAN_INVITE_TTL_LABELS: Record<number, string> = { 3600: "1시간", 86400: "24시간", 604800: "7일" };
 
 function humanInviteSummary(maxUses: number, ttlSeconds: number) {
@@ -302,7 +313,7 @@ export default function RoomInviteModal({
                             {invite.displayName}
                           </span>
                           <span className="dc-invite-friend-handle preserve-words">
-                            {humanInviteUseLabel(invite.maxUses)} · 만료 {invite.expiresAt} ·{" "}
+                            {humanInviteUseLabel(invite.maxUses)} · {inviteExpiryLabel(invite.expiresAt)} ·{" "}
                             {humanInviteStatus(invite)}
                           </span>
                         </span>
