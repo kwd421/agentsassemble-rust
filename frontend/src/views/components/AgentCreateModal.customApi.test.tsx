@@ -45,7 +45,6 @@ describe("AgentCreateModal Custom API", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(screen.getByRole("listitem", { name: "Custom API" }));
     expect(primaryActionButton().disabled).toBe(true);
 

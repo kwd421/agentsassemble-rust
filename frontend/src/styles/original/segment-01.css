@@ -582,7 +582,8 @@ button:disabled,
 .dc-agent-provider-grid button {
   display: flex;
   min-width: 0;
-  height: 40px;
+  min-height: 44px;
+  padding: 8px;
   align-items: center;
   justify-content: center;
   gap: 6px;
@@ -605,6 +606,10 @@ button:disabled,
   background: var(--color-accent);
   border-color: var(--color-accent);
   color: #fff;
+}
+
+.dc-agent-provider-grid button[data-unavailable="true"] {
+  opacity: 0.4;
 }
 
 .dc-agent-provider-grid button:disabled {

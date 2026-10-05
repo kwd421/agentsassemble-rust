@@ -575,9 +575,8 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    expect(screen.queryByRole("listitem", { name: "DeepSeek" })).toBeNull();
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
-    expect(screen.getByRole("list", { name: "API 제공자" })).toBeTruthy();
+    expect(screen.getByRole("listitem", { name: "DeepSeek" })).toBeTruthy();
+    expect(screen.getByRole("list", { name: "API 키 제공자" })).toBeTruthy();
     expect(screen.queryByLabelText("API 키")).toBeNull();
 
     await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));
@@ -595,7 +594,7 @@ describe("AgentCreateModal", () => {
     );
   });
 
-  it("projects one mixed-location provider into matching Harness and Local model lists", async () => {
+  it("shows one mixed-group provider and changes persona visibility with its selected model", async () => {
     const onCreate = vi.fn().mockResolvedValue(undefined);
     render(
       <AgentCreateModal
@@ -610,25 +609,25 @@ describe("AgentCreateModal", () => {
     );
 
     expect(screen.getByRole("listitem", { name: "Ollama" })).toBeTruthy();
-    expect(screen.queryByRole("listitem", { name: "LM Studio" })).toBeNull();
+    expect(screen.getByRole("listitem", { name: "LM Studio" })).toBeTruthy();
     await userEvent.click(screen.getByRole("listitem", { name: "Ollama" }));
     expectProviderControlValue("모델", "Nemotron 3 Super");
     expect(screen.getByRole("combobox", { name: "모델" }).textContent).toContain(
       "Free tier"
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "Local" }));
-    expect(screen.getByRole("listitem", { name: "Ollama" })).toBeTruthy();
-    expect(screen.getByRole("listitem", { name: "LM Studio" })).toBeTruthy();
-    await userEvent.click(screen.getByRole("listitem", { name: "Ollama" }));
+    expect(screen.getAllByRole("listitem", { name: "Ollama" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /적용 안 함/ })).toBeNull();
 
     expect(screen.queryByLabelText("API 키")).toBeNull();
     const model = screen.getByRole("combobox", { name: "모델" }) as HTMLButtonElement;
     expect(model.disabled).toBe(false);
-    expectProviderControlValue("모델", "선택 필요");
-    expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
-    await chooseProviderControl("모델", "Gemma 4 12B Local");
-    expect(model.disabled).toBe(true);
+    expectProviderControlValue("모델", "구독 에이전트");
+    expect(primaryActionButton().hasAttribute("disabled")).toBe(false);
+    await chooseProviderControl("모델", "Gemma 4 12B · 내 컴퓨터 Local");
+    expect(model.disabled).toBe(false);
+    expectProviderControlValue("모델", "내 컴퓨터");
+    expect(screen.getByRole("button", { name: /적용 안 함/ })).toBeTruthy();
     expect(screen.queryByRole("combobox", { name: "추론 강도" })).toBeNull();
     expect(screen.queryByRole("switch", { name: "응답 속도" })).toBeNull();
     expectProviderControlValue("권한", "읽기 전용");
@@ -657,7 +656,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));
     const secretInput = screen.getByLabelText("API 키") as HTMLInputElement;
     await userEvent.type(secretInput, "sk-not-saved");
@@ -705,7 +703,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(
       screen.getByRole("listitem", { name: "Cerebras" })
     );
@@ -727,7 +724,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(screen.getByRole("listitem", { name: "OpenRouter" }));
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("openrouter");
@@ -746,7 +742,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(
       screen.getByRole("listitem", { name: "Vercel AI Gateway" })
     );
@@ -767,7 +762,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(screen.getByRole("listitem", { name: "LLM Gateway" }));
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("llmgateway");
@@ -786,7 +780,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(screen.getByRole("listitem", { name: "TokenRouter" }));
     expect(await screen.findByLabelText("API 키")).toBeTruthy();
     expect(apiMocks.fetchProviderCredentialStatus).toHaveBeenCalledWith("tokenrouter");
@@ -812,7 +805,6 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    await userEvent.click(screen.getByRole("listitem", { name: "API" }));
     await userEvent.click(screen.getByRole("listitem", { name: "DeepSeek" }));
     const deleteButton = await screen.findByRole("button", { name: "키 삭제" });
     await userEvent.click(deleteButton);

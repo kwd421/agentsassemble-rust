@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 agent creation: shared provider sections, unavailable-last order, mixed Ollama model tags/persona visibility and Friends labels; affected frontend tests 47/47 passed; visual/manual verification deferred to user.
+
 ## C4a Daybreak corrections (2026-10-05)
 
 - M1 re-review: exact normalized sqlite_schema DDL replaces PRAGMA checks; original 13 plus 4 conflict/constraint mutations and formatted valid DDL covered; persistence 411/411 passed; `make verify` passed once (Rust 1,080, desktop 46, frontend 1,043; all gates passed).

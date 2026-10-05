@@ -40,7 +40,7 @@ it.each([false, true])("keeps failed creation custody and cancels edits (server 
   expect(screen.getByRole("button", { name: "새 친구 프로필 보기" })).toBeTruthy();
   const profile = screen.getByRole("complementary", { name: "친구 프로필" });
   expect(within(profile).getByRole("heading", { name: "새 친구" })).toBeTruthy();
-  fireEvent.click(within(screen.getByRole("navigation", { name: "친구 분류" })).getByRole("button", { name: "API" }));
+  fireEvent.click(within(screen.getByRole("navigation", { name: "친구 분류" })).getByRole("button", { name: "API 키" }));
   expect(screen.queryByRole("button", { name: "새 친구 프로필 보기" })).toBeNull();
   expect(within(profile).queryByRole("heading", { name: "새 친구" })).toBeNull();
   fireEvent.click(within(screen.getByRole("navigation", { name: "친구 분류" })).getByRole("button", { name: "사람" }));

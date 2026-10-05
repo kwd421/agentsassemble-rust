@@ -3,6 +3,17 @@
 Status: published contract owner; implementation reopened by the 2026-09-01
 repository audit before further Agent Session work
 
+## Shared agent creation presentation (2026-10-05)
+
+App/web `AgentCreateModal` shows all providers once under 구독 에이전트, API 키,
+내 컴퓨터, matching FriendsView labels. Preserve catalog order within availability
+tiers, with unavailable providers dimmed last and still selectable for setup. Mixed
+model groups stay in one provider; model labels show short group tags and selected
+model metadata owns permission copy and api/local persona visibility. Preserve full
+provider names, catalog_group and create payload contracts, retries and setup.
+Acceptance: affected frontend tests; one pre-push make verify. No signed build,
+manual verification or deployment; visual acceptance belongs to the user.
+
 ## Definition
 
 A host selects an installed provider/model from the authoritative live catalog, creates a durable Agent Session, and can ultimately start that same session so its canonical room-context reply is published back into the room.

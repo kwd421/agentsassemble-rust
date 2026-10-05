@@ -9,7 +9,7 @@ import { isActivePresence, presenceStatusLabel } from "../lib/presenceStatus";
 import type { SavedFriendsAuthority } from "../api/friends";
 
 const types: Record<FriendParticipantType, string> = {
-  subscription_ai: "구독형 AI", api: "API", local: "Local", remote: "외부 AI", human: "사람", unknown: "기타",
+  subscription_ai: "구독 에이전트", api: "API 키", local: "내 컴퓨터", remote: "외부 AI", human: "사람", unknown: "기타",
 };
 const icons = { human: UserRound, subscription_ai: Bot, api: Cloud, local: Cpu, remote: Wifi, unknown: Users };
 const inputStyle = { width: "100%", minHeight: 44, padding: "8px 12px", boxSizing: "border-box" as const };

@@ -1,19 +1,21 @@
-import { Cable, Cloud, HardDrive } from "lucide-react";
 import type { NativeCliProviderAvailability } from "../roomSocketClient";
 
 export type ProviderCatalogGroup = "harness" | "api" | "local";
 
 export const PROVIDER_GROUPS = [
-  { id: "harness", label: "Harness", Icon: Cable },
-  { id: "api", label: "API", Icon: Cloud },
-  { id: "local", label: "Local", Icon: HardDrive },
+  { id: "harness", label: "구독 에이전트" },
+  { id: "api", label: "API 키" },
+  { id: "local", label: "내 컴퓨터" },
 ] as const;
 
 export function providerCatalogGroup(
-  provider: NativeCliProviderAvailability
+  provider: NativeCliProviderAvailability,
+  model?: string
 ): ProviderCatalogGroup {
-  if (["harness", "api", "local"].includes(provider.catalog_group)) {
-    return provider.catalog_group as ProviderCatalogGroup;
+  const group = provider.controls.find((control) => control.key === "model")
+    ?.options.find((option) => option.value === model)?.metadata?.catalog_group ?? provider.catalog_group;
+  if (typeof group === "string" && ["harness", "api", "local"].includes(group)) {
+    return group as ProviderCatalogGroup;
   }
   throw new Error("Provider catalog group is outside the current room contract.");
 }
@@ -21,61 +23,11 @@ export function providerCatalogGroup(
 export function projectProvidersByCatalogGroup(
   providers: NativeCliProviderAvailability[]
 ): Record<ProviderCatalogGroup, NativeCliProviderAvailability[]> {
-  return {
-    harness: projectProviders(providers, "harness"),
-    api: projectProviders(providers, "api"),
-    local: projectProviders(providers, "local"),
-  };
-}
-
-function projectProviders(
-  providers: NativeCliProviderAvailability[],
-  group: ProviderCatalogGroup
-): NativeCliProviderAvailability[] {
-  return providers.flatMap((provider) => {
-    const projected = projectProviderToCatalogGroup(provider, group);
-    return projected ? [projected] : [];
-  });
-}
-
-function projectProviderToCatalogGroup(
-  provider: NativeCliProviderAvailability,
-  group: ProviderCatalogGroup
-): NativeCliProviderAvailability | null {
-  const modelControl = provider.controls.find((control) => control.key === "model");
-  if (!modelControl) {
-    return providerCatalogGroup(provider) === group ? provider : null;
-  }
-  const providerGroup = providerCatalogGroup(provider);
-  const scopedOptions = modelControl.options.filter((option) => {
-    const optionGroup = option.metadata?.catalog_group;
-    return (
-      (typeof optionGroup === "string" && optionGroup ? optionGroup : providerGroup) === group
-    );
-  });
-  if (scopedOptions.length === 0) return null;
-  if (scopedOptions.length === modelControl.options.length && providerGroup === group) {
-    return provider;
-  }
-  const defaultModel = scopedOptions.some(
-    (option) => option.value === modelControl.default_value
-  )
-    ? modelControl.default_value
-    : "";
-  return {
-    ...provider,
-    catalog_group: group,
-    default_model: defaultModel,
-    controls: provider.controls.map((control) =>
-      control.key === "model"
-        ? {
-            ...control,
-            default_value: defaultModel,
-            options: scopedOptions,
-          }
-        : control
-    ),
-  };
+  return Object.fromEntries(PROVIDER_GROUPS.map(({ id }) => [
+    id,
+    providers.filter((provider) => providerCatalogGroup(provider) === id)
+      .sort((a, b) => Number(b.startable) - Number(a.startable)),
+  ])) as Record<ProviderCatalogGroup, NativeCliProviderAvailability[]>;
 }
 
 export function providerGroupLabel(group: ProviderCatalogGroup): string {
