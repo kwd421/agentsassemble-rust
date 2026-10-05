@@ -104,8 +104,9 @@ async fn join(
 
 async fn assert_member_socket(client: &reqwest::Client, base: &str, token: &str) {
     let mut socket = open_session_socket(client, base, token).await;
+    let request_id = uuid::Uuid::new_v4().to_string();
     socket
-        .send_json(&json!({"op":"command", "request_id":"member-message",
+        .send_json(&json!({"op":"command", "request_id":request_id,
         "action":"message.send", "payload":{"content":"member message"}}))
         .await;
     let first = socket.receive_json().await;
@@ -113,7 +114,7 @@ async fn assert_member_socket(client: &reqwest::Client, base: &str, token: &str)
     assert!(
         [&first, &second]
             .iter()
-            .any(|f| f["op"] == "ack" && f["request_id"] == "member-message")
+            .any(|f| f["op"] == "ack" && f["request_id"] == request_id)
     );
     assert!([&first, &second].iter().any(|f| {
         f["op"] == "event"
@@ -277,6 +278,13 @@ async fn assert_admission(
     let new_session = first["session_token"] != replay["session_token"];
     assert!(new_session, "new device needs a new session");
     received.recv().await.ok_or("second redeem")?;
+    // Both device sessions remain usable through the server's HTTP/WS authority owner.
+    assert_member_socket(
+        client,
+        base,
+        first["session_token"].as_str().ok_or("first token")?,
+    )
+    .await;
     Ok(replay)
 }
 
@@ -389,6 +397,7 @@ async fn assert_durable_replay(
         person_id: "person-1".into(),
         display_name: "Ignored".into(),
         registration_epoch: "member-epoch".into(),
+        challenge_fingerprint: [7; 32],
         challenge_expires_at: now + chrono::Duration::seconds(30),
     });
     let HumanAdmissionDecision::Admitted(commit) = store.admit_human(&request, now).await? else {

@@ -136,6 +136,7 @@ pub use provider_requests::{OpenProviderRequest, ProviderRequestCommit};
 mod central_identity_bindings;
 mod member_admission;
 mod member_schema;
+mod member_sessions;
 pub use member_admission::MemberAdmission;
 #[cfg(test)]
 mod provider_request_resolution_tests;

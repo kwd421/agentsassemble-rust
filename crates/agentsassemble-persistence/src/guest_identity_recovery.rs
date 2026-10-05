@@ -206,7 +206,7 @@ async fn recover(
     if room.status != RoomStatus::Active || participant.status != ParticipantStatus::Joined {
         return Err(unavailable_membership());
     }
-    if capacity_reached(tx, room_id, &user.participant_id, now).await? {
+    if capacity_reached(tx, room_id, &user.participant_id, 0, now).await? {
         return Err(rejected(
             "recovery_capacity_reached",
             "Room session capacity is full.",

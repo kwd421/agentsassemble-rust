@@ -14,20 +14,25 @@ pub(crate) const DDL: &str = "CREATE TABLE member_admissions (
     participant_id TEXT NOT NULL,
     session_key BLOB NOT NULL CHECK(length(session_key) = 32),
     result_json TEXT NOT NULL,
+    replay_floor INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY(binding_id, invite_id),
     UNIQUE(binding_id, room_id)
 ) STRICT";
 
-// v82 changes the reusable-session credential constraint. The v81 floor must
-// reject this database; the frozen binding DDL and bootstrap revision stay intact.
+// v82 changes session provenance; v83 admits bounded simultaneous member devices.
+// Older hosts reject this version; frozen binding DDL and bootstrap stay intact.
 pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
     let mut connection = pool.acquire().await?;
     let version: String =
         sqlx::query_scalar("SELECT value FROM runtime_metadata WHERE key = 'schema_version'")
             .fetch_one(&mut *connection)
             .await?;
-    if version == "82" {
+    if version == "83" {
         return Ok(());
+    }
+    if version == "82" {
+        drop(connection);
+        return super::member_sessions::upgrade_v82(pool).await;
     }
     sqlx::query("PRAGMA foreign_keys = OFF")
         .execute(&mut *connection)
@@ -53,7 +58,7 @@ pub(crate) async fn upgrade(pool: &SqlitePool) -> Result<(), PersistenceError> {
         if !sqlx::query("PRAGMA foreign_key_check").fetch_all(&mut *tx).await?.is_empty() {
             return Err(PersistenceError::InvalidSchemaVersion("member migration foreign key check failed".into()));
         }
-        sqlx::query("UPDATE runtime_metadata SET value = '82' WHERE key = 'schema_version'").execute(&mut *tx).await?;
+        sqlx::query("UPDATE runtime_metadata SET value = '83' WHERE key = 'schema_version'").execute(&mut *tx).await?;
         tx.commit().await?;
         Ok(())
     }.await;
@@ -80,7 +85,7 @@ pub(crate) async fn restore_v80_fixture(store: &crate::SqliteStore) -> Result<()
         .await?
         .iter()
         .map(|r| r.get::<String, _>("name"))
-        .filter(|n| n != "member_admission_id")
+        .filter(|n| !n.starts_with("member_"))
         .collect::<Vec<_>>()
         .join(",");
     sqlx::raw_sql(sqlx::AssertSqlSafe(format!(
@@ -104,7 +109,13 @@ pub(crate) async fn restore_v80_fixture(store: &crate::SqliteStore) -> Result<()
         .iter()
         .filter(|s| s.contains(" ON human_room_sessions("))
     {
-        sqlx::query(*index).execute(&mut *tx).await?;
+        if !index.contains("member_device_idx") && !index.contains("member_history_idx") {
+            sqlx::raw_sql(sqlx::AssertSqlSafe(
+                index.replace(" AND member_admission_id IS NULL", ""),
+            ))
+            .execute(&mut *tx)
+            .await?;
+        }
     }
     sqlx::query("UPDATE runtime_metadata SET value = '80' WHERE key = 'schema_version'")
         .execute(&mut *tx)

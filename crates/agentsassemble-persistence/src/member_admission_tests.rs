@@ -18,6 +18,7 @@ fn member(join: u8, browser: u8, name: &str) -> PreparedHumanAdmission {
         person_id: "person-1".into(),
         display_name: name.into(),
         registration_epoch: "epoch".into(),
+        challenge_fingerprint: Sha256::digest(uuid::Uuid::new_v4().as_bytes()).into(),
         challenge_expires_at: Utc::now() + Duration::minutes(5),
     })
 }
@@ -65,7 +66,7 @@ async fn member_devices_retry_canonical_result_without_profile_overwrite_or_devi
             store
                 .revalidate_human_session_authorization(&auth)
                 .await
-                .is_err()
+                .is_ok()
         );
         let fingerprint: [u8; 32] = Sha256::digest(replay.session_bearer().as_bytes()).into();
         store.authorize_human_session(&fingerprint).await?;
@@ -173,7 +174,7 @@ async fn member_two_device_race_reads_committed_winner() -> TestResult {
         )
         .fetch_one(&store.pool)
         .await?,
-        1
+        2
     );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT use_count FROM room_invites")
@@ -435,7 +436,7 @@ async fn member_failed_reentry_rolls_back_session_replacement() -> TestResult {
     let first = admitted(store.admit_human(&member(2, 3, "Hihi"), now).await?);
     sqlx::query("CREATE TRIGGER fail_reentry BEFORE INSERT ON human_room_sessions BEGIN SELECT RAISE(ABORT, 'test failure'); END")
         .execute(&store.pool).await?;
-    assert!(store.admit_human(&member(2, 4, "Hihi"), now).await.is_err());
+    assert!(store.admit_human(&member(2, 3, "Hihi"), now).await.is_err());
     let fingerprint: [u8; 32] = Sha256::digest(first.session_bearer().as_bytes()).into();
     store.authorize_human_session(&fingerprint).await?;
     assert_eq!(
@@ -446,3 +447,6 @@ async fn member_failed_reentry_rolls_back_session_replacement() -> TestResult {
     );
     Ok(())
 }
+
+#[path = "member_session_tests.rs"]
+mod bounded;

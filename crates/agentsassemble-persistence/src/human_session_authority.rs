@@ -157,6 +157,8 @@ pub(crate) async fn resolve_human_session(
     if user_id.is_empty() || participant_id.is_empty() {
         return Err(invalid_state("Stored human session identity is invalid."));
     }
+    sqlx::query("UPDATE human_room_sessions SET member_last_used_at = MAX(member_last_used_at, ?) WHERE session_fingerprint = ? AND member_admission_id IS NOT NULL")
+        .bind(now.timestamp_micros()).bind(session_fingerprint.as_slice()).execute(&mut **transaction).await?;
     let client_kind = ClientKind::Browser;
     Ok(ResolvedHumanSession::Live {
         authorization: HumanSessionAuthorization {

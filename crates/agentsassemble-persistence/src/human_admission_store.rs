@@ -179,7 +179,7 @@ async fn admit_human_in_transaction(
 
 async fn commit_new_admission(
     store: &SqliteStore,
-    transaction: &mut Transaction<'_, Sqlite>,
+    tx: &mut Transaction<'_, Sqlite>,
     request: &PreparedHumanAdmission,
     invite: &HumanInvite,
     room: &agentsassemble_domain::Room,
@@ -187,20 +187,13 @@ async fn commit_new_admission(
     now: DateTime<Utc>,
 ) -> Result<HumanAdmissionDecision, PersistenceError> {
     let payload_hash = request.payload_hash();
-    let avatar = resolve_admission_avatar(transaction, request, invite, now).await?;
-    let identity = resolve_identity(
-        transaction,
-        request,
-        invite,
-        &admission_key,
-        avatar.as_ref(),
-        now,
-    )
-    .await?;
+    let avatar = resolve_admission_avatar(tx, request, invite, now).await?;
+    let identity =
+        resolve_identity(tx, request, invite, &admission_key, avatar.as_ref(), now).await?;
     let Some(identity) = identity else {
         return Ok(rejected(HumanAdmissionRejection::IdentityConflict));
     };
-    if capacity_reached(transaction, &invite.room_id, &identity.participant_id, now).await? {
+    if capacity_reached(tx, &invite.room_id, &identity.participant_id, 0, now).await? {
         return Ok(rejected(HumanAdmissionRejection::CapacityReached));
     }
 
@@ -210,20 +203,13 @@ async fn commit_new_admission(
     .bind(&invite.room_id)
     .bind(&identity.participant_id)
     .bind(now.timestamp_micros())
-    .execute(&mut **transaction)
+    .execute(&mut **tx)
     .await?;
-    let identity =
-        persist_identity(transaction, identity, request, invite, avatar.as_ref(), now).await?;
+    let identity = persist_identity(tx, identity, request, invite, avatar.as_ref(), now).await?;
     let replaced_session_fingerprints =
-        replace_live_sessions(transaction, &invite.room_id, &identity.participant_id, now).await?;
-    let (participant, joined) = join_participant(
-        transaction,
-        invite,
-        &identity.participant_id,
-        &identity.profile,
-        now,
-    )
-    .await?;
+        replace_live_sessions(tx, &invite.room_id, &identity.participant_id, now).await?;
+    let (participant, joined) =
+        join_participant(tx, invite, &identity.participant_id, &identity.profile, now).await?;
 
     let consumed = sqlx::query(
         "UPDATE room_invites SET use_count = use_count + 1 WHERE invite_id = ? AND revoked = 0 AND expires_at > ? AND use_count < ?",
@@ -231,7 +217,7 @@ async fn commit_new_admission(
     .bind(&invite.invite_id)
     .bind(now.timestamp_micros())
     .bind(invite.effective_use_limit())
-    .execute(&mut **transaction)
+    .execute(&mut **tx)
     .await?;
     if consumed.rows_affected() != 1 {
         return Err(invalid_state(
@@ -241,13 +227,13 @@ async fn commit_new_admission(
 
     let mut events = identity.profile_events;
     if joined {
-        events.push(append_participant_joined(transaction, &participant, now).await?);
+        events.push(append_participant_joined(tx, &participant, now).await?);
     }
     let expires_at = now
         .checked_add_signed(SESSION_TTL)
         .ok_or_else(|| invalid_state("Human session expiry overflowed."))?;
     let result = admission_result(
-        transaction,
+        tx,
         request,
         invite,
         room,
@@ -276,7 +262,7 @@ async fn commit_new_admission(
     .bind(serde_json::to_string(&result)?)
     .bind(now.timestamp_micros())
     .bind(expires_at.timestamp_micros())
-    .execute(&mut **transaction)
+    .execute(&mut **tx)
     .await?;
 
     Ok(HumanAdmissionDecision::Admitted(Box::new(
@@ -397,6 +383,7 @@ pub(crate) async fn capacity_reached(
     transaction: &mut Transaction<'_, Sqlite>,
     room_id: &str,
     participant_id: &str,
+    retained_sessions: i64,
     now: DateTime<Utc>,
 ) -> Result<bool, PersistenceError> {
     let global = sqlx::query_scalar::<_, i64>(
@@ -415,7 +402,8 @@ pub(crate) async fn capacity_reached(
     .bind(participant_id)
     .fetch_one(&mut **transaction)
     .await?;
-    Ok(global >= MAX_PUBLIC_SESSIONS || room >= MAX_PUBLIC_ROOM_SESSIONS)
+    Ok(global + retained_sessions >= MAX_PUBLIC_SESSIONS
+        || room + retained_sessions >= MAX_PUBLIC_ROOM_SESSIONS)
 }
 
 pub(crate) async fn replace_live_sessions(

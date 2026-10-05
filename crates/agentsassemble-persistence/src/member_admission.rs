@@ -22,6 +22,7 @@ pub struct MemberAdmission {
     pub person_id: String,
     pub display_name: String,
     pub registration_epoch: String,
+    pub challenge_fingerprint: [u8; 32],
     pub challenge_expires_at: DateTime<Utc>,
 }
 
@@ -89,7 +90,7 @@ pub(crate) async fn admit(
     }
     let input_hash = canonical_input_hash(&binding, &invite)?;
     let previous =
-        sqlx::query("SELECT admission_id, participant_id, invite_id, invite_scope, input_hash, session_key, result_json FROM member_admissions WHERE binding_id = ? AND room_id = ?")
+        sqlx::query("SELECT admission_id, participant_id, invite_id, invite_scope, input_hash, session_key, result_json, replay_floor FROM member_admissions WHERE binding_id = ? AND room_id = ?")
             .bind(&binding)
             .bind(&invite.room_id)
             .fetch_optional(&mut **tx)
@@ -100,7 +101,7 @@ pub(crate) async fn admit(
     if invite.use_count >= invite.effective_use_limit() {
         return Ok(denied(Rejection::InviteUseLimitReached));
     }
-    if capacity_reached(tx, &invite.room_id, participant, now).await? {
+    if capacity_reached(tx, &invite.room_id, participant, 0, now).await? {
         return Ok(denied(Rejection::CapacityReached));
     }
     let is_new = identity.new;
@@ -131,11 +132,11 @@ pub(crate) async fn admit(
         .bind(&invite.invite_id)
         .execute(&mut **tx)
         .await?;
-    sqlx::query("INSERT INTO human_room_sessions(admission_key, key_kind, member_admission_id, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, result_json, admitted_at, expires_at, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'browser', ?, ?, ?, ?, ?, 'active')")
+    sqlx::query("INSERT INTO human_room_sessions(admission_key, key_kind, member_admission_id, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, result_json, admitted_at, expires_at, member_challenge_expires_at, member_last_used_at, state) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'browser', ?, ?, ?, ?, ?, ?, ?, 'active')")
         .bind(key.as_slice()).bind(if invite.is_reusable() {"reusable"} else {"one_use"}).bind(&admission_id)
         .bind(request.request_id().to_string()).bind(&invite.invite_id).bind(input_hash.as_slice()).bind(issued.fingerprint.as_slice())
         .bind(&invite.room_id).bind(user).bind(participant).bind(invite_scope_storage(invite.invite_scope))
-        .bind(request.browser_credential_fingerprint().as_slice()).bind(&result_json).bind(now.timestamp_micros()).bind(expires.timestamp_micros())
+        .bind(request.browser_credential_fingerprint().as_slice()).bind(&result_json).bind(now.timestamp_micros()).bind(expires.timestamp_micros()).bind(member.challenge_expires_at.timestamp_micros()).bind(now.timestamp_micros())
         .execute(&mut **tx).await?;
     let events = if is_joined {
         vec![append_participant_joined(tx, &joined, now).await?]
@@ -169,12 +170,20 @@ fn canonical_input_hash(
     .into())
 }
 
-fn reentry_key(seed: &[u8], browser: &[u8], request_id: &str) -> [u8; 32] {
+fn reentry_key(
+    seed: &[u8],
+    browser: &[u8],
+    request_id: &str,
+    challenge: Option<&[u8]>,
+) -> [u8; 32] {
     let mut hash = Sha256::new();
     hash.update(b"agentsassemble-member-session-v1\0");
     hash.update(seed);
     hash.update(browser);
     hash.update(request_id.as_bytes());
+    if let Some(challenge) = challenge {
+        hash.update(challenge);
+    }
     hash.finalize().into()
 }
 
@@ -187,6 +196,9 @@ async fn reenter(
     row: sqlx::sqlite::SqliteRow,
     now: DateTime<Utc>,
 ) -> Result<HumanAdmissionDecision, PersistenceError> {
+    let member = request.member.as_ref().ok_or_else(|| {
+        crate::account_identity::rejected("session_revoked", "Member admission is required.")
+    })?;
     if row.try_get::<String, _>("invite_scope")? != invite_scope_storage(invite.invite_scope)
         || (row.try_get::<String, _>("invite_id")? == invite.invite_id
             && row.try_get::<Vec<u8>, _>("input_hash")? != input_hash)
@@ -199,12 +211,18 @@ async fn reenter(
         &seed,
         request.browser_credential_fingerprint(),
         &request.request_id().to_string(),
+        Some(&member.challenge_fingerprint),
     );
-    let exact = sqlx::query("SELECT admission_key, result_json FROM human_room_sessions WHERE admission_key IN (?, ?) AND member_admission_id = ? AND first_request_id = ? AND browser_credential_fingerprint = ?")
-        .bind(key.as_slice()).bind(seed.as_slice()).bind(row.try_get::<&str, _>("admission_id")?)
+    let exact = sqlx::query("SELECT admission_key, result_json, state, expires_at FROM human_room_sessions WHERE member_admission_id = ? AND first_request_id = ? AND browser_credential_fingerprint = ?")
+        .bind(row.try_get::<&str, _>("admission_id")?)
         .bind(request.request_id().to_string()).bind(request.browser_credential_fingerprint().as_slice())
         .fetch_optional(&mut **tx).await?;
     if let Some(exact) = exact {
+        if exact.try_get::<&str, _>("state")? != "active"
+            || exact.try_get::<i64, _>("expires_at")? <= now.timestamp_micros()
+        {
+            return Ok(denied(Rejection::SessionUnavailable));
+        }
         let key = crate::human_session_authority::fixed_session_fingerprint(
             exact.try_get("admission_key")?,
         )?;
@@ -220,32 +238,30 @@ async fn reenter(
             },
         )));
     }
+    if member.challenge_expires_at.timestamp_micros() <= row.try_get::<i64, _>("replay_floor")? {
+        return Ok(denied(Rejection::SessionUnavailable));
+    }
+    let admission: &str = row.try_get("admission_id")?;
     let participant: &str = row.try_get("participant_id")?;
-    if capacity_reached(tx, &invite.room_id, participant, now).await? {
+    let retained = crate::member_sessions::retained_devices(tx, admission, request, now).await?;
+    if capacity_reached(tx, &invite.room_id, participant, retained, now).await? {
         return Ok(denied(Rejection::CapacityReached));
     }
-    // The single active participant session rule and room-owned revocation delivery remain intact.
-    let replaced = sqlx::query("UPDATE human_room_sessions SET state = 'ended' WHERE room_id = ? AND participant_id = ? AND state = 'active' RETURNING session_fingerprint")
-        .bind(&invite.room_id).bind(participant).fetch_all(&mut **tx).await?;
-    let replaced_session_fingerprints = replaced
-        .into_iter()
-        .map(|r| {
-            crate::human_session_authority::fixed_session_fingerprint(
-                r.try_get("session_fingerprint")?,
-            )
-        })
-        .collect::<Result<Vec<_>, PersistenceError>>()?;
+    let replaced_session_fingerprints =
+        crate::member_sessions::replace_devices(tx, admission, request, now).await?;
     let mut result: crate::HumanAdmissionResult =
         serde_json::from_str(row.try_get("result_json")?)?;
     result.request_id = request.request_id().to_string();
     result.client_id = request.client_id().to_owned();
     result.expires_at = now + SESSION_TTL;
     let issued = derive_session_bearer(store.host_key.session_hmac_key(), &key, HumanAdmission);
-    sqlx::query("INSERT INTO human_room_sessions(admission_key, key_kind, member_admission_id, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, result_json, admitted_at, expires_at, state) SELECT ?, (SELECT key_kind FROM room_invites WHERE invite_id = member_admissions.invite_id), admission_id, ?, invite_id, input_hash, ?, room_id, user_id, participant_id, 'browser', invite_scope, ?, ?, ?, ?, 'active' FROM member_admissions WHERE admission_id = ?")
+    sqlx::query("INSERT INTO human_room_sessions(admission_key, key_kind, member_admission_id, first_request_id, invite_id, payload_hash, session_fingerprint, room_id, user_id, participant_id, client_kind, invite_scope, browser_credential_fingerprint, result_json, admitted_at, expires_at, member_challenge, member_challenge_expires_at, member_last_used_at, state) SELECT ?, (SELECT key_kind FROM room_invites WHERE invite_id = member_admissions.invite_id), admission_id, ?, invite_id, input_hash, ?, room_id, user_id, participant_id, 'browser', invite_scope, ?, ?, ?, ?, ?, ?, ?, 'active' FROM member_admissions WHERE admission_id = ?")
         .bind(key.as_slice()).bind(&result.request_id).bind(issued.fingerprint.as_slice())
         .bind(request.browser_credential_fingerprint().as_slice()).bind(serde_json::to_string(&result)?)
         .bind(now.timestamp_micros()).bind(result.expires_at.timestamp_micros())
-        .bind(row.try_get::<&str, _>("admission_id")?).execute(&mut **tx).await?;
+        .bind(member.challenge_fingerprint.as_slice()).bind(member.challenge_expires_at.timestamp_micros()).bind(now.timestamp_micros())
+        .bind(admission).execute(&mut **tx).await?;
+    crate::member_sessions::prune(tx, admission).await?;
     Ok(HumanAdmissionDecision::Admitted(Box::new(
         HumanAdmissionCommit {
             result,
@@ -261,7 +277,7 @@ pub(crate) async fn session_provenance(
     tx: &mut Transaction<'_, Sqlite>,
     fingerprint: &[u8; 32],
 ) -> Result<bool, PersistenceError> {
-    let row = sqlx::query("SELECT s.member_admission_id, s.admission_key, s.first_request_id, s.browser_credential_fingerprint, (SELECT session_key FROM member_admissions WHERE admission_id = s.member_admission_id) AS seed, EXISTS(SELECT 1 FROM member_admissions m JOIN central_identity_bindings b ON b.binding_id = m.binding_id WHERE m.admission_id = s.member_admission_id AND b.user_id = s.user_id AND m.user_id = s.user_id AND m.participant_id = s.participant_id AND m.room_id = s.room_id AND m.invite_id = s.invite_id AND m.invite_scope = s.invite_scope AND m.input_hash = s.payload_hash) AS valid FROM human_room_sessions s WHERE s.session_fingerprint = ?")
+    let row = sqlx::query("SELECT s.member_admission_id, s.member_challenge, s.admission_key, s.first_request_id, s.browser_credential_fingerprint, (SELECT session_key FROM member_admissions WHERE admission_id = s.member_admission_id) AS seed, EXISTS(SELECT 1 FROM member_admissions m JOIN central_identity_bindings b ON b.binding_id = m.binding_id WHERE m.admission_id = s.member_admission_id AND b.user_id = s.user_id AND m.user_id = s.user_id AND m.participant_id = s.participant_id AND m.room_id = s.room_id AND m.invite_id = s.invite_id AND m.invite_scope = s.invite_scope AND m.input_hash = s.payload_hash) AS valid FROM human_room_sessions s WHERE s.session_fingerprint = ?")
         .bind(fingerprint.as_slice()).fetch_one(&mut **tx).await?;
     if row
         .try_get::<Option<String>, _>("member_admission_id")?
@@ -275,6 +291,7 @@ pub(crate) async fn session_provenance(
         &seed,
         &row.try_get::<Vec<u8>, _>("browser_credential_fingerprint")?,
         row.try_get("first_request_id")?,
+        row.try_get::<Option<&[u8]>, _>("member_challenge")?,
     );
     if !row.try_get::<bool, _>("valid")? || (key != seed && key != derived) {
         return Err(crate::account_identity::rejected(

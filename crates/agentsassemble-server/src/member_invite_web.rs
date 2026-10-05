@@ -274,6 +274,7 @@ async fn redeem_member(
         person_id: identity.person_id,
         display_name: identity.display_name,
         registration_epoch: epoch,
+        challenge_fingerprint: Sha256::digest(body.challenge_id.as_bytes()).into(),
         challenge_expires_at: challenge.expires,
     })
 }

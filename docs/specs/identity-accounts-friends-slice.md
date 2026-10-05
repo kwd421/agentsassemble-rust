@@ -1657,3 +1657,22 @@ admission_session_unavailable 및 기타 일시 실패는 “참가를 마치지
 회귀: 만료/종료 뒤 같은·다른 기기 재입장, 새 세션/같은 사용자/출처/소비 불변, 정확 재시도,
 동시 요청·교체·rollback, Kicked 및 오류 매핑. 관련 테스트 후 make verify 한 번과 기능 커밋/푸시.
 서명 빌드·수동 검증·배포 제외.
+
+### 멤버 다중 기기와 유한 재시도 보관 (2026-10-05, 233019d8 교정)
+
+관리자 요구: Discord처럼 다른 기기는 동시에 유지한다. 위 단일 active participant 규칙을
+대체하여 (admission, browser fingerprint)당 active 세션 하나, admission당 최대 8개를 둔다.
+같은 기기의 새 요청은 그 기기만 교체하고, 아홉 번째 기기는 마지막 성공한 권위 사용 시각이
+가장 오래된 세션을 종료한다. 동률은 admitted_at/admission_key 순서로 결정한다.
+member-join → persistence admission → HTTP/WS authority/revalidation 및 기존 revocation 전달이
+영향받는 진입점이다. 종료/만료 세션은 최신 32개 tombstone만 보관하므로 admission당 최대
+40행이다(재입장 트랜잭션마다 정리; 퇴장/강퇴로 남은 active가 종료되어도 총 40행 이내). 기존 v82는 살아 있는 세션을 보존하며 v83으로 올리고 종료 이력을 같은 상한으로 정리한다.
+정확한 재시도는 살아 있는 결과만 반환한다. 종료 tombstone은 거절하며 정리한 challenge의
+만료 시각 이하 재시도도 거절한다. 기존 300초 challenge 창 밖은 새 challenge/grant가 필요하다.
+유한 보관 이후 새 challenge로 옛 UUID를 제출하는 것은 새 시도지만 challenge에 결합한 새
+세션 키를 쓰므로 옛 bearer는 부활하지 않는다. 무기한 UUID 이력은 보관하지 않는다.
+동일 범위, Left/Kicked, 현재 초대 유효성, browser/challenge/epoch 결합, provenance, C4a 거절,
+초대 소비 불변과 전역/방 세션 한도를 유지한다. 회귀는 두 기기 동시 유지, 같은 기기 교체,
+LRU 실제 사용 갱신, 8/32/40 상한, 오래된 재시도 비부활, 동시성 및 원자적 rollback을 검사한다.
+이번 검증은 persistence/server 테스트와 푸시 직전 make verify 한 번, 커밋/푸시 하나,
+VERIFICATION.md 한 줄로 제한한다. 서명 빌드·수동 검증·배포는 하지 않는다.

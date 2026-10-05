@@ -129,7 +129,7 @@ async fn product_snapshot(store: &SqliteStore) -> Result<Vec<String>, sqlx::Erro
             .await?;
         let expressions = columns
             .iter()
-            .filter(|row| row.get::<String, _>("name") != "member_admission_id")
+            .filter(|row| !row.get::<String, _>("name").starts_with("member_"))
             .map(|row| {
                 format!(
                     "quote(\"{}\")",
@@ -238,7 +238,7 @@ async fn member_upgrade_preserves_80_and_81_product_data() -> TestResult {
 
 #[tokio::test]
 async fn floor_rejects_newer_versions_and_incomplete_81() -> TestResult {
-    for (version, partial) in [(81, false), (81, true), (83, false), (999, false)] {
+    for (version, partial) in [(81, false), (81, true), (84, false), (999, false)] {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("runtime.db");
         let store = SqliteStore::open_path(&path).await?;
@@ -264,7 +264,7 @@ async fn floor_rejects_newer_versions_and_incomplete_81() -> TestResult {
             ));
         } else {
             assert!(
-                matches!(result, Err(PersistenceError::SchemaVersionMismatch { found, required: 82 })
+                matches!(result, Err(PersistenceError::SchemaVersionMismatch { found, required: 83 })
                 if found == version)
             );
         }
