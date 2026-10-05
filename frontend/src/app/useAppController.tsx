@@ -124,7 +124,6 @@ export function useAppController(deviceToken: string, clientId: string) {
     : null, centralDirectory?.status === "central-unconfirmed"), [directoryRooms, startupHostEnabled, roomDirectorySyncIssue, centralDirectory]);
   const [connectingServerId, setConnectingServerId] = useState("");
   const [serverConnectionError, setServerConnectionError] = useState("");
-  useEffect(() => { if (centralDirectory?.status === "connected") setServerConnectionError(""); }, [centralDirectory]);
   const serverOpening = useRef(false);
   async function openRailServer(server: CentralServerDisplay) {
     if (serverOpening.current) return;

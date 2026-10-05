@@ -1,5 +1,12 @@
 # Identity, accounts, friends and human admission
 
+Rail feedback correction (2026-10-05): shared app/web `openRailServer` keeps a
+missing-server/open failure visible across successful background directory updates
+until the next server-opening action clears it. Keep existing refresh, authority,
+concurrency guard and retry behavior; no protocol/storage changes. Verify the
+missing-server race, later refresh and next-open clearing with a frontend regression;
+one pre-push make verify, no packaged/manual verification or deployment.
+
 ## Discord-style rail, step 1 — central outage continuity (2026-10-05)
 
 User-required entry points: `StartupIdentityGate`, explicit this-device selection,

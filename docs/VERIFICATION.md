@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 rail feedback: pre-fix missing-server regression reproduced; retained error across connected refresh and next-open clearing passed (1/1); one pre-push `make verify` passed for both changes (frontend 1,044, Rust 1,080, desktop 46 and all gates); no signed build/manual verification/deployment.
+
 - 2026-10-05 agent creation: shared provider sections, unavailable-last order, mixed Ollama model tags/persona visibility and Friends labels; affected frontend tests 47/47 passed; visual/manual verification deferred to user.
 
 ## C4a Daybreak corrections (2026-10-05)
