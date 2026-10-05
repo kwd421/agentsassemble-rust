@@ -447,7 +447,7 @@ async fn assert_served_frontend(server: &RunningServer, expected_build: &str) {
     let inspected: agentsassemble_domain::RuntimeVersion = serde_json::from_slice(&output.stdout)
         .unwrap_or_else(|error| panic!("decode frontend-info output: {error}"));
     assert_eq!(inspected, version);
-    for entrance in ["/join?token=one-use", "/join/", "/pair", "/pair/"] {
+    for entrance in ["/join", "/join?token=one-use", "/join/", "/pair", "/pair/"] {
         let response = Client::new()
             .get(format!("{}{entrance}", server.base_url))
             .send()
@@ -480,11 +480,20 @@ async fn assert_served_frontend(server: &RunningServer, expected_build: &str) {
 
 fn assert_static_frontend_headers(response: &reqwest::Response) {
     assert!(response.headers().contains_key("content-security-policy"));
+    let cache_control = if matches!(response.url().path(), "/join" | "/join/") {
+        assert_eq!(
+            response.headers()["content-security-policy"],
+            "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        );
+        "private, no-store"
+    } else {
+        "no-cache"
+    };
     for (name, expected) in [
         ("x-content-type-options", "nosniff"),
         ("x-frame-options", "DENY"),
         ("connection", "close"),
-        ("cache-control", "no-cache"),
+        ("cache-control", cache_control),
     ] {
         assert_eq!(
             response

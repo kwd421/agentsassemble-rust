@@ -3,6 +3,10 @@ use axum::{
     response::Response,
 };
 
+pub(crate) const JOIN_DOCUMENT_POLICY: HeaderValue = HeaderValue::from_static(
+    "default-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'",
+);
+
 // One policy owner; only the documented GIS resource sources vary with configuration.
 macro_rules! content_policy {
     ($script:literal, $style:literal, $connect:literal, $frame:literal) => {

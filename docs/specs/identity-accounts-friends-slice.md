@@ -150,6 +150,13 @@ challenge를 시작한다. preview 이전 오류는 신뢰할 반환 주소가 �
 V1 packaged 검증, 예약/outbox/결과 확인/중앙 membership projection 및 목록 동기화,
 leave receipt, 익명 merge·전환/scope 변경/reapproval은 유예한다. leave 응답 유실은 결과 불명이다.
 
+2026-10-05 Daybreak Low 2 보정: fragment 입장권이 돌아오는 호스트 `/join` 및
+`/join/`의 non-connector HTML은 기존 문서 보호 헤더를 재사용해
+`Cache-Control: private, no-store`와 self-only CSP (`frame-ancestors 'none'` 포함)를
+반환한다. 공통 CSP 레이어는 경로가 지정한 정책을 보존한다. 일반 앱/자산 및
+connector 응답 정책은 유지하고 실제 HTTP 응답의 헤더 값으로 회귀 검증한다.
+Low 1 중앙 grant/handoff_state 결합은 관리자 위험 수용으로 이번 수정에서 제외한다.
+
 ### 파일 지도
 
 - `crates/agentsassemble-persistence/src/schema_version.rs`, `member_schema.rs`: 현재 82, 고정 C4a binding DDL 및 H1 세션 migration.

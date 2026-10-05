@@ -238,7 +238,7 @@ pub fn router(state: AppState) -> Router {
     app.with_state(state)
         .layer(RequestBodyDeadlineLayer::new(HTTP_BODY_DEADLINE))
         .layer(middleware::map_response(crate::security_headers::apply))
-        .layer(SetResponseHeaderLayer::overriding(
+        .layer(SetResponseHeaderLayer::if_not_present(
             header::CONTENT_SECURITY_POLICY,
             content_policy,
         ))

@@ -36,9 +36,10 @@ async fn entry(State(state): State<AppState>, request: Request) -> Response {
             || StatusCode::NOT_FOUND.into_response(),
             |frontend| {
                 let mut response = Html(frontend.index_html().to_string()).into_response();
+                protect_document(&mut response);
                 response.headers_mut().insert(
-                    header::CACHE_CONTROL,
-                    crate::web::STATIC_FRONTEND_CACHE_CONTROL,
+                    header::CONTENT_SECURITY_POLICY,
+                    crate::security_headers::JOIN_DOCUMENT_POLICY,
                 );
                 response
             },
