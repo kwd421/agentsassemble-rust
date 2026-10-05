@@ -9,7 +9,7 @@ use crate::{
     AttendeeConnectionAuthorization, CommandOutcome, PersistenceError, ProviderTurnEffectPhase,
     ProviderTurnReconciliationCandidate, ProviderTurnStartAuthority, RoomCommandMutation,
     SqliteStore,
-    attendee_invites::rejected,
+    attendee::invites::rejected,
     command_admission::{admit_non_lifecycle_command, store_command_result},
     provider_turn_effect::{canonical_now, load_effect_in, transition_to_waiting_in},
 };
@@ -49,7 +49,7 @@ impl SqliteStore {
         now: DateTime<Utc>,
     ) -> Result<Option<AttendeeInterruptDelivery>, PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        crate::attendee_connection::revalidate_in(&mut tx, connection, now).await?;
+        crate::attendee::connection::revalidate_in(&mut tx, connection, now).await?;
         let Some(mut candidate) = load_candidate(&mut tx, connection).await? else {
             tx.commit().await?;
             return Ok(None);
@@ -102,7 +102,7 @@ impl SqliteStore {
         let action = "bridge.interrupt.report";
         let key = &authority.key;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        crate::attendee_cleanup::revalidate_in(&mut tx, authority).await?;
+        crate::attendee::cleanup::revalidate_in(&mut tx, authority).await?;
         if let Some(outcome) = admit_non_lifecycle_command(
             &mut tx,
             &key.room_id,
@@ -122,7 +122,7 @@ impl SqliteStore {
         }
         // An exact receipt remains recoverable after runtime-gone detached membership.
         // A new proof still requires the current normal session and connection generation.
-        let connection = crate::attendee_connection::authorize_current_in(
+        let connection = crate::attendee::connection::authorize_current_in(
             &mut tx,
             &authority.fingerprint,
             connection_id,

@@ -96,7 +96,7 @@ async fn append_state_projection_event(
     principal: &AuthenticatedPrincipal,
     session: &AgentSession,
 ) -> Result<RoomEvent, PersistenceError> {
-    let projection = crate::attendee_ready::project_session_in(transaction, session).await?;
+    let projection = crate::attendee::ready::project_session_in(transaction, session).await?;
     append_session_event(
         transaction,
         principal,

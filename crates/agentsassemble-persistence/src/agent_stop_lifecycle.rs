@@ -99,7 +99,7 @@ impl SqliteStore {
             return Ok(AgentStopPlan::Outcome(Box::new(outcome)));
         }
         if session.public.external_owned && session.public.process_ownership == "external" {
-            let events = crate::attendee_stop::prepare_in(
+            let events = crate::attendee::stop::prepare_in(
                 &mut transaction,
                 principal,
                 &mut session,

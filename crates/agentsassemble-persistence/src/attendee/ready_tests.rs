@@ -1,6 +1,6 @@
 use crate::{
     AttendeeRuntimeReady, PersistenceError, RoomMutationAuthority,
-    attendee_connection_tests::fixture, human_session_authority_tests::session_fingerprint,
+    attendee::connection_tests::fixture, human_session_authority_tests::session_fingerprint,
 };
 use agentsassemble_domain::AgentRuntimeStatus;
 use serde_json::json;
@@ -151,7 +151,7 @@ async fn attendee_idle_disconnect_requires_ready_before_assigning_queued_observa
     Ok(())
 }
 
-pub(super) fn report() -> AttendeeRuntimeReady {
+pub(crate) fn report() -> AttendeeRuntimeReady {
     AttendeeRuntimeReady {
         retained_interrupt: true,
         runtime_handle_id: "external-runtime".to_owned(),

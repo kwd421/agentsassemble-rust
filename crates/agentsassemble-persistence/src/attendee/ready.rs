@@ -1,6 +1,6 @@
 use crate::{
     AgentTurnCommit, AttendeeConnectionAuthorization, PersistenceError, SqliteStore,
-    attendee_invites::rejected,
+    attendee::invites::rejected,
 };
 use agentsassemble_domain::{AgentRuntimeStatus, AgentSession, DurableAgentSession};
 use chrono::{DateTime, Utc};
@@ -143,7 +143,7 @@ impl SqliteStore {
     ) -> Result<AgentTurnCommit, PersistenceError> {
         report.validate()?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        crate::attendee_connection::revalidate_in(&mut tx, connection, now).await?;
+        crate::attendee::connection::revalidate_in(&mut tx, connection, now).await?;
         let principal = connection.session.principal();
         let mut session = crate::agent_lifecycle::load_session(
             &mut tx,
@@ -224,7 +224,7 @@ pub(crate) async fn is_available(
         return Ok(false);
     };
     let fingerprint = fingerprint.try_into().map_err(|_| invalid_ready())?;
-    match crate::attendee_session::authorize_in(tx, &fingerprint, Utc::now()).await {
+    match crate::attendee::session::authorize_in(tx, &fingerprint, Utc::now()).await {
         Ok(_) => Ok(true),
         Err(PersistenceError::ParticipantMissing | PersistenceError::RoomMissing) => Ok(false),
         Err(PersistenceError::CommandRejected { code, .. })

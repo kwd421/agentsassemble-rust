@@ -424,7 +424,7 @@ pub(crate) async fn load_agent_sessions(
         let session =
             serde_json::from_str::<DurableAgentSession>(row.get::<&str, _>("session_json"))?;
         sessions
-            .push(crate::attendee_ready::project_session_in(transaction, &session.public).await?);
+            .push(crate::attendee::ready::project_session_in(transaction, &session.public).await?);
     }
     Ok(sessions)
 }

@@ -9,7 +9,7 @@ use crate::{
     AgentTurnCommit, CommandOutcome, PersistenceError, RoomCommandMutation, RoomRuntimeCleanupKey,
     SqliteStore,
     agent_lifecycle::{load_session, save_session},
-    attendee_invites::{parse_uuid, rejected},
+    attendee::invites::{parse_uuid, rejected},
     command_admission::{admit_non_lifecycle_command, store_command_result},
     room_runtime_cleanup::{cleanup_exists, finish_cleanup_in},
 };
@@ -246,7 +246,7 @@ async fn checkpoint_absence(
 ) -> Result<AgentTurnCommit, PersistenceError> {
     let mut session = load_session(tx, &key.room_id, &key.session_id).await?;
     if session.lifecycle_intent_action == agentsassemble_domain::AgentLifecycleAction::Stop {
-        return crate::attendee_stop::confirm_in(tx, session).await;
+        return crate::attendee::stop::confirm_in(tx, session).await;
     }
     if let Some(candidate) = crate::provider_turn_reconciliation::load_active_candidate_in(
         tx,

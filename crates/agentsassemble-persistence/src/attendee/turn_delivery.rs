@@ -1,7 +1,7 @@
 use crate::{
     AttendeeConnectionAuthorization, PersistenceError, ProviderTurnAssignmentEnvelope,
     ProviderTurnEffectPhase, ProviderTurnExecutionPhase, ProviderTurnStartAuthority, SqliteStore,
-    attendee_invites::rejected,
+    attendee::invites::rejected,
 };
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
@@ -29,7 +29,7 @@ impl SqliteStore {
         now: DateTime<Utc>,
     ) -> Result<Option<AttendeeTurnDelivery>, PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        crate::attendee_connection::revalidate_in(&mut tx, connection, now).await?;
+        crate::attendee::connection::revalidate_in(&mut tx, connection, now).await?;
         let ready: bool = sqlx::query_scalar("SELECT state='ready' FROM attendee_connections WHERE session_fingerprint=? AND connection_id=?")
             .bind(connection.session.fingerprint.as_slice()).bind(connection.connection_id.to_string()).fetch_one(&mut *tx).await?;
         if !ready {
@@ -117,7 +117,7 @@ impl SqliteStore {
         now: DateTime<Utc>,
     ) -> Result<(), PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        crate::attendee_connection::revalidate_in(&mut tx, connection, now).await?;
+        crate::attendee::connection::revalidate_in(&mut tx, connection, now).await?;
         let principal = connection.session.principal();
         let session = crate::agent_lifecycle::load_session(
             &mut tx,

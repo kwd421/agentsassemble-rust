@@ -1,6 +1,6 @@
 use crate::{
     PersistenceError, SqliteStore,
-    attendee_invites::{parse_uuid, rejected, timestamp},
+    attendee::invites::{parse_uuid, rejected, timestamp},
 };
 use agentsassemble_domain::{AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope};
 use chrono::{DateTime, Utc};

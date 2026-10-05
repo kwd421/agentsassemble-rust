@@ -104,7 +104,7 @@ pub(super) async fn assign_available_pending(
         any_active |=
             active && !crate::ordered_turn_release::is_quarantined(transaction, &session).await?;
         if !session_is_assignable(&session)
-            || !crate::attendee_ready::is_available(transaction, &session).await?
+            || !crate::attendee::ready::is_available(transaction, &session).await?
         {
             continue;
         }

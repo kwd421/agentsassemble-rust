@@ -1,3 +1,4 @@
+mod attendee;
 mod host_owner_session;
 #[cfg(test)]
 mod host_owner_session_tests;
@@ -9,51 +10,20 @@ pub use host_owner_session::{
 };
 pub use owner_devices::{OwnerDeviceSession, OwnerDevicesRevocation};
 pub use server_owner_authority::{ServerOwnerAuthority, ServerOwnerLifecycleAuthorization};
-mod attendee_interrupt;
-#[cfg(test)]
-mod attendee_interrupt_tests;
-mod attendee_leave;
-mod attendee_random;
-#[cfg(test)]
-mod attendee_random_tests;
-mod attendee_tool_authority;
-mod attendee_tool_read;
 mod local_attendee_receipt;
-pub use attendee_random::{AttendeeRandomMutation, AttendeeRandomRequest};
-#[cfg(test)]
-mod attendee_tool_read_tests;
-pub use attendee_interrupt::{
-    AttendeeInterruptDelivery, AttendeeInterruptReport, AttendeeInterruptedRuntime,
-};
-pub use attendee_tool_read::{AttendeeToolRead, AttendeeToolReadRequest, AttendeeToolReadResult};
-mod attendee_cleanup;
-#[cfg(test)]
-mod attendee_cleanup_tests;
-mod attendee_stop;
-#[cfg(test)]
-mod attendee_stop_tests;
-pub use attendee_cleanup::{
+pub use attendee::admission::{AttendeeAdmission, AttendeeAdmissionRequest};
+pub use attendee::cleanup::{
     AttendeeCleanupAuthorization, AttendeeCleanupDelivery, AttendeeCleanupReport,
 };
-mod attendee_admission;
-mod attendee_connection;
-mod attendee_ready;
-#[cfg(test)]
-mod attendee_ready_tests;
-pub use attendee_ready::AttendeeRuntimeReady;
-#[cfg(test)]
-mod attendee_connection_tests;
-pub use attendee_connection::{AttendeeConnectionAuthorization, AttendeeConnectionClaim};
-#[cfg(test)]
-mod attendee_admission_tests;
-mod attendee_records;
-mod attendee_session;
-pub use attendee_admission::{AttendeeAdmission, AttendeeAdmissionRequest};
-pub use attendee_session::AttendeeSessionAuthorization;
-#[cfg(test)]
-mod attendee_invite_tests;
-mod attendee_invites;
-pub use attendee_invites::{AttendeeInvite, CompanionInviteRequest};
+pub use attendee::connection::{AttendeeConnectionAuthorization, AttendeeConnectionClaim};
+pub use attendee::interrupt::{
+    AttendeeInterruptDelivery, AttendeeInterruptReport, AttendeeInterruptedRuntime,
+};
+pub use attendee::invites::{AttendeeInvite, CompanionInviteRequest};
+pub use attendee::random::{AttendeeRandomMutation, AttendeeRandomRequest};
+pub use attendee::ready::AttendeeRuntimeReady;
+pub use attendee::session::AttendeeSessionAuthorization;
+pub use attendee::tool_read::{AttendeeToolRead, AttendeeToolReadRequest, AttendeeToolReadResult};
 mod connector_admission;
 mod connector_session;
 #[cfg(test)]
@@ -285,15 +255,9 @@ pub use sqlite::{
 };
 
 pub use room_turns::{AttendeeTurnOutcome, AttendeeTurnReport};
-#[cfg(test)]
-mod attendee_turn_report_tests;
 
-mod attendee_turn_delivery;
-pub use attendee_turn_delivery::AttendeeTurnDelivery;
+pub use attendee::turn_delivery::AttendeeTurnDelivery;
 pub use provider_turn_execution::ProviderTurnAssignmentEnvelope;
-
-#[cfg(test)]
-mod attendee_turn_delivery_tests;
 
 #[cfg(test)]
 mod member_floor_tests;

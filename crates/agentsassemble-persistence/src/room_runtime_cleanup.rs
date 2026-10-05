@@ -43,7 +43,7 @@ pub(crate) async fn request_runtime_cleanup(
         && session.public.external_owned
         && session.public.process_ownership == "external"
     {
-        crate::attendee_cleanup::request_in(transaction, session).await?;
+        crate::attendee::cleanup::request_in(transaction, session).await?;
     }
     session.public.enabled = false;
     session.public.status = AgentSessionStatus::Detached;

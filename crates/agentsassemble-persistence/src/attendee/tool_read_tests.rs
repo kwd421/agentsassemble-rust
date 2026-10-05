@@ -1,7 +1,7 @@
 use crate::{
     AttendeeToolRead, AttendeeToolReadRequest, AttendeeToolReadResult, RoomMutationAuthority,
-    RoomSessionAuthorization, attendee_connection_tests::fixture,
-    attendee_ready_tests::report as ready_report,
+    RoomSessionAuthorization, attendee::connection_tests::fixture,
+    attendee::ready_tests::report as ready_report,
     human_session_authority_tests::session_fingerprint,
 };
 use serde_json::json;

@@ -1,5 +1,5 @@
 use crate::{
-    AttendeeSessionAuthorization, PersistenceError, SqliteStore, attendee_invites::rejected,
+    AttendeeSessionAuthorization, PersistenceError, SqliteStore, attendee::invites::rejected,
 };
 use agentsassemble_domain::{AgentRuntimeStatus, RoomEvent};
 use chrono::{DateTime, Utc};
@@ -44,7 +44,7 @@ impl SqliteStore {
             return Err(rejected("bad_request", "A connection UUID is required."));
         }
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        let current = crate::attendee_session::revalidate_in(&mut tx, expected, now).await?;
+        let current = crate::attendee::session::revalidate_in(&mut tx, expected, now).await?;
         // A connection identity belongs to one TCP/WebSocket lifetime and is never reused.
         sqlx::query("INSERT INTO attendee_connections(session_fingerprint,connection_id,state) VALUES(?,?,'connected') ON CONFLICT(session_fingerprint) DO UPDATE SET connection_id=excluded.connection_id,state='connected'")
             .bind(current.fingerprint.as_slice()).bind(connection_id.to_string()).execute(&mut *tx).await?;
@@ -134,7 +134,7 @@ pub(crate) async fn revalidate_in(
     expected: &AttendeeConnectionAuthorization,
     now: DateTime<Utc>,
 ) -> Result<(), PersistenceError> {
-    crate::attendee_session::revalidate_in(tx, &expected.session, now).await?;
+    crate::attendee::session::revalidate_in(tx, &expected.session, now).await?;
     require_current_id(tx, expected).await
 }
 
@@ -145,7 +145,7 @@ pub(crate) async fn authorize_current_in(
     now: DateTime<Utc>,
 ) -> Result<AttendeeConnectionAuthorization, PersistenceError> {
     let connection = AttendeeConnectionAuthorization {
-        session: crate::attendee_session::authorize_in(tx, fingerprint, now).await?,
+        session: crate::attendee::session::authorize_in(tx, fingerprint, now).await?,
         connection_id,
     };
     require_current_id(tx, &connection).await?;

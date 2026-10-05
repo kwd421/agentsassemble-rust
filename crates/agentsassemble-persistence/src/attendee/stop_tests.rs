@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     AgentStopPlan, AttendeeCleanupReport, PersistenceError,
-    RoomMutationAuthority::TrustedPrincipal, attendee_turn_report_tests::assigned_report,
+    RoomMutationAuthority::TrustedPrincipal, attendee::turn_report_tests::assigned_report,
     human_session_authority_tests::local_operator_principal,
 };
 

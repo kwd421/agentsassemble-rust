@@ -296,7 +296,7 @@ pub(crate) async fn session_state_event(
     ))
     .await?;
     let projection =
-        crate::attendee_ready::project_session_in(transaction, &session.public).await?;
+        crate::attendee::ready::project_session_in(transaction, &session.public).await?;
     internal_event(
         transaction,
         session,

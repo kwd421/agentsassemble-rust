@@ -1,6 +1,6 @@
 use crate::{
-    PersistenceError, attendee_ready_tests::report as ready_report,
-    attendee_turn_report_tests::assigned_report,
+    PersistenceError, attendee::ready_tests::report as ready_report,
+    attendee::turn_report_tests::assigned_report,
 };
 use uuid::Uuid;
 

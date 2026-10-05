@@ -7,7 +7,7 @@ use uuid::Uuid;
 use crate::{
     AttendeeConnectionAuthorization, AttendeeSessionAuthorization, CommandOutcome,
     PersistenceError, ProviderRoomRandomCommit, SqliteStore,
-    attendee_invites::rejected,
+    attendee::invites::rejected,
     command_admission::{inspect_non_lifecycle_command, store_command_result},
 };
 
@@ -61,7 +61,7 @@ impl SqliteStore {
         let action = "bridge.tool.random";
         let principal = session.principal();
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        crate::attendee_connection::revalidate_in(&mut tx, &connection, now).await?;
+        crate::attendee::connection::revalidate_in(&mut tx, &connection, now).await?;
         if let Some(outcome) = inspect_non_lifecycle_command(
             &mut tx,
             &principal.room_id,
@@ -76,7 +76,7 @@ impl SqliteStore {
             tx.commit().await?;
             return Ok(AttendeeRandomMutation { outcome, result });
         }
-        let session = crate::attendee_tool_authority::load_turn_in(
+        let session = crate::attendee::tool_authority::load_turn_in(
             &mut tx,
             &connection,
             request.turn_generation,

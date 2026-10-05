@@ -95,7 +95,7 @@ async fn startup_ends_old_attendee_network_lifetimes_without_revoking_admission(
     Ok(())
 }
 
-pub(super) async fn fixture()
+pub(crate) async fn fixture()
 -> Result<(SqliteStore, AttendeeSessionAuthorization, DateTime<Utc>), Box<dyn std::error::Error>> {
     let (store, now) = admitted_fixture(InviteScope::ReadWrite).await;
     let human = store

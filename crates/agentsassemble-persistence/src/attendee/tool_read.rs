@@ -5,7 +5,7 @@ use uuid::Uuid;
 
 use crate::{
     MessageAttachment, PersistenceError, ProviderAttachmentReadAuthority, SqliteStore,
-    attendee_connection::authorize_current_in,
+    attendee::connection::authorize_current_in,
     message_attachments::bound_provider_attachment_in,
     room_turns::support::{load_participant, provider_room_principal},
 };
@@ -50,7 +50,7 @@ impl SqliteStore {
         let mut tx = self.pool.begin().await?;
         let connection = authorize_current_in(&mut tx, fingerprint, connection_id, now).await?;
         let owner = connection.session().principal();
-        let session = crate::attendee_tool_authority::load_turn_in(
+        let session = crate::attendee::tool_authority::load_turn_in(
             &mut tx,
             &connection,
             request.turn_generation,

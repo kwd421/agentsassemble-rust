@@ -1,7 +1,7 @@
 use crate::{
     AttendeeConnectionAuthorization, AttendeeTurnOutcome, AttendeeTurnReport, PersistenceError,
-    RoomMutationAuthority, SqliteStore, attendee_connection_tests::fixture,
-    attendee_ready_tests::report as ready_report,
+    RoomMutationAuthority, SqliteStore, attendee::connection_tests::fixture,
+    attendee::ready_tests::report as ready_report,
     human_session_authority_tests::session_fingerprint,
 };
 use chrono::{DateTime, Utc};
@@ -142,7 +142,7 @@ async fn attendee_reports_share_vote_decline_and_failure_terminal_owners() -> Te
     Ok(())
 }
 
-pub(super) async fn assigned_report() -> Result<
+pub(crate) async fn assigned_report() -> Result<
     (
         SqliteStore,
         AttendeeConnectionAuthorization,

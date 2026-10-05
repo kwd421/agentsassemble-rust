@@ -1,5 +1,5 @@
 use crate::{
-    AttendeeCleanupReport, RoomMutationAuthority, attendee_turn_report_tests::assigned_report,
+    AttendeeCleanupReport, RoomMutationAuthority, attendee::turn_report_tests::assigned_report,
     human_session_authority_tests::local_operator_principal,
 };
 use agentsassemble_domain::{AgentRuntimeStatus, ParticipantStatus};
@@ -211,14 +211,14 @@ async fn revoked_attendee_cleanup_requires_its_exact_external_stop_and_retries_a
 async fn idle_external_cleanup_preserves_removal_and_unstarted_cleanup_needs_no_runtime_claim()
 -> TestResult {
     for ready in [false, true] {
-        let (store, session, now) = crate::attendee_connection_tests::fixture().await?;
+        let (store, session, now) = crate::attendee::connection_tests::fixture().await?;
         let connection = store
             .claim_attendee_connection(&session, Uuid::new_v4(), now)
             .await?
             .authorization;
         if ready {
             store
-                .record_attendee_ready(&connection, &crate::attendee_ready_tests::report(), now)
+                .record_attendee_ready(&connection, &crate::attendee::ready_tests::report(), now)
                 .await?;
         }
         let operator = local_operator_principal();

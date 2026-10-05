@@ -4,7 +4,7 @@ use uuid::Uuid;
 
 use crate::{
     AttendeeInterruptReport, AttendeeInterruptedRuntime, PersistenceError,
-    RoomMutationAuthority::TrustedPrincipal, attendee_turn_report_tests::assigned_report,
+    RoomMutationAuthority::TrustedPrincipal, attendee::turn_report_tests::assigned_report,
     human_session_authority_tests::local_operator_principal,
 };
 
@@ -121,7 +121,7 @@ async fn readiness_cannot_change_exact_runtime_interrupt_capability_on_reconnect
         .claim_attendee_connection(connection.session(), Uuid::new_v4(), now)
         .await?
         .authorization;
-    let mut ready = crate::attendee_ready_tests::report();
+    let mut ready = crate::attendee::ready_tests::report();
     ready.retained_interrupt = false;
     assert!(matches!(
         store.record_attendee_ready(&replacement, &ready, now).await,
@@ -172,12 +172,12 @@ async fn assert_quiesced(
 #[tokio::test]
 async fn external_runtime_without_retained_interrupt_rejects_before_preparing_effect() -> TestResult
 {
-    let (store, session, now) = crate::attendee_connection_tests::fixture().await?;
+    let (store, session, now) = crate::attendee::connection_tests::fixture().await?;
     let connection = store
         .claim_attendee_connection(&session, Uuid::new_v4(), now)
         .await?
         .authorization;
-    let mut ready = crate::attendee_ready_tests::report();
+    let mut ready = crate::attendee::ready_tests::report();
     ready.retained_interrupt = false;
     let ready_commit = store
         .record_attendee_ready(&connection, &ready, now)

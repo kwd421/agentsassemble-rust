@@ -1,7 +1,7 @@
 use crate::{
     AttendeeSessionAuthorization, PersistenceError, SqliteStore,
-    attendee_invites::{parse_uuid, rejected},
-    attendee_session::{authorize_in, require_parent},
+    attendee::invites::{parse_uuid, rejected},
+    attendee::session::{authorize_in, require_parent},
     session_bearer::{SessionBearerPurpose, derive_session_bearer},
 };
 use chrono::{DateTime, Duration, Utc};
@@ -136,7 +136,7 @@ impl SqliteStore {
                 "The attendee invitation expired.",
             ));
         }
-        let event = crate::attendee_records::insert_membership(
+        let event = crate::attendee::records::insert_membership(
             &mut tx,
             &room_id,
             row.get("invite_id"),

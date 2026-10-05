@@ -80,7 +80,7 @@ Windows 만 달랐다. CRLF 는 원인이 아니었다.
 
 같은 종류의 색(0에 가까운 채널 + 불투명도 수식어)을 새로 쓰면 다시 플랫폼 차이가 날 수 있다.
 
-### 5. 초대 만료 시각 정밀도 (`crates/agentsassemble-persistence/src/{connector_admission,attendee_invites}.rs`)
+### 5. 초대 만료 시각 정밀도 (`crates/agentsassemble-persistence/src/connector_admission.rs`, `crates/agentsassemble-persistence/src/attendee/invites.rs`)
 
 증상: 같은 초대를 정확히 재요청하면 `expires_at` 이 달라진다(`.057463900` → `.057463`). 초대 경계
 테스트 3개가 Windows 에서 실패.

@@ -10,7 +10,7 @@ use crate::{
     agent_lifecycle::{load_session, save_session},
     agent_lifecycle_authority::{lifecycle_intent_is_empty, require_matching_operation},
     agent_lifecycle_reservations::LifecycleReservation,
-    attendee_invites::rejected,
+    attendee::invites::rejected,
     room_runtime_cleanup::{cleanup_exists, request_runtime_cleanup},
 };
 

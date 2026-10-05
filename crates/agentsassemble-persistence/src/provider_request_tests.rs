@@ -4,7 +4,7 @@ use agentsassemble_domain::{
 use chrono::TimeDelta;
 use uuid::Uuid;
 
-use crate::{OpenProviderRequest, PersistenceError, attendee_turn_report_tests::assigned_report};
+use crate::{OpenProviderRequest, PersistenceError, attendee::turn_report_tests::assigned_report};
 
 #[tokio::test]
 async fn request_open_replays_one_private_event_and_fences_changed_expired_or_replaced_authority()

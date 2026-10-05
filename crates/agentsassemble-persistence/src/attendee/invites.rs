@@ -279,19 +279,19 @@ impl SqliteStore {
     }
 }
 
-pub(super) fn rejected(code: &'static str, message: &str) -> PersistenceError {
+pub(crate) fn rejected(code: &'static str, message: &str) -> PersistenceError {
     PersistenceError::CommandRejected {
         code: code.into(),
         message: message.to_owned(),
     }
 }
 
-pub(super) fn timestamp(micros: i64) -> Result<DateTime<Utc>, PersistenceError> {
+pub(crate) fn timestamp(micros: i64) -> Result<DateTime<Utc>, PersistenceError> {
     DateTime::from_timestamp_micros(micros)
         .ok_or_else(|| rejected("invalid_state", "Stored attendee expiry is invalid."))
 }
 
-pub(super) fn parse_uuid(value: &str) -> Result<Uuid, PersistenceError> {
+pub(crate) fn parse_uuid(value: &str) -> Result<Uuid, PersistenceError> {
     Uuid::parse_str(value)
         .map_err(|_| rejected("invalid_state", "Stored attendee identity is invalid."))
 }

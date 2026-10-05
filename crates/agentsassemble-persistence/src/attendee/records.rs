@@ -1,4 +1,4 @@
-use crate::{PersistenceError, attendee_invites::rejected};
+use crate::{PersistenceError, attendee::invites::rejected};
 use agentsassemble_domain::{
     Actor, AgentRuntimeStatus, AgentSession, AgentSessionStatus, AgentTurnPhase, Participant,
     ParticipantRole, ParticipantStatus, RoomEvent,

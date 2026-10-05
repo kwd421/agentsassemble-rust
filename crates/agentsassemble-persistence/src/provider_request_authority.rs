@@ -70,7 +70,7 @@ pub(crate) async fn require_execution_in(
         let fingerprint = fingerprint
             .try_into()
             .map_err(|_| rejected("invalid_state", "Stored attendee identity is invalid."))?;
-        crate::attendee_connection::authorize_current_in(tx, &fingerprint, connection_id, now)
+        crate::attendee::connection::authorize_current_in(tx, &fingerprint, connection_id, now)
             .await?;
         crate::turn_authority::require_room_tool_turn_authority(
             tx,

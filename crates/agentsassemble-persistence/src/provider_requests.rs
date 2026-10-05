@@ -11,7 +11,7 @@ use uuid::Uuid;
 use crate::{
     PersistenceError, SqliteStore,
     agent_lifecycle::load_session,
-    attendee_connection::authorize_current_in,
+    attendee::connection::authorize_current_in,
     authority::load_active_membership,
     room_turns::support::{internal_event, load_event},
     room_write_budget::reserve_room_write_budget,
@@ -120,7 +120,7 @@ impl SqliteStore {
     ) -> Result<ProviderRequestCommit, PersistenceError> {
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
         let connection = authorize_current_in(&mut tx, fingerprint, connection_id, now).await?;
-        let session = crate::attendee_tool_authority::load_turn_in(
+        let session = crate::attendee::tool_authority::load_turn_in(
             &mut tx,
             &connection,
             request.turn_generation,

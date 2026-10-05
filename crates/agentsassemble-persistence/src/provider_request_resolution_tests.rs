@@ -8,7 +8,7 @@ use uuid::Uuid;
 
 use crate::{
     PersistenceError, ProviderRequestDeliveryOutcome, RoomMutationAuthority,
-    attendee_turn_report_tests::assigned_report,
+    attendee::turn_report_tests::assigned_report,
     human_session_authority_tests::session_fingerprint, provider_request_tests::request_for,
 };
 

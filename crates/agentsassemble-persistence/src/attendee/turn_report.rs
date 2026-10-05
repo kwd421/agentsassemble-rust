@@ -70,7 +70,7 @@ impl SqliteStore {
         let action = "bridge.turn.report";
         let bytes = crate::room_write_budget::command_size(&request_id, action, &payload)?;
         let mut tx = self.pool.begin_with("BEGIN IMMEDIATE").await?;
-        crate::attendee_connection::revalidate_in(&mut tx, connection, now).await?;
+        crate::attendee::connection::revalidate_in(&mut tx, connection, now).await?;
         let principal = connection.session.principal();
         if let Some(outcome) = admit_non_lifecycle_command(
             &mut tx,

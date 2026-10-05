@@ -3,7 +3,7 @@ use serde_json::json;
 use uuid::Uuid;
 
 use crate::{
-    AttendeeRandomRequest, RoomMutationAuthority, attendee_turn_report_tests::assigned_report,
+    AttendeeRandomRequest, RoomMutationAuthority, attendee::turn_report_tests::assigned_report,
     human_session_authority_tests::local_operator_principal,
 };
 

@@ -170,7 +170,7 @@ async fn load_interruptible_session(
     require_busy_session(&session, &participant)?;
     if session.public.external_owned && session.public.process_ownership == "external" {
         let supported =
-            crate::attendee_ready::retained_interrupt_supported_in(transaction, room_id, agent_id)
+            crate::attendee::ready::retained_interrupt_supported_in(transaction, room_id, agent_id)
                 .await?;
         if !supported {
             return Err(rejected(

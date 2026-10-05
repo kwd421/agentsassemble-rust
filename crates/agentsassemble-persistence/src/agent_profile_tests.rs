@@ -16,7 +16,7 @@ async fn expired_external_request_precedes_atomic_profile_ack_and_replay()
     use agentsassemble_domain::{ProviderRequestResolution, public_event_for_principal};
     for resolving in [false, true] {
         let (store, connection, turn, now) =
-            crate::attendee_turn_report_tests::assigned_report().await?;
+            crate::attendee::turn_report_tests::assigned_report().await?;
         let operator = crate::human_session_authority_tests::local_operator_principal();
         let request = crate::provider_request_tests::request_for(&turn);
         let id = request.request.provider_request_id;
@@ -143,14 +143,14 @@ async fn assert_profile_event_failure_rolls_back(
 async fn external_profile_ack_reuses_state_projection_and_exact_replay()
 -> Result<(), Box<dyn std::error::Error>> {
     for capability in [None, Some(false), Some(true)] {
-        let (store, attendee, now) = crate::attendee_connection_tests::fixture().await?;
+        let (store, attendee, now) = crate::attendee::connection_tests::fixture().await?;
         let agent_id = &attendee.principal().participant_id;
         if let Some(capability) = capability {
             let connection = store
                 .claim_attendee_connection(&attendee, uuid::Uuid::new_v4(), now)
                 .await?
                 .authorization;
-            let mut ready = crate::attendee_ready_tests::report();
+            let mut ready = crate::attendee::ready_tests::report();
             ready.retained_interrupt = capability;
             store
                 .record_attendee_ready(&connection, &ready, now)
@@ -191,7 +191,7 @@ async fn external_profile_ack_reuses_state_projection_and_exact_replay()
                 .await?
                 .authorization;
             store
-                .record_attendee_ready(&connection, &crate::attendee_ready_tests::report(), now)
+                .record_attendee_ready(&connection, &crate::attendee::ready_tests::report(), now)
                 .await?;
             assert_eq!(
                 store.snapshot("general", 0, 200).await?.agent_sessions[0]
