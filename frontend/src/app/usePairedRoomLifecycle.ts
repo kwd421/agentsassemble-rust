@@ -72,7 +72,7 @@ export function usePairedRoomLifecycle(options: Options) {
       setPending(null);
       setRoom(result.room);
       setRetirement("ended");
-      setNotice(result.deleted ? "방이 삭제됐습니다." : "방 상태가 변경되어 이 기기의 연결이 종료됐습니다.");
+      setNotice(result.deleted ? "방이 삭제됐어요." : "방 상태가 변경되어 이 기기의 연결이 종료됐어요.");
     } catch (failure) {
       if (!resultIsCurrent()) return;
       if (failure instanceof ApiError && failure.resolution === "rejected") {
@@ -81,9 +81,9 @@ export function usePairedRoomLifecycle(options: Options) {
       }
       if (failure instanceof ApiError && failure.code === "room_deletion_pending" && failure.resolution === "unresolved") {
         setRetirement("deleting");
-        setNotice("방 삭제 요청이 접수되어 이 기기의 연결이 종료됐습니다. 삭제 완료 여부는 원래 앱에서 확인해 주세요.");
+        setNotice("방 삭제 요청이 접수되어 이 기기의 연결이 종료됐어요. 삭제 완료 여부는 원래 앱에서 확인해 주세요.");
       } else {
-        setError(`${failure instanceof Error ? failure.message : "방 관리 결과를 확인하지 못했습니다."} 연결이 종료됐다면 원래 앱에서 방 상태를 확인해 주세요.`);
+        setError(`${failure instanceof Error ? failure.message : "방 관리 결과를 확인하지 못했어요."} 연결이 종료됐다면 원래 앱에서 방 상태를 확인해 주세요.`);
       }
     } finally {
       if (resultIsCurrent()) {
@@ -121,7 +121,7 @@ export function usePairedRoomLifecycle(options: Options) {
     close: () => setOpen(false),
     refresh: async () => {
       if (canChange) options.refreshProjection();
-      else setNotice("이 기기의 방 연결이 종료됐습니다. 원래 앱에서 방 상태를 확인해 주세요.");
+      else setNotice("이 기기의 방 연결이 종료됐어요. 원래 앱에서 방 상태를 확인해 주세요.");
     },
     retry: () => { if (operation.current) void submit(operation.current.intent); },
     onRoomLifecycle: (next: Room) => {

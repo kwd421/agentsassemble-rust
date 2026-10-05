@@ -21,9 +21,9 @@ export async function startCentralWebGoogle(signal: AbortSignal): Promise<void> 
   const url = new URL(started.authorization_url);
   if (started.state !== state || url.searchParams.get("redirect_uri") !== `${window.location.origin}/` ||
       url.searchParams.get("code_challenge") !== challenge || started.expires_at <= Date.now() / 1000) {
-    throw new Error("웹 로그인 응답을 확인하지 못했습니다.");
+    throw new Error("웹 로그인 응답을 확인하지 못했어요.");
   }
-  if (signal.aborted) throw new DOMException("Google 로그인을 취소했습니다.", "AbortError");
+  if (signal.aborted) throw new DOMException("Google 로그인을 취소했어요.", "AbortError");
   const pending: PendingLogin = { handoffId: started.handoff_id, verifier, state, expiresAt: started.expires_at };
   // The verifier stays in this tab on the central origin, never in a URL or room host.
   sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
@@ -44,27 +44,27 @@ async function completeReturn(): Promise<void> {
   if (returned) window.history.replaceState({}, "", url.pathname);
   const stored = sessionStorage.getItem(PENDING_KEY);
   if (!stored) {
-    if (returned) throw new Error("이 창에서 시작한 Google 로그인이 아닙니다. 다시 로그인해 주세요.");
+    if (returned) throw new Error("이 창에서 시작한 Google 로그인이 아니에요. 다시 로그인해 주세요.");
     return;
   }
   let pending: PendingLogin;
   try { pending = JSON.parse(stored) as PendingLogin; }
-  catch { sessionStorage.removeItem(PENDING_KEY); throw new Error("저장된 로그인 요청을 읽지 못했습니다. 다시 로그인해 주세요."); }
+  catch { sessionStorage.removeItem(PENDING_KEY); throw new Error("저장된 로그인 요청을 읽지 못했어요. 다시 로그인해 주세요."); }
   if (!/^goh_[A-Za-z0-9_-]+$/.test(pending.handoffId) ||
       !/^[A-Za-z0-9_-]{43}$/.test(pending.verifier) || !/^[A-Za-z0-9_-]{43}$/.test(pending.state) ||
       !Number.isSafeInteger(pending.expiresAt) || pending.expiresAt <= Date.now() / 1000) {
     sessionStorage.removeItem(PENDING_KEY);
-    throw new Error("Google 로그인 요청이 만료됐습니다. 다시 로그인해 주세요.");
+    throw new Error("Google 로그인 요청이 만료됐어요. 다시 로그인해 주세요.");
   }
   if (returned) {
     if (url.searchParams.getAll("state").length !== 1 || url.searchParams.get("state") !== pending.state) {
-      throw new Error("Google 로그인 요청이 일치하지 않습니다. 다시 로그인해 주세요.");
+      throw new Error("Google 로그인 요청이 일치하지 않아요. 다시 로그인해 주세요.");
     }
     if (url.searchParams.has("error")) {
       sessionStorage.removeItem(PENDING_KEY);
-      throw new Error("Google 로그인이 취소되었거나 거부되었습니다.");
+      throw new Error("Google 로그인이 취소되었거나 거부됐어요.");
     }
-    if (url.searchParams.getAll("code").length !== 1) throw new Error("Google 로그인 응답을 확인하지 못했습니다.");
+    if (url.searchParams.getAll("code").length !== 1) throw new Error("Google 로그인 응답을 확인하지 못했어요.");
     pending.authorizationCode = url.searchParams.get("code") || "";
     sessionStorage.setItem(PENDING_KEY, JSON.stringify(pending));
   }

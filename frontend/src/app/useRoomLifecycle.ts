@@ -33,7 +33,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
       } while (directoryInvalidatedRef.current);
     } catch (failure) {
       if (!(failure instanceof RoomDirectoryOperationSuperseded)) {
-        setError(failure instanceof Error ? failure.message : "방 목록을 확인하지 못했습니다.");
+        setError(failure instanceof Error ? failure.message : "방 목록을 확인하지 못했어요.");
       }
     } finally {
       busyRef.current = false;
@@ -55,7 +55,7 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
       validateRoomDirectoryContinuity(continuity);
       pendingRef.current = null;
       setPending(null);
-      setNotice(response.deleted ? "방이 삭제됐습니다." : response.cleanupPending ? "방 상태가 변경됐습니다. 실행 중이던 에이전트 정리를 기다리고 있습니다." : "방 상태가 변경됐습니다.");
+      setNotice(response.deleted ? "방이 삭제됐어요." : response.cleanupPending ? "방 상태가 변경됐어요. 실행 중이던 에이전트 정리를 기다리고 있어요." : "방 상태가 변경됐어요.");
       directoryInvalidatedRef.current = false;
       const refreshed = await refreshRoomDirectory(continuity);
       if (!refreshed.ok) throw refreshed.error;
@@ -65,9 +65,9 @@ export function useRoomLifecycle({ enabled, authorityReady, managementRooms, cap
         setPending(null);
       }
       if (failure instanceof ApiError && failure.code === "room_deletion_pending" && failure.resolution === "unresolved") {
-        setNotice("방 삭제를 처리하고 있습니다. 에이전트 정리가 끝난 뒤 같은 요청으로 완료 여부를 확인할 수 있습니다.");
+        setNotice("방 삭제를 처리하고 있어요. 에이전트 정리가 끝난 뒤 같은 요청으로 완료 여부를 확인할 수 있어요.");
         directoryInvalidatedRef.current = true;
-      } else setError(failure instanceof Error ? failure.message : "방 관리 결과를 확인하지 못했습니다.");
+      } else setError(failure instanceof Error ? failure.message : "방 관리 결과를 확인하지 못했어요.");
     } finally {
       busyRef.current = false;
       setBusy(false);

@@ -147,9 +147,9 @@ export default function ChannelHeader({
     onToggleMembers?.();
   }
 
-  const notificationSummary = headerActions?.notificationSummary || "서버 기본 알림을 사용 중입니다.";
-  const lastReadSummary = headerActions?.lastReadSummary || "아직 이 채널을 읽음으로 표시하지 않았습니다.";
-  const pinnedSummary = headerActions?.pinnedSummary || "아직 고정된 메시지가 없습니다.";
+  const notificationSummary = headerActions?.notificationSummary || "방 기본 알림을 사용 중이에요.";
+  const lastReadSummary = headerActions?.lastReadSummary || "아직 이 채널을 읽음으로 표시하지 않았어요.";
+  const pinnedSummary = headerActions?.pinnedSummary || "아직 고정된 메시지가 없어요.";
   const searchNeedle = searchQuery.trim().toLocaleLowerCase();
   const searchMatches = useMemo(() => {
     if (!searchNeedle) return [];
@@ -338,7 +338,7 @@ export default function ChannelHeader({
               <>
                 <p className="dc-head-popover-title">고정 메시지</p>
                 {headerActions?.pinsLoading ? (
-                  <p className="dc-head-popover-copy preserve-words">고정 메시지를 불러오는 중입니다.</p>
+                  <p className="dc-head-popover-copy preserve-words">고정 메시지를 불러오는 중이에요.</p>
                 ) : headerActions?.pinsError ? (
                   <p className="dc-head-popover-copy preserve-words" role="alert">
                     {headerActions.pinsError}
@@ -419,10 +419,10 @@ export default function ChannelHeader({
                 </label>
                 {!searchNeedle ? (
                   <p className="dc-head-popover-copy preserve-words">
-                    검색어를 입력하면 {searchScope === "all" ? "읽을 수 있는 모든 채널" : "이 채널"}의 전체 메시지에서 찾습니다.
+                    검색어를 입력하면 {searchScope === "all" ? "읽을 수 있는 모든 채널" : "이 채널"}의 전체 메시지에서 찾아요.
                   </p>
                 ) : searchLoading && !searchMatches.length ? (
-                  <p className="dc-head-popover-copy preserve-words">검색하는 중입니다.</p>
+                  <p className="dc-head-popover-copy preserve-words">검색하는 중이에요.</p>
                 ) : searchError ? (
                   <p className="dc-head-popover-copy preserve-words" role="alert">
                     {searchError}
@@ -430,7 +430,7 @@ export default function ChannelHeader({
                 ) : searchMatches.length ? (
                   <>
                     <p className="dc-head-popover-copy preserve-words">
-                      {searchMatches.length}개의 결과를 찾았습니다.
+                      {searchMatches.length}개의 결과를 찾았어요.
                     </p>
                     <div className="dc-head-search-results" role="list" aria-label="채널 검색 결과">
                       {searchMatches.map((item, index) => (
@@ -485,7 +485,7 @@ export default function ChannelHeader({
                   </>
                 ) : (
                   <p className="dc-head-popover-copy preserve-words">
-                    일치하는 메시지가 없습니다.
+                    일치하는 메시지가 없어요.
                   </p>
                 )}
                 {searchNeedle && searchHasMore && onLoadMoreSearch && (

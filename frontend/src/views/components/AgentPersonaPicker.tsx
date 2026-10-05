@@ -43,7 +43,7 @@ export default function AgentPersonaPicker({
       })
       .catch((error) => {
         if (!active) return;
-        setStatus(error instanceof Error ? error.message : "라이브러리를 불러오지 못했습니다.");
+        setStatus(error instanceof Error ? error.message : "라이브러리를 불러오지 못했어요.");
       });
     return () => {
       active = false;
@@ -96,7 +96,7 @@ export default function AgentPersonaPicker({
       setQuery("");
       setStatus(`${imported.display_name} 가져오기 완료`);
     } catch (error) {
-      setStatus(error instanceof Error ? error.message : "가져오기에 실패했습니다.");
+      setStatus(error instanceof Error ? error.message : "가져오기에 실패했어요.");
     } finally {
       setImporting(false);
     }
@@ -107,7 +107,7 @@ export default function AgentPersonaPicker({
       <div className="dc-persona-picker-head">
         <div>
           <strong>봇카드 · Risu 모듈</strong>
-          <span>API/Local 모델의 캐릭터와 세계관에 적용됩니다.</span>
+          <span>API/Local 모델의 캐릭터와 세계관에 적용돼요.</span>
         </div>
         <label className="dc-persona-import" data-disabled={disabled || importing}>
           <Upload size={15} aria-hidden="true" />
@@ -167,8 +167,8 @@ export default function AgentPersonaPicker({
         <div className="dc-persona-library">
           {emptyLibrary ? (
             <p className="dc-persona-empty preserve-words">
-              아직 가져온 봇카드나 Risu 모듈이 없습니다. 위의 <strong>파일 가져오기</strong>로
-              추가하면 여기에서 고를 수 있습니다.
+              아직 가져온 봇카드나 Risu 모듈이 없어요. 위의 <strong>파일 가져오기</strong>로
+              추가하면 여기에서 고를 수 있어요.
             </p>
           ) : (
             <>
@@ -240,13 +240,13 @@ export default function AgentPersonaPicker({
               </div>
               {searching && matchingItems.length === 0 && (
                 <p className="dc-persona-status">
-                  「{query.trim()}」에 맞는 봇카드나 모듈이 없습니다.
+                  「{query.trim()}」에 맞는 봇카드나 모듈이 없어요.
                 </p>
               )}
               {matchingItems.length > VISIBLE_RESULT_LIMIT && (
                 <p className="dc-persona-status">
                   {matchingItems.length.toLocaleString()}개 중 {VISIBLE_RESULT_LIMIT}개만
-                  표시합니다. 검색어로 좁혀보세요.
+                  표시해요. 검색어로 좁혀보세요.
                 </p>
               )}
             </>
@@ -256,11 +256,11 @@ export default function AgentPersonaPicker({
       {status && <p className="dc-persona-status preserve-words">{status}</p>}
       {failedThumbnailIds.size > 0 && (
         <p className="dc-persona-status preserve-words" role="alert">
-          봇카드 썸네일을 불러오지 못했습니다.
+          봇카드 썸네일을 불러오지 못했어요.
         </p>
       )}
       <p className="dc-persona-safety preserve-words">
-        실행형 스크립트·정규식·트리거는 보관만 하며 실행하지 않습니다.
+        실행형 스크립트·정규식·트리거는 보관만 하며 실행하지 않아요.
       </p>
     </div>
   );

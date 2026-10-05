@@ -257,7 +257,7 @@ export function useManagedHumanInvites({
       Date.now()
     );
     if (!presentation.copyUrl) {
-      publishStatus("현재 확인된 활성 사람 초대만 복사할 수 있습니다.");
+      publishStatus("현재 확인된 활성 사람 초대만 복사할 수 있어요.");
       return;
     }
     const refreshCurrentPublicOrigin = captureCurrentPublicOriginRefresh();
@@ -278,7 +278,7 @@ export function useManagedHumanInvites({
       publishStatus(
         error instanceof Error
           ? error.message
-          : "현재 공개 초대 상태를 확인하지 못했습니다."
+          : "현재 공개 초대 상태를 확인하지 못했어요."
       );
     }
   }
@@ -325,8 +325,8 @@ export function useManagedHumanInvites({
       );
       publishStatus(
         result === "invite_not_found"
-          ? "사람 초대가 이미 폐기되었습니다."
-          : "사람 초대를 폐기했습니다."
+          ? "사람 초대가 이미 폐기됐어요."
+          : "사람 초대를 폐기했어요."
       );
     } catch (error) {
       if (!revokeAttemptIsCurrent(key, generation)) return;
@@ -344,8 +344,8 @@ export function useManagedHumanInvites({
       );
       publishStatus(
         nextState === "unknown"
-          ? "사람 초대 폐기 결과를 확인할 수 없습니다. 명시적으로 다시 시도할 수 있습니다."
-          : "사람 초대 폐기 요청이 전송되지 않았습니다."
+          ? "사람 초대 폐기 결과를 확인할 수 없어요. 명시적으로 다시 시도할 수 있어요."
+          : "사람 초대 폐기 요청이 전송되지 않았어요."
       );
     }
   }

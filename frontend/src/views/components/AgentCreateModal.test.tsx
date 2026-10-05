@@ -293,7 +293,7 @@ describe("AgentCreateModal", () => {
       />
     );
 
-    expect(screen.getByText("선택한 provider가 현재 catalog에 없습니다.")).toBeTruthy();
+    expect(screen.getByText("선택한 provider가 현재 catalog에 없어요.")).toBeTruthy();
     expect(screen.getByRole("listitem", { name: "Codex" }).getAttribute("data-active")).toBe("false");
     expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
   });
@@ -363,7 +363,7 @@ describe("AgentCreateModal", () => {
     await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
     expectProviderControlValue("모델", "선택 필요");
     expect(primaryActionButton().hasAttribute("disabled")).toBe(true);
-    expect(screen.getByText("모델의 유효한 기본값이 없어 직접 선택해야 합니다.")).toBeTruthy();
+    expect(screen.getByText("모델의 유효한 기본값이 없어 직접 선택해야 해요.")).toBeTruthy();
   });
 
   it("narrows effort and service tier options for the selected model", async () => {

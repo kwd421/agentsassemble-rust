@@ -340,7 +340,7 @@ export default function AgentCreateModal({
     try {
       setCredentialStatus(await deleteProviderCredential(selectedProvider.id));
       setProviderApiKey("");
-      setStatus(`${selectedProvider.display_name} 저장 키를 삭제했습니다`);
+      setStatus(`${selectedProvider.display_name} 저장 키를 삭제했어요`);
       if (localProviderActions && isDesktopWebview()) {
         const catalog = await refreshLocalProviderCatalog(selectedProvider.id);
         onCatalogChange?.(catalog);
@@ -527,7 +527,7 @@ export default function AgentCreateModal({
                 </label>
               </div>
               <p className="preserve-words">
-                Base URL과 /chat/completions 전체 주소를 모두 받을 수 있습니다.
+                Base URL과 /chat/completions 전체 주소를 모두 받을 수 있어요.
               </p>
             </section>
           )}
@@ -614,7 +614,7 @@ export default function AgentCreateModal({
               <strong>{startNow ? "추가하고 바로 실행" : "목록에만 추가"}</strong>
               <em>
                 {startNow
-                  ? "추가와 동시에 세션이 켜집니다."
+                  ? "추가와 동시에 세션이 켜져요."
                   : "카드에서 언제든 켤 수 있어요."}
               </em>
             </span>

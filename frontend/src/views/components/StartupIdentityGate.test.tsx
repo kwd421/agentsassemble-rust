@@ -241,14 +241,14 @@ describe("StartupIdentityGate", () => {
         await userEvent.type(screen.getByRole("textbox", { name: "표시 이름" }), "Guest");
         await userEvent.click(screen.getByRole("button", { name: "게스트 만들기" }));
       } else if (entry === "recover") {
-        await userEvent.click(await screen.findByRole("button", { name: "이미 복구 코드가 있습니다" }));
+        await userEvent.click(await screen.findByRole("button", { name: "이미 복구 코드가 있어요" }));
         await userEvent.type(screen.getByRole("textbox", { name: "게스트 복구 코드" }), "OLD-CODE");
         await userEvent.click(screen.getByRole("button", { name: "같은 게스트로 로그인" }));
       }
       await userEvent.click(await screen.findByRole("checkbox"));
       await userEvent.click(screen.getByRole("button", { name: "계속" }));
     }
-    await screen.findByText(/등록된 서버가 없습니다/);
+    await screen.findByText(/등록된 서버가 없어요/);
     expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
     expect(desktopMocks.initializeBootstrap).not.toHaveBeenCalled();
     expect(centralMocks.register).not.toHaveBeenCalled();
@@ -419,7 +419,7 @@ it("requires login after authentication rejection even with an existing local ho
   centralMocks.session = { person: { display_name: "Cached name" } };
   centralMocks.bootstrap.mockImplementation(async () => {
     centralMocks.session = null;
-    throw new Error("로그인이 만료됐습니다. 다시 로그인해 주세요.");
+    throw new Error("로그인이 만료됐어요. 다시 로그인해 주세요.");
   });
   desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
   const onComplete = vi.fn();

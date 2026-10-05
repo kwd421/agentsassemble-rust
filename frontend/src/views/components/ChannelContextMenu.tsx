@@ -36,13 +36,13 @@ export default function ChannelContextMenu({
   const preferenceReady = preferenceStatus === "ready";
   const preferenceMessage =
     preferenceStatus === "loading"
-      ? "채널 설정을 불러오는 중입니다."
+      ? "채널 설정을 불러오는 중이에요."
       : preferenceStatus === "saving"
-        ? "채널 설정을 저장하는 중입니다."
+        ? "채널 설정을 저장하는 중이에요."
         : preferenceStatus === "stale"
-          ? "저장하지 못해 마지막 서버 값으로 되돌렸습니다."
+          ? "저장하지 못해 마지막 서버 값으로 되돌렸어요."
           : preferenceStatus === "error"
-            ? "채널 설정을 불러오지 못했습니다."
+            ? "채널 설정을 불러오지 못했어요."
             : "";
 
   return (

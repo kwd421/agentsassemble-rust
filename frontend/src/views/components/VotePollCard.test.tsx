@@ -130,7 +130,7 @@ describe("VotePollCard", () => {
     expect(north.disabled).toBe(true);
     fireEvent.click(north);
     expect(say).not.toHaveBeenCalled();
-    expect(screen.getByText("투표가 마감되었습니다")).toBeTruthy();
+    expect(screen.getByText("투표가 마감됐어요")).toBeTruthy();
   });
 
   it("shows when an open vote has no deadline", async () => {
@@ -226,7 +226,7 @@ describe("VotePollCard", () => {
       </RoomSocketProvider>
     );
 
-    expect(await screen.findByText("방 연결이 준비되지 않았습니다.")).toBeTruthy();
+    expect(await screen.findByText("방 연결이 준비되지 않았어요.")).toBeTruthy();
   });
 
   it("marks only the authenticated viewer's anonymous choice", async () => {

@@ -56,7 +56,7 @@ describe("projectRoomEventsToTimeline", () => {
     for (const timeline of [together, separately]) {
       expect(timeline).toHaveLength(1);
       expect(timeline[0]).toMatchObject({
-        record_id: "deleted-target", message_deleted: true, message: "삭제된 메시지입니다",
+        record_id: "deleted-target", message_deleted: true, message: "삭제된 메시지예요",
       });
     }
   });

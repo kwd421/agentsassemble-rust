@@ -625,7 +625,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
   function openCrossChannelSearchResult(result: RoomSearchResult) {
     const targetChannel = result.channel_id;
     if (targetChannel !== "lobby" && !roomChannels.activeChannels.some((item) => item.id === targetChannel && item.type === "text")) {
-      roomMessageSearch.setError("검색 결과의 채널을 더 이상 열 수 없습니다.");
+      roomMessageSearch.setError("검색 결과의 채널을 더 이상 열 수 없어요.");
       return;
     }
     setPendingMessageSearchTarget({

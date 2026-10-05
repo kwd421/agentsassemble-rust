@@ -280,7 +280,7 @@ export default function UserSettingsPanel({
 
           {settingsSection === "voice" && (
             <>
-              <p className="dc-user-settings-lead">실제 음성 연결은 아니고, 방 클라이언트의 표시 상태만 저장합니다.</p>
+              <p className="dc-user-settings-lead">실제 음성 연결은 아니고, 방 클라이언트의 표시 상태만 저장해요.</p>
               <div className="dc-user-settings-toggles">
                 <button
                   type="button"

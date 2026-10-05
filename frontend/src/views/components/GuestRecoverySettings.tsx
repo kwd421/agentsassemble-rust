@@ -44,7 +44,7 @@ export default function GuestRecoverySettings({
       setStatus("새 코드를 만들었어요. 이전 코드는 더 이상 사용할 수 없어요.");
     } catch (error) {
       if (scope !== generation.current) return;
-      setStatus(error instanceof Error ? error.message : "복구 코드를 만들지 못했습니다.");
+      setStatus(error instanceof Error ? error.message : "복구 코드를 만들지 못했어요.");
     } finally {
       if (scope === generation.current) {
         inFlight.current = false;

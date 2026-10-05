@@ -163,7 +163,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
           onClose={closeCreation}
           onCreate={async (request) => {
             if (!roomSocket?.ready()) {
-              throw new Error("방 연결이 아직 준비되지 않았습니다");
+              throw new Error("방 연결이 아직 준비되지 않았어요");
             }
             if (request.sessionId) {
               await roomSocket.command("agent.readd", {

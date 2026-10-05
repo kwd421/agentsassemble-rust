@@ -61,7 +61,7 @@ describe("GuestJoinProfilePanel", () => {
     await waitFor(() => expect(onAvatarImageChange).toHaveBeenCalledWith(
       "data:image/png;base64,YXZhdGFy"
     ));
-    expect(screen.getByText("입장할 때 사진이 저장됩니다.")).toBeTruthy();
+    expect(screen.getByText("입장할 때 사진이 저장돼요.")).toBeTruthy();
   });
 
   it("retries preflight without presenting editable join-profile fields", () => {
@@ -70,7 +70,7 @@ describe("GuestJoinProfilePanel", () => {
     render(
       <GuestJoinProfilePanel
         displayName="Guest"
-        status="방 세션을 브라우저에 영구 저장할 수 없습니다."
+        status="방 세션을 브라우저에 영구 저장할 수 없어요."
         retryMode="preflight"
         onDisplayNameChange={vi.fn()}
         onAvatarImageChange={vi.fn()}

@@ -23,29 +23,29 @@ export function deriveAgentCreateStatus({
 }): string {
   if (status) return status;
   if (selectedProvider?.discovery_status === "loading") {
-    return "모델 목록을 불러오는 중입니다";
+    return "모델 목록을 불러오는 중이에요";
   }
   if (selectedProvider && !selectedProvider.available) {
     return providerUnavailableText(selectedProvider);
   }
   if (selectedProvider?.discovery_status === "failed" && selectedProvider.available) {
-    return selectedProvider.discovery_error || "모델 목록을 불러오지 못했습니다";
+    return selectedProvider.discovery_error || "모델 목록을 불러오지 못했어요";
   }
   if (selectedProviderMissing) {
-    return "선택한 provider가 현재 catalog에 없습니다.";
+    return "선택한 provider가 현재 catalog에 없어요.";
   }
   if (!selectedProvider && !selectedProviderMissing && hasProviders) {
     return "사용할 제공자를 골라 주세요.";
   }
   if (invalidControl) {
-    return `${invalidControl.label}의 유효한 기본값이 없어 직접 선택해야 합니다.`;
+    return `${invalidControl.label}의 유효한 기본값이 없어 직접 선택해야 해요.`;
   }
   if (
     selectedProvider &&
     workspaceRequired &&
     !workspacePath.trim()
   ) {
-    return "작업 폴더를 선택하세요. 이 폴더에서 세션이 실행됩니다.";
+    return "작업 폴더를 선택하세요. 이 폴더에서 세션이 실행돼요.";
   }
   return "";
 }
@@ -78,5 +78,5 @@ export function providerUnavailableText(provider: {
   if (provider.discovery_error_code === "command_missing") {
     return `이 PC에서 ${provider.display_name} CLI를 찾지 못했어요. 데스크톱 앱에만 포함된 CLI는 다른 앱에서 사용할 수 없어요.`;
   }
-  return provider.discovery_error || "CLI를 찾지 못했습니다";
+  return provider.discovery_error || "CLI를 찾지 못했어요";
 }

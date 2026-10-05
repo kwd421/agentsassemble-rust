@@ -37,7 +37,7 @@ describe("RoomSyncNotice", () => {
     );
 
     expect(screen.getByRole("status").textContent).toContain(
-      "방 서버에 연결하지 못했습니다"
+      "방 서버에 연결하지 못했어요"
     );
   });
 
@@ -63,7 +63,7 @@ describe("RoomSyncNotice", () => {
     expect(screen.getByRole("status").textContent).toContain("Previous room");
     fireEvent.click(screen.getByRole("button", { name: "완료 여부 확인" }));
     expect(lifecycle.retry).toHaveBeenCalledOnce();
-    rerender(<RoomSyncNotice issue={null} lifecycle={{ ...lifecycle, pending: null, notice: "방이 삭제됐습니다." }} />);
+    rerender(<RoomSyncNotice issue={null} lifecycle={{ ...lifecycle, pending: null, notice: "방이 삭제됐어요." }} />);
     expect(screen.queryByRole("button", { name: "완료 여부 확인" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
     expect(lifecycle.dismissNotice).toHaveBeenCalledOnce();

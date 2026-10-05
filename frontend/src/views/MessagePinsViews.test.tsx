@@ -131,7 +131,7 @@ describe("message-pin view ownership", () => {
     fireEvent.click(screen.getByRole("button", { name: /Operator.*pin this message/ }));
 
     expect((await screen.findByRole("alert")).textContent).toContain(
-      "현재 불러온 기록에 없는 고정 메시지입니다."
+      "현재 불러온 기록에 없는 고정 메시지예요."
     );
     expect(api.fetchRoomContext).not.toHaveBeenCalled();
   });
@@ -150,7 +150,7 @@ describe("message-pin view ownership", () => {
     expect(screen.queryByRole("button", { name: "메시지 고정" })).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "고정 메시지" }));
     expect(
-      screen.getByText("이 환경에서는 로비 메시지 핀을 사용할 수 없습니다.")
+      screen.getByText("이 환경에서는 로비 메시지 핀을 사용할 수 없어요.")
     ).toBeTruthy();
     expect(api.fetchLobbyPins).not.toHaveBeenCalled();
   });
@@ -194,7 +194,7 @@ describe("message-pin view ownership", () => {
     await act(async () => releaseGrant?.());
 
     expect(screen.queryByRole("list", { name: "고정 메시지 목록" })).toBeNull();
-    expect(screen.getByText("아직 고정된 메시지가 없습니다.")).toBeTruthy();
+    expect(screen.getByText("아직 고정된 메시지가 없어요.")).toBeTruthy();
   });
 
 });

@@ -181,7 +181,7 @@ describe("LobbyView active provider turn", () => {
       target: { value: "카나리아" },
     });
     expect(
-      await screen.findByText("이 환경에서는 메시지 검색을 사용할 수 없습니다.")
+      await screen.findByText("이 환경에서는 메시지 검색을 사용할 수 없어요.")
     ).toBeTruthy();
     expect(
       screen.queryByRole("button", {
@@ -610,7 +610,7 @@ describe("LobbyView history loading", () => {
     );
 
     expect(screen.getByText("불러오는 중...")).toBeTruthy();
-    expect(screen.queryByText("아직 채팅 메시지가 없습니다. 첫 메시지를 남겨 보세요.")).toBeNull();
+    expect(screen.queryByText("아직 채팅 메시지가 없어요. 첫 메시지를 남겨 보세요.")).toBeNull();
 
     view.rerender(
       <LobbyView

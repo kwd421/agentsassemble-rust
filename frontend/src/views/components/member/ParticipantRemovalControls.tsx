@@ -46,7 +46,7 @@ export default function ParticipantRemovalControls({ participantId, displayName,
       setConfirmAction(null);
       setMenuOpen(false);
     } catch (failure) {
-      setError(failure instanceof Error ? failure.message : "참가자를 제거하지 못했습니다.");
+      setError(failure instanceof Error ? failure.message : "참가자를 제거하지 못했어요.");
     } finally {
       busyRef.current = false;
       setBusy(false);
@@ -56,12 +56,12 @@ export default function ParticipantRemovalControls({ participantId, displayName,
   const actions = (
     <div onClick={(event) => event.stopPropagation()} onKeyDown={(event) => { if (event.key !== "Escape") event.stopPropagation(); }}>
       <button type="button" className="dc-member-context-menu-item" data-variant="danger" style={{ minHeight: 44 }} disabled={busy}
-        aria-label={`${displayName} 내보내기`} title="방에서 내보냅니다. 나중에 다시 참가시킬 수 있어요."
+        aria-label={`${displayName} 내보내기`} title="방에서 내보내요. 나중에 다시 참가시킬 수 있어요."
         onClick={(event) => { actionTriggerRef.current = event.currentTarget; setConfirmAction("kick"); }}>
         내보내기
       </button>
       <button type="button" className="dc-member-context-menu-item" data-variant="danger" style={{ minHeight: 44 }} disabled={busy}
-        aria-label={`${displayName} 영구 퇴장`} title="다시 들어올 수 없게 참가를 끝냅니다. 대화 기록은 남아요."
+        aria-label={`${displayName} 영구 퇴장`} title="다시 들어올 수 없게 참가를 끝내요. 대화 기록은 남아요."
         onClick={(event) => { actionTriggerRef.current = event.currentTarget; setConfirmAction("export"); }}>
         영구 퇴장
       </button>
@@ -72,8 +72,8 @@ export default function ParticipantRemovalControls({ participantId, displayName,
           onCancel={(event) => { event.preventDefault(); event.stopPropagation(); if (!busy) { setConfirmAction(null); setError(""); } }}>
           <h2 className="font-semibold" style={{ fontSize: 18 }}>{confirmAction === "kick" ? "참가자를 내보낼까요?" : "영구 퇴장시킬까요?"}</h2>
           <p className="preserve-words" style={{ margin: "20px 0" }}>{displayName}{confirmAction === "kick"
-            ? "의 방 접속과 실행이 종료됩니다. 대화 기록은 남고, 나중에 다시 참가시킬 수 있어요."
-            : "의 참가가 끝나고 방 접근 권한이 해제됩니다. 대화 기록은 남지만, 이 참가자는 다시 들어올 수 없어요."}</p>
+            ? "의 방 접속과 실행이 종료돼요. 대화 기록은 남고, 나중에 다시 참가시킬 수 있어요."
+            : "의 참가가 끝나고 방 접근 권한이 해제돼요. 대화 기록은 남지만, 이 참가자는 다시 들어올 수 없어요."}</p>
           {error && <p className="dc-channel-composer-error preserve-words" role="alert">{error}</p>}
           <div className="dc-create-channel-actions">
             <button type="button" autoFocus className="dc-agent-create-secondary" style={{ minHeight: 44 }} disabled={busy} onClick={() => { setConfirmAction(null); setError(""); }}>취소</button>

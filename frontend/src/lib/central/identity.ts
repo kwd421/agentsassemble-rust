@@ -159,7 +159,7 @@ function openCredentialDb(): Promise<IDBDatabase> {
     };
     request.onsuccess = () => resolve(request.result);
     request.onerror = () =>
-      reject(request.error || new Error("기기 보안 저장소를 열지 못했습니다."));
+      reject(request.error || new Error("기기 보안 저장소를 열지 못했어요."));
   });
 }
 
@@ -174,7 +174,7 @@ async function loadOrCreateDevice(): Promise<StoredDevice> {
         const transaction = db.transaction(STORE_NAME, "readwrite");
         transaction.objectStore(STORE_NAME).delete(DEVICE_KEY);
         transaction.oncomplete = () => resolve();
-        transaction.onerror = transaction.onabort = () => reject(transaction.error || new Error("로그아웃한 기기 등록을 초기화하지 못했습니다."));
+        transaction.onerror = transaction.onabort = () => reject(transaction.error || new Error("로그아웃한 기기 등록을 초기화하지 못했어요."));
       });
       localStorage.setItem(SESSION_KEY, "logged-out:fresh-device");
     }
@@ -211,7 +211,7 @@ async function loadOrCreateDevice(): Promise<StoredDevice> {
       const transaction = db.transaction(STORE_NAME, "readwrite");
       transaction.objectStore(STORE_NAME).put(created, DEVICE_KEY);
       transaction.oncomplete = () => resolve();
-      transaction.onerror = transaction.onabort = () => reject(transaction.error || new Error("기기 로그인 키를 저장하지 못했습니다."));
+      transaction.onerror = transaction.onabort = () => reject(transaction.error || new Error("기기 로그인 키를 저장하지 못했어요."));
     });
     return created;
   } finally {
@@ -423,7 +423,7 @@ export function parseCentralGoogleHandoff(value: unknown): CentralGoogleHandoff 
 
 function throwIfGoogleLoginAborted(signal?: AbortSignal): void {
   if (!signal?.aborted) return;
-  const error = new Error("Google 로그인이 취소됐습니다.");
+  const error = new Error("Google 로그인이 취소됐어요.");
   error.name = "AbortError";
   throw error;
 }
@@ -438,7 +438,7 @@ function waitForGoogleReturn(signal?: AbortSignal): Promise<void> {
     function abort() {
       window.clearTimeout(timer);
       signal?.removeEventListener("abort", abort);
-      const error = new Error("Google 로그인이 취소됐습니다.");
+      const error = new Error("Google 로그인이 취소됐어요.");
       error.name = "AbortError";
       reject(error);
     }
@@ -467,7 +467,7 @@ async function signedFetch(
   if (device.deviceId !== session.device_id) {
     if (loadCentralSession()?.token === session.token) clearCentralSession();
     throw new CentralAuthError(
-      "이 기기의 로그인 키가 바뀌었습니다. 다시 로그인해 주세요."
+      "이 기기의 로그인 키가 바뀌었어요. 다시 로그인해 주세요."
     );
   }
   const body = bodyValue ? JSON.stringify(bodyValue) : "";
@@ -553,7 +553,7 @@ export async function loginCentralGoogle(
     const callback = await controlDesktopCentralLogin("start", state);
     throwIfGoogleLoginAborted(signal);
     if (callback.result.status !== "pending") {
-      throw new Error("Google 로그인을 준비하지 못했습니다. 다시 시도해 주세요.");
+      throw new Error("Google 로그인을 준비하지 못했어요. 다시 시도해 주세요.");
     }
     const started = parseCentralGoogleHandoff(
       await unsignedPost<unknown>(
@@ -587,7 +587,7 @@ export async function loginCentralGoogle(
       throwIfGoogleLoginAborted(signal);
       if (returned.status === "pending") continue;
       if (returned.status === "failed" || returned.status === "cancelled") {
-        throw new Error("Google 로그인이 취소됐습니다.");
+        throw new Error("Google 로그인이 취소됐어요.");
       }
       // Retire the transient native return before the central server issues a
       // session. Once a complete exchange arrives, persist that committed result.
@@ -609,7 +609,7 @@ export async function loginCentralGoogle(
       );
       return saveSession(exchanged);
     }
-    throw new Error("Google 로그인 시간이 만료됐습니다. 다시 시도해 주세요.");
+    throw new Error("Google 로그인 시간이 만료됐어요. 다시 시도해 주세요.");
   } catch (reason) {
     failure = { reason };
     throw reason;
@@ -618,7 +618,7 @@ export async function loginCentralGoogle(
       try { await controlDesktopCentralLogin("cancel", state); }
       catch (cleanup) {
         if (!failure) throw cleanup;
-        const describe = (reason: unknown) => reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "원인을 확인하지 못했습니다.";
+        const describe = (reason: unknown) => reason instanceof Error ? reason.message : typeof reason === "string" ? reason : "원인을 확인하지 못했어요.";
         throw new AggregateError([failure.reason, cleanup], `${describe(failure.reason)}\n로그인 정리 실패: ${describe(cleanup)}`);
       }
     }
@@ -636,7 +636,7 @@ export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBoo
   signal?.throwIfAborted();
   if (!payload.person || payload.person.person_id !== session.person.person_id || !Array.isArray(payload.servers)) throw new Error("서버 목록 응답이 올바르지 않습니다.");
   const current = loadCentralSession();
-  if (current?.token !== session.token) throw new CentralAuthError("로그인 상태가 바뀌었습니다. 다시 로그인해 주세요.");
+  if (current?.token !== session.token) throw new CentralAuthError("로그인 상태가 바뀌었어요. 다시 로그인해 주세요.");
   localStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, person: payload.person }));
   saveCentralDirectoryCache(payload.person.person_id, payload.servers);
   return payload;
@@ -671,7 +671,7 @@ export async function previewCentralMember(request: MemberTargetRequest, signal?
 
 export async function openCentralOwnedServer(server: CentralServer): Promise<void> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
   if (
     server.relation !== "owner" ||
     !server.endpoint ||
@@ -738,7 +738,7 @@ async function updateLocalRegistrationEpoch(serverId: string, epoch: string | nu
 
 export async function registerLocalServer(deviceToken: string, name?: string): Promise<void> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
   for (let attempt = 0; attempt < 2; attempt++) {
     const registrationRequest = {
       method: "POST", cache: "no-store",
@@ -809,15 +809,15 @@ export function isCentralAuthenticationError(error: unknown): boolean {
 
 export async function renameCentralServer(server: CentralServerDisplay, name: string | null): Promise<void> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
-  if (server.relation !== "owner") throw new Error("서버 소유자만 이름을 바꿀 수 있습니다.");
+  if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
+  if (server.relation !== "owner") throw new Error("서버 소유자만 이름을 바꿀 수 있어요.");
   await signedRequest(session, `/v1/servers/${encodeURIComponent(server.server_id)}/name`, "POST", {
     registration_epoch: server.registration_epoch,
     ...(name === null ? { reset_default: true } : { name }),
     expected_name: server.alias || server.server_id,
     expected_name_is_default: server.name_is_default,
   });
-  if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었습니다. 다시 확인해 주세요.");
+  if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었어요. 다시 확인해 주세요.");
 }
 
 const SERVER_ICON_REFERENCE = /^\/v1\/servers\/[^/?#]+\/icon\/[^/?#]+\.png$/;
@@ -829,7 +829,7 @@ const SERVER_ICON_REFERENCE = /^\/v1\/servers\/[^/?#]+\/icon\/[^/?#]+\.png$/;
  */
 export async function fetchCentralServerIcon(reference: string): Promise<Blob> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
   if (!SERVER_ICON_REFERENCE.test(reference)) throw new Error("서버 아이콘 주소가 올바르지 않습니다.");
   const response = await signedFetch(session, reference, "GET");
   if (!response.ok) await responsePayload<never>(response);
@@ -848,14 +848,14 @@ async function pngDataUrl(file: File): Promise<string> {
 /** Sets (512x512 PNG) or removes (null) a server icon; returns the new reference. */
 export async function setCentralServerIcon(server: CentralServerDisplay, icon: File | null): Promise<string> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
-  if (server.relation !== "owner") throw new Error("서버 소유자만 아이콘을 바꿀 수 있습니다.");
+  if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
+  if (server.relation !== "owner") throw new Error("서버 소유자만 아이콘을 바꿀 수 있어요.");
   const result = await signedRequest<{ icon: string }>(
     session,
     `/v1/servers/${encodeURIComponent(server.server_id)}/icon`,
     "POST",
     { registration_epoch: server.registration_epoch, icon: icon ? await pngDataUrl(icon) : "", expected_icon: server.icon || "" }
   );
-  if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었습니다. 다시 확인해 주세요.");
+  if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었어요. 다시 확인해 주세요.");
   return String(result.icon || "");
 }

@@ -171,7 +171,7 @@ export function useRoomAppearanceAssets({
           });
         } catch (error) {
           nextStaticErrors[roomKey] =
-            error instanceof Error ? error.message : "방 외형 자산 참조가 올바르지 않습니다.";
+            error instanceof Error ? error.message : "방 외형 자산 참조가 올바르지 않아요.";
         }
       }
     }
@@ -240,7 +240,7 @@ export function useRoomAppearanceAssets({
           setRequestErrors((errors) => ({
             ...errors,
             [key]:
-              error instanceof Error ? error.message : "방 외형 자산을 읽을 수 없습니다.",
+              error instanceof Error ? error.message : "방 외형 자산을 읽을 수 없어요.",
           }));
         });
     }

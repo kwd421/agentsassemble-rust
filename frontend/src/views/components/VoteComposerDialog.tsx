@@ -129,7 +129,7 @@ export default function VoteComposerDialog({
       new Set(trimmedOptions.map((option) => option.toLocaleLowerCase())).size !==
       trimmedOptions.length
     ) {
-      setError("선택지 이름은 서로 달라야 합니다.");
+      setError("선택지 이름은 서로 달라야 해요.");
       return;
     }
     if (
@@ -139,7 +139,7 @@ export default function VoteComposerDialog({
         durationMinutes > MAX_DURATION_MINUTES)
     ) {
       setError(
-        `투표 기간은 ${MIN_DURATION_MINUTES}분에서 ${MAX_DURATION_MINUTES}분 사이여야 합니다.`
+        `투표 기간은 ${MIN_DURATION_MINUTES}분에서 ${MAX_DURATION_MINUTES}분 사이여야 해요.`
       );
       return;
     }
@@ -157,7 +157,7 @@ export default function VoteComposerDialog({
       setError(
         errorValue instanceof Error
           ? errorValue.message
-          : "투표를 만들지 못했습니다."
+          : "투표를 만들지 못했어요."
       );
       setBusy(false);
     }
@@ -279,8 +279,8 @@ export default function VoteComposerDialog({
               className="text-[12px] font-medium text-text-muted"
             >
               {noDeadline
-                ? "투표를 만든 사람이나 방 관리자/호스트가 직접 종료할 때까지 열립니다."
-                : "설정한 시간이 지나면 서버가 새 투표를 받지 않습니다."}
+                ? "투표를 만든 사람이나 방 관리자/호스트가 직접 종료할 때까지 열려요."
+                : "설정한 시간이 지나면 서버가 새 투표를 받지 않아요."}
             </span>
           </div>
 

@@ -152,7 +152,7 @@ export default function MemberList({
         await onRoleChange(memberId, role);
       } catch (error) {
         setRoleChangeError(
-          error instanceof Error ? error.message : "역할을 변경하지 못했습니다."
+          error instanceof Error ? error.message : "역할을 변경하지 못했어요."
         );
       }
       return;
@@ -199,7 +199,7 @@ export default function MemberList({
       <div className="min-h-0 flex-1 overflow-y-auto px-2 py-3 chat-scroll">
         {agents.length === 0 && members.length === 0 && (
           <p className="mb-2 px-2 text-[13px] text-text-muted preserve-words">
-            {roomName}에는 아직 멤버가 없습니다.
+            {roomName}에는 아직 멤버가 없어요.
           </p>
         )}
         {ownerGroups.map((group) => {

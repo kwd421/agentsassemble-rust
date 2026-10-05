@@ -13,7 +13,7 @@ export const COMPOSER_COMMANDS: ComposerCommand[] = [
     id: "vote",
     command: "/vote",
     label: "투표 만들기",
-    description: "질문, 선택지, 투표 시간을 설정합니다.",
+    description: "질문, 선택지, 투표 시간을 설정해요.",
   },
 ];
 

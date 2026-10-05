@@ -41,7 +41,7 @@ export type RoomGuestSession = {
 
 const ROOM_GUEST_SESSION_STORAGE_KEY = "agentsassemble.roomGuestSession.v1";
 const ROOM_GUEST_SESSION_STORAGE_UNAVAILABLE =
-  "방 세션을 브라우저에 영구 저장할 수 없습니다. 저장 공간 또는 사이트 설정을 확인한 뒤 다시 시도해 주세요.";
+  "방 세션을 브라우저에 영구 저장할 수 없어요. 저장 공간 또는 사이트 설정을 확인한 뒤 다시 시도해 주세요.";
 
 function cleanText(value: unknown, limit: number): string {
   return String(value || "")

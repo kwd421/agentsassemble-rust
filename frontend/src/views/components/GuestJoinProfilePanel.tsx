@@ -56,11 +56,11 @@ export default function GuestJoinProfilePanel({
     setUploadStatus("프로필 사진 준비 중...");
     try {
       if (file.type !== "image/png" || file.size > 1_400_000) {
-        throw new Error("프로필 사진이 너무 큽니다.");
+        throw new Error("프로필 사진이 너무 커요.");
       }
       onAvatarImageChange(`data:image/png;base64,${await fileToBase64(file)}`);
       setCropFile(null);
-      setUploadStatus("입장할 때 사진이 저장됩니다.");
+      setUploadStatus("입장할 때 사진이 저장돼요.");
     } catch (error) {
       setUploadStatus(error instanceof Error ? error.message : "프로필 사진 준비 실패");
     } finally {

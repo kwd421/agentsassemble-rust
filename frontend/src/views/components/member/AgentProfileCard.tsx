@@ -72,7 +72,7 @@ export default function AgentProfileCard({ session, avatarImage, detail, onClose
     uploadRef.current = controller;
     try {
       if (photo) {
-        if (!onAvatarUpdate) throw new Error("사진 변경을 사용할 수 없습니다.");
+        if (!onAvatarUpdate) throw new Error("사진 변경을 사용할 수 없어요.");
         await onAvatarUpdate(session, photo, name, controller.signal);
       } else {
         await onSave(session, { display_name: name, ...(clearPhoto ? { avatar_image_url: "" } : {}) });

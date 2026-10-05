@@ -121,7 +121,7 @@ describe("AgentPersonaPicker", () => {
     );
 
     expect((await screen.findByRole("alert")).textContent).toContain(
-      "봇카드 썸네일을 불러오지 못했습니다."
+      "봇카드 썸네일을 불러오지 못했어요."
     );
   });
 

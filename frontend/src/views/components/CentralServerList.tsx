@@ -82,7 +82,7 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
       setIconFile(null); setIconTarget(null); setIconStatus("");
       await onRefresh();
     } catch (reason) {
-      const message = reason instanceof Error ? reason.message : "서버 아이콘을 저장하지 못했습니다.";
+      const message = reason instanceof Error ? reason.message : "서버 아이콘을 저장하지 못했어요.";
       if (icon) setIconStatus(message); else setError(message);
     } finally { operation.current = false; setSaving(false); }
   }
@@ -102,7 +102,7 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
       setEditingId(null);
       await onRefresh();
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "서버 이름을 저장하지 못했습니다.");
+      setError(reason instanceof Error ? reason.message : "서버 이름을 저장하지 못했어요.");
     } finally { operation.current = false; setSaving(false); }
   }
 

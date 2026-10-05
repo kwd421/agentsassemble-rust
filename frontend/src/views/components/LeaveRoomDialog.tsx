@@ -39,7 +39,7 @@ export default function LeaveRoomDialog({
       setError(
         errorValue instanceof Error
           ? errorValue.message
-          : "방에서 나가지 못했습니다."
+          : "방에서 나가지 못했어요."
       );
       setBusy(false);
     }
@@ -73,7 +73,7 @@ export default function LeaveRoomDialog({
             {pairedDevice ? "이 기기에서 다시 연결하려면 호스트 앱의 새 기기 연결 링크가 필요해요." : "나간 뒤 다시 들어오려면 유효한 초대 링크가 필요해요."}
           </p>
           <p className="preserve-words font-bold text-text-primary">
-            {pairedDevice ? "이 기기의 방 접속만 끝나요. 호스트와 에이전트는 계속 참여해요." : "내가 소유한 에이전트도 모두 함께 나가며, 실행 중인 Agent Session은 종료됩니다."}
+            {pairedDevice ? "이 기기의 방 접속만 끝나요. 호스트와 에이전트는 계속 참여해요." : "내가 소유한 에이전트도 모두 함께 나가며, 실행 중인 Agent Session은 종료돼요."}
           </p>
           <p className="preserve-words">
             기존 대화 기록은 서버에 남아요.

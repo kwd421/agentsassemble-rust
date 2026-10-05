@@ -183,7 +183,7 @@ export default function StartupIdentityGate({
 
   const finishCentralStartup = useCallback(async () => {
     const result = await refreshCentral();
-    if (!result.person) throw result.error || new Error("로그인이 필요합니다. 다시 로그인해 주세요.");
+    if (!result.person) throw result.error || new Error("로그인이 필요해요. 다시 로그인해 주세요.");
     setScreen("servers"); setChecking(false);
   }, [refreshCentral]);
 
@@ -191,7 +191,7 @@ export default function StartupIdentityGate({
     if (screen !== "servers" || !directory) return;
     if (directory.status === "authentication-required") {
       setScreen("choice");
-      setError("로그인이 만료됐습니다. 다시 로그인해 주세요.");
+      setError("로그인이 만료됐어요. 다시 로그인해 주세요.");
     } else if (directory.status === "error") {
       setError(failureMessage(directory.error, "서버 목록을 확인하지 못했어요."));
     }
@@ -213,7 +213,7 @@ export default function StartupIdentityGate({
         if (webEntry) throw new Error("서버를 실행하려면 이 기기의 앱을 열어 주세요.");
         // Local authority is touched only after the explicit hosting choice.
         const current = await refreshCentral();
-        if (!current.person) throw current.error || new Error("로그인이 필요합니다. 다시 로그인해 주세요.");
+        if (!current.person) throw current.error || new Error("로그인이 필요해요. 다시 로그인해 주세요.");
         if (current.status === "central-unconfirmed") {
           // Cached identity is presentation only; never initialize a new operator from it.
           await enterApplication(await requestDesktopBootstrapStatus());
@@ -226,7 +226,7 @@ export default function StartupIdentityGate({
       }
     } catch (reason) {
       setChecking(false);
-      setError(failureMessage(reason, "서버를 열지 못했습니다."));
+      setError(failureMessage(reason, "서버를 열지 못했어요."));
     } finally {
       setConnectingServerId(""); setBusy(false);
     }
@@ -239,7 +239,7 @@ export default function StartupIdentityGate({
       setLocalHostError("");
     } catch (reason) {
       setLocalHost(null);
-      setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했습니다."));
+      setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했어요."));
     }
   }
 
@@ -247,7 +247,7 @@ export default function StartupIdentityGate({
     if (busy) return;
     setBusy(true); setError("");
     try { await refreshLocalHost(); await finishCentralStartup(); }
-    catch (reason) { setError(failureMessage(reason, "서버 목록을 불러오지 못했습니다.")); }
+    catch (reason) { setError(failureMessage(reason, "서버 목록을 불러오지 못했어요.")); }
     finally { setBusy(false); }
   }
 
@@ -257,7 +257,7 @@ export default function StartupIdentityGate({
     try {
       await logoutCentral();
       setScreen("choice");
-    } catch (reason) { setError(failureMessage(reason, "로그아웃하지 못했습니다.")); }
+    } catch (reason) { setError(failureMessage(reason, "로그아웃하지 못했어요.")); }
     finally { setBusy(false); }
   }
 
@@ -267,7 +267,7 @@ export default function StartupIdentityGate({
     try {
       await finishCentralStartup();
       clearPendingCentralRecoveryCode();
-    } catch (reason) { setError(failureMessage(reason, "서버 목록을 불러오지 못했습니다.")); }
+    } catch (reason) { setError(failureMessage(reason, "서버 목록을 불러오지 못했어요.")); }
     finally { setBusy(false); }
   }
 
@@ -283,7 +283,7 @@ export default function StartupIdentityGate({
               const device = await requestDesktopHostDeviceInfo();
               if (active) { setLocalHost(device); setLocalHostError(""); }
             } catch (reason) {
-              if (active) setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했습니다."));
+              if (active) setLocalHostError(failureMessage(reason, "이 기기의 서버 정보를 확인하지 못했어요."));
             }
           }
         }
@@ -341,7 +341,7 @@ export default function StartupIdentityGate({
       } catch (reason) {
         if (isCentralAuthenticationError(reason)) {
           if (active) {
-            setError("로그인이 만료됐습니다. 다시 로그인해 주세요.");
+            setError("로그인이 만료됐어요. 다시 로그인해 주세요.");
             setChecking(false);
           }
           return;
@@ -378,7 +378,7 @@ export default function StartupIdentityGate({
         setCopied(false);
         setScreen("recovery-code");
       } else {
-        setError(failureMessage(reason, "게스트 신원을 만들지 못했습니다."));
+        setError(failureMessage(reason, "게스트 신원을 만들지 못했어요."));
       }
     } finally {
       setBusy(false);
@@ -404,7 +404,7 @@ export default function StartupIdentityGate({
         setCopied(false);
         setScreen("recovery-code");
       } else {
-        setError(failureMessage(reason, "게스트 신원을 복구하지 못했습니다."));
+        setError(failureMessage(reason, "게스트 신원을 복구하지 못했어요."));
       }
     } finally {
       setBusy(false);
@@ -432,8 +432,8 @@ export default function StartupIdentityGate({
           reason !== null &&
           "name" in reason &&
           reason.name === "AbortError"
-          ? "Google 로그인을 취소했습니다."
-          : failureMessage(reason, "Google 로그인을 완료하지 못했습니다.")
+          ? "Google 로그인을 취소했어요."
+          : failureMessage(reason, "Google 로그인을 완료하지 못했어요.")
       );
     } finally {
       if (googleAbortController.current === controller) {
@@ -448,7 +448,7 @@ export default function StartupIdentityGate({
       await navigator.clipboard.writeText(issuedRecoveryCode);
       setCopied(true);
     } catch {
-      setError("복사 권한이 거부됐습니다. 코드를 직접 선택해 복사해 주세요.");
+      setError("복사 권한이 거부됐어요. 코드를 직접 선택해 복사해 주세요.");
     }
   }
 
@@ -464,7 +464,7 @@ export default function StartupIdentityGate({
       );
       await enterApplication(localAuthority);
     } catch (reason) {
-      setError(failureMessage(reason, "로컬 프로필을 저장하지 못했습니다."));
+      setError(failureMessage(reason, "로컬 프로필을 저장하지 못했어요."));
     } finally {
       setBusy(false);
     }
@@ -543,10 +543,10 @@ export default function StartupIdentityGate({
           </h1>
           <p className="text-[13px] font-semibold leading-5 text-text-muted">
             {screen === "recovery-code"
-              ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요합니다. 로그인 서버에는 코드 원문을 저장하지 않아요."
+              ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요해요. 로그인 서버에는 코드 원문을 저장하지 않아요."
               : screen === "servers"
                 ? "호스트 컴퓨터가 켜져 있는 서버만 열 수 있어요."
-              : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용합니다. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남습니다."}
+              : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용해요. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남아요."}
           </p>
         </header>
 
@@ -594,7 +594,7 @@ export default function StartupIdentityGate({
                 setScreen("recover");
               }}
             >
-              이미 복구 코드가 있습니다
+              이미 복구 코드가 있어요
             </button>
           </div>
         )}
@@ -606,7 +606,7 @@ export default function StartupIdentityGate({
               <p className="text-[12px] font-semibold text-text-muted">{centralPerson?.display_name}님의 서버</p>
               <button type="button" className="grid h-11 w-11 place-items-center rounded-lg text-text-muted hover:bg-white/5 hover:text-text-primary disabled:opacity-50" aria-label="서버 목록 새로고침" title="새로고침" disabled={busy} onClick={() => void refreshServers()}><RefreshCw size={16} /></button>
             </div>
-            {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없습니다. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
+            {centralServers.length === 0 && <p className="text-[12px] text-text-muted">등록된 서버가 없어요. {webEntry ? "호스트 앱에서 같은 계정으로 서버를 열어 주세요." : localHost ? "아래 이 기기 항목에서 서버를 열어 주세요." : "이 기기의 서버 정보를 먼저 확인해 주세요."}</p>}
             {localHostError && <p role="alert" className="text-sm text-red-300">이 기기 · {localHostError} 서버 목록 새로고침으로 다시 확인해 주세요.</p>}
             <CentralServerList key={centralPerson?.person_id} servers={centralServers} liveServers={directory?.live?.servers || []} centralUnavailable={centralUnavailable} connectingServerId={connectingServerId} busy={busy} profileName={centralPerson?.display_name} localHost={localHost} onOpenLocal={!webEntry ? (name) => selectCentralServer(undefined, name) : undefined} onOpen={selectCentralServer} onRefresh={refreshServers} />
             <button type="button" className="mt-2 min-h-11 w-fit text-[13px] text-text-muted hover:text-text-primary hover:underline disabled:opacity-50" disabled={busy} onClick={() => void logout()}>로그아웃</button>
@@ -711,7 +711,7 @@ export default function StartupIdentityGate({
               {copied ? <Check size={16} /> : <Copy size={16} />} {copied ? "복사됨" : "복구 코드 복사"}
             </button>
             <p className="rounded-md bg-[#3a2526] p-3 text-[11px] font-bold leading-5 text-[#ffb4b5]">
-              이 코드를 잃으면 다른 기기에서 이 게스트 신원을 복구할 수 없습니다. 비밀번호 관리자나 안전한 오프라인 장소에 보관하세요. 복구 직후에는 이전 코드가 폐기됩니다.
+              이 코드를 잃으면 다른 기기에서 이 게스트 신원을 복구할 수 없어요. 비밀번호 관리자나 안전한 오프라인 장소에 보관하세요. 복구 직후에는 이전 코드가 폐기돼요.
             </p>
             <label className="flex items-start gap-2 text-[12px] font-bold leading-5 text-text-secondary">
               <input
@@ -720,7 +720,7 @@ export default function StartupIdentityGate({
                 checked={savedRecoveryCode}
                 onChange={(event) => setSavedRecoveryCode(event.currentTarget.checked)}
               />
-              복구 코드를 안전한 곳에 저장했습니다.
+              복구 코드를 안전한 곳에 저장했어요.
             </label>
             <button
               type="button"

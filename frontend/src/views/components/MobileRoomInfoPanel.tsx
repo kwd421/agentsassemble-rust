@@ -415,7 +415,7 @@ export default function MobileRoomInfoPanel({
         </div>
       </section>
       <p className="dc-mobile-info-topic preserve-words">
-        {room.topic || `${room.label} 안에서 사람과 AI가 함께 대화합니다.`}
+        {room.topic || `${room.label} 안에서 사람과 AI가 함께 대화해요.`}
       </p>
 
       <nav className="dc-mobile-info-tabs" style={{ flexShrink: 0 }} aria-label="채널 정보 탭">

@@ -494,14 +494,14 @@ export function useCanonicalRoom(options: UseCanonicalRoomOptions) {
       !socket ||
       !socketIsAccepted(socket)
     ) {
-      throw new Error("방 연결이 준비되지 않았습니다.");
+      throw new Error("방 연결이 준비되지 않았어요.");
     }
     return socket;
   }, [projectionIsCurrent, socket, socketIsAccepted]);
 
   const loadHistory = useCallback(
     async (beforeSeq: number) => {
-      if (!roomId) throw new Error("방 연결이 준비되지 않았습니다.");
+      if (!roomId) throw new Error("방 연결이 준비되지 않았어요.");
       const operationSocket = requireCurrentProjectionSocket();
       let cursor = beforeSeq;
       let hasMoreBefore = true;

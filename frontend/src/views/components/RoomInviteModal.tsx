@@ -476,7 +476,7 @@ export default function RoomInviteModal({
           <PublicAccessConfirmation onCancel={() => setPendingPublicAction(null)}>
               <h3 id="public-access-confirm-title">외부 접속을 열까요?</h3>
               <p>
-                이 컴퓨터의 서버에 임시 공개 주소를 연결한 뒤 사람 초대 링크를 만듭니다. 링크를 가진 사람만 참가할 수 있습니다.
+                이 컴퓨터의 서버에 임시 공개 주소를 연결한 뒤 사람 초대 링크를 만들어요. 링크를 가진 사람만 참가할 수 있어요.
               </p>
               <div className="dc-invite-confirm-actions">
                 <button

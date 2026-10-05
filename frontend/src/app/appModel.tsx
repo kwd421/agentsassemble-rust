@@ -56,7 +56,7 @@ export const CHANNEL_SECTIONS: Array<{
 }> = [{ id: "conversation", label: "채팅 채널" }];
 
 const CHANNEL_NOTIFICATION_LABELS: Record<ChannelNotificationSetting, string> = {
-  default: "서버 기본 알림",
+  default: "방 기본 알림",
   all: "모든 메시지 알림",
   mentions: "@멘션만 알림",
   mute: "알림 끔",
@@ -78,9 +78,9 @@ export function channelNotificationSummary(setting?: ChannelSettings): string {
 }
 
 export function channelLastReadSummary(setting?: ChannelSettings): string {
-  if (!setting?.lastReadAt) return "아직 이 채널을 읽음으로 표시하지 않았습니다.";
+  if (!setting?.lastReadAt) return "아직 이 채널을 읽음으로 표시하지 않았어요.";
   if (setting.lastReadAt.startsWith("seq:")) {
-    return "이 채널의 읽음 위치가 기기 간 동기화됩니다.";
+    return "이 채널의 읽음 위치가 기기 간 동기화돼요.";
   }
   try {
     const readAt = new Date(setting.lastReadAt).toLocaleString("ko-KR", {
@@ -89,7 +89,7 @@ export function channelLastReadSummary(setting?: ChannelSettings): string {
     });
     return `마지막 읽음 표시: ${readAt}`;
   } catch {
-    return "마지막 읽음 표시 시간이 올바르지 않습니다.";
+    return "마지막 읽음 표시 시간이 올바르지 않아요.";
   }
 }
 

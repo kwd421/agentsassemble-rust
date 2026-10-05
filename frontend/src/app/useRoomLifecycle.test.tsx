@@ -63,6 +63,6 @@ describe("room lifecycle request ownership", () => {
     await waitFor(() => expect(result.current.pending).toBeNull());
     expect(vi.mocked(changeRoomLifecycle).mock.calls.at(-1)?.[0]).toEqual(deletion);
     expect(vi.mocked(changeRoomLifecycle).mock.calls.at(-1)?.[2]).toEqual(transport);
-    expect(result.current.notice).toBe("방이 삭제됐습니다.");
+    expect(result.current.notice).toBe("방이 삭제됐어요.");
   });
 });

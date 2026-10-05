@@ -81,7 +81,7 @@ describe("LobbyComposer", () => {
     fireEvent.click(screen.getByLabelText("채팅 메시지 보내기"));
 
     expect(
-      await screen.findByText("방 연결이 준비되지 않았습니다. 연결된 뒤 다시 보내 주세요.")
+      await screen.findByText("방 연결이 준비되지 않았어요. 연결된 뒤 다시 보내 주세요.")
     ).toBeTruthy();
     await waitFor(() => expect(onPosted).not.toHaveBeenCalled());
   });
@@ -455,7 +455,7 @@ describe("LobbyComposer", () => {
         onPosted={vi.fn()}
         postingMode="guest"
         roomSessionToken="aas1.read-only-session"
-        disabledReason="읽기 전용 초대입니다."
+        disabledReason="읽기 전용 초대예요."
       />
     );
 

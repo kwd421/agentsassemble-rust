@@ -272,7 +272,7 @@ describe("useCanonicalRoom projection isolation", () => {
           },
         },
       });
-      await expect(pendingHostCommand).rejects.toThrow("방 연결이 준비되지 않았습니다.");
+      await expect(pendingHostCommand).rejects.toThrow("방 연결이 준비되지 않았어요.");
     });
 
     expect(hook.result.current.capabilities).toEqual({ "message.send": true });

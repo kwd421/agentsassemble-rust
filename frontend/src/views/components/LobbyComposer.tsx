@@ -93,7 +93,7 @@ const COMPOSER_ACCESSORIES: ComposerAccessory[] = [
     id: "apps",
     label: "앱",
     title: "앱",
-    notice: "앱 명령은 외부 Discord로 전송하지 않습니다. AgentsAssemble 로컬 기능만 이 방에서 다룹니다.",
+    notice: "앱 명령은 외부 Discord로 전송하지 않아요. AgentsAssemble 로컬 기능만 이 방에서 다뤄요.",
     insertText: "/",
     icon: Sparkles,
   },
@@ -386,7 +386,7 @@ export default function LobbyComposer({
     setError("");
     try {
       if (postingMode === "guest" && !roomSessionToken) {
-        throw new Error("메시지를 보내려면 유효한 초대 세션이 필요합니다.");
+        throw new Error("메시지를 보내려면 유효한 초대 세션이 필요해요.");
       }
       // "/vote 질문 | 옵션1 | 옵션2" opens a poll card instead of a message.
       const voteCommand = parseVoteCommand(trimmed);
@@ -407,7 +407,7 @@ export default function LobbyComposer({
             ? await roomSocket.say(sayRequest)
             : await Promise.reject(
                 new RoomSocketSayError(
-                  "방 연결이 준비되지 않았습니다. 연결된 뒤 다시 보내 주세요.",
+                  "방 연결이 준비되지 않았어요. 연결된 뒤 다시 보내 주세요.",
                   "socket_not_ready"
                 )
               );
@@ -446,7 +446,7 @@ export default function LobbyComposer({
 
   async function submitVote(value: VoteComposerValue) {
     if (disabled || busy || uploading) {
-      throw new Error("지금은 투표를 만들 수 없습니다.");
+      throw new Error("지금은 투표를 만들 수 없어요.");
     }
     const key = JSON.stringify([meetingId, value, pendingAttachments]);
     if (voteRetry.current?.key !== key) voteRetry.current = null;
@@ -454,11 +454,11 @@ export default function LobbyComposer({
     setError("");
     try {
       if (postingMode === "guest" && !roomSessionToken) {
-        throw new Error("투표를 만들려면 유효한 초대 세션이 필요합니다.");
+        throw new Error("투표를 만들려면 유효한 초대 세션이 필요해요.");
       }
       if (!roomSocket?.ready()) {
         throw new RoomSocketSayError(
-          "방 연결이 준비되지 않았습니다. 연결된 뒤 다시 보내 주세요.",
+          "방 연결이 준비되지 않았어요. 연결된 뒤 다시 보내 주세요.",
           "socket_not_ready"
         );
       }

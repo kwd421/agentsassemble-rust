@@ -131,7 +131,7 @@ export default function UserPanel({
         setProfileError(
           error instanceof Error && error.message
             ? error.message
-            : "프로필을 불러오지 못했습니다."
+            : "프로필을 불러오지 못했어요."
         );
       }
     });
@@ -263,7 +263,7 @@ export default function UserPanel({
         } catch (error) {
           if (profileScopeGeneration.current !== scopeGeneration) return "stale";
           const message =
-            error instanceof Error ? error.message : "프로필을 저장하지 못했습니다.";
+            error instanceof Error ? error.message : "프로필을 저장하지 못했어요.";
           const recoveryIntentGeneration = ++profileIntentGeneration.current;
           setProfileHydrated(false);
           setProfileError(message);
@@ -279,7 +279,7 @@ export default function UserPanel({
             const recoveryMessage =
               recoveryError instanceof Error && recoveryError.message
                 ? recoveryError.message
-                : "서버 프로필을 다시 확인하지 못했습니다.";
+                : "서버 프로필을 다시 확인하지 못했어요.";
             setProfileError(`${message} ${recoveryMessage}`);
           } finally {
             if (
@@ -347,7 +347,7 @@ export default function UserPanel({
       });
       if (result === "stale") return;
       if (result === "failed") {
-        setAvatarStatus("프로필 사진을 저장하지 못했습니다.");
+        setAvatarStatus("프로필 사진을 저장하지 못했어요.");
         return;
       }
       setAvatarCropFile(null);

@@ -58,7 +58,7 @@ class SessionSurfaceError extends Error {}
 class SessionCustodyError extends Error {}
 const SERVER_SURFACE_INVALID_MESSAGE = "방 서버의 제품 표면을 검증하지 못했습니다.";
 const INTENT_CLEANUP_RETRY_MESSAGE =
-  "입장 재시도 정보 정리를 완료하지 못했습니다. 브라우저 저장소 접근을 복구한 뒤 다시 시도하세요.";
+  "입장 재시도 정보 정리를 완료하지 못했어요. 브라우저 저장소 접근을 복구한 뒤 다시 시도하세요.";
 
 function roomSessionSurfaceKey(session: RoomGuestSession): string {
   return `${session.serverSurface.server_id}:${session.serverSurface.server_product_surface.digest}`;
@@ -341,7 +341,7 @@ export function useRoomAdmission({
         throw new SessionCustodyError(
           error instanceof Error
             ? error.message
-            : "방 세션을 브라우저에 영구 저장할 수 없습니다."
+            : "방 세션을 브라우저에 영구 저장할 수 없어요."
         );
       }
       rememberGuestProfile({
@@ -434,8 +434,8 @@ export function useRoomAdmission({
           message,
           retryable,
           status: retryable
-            ? `${message} 다시 시도할 수 있습니다.`
-            : `${message} 이 연결 링크는 사용할 수 없습니다. 호스트에게 새 링크를 요청하세요.`,
+            ? `${message} 다시 시도할 수 있어요.`
+            : `${message} 이 연결 링크는 사용할 수 없어요. 호스트에게 새 링크를 요청하세요.`,
         });
       });
     return attempt.cancel;
@@ -481,7 +481,7 @@ export function useRoomAdmission({
     pendingIntent.then((resolution) => {
         if (!attempt.isCurrent()) return null;
         if (resolution?.kind === "terminal") {
-          const message = "이 브라우저의 이전 입장 요청은 이미 종료되었습니다.";
+          const message = "이 브라우저의 이전 입장 요청은 이미 종료됐어요.";
           dispatchAdmission({
             type: "failed",
             operation: "preflight",
@@ -514,8 +514,8 @@ export function useRoomAdmission({
         if (!("room_id" in decision)) {
           const message =
             decision.status === "invite_expired"
-              ? "초대 링크가 만료되었습니다."
-              : "유효하지 않은 초대 링크입니다.";
+              ? "초대 링크가 만료됐어요."
+              : "유효하지 않은 초대 링크예요.";
           dispatchAdmission({
             type: "failed",
             operation: "preflight",
@@ -528,7 +528,7 @@ export function useRoomAdmission({
         }
         if (decision.status === "agent_client_required") {
           const message =
-            "이 링크는 에이전트 세션 전용입니다. 터미널에서 AgentsAssemble 참가 명령으로 연결하세요.";
+            "이 링크는 에이전트 세션 전용이에요. 터미널에서 AgentsAssemble 참가 명령으로 연결하세요.";
           dispatchAdmission({
             type: "failed",
             operation: "preflight",
@@ -543,7 +543,7 @@ export function useRoomAdmission({
         inviteRoomLabelRef.current = decision.room_label;
         if (decision.status === "existing_session" && guestSession) {
           if (guestSession.meetingId !== expectedInviteRoomIdRef.current) {
-            throw new Error("기존 세션이 초대가 가리키는 방과 일치하지 않습니다.");
+            throw new Error("기존 세션이 초대가 가리키는 방과 일치하지 않아요.");
           }
           const preservedSession = {
             ...guestSession,
@@ -580,7 +580,7 @@ export function useRoomAdmission({
           dispatchAdmission({ type: "profile_required" });
           return;
         }
-        const message = "현재 브라우저에 연결할 기존 방 세션이 없습니다.";
+        const message = "현재 브라우저에 연결할 기존 방 세션이 없어요.";
         dispatchAdmission({
           type: "failed",
           operation: "preflight",
@@ -629,7 +629,7 @@ export function useRoomAdmission({
     if (admissionState.kind !== "joining") return;
     const expectedRoomId = expectedInviteRoomIdRef.current;
     if (!expectedRoomId) {
-      const message = "초대가 가리키는 방을 확인할 수 없습니다.";
+      const message = "초대가 가리키는 방을 확인할 수 없어요.";
       dispatchAdmission({
         type: "failed",
         operation: "join",

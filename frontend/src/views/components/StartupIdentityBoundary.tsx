@@ -65,7 +65,7 @@ export default function StartupIdentityBoundary({
         error:
           error instanceof Error
             ? error.message
-            : "이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없습니다.",
+            : "이 브라우저에서는 안전한 입장 자격 증명을 사용할 수 없어요.",
       };
     }
   });
@@ -111,7 +111,7 @@ export default function StartupIdentityBoundary({
           aria-label="브라우저 신원 사용 불가"
         >
           <h1 className="text-2xl font-black text-text-primary">
-            안전한 브라우저 신원을 사용할 수 없습니다
+            안전한 브라우저 신원을 사용할 수 없어요
           </h1>
           <p
             role="alert"

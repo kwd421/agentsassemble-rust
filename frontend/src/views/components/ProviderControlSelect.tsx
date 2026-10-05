@@ -306,7 +306,7 @@ export default function ProviderControlSelect({
                 onScroll={modelDetails.hide}
               >
               {filteredOptions.length === 0 ? (
-                <p className="dc-agent-model-empty" role="status">조건에 맞는 모델이 없습니다.</p>
+                <p className="dc-agent-model-empty" role="status">조건에 맞는 모델이 없어요.</p>
               ) : activeOptionGroup
                 ? activeOptionGroup.options.map((option) => {
                     const selected = option.value === value;

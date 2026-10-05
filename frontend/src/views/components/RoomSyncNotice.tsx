@@ -8,18 +8,18 @@ type RoomSyncIssue = {
 
 function noticeMessage(category: string) {
   if (category === "room_directory_unconfirmed") {
-    return "저장된 방 목록을 서버 원본과 확인하고 있습니다.";
+    return "저장된 방 목록을 서버 원본과 확인하고 있어요.";
   }
   if (category === "room_directory_unavailable") {
-    return "서버의 방 목록을 확인하지 못했습니다. 연결 상태를 확인한 뒤 새로고침해 주세요.";
+    return "서버의 방 목록을 확인하지 못했어요. 연결 상태를 확인한 뒤 새로고침해 주세요.";
   }
   if (category === "authorization_failed") {
-    return "방 인증에 실패했습니다. 방에 다시 참여하거나 새 초대를 요청해 주세요.";
+    return "방 인증에 실패했어요. 방에 다시 참여하거나 새 초대를 요청해 주세요.";
   }
   if (category === "socket_connection_failed") {
-    return "방 서버에 연결하지 못했습니다. 연결을 다시 시도하고 있습니다.";
+    return "방 서버에 연결하지 못했어요. 연결을 다시 시도하고 있어요.";
   }
-  return "방 상태 불일치를 감지해 서버 원본으로 다시 동기화하고 있습니다.";
+  return "방 상태 불일치를 감지해 서버 원본으로 다시 동기화하고 있어요.";
 }
 
 export default function RoomSyncNotice({

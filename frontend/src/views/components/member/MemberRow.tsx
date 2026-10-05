@@ -133,7 +133,7 @@ export default function MemberRow({
           {entry.muted && (
             <span
               className="dc-member-muted-badge"
-              title={`${entry.displayName}은(는) 뮤트되어 발언할 수 없습니다`}
+              title={`${entry.displayName}은(는) 뮤트되어 발언할 수 없어요`}
               aria-label="뮤트됨"
             >
               <VolumeX size={11} />

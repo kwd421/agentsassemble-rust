@@ -54,7 +54,7 @@ export default function MessageMutationControls({
       await onEdit(draft);
       setMutation(null);
     } catch (reason) {
-      setError(reason instanceof Error ? reason.message : "메시지를 수정하지 못했습니다.");
+      setError(reason instanceof Error ? reason.message : "메시지를 수정하지 못했어요.");
     } finally {
       setBusy(false);
     }
@@ -69,7 +69,7 @@ export default function MessageMutationControls({
       setMutation(null);
     } catch (reason) {
       if (showDialogOnFailure) setMutation("delete");
-      setError(reason instanceof Error ? reason.message : "메시지를 삭제하지 못했습니다.");
+      setError(reason instanceof Error ? reason.message : "메시지를 삭제하지 못했어요.");
     } finally {
       setBusy(false);
     }
@@ -143,7 +143,7 @@ export default function MessageMutationControls({
             <header>
               <div>
                 <h2 id={titleId}>{mutation === "edit" ? "메시지 수정하기" : "메시지 삭제하기"}</h2>
-                <p>{mutation === "edit" ? "수정해도 에이전트를 다시 호출하지 않습니다." : "정말 이 메시지를 삭제할까요?"}</p>
+                <p>{mutation === "edit" ? "수정해도 에이전트를 다시 호출하지 않아요." : "정말 이 메시지를 삭제할까요?"}</p>
               </div>
               <button
                 type="button"
@@ -180,7 +180,7 @@ export default function MessageMutationControls({
 
             {mutation === "delete" && (
               <p className="dc-message-delete-hint">
-                참고: 데스크톱에서는 Shift를 누른 채 삭제를 선택하면 이 확인을 건너뜁니다.
+                참고: 데스크톱에서는 Shift를 누른 채 삭제를 선택하면 이 확인을 건너뛰어요.
               </p>
             )}
             {error && <p className="dc-channel-composer-error" role="alert">{error}</p>}

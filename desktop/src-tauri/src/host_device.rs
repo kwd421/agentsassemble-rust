@@ -48,7 +48,10 @@ pub(crate) async fn host_device_info(window: WebviewWindow) -> Result<HostDevice
         _ => {
             let _ = child.kill().await;
             let _ = child.wait().await;
-            Err("이 기기의 서버 정보를 확인하지 못했습니다. 기존 데이터와 실행 상태를 확인해 주세요.".to_owned())
+            Err(
+                "이 기기의 서버 정보를 확인하지 못했어요. 기존 데이터와 실행 상태를 확인해 주세요."
+                    .to_owned(),
+            )
         }
     }
 }

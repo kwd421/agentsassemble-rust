@@ -36,7 +36,7 @@ export default function VotePollCard({
 
   const refresh = useCallback(() => {
     if (!roomSocket?.ready()) {
-      setError("방 연결이 준비되지 않았습니다.");
+      setError("방 연결이 준비되지 않았어요.");
       return;
     }
     void roomSocket
@@ -46,7 +46,7 @@ export default function VotePollCard({
         setError("");
       })
       .catch((errorValue) => {
-        setError(errorValue instanceof Error ? errorValue.message : "투표 현황을 불러오지 못했습니다.");
+        setError(errorValue instanceof Error ? errorValue.message : "투표 현황을 불러오지 못했어요.");
       });
   }, [revision, roomSocket, voteId]);
 
@@ -77,7 +77,7 @@ export default function VotePollCard({
     setBusyOption(option);
     setError("");
     try {
-      if (!roomSocket?.ready()) throw new Error("방 연결이 준비되지 않았습니다.");
+      if (!roomSocket?.ready()) throw new Error("방 연결이 준비되지 않았어요.");
       await roomSocket.say({
         message: "",
         kind: option === myChoice ? "vote_withdraw" : "vote_cast",
@@ -96,7 +96,7 @@ export default function VotePollCard({
     setBusyOption("__close__");
     setError("");
     try {
-      if (!roomSocket?.ready()) throw new Error("방 연결이 준비되지 않았습니다.");
+      if (!roomSocket?.ready()) throw new Error("방 연결이 준비되지 않았어요.");
       await roomSocket.say({
         message: "",
         kind: "vote_close",
@@ -183,7 +183,7 @@ export default function VotePollCard({
         <span>총 {total}명 참여{summary?.created_by ? ` · ${summary.created_by} 시작` : ""}</span>
         <span className="dc-vote-card-hint">
           {ended
-            ? "투표가 마감되었습니다"
+            ? "투표가 마감됐어요"
             : canVote
               ? "선택지를 누르면 투표 · 내 선택을 다시 누르면 철회"
               : "읽기 전용 세션은 투표할 수 없어요"}

@@ -64,7 +64,7 @@ export function useRoomMessageSearch({
     }
     if (!authority) {
       setLoading(false);
-      setError("이 환경에서는 메시지 검색을 사용할 수 없습니다.");
+      setError("이 환경에서는 메시지 검색을 사용할 수 없어요.");
       return undefined;
     }
     setLoading(true);
@@ -90,7 +90,7 @@ export function useRoomMessageSearch({
           if (requestVersionRef.current !== version) return;
           setResults([]);
           setNextCursor("");
-          setError(reason instanceof Error ? reason.message : "메시지를 검색하지 못했습니다.");
+          setError(reason instanceof Error ? reason.message : "메시지를 검색하지 못했어요.");
         })
         .finally(() => {
           if (requestVersionRef.current === version) setLoading(false);
@@ -123,7 +123,7 @@ export function useRoomMessageSearch({
       setError("");
     } catch (reason) {
       if (requestVersionRef.current !== version) return;
-      setError(reason instanceof Error ? reason.message : "검색 결과를 더 불러오지 못했습니다.");
+      setError(reason instanceof Error ? reason.message : "검색 결과를 더 불러오지 못했어요.");
     } finally {
       if (requestVersionRef.current === version) setLoadingMore(false);
     }
@@ -131,7 +131,7 @@ export function useRoomMessageSearch({
 
   const readContext = useCallback(async (eventId: string, targetChannelId: string) => {
     if (!authority) {
-      throw new Error("이 환경에서는 메시지 검색을 사용할 수 없습니다.");
+      throw new Error("이 환경에서는 메시지 검색을 사용할 수 없어요.");
     }
     const version = ++contextVersionRef.current;
     try {

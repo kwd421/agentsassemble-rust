@@ -256,7 +256,7 @@ async fn complete_page() -> Response {
             "done",
             DONE_MARK,
             "로그인 완료",
-            "AgentsAssemble 앱으로 돌아가 주세요. 이 창은 닫아도 됩니다.",
+            "AgentsAssemble 앱으로 돌아가 주세요. 이 창은 닫아도 돼요.",
         ))
         .into_response(),
     )

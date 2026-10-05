@@ -94,7 +94,7 @@ async fn entry(State(state): State<AppState>, request: Request) -> Response {
 }
 
 fn document_error(status: StatusCode) -> Response {
-    let mut response = (status, "AI 초대 안내를 표시할 수 없습니다.").into_response();
+    let mut response = (status, "AI 초대 안내를 표시할 수 없어요.").into_response();
     protect_document(&mut response);
     response
 }

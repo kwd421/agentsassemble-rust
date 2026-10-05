@@ -303,7 +303,7 @@ export function projectRoomEventsToTimeline(
       };
       if (projected.message_deleted) {
         projected.reply_to_event_id = undefined;
-        projected.message = "삭제된 메시지입니다";
+        projected.message = "삭제된 메시지예요";
         projected.attachments = [];
         if (messageKind === "vote") deletedVoteIds.add(String(event.id));
       }
@@ -344,7 +344,7 @@ export function projectRoomEventsToTimeline(
       timeline[targetIndex] = deleted
         ? {
             ...existing,
-            message: "삭제된 메시지입니다",
+            message: "삭제된 메시지예요",
             attachments: [],
             message_deleted: true,
             reply_to_event_id: undefined,

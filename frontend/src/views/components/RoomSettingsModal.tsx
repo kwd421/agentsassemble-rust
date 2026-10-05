@@ -103,23 +103,23 @@ export default function RoomSettingsModal({
   const preferenceSettingsReady = preferenceStatus === "ready";
   const routingSettingsMessage =
     settingsStatus === "loading"
-      ? "서버 대화 설정을 불러오는 중입니다."
+      ? "방 대화 설정을 불러오는 중이에요."
       : settingsStatus === "saving"
-        ? "서버 대화 설정을 저장하는 중입니다."
+        ? "방 대화 설정을 저장하는 중이에요."
         : settingsStatus === "stale"
-          ? "서버 설정 동기화에 실패했습니다. 확인된 이전 값은 읽기 전용으로 표시됩니다."
+          ? "방 설정 동기화에 실패했어요. 확인된 이전 값은 읽기 전용으로 표시돼요."
           : settingsStatus === "error"
-            ? "서버 대화 설정을 확인할 수 없어 변경할 수 없습니다."
+            ? "방 대화 설정을 확인할 수 없어 변경할 수 없어요."
             : "";
   const preferenceSettingsMessage =
     preferenceStatus === "loading"
-      ? "내 알림 설정을 불러오는 중입니다."
+      ? "내 알림 설정을 불러오는 중이에요."
       : preferenceStatus === "saving"
-        ? "내 알림 설정을 저장하는 중입니다."
+        ? "내 알림 설정을 저장하는 중이에요."
         : preferenceStatus === "stale"
-          ? "내 알림 설정 저장에 실패해 확인된 이전 값으로 되돌렸습니다."
+          ? "내 알림 설정 저장에 실패해 확인된 이전 값으로 되돌렸어요."
           : preferenceStatus === "error"
-            ? "내 알림 설정을 확인할 수 없어 변경할 수 없습니다."
+            ? "내 알림 설정을 확인할 수 없어 변경할 수 없어요."
             : "";
 
   useEffect(() => {

@@ -46,7 +46,7 @@ function ambiguousFailure(error: unknown): boolean {
 }
 
 function errorMessage(error: unknown) {
-  return error instanceof Error ? error.message : "방을 만들지 못했습니다.";
+  return error instanceof Error ? error.message : "방을 만들지 못했어요.";
 }
 
 export function useRoomCreation({
@@ -67,7 +67,7 @@ export function useRoomCreation({
       initialContinuity: RoomDirectoryContinuity
     ): Promise<SubmitResult> => {
       let continuity = initialContinuity;
-      let lastError: unknown = new Error("방 생성 응답을 확인하지 못했습니다.");
+      let lastError: unknown = new Error("방 생성 응답을 확인하지 못했어요.");
       for (let attempt = 0; attempt < 2; attempt += 1) {
         try {
           validateRoomDirectoryContinuity(continuity);

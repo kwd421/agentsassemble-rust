@@ -198,7 +198,7 @@ export function useRoomInviteController({
       setPublicAccessTransition("idle");
       setPublicInviteStatus(null);
       setPublicAccessQuery("unavailable");
-      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있어요.");
       return;
     }
     const generation = beginIngressOperation();
@@ -206,7 +206,7 @@ export function useRoomInviteController({
     refreshPublicInviteState(generation)
       .catch((error) => {
         if (ingressOperationIsCurrent(generation)) {
-          setCopyStatus(error instanceof Error ? error.message : "공개 초대 상태를 불러오지 못했습니다.");
+          setCopyStatus(error instanceof Error ? error.message : "공개 초대 상태를 불러오지 못했어요.");
         }
       });
     return () => {
@@ -245,7 +245,7 @@ export function useRoomInviteController({
       return status;
     }
     if (!localOperatorEligible) {
-      throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+      throw new Error("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있어요.");
     }
     assertIngressOperation(generation);
     const status = await fetchPublicInviteStatus(() =>
@@ -356,7 +356,7 @@ export function useRoomInviteController({
 
   async function startTunnel() {
     if (!localOperatorEligible) {
-      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있어요.");
       return;
     }
     const generation = beginIngressOperation("starting");
@@ -375,7 +375,7 @@ export function useRoomInviteController({
       assertIngressOperation(generation);
       setCopyStatus(
         latest.public_url
-          ? "서버가 공개되었습니다. 이제 외부 초대 링크를 만들 수 있습니다."
+          ? "서버가 공개됐어요. 이제 외부 초대 링크를 만들 수 있어요."
           : PUBLIC_INGRESS_START_ERROR
       );
     } catch (error) {
@@ -390,7 +390,7 @@ export function useRoomInviteController({
 
   async function stopTunnel() {
     if (!localOperatorEligible) {
-      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있습니다.");
+      setCopyStatus("외부 접속 관리는 패키지 앱의 로컬 운영자만 사용할 수 있어요.");
       return;
     }
     const generation = beginIngressOperation("stopping");
@@ -402,7 +402,7 @@ export function useRoomInviteController({
       );
       assertIngressOperation(generation);
       setPublicInviteStatus(status);
-      setCopyStatus("외부 접속을 닫았습니다. 룸은 이 컴퓨터에서 계속 작동합니다.");
+      setCopyStatus("외부 접속을 닫았어요. 방은 이 컴퓨터에서 계속 작동해요.");
     } catch (error) {
       if (error === RETIRED_INGRESS_OPERATION) return;
       setCopyStatus(error instanceof Error ? error.message : "서버 비공개 전환 실패");

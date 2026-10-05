@@ -211,7 +211,7 @@ export default function LobbyView({
   );
 
   async function editMessage(event: LobbyEvent, content: string) {
-    if (!roomSocket?.ready()) throw new Error("방 연결이 준비되지 않았습니다.");
+    if (!roomSocket?.ready()) throw new Error("방 연결이 준비되지 않았어요.");
     await roomSocket.command("message.edit", {
       event_id: event.record_id || event.id,
       content,
@@ -219,7 +219,7 @@ export default function LobbyView({
   }
 
   async function deleteMessage(event: LobbyEvent) {
-    if (!roomSocket?.ready()) throw new Error("방 연결이 준비되지 않았습니다.");
+    if (!roomSocket?.ready()) throw new Error("방 연결이 준비되지 않았어요.");
     await roomSocket.command("message.delete", {
       event_id: event.record_id || event.id,
     });
@@ -279,7 +279,7 @@ export default function LobbyView({
             void navigateToSearchResult(result.event_id).catch((reason) => {
               setPendingMessageTarget("");
               messageSearch.setError(
-                reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했습니다."
+                reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했어요."
               );
             });
           },
@@ -365,7 +365,7 @@ export default function LobbyView({
       .catch((reason) => {
         setPendingMessageTarget("");
         messageSearch.setError(
-          reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했습니다."
+          reason instanceof Error ? reason.message : "검색한 메시지로 이동하지 못했어요."
         );
       })
       .finally(() => {
@@ -382,7 +382,7 @@ export default function LobbyView({
       (candidate) => candidate.record_id === pin.event_id || candidate.id === pin.event_id
     );
     if (!event) {
-      setPinsError("현재 불러온 기록에 없는 고정 메시지입니다.");
+      setPinsError("현재 불러온 기록에 없는 고정 메시지예요.");
       return;
     }
     jumpToEvent(event.id);
@@ -400,7 +400,7 @@ export default function LobbyView({
     pinsError,
     pinnedSummary: messagePinsAuthority
       ? undefined
-      : "이 환경에서는 로비 메시지 핀을 사용할 수 없습니다.",
+      : "이 환경에서는 로비 메시지 핀을 사용할 수 없어요.",
     onSelectPin: selectPin,
     onOpenPins: messagePinsAuthority ? () => void reloadPins() : undefined,
     onUnpin: canPostMessages && messagePinsAuthority
@@ -487,7 +487,7 @@ export default function LobbyView({
             <span className="min-w-0 truncate text-text-muted preserve-words">
               {canPostMessages
                 ? "초대받은 방의 대화에 참여하고 있어요."
-                : composerDisabledReason || "이 링크에서는 메시지를 보낼 수 없습니다"}
+                : composerDisabledReason || "이 링크에서는 메시지를 보낼 수 없어요"}
             </span>
           </div>
         </div>
@@ -504,7 +504,7 @@ export default function LobbyView({
             role="alert"
             className="sticky top-2 z-[2] mx-auto mb-2 flex w-fit items-center gap-3 rounded-md border border-error/40 bg-panel px-3 py-2 text-[12px] text-text-secondary shadow-lg"
           >
-            <span>이전 대화를 불러오지 못했습니다.</span>
+            <span>이전 대화를 불러오지 못했어요.</span>
             <button
               type="button"
               className="font-bold text-accent hover:underline"
@@ -535,7 +535,7 @@ export default function LobbyView({
         )}
         {loaded && hasMoreHistory && visibleEvents.length > 0 && (
           <p className="px-4 pb-2 text-center text-[12px] text-text-muted">
-            {loadingOlder ? "이전 대화 불러오는 중..." : "위로 스크롤하면 이전 대화를 불러옵니다"}
+            {loadingOlder ? "이전 대화 불러오는 중..." : "위로 스크롤하면 이전 대화를 불러와요"}
           </p>
         )}
         {!loaded ? (
@@ -544,7 +544,7 @@ export default function LobbyView({
           // The channel intro already invites the first message; repeat it only without one.
           historyWindowActive || hasMoreHistory ? (
             <p className="px-4 text-[13px] text-text-muted preserve-words">
-              아직 채팅 메시지가 없습니다. 첫 메시지를 남겨 보세요.
+              아직 채팅 메시지가 없어요. 첫 메시지를 남겨 보세요.
             </p>
           ) : null
         ) : (
@@ -595,7 +595,7 @@ export default function LobbyView({
                   if (!id) return;
                   const source = visibleEvents.find((item) => (item.record_id || item.id) === id);
                   if (source) { suppressAutomaticHistoryLoad(); jumpToEvent(source.id); }
-                  else void navigateToSearchResult(id).catch((error: unknown) => messageSearch.setError(error instanceof Error ? error.message : "답장 원문을 열지 못했습니다."));
+                  else void navigateToSearchResult(id).catch((error: unknown) => messageSearch.setError(error instanceof Error ? error.message : "답장 원문을 열지 못했어요."));
                 }}
                 providerKind={
                   event.provider_kind ||

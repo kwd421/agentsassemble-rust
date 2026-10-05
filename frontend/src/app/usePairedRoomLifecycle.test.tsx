@@ -81,7 +81,7 @@ it("retries only the exact uncertain intent and distinguishes accepted deletion 
   await act(async () => response.reject(new ApiError(503, "accepted", "room_deletion_pending", "unresolved")));
   expect(hook.result.current.notice).toContain("삭제 요청이 접수");
   expect(hook.result.current.notice).toContain("원래 앱");
-  expect(hook.result.current.notice).not.toBe("방이 삭제됐습니다.");
+  expect(hook.result.current.notice).not.toBe("방이 삭제됐어요.");
   expect(hook.result.current.pending).toBeNull();
   expect(hook.result.current.busy).toBe(false);
   act(() => hook.result.current.retry());

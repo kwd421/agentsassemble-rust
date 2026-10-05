@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 공용 app/web·호스트 문구: 사용자 표시 234곳 해요체·방/서버 용어 정리, 영향 frontend 773 통과; 푸시 전 make verify 1회는 desktop 문구 포맷에서 중단, 포맷·이름 동기화 상태 assertion 수정 후 실패 검사와 미실행 검사 완료(frontend 1,119/Rust 1,103/desktop 47, doc tests·architecture·format·Clippy·diff·artifact 통과); 서명·수동 검증·배포 없음.
+
 - 2026-10-06 서버 기본 이름/편집: 호스트 프로필+기기 모델, 중앙 기본 label 갱신·고정 별칭 보존·기본 복원·최초 열기 미리보기; 영향 frontend 39, Rust central 11/persistence 8/directory HTTP 6, TypeScript·server Clippy 통과, 중앙 이름/epoch/member preview 68 통과(경로 제거 mutation에서 실패 확인); 중앙 0013 로컬 검증만, 서명·수동 검증·배포 없음.
 
 - 2026-10-05 방 중심 참가 확인 (보안 리뷰 대상): 표시 전용 room_name fragment·정규화/80단위 제한·중앙 preview 서버/주소·기존 callback 상관관계를 유지했고 참가/fragment/admission 영향 테스트 50/50 통과; 서명·수동 검증·배포 없음.

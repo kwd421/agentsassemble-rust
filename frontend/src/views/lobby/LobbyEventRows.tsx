@@ -430,7 +430,7 @@ export function LobbyMessageRow({
           voteCard
         ) : event.message_deleted ? (
           <div className="text-[14px] italic leading-relaxed text-text-muted">
-            삭제된 메시지입니다
+            삭제된 메시지예요
           </div>
         ) : (
           <div className="text-[14px] leading-relaxed text-text-secondary preserve-words">

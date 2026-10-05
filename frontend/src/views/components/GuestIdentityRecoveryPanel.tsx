@@ -56,7 +56,7 @@ export default function GuestIdentityRecoveryPanel({
       setStatus("");
     } catch (error) {
       if (scope !== generation.current) return;
-      setStatus(error instanceof Error ? error.message : "신원을 복구하지 못했습니다.");
+      setStatus(error instanceof Error ? error.message : "신원을 복구하지 못했어요.");
     } finally {
       if (scope === generation.current) {
         inFlight.current = false;
@@ -85,11 +85,11 @@ export default function GuestIdentityRecoveryPanel({
           {recovered ? <Check size={24} /> : <KeyRound size={24} />}
         </span>
         <div>
-          <h1>{recovered ? "신원을 복구했습니다" : "기존 신원으로 돌아가기"}</h1>
+          <h1>{recovered ? "신원을 복구했어요" : "기존 신원으로 돌아가기"}</h1>
           <p>
             {recovered
-              ? `${recovered.display_name} 이름과 기존 방 멤버십을 이 기기에 연결했습니다.`
-              : "복구 코드는 기존 게스트 이름과 방 멤버십을 이 기기에 연결합니다."}
+              ? `${recovered.display_name} 이름과 기존 방 멤버십을 이 기기에 연결했어요.`
+              : "복구 코드는 기존 게스트 이름과 방 멤버십을 이 기기에 연결해요."}
           </p>
         </div>
 
@@ -108,7 +108,7 @@ export default function GuestIdentityRecoveryPanel({
         {recovered ? (
           <>
             <p className="dc-guest-recovery-warning">
-              이전 코드는 폐기됐습니다. 다음 복구에 쓸 새 코드를 지금 안전한 곳에 보관하세요.
+              이전 코드는 폐기됐어요. 다음 복구에 쓸 새 코드를 지금 안전한 곳에 보관하세요.
             </p>
             <div className="dc-guest-recovery-actions">
               <button style={{ minWidth: 44, minHeight: 44 }} type="button" onClick={() => void copyReplacementCode()}>

@@ -34,7 +34,7 @@ export function roomPostingState({
       canPost: false,
       transport: "blocked",
       sessionToken: cleanSessionToken,
-      disabledReason: "읽기 전용 초대입니다. 이 방은 보기만 가능합니다.",
+      disabledReason: "읽기 전용 초대예요. 이 방은 보기만 가능해요.",
     };
   }
   if (!cleanSessionToken) {
@@ -43,7 +43,7 @@ export function roomPostingState({
       canPost: false,
       transport: "blocked",
       sessionToken: "",
-      disabledReason: "메시지를 보내려면 유효한 초대 세션이 필요합니다.",
+      disabledReason: "메시지를 보내려면 유효한 초대 세션이 필요해요.",
     };
   }
   return {

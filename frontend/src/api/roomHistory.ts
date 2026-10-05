@@ -263,12 +263,12 @@ export function mergeLobbyEvents(
       if (!targetId || !target) continue;
       const replacement = event.flow_action === "message_deleted"
         ? target.message_deleted === true &&
-          target.message === "삭제된 메시지입니다" &&
+          target.message === "삭제된 메시지예요" &&
           target.attachments?.length === 0
           ? target
           : {
               ...target,
-              message: "삭제된 메시지입니다",
+              message: "삭제된 메시지예요",
               attachments: [],
               message_deleted: true,
             }

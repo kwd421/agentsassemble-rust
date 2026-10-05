@@ -24,7 +24,7 @@ describe("ChannelContextMenu preference authority", () => {
       />
     );
 
-    expect(screen.getByRole("alert").textContent).toContain("불러오지 못했습니다");
+    expect(screen.getByRole("alert").textContent).toContain("불러오지 못했어요");
     await userEvent.click(screen.getByRole("menuitem", { name: "읽음으로 표시하기" }));
     await userEvent.click(screen.getByRole("menuitemradio", { name: "모든 메시지" }));
     expect(onMarkRead).not.toHaveBeenCalled();

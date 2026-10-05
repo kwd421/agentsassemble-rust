@@ -147,7 +147,7 @@ describe("useCanonicalRoom", () => {
     );
 
     await expect(result.current.sendAgentControl(session(), "stop")).rejects.toThrow(
-      "방 연결이 준비되지 않았습니다."
+      "방 연결이 준비되지 않았어요."
     );
   });
 

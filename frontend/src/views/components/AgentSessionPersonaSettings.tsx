@@ -55,7 +55,7 @@ export default function AgentSessionPersonaSettings({
         <p className="preserve-words">
           {session.persona_card
             ? `현재 적용 · ${session.persona_card.display_name}`
-            : "현재 적용된 봇카드나 모듈이 없습니다."}
+            : "현재 적용된 봇카드나 모듈이 없어요."}
         </p>
         <button
           type="button"
@@ -73,7 +73,7 @@ export default function AgentSessionPersonaSettings({
       </div>
       {!canConfigure && (
         <p className="dc-member-session-status preserve-words">
-          세션을 중지하면 봇카드·모듈을 교체할 수 있습니다.
+          세션을 중지하면 봇카드·모듈을 교체할 수 있어요.
         </p>
       )}
     </div>

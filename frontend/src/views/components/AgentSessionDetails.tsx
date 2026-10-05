@@ -68,16 +68,16 @@ function sessionErrorMessage(session: RoomAgentSession) {
     return "앱이 갑자기 종료돼 이 세션이 실제로 끝났는지 확인하지 못했어요. 복구를 누르면 확인 후 정리해요.";
   }
   if (session.last_error_code === "provider_turn_recovery_required") {
-    return "Provider 응답 결과가 불확실해 런타임 복구가 필요합니다.";
+    return "Provider 응답 결과가 불확실해 런타임 복구가 필요해요.";
   }
   if (session.last_error_code === "quota_exhausted") {
-    return "Provider 할당량 또는 사용 가능 잔액이 소진되었습니다.";
+    return "Provider 할당량 또는 사용 가능 잔액이 소진됐어요.";
   }
   if (session.last_error_code === "provider_rate_limited") {
-    return "Provider 요청 속도 제한에 걸렸습니다. 할당량 소진으로 단정할 수는 없습니다.";
+    return "Provider 요청 속도 제한에 걸렸어요. 할당량 소진으로 단정할 수는 없어요.";
   }
   if (session.last_error_code === "runtime_profile_unsupported") {
-    return "저장된 실행 프로필은 현재 runtime에서 지원하지 않습니다. 현재 provider 설정으로 다시 구성하세요.";
+    return "저장된 실행 프로필은 현재 runtime에서 지원하지 않아요. 현재 provider 설정으로 다시 구성하세요.";
   }
   return session.last_error || "";
 }
@@ -270,7 +270,7 @@ export default function AgentSessionDetails({
             type="button"
             className="dc-member-session-button"
             data-variant={strandedRuntime ? undefined : "danger"}
-            title={strandedRuntime ? "남은 런타임이 정말 끝났는지 확인하고 세션을 정리합니다" : "세션 중지"}
+            title={strandedRuntime ? "남은 런타임이 정말 끝났는지 확인하고 세션을 정리해요" : "세션 중지"}
             disabled={!canStop || Boolean(pendingAction)}
             onClick={() => void runControl("stop")}
           >
@@ -350,12 +350,12 @@ export default function AgentSessionDetails({
           </button>
           <p className="preserve-words">
             {!canConfigure
-              ? "현재 세션이 실행 중이라 시작 프로필을 표시하고 있습니다. 변경하려면 세션을 중지하세요."
+              ? "현재 세션이 실행 중이라 시작 프로필을 표시하고 있어요. 변경하려면 세션을 중지하세요."
               : invalidRuntimeControl
                 ? invalidRuntimeValue
-                  ? `저장값: “${invalidRuntimeValue}”. 현재 선택 가능한 ${invalidRuntimeControl.label} 목록에 없습니다.`
+                  ? `저장값: “${invalidRuntimeValue}”. 현재 선택 가능한 ${invalidRuntimeControl.label} 목록에 없어요.`
                   : `${invalidRuntimeControl.label}을(를) 선택하세요.`
-                : `${runtimeSettingLabels}을 함께 저장합니다. 변경은 다음 세션 시작부터 적용됩니다.`}
+                : `${runtimeSettingLabels}을 함께 저장해요. 변경은 다음 세션 시작부터 적용돼요.`}
           </p>
           </div>
         </details>
