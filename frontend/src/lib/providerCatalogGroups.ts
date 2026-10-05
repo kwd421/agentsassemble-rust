@@ -26,7 +26,7 @@ export function projectProvidersByCatalogGroup(
   return Object.fromEntries(PROVIDER_GROUPS.map(({ id }) => [
     id,
     providers.filter((provider) => providerCatalogGroup(provider) === id)
-      .sort((a, b) => Number(b.startable) - Number(a.startable)),
+      .sort((a, b) => Number(b.available) - Number(a.available)),
   ])) as Record<ProviderCatalogGroup, NativeCliProviderAvailability[]>;
 }
 

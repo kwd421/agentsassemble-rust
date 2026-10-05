@@ -7,7 +7,9 @@ repository audit before further Agent Session work
 
 App/web `AgentCreateModal` shows all providers once under 구독 에이전트, API 키,
 내 컴퓨터, matching FriendsView labels. Preserve catalog order within availability
-tiers, with unavailable providers dimmed last and still selectable for setup. Mixed
+tiers based on `ProviderAvailability.available`, with unavailable providers dimmed
+last and still selectable for setup. Installed providers awaiting model discovery
+remain undimmed and retain catalog order even while `startable` is false. Mixed
 model groups stay in one provider; model labels show short group tags and selected
 model metadata owns permission copy and api/local persona visibility. Preserve full
 provider names, catalog_group and create payload contracts, retries and setup.

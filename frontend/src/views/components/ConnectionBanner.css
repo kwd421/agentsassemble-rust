@@ -9,3 +9,21 @@
   line-height: 20px;
   text-align: center;
 }
+
+.dc-app-layout {
+  display: flex;
+  flex-direction: column;
+  height: 100dvh;
+  overflow: hidden;
+}
+
+.dc-app-layout > .dc-connection-banner {
+  position: static;
+  flex-shrink: 0;
+}
+
+.dc-app-layout > .dc-shell {
+  flex: 1;
+  min-height: 0;
+  height: auto;
+}

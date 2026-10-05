@@ -151,6 +151,14 @@ export default function AppView({ controller }: { controller: AppController }) {
   return (
     <RoomSocketProvider socket={roomSocket}>
     <KnownChannels names={channelNames}>
+    <div className="dc-app-layout">
+      <RoomSyncNotice
+        connectionMessage={roomDirectorySyncIssue ? "서버 연결을 확인하고 있어요. 연결이 끊긴 방에서 다시 시도할 수 있어요."
+          : controller.centralDirectory?.status === "central-unconfirmed" ? "중앙 연결이 끊겼어요. 이 기기의 서버는 계속 사용할 수 있어요."
+          : controller.serverConnectionError}
+        issue={canonicalRoom.syncIssue || roomDirectorySyncIssue}
+        lifecycle={roomLifecycle.enabled ? roomLifecycle : undefined}
+      />
     <div
       className="dc-shell flex h-screen max-h-screen overflow-hidden text-text-primary"
       style={shellStyle}
@@ -161,13 +169,6 @@ export default function AppView({ controller }: { controller: AppController }) {
       onPointerUp={handleMobileShellPointerEnd}
       onPointerCancel={cancelMobileShellPointer}
     >
-      <RoomSyncNotice
-        connectionMessage={roomDirectorySyncIssue ? "서버 연결을 확인하고 있어요. 연결이 끊긴 방에서 다시 시도할 수 있어요."
-          : controller.centralDirectory?.status === "central-unconfirmed" ? "중앙 연결이 끊겼어요. 이 기기의 서버는 계속 사용할 수 있어요."
-          : controller.serverConnectionError}
-        issue={canonicalRoom.syncIssue || roomDirectorySyncIssue}
-        lifecycle={roomLifecycle.enabled ? roomLifecycle : undefined}
-      />
       <RoomRail
         serverEntries={<ServerRailEntries directory={controller.centralDirectory}
           localServerIds={[controller.localServerId || ""]}
@@ -558,6 +559,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           chat={controller.sideChat} socket={roomSocket} canPost={canPostHumanMessage} mentionables={scopedMentionables} />
       </aside>}
       </div>
+    </div>
     </div>
     </KnownChannels>
     </RoomSocketProvider>

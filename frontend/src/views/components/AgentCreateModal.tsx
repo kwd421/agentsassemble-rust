@@ -375,7 +375,7 @@ export default function AgentCreateModal({
         aria-label={presentation.providerName}
         title={presentation.providerName}
         data-active={provider.id === selectedProvider?.id}
-        data-unavailable={!provider.startable}
+        data-unavailable={!provider.available}
         onClick={() => {
           applyProvider(provider);
           setStatus("");

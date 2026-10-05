@@ -3,7 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import AgentCreateModal from "./AgentCreateModal";
-import { codexProvider, openCodeProvider, deepSeekProvider, lmStudioProvider } from "./AgentCreateModal.testProviders";
+import { codexProvider, claudeProvider, openCodeProvider, deepSeekProvider, lmStudioProvider } from "./AgentCreateModal.testProviders";
 
 afterEach(cleanup);
 
@@ -43,4 +43,14 @@ it("keeps an unavailable provider selectable for local setup without permitting 
   expect(setup.getAttribute("href")).toBe("agentsassemble://provider-setup/codex");
   expect((screen.getByRole("button", { name: "추가" }) as HTMLButtonElement).disabled).toBe(true);
   expect(onCreate).not.toHaveBeenCalled();
+});
+
+it("keeps installed providers undimmed and in catalog order before model discovery", () => {
+  render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
+    providers={[{ ...codexProvider(), startable: false, discovery_status: "idle", controls: [] },
+      { ...claudeProvider(), startable: false, discovery_status: "idle", controls: [] }, openCodeProvider()]}
+    onClose={() => undefined} onCreate={vi.fn()} />);
+  const choices = within(screen.getByRole("list", { name: "구독 에이전트 제공자" })).getAllByRole("listitem");
+  expect(choices.map((item) => item.getAttribute("aria-label"))).toEqual(["Codex", "Claude Code", "OpenCode"]);
+  expect(choices.map((item) => item.getAttribute("data-unavailable"))).toEqual(["false", "false", "false"]);
 });

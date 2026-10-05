@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 provider availability/header fixes: affected screen tests 55/55 passed; one pre-push `make verify` passed frontend 1,045/1,045 but failed desktop `next_owner_reclaims_only_unlocked_runtime_staging` (`!active_path.exists()`, 45/46 passed), so push is blocked; no signed build/manual verification/deployment.
+
 - 2026-10-05 rail feedback: pre-fix missing-server regression reproduced; retained error across connected refresh and next-open clearing passed (1/1); one pre-push `make verify` passed for both changes (frontend 1,044, Rust 1,080, desktop 46 and all gates); no signed build/manual verification/deployment.
 
 - 2026-10-05 agent creation: shared provider sections, unavailable-last order, mixed Ollama model tags/persona visibility and Friends labels; affected frontend tests 47/47 passed; visual/manual verification deferred to user.

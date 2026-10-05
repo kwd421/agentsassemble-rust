@@ -2,7 +2,9 @@
 
 Rail feedback correction (2026-10-05): shared app/web `openRailServer` keeps a
 missing-server/open failure visible across successful background directory updates
-until the next server-opening action clears it. Keep existing refresh, authority,
+until the next server-opening action clears it. The shared `RoomSyncNotice`
+connection banner occupies its own layout row above the room shell, including
+wrapped messages, so the room-name header remains unobscured. Keep existing refresh, authority,
 concurrency guard and retry behavior; no protocol/storage changes. Verify the
 missing-server race, later refresh and next-open clearing with a frontend regression;
 one pre-push make verify, no packaged/manual verification or deployment.
