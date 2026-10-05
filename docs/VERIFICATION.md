@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 provider chooser loading correction: frontend-only dimming/order uses `discovery_status != "loading" && !available`; server-shaped initial loading fixture and loading/available/unavailable screen regression passed (3/3), one pre-push `make verify` passed (exit 0); no signed build or manual visual verification.
+
 - 2026-10-05 Daybreak F1 Low 2: non-connector `/join` and `/join/` HTML reuse private/no-store protection and carry self-only CSP with frame-ancestors none; outer CSP preserves route policy; exact HTTP header regression and server 314/314 passed (initial release-file WouldBlock passed on rerun); one pre-push `make verify` passed (workspace/frontend/desktop tests and architecture/format/build/Clippy/diff/artifact gates); Low 1 handoff_state binding excluded by administrator risk acceptance.
 
 - 2026-10-05 F1 central member UI: shared app/web consent, W3 preview/W2 grant origin-generation binding, login continuation, single-use correlated callback with pre-parse fragment removal, explicit fresh-challenge retries and anonymous admission regressions passed against central test doubles (78 affected tests); one pre-push `make verify` passed (frontend 1,097, workspace Rust 1,091, desktop 47; build/type/architecture/format/Clippy/diff/artifact gates), followed by 15/15 consent-screen tests for the initial login-button timing correction. Missing handoff custody or a pre-preview login failure requires returning to the original invite; no Rust/Worker edits, deployment, signed build or manual verification.

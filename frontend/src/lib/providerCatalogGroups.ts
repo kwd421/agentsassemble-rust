@@ -20,13 +20,17 @@ export function providerCatalogGroup(
   throw new Error("Provider catalog group is outside the current room contract.");
 }
 
+export function isProviderUnavailable(provider: NativeCliProviderAvailability): boolean {
+  return provider.discovery_status !== "loading" && !provider.available;
+}
+
 export function projectProvidersByCatalogGroup(
   providers: NativeCliProviderAvailability[]
 ): Record<ProviderCatalogGroup, NativeCliProviderAvailability[]> {
   return Object.fromEntries(PROVIDER_GROUPS.map(({ id }) => [
     id,
     providers.filter((provider) => providerCatalogGroup(provider) === id)
-      .sort((a, b) => Number(b.available) - Number(a.available)),
+      .sort((a, b) => Number(isProviderUnavailable(a)) - Number(isProviderUnavailable(b))),
   ])) as Record<ProviderCatalogGroup, NativeCliProviderAvailability[]>;
 }
 

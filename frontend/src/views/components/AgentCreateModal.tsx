@@ -18,6 +18,7 @@ import {
 } from "../../lib/providerControlSettings";
 import {
   PROVIDER_GROUPS,
+  isProviderUnavailable,
   projectProvidersByCatalogGroup,
   providerCatalogGroup,
   providerGroupLabel,
@@ -375,7 +376,7 @@ export default function AgentCreateModal({
         aria-label={presentation.providerName}
         title={presentation.providerName}
         data-active={provider.id === selectedProvider?.id}
-        data-unavailable={!provider.available}
+        data-unavailable={isProviderUnavailable(provider)}
         onClick={() => {
           applyProvider(provider);
           setStatus("");

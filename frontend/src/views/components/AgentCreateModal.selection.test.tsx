@@ -45,12 +45,21 @@ it("keeps an unavailable provider selectable for local setup without permitting 
   expect(onCreate).not.toHaveBeenCalled();
 });
 
-it("keeps installed providers undimmed and in catalog order before model discovery", () => {
-  render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
-    providers={[{ ...codexProvider(), startable: false, discovery_status: "idle", controls: [] },
-      { ...claudeProvider(), startable: false, discovery_status: "idle", controls: [] }, openCodeProvider()]}
+it("keeps initial loading providers undimmed in catalog order", () => {
+  const providers = [codexProvider(), claudeProvider(), openCodeProvider()].map((provider) => ({
+    ...provider, available: false, startable: false, discovery_status: "loading",
+    catalog_source: "discovered", controls: [], default_model: "",
+  }));
+  const { rerender } = render(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
+    providers={providers} onClose={() => undefined} onCreate={vi.fn()} />);
+  const choices = () => within(screen.getByRole("list", { name: "구독 에이전트 제공자" })).getAllByRole("listitem");
+  expect(choices().map((item) => item.getAttribute("aria-label"))).toEqual(["Codex", "Claude Code", "OpenCode"]);
+  expect(choices().map((item) => item.getAttribute("data-unavailable"))).toEqual(["false", "false", "false"]);
+
+  rerender(<AgentCreateModal open meetingId="room-a" roomLabel="Room A"
+    providers={[{ ...providers[0], discovery_status: "failed", discovery_error_code: "command_missing" },
+      providers[1], openCodeProvider()]}
     onClose={() => undefined} onCreate={vi.fn()} />);
-  const choices = within(screen.getByRole("list", { name: "구독 에이전트 제공자" })).getAllByRole("listitem");
-  expect(choices.map((item) => item.getAttribute("aria-label"))).toEqual(["Codex", "Claude Code", "OpenCode"]);
-  expect(choices.map((item) => item.getAttribute("data-unavailable"))).toEqual(["false", "false", "false"]);
+  expect(choices().map((item) => item.getAttribute("aria-label"))).toEqual(["Claude Code", "OpenCode", "Codex"]);
+  expect(choices().map((item) => item.getAttribute("data-unavailable"))).toEqual(["false", "false", "true"]);
 });

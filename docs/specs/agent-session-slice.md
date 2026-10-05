@@ -17,9 +17,10 @@ pre-push `make verify`; no live provider, deployment, signing or manual checks.
 
 App/web `AgentCreateModal` shows all providers once under 구독 에이전트, API 키,
 내 컴퓨터, matching FriendsView labels. Preserve catalog order within availability
-tiers based on `ProviderAvailability.available`, with unavailable providers dimmed
-last and still selectable for setup. Installed providers awaiting model discovery
-remain undimmed and retain catalog order even while `startable` is false. Mixed
+tiers: only `discovery_status != "loading" && !available` is dimmed and placed
+last, still selectable for setup. Initial server loading entries (`available=false`,
+`startable=false`) and available entries remain undimmed in catalog order.
+Acceptance covers loading, available and discovered-unavailable screen states. Mixed
 model groups stay in one provider; model labels show short group tags and selected
 model metadata owns permission copy and api/local persona visibility. Preserve full
 provider names, catalog_group and create payload contracts, retries and setup.
