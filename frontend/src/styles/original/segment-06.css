@@ -1,7 +1,12 @@
 
 /* Member list. */
 .dc-members {
-  width: 300px;
+  position: relative;
+  z-index: auto;
+  display: flex;
+  flex-direction: column;
+  width: clamp(220px, 32%, 300px);
+  min-width: 0;
   background: var(--color-sidebar);
 }
 

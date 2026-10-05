@@ -1,3 +1,7 @@
+import { PROTOCOL_VERSION } from "../src/types/generated/PROTOCOL_VERSION";
+import { roomFixture } from "../src/test/room";
+import { participantFixture } from "../src/test/participant";
+import { TEST_SERVER_PRODUCT_SURFACE } from "../src/test/serverProductSurface";
 import { expect, test } from "@playwright/test";
 import {
   lengthDelimitedTranscript,
@@ -348,4 +352,65 @@ test("retains recovery while consuming its URL secret", async ({ page }) => {
   await expect(page.getByRole("textbox", { name: "복구 코드" })).toHaveValue(
     RECOVERY_CODE
   );
+});
+
+
+test("keeps the composer usable at 768–1100px with members open", async ({ page }) => {
+  await page.route("**/join?token=layout-invite", async route => {
+    const response = await route.fetch();
+    await route.fulfill({ response, body: (await response.text()).replace("<html", `<html data-agentsassemble-build="${"b".repeat(64)}"`) });
+  });
+  await page.route("**/api/runtime/version", route => route.fulfill({ json: {
+    frontend_build_id: "b".repeat(64), protocol_version: PROTOCOL_VERSION,
+  } }));
+  await page.route("**/api/side-chat?*", route => route.fulfill({ status: 503, json: {} }));
+  await page.route("**/api/room-invite/admission", route => route.fulfill({ json: knownUserPreflight("general") }));
+  await page.route("**/api/room-invite/join", async route => route.fulfill({
+    json: { ...await admittedPayload(route.request().postDataJSON(), "general", "aas1.layout-session"), server_product_surface: TEST_SERVER_PRODUCT_SURFACE },
+  }));
+  await page.route("**/api/session-tickets/socket", route => route.fulfill({ json: { ticket: "a".repeat(64), ttl_seconds: 30 } }));
+  await page.routeWebSocket("**/ws?*", socket => {
+    socket.onMessage(raw => {
+      const request = JSON.parse(String(raw));
+      if (request.op !== "subscribe") return;
+      socket.send(JSON.stringify({ op: "subscribed", protocol_version: 1, streams: request.streams,
+        room_id: "general", principal_id: "guest", participant_id: "guest-1",
+        server_surface_revision: TEST_SERVER_PRODUCT_SURFACE.revision, snapshot_cursor: 0, catchup_high_water: 0 }));
+      socket.send(JSON.stringify({ op: "provider_catalog_updated", catalog: { status: "ready", catalog_revision: "layout", providers: [] } }));
+      socket.send(JSON.stringify({ op: "provider_request_snapshot", request: null }));
+      socket.send(JSON.stringify({ op: "snapshot", stream: "room_events", room: roomFixture(),
+        room_settings: { settings_revision: "layout", label: "General", topic: "",
+          appearance: { banner_preset: "default", banner_image_url: "", icon_image_url: "", icon_label: "G", invite_scope: "room" },
+          conversation_mode: "ordered", tool_mode: "chat", ordered_exclude_previous_speaker: true, channels: [] },
+        participants: [participantFixture({ participant_id: "guest-1", display_name: "Guest" })],
+        agent_sessions: [], active_turns: [], events: [], oldest_seq: 0, last_seq: 0,
+        has_more_before: false, resume_gap: false, snapshot_mode: "initial",
+        capabilities: { "message.send": true, "message.modify": true, "participant.leave": true,
+          "participant.mute": false, "room.history": true, "room.manage": false, "agent.control": false,
+          "bridge.publish": false, "room.random": true, "room.vote.summary": true } }));
+    });
+  });
+  await page.route("**/api/user-profile", route => route.fulfill({ status: 503, json: {} }));
+  await page.route("**/api/room-settings?*", route => route.fulfill({ status: 503, json: {} }));
+  await page.addInitScript(() => localStorage.setItem("agentsassemble.sidebar.width.v1", "420"));
+  await page.goto("/join?token=layout-invite");
+  const input = page.locator('textarea[aria-label="채팅 입력"]');
+  await expect(input).toBeVisible();
+  for (const width of [768, 800, 814, 900, 1024, 1100]) {
+    await page.setViewportSize({ width, height: 800 });
+    const panel = page.getByTestId("room-right-panel");
+    await expect(panel).toBeVisible();
+    await expect(panel.getByRole("region", { name: "동반 AI 초대" })).toBeVisible();
+    await expect(panel).toHaveCSS("position", "absolute");
+    expect((await input.boundingBox())!.width).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "멤버 목록 닫기" }).click();
+    await expect(panel).toHaveCount(0);
+    await input.fill(`폭 ${width} 입력 확인`);
+    await expect(input).toHaveValue(`폭 ${width} 입력 확인`);
+    await page.getByRole("button", { name: "사이드챗 열기" }).click();
+    await expect(page.getByRole("complementary", { name: "사이드챗 패널" })).toHaveCSS("position", "absolute");
+    expect((await input.boundingBox())!.width).toBeGreaterThan(0);
+    await page.getByRole("button", { name: "사이드챗 닫기" }).click();
+    await page.getByRole("button", { name: "멤버 목록 토글" }).click();
+  }
 });

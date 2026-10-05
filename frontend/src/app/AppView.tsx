@@ -14,6 +14,7 @@ import {
   Plus,
   UserPlus,
   UserRound,
+  X,
 } from "lucide-react";
 import { CHANNEL_SECTIONS, DeferredViewFallback } from "./appModel";
 import type { AppController } from "./useAppController";
@@ -107,7 +108,6 @@ export default function AppView({ controller }: { controller: AppController }) {
   const sideChatOpen = canOpenSideChat && sideChatScope === channelScope;
   const roomInfoOpen = !mobileViewport && hasRoom && showMembers && membersOpen && !sideChatOpen;
   const persistentRail = !mobileViewport && canOpenSideChat;
-  const panelStyle = { position: "relative", zIndex: "auto", display: "flex", width: "clamp(220px, 32%, 300px)", minWidth: 0, marginTop: persistentRail ? 48 : 0, boxShadow: "none" } as const;
   function toggleRoomInfo() {
     if (sideChatOpen) {
       setSideChatScope("");
@@ -519,9 +519,10 @@ export default function AppView({ controller }: { controller: AppController }) {
         <aside
           className="dc-members hidden shrink-0 xl:flex xl:flex-col"
           aria-label="방 연결 정보"
-          style={panelStyle}
+          style={{ marginTop: persistentRail ? 48 : 0 }}
           data-testid="room-right-panel"
         >
+          <button type="button" className="dc-compact-panel-close" aria-label="멤버 목록 닫기" onClick={toggleRoomInfo}><X size={18} /></button>
           <section
             id="room-info-panel"
             aria-label="방 연결 정보"
@@ -554,7 +555,7 @@ export default function AppView({ controller }: { controller: AppController }) {
           </section>
         </aside>
       )}
-      {sideChatOpen && !friendsVisible && <aside aria-label="사이드챗 패널" style={{ ...panelStyle, flexShrink: 0, flexDirection: "column", borderLeft: "1px solid var(--color-panel-separator)", background: "var(--color-sidebar)" }}>
+      {sideChatOpen && !friendsVisible && <aside className="dc-members shrink-0" aria-label="사이드챗 패널" style={{ marginTop: persistentRail ? 48 : 0, borderLeft: "1px solid var(--color-panel-separator)" }}>
         <SideChatDock open onOpenChange={setSideChatOpen}
           chat={controller.sideChat} socket={roomSocket} canPost={canPostHumanMessage} mentionables={scopedMentionables} />
       </aside>}
