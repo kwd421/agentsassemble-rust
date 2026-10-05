@@ -104,7 +104,7 @@ Status: Phase 5 locally verified and approved by Daybreak through `1e24adf`, C0/
 - `server_memberships`는 binding PK, `active/left/banned`, 단조 authorization revision, 대표 enrollment를 갖는다. revision CAS가 변경을 소유하고 종료 사유는 호스트에만 둔다. 정확한 버전 참조가 남은 `membership_versions`는 삭제하지 않는다. 일반 입장으로 종료 membership/participant를 복구하지 않는다.
 - 필수 `profile_json`/participant ID는 기존 identity/admission 생성 경로에서 만든다. 등록 호스트가 직접 redeem하여 검증한 중앙 display metadata의 길이 제한·정규화 snapshot으로 최초 이름을 정하고 avatar는 기존 기본값을 쓴다. browser 입력/invite 이름/외부 avatar URL은 초기 profile 권위가 아니다.
 - 초기 profile은 최초 binding 커밋에서 한 번만 확정한다. 동시 요청은 UNIQUE 경쟁 후 기존 local profile을 재사용하며 서로 다른 중앙 snapshot은 admission conflict가 아니다. 이후 `user_profiles`만 profile 권위이며 re-entry/다른 기기/새 invite는 이름/avatar를 덮어쓰지 않는다.
-- 모든 중앙 관계/grant/enrollment/sync는 불변 `server_incarnation=(server_id, host-key fingerprint, 재사용 불가 registration epoch)`에 결합한다. server ID 재사용·옛 registration 재활성화는 금지한다. 새 등록은 새 ID/epoch이고 옛 enrollment/grant/projection/예약/sync를 승계하지 않는다. 클라이언트 지정 person ID API는 만들지 않는다.
+- 모든 중앙 관계/grant/enrollment/sync는 불변 `server_incarnation=(server_id, host-key fingerprint, 재사용 불가 registration epoch)`에 결합한다. 옛 registration 재활성화는 금지한다. 새 등록은 새 무작위 epoch이고 옛 enrollment/grant/projection/예약/sync를 승계하지 않는다. 클라이언트 지정 person ID API는 만들지 않는다.
 - opaque member grant는 별도 prefix·해시, 최대 300초이며 person/session/device/incarnation/origin/generation/purpose/challenge/browser에 결합한다. member 전용 issue/redeem endpoint·Rust 타입·`MemberAdmission`·HMAC bearer purpose를 사용한다. 새 서명 assertion은 도입하지 않고 기존 owner SQL의 owner 일치 조건을 보존한다.
 - `member_enrollments`는 고엔트로피 ID·인증/입장 결합·예약 참조·초기 profile snapshot·호스트 결과를 저장한다. 전이는 `pending→redeemed|cancelled`, `redeemed→confirmed|host_rejected`뿐이다. pending은 300초 후 cancelled이며 redeem/cancel/삭제가 같은 행에서 원자 경쟁한다. redeemed는 grant 만료와 독립 보존한다. `abandoned_unknown`은 별도 복구 표식이지 실패/terminal 결과가 아니다.
 - `member_projection`은 person/incarnation·host revision/state만 투영한다. visibility는 별도 사용자 권위이며 표시 우선순위는 `owner > active member > bookmark`다. 예약만으로 목록을 만들지 않는다. 같은 person/incarnation 관계는 참조를 공유하고 exact-result tombstone은 visible/관계 용량과 별도 계산한다.
@@ -158,7 +158,7 @@ Signed enrollment/incarnation/revision/state/event ID에서 같은 revision/내�
 
 1. **C1 (이번 변경): 계약만.** 아래 acceptance는 향후 필수이며 코드·migration·테스트 코드나 외부 중앙 저장소 변경은 포함하지 않는다.
 2. **C2군:** 목적별 limiter/owner 격리 → grant 재사용 → bounded cleanup·생성/재시도/결과 보존 예산을 책임별 구현·검증한다. 완료 전 member 기능을 노출하지 않는다. 기존 중앙 C2 기록이 member 예산/격리까지 증명하지는 않는다.
-3. **C3a 중앙 호환 floor:** member 데이터 생성 전에 구 account/server delete·cascade·registration을 tombstone-aware 또는 FK-restrict-safe하게 고친 호환 release를 먼저 배포한다. terminal 재등록·위험한 물리 삭제는 거절한다. 위 외부 README 절 갱신도 C3 소유다.
+3. **C3a 중앙 호환 floor:** 중앙 README `79a181cd`의 결정에 따라 서버 ID tombstone·terminal 재등록 거절 대신 C3c에서 등록마다 새 무작위 registration epoch로 incarnation을 구분하여 재등록이 옛 관계·grant·enrollment를 상속하지 않게 한다. member 소유 레코드는 cleanup이 지우는 `sessions`·`server_connect_grants`를 FK로 참조하지 않고 필요한 출처를 값으로 복사한다. C3a는 migration 없이 삭제의 FK RESTRICT 실패를 전체 DELETE/cascade 롤백과 409 `deletion_restricted`로 처리하는 코드만 배포한다.
 4. **C3b 중앙 전환 장벽:** 모든 트래픽/배포 경로가 floor 이상이고 구 Worker가 D1을 변경할 수 없음을 확인한 뒤 member migration/경로를 배포한다. 혼재는 floor↔new만 허용하며 floor 이전 rollback은 금지한다. 구 코드가 남으면 장벽 실패로 진행하지 않는다.
 5. **C3c군:** incarnation/삭제 provenance → enrollment·예약/terminal 해제·unknown → 단조 결과/projection을 내부 경로로 구현한다. 중앙 floor/new 양방향 삭제·재등록·결과 경쟁을 검증한다.
 6. **C4a host floor:** 보완 H2가 설계 본문의 v79 기준을 대체한다. 현재 `CURRENT_SCHEMA_VERSION = 80` (native pairing idle 수명 전환)이다. 먼저 실제 다음 미사용 schema/additive 구조를 확인한다. floor release는 **81을 인식만** 하고 member 입장/route 없이 80 데이터를 그대로 열며 member 권위·폐기를 보존한다. 상위 버전 무조건 허용·구조 게이트 완화는 금지한다.
@@ -195,10 +195,13 @@ CREATE INDEX central_identity_bindings_user ON central_identity_bindings(user_id
 `created_at`은 UTC Unix microseconds다. binding은 membership 종료/중앙 삭제에도
 존재 표식으로 보존하며 이동/익명 전환하지 않는다. floor는 membership 상태와
 무관하게 **어느 issuer든 해당 user_id 행 존재**만으로 미지원 member를 판정한다.
-81 DB open은 `sqlite_schema.sql`의 위 테이블·user 인덱스 DDL을 읽기 전용으로 조회하고
-공백·대소문자·식별자 따옴표만 정규화하여 정식 DDL과 정확히 비교한다. 충돌 정책
-(`ON CONFLICT REPLACE`)이나 추가 테이블 제약도 거절하며 익명으로 간주하지 않는다.
-기존 변형 13종, 충돌 정책·추가 제약 거절 및 정규화한 정상 DDL 허용을 검증한다.
+81 DB open은 `sqlite_schema`에서 `tbl_name = 'central_identity_bindings'`이고
+`sql IS NOT NULL`인 객체가 정식 테이블과 user 인덱스 두 개뿐인지 읽기 전용으로 확인한다.
+각 `sql` 원문은 `central_identity_bindings.rs`의 정식 DDL 상수와 바이트 그대로 비교하며
+정규화하지 않는다. C4b migration은 같은 상수를 그대로 실행한다.
+기존 변형·충돌 정책·추가 제약과 겹친 따옴표 식별자, 추가 트리거·UNIQUE 인덱스는
+거절하고 정상 v80/v81은 계속 허용한다. 이 이상의 로컬 DB 쓰기 권한자의 적대적 조작은
+위협 모델 밖이며 검사 범위를 넓히지 않는다.
 
 C4b는 기존 80 테이블/열/credential 의미를 바꾸지 않는 additive migration이어야
 한다. 81은 DB 스키마 번호이며 bootstrap 권위 계약의 새 revision이 아니다.
