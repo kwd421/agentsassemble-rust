@@ -104,5 +104,13 @@ it("dims central-dependent cached servers while keeping this-device open availab
     onOpenLocal={async () => {}} onOpen={async () => {}} onRefresh={async () => {}} />);
   expect(screen.getByRole("button", { name: "Mac Studio 서버 열기" })).toHaveProperty("disabled", false);
   expect(screen.getByRole("button", { name: "Other Mac 서버 열기" })).toHaveProperty("disabled", true);
-  expect(screen.getByText(/연결 끊김 · 중앙 확인 불가/).closest(".dc-server-row")?.getAttribute("data-state")).toBe("central-unconfirmed");
+  expect(screen.getByText(/연결 끊김 · 로그인 서버 확인 불가/).closest(".dc-server-row")?.getAttribute("data-state")).toBe("central-unconfirmed");
+});
+
+it("does not expose full or shortened server IDs in the saved chooser", () => {
+  const server = { ...host, server_id: "12345678-1234-4234-8234-123456789abc", alias: "" };
+  render(<CentralServerList servers={[server]} liveServers={[]} busy={false} onOpen={async () => {}} onRefresh={async () => {}} />);
+  expect(screen.getByText("이름 없는 서버")).toBeTruthy();
+  expect(document.body.textContent).not.toContain(server.server_id.slice(0, 8));
+  expect(screen.getByRole("button", { name: "이름 없는 서버 서버 열기" })).toBeTruthy();
 });

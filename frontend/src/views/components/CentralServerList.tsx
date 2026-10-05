@@ -112,7 +112,7 @@ export default function CentralServerList({ servers, busy, localHost, onOpenLoca
       const isLocal = Boolean(localHost?.server_id === server.server_id && onOpenLocal);
       const live = liveServers.find(item => item.server_id === server.server_id);
       const online = !centralUnavailable && server.relation === "owner" && live?.endpoint?.status === "likely_online" && live.endpoint.lease_expires_at > Date.now() / 1000;
-      const name = server.alias || server.server_id;
+      const name = server.alias || "이름 없는 서버";
       const openable = isLocal || online;
       const state = connectingServerId === server.server_id ? "connecting" : isLocal ? "local" : centralUnavailable ? "central-unconfirmed" : server.relation !== "owner" ? "invited" : online ? "online" : "offline";
       return <div key={server.server_id} className="dc-server-row" data-state={state}>
@@ -127,9 +127,8 @@ export default function CentralServerList({ servers, busy, localHost, onOpenLoca
           <strong className="break-all"><span>{name}</span>{isLocal && " · 이 기기"}</strong>
           <span className="dc-server-row-meta">
             <span className="dc-server-row-dot" aria-hidden />
-            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 중앙 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기에서 열 수 있어요" : state === "online" ? "연결 가능" : "연결 끊김"}
+            {state === "connecting" ? "연결 중" : state === "central-unconfirmed" ? "연결 끊김 · 로그인 서버 확인 불가" : state === "invited" ? "초대 링크로 접속해 주세요" : state === "local" ? "이 기기에서 열 수 있어요" : state === "online" ? "연결 가능" : "연결 끊김"}
             {" · "}<span aria-label="호스트 운영체제">{server.host_os ? OS_LABELS[server.host_os] : "OS 미확인"}</span>
-            {" · "}{server.server_id.slice(0, 8)}
           </span>
           {editingId === server.server_id && <form className="dc-server-row-edit" onSubmit={(event) => { event.preventDefault(); void save(); }}>
             <label className="grid gap-1 text-[13px] text-text-secondary">서버 이름

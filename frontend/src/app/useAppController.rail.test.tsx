@@ -24,11 +24,11 @@ it("retains missing-server feedback across connected directory refreshes until t
     return mocks.directory;
   });
   await act(async () => { await result.current.openRailServer(server); });
-  expect(result.current.serverConnectionError).toBe("서버 연결이 끊겼어요. 중앙 연결을 다시 확인하고 있어요.");
+  expect(result.current.serverConnectionError).toBe("서버 연결이 끊겼어요. 로그인 서버 연결을 다시 확인하고 있어요.");
   expect(mocks.open).not.toHaveBeenCalled();
   mocks.directory = { ...mocks.directory! };
   rerender();
-  expect(result.current.serverConnectionError).toBe("서버 연결이 끊겼어요. 중앙 연결을 다시 확인하고 있어요.");
+  expect(result.current.serverConnectionError).toBe("서버 연결이 끊겼어요. 로그인 서버 연결을 다시 확인하고 있어요.");
   let resolve!: (value: unknown) => void;
   mocks.refresh.mockImplementation(() => new Promise((done) => { resolve = done; }));
   let opening!: Promise<void>;

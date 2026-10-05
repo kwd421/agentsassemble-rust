@@ -17,6 +17,6 @@ it("projects local stream failure, shows its reason and retries; successful stre
 it("explains central-unconfirmed remote rooms without hiding saved room identity", () => {
   const [offline] = projectRoomConnections([{ ...createFreshRoom(), roomOrigin: "remote_server", connectionState: "disconnected" }], null, true);
   render(<DisconnectedRoomView room={offline} onRetry={async () => {}} />);
-  expect(screen.getByText(/중앙 연결이 끊겨 서버를 확인할 수 없어요/)).toBeTruthy();
+  expect(screen.getByText(/로그인 서버에 연결하지 못했어요/)).toBeTruthy();
   expect(screen.getByText(offline.label)).toBeTruthy();
 });

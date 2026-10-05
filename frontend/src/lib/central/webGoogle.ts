@@ -11,7 +11,7 @@ type PendingLogin = {
 };
 
 export async function startCentralWebGoogle(signal: AbortSignal): Promise<void> {
-  if (!isCentralWebEntry()) throw new Error("중앙 계정 페이지에서 로그인해 주세요.");
+  if (!isCentralWebEntry()) throw new Error("계정 페이지에서 로그인해 주세요.");
   const verifier = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const state = encodeBase64Url(crypto.getRandomValues(new Uint8Array(32)));
   const challenge = encodeBase64Url(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(verifier)));

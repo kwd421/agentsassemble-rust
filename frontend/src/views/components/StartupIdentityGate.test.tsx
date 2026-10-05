@@ -1,4 +1,5 @@
-import { CentralTemporaryError } from "../../lib/central/connectionError";
+import { saveCentralDirectoryCache } from "../../lib/central/directoryCache";
+import { CentralTemporaryError, fetchCentral } from "../../lib/central/connectionError";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -12,7 +13,7 @@ const centralMocks = vi.hoisted(() => ({
   loggedOut: false,
   login: vi.fn(),
   openServer: vi.fn(),
-  session: null as null | { person: { display_name: string } },
+  session: null as null | { person: { display_name: string; person_id?: string } },
   bootstrap: vi.fn(),
   register: vi.fn(),
   create: vi.fn(),
@@ -418,7 +419,7 @@ it("requires login after authentication rejection even with an existing local ho
   centralMocks.session = { person: { display_name: "Cached name" } };
   centralMocks.bootstrap.mockImplementation(async () => {
     centralMocks.session = null;
-    throw new Error("중앙 로그인이 만료됐습니다. 다시 로그인해 주세요.");
+    throw new Error("로그인이 만료됐습니다. 다시 로그인해 주세요.");
   });
   desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
   const onComplete = vi.fn();
@@ -427,4 +428,20 @@ it("requires login after authentication rejection even with an existing local ho
   expect(screen.queryByRole("button", { name: /이 기기 서버 열기/ })).toBeNull();
   expect(desktopMocks.requestBootstrapStatus).not.toHaveBeenCalled();
   expect(onComplete).not.toHaveBeenCalled();
+});
+
+it("keeps the saved-server chooser after the first request times out", async () => {
+  centralMocks.configured = true;
+  centralMocks.session = { person: { person_id: "cached", display_name: "Cached name" } };
+  saveCentralDirectoryCache("cached", [{ server_id: "saved", alias: "Saved Mac", icon: "", host_os: "macos", relation: "owner" }]);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new DOMException("Fetch is aborted", "AbortError")));
+  centralMocks.bootstrap.mockImplementation(() => fetchCentral("/test", {
+    signal: AbortSignal.abort(new DOMException("Timed out", "TimeoutError")),
+  }));
+  desktopMocks.requestBootstrapStatus.mockResolvedValue(completedBootstrap);
+  render(<StartupIdentityGate deviceToken="device" onComplete={vi.fn()} />);
+  expect(await screen.findByText("Saved Mac")).toBeTruthy();
+  expect(screen.getByText("로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요.")).toBeTruthy();
+  expect(screen.queryByRole("button", { name: "Google로 계속" })).toBeNull();
+  expect(document.body.textContent).not.toMatch(/중앙|Fetch is aborted|저장된 목록을 읽지 못/);
 });

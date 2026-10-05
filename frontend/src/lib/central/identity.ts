@@ -245,7 +245,7 @@ export function saveSession(
 export function saveGuestResult(result: CentralGuestResult): CentralGuestResult {
   const recoveryCode = String(result.recovery_code || "").trim().toUpperCase();
   if (!RECOVERY_CODE_PATTERN.test(recoveryCode)) {
-    throw new Error("중앙 서버가 올바른 형식의 복구 코드를 반환하지 않았습니다.");
+    throw new Error("로그인 서버가 올바른 형식의 복구 코드를 반환하지 않았습니다.");
   }
   // Keep the sole plaintext copy only on this client until the user confirms
   // saving it. A restart must return to the warning screen instead of silently
@@ -321,11 +321,12 @@ export async function logoutCentral(): Promise<void> {
   devicePromise = undefined;
 }
 
-async function responsePayload<T>(response: Response, central = true): Promise<T> {
+async function responsePayload<T>(response: Response, central = true, signal?: AbortSignal): Promise<T> {
   const payload = (await response.json().catch((error) => {
     if (response.ok) {
-      if (central && (error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError")) {
-        throw new CentralTemporaryError("중앙 서버 응답을 받지 못했어요.");
+      if (signal?.aborted && signal.reason?.name !== "TimeoutError") throw error;
+      if (central && (signal?.reason?.name === "TimeoutError" || error instanceof TypeError || error instanceof DOMException && error.name === "TimeoutError")) {
+        throw new CentralTemporaryError("로그인 서버 응답을 받지 못했어요.");
       }
       throw error;
     }
@@ -335,7 +336,7 @@ async function responsePayload<T>(response: Response, central = true): Promise<T
   } & T;
   if (!response.ok) {
     const message =
-      payload?.error?.message || `중앙 서버가 HTTP ${response.status}을 반환했습니다.`;
+      payload?.error?.message || `로그인 서버가 HTTP ${response.status}을 반환했습니다.`;
     if (response.status === 401) throw new CentralAuthError(message, payload?.error?.code);
     if (central && (response.status === 429 || response.status >= 500)) throw new CentralTemporaryError(message);
     throw Object.assign(new Error(message), { status: response.status, code: payload?.error?.code });
@@ -373,12 +374,12 @@ function fetchLocalRuntime(path: string, init: RequestInit = {}): Promise<Respon
 export function parseCentralGoogleHandoff(value: unknown): CentralGoogleHandoff {
   const handoff = value as Partial<CentralGoogleHandoff> | null;
   if (!handoff || typeof handoff !== "object") {
-    throw new Error("중앙 로그인 서버가 올바르지 않은 응답을 반환했습니다.");
+    throw new Error("로그인 서버가 올바르지 않은 응답을 반환했습니다.");
   }
   const state = String(handoff.state || "").trim();
   if (!state) {
     throw new Error(
-      "중앙 로그인 서버가 현재 앱보다 오래된 버전입니다. Worker 업데이트가 필요합니다."
+      "로그인 서버가 현재 앱보다 오래된 버전입니다. Worker 업데이트가 필요합니다."
     );
   }
   const result: CentralGoogleHandoff = {
@@ -391,7 +392,7 @@ export function parseCentralGoogleHandoff(value: unknown): CentralGoogleHandoff 
   try {
     authorizationUrl = new URL(result.authorization_url);
   } catch {
-    throw new Error("중앙 로그인 서버가 올바르지 않은 응답을 반환했습니다.");
+    throw new Error("로그인 서버가 올바르지 않은 응답을 반환했습니다.");
   }
   if (
     !result.handoff_id ||
@@ -413,7 +414,7 @@ export function parseCentralGoogleHandoff(value: unknown): CentralGoogleHandoff 
     !authorizationUrl.searchParams.get("client_id") ||
     !authorizationUrl.searchParams.get("nonce")
   ) {
-    throw new Error("중앙 로그인 서버가 올바르지 않은 응답을 반환했습니다.");
+    throw new Error("로그인 서버가 올바르지 않은 응답을 반환했습니다.");
   }
   return result;
 }
@@ -450,7 +451,7 @@ async function signedRequest<T>(
   bodyValue?: Record<string, unknown>,
   signal?: AbortSignal
 ): Promise<T> {
-  return responsePayload<T>(await signedFetch(session, path, method, bodyValue, signal));
+  return responsePayload<T>(await signedFetch(session, path, method, bodyValue, signal), true, signal);
 }
 
 async function signedFetch(
@@ -464,7 +465,7 @@ async function signedFetch(
   if (device.deviceId !== session.device_id) {
     if (loadCentralSession()?.token === session.token) clearCentralSession();
     throw new CentralAuthError(
-      "이 기기의 중앙 로그인 키가 바뀌었습니다. 다시 로그인해 주세요."
+      "이 기기의 로그인 키가 바뀌었습니다. 다시 로그인해 주세요."
     );
   }
   const body = bodyValue ? JSON.stringify(bodyValue) : "";
@@ -565,14 +566,14 @@ export async function loginCentralGoogle(
       )
     );
     if (started.state !== state) {
-      throw new Error("중앙 로그인 서버가 요청 상태를 바꾸었습니다.");
+      throw new Error("로그인 서버가 요청 상태를 바꾸었습니다.");
     }
     const authorizationUrl = new URL(started.authorization_url);
     if (
       authorizationUrl.searchParams.get("redirect_uri") !== callback.redirect_uri ||
       authorizationUrl.searchParams.get("code_challenge") !== codeChallenge
     ) {
-      throw new Error("중앙 로그인 서버가 현재 앱과 다른 로그인 요청을 만들었습니다.");
+      throw new Error("로그인 서버가 현재 앱과 다른 로그인 요청을 만들었습니다.");
     }
     status?.("시스템 브라우저에서 Google 계정을 선택해 주세요.");
     throwIfGoogleLoginAborted(signal);
@@ -631,9 +632,9 @@ export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBoo
     "GET", undefined, signal ? AbortSignal.any([signal, AbortSignal.timeout(10_000)]) : AbortSignal.timeout(10_000)
   );
   signal?.throwIfAborted();
-  if (!payload.person || payload.person.person_id !== session.person.person_id || !Array.isArray(payload.servers)) throw new Error("중앙 서버 목록 응답이 올바르지 않습니다.");
+  if (!payload.person || payload.person.person_id !== session.person.person_id || !Array.isArray(payload.servers)) throw new Error("서버 목록 응답이 올바르지 않습니다.");
   const current = loadCentralSession();
-  if (current?.token !== session.token) throw new CentralAuthError("중앙 로그인 상태가 바뀌었습니다. 다시 로그인해 주세요.");
+  if (current?.token !== session.token) throw new CentralAuthError("로그인 상태가 바뀌었습니다. 다시 로그인해 주세요.");
   localStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, person: payload.person }));
   saveCentralDirectoryCache(payload.person.person_id, payload.servers);
   return payload;
@@ -641,7 +642,7 @@ export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBoo
 
 export async function issueCentralMemberGrant(request: MemberTargetRequest, signal?: AbortSignal) {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("중앙 로그인이 필요해요.");
+  if (!session) throw new CentralAuthError("로그인이 필요해요.");
   const value = await signedRequest<unknown>(session,
     `/v1/servers/${encodeURIComponent(request.server_id)}/member-grants`, "POST",
     { registration_epoch: request.registration_epoch, challenge_hash: request.challenge_hash }, signal);
@@ -651,7 +652,7 @@ export async function issueCentralMemberGrant(request: MemberTargetRequest, sign
 
 export async function previewCentralMember(request: MemberTargetRequest, signal?: AbortSignal) {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("중앙 로그인이 필요해요.");
+  if (!session) throw new CentralAuthError("로그인이 필요해요.");
   const value = strictRecord(await signedRequest<unknown>(session,
     `/v1/servers/${encodeURIComponent(request.server_id)}/member-preview`, "POST",
     { registration_epoch: request.registration_epoch }, signal), "입장할 서버");
@@ -668,14 +669,14 @@ export async function previewCentralMember(request: MemberTargetRequest, signal?
 
 export async function openCentralOwnedServer(server: CentralServer): Promise<void> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
   if (
     server.relation !== "owner" ||
     !server.endpoint ||
     server.endpoint.status !== "likely_online" ||
     server.endpoint.lease_expires_at <= Math.floor(Date.now() / 1000)
   ) {
-    throw new Error("이 서버는 현재 중앙 계정으로 열 수 없습니다.");
+    throw new Error("이 서버는 현재 계정으로 열 수 없습니다.");
   }
   const grant = await signedRequest<CentralConnectGrant>(
     session,
@@ -693,7 +694,7 @@ export async function openCentralOwnedServer(server: CentralServer): Promise<voi
     !Number.isSafeInteger(grant.expires_at) ||
     grant.expires_at <= Math.floor(Date.now() / 1000)
   ) {
-    throw new Error("중앙 서버 접속권 응답이 올바르지 않습니다.");
+    throw new Error("서버 접속권 응답이 올바르지 않습니다.");
   }
   const target = centralOwnerServerUrl(grant.origin, {
       grantToken: grant.grant_token,
@@ -705,7 +706,7 @@ export async function openCentralOwnedServer(server: CentralServer): Promise<voi
     });
   if (isDesktopWebview()) await openDesktopCentralOwnedServer(target);
   else if (isCentralWebEntry()) window.location.assign(target);
-  else throw new Error("중앙 계정 페이지에서 서버를 열어 주세요.");
+  else throw new Error("계정 페이지에서 서버를 열어 주세요.");
 }
 
 export type LocalServerInfo = {
@@ -735,7 +736,7 @@ async function updateLocalRegistrationEpoch(serverId: string, epoch: string | nu
 
 export async function registerLocalServer(deviceToken: string): Promise<void> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
   for (let attempt = 0; attempt < 2; attempt++) {
     const registrationRequest = {
       method: "POST", cache: "no-store",
@@ -800,7 +801,7 @@ export function isCentralAuthenticationError(error: unknown): boolean {
 
 export async function renameCentralServer(server: CentralServerDisplay, name: string): Promise<void> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
   if (server.relation !== "owner") throw new Error("서버 소유자만 이름을 바꿀 수 있습니다.");
   await signedRequest(session, `/v1/servers/${encodeURIComponent(server.server_id)}/name`, "POST", {
     registration_epoch: server.registration_epoch, name, expected_name: server.alias || server.server_id,
@@ -817,7 +818,7 @@ const SERVER_ICON_REFERENCE = /^\/v1\/servers\/[^/?#]+\/icon\/[^/?#]+\.png$/;
  */
 export async function fetchCentralServerIcon(reference: string): Promise<Blob> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
   if (!SERVER_ICON_REFERENCE.test(reference)) throw new Error("서버 아이콘 주소가 올바르지 않습니다.");
   const response = await signedFetch(session, reference, "GET");
   if (!response.ok) await responsePayload<never>(response);
@@ -836,7 +837,7 @@ async function pngDataUrl(file: File): Promise<string> {
 /** Sets (512x512 PNG) or removes (null) a server icon; returns the new reference. */
 export async function setCentralServerIcon(server: CentralServerDisplay, icon: File | null): Promise<string> {
   const session = loadCentralSession();
-  if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+  if (!session) throw new CentralAuthError("로그인이 필요합니다. 다시 로그인해 주세요.");
   if (server.relation !== "owner") throw new Error("서버 소유자만 아이콘을 바꿀 수 있습니다.");
   const result = await signedRequest<{ icon: string }>(
     session,

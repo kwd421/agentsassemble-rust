@@ -29,17 +29,17 @@ function liveExpiry(value: unknown): number {
 }
 
 export function parseMemberTargetRequest(value: unknown): MemberTargetRequest {
-  const r = strictRecord(value, "중앙 입장 요청");
-  assertExactKeys(r, ["server_id", "registration_epoch", "challenge_hash", "handoff_state"], "중앙 입장 요청");
+  const r = strictRecord(value, "서버 입장 요청");
+  assertExactKeys(r, ["server_id", "registration_epoch", "challenge_hash", "handoff_state"], "서버 입장 요청");
   const request = {
-    server_id: requiredString(r, "server_id", "중앙 입장 요청"),
-    registration_epoch: requiredString(r, "registration_epoch", "중앙 입장 요청"),
-    challenge_hash: requiredString(r, "challenge_hash", "중앙 입장 요청"),
-    handoff_state: requiredString(r, "handoff_state", "중앙 입장 요청"),
+    server_id: requiredString(r, "server_id", "서버 입장 요청"),
+    registration_epoch: requiredString(r, "registration_epoch", "서버 입장 요청"),
+    challenge_hash: requiredString(r, "challenge_hash", "서버 입장 요청"),
+    handoff_state: requiredString(r, "handoff_state", "서버 입장 요청"),
   };
   if (!HASH.test(request.challenge_hash) || !HASH.test(request.handoff_state) ||
       request.server_id.length > 200 || request.registration_epoch.length > 200) {
-    throw new Error("중앙 입장 요청을 확인하지 못했어요.");
+    throw new Error("서버 입장 요청을 확인하지 못했어요.");
   }
   return request;
 }
@@ -58,16 +58,16 @@ export function parseMemberChallenge(value: unknown): MemberChallenge {
 }
 
 export function parseMemberGrant(value: unknown, expected: MemberTargetRequest): MemberGrant {
-  const r = strictRecord(value, "중앙 입장권");
-  assertExactKeys(r, ["grant_token", "server_id", "registration_epoch", "expires_at", "endpoint_origin", "endpoint_generation"], "중앙 입장권");
+  const r = strictRecord(value, "서버 입장권");
+  assertExactKeys(r, ["grant_token", "server_id", "registration_epoch", "expires_at", "endpoint_origin", "endpoint_generation"], "서버 입장권");
   if (r.server_id !== expected.server_id || r.registration_epoch !== expected.registration_epoch ||
       typeof r.endpoint_generation !== "number" || !Number.isSafeInteger(r.endpoint_generation) || r.endpoint_generation < 1 ||
       typeof r.grant_token !== "string" || !/^aamg1\.[A-Za-z0-9_-]{43}$/.test(r.grant_token)) {
-    throw new Error("중앙 입장권이 요청한 서버와 일치하지 않아요.");
+    throw new Error("서버 입장권이 요청한 서버와 일치하지 않아요.");
   }
   return { grant_token: r.grant_token, server_id: expected.server_id,
     registration_epoch: expected.registration_epoch, expires_at: liveExpiry(r.expires_at),
-    endpoint_origin: exactCentralServerOrigin(requiredString(r, "endpoint_origin", "중앙 입장권")),
+    endpoint_origin: exactCentralServerOrigin(requiredString(r, "endpoint_origin", "서버 입장권")),
     endpoint_generation: r.endpoint_generation };
 }
 

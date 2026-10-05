@@ -31,3 +31,11 @@ it.each([null, 0, "unavailable"])("uses HTTP 401 even when its JSON error body i
   expect(isCentralAuthenticationError(error)).toBe(true);
   expect(isCentralTemporaryError(error)).toBe(false);
 });
+
+it("uses the timeout signal when WebKit reports an AbortError and preserves caller cancellation", async () => {
+  const error = new DOMException("Fetch is aborted", "AbortError");
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(error));
+  const timeout = AbortSignal.abort(new DOMException("Timed out", "TimeoutError"));
+  expect(isCentralTemporaryError(await fetchCentral("/test", { signal: timeout }).catch(e => e))).toBe(true);
+  await expect(fetchCentral("/test", { signal: AbortSignal.abort() })).rejects.toBe(error);
+});

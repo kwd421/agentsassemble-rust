@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { CentralTemporaryError } from "../lib/central/connectionError";
+import { CentralTemporaryError, fetchCentral } from "../lib/central/connectionError";
 import { saveCentralDirectoryCache } from "../lib/central/directoryCache";
 import { useCentralDirectory } from "./useCentralDirectory";
 const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), session: null as object | null }));
@@ -11,7 +11,7 @@ vi.mock("../lib/central/identity", () => ({ bootstrapCentral: mocks.bootstrap,
 }));
 const person = { person_id: "person", display_name: "Name", identity_kind: "google" };
 const server = { server_id: "server", alias: "Saved Mac", icon: "", host_os: "macos" as const, relation: "owner" as const };
-afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); localStorage.clear(); });
+afterEach(() => { cleanup(); vi.useRealTimers(); vi.resetAllMocks(); vi.unstubAllGlobals(); localStorage.clear(); });
 it("shows cached display only during outage, caps backoff and automatically replaces it on recovery", async () => {
   vi.useFakeTimers();
   mocks.session = { token: "session", person };
@@ -102,4 +102,22 @@ it("rejects a successful flight when the session is cleared before publication",
     await expect(pending).rejects.toMatchObject({ name: "AbortError" });
   });
   expect(result.current.directory).toBeNull();
+});
+
+it("retains saved servers on the first WebKit timeout and retries in the background", async () => {
+  vi.useFakeTimers();
+  mocks.session = { token: "session", person };
+  saveCentralDirectoryCache(person.person_id, [server]);
+  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new DOMException("Fetch is aborted", "AbortError")));
+  mocks.bootstrap.mockImplementation(() => fetchCentral("/test", {
+    signal: AbortSignal.abort(new DOMException("Timed out", "TimeoutError")),
+  }));
+  const { result } = renderHook(() => useCentralDirectory(true));
+  await act(async () => {});
+  expect(result.current.directory).toMatchObject({ status: "central-unconfirmed", person, servers: [server], live: null });
+  expect(result.current.directory?.error).toBeUndefined();
+  mocks.bootstrap.mockResolvedValue({ person, servers: [server], server_time: 1 });
+  await act(async () => { await vi.advanceTimersByTimeAsync(1000); });
+  expect(mocks.bootstrap).toHaveBeenCalledTimes(2);
+  expect(result.current.directory?.status).toBe("connected");
 });

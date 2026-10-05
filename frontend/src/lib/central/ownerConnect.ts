@@ -21,7 +21,7 @@ export type CentralOwnerConnect = {
 
 function normalize(value: unknown): CentralOwnerConnect | null {
   try {
-    const record = strictRecord(value, "중앙 서버 접속권");
+    const record = strictRecord(value, "서버 접속권");
     assertExactKeys(
       record,
       [
@@ -32,18 +32,18 @@ function normalize(value: unknown): CentralOwnerConnect | null {
         "hostPublicKeyX",
         "hostKeyFingerprint",
       ],
-      "중앙 서버 접속권"
+      "서버 접속권"
     );
     const result: CentralOwnerConnect = {
-      grantToken: requiredString(record, "grantToken", "중앙 서버 접속권"),
-      serverId: requiredString(record, "serverId", "중앙 서버 접속권"),
+      grantToken: requiredString(record, "grantToken", "서버 접속권"),
+      serverId: requiredString(record, "serverId", "서버 접속권"),
       generation: Number(record.generation),
       expiresAt: Number(record.expiresAt),
-      hostPublicKeyX: requiredString(record, "hostPublicKeyX", "중앙 서버 접속권"),
+      hostPublicKeyX: requiredString(record, "hostPublicKeyX", "서버 접속권"),
       hostKeyFingerprint: requiredString(
         record,
         "hostKeyFingerprint",
-        "중앙 서버 접속권"
+        "서버 접속권"
       ),
     };
     if (
@@ -89,7 +89,7 @@ export function exactCentralServerOrigin(origin: string): string {
     url.search ||
     url.hash
   ) {
-    throw new Error("중앙 서버 주소가 안전하지 않습니다.");
+    throw new Error("로그인 서버 주소가 안전하지 않습니다.");
   }
   return url.origin;
 }
@@ -172,7 +172,7 @@ export async function verifyCentralOwnerHost(
     jwk.key_ops[0] !== "verify" ||
     jwk.x !== connect.hostPublicKeyX
   ) {
-    throw new Error("선택한 중앙 서버와 열린 서버의 신원이 다릅니다.");
+    throw new Error("선택한 서버와 열린 서버의 신원이 다릅니다.");
   }
   const canonicalJwk = JSON.stringify({
     crv: "Ed25519",
@@ -186,7 +186,7 @@ export async function verifyCentralOwnerHost(
   );
   const signature = decodeCanonicalBase64Url(requiredString(record, "signature", "서버 신원 확인"));
   if (fingerprint !== connect.hostKeyFingerprint || !signature) {
-    throw new Error("중앙 서버 공개 키 지문이 올바르지 않습니다.");
+    throw new Error("서버 공개 키 지문이 올바르지 않습니다.");
   }
   const key = await crypto.subtle.importKey(
     "jwk",
@@ -210,6 +210,6 @@ export async function verifyCentralOwnerHost(
       new TextEncoder().encode(transcript)
     ))
   ) {
-    throw new Error("중앙 서버 서명을 확인하지 못했습니다.");
+    throw new Error("서버 서명을 확인하지 못했습니다.");
   }
 }

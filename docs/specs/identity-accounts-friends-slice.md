@@ -5,14 +5,16 @@
 Shared app/web entry points: room composer/member panel, invite list/public-access
 controls, startup chooser and server rail. At 768–1100px with sidebar, members and
 companion card present, the chat textarea must retain positive usable width; reuse
-the compact overlay rules and preserve search stacking. Public-access startup
+the compact overlay rules and preserve search stacking. The side-chat panel shares
+the same width owner and must preserve the composer too. Public-access startup
 failures show “외부 접속을 열지 못했어요. 잠시 후 다시 시도해 주세요.”; raw errors
 remain diagnostic-only. Invite expiry uses local calendar/time labels (today,
 tomorrow or a short date), never raw ISO. Saved-session startup fetch/body timeouts
 retain display-only server cache and existing background retries, while explicit
 cancellation, logout, 401, malformed data and storage failures retain their separate
 semantics. Existing local authority alone permits this-device access. All user-facing
-중앙 wording becomes login/account/server wording; identifiers/logs stay unchanged.
+중앙 wording becomes login/account/server wording; server lists/rails must not show
+UUIDs as names or metadata. Identifiers, request identity and logs stay unchanged.
 No new storage, protocol, abstraction, authority or provider behavior. Acceptance:
 affected automated regressions, one pre-push make verify; no signing, manual
 verification or deployment.

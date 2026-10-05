@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 startup timeout continuity: fetch/body timeout signals preserve the saved session, display-only server list and existing bounded background retry; caller cancellation/auth rejection stay separate; affected startup/directory/identity/copy regressions passed, including first WebKit AbortError and background recovery; user-facing 중앙 wording and saved-list/rail UUID labels removed, cache-corruption and validation banners distinguished; one pre-push make verify passed (frontend 1,113, workspace Rust 1,093, desktop 47 and all mandatory gates), supplementary UUID copy regressions 8/8, final frontend build and architecture/source-growth/diff checks passed; no signing, manual verification or deployment.
+
 - 2026-10-05 frontend release lock: same inherited-file-description lifetime as ed1e74b0/cd3d3aaa; close-only control deterministically reproduced OS 35 WouldBlock, explicit unlock covers successful publication and corruption failure while preserving next-owner exclusion; original release and duplicate-descriptor regressions passed; no sleeps/retries, signing, manual verification or deployment.
 
 - 2026-10-05 invite expiry: human invite rows use local today/tomorrow/short-date and Korean hour/minute labels, including year changes; affected modal/controller regressions 39/39 passed; no signing, manual verification or deployment.

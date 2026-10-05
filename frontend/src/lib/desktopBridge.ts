@@ -378,7 +378,7 @@ function validateDesktopCentralRegistrationTicket(
       "host_public_key_x",
       "host_key_fingerprint",
     ],
-    "중앙 등록 티켓"
+    "서버 등록 티켓"
   );
   if (
     typeof grant.ticket !== "string" ||
@@ -393,7 +393,7 @@ function validateDesktopCentralRegistrationTicket(
     typeof grant.host_key_fingerprint !== "string" ||
     !/^[A-Za-z0-9_-]{43}$/.test(grant.host_key_fingerprint)
   ) {
-    throw new Error("중앙 등록 티켓 권위가 올바르지 않습니다.");
+    throw new Error("서버 등록 티켓 권위가 올바르지 않습니다.");
   }
   return {
     ticket: grant.ticket,
@@ -804,7 +804,7 @@ export async function fetchDesktopCentralRegistration(
   init: RequestInit = {}
 ): Promise<DesktopCentralRegistrationResponse> {
   if (init.method !== "POST") {
-    throw new Error("중앙 등록 증명은 POST 요청만 허용합니다.");
+    throw new Error("서버 등록 증명은 POST 요청만 허용합니다.");
   }
   const issued = await requestDesktopCentralRegistrationTicket();
   const headers = new Headers(init.headers);
@@ -843,7 +843,7 @@ export async function controlDesktopCentralLogin(
   state: string,
 ): Promise<{ redirect_uri: string; result: DesktopCentralLoginResult }> {
   const tauri = tauriInternals();
-  if (!tauri) throw new Error("데스크톱 중앙 로그인 기능을 사용할 수 없습니다.");
+  if (!tauri) throw new Error("데스크톱 로그인 기능을 사용할 수 없습니다.");
   requireDesktopHostCommand("runtime_central_login");
   return tauri.invoke("runtime_central_login", { action, state });
 }
@@ -851,7 +851,7 @@ export async function controlDesktopCentralLogin(
 export async function openDesktopCentralGoogleLogin(url: string): Promise<void> {
   const tauri = tauriInternals();
   if (!tauri) {
-    throw new Error("데스크톱 중앙 로그인 기능을 사용할 수 없습니다.");
+    throw new Error("데스크톱 로그인 기능을 사용할 수 없습니다.");
   }
   requireDesktopHostCommand("open_central_google_login");
   await tauri.invoke("open_central_google_login", { url });
@@ -860,7 +860,7 @@ export async function openDesktopCentralGoogleLogin(url: string): Promise<void> 
 export async function openDesktopCentralOwnedServer(url: string): Promise<void> {
   const tauri = tauriInternals();
   if (!tauri) {
-    throw new Error("데스크톱 중앙 서버 열기를 사용할 수 없습니다.");
+    throw new Error("데스크톱 서버 열기를 사용할 수 없습니다.");
   }
   requireDesktopHostCommand("open_central_owned_server");
   await tauri.invoke("open_central_owned_server", { url });

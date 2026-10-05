@@ -67,7 +67,7 @@ it("keeps native central Google login separate and exposes status failures witho
   render(<GoogleAccountSettings identity={{}} />);
   await screen.findByText("상태 읽기 실패");
   fireEvent.click(screen.getByRole("button", { name: "다시 불러오기" }));
-  await screen.findByText("앱의 Google 로그인은 시작 화면의 중앙 계정에서 관리해요.");
+  await screen.findByText("앱의 Google 로그인은 시작 화면의 계정에서 관리해요.");
   expect(mocks.start).not.toHaveBeenCalled();
   expect(mocks.load).not.toHaveBeenCalled();
 });

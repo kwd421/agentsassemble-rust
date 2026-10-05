@@ -122,7 +122,7 @@ export default function GoogleAccountSettings({ identity }: { identity: UserProf
           {busy ? "해제 중…" : "연결 해제"}
         </button>
       </>}
-      {status && !status.account && desktop && <p>앱의 Google 로그인은 시작 화면의 중앙 계정에서 관리해요.</p>}
+      {status && !status.account && desktop && <p>앱의 Google 로그인은 시작 화면의 계정에서 관리해요.</p>}
       {status && !status.account && !desktop && (!status.google.enabled
         ? <p>이 서버에는 Google 로그인이 설정되지 않았어요.</p>
         : <>

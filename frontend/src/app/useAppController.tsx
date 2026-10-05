@@ -131,7 +131,7 @@ export function useAppController(deviceToken: string, clientId: string, memberRe
     try {
       const current = await refreshCentralDirectory();
       const live = current.live?.servers.find(item => item.server_id === server.server_id);
-      if (!live) throw new Error("서버 연결이 끊겼어요. 중앙 연결을 다시 확인하고 있어요.");
+      if (!live) throw new Error("서버 연결이 끊겼어요. 로그인 서버 연결을 다시 확인하고 있어요.");
       await openCentralOwnedServer(live);
     } catch (error) { setServerConnectionError(error instanceof Error ? error.message : "서버 연결이 끊겼어요."); }
     finally { serverOpening.current = false; setConnectingServerId(""); }

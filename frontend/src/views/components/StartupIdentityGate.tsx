@@ -183,7 +183,7 @@ export default function StartupIdentityGate({
 
   const finishCentralStartup = useCallback(async () => {
     const result = await refreshCentral();
-    if (!result.person) throw result.error || new Error("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+    if (!result.person) throw result.error || new Error("로그인이 필요합니다. 다시 로그인해 주세요.");
     setScreen("servers"); setChecking(false);
   }, [refreshCentral]);
 
@@ -191,9 +191,9 @@ export default function StartupIdentityGate({
     if (screen !== "servers" || !directory) return;
     if (directory.status === "authentication-required") {
       setScreen("choice");
-      setError("중앙 로그인이 만료됐습니다. 다시 로그인해 주세요.");
+      setError("로그인이 만료됐습니다. 다시 로그인해 주세요.");
     } else if (directory.status === "error") {
-      setError(failureMessage(directory.error, "중앙 서버 목록을 확인하지 못했어요."));
+      setError(failureMessage(directory.error, "서버 목록을 확인하지 못했어요."));
     }
   }, [directory, screen]);
 
@@ -206,14 +206,14 @@ export default function StartupIdentityGate({
       if (server) {
         const current = await refreshCentral();
         const live = current.live?.servers.find(item => item.server_id === server.server_id);
-        if (!live) throw new Error("서버 연결이 끊겼어요. 중앙 연결을 다시 확인해 주세요.");
+        if (!live) throw new Error("서버 연결이 끊겼어요. 로그인 서버 연결을 다시 확인해 주세요.");
         await openCentralOwnedServer(live);
       }
       else {
         if (webEntry) throw new Error("서버를 실행하려면 이 기기의 앱을 열어 주세요.");
         // Local authority is touched only after the explicit hosting choice.
         const current = await refreshCentral();
-        if (!current.person) throw current.error || new Error("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
+        if (!current.person) throw current.error || new Error("로그인이 필요합니다. 다시 로그인해 주세요.");
         if (current.status === "central-unconfirmed") {
           // Cached identity is presentation only; never initialize a new operator from it.
           await enterApplication(await requestDesktopBootstrapStatus());
@@ -330,7 +330,7 @@ export default function StartupIdentityGate({
         return;
       }
       try {
-        setStatus("중앙 신원과 방 목록을 확인하는 중");
+        setStatus("로그인 정보와 방 목록을 확인하는 중");
         const central = await refreshCentral();
         if (!active) return;
         if (!central.person) {
@@ -341,13 +341,13 @@ export default function StartupIdentityGate({
       } catch (reason) {
         if (isCentralAuthenticationError(reason)) {
           if (active) {
-            setError("중앙 로그인이 만료됐습니다. 다시 로그인해 주세요.");
+            setError("로그인이 만료됐습니다. 다시 로그인해 주세요.");
             setChecking(false);
           }
           return;
         }
         if (active) {
-          setError(failureMessage(reason, "중앙 신원과 로컬 권위를 동기화하지 못했습니다."));
+          setError(failureMessage(reason, "로그인 정보를 이 기기에 저장하지 못했어요. 다시 시도해 주세요."));
           setChecking(false);
         }
       }
@@ -490,7 +490,7 @@ export default function StartupIdentityGate({
           <header className="grid gap-2">
             <h1 className="text-2xl font-black text-text-primary">어떻게 사용할까요?</h1>
             <p className="text-[13px] font-semibold leading-5 text-text-muted">
-              중앙 디렉터리가 설정되지 않아 기존 로컬 신원 모드로 시작합니다.
+              로그인 서버가 설정되지 않았어요. 이 기기에서 사용할 이름을 입력해 주세요.
             </p>
           </header>
           {error && (
@@ -526,8 +526,9 @@ export default function StartupIdentityGate({
 
   return (
     <div className="fixed inset-0 z-[400] grid place-items-center overflow-y-auto bg-[#101114] p-5">
-      {centralUnavailable && <ConnectionBanner message={directory?.error ? "중앙 연결이 끊겼고 저장된 서버 목록을 읽지 못했어요. 서버 목록을 다시 확인해 주세요."
-        : webEntry ? "중앙 연결이 끊겼어요. 연결을 다시 확인하고 있어요." : "중앙 연결이 끊겼어요. 이 기기의 서버는 계속 사용할 수 있어요."} />}
+      {centralUnavailable && <ConnectionBanner message={directory?.status === "error" ? "로그인 정보를 확인하지 못했어요. 다시 시도해 주세요."
+        : directory?.error ? "로그인 서버에 연결하지 못했고 저장된 목록을 읽지 못했어요. 서버 목록을 다시 확인해 주세요."
+        : webEntry ? "로그인 서버에 연결하지 못했어요. 연결을 다시 확인하고 있어요." : "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."} />}
       <main
         className="grid w-full max-w-[520px] gap-5 rounded-xl border border-white/10 bg-[#202126] p-6 shadow-2xl"
         aria-label="시작 로그인"
@@ -542,7 +543,7 @@ export default function StartupIdentityGate({
           </h1>
           <p className="text-[13px] font-semibold leading-5 text-text-muted">
             {screen === "recovery-code"
-              ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요합니다. 중앙에는 코드 원문을 저장하지 않습니다."
+              ? "이 코드는 다른 기기에서 같은 게스트 신원과 방 목록을 복구할 때 필요합니다. 로그인 서버에는 코드 원문을 저장하지 않아요."
               : screen === "servers"
                 ? "호스트 컴퓨터가 켜져 있는 서버만 열 수 있어요."
               : "Google 계정은 내가 참여한 방 목록을 기기 간 동기화할 때만 사용합니다. 대화와 메시지는 그 방을 여는 컴퓨터에 그대로 남습니다."}

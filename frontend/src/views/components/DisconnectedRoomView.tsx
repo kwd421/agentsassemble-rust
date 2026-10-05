@@ -21,7 +21,7 @@ export default function DisconnectedRoomView({ room, onRetry }: { room: RoomDock
       <h1 id="disconnected-room-title">{room.connectionState === "connecting" ? "서버에 연결 중이에요" : "연결이 끊긴 방"}</h1>
       <p className="dc-disconnected-room-name">{room.label}</p>
       <p className="dc-disconnected-room-description">
-        {room.connectionState === "connecting" ? "연결이 확인되면 방을 자동으로 열어요." : room.connectionState === "central-unconfirmed" ? "중앙 연결이 끊겨 서버를 확인할 수 없어요. 이 기기의 서버는 계속 사용할 수 있어요."
+        {room.connectionState === "connecting" ? "연결이 확인되면 방을 자동으로 열어요." : room.connectionState === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
           : room.roomOrigin !== "remote_server" ? "이 기기의 서버 연결이 끊겼어요. 서버가 실행 중인지 확인해 주세요."
           : "서버 연결이 끊겨 메시지와 참가자를 불러올 수 없어요."}
       </p>

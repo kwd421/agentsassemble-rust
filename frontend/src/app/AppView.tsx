@@ -154,7 +154,7 @@ export default function AppView({ controller }: { controller: AppController }) {
     <div className="dc-app-layout">
       <RoomSyncNotice
         connectionMessage={roomDirectorySyncIssue ? "서버 연결을 확인하고 있어요. 연결이 끊긴 방에서 다시 시도할 수 있어요."
-          : controller.centralDirectory?.status === "central-unconfirmed" ? "중앙 연결이 끊겼어요. 이 기기의 서버는 계속 사용할 수 있어요."
+          : controller.centralDirectory?.status === "central-unconfirmed" ? "로그인 서버에 연결하지 못했어요. 이 기기의 서버는 계속 쓸 수 있어요."
           : controller.serverConnectionError}
         issue={canonicalRoom.syncIssue || roomDirectorySyncIssue}
         lifecycle={roomLifecycle.enabled ? roomLifecycle : undefined}

@@ -58,7 +58,7 @@ export function useCentralDirectory(autoStart = false) {
       }
       const currentToken = loadCentralSession()?.token;
       if (abort.signal.aborted || currentToken !== session?.token) {
-        throw new DOMException("중앙 확인 요청이 바뀌었어요.", "AbortError");
+        throw new DOMException("로그인 서버 확인 요청이 바뀌었어요.", "AbortError");
       }
       if (active.current && controller.current === abort) setDirectory(next);
       return next;
