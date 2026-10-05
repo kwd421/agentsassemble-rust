@@ -15,7 +15,17 @@ const MAX_STAGING_DIRECTORIES: usize = 1_024;
 
 pub(super) struct RuntimeExecutableStaging {
     directory: tempfile::TempDir,
-    _lease: File,
+    _lease: StagingLock,
+}
+
+struct StagingLock(File);
+
+impl Drop for StagingLock {
+    fn drop(&mut self) {
+        // CLOEXEC does not prevent a concurrently spawning child from sharing
+        // this description before exec. End ownership without waiting for it.
+        let _ = FileExt::unlock(&self.0);
+    }
 }
 
 impl RuntimeExecutableStaging {
@@ -76,7 +86,7 @@ fn ensure_private_directory(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
-fn acquire_lock(path: &Path, create: bool, wait: bool) -> io::Result<File> {
+fn acquire_lock(path: &Path, create: bool, wait: bool) -> io::Result<StagingLock> {
     let file = OpenOptions::new()
         .create(create)
         .read(true)
@@ -98,7 +108,7 @@ fn acquire_lock(path: &Path, create: bool, wait: bool) -> io::Result<File> {
     } else {
         FileExt::try_lock_exclusive(&file)?;
     }
-    Ok(file)
+    Ok(StagingLock(file))
 }
 
 fn reclaim_stale_directories(root: &Path) -> io::Result<()> {
@@ -160,6 +170,27 @@ mod tests {
     use super::*;
 
     #[test]
+    fn root_lock_release_does_not_wait_for_an_inherited_description() -> io::Result<()> {
+        let base = tempfile::tempdir()?;
+        let path = base.path().join(ROOT_LOCK_NAME);
+        let owner = acquire_lock(&path, true, false)?;
+        let inherited = owner.0.try_clone()?;
+        assert!(matches!(
+            acquire_lock(&path, false, false),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock
+        ));
+        drop(owner);
+        let replacement = acquire_lock(&path, false, false)?;
+        drop(inherited);
+        assert!(matches!(
+            acquire_lock(&path, false, false),
+            Err(error) if error.kind() == io::ErrorKind::WouldBlock
+        ));
+        drop(replacement);
+        Ok(())
+    }
+
+    #[test]
     fn next_owner_reclaims_only_unlocked_runtime_staging() {
         let base = tempfile::tempdir()
             .unwrap_or_else(|error| panic!("create runtime staging test root: {error}"));
@@ -186,6 +217,12 @@ mod tests {
 
         let root_lock = acquire_lock(&root.join(ROOT_LOCK_NAME), false, true)
             .unwrap_or_else(|error| panic!("hold runtime enumeration lock: {error}"));
+        // dup models the shared description held by a spawning child before exec.
+        let RuntimeExecutableStaging { _lease: lease, .. } = &active;
+        let inherited = lease
+            .0
+            .try_clone()
+            .unwrap_or_else(|error| panic!("duplicate runtime staging lease: {error}"));
         drop(active);
         assert!(active_path.is_dir());
         drop(root_lock);
@@ -194,5 +231,6 @@ mod tests {
         assert!(!active_path.exists());
         assert!(replacement.path().is_dir());
         assert!(next.path().is_dir());
+        drop(inherited);
     }
 }

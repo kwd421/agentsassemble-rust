@@ -1295,6 +1295,19 @@ introduced. Acceptance is deterministic SDK-option verification from a different
 caller directory; whether this eliminates the native music prompt remains unknown
 without independent CLI access evidence.
 
+### Desktop executable staging lock release (2026-10-05)
+
+Required behavior: desktop `BoundSidecar::bind` and `RuntimeExecutableStaging`
+creation/drop retain live staging and let the next owner reclaim abandoned staging
+immediately after its owner drops, including concurrent child startup. Root-lock
+contention may defer deletion until the next creation; it must not extend lease
+ownership after drop. Both root serialization and directory leases must end at
+their owning scope even when a spawning child temporarily shares the open file
+description before exec. Preserve private-directory checks and active-owner
+exclusion; no sleeps, retries or weaker assertions. Verify repeated parallel full
+desktop suites before/after and deterministic shared-description coverage, then
+one final `make verify`; no deployment, signed build or manual verification.
+
 ### Writer release after runtime stop (2026-10-05)
 
 Required behavior: a confirmed runtime stop followed by release of the caller's
