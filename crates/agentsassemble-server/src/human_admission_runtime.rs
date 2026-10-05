@@ -9,7 +9,9 @@ use tokio::sync::{broadcast, oneshot};
 use crate::event_publication::{PublicationAttempt, publish_durable_room_events};
 
 pub(crate) struct HumanAdmissionCommand {
-    pub(crate) request: PreparedHumanAdmission,
+    // Member identity made the room input 536 bytes versus the 224-byte next variant.
+    // Keep admission custody on the existing queue without inflating every slot.
+    pub(crate) request: Box<PreparedHumanAdmission>,
     pub(crate) reply: oneshot::Sender<Result<HumanAdmissionDecision, PersistenceError>>,
 }
 
@@ -209,7 +211,10 @@ mod tests {
             "general",
             &event_tx,
             &revocation_tx,
-            HumanAdmissionCommand { request, reply },
+            HumanAdmissionCommand {
+                request: Box::new(request),
+                reply,
+            },
         )
         .await;
         let event = timeout(Duration::from_secs(1), events.recv())

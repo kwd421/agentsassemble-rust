@@ -24,6 +24,24 @@ pub struct MemberAdmission {
     pub challenge_expires_at: DateTime<Utc>,
 }
 
+impl MemberAdmission {
+    async fn is_current(
+        &self,
+        tx: &mut Transaction<'_, Sqlite>,
+        now: DateTime<Utc>,
+    ) -> Result<bool, PersistenceError> {
+        let epoch: Option<String> = sqlx::query_scalar(
+            "SELECT value FROM runtime_metadata WHERE key = 'central_registration_epoch'",
+        )
+        .fetch_optional(&mut **tx)
+        .await?;
+        Ok(now < self.challenge_expires_at
+            && epoch.as_deref() == Some(self.registration_epoch.as_str())
+            && !self.issuer.is_empty()
+            && !self.person_id.is_empty())
+    }
+}
+
 fn denied(reason: Rejection) -> HumanAdmissionDecision {
     HumanAdmissionDecision::Rejected(reason)
 }
@@ -35,16 +53,7 @@ pub(crate) async fn admit(
     member: &MemberAdmission,
     now: DateTime<Utc>,
 ) -> Result<HumanAdmissionDecision, PersistenceError> {
-    let epoch: Option<String> = sqlx::query_scalar(
-        "SELECT value FROM runtime_metadata WHERE key = 'central_registration_epoch'",
-    )
-    .fetch_optional(&mut **tx)
-    .await?;
-    if now >= member.challenge_expires_at
-        || epoch.as_deref() != Some(member.registration_epoch.as_str())
-        || member.issuer.is_empty()
-        || member.person_id.is_empty()
-    {
+    if !member.is_current(tx, now).await? {
         return Ok(denied(Rejection::SessionUnavailable));
     }
     let Some((invite, room)) = load_invite_and_room(tx, request.credential()).await? else {

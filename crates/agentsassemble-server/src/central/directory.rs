@@ -39,6 +39,14 @@ pub(crate) struct OwnerAdmissionResponse {
     expires_at: i64,
 }
 
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct MemberAdmissionResponse {
+    pub(crate) person_id: String,
+    pub(crate) issuer: String,
+    pub(crate) display_name: String,
+}
+
 #[derive(Clone, Serialize)]
 pub(crate) struct CentralDirectoryStatus {
     pub(crate) enabled: bool,
@@ -174,6 +182,38 @@ impl CentralDirectory {
             publish_offline(&inner, &store, &identity).await?;
         }
         Ok(())
+    }
+
+    pub(crate) async fn member_admission(
+        &self,
+        identity: &CentralHostIdentity,
+        store: &SqliteStore,
+        grant: &str,
+        challenge_hash: &str,
+        epoch: &str,
+    ) -> Result<MemberAdmissionResponse, CentralDirectoryError> {
+        let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
+        if !grant.starts_with("aamg1.")
+            || grant.len() > 256
+            || store.registration_epoch().await?.as_deref() != Some(epoch)
+        {
+            return Err(CentralDirectoryError::Rejected);
+        }
+        let path = format!("/v1/servers/{}/member-grants/redeem", identity.server_id());
+        let body = json!({"grant_token": grant, "challenge_hash": challenge_hash,
+            "registration_epoch": epoch});
+        let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
+        let response: MemberAdmissionResponse =
+            serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
+        if response.issuer != inner.base_url.origin().ascii_serialization()
+            || response.person_id.is_empty()
+            || response.person_id.len() > 256
+            || response.display_name.trim().is_empty()
+            || response.display_name.chars().count() > 80
+        {
+            return Err(CentralDirectoryError::InvalidResponse);
+        }
+        Ok(response)
     }
 
     pub(crate) async fn owner_admission(

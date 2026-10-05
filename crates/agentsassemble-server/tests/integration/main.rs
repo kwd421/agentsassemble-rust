@@ -114,3 +114,6 @@ mod runtime_restart_socket;
 mod side_chat_boundary;
 #[path = "../side_chat_live_boundary.rs"]
 mod side_chat_live_boundary;
+
+#[path = "../member_invite_boundary.rs"]
+mod member_invite_boundary;

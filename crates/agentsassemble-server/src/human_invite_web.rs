@@ -29,6 +29,9 @@ use crate::{
     ingress_trust::single_header,
 };
 
+#[path = "member_invite_web.rs"]
+pub(crate) mod member;
+
 const MAX_ADMISSION_BODY_BYTES: usize = 16 * 1024;
 const MAX_JOIN_BODY_BYTES: usize = 2 * 1024 * 1024;
 #[derive(Deserialize)]
@@ -57,7 +60,7 @@ struct JoinRequest {
 }
 
 #[derive(Serialize)]
-struct JoinResponse {
+pub(crate) struct JoinResponse {
     #[serde(flatten)]
     result: HumanAdmissionResult,
     session_token: String,
@@ -79,6 +82,8 @@ registered_routes! {
     fn invite_routes<AppState>() {
         same_origin_public "/api/room-invite/admission" => post(preflight),
         same_origin_public "/api/room-invite/join" => post(join),
+        same_origin_public "/api/room-invite/member-challenge" => post(member::start),
+        same_origin_public "/api/room-invite/member-join" => post(member::join),
     }
 }
 
@@ -293,7 +298,7 @@ const fn invite_scope_text(scope: InviteScope) -> &'static str {
 }
 
 #[derive(Debug)]
-struct HumanInviteHttpError {
+pub(crate) struct HumanInviteHttpError {
     status: StatusCode,
     code: &'static str,
     message: String,

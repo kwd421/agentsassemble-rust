@@ -29,8 +29,11 @@ work is active or waiting, and remove it when it closes.
   changes (screen was locked); Tailscale support is deferred by the user.
 - Central member binding (approved design, six rounds): C1 contracts `e5134655`
   (approved), schema 81 floor contract `e8b242e9` and C4a host floor `67d46320`
-  (C4a approved (`7c2d2d34`)). Remaining: C3b
-  barrier, C3c, C4b migration, C5 exposure, C6 verification.
+  (C4a approved (`7c2d2d34`)). Approved minimal v2/v2.1 supersedes the remaining
+  full-design sequence: W1 central grants `84f604be`; H1 Rust host persistence/API
+  implemented with schema 82 (session credential constraint exceeds the additive
+  v81 floor). Remaining: F1 frontend and V1 packaged verification; reservation,
+  outbox/result confirmation and membership projection are deferred to rail (c).
   C3a central floor deployed to production (Worker `79a181cd`, version `8c190b48`).
   [Owning contract](docs/specs/identity-accounts-friends-slice.md#초대-멤버를-중앙-계정에-묶기--c1-승인-계약-2026-10-05).
 - Open verification: Windows physical-device checks (recent Discord-style UI,

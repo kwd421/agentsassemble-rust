@@ -124,8 +124,10 @@ leave receipt, 익명 merge·전환/scope 변경/reapproval은 유예한다. lea
 
 ### 파일 지도
 
-- `crates/agentsassemble-persistence/src/schema_version.rs`: 현재 80, host floor 및 additive member migration.
-- `crates/agentsassemble-persistence/src/central_identity_bindings.rs`: C4a의 read-only binding 존재 검사; issuer/person/local user 양방향 binding 생성은 C4b 소유.
+- `crates/agentsassemble-persistence/src/schema_version.rs`, `member_schema.rs`: 현재 82, 고정 C4a binding DDL 및 H1 세션 migration.
+- `crates/agentsassemble-persistence/src/central_identity_bindings.rs`: C4a의 일반 identity 경로 거절 유지.
+- `crates/agentsassemble-persistence/src/member_admission.rs`, `human_admission_identity.rs`: H1 binding 조회/생성, durable admission 및 정확한 세션 출처.
+- `crates/agentsassemble-server/src/member_invite_web.rs`: H1 challenge와 member join; 중앙 redeem은 기존 `central/directory.rs` 소유.
 - `crates/agentsassemble-persistence/src/server_memberships.rs` (예정): membership/version CAS; 종료는 기존 removal 소유자와 조정.
 - `crates/agentsassemble-persistence/src/member_admission_results.rs` (예정), `membership_outbox.rs` (같은 디렉터리, 예정): durable intent/결과/예약 및 단조 동기화.
 - `crates/agentsassemble-persistence/src/human_admission_identity.rs`, `account_identity.rs`, `google_accounts.rs`, `account_guest_retirement.rs`, `guest_identity_recovery.rs`: 기존 profile 생성·credential·retirement·recovery 권위 확장.

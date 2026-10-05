@@ -160,7 +160,7 @@ impl RoomRuntime {
         handle
             .mutations
             .try_send(RoomMutation::HumanAdmission(HumanAdmissionCommand {
-                request,
+                request: Box::new(request),
                 reply,
             }))
             .map_err(|error| match error {
