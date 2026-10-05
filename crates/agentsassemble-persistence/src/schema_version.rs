@@ -2,7 +2,7 @@ use sqlx::{Row, Sqlite, SqlitePool, Transaction};
 
 use crate::PersistenceError;
 
-pub const CURRENT_SCHEMA_VERSION: i64 = 80;
+pub const CURRENT_SCHEMA_VERSION: i64 = 82;
 
 // Historical metadata remains only to preserve v74 rows and their foreign keys.
 // It is never promoted or used as current host admission authority.
@@ -34,9 +34,8 @@ pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), Per
             required: CURRENT_SCHEMA_VERSION,
         });
     }
-    if found == crate::central_identity_bindings::MEMBER_SCHEMA_VERSION {
-        // Validate the contracted additive boundary before reading product state.
-        // This release neither creates nor migrates member tables.
+    if found >= crate::central_identity_bindings::MEMBER_SCHEMA_VERSION {
+        // Keep the frozen C4a binding boundary before reading or migrating product state.
         validate_member_schema(pool).await?;
     }
     let server_id = sqlx::query_scalar::<_, String>(
@@ -172,6 +171,7 @@ pub(crate) async fn upgrade_schema(pool: &SqlitePool) -> Result<(), PersistenceE
             .await?;
     }
     tx.commit().await?;
+    crate::member_schema::upgrade(pool).await?;
     Ok(())
 }
 
@@ -449,6 +449,7 @@ mod tests {
         if previous < 75 {
             simulate_previous_schema(&store, previous).await?;
         } else {
+            crate::member_schema::restore_v80_fixture(&store).await?;
             sqlx::query("ALTER TABLE provider_turn_executions DROP COLUMN released_input_ids")
                 .execute(&store.pool)
                 .await?;
@@ -558,6 +559,7 @@ mod tests {
         store: &SqliteStore,
         previous: i32,
     ) -> Result<(), sqlx::Error> {
+        crate::member_schema::restore_v80_fixture(store).await?;
         sqlx::query("ALTER TABLE provider_turn_executions DROP COLUMN released_input_ids")
             .execute(&store.pool)
             .await?;

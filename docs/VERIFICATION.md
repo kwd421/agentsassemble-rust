@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 H1 member persistence: schema 82 preserves v80/minimum-v81 data and frozen binding DDL; canonical member admission, two-device race, profile retention, terminal membership, rollback and C4a refusals passed (full persistence 415, final member/C4a filter 27 including the added invite/lifecycle case); no deployment, signed build or manual verification.
+
 - 2026-10-05 path-only grouping 2: server connector 13, persistence attendee 26 and provider codex 11 files moved with git mv; crate build/tests passed (server 311, persistence 411, provider 290); one final pre-push make verify exited 0 (workspace Rust 1,083, frontend 1,061, desktop 47; architecture/format/Clippy/diff/artifact gates passed); existing visibility/ownership retained, no behavior changes or compatibility aliases; no deployment, signed build or manual verification.
 
 - 2026-10-05 path-only grouping: server attendee 23 + central 6 and frontend central 17 files moved with git mv; server 311 tests and frontend TypeScript + 1,061 tests passed; one final pre-push make verify exited 0 (workspace Rust 1,083, frontend 1,061, desktop 47; architecture/format/Clippy/diff/artifact gates passed); no behavior changes, compatibility aliases, deployment, signed build or manual verification.

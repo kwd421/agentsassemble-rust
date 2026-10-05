@@ -1,4 +1,4 @@
-//! The contracted minimum v81 fixture, not the future complete C4b migration.
+//! Frozen C4a binding refusals and preservation across the H1 member migration.
 use chrono::Utc;
 use sha2::{Digest, Sha256};
 use sqlx::Row;
@@ -17,6 +17,7 @@ fn member_ddl() -> String {
 }
 
 async fn install_v81(store: &SqliteStore) -> Result<(), sqlx::Error> {
+    crate::member_schema::restore_v80_fixture(store).await?;
     let mut tx = store.pool.begin().await?;
     sqlx::raw_sql(sqlx::AssertSqlSafe(member_ddl()))
         .execute(&mut *tx)
@@ -113,8 +114,48 @@ async fn snapshot(store: &SqliteStore) -> Result<Vec<String>, sqlx::Error> {
     Ok(result)
 }
 
+async fn product_snapshot(store: &SqliteStore) -> Result<Vec<String>, sqlx::Error> {
+    let mut result = Vec::new();
+    let tables = sqlx::query_scalar::<_, String>(
+        "SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name",
+    )
+    .fetch_all(&store.pool)
+    .await?;
+    for table in tables {
+        let quoted = format!("\"{}\"", table.replace('"', "\"\""));
+        let columns = sqlx::query("SELECT name FROM pragma_table_info(?)")
+            .bind(&table)
+            .fetch_all(&store.pool)
+            .await?;
+        let expressions = columns
+            .iter()
+            .filter(|row| row.get::<String, _>("name") != "member_admission_id")
+            .map(|row| {
+                format!(
+                    "quote(\"{}\")",
+                    row.get::<String, _>("name").replace('"', "\"\"")
+                )
+            })
+            .collect::<Vec<_>>()
+            .join(" || ',' || ");
+        let filter = if table == "runtime_metadata" {
+            "WHERE key != 'schema_version'"
+        } else {
+            ""
+        };
+        result.extend(
+            sqlx::query_scalar::<_, String>(sqlx::AssertSqlSafe(format!(
+                "SELECT {expressions} AS contents FROM {quoted} {filter} ORDER BY contents"
+            )))
+            .fetch_all(&store.pool)
+            .await?,
+        );
+    }
+    Ok(result)
+}
+
 #[tokio::test]
-async fn floor_opens_80_and_81_without_changing_schema_or_data() -> TestResult {
+async fn member_upgrade_preserves_80_and_81_product_data() -> TestResult {
     for version in [80, 81] {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("runtime.db");
@@ -151,6 +192,9 @@ async fn floor_opens_80_and_81_without_changing_schema_or_data() -> TestResult {
                 .redeem_operator_pairing(&[token; 32], &[73; 32], "https://host.example.test", now)
                 .await?;
         }
+        if version == 80 {
+            crate::member_schema::restore_v80_fixture(&store).await?;
+        }
         if version == 81 {
             install_v81(&store).await?;
             bind(
@@ -166,10 +210,11 @@ async fn floor_opens_80_and_81_without_changing_schema_or_data() -> TestResult {
                 INSERT INTO member_retention_probe VALUES (7, 'banned', 1);")
                 .execute(&store.pool).await?;
         }
-        let before = snapshot(&store).await?;
+        let before = product_snapshot(&store).await?;
         store.close().await?;
         let store = SqliteStore::open_path(&path).await?;
-        assert_eq!(snapshot(&store).await?, before);
+        let after = product_snapshot(&store).await?;
+        assert_eq!(after, before);
         verify_native_pairings(&store, now).await?;
         store.close().await?;
         let store = SqliteStore::open_path(&path).await?;
@@ -193,16 +238,13 @@ async fn floor_opens_80_and_81_without_changing_schema_or_data() -> TestResult {
 
 #[tokio::test]
 async fn floor_rejects_newer_versions_and_incomplete_81() -> TestResult {
-    for (version, partial) in [
-        (81, false),
-        (81, true),
-        (82, false),
-        (83, false),
-        (999, false),
-    ] {
+    for (version, partial) in [(81, false), (81, true), (83, false), (999, false)] {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("runtime.db");
         let store = SqliteStore::open_path(&path).await?;
+        if !partial {
+            crate::member_schema::restore_v80_fixture(&store).await?;
+        }
         if partial {
             install_v81(&store).await?;
             sqlx::query("ALTER TABLE central_identity_bindings DROP COLUMN created_at")
@@ -222,7 +264,7 @@ async fn floor_rejects_newer_versions_and_incomplete_81() -> TestResult {
             ));
         } else {
             assert!(
-                matches!(result, Err(PersistenceError::SchemaVersionMismatch { found, required: 80 })
+                matches!(result, Err(PersistenceError::SchemaVersionMismatch { found, required: 82 })
                 if found == version)
             );
         }
@@ -288,6 +330,7 @@ async fn floor_rejects_malformed_81_structure() -> TestResult {
         let directory = tempfile::tempdir()?;
         let path = directory.path().join("runtime.db");
         let store = SqliteStore::open_path(&path).await?;
+        crate::member_schema::restore_v80_fixture(&store).await?;
         let malformed = ddl.replace(original, replacement);
         assert_ne!(malformed, ddl);
         sqlx::raw_sql(sqlx::AssertSqlSafe(malformed))
@@ -309,7 +352,7 @@ async fn floor_rejects_malformed_81_structure() -> TestResult {
 async fn floor_denies_bound_human_admission_and_session_reuse() -> TestResult {
     let (store, now) = fixture().await;
     let (session, identity) = guest(&store).await?;
-    install_v81(&store).await?;
+
     bind(
         &store,
         &identity
@@ -359,7 +402,7 @@ async fn floor_denies_bound_browser_one_use_first_and_replay() -> TestResult {
         if replay {
             admitted(store.admit_human(&request, now).await?);
         }
-        install_v81(&store).await?;
+
         bind(
             &store,
             &identity
@@ -381,7 +424,7 @@ async fn floor_denies_bound_browser_one_use_first_and_replay() -> TestResult {
 async fn floor_denies_bound_recovery_issue() -> TestResult {
     let (store, _) = fixture().await;
     let (_, identity) = guest(&store).await?;
-    install_v81(&store).await?;
+
     bind(
         &store,
         &identity
@@ -411,7 +454,7 @@ async fn floor_denies_bound_recovery_fresh_and_exact_retry() -> TestResult {
         if replay {
             store.redeem_guest_recovery_code(&request, now).await?;
         }
-        install_v81(&store).await?;
+
         bind(
             &store,
             &identity
@@ -442,7 +485,7 @@ async fn floor_denies_bound_device_binding_and_google_link() -> TestResult {
     let new_device = store
         .account_identity(AccountAuthority::BrowserDevice([4; 32]))
         .await?;
-    install_v81(&store).await?;
+
     bind(&store, user_id).await?;
     let before = snapshot(&store).await?;
     let mut tx = store.pool.begin().await?;
@@ -465,7 +508,7 @@ async fn floor_denies_bound_device_binding_and_google_link() -> TestResult {
 #[tokio::test]
 async fn floor_keeps_unbound_anonymous_recovery_and_google_flow() -> TestResult {
     let (store, now) = fixture().await;
-    install_v81(&store).await?;
+
     let (_, identity) = guest(&store).await?;
     let code = fingerprint(&store.issue_guest_recovery_code(&identity).await?);
     let request = GuestRecoveryRequest {

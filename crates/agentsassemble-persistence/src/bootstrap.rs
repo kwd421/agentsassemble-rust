@@ -160,7 +160,7 @@ async fn install_metadata(
         "INSERT INTO local_bootstrap_authority(singleton, authority_lineage_id, state, schema_revision, created_at) VALUES (1, ?, 'empty', ?, ?)",
     )
     .bind(uuid::Uuid::new_v4().to_string())
-    .bind(crate::schema_version::CURRENT_SCHEMA_VERSION)
+    .bind(80_i64)
     .bind(canonical_timestamp(Utc::now()))
     .execute(&mut **transaction)
     .await?;

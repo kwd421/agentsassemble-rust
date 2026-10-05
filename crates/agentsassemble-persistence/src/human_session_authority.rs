@@ -124,7 +124,9 @@ pub(crate) async fn resolve_human_session(
         _ => return Err(invalid_state("Stored human session scope is invalid.")),
     };
     let user_id = row.try_get::<String, _>("user_id")?;
-    crate::central_identity_bindings::require_unbound_user(transaction, &user_id).await?;
+    if !crate::member_admission::session_provenance(transaction, session_fingerprint).await? {
+        crate::central_identity_bindings::require_unbound_user(transaction, &user_id).await?;
+    }
     let participant_id = row.try_get::<String, _>("participant_id")?;
     let room: Room = decode_required_json(&row, "room_json", "room")?;
     let participant: Participant = decode_required_json(&row, "participant_json", "participant")?;

@@ -326,6 +326,7 @@ async fn ordered_recovery_schema_upgrade_preserves_exact_execution_and_input()
     sqlx::query("ALTER TABLE provider_turn_executions DROP COLUMN released_input_ids")
         .execute(&store.pool)
         .await?;
+    crate::member_schema::restore_v80_fixture(&store).await?;
     sqlx::query("UPDATE runtime_metadata SET value = '77' WHERE key = 'schema_version'")
         .execute(&store.pool)
         .await?;

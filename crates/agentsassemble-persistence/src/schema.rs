@@ -6,7 +6,17 @@ pub(crate) struct TableDefinition {
 
 pub(crate) const HOST_INITIALIZATION_DDL: &str = "CREATE TABLE IF NOT EXISTS runtime_host_initialization (singleton INTEGER PRIMARY KEY CHECK(singleton = 1), nonce TEXT NOT NULL UNIQUE CHECK(length(nonce) = 36))";
 
-const TABLES: &[TableDefinition] = &[
+pub(crate) const TABLES: &[TableDefinition] = &[
+    TableDefinition {
+        name: "central_identity_bindings",
+        ddl: crate::central_identity_bindings::TABLE_DDL,
+        infrastructure: false,
+    },
+    TableDefinition {
+        name: "member_admissions",
+        ddl: crate::member_schema::DDL,
+        infrastructure: false,
+    },
     TableDefinition {
         name: "central_owner_sessions",
         ddl: crate::schema_version::V74_OWNER_SESSIONS_DDL,
@@ -303,6 +313,7 @@ const TABLES: &[TableDefinition] = &[
             "admission_key BLOB PRIMARY KEY ",
             "CHECK(typeof(admission_key) = 'blob' AND length(admission_key) = 32), ",
             "key_kind TEXT NOT NULL CHECK(key_kind IN ('one_use', 'reusable', 'recovery')), ",
+            "member_admission_id TEXT REFERENCES member_admissions(admission_id), ",
             "first_request_id TEXT CHECK(length(first_request_id) = 36), ",
             "invite_id TEXT, ",
             "payload_hash BLOB ",
@@ -329,10 +340,11 @@ const TABLES: &[TableDefinition] = &[
             "CHECK((key_kind = 'recovery' AND invite_id IS NULL AND first_request_id IS NULL AND payload_hash IS NULL) OR ",
             "(key_kind IN ('one_use', 'reusable') AND invite_id IS NOT NULL AND first_request_id IS NOT NULL AND payload_hash IS NOT NULL)), ",
             "CHECK(",
-            "(key_kind = 'one_use' AND reusable_identity_fingerprint IS NULL) OR ",
+            "(member_admission_id IS NOT NULL AND key_kind != 'recovery' AND reusable_identity_fingerprint IS NULL) OR ",
+            "(member_admission_id IS NULL AND ((key_kind = 'one_use' AND reusable_identity_fingerprint IS NULL) OR ",
             "(key_kind IN ('reusable', 'recovery') AND reusable_identity_fingerprint IS NOT NULL ",
             "AND length(reusable_identity_fingerprint) = 32 ",
-            "AND reusable_identity_fingerprint = browser_credential_fingerprint)), ",
+            "AND reusable_identity_fingerprint = browser_credential_fingerprint)))), ",
             "FOREIGN KEY(invite_id, room_id, invite_scope, key_kind) ",
             "REFERENCES room_invites(invite_id, room_id, invite_scope, key_kind) ",
             "ON DELETE CASCADE, ",
@@ -470,7 +482,8 @@ const TABLES: &[TableDefinition] = &[
     },
 ];
 
-const INDEXES: &[&str] = &[
+pub(crate) const INDEXES: &[&str] = &[
+    crate::central_identity_bindings::USER_INDEX_DDL,
     "CREATE UNIQUE INDEX IF NOT EXISTS provider_requests_pending_session_idx ON provider_requests(room_id,session_id) WHERE state IN ('open','resolving')",
     "CREATE INDEX IF NOT EXISTS room_channel_messages_idx ON room_events(room_id, json_extract(event_json, '$.channel_id'), seq) WHERE json_extract(event_json, '$.type') = 'channel_message_final'",
     "CREATE UNIQUE INDEX IF NOT EXISTS room_delete_pending_idx ON room_delete_results(room_id) WHERE state = 'pending'",

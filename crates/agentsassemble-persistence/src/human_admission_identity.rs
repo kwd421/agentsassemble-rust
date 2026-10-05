@@ -19,7 +19,7 @@ pub(super) struct ResolvedIdentity {
     pub(super) profile_events: Vec<RoomEvent>,
     previous_avatar_url: String,
     profile_changed: bool,
-    new: bool,
+    pub(super) new: bool,
 }
 
 pub(super) struct AdmissionAvatar {
@@ -116,6 +116,53 @@ pub(super) async fn resolve_identity(
     }))
 }
 
+pub(super) async fn resolve_member_identity(
+    transaction: &mut Transaction<'_, Sqlite>,
+    member: &crate::MemberAdmission,
+    now: DateTime<Utc>,
+) -> Result<(String, ResolvedIdentity), PersistenceError> {
+    let existing = sqlx::query("SELECT b.binding_id, b.user_id, p.participant_id, p.profile_json FROM central_identity_bindings b JOIN user_profiles p ON p.user_id = b.user_id WHERE b.issuer = ? AND b.person_id = ?")
+        .bind(&member.issuer).bind(&member.person_id).fetch_optional(&mut **transaction).await?;
+    let new = existing.is_none();
+    let (binding, user_id, participant_id, profile) = if let Some(row) = existing {
+        let participant: String = row.try_get("participant_id")?;
+        let profile =
+            decode_bound_profile(&participant, &participant, row.try_get("profile_json")?)?;
+        (
+            row.try_get("binding_id")?,
+            row.try_get("user_id")?,
+            participant,
+            profile,
+        )
+    } else {
+        let profile =
+            UserProfile::for_admitted_human(&member.display_name, "", now).ok_or_else(|| {
+                crate::account_identity::rejected(
+                    "identity_conflict",
+                    "Invalid member profile snapshot.",
+                )
+            })?;
+        (
+            uuid::Uuid::new_v4().to_string(),
+            format!("u-member-{}", uuid::Uuid::new_v4()),
+            format!("member-{}", uuid::Uuid::new_v4()),
+            profile,
+        )
+    };
+    Ok((
+        binding,
+        ResolvedIdentity {
+            user_id,
+            participant_id,
+            profile,
+            profile_events: vec![],
+            previous_avatar_url: String::new(),
+            profile_changed: false,
+            new,
+        },
+    ))
+}
+
 pub(super) async fn persist_identity(
     transaction: &mut Transaction<'_, Sqlite>,
     mut identity: ResolvedIdentity,
@@ -138,7 +185,7 @@ pub(super) async fn persist_identity(
                 .await?;
             replace_profile_avatar(transaction, &identity.user_id, "", &avatar.url).await?;
         }
-        if invite.is_reusable() {
+        if invite.is_reusable() && request.member.is_none() {
             sqlx::query(
                 "INSERT INTO human_device_credentials(credential_fingerprint, user_id, created_at) VALUES (?, ?, ?)",
             )

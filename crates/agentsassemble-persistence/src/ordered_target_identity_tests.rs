@@ -219,6 +219,7 @@ async fn upgrade_recovers_routing_from_original_names_before_startup_release() -
                 .execute(&store.pool)
                 .await?;
         }
+        crate::member_schema::restore_v80_fixture(&store).await?;
         sqlx::query("UPDATE runtime_metadata SET value = ? WHERE key = 'schema_version'")
             .bind(if stopped { "77" } else { "78" })
             .execute(&store.pool)

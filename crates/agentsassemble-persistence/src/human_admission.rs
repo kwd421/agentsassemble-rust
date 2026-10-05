@@ -136,6 +136,7 @@ pub enum HumanAdmissionDecision {
 /// This type deliberately implements neither `Debug` nor serialization so browser
 /// and invite fingerprints cannot enter generic diagnostics or wire projections.
 pub struct PreparedHumanAdmission {
+    pub(crate) member: Option<crate::MemberAdmission>,
     credential: HumanInviteCredentialEvidence,
     browser_credential_fingerprint: [u8; 32],
     request_id: Uuid,
@@ -169,6 +170,13 @@ pub struct HumanAdmissionInput {
 }
 
 impl PreparedHumanAdmission {
+    /// Attaches identity verified by the host's central member redemption boundary.
+    #[must_use]
+    pub fn with_member(mut self, member: crate::MemberAdmission) -> Self {
+        self.member = Some(member);
+        self
+    }
+
     /// Canonicalizes the bounded request without reading or mutating persistence.
     ///
     /// # Errors
@@ -221,6 +229,7 @@ impl PreparedHumanAdmission {
             )
         };
         Ok(Self {
+            member: None,
             credential,
             browser_credential_fingerprint,
             request_id,

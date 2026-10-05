@@ -270,6 +270,7 @@ async fn startup_repairs_upgraded_quarantine_and_confirmed_stop_receipts() -> Te
         sqlx::query("ALTER TABLE provider_turn_executions DROP COLUMN released_input_ids")
             .execute(&store.pool)
             .await?;
+        crate::member_schema::restore_v80_fixture(&store).await?;
         sqlx::query("UPDATE runtime_metadata SET value = '77' WHERE key = 'schema_version'")
             .execute(&store.pool)
             .await?;

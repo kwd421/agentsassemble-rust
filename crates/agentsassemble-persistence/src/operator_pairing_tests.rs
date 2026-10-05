@@ -867,6 +867,7 @@ async fn seed_v79_native_pairings(
         .bind([73_u8; 32].as_slice())
         .execute(&store.pool)
         .await?;
+    crate::member_schema::restore_v80_fixture(&store).await?;
     sqlx::query("UPDATE runtime_metadata SET value = '79' WHERE key = 'schema_version'")
         .execute(&store.pool)
         .await?;

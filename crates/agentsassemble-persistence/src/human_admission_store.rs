@@ -68,6 +68,14 @@ impl SqliteStore {
         let now = timestamp(now.timestamp_micros())?;
         let mut transaction = self.pool.begin().await?;
         let decision = admit_human_in_transaction(self, &mut transaction, request, now).await?;
+        if request
+            .member
+            .as_ref()
+            .is_some_and(|member| Utc::now() >= member.challenge_expires_at)
+        {
+            transaction.rollback().await?;
+            return Ok(rejected(HumanAdmissionRejection::SessionUnavailable));
+        }
         transaction.commit().await?;
         Ok(decision)
     }
@@ -79,6 +87,9 @@ async fn admit_human_in_transaction(
     request: &PreparedHumanAdmission,
     now: DateTime<Utc>,
 ) -> Result<HumanAdmissionDecision, PersistenceError> {
+    if let Some(member) = &request.member {
+        return crate::member_admission::admit(store, transaction, request, member, now).await;
+    }
     let Some((invite, room)) = load_invite_and_room(transaction, request.credential()).await?
     else {
         return Ok(rejected(HumanAdmissionRejection::InviteNotFound));
@@ -426,7 +437,7 @@ pub(crate) async fn replace_live_sessions(
         .collect()
 }
 
-async fn join_participant(
+pub(crate) async fn join_participant(
     transaction: &mut Transaction<'_, Sqlite>,
     invite: &HumanInvite,
     participant_id: &str,
@@ -497,7 +508,7 @@ async fn join_participant(
     Ok((participant, joined))
 }
 
-async fn append_participant_joined(
+pub(crate) async fn append_participant_joined(
     transaction: &mut Transaction<'_, Sqlite>,
     participant: &Participant,
     now: DateTime<Utc>,
@@ -532,7 +543,7 @@ async fn append_participant_joined(
     Ok(event)
 }
 
-async fn admission_result(
+pub(crate) async fn admission_result(
     transaction: &mut Transaction<'_, Sqlite>,
     request: &PreparedHumanAdmission,
     invite: &HumanInvite,
@@ -595,14 +606,14 @@ fn timestamp(value: i64) -> Result<DateTime<Utc>, PersistenceError> {
         .ok_or_else(|| invalid_state("Stored human admission timestamp is invalid."))
 }
 
-const fn invite_scope_storage(scope: InviteScope) -> &'static str {
+pub(crate) const fn invite_scope_storage(scope: InviteScope) -> &'static str {
     match scope {
         InviteScope::ReadWrite => "read_write",
         InviteScope::ReadOnly => "read_only",
     }
 }
 
-const fn invite_scope_public(scope: InviteScope) -> &'static str {
+pub(crate) const fn invite_scope_public(scope: InviteScope) -> &'static str {
     match scope {
         InviteScope::ReadWrite => "room",
         InviteScope::ReadOnly => "read_only",

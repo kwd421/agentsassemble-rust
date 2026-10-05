@@ -86,6 +86,42 @@ Status: Phase 5 locally verified and approved by Daybreak through `1e24adf`, C0/
 
 ## 초대 멤버를 중앙 계정에 묶기 — C1 승인 계약 (2026-10-05)
 
+### 최소판 H1 (2026-10-05, 승인 설계 v2/v2.1)
+
+H1은 Rust 서버 API까지만 구현한다. 기존 invite preflight, 방 큐, human admission,
+profile 생성, 세션 bearer, AA-HOST-1 중앙 클라이언트를 재사용한다. 중앙 W1 redeem은
+신원만 증명하고 호스트 트랜잭션은 invite/방/상한/Left·Kicked를 재검사한다.
+(issuer, person_id) binding은 기존 사용자를 재사용하며 프로필을 덮어쓰지 않는다.
+(binding, invite) 결과를 저장하고 (binding, room) UNIQUE로 다른 초대/scope를 거절한다.
+새 challenge는 invite/browser fingerprint, server incarnation, 만료에 묶이며 상한 있는
+메모리에서 원자적으로 redeeming을 선점한다. 중앙 응답 불명·오류는 폐기하고 새
+challenge/grant를 요구한다. commit 직전에도 만료/epoch를 검사하며 익명 fallback은 없다.
+멤버 세션은 정확한 member_admissions 출처를 검증한다. C4a의 일반 초대 재생,
+recovery, Google 연결, retirement, 기기 binding 거절을 유지하고 기기 credential은 만들지 않는다.
+검증: 최초/다른 기기/정확 재시도/같은 방 다른 초대/Left·Kicked/browser 불일치/
+challenge 재사용·만료/동시 입장/세션 사용/C4a 거절/중앙 오류를 테스트 대역으로 검사한다.
+스키마 결정: binding은 C4a 상수 DDL 그대로 생성하되 실제 H1은 **82**다.
+기존 reusable 세션의 CHECK/FK가 로컬 device credential을 강제하므로 정확한 member 출처에
+한해서 이를 대체하는 세션 테이블 migration이 필요하다. v81의 기존 테이블·credential 의미를
+바꾸지 않는 additive 계약을 넘는다. C4a(80/81 reader)는 82를 열기 전에 거절한다.
+80/최소81에서 기존 세션·profile·native pairing·bootstrap revision 80을 보존하여 upgrade한다.
+세션 수명/종료는 기존 human 세션과 동일하며, 만료·종료된 canonical 결과는 재발급하지 않는다.
+
+H1 API (양쪽 요청 모두 기존 `x-device-token` 브라우저 credential 필수):
+- `POST /api/room-invite/member-challenge` `{invite_token}` →
+  `{challenge_id, challenge_hash, server_id, registration_epoch, expires_at}` (Unix seconds, 300초).
+  사용 상한에 도달한 초대도 이미 commit된 결과 복구를 위해 challenge만 발급할 수 있다.
+- `POST /api/room-invite/member-join` `{invite_token, challenge_id, grant_token, request_id}` →
+  기존 `/api/room-invite/join` 성공 응답 (`session_token`, 사용자/방/서버 정보 포함).
+  canonical 결과 재시도는 최초 `request_id`와 bearer를 그대로 반환하며 초대를 다시 소비하지 않는다.
+- 실패 시 session 없이 기존 error envelope를 반환한다. challenge 오류는 401
+  `member_challenge_invalid`, 중앙 거절/불명/장애는 502 `member_redeem_failed`,
+  challenge 상한(호스트당 1024)은 429 `member_challenge_capacity`; 방/초대 거절은 기존 코드다.
+  UI는 명시적 재시도로 challenge와 중앙 grant를 새로 발급하며 자동 재시도하지 않는다.
+
+F1 화면, V1 packaged 검증, 예약/outbox/결과 확인/중앙 membership projection 및 목록 동기화,
+leave receipt, 익명 merge·전환/scope 변경/reapproval은 유예한다. leave 응답 유실은 결과 불명이다.
+
 ### 파일 지도
 
 - `crates/agentsassemble-persistence/src/schema_version.rs`: 현재 80, host floor 및 additive member migration.

@@ -1,4 +1,4 @@
-//! Read-only C4a boundary. C4b owns creation and migration of member authority.
+//! C4a refusal boundary, retained for all non-member identity entry points.
 use sqlx::{Sqlite, Transaction};
 
 use crate::{PersistenceError, account_identity::rejected};
@@ -29,8 +29,8 @@ pub(crate) async fn require_unbound_user(
             .fetch_one(&mut **tx)
             .await?;
     match version.parse::<i64>() {
-        Ok(crate::CURRENT_SCHEMA_VERSION) => Ok(()),
-        Ok(MEMBER_SCHEMA_VERSION) => {
+        Ok(70..=80) => Ok(()),
+        Ok(MEMBER_SCHEMA_VERSION | 82) => {
             let bound: bool = sqlx::query_scalar(
                 "SELECT EXISTS(SELECT 1 FROM central_identity_bindings WHERE user_id = ?)",
             )
