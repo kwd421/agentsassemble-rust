@@ -811,6 +811,7 @@ export async function renameCentralServer(server: CentralServerDisplay, name: st
   const session = loadCentralSession();
   if (!session) throw new CentralAuthError("로그인이 필요해요. 다시 로그인해 주세요.");
   if (server.relation !== "owner") throw new Error("서버 소유자만 이름을 바꿀 수 있어요.");
+  if (!server.registration_epoch?.trim()) throw new Error("서버 등록 정보를 확인할 수 없어요. 목록을 새로고침해 주세요.");
   await signedRequest(session, `/v1/servers/${encodeURIComponent(server.server_id)}/name`, "POST", {
     registration_epoch: server.registration_epoch,
     ...(name === null ? { reset_default: true } : { name }),

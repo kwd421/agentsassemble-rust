@@ -35,3 +35,16 @@ it.each(["fetch", "body", "cancel"])("preserves the saved session after %s inter
   if (stage === "cancel") expect(error).toBe(raw);
   expect(loadCentralSession()?.token).toBe("fixture-session");
 });
+
+it.each([undefined, "", "  "])("fails closed before a name edit when the epoch is %s", async registration_epoch => {
+  localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({ token: "fixture-session", expires_at: 9_999_999_999,
+    device_id: "fixture-device", person: { person_id: "fixture-person", identity_kind: "google", display_name: "Name" } }));
+  const fetch = vi.fn();
+  vi.stubGlobal("fetch", fetch);
+  const { renameCentralServer } = await import("./identity");
+  for (const name of [null, "Fixed name"]) {
+    await expect(renameCentralServer({ server_id: "fixture-server", alias: "Old name", host_os: "macos",
+      relation: "owner", name_is_default: true, registration_epoch }, name)).rejects.toThrow("서버 등록 정보");
+  }
+  expect(fetch).not.toHaveBeenCalled();
+});

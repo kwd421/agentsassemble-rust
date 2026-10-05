@@ -53,7 +53,7 @@ it.each(["bootstrap", "unsigned login"])("deletes the legacy directory before of
 const operations = [
   ["bootstrap", () => bootstrapCentral()],
   ["icon read", () => fetchCentralServerIcon(server.icon)],
-  ["rename", () => renameCentralServer(server, "Changed")],
+  ["rename", () => renameCentralServer({ ...server, registration_epoch: "stored-epoch" }, "Changed")],
   ["registration", () => registerLocalServer("fixture-local-token")],
   ["icon write", () => setCentralServerIcon(server, null)],
 ] as const;
@@ -124,7 +124,11 @@ it("clears the directory as soon as 401 headers arrive, before the error body co
 it.each([undefined, "stored-epoch"])("sends stored epoch on device mutations (%s)", async (epoch) => {
   const current = { ...server, registration_epoch: epoch };
   fetcher.mockImplementation(async () => Response.json({ icon: "" }));
-  await renameCentralServer(current, "New name");
+  if (epoch) await renameCentralServer(current, "New name");
+  else {
+    await expect(renameCentralServer(current, "New name")).rejects.toThrow("서버 등록 정보");
+    expect(fetcher).not.toHaveBeenCalled();
+  }
   await setCentralServerIcon(current, null);
   await expect(openCentralOwnedServer({ ...current, host_public_key_jwk: {}, host_key_fingerprint: "key",
     endpoint: { status: "likely_online", origin: "https://host.example", generation: 1, lease_expires_at: 9_999_999_999 } })).rejects.toThrow();

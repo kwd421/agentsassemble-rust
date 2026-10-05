@@ -128,6 +128,7 @@ impl CentralDirectory {
         let mut profile_changes = store.subscribe_room_directory();
         let mut name_dirty = true;
         let mut published_name = None;
+        let mut parked_name = None;
         let mut name_failures = 0_u32;
         let mut next_name_attempt = std::time::Instant::now();
         let mut registered = String::new();
@@ -136,7 +137,14 @@ impl CentralDirectory {
         let mut next_attempt = std::time::Instant::now();
         loop {
             if name_dirty && std::time::Instant::now() >= next_name_attempt {
-                match publish_default_name(&inner, &store, &identity, published_name.as_ref()).await
+                match publish_default_name(
+                    &inner,
+                    &store,
+                    &identity,
+                    published_name.as_ref(),
+                    &mut parked_name,
+                )
+                .await
                 {
                     Ok(version) => {
                         published_name = version;
@@ -145,6 +153,7 @@ impl CentralDirectory {
                         inner.status.write().name_sync_error.clear();
                     }
                     Err(error) => {
+                        name_dirty = !matches!(error, CentralDirectoryError::Rejected);
                         name_failures = name_failures.saturating_add(1);
                         next_name_attempt = std::time::Instant::now() + retry_delay(name_failures);
                         inner.status.write().name_sync_error = error.to_string();
@@ -293,15 +302,20 @@ async fn publish_default_name(
     inner: &CentralDirectoryInner,
     store: &SqliteStore,
     identity: &CentralHostIdentity,
-    published: Option<&(String, i64)>,
-) -> Result<Option<(String, i64)>, CentralDirectoryError> {
+    published: Option<&(String, String)>,
+    parked: &mut Option<(String, i64)>,
+) -> Result<Option<(String, String)>, CentralDirectoryError> {
     let Some(epoch) = store.registration_epoch().await? else {
         return Ok(None);
     };
     let profile = store.local_operator_profile().await?;
-    let version = (epoch, profile.revision);
+    let revision = (epoch.clone(), profile.revision);
+    if parked.as_ref() == Some(&revision) {
+        return Err(CentralDirectoryError::Rejected);
+    }
+    let name = super::host_identity::default_server_name(&profile.display_name).await;
+    let version = (epoch, name.clone());
     if published != Some(&version) {
-        let name = super::host_identity::default_server_name(&profile.display_name).await;
         let path = format!("/v1/servers/{}/name", identity.server_id());
         send_signed(
             inner,
@@ -311,8 +325,14 @@ async fn publish_default_name(
             &path,
             json!({"name": name, "name_revision": profile.revision}),
         )
-        .await?;
+        .await
+        .inspect_err(|error| {
+            if matches!(error, CentralDirectoryError::Rejected) {
+                *parked = Some(revision);
+            }
+        })?;
     }
+    *parked = None;
     Ok(Some(version))
 }
 
@@ -391,6 +411,7 @@ async fn send_signed(
         return Err(
             if response.status().is_server_error()
                 || response.status() == StatusCode::TOO_MANY_REQUESTS
+                || response.status() == StatusCode::REQUEST_TIMEOUT
             {
                 CentralDirectoryError::Unavailable
             } else {
@@ -621,6 +642,113 @@ mod tests {
         cancellation.cancel();
         host.await??;
         server.await?;
+        Ok(())
+    }
+
+    #[tokio::test]
+    async fn name_delivery_skips_unrelated_changes_and_parks_permanent_rejections()
+    -> Result<(), Box<dyn std::error::Error>> {
+        use super::publish_default_name as publish;
+        use agentsassemble_domain::UserProfilePatch;
+        use axum::{Router, body::Bytes, http::StatusCode, routing::put};
+        use std::sync::{
+            Arc,
+            atomic::{AtomicU16, Ordering},
+        };
+        let store = agentsassemble_persistence::SqliteStore::open("sqlite::memory:").await?;
+        store
+            .bootstrap_local_authority("449ce88d-61cd-471f-82a1-e03242ff210f", "Profile")
+            .await?;
+        store.set_registration_epoch(Some("name-epoch")).await?;
+        let identity = crate::CentralHostIdentity::from_persistent(&store.host_identity().await?)?;
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let status = Arc::new(AtomicU16::new(200));
+        let response_status = status.clone();
+        let router = Router::new().route(
+            "/{*path}",
+            put(move |body: Bytes| {
+                let (tx, status) = (tx.clone(), response_status.clone());
+                async move {
+                    tx.send(serde_json::from_slice::<serde_json::Value>(&body).unwrap_or_default())
+                        .ok();
+                    StatusCode::from_u16(status.load(Ordering::SeqCst))
+                        .unwrap_or(StatusCode::INTERNAL_SERVER_ERROR)
+                }
+            }),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let directory =
+            super::CentralDirectory::configured(&format!("http://{}", listener.local_addr()?))?;
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        let shutdown = cancellation.clone();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(shutdown.cancelled_owned())
+                .await
+        });
+        let inner = directory.0.as_ref().ok_or("configured directory")?;
+        let mut parked = None;
+        let mut sent = publish(inner, &store, &identity, None, &mut parked).await?;
+        assert_eq!(rx.try_recv()?["name_revision"], 1);
+        store
+            .update_local_operator_profile(
+                1,
+                UserProfilePatch {
+                    avatar_label: Some("AV".into()),
+                    status: Some("idle".into()),
+                    mic_muted: Some(false),
+                    deafened: Some(true),
+                    ..Default::default()
+                },
+            )
+            .await?;
+        sent = publish(inner, &store, &identity, sent.as_ref(), &mut parked).await?;
+        assert!(rx.try_recv().is_err()); // Unrelated edits emit no PUT.
+        // Each changed name sends its current revision; conflicts park, and
+        // another name revision unparks exactly once.
+        for (revision, name, code) in [
+            (2, "Changed", 200),
+            (3, "Conflict", 409),
+            (4, "Corrected", 409),
+        ] {
+            store
+                .update_local_operator_profile(
+                    revision,
+                    UserProfilePatch {
+                        display_name: Some(name.into()),
+                        ..Default::default()
+                    },
+                )
+                .await?;
+            status.store(code, Ordering::SeqCst);
+            let result = publish(inner, &store, &identity, sent.as_ref(), &mut parked).await;
+            assert_eq!(rx.try_recv()?["name_revision"], revision + 1);
+            if code == 200 {
+                sent = result?;
+            } else {
+                assert!(result.is_err());
+                for _ in 0..3 {
+                    assert!(
+                        publish(inner, &store, &identity, sent.as_ref(), &mut parked)
+                            .await
+                            .is_err()
+                    );
+                    assert!(rx.try_recv().is_err()); // No additional nonce/budget use.
+                }
+            }
+        }
+        store
+            .set_registration_epoch(Some("replacement-epoch"))
+            .await?;
+        // Rate limiting, timeout and server failure remain retryable.
+        for code in [429, 408, 503, 200] {
+            status.store(code, Ordering::SeqCst);
+            let result = publish(inner, &store, &identity, sent.as_ref(), &mut parked).await;
+            assert_eq!(result.is_ok(), code == 200);
+            assert_eq!(rx.try_recv()?["registration_epoch"], "replacement-epoch");
+        }
+        cancellation.cancel();
+        server.await??;
         Ok(())
     }
 

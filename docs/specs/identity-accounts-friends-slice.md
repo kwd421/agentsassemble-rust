@@ -1717,3 +1717,13 @@ POST 이름 편집은 동일 소유권·epoch·관측 이름 검사에서 reset_
 중앙 기존 클라이언트의 revision 없는 등록은 수용하지만 갱신된 기본 label을 되돌리지
 않는다. 중앙 0013은 로컬 검증만 하며 배포/운영 migration은 별도다. 최초 선택 화면의
 기존 설치 프로필은 DB를 읽기 전용으로 검사하고, 최초 설치는 로그인 프로필을 사용한다.
+
+Daybreak REVISE 보완 (2026-10-06): 기존 directory `/name` PUT의 변경 판단은
+(epoch, 파생 기본 이름)으로 하여 아바타·상태·음소거 등 이름과 무관한 프로필 변경은
+쓰기를 만들지 않는다. 실제 이름 변경 시 현재 프로필 revision을 보낸다. 영구 4xx는
+동일 epoch/프로필 revision에 재시도하지 않고 보류하며, 일시 장애의 기존 재시도는 유지한다.
+미적용 0013에서 revision 있는 label을 구 Worker의 label-only 쓰기로부터 보호하고,
+80단위 넘는 기본 이름으로 new → old rollback → new 복원을 검증한다. reset_default와
+expected_name_is_default는 nonempty registration_epoch를 필수로 하며 frontend도 누락 시
+요청 전에 실패한다. 이름 쓰기는 NFC·Cc/Cf 거절·공백 축소 후 길이를 검사하고, 과거
+행을 반환하는 bootstrap/member preview에도 같은 정리와 길이 제한을 적용한다.
