@@ -10,7 +10,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import type { LucideIcon } from "lucide-react";
-import { AtSign, Paperclip, Send, Smile, Sparkles, X } from "lucide-react";
+import { AtSign, Paperclip, Plus, Send, Smile, Sparkles, X } from "lucide-react";
 import {
   uploadLobbyAttachment,
   type LobbyAttachmentRef,
@@ -135,6 +135,26 @@ export default function LobbyComposer({
   const activeUploadOperation = useRef<AttachmentUploadOperation | null>(null);
   const commandListId = useId();
   const emojiListId = useId();
+  const toolsListId = useId();
+  const toolsRef = useRef<HTMLDivElement>(null);
+  const toolsButtonRef = useRef<HTMLButtonElement>(null);
+  const [toolsOpen, setToolsOpen] = useState(false);
+  const [activeToolIndex, setActiveToolIndex] = useState(0);
+  useEffect(() => {
+    if (!toolsOpen) return;
+    const menu = toolsRef.current;
+    menu?.querySelector<HTMLButtonElement>("button:not(:disabled)")?.focus();
+    const outside = (event: PointerEvent) => {
+      if (!menu?.contains(event.target as Node) && !toolsButtonRef.current?.contains(event.target as Node)) setToolsOpen(false);
+    };
+    const resize = () => setToolsOpen(false);
+    window.addEventListener("pointerdown", outside);
+    window.addEventListener("resize", resize);
+    return () => {
+      window.removeEventListener("pointerdown", outside);
+      window.removeEventListener("resize", resize);
+    };
+  }, [toolsOpen]);
   const [draftsByRoom, setDraftsByRoom] = useState<Record<string, LobbyComposerDraft>>({});
   const [busy, setBusy] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -525,6 +545,16 @@ export default function LobbyComposer({
     void handleSubmit();
   }
 
+  const composerTools = [
+    { id: "attachment", label: "첨부 추가", title: `첨부 ${pendingAttachments.length}/${MAX_ATTACHMENTS_PER_EVENT}`, icon: Paperclip,
+      disabled: disabled || !canUploadAttachments || busy || uploading || pendingAttachments.length >= MAX_ATTACHMENTS_PER_EVENT,
+      run: () => fileInputRef.current?.click() },
+    ...COMPOSER_ACCESSORIES.map(accessory => ({ id: accessory.id, label: `채팅 ${accessory.label}`, title: accessory.title, icon: accessory.icon,
+      disabled: busy || disabled, run: () => handleAccessoryClick(accessory) })),
+    { id: "mention", label: "멘션 삽입", title: "@멘션", icon: AtSign, disabled: busy || disabled, run: () => insertText("@") },
+    { id: "emoji", label: "이모지 삽입", title: "이모지", icon: Smile, disabled: busy || disabled, run: () => setEmojiOpen(current => !current) },
+  ];
+
   return (
     <>
       <section className="dc-composer-shell">
@@ -637,64 +667,37 @@ export default function LobbyComposer({
           onChange={handleFileChange}
           aria-label="채팅 첨부 선택"
         />
-        <button
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={
-            disabled ||
-            !canUploadAttachments ||
-            busy ||
-            uploading ||
-            pendingAttachments.length >= MAX_ATTACHMENTS_PER_EVENT
+        <button ref={toolsButtonRef} type="button" className="dc-composer-button dc-composer-tools-toggle"
+          aria-label="채팅 도구 열기" aria-haspopup="menu" aria-expanded={toolsOpen} aria-controls={toolsListId}
+          disabled={busy || disabled} onClick={() => { setDismissedCommandMessage(message); setEmojiOpen(false); setToolsOpen(current => !current); }}>
+          <Plus size={20} />
+        </button>
+        {toolsOpen && <div ref={toolsRef} className="dc-composer-tools-menu" onBlur={event => {
+          if (!event.currentTarget.contains(event.relatedTarget) && event.relatedTarget !== toolsButtonRef.current) setToolsOpen(false);
+        }} onKeyDown={event => {
+          if (event.key === "Escape") {
+            event.preventDefault(); setToolsOpen(false); toolsButtonRef.current?.focus();
+          } else if (["ArrowDown", "ArrowUp", "Home", "End"].includes(event.key)) {
+            event.preventDefault();
+            const buttons = Array.from(event.currentTarget.querySelectorAll<HTMLButtonElement>("button:not(:disabled)"));
+            const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
+            const next = event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length;
+            buttons[next]?.focus();
           }
-          className="dc-composer-button"
-          data-role="attachment"
-          aria-label="첨부 추가"
-          title={`첨부 ${pendingAttachments.length}/${MAX_ATTACHMENTS_PER_EVENT}`}
-        >
-          <Paperclip size={17} />
-        </button>
-        {COMPOSER_ACCESSORIES.map((accessory) => {
-          const Icon = accessory.icon;
-          return (
-            <button
-              key={accessory.id}
-              type="button"
-              onClick={() => handleAccessoryClick(accessory)}
-              disabled={busy || disabled}
-              className="dc-composer-button"
-              data-accessory={accessory.id}
-              aria-label={`채팅 ${accessory.label}`}
-              title={accessory.title}
-            >
-              {Icon ? <Icon size={17} /> : <span className="dc-composer-button-label">{accessory.label}</span>}
-            </button>
-          );
+        }}>
+          <ComposerCommandMenu actions listId={toolsListId} activeIndex={activeToolIndex} onActiveIndexChange={setActiveToolIndex}
+            commands={composerTools} onSelect={item => { setToolsOpen(false); toolsButtonRef.current?.focus(); item.run(); }} />
+        </div>}
+        {composerTools.map(tool => {
+          const Icon = tool.icon;
+          return <button key={tool.id} type="button" onClick={tool.run} disabled={tool.disabled}
+            className="dc-composer-button dc-composer-wide-tool"
+            data-role={tool.id === "apps" ? undefined : tool.id} data-accessory={tool.id === "apps" ? tool.id : undefined}
+            aria-label={tool.label} title={tool.title}
+            aria-expanded={tool.id === "emoji" ? emojiOpen : undefined} aria-controls={tool.id === "emoji" ? emojiListId : undefined}>
+            {Icon ? <Icon size={17} /> : <span className="dc-composer-button-label">{tool.title}</span>}
+          </button>;
         })}
-        <button
-          type="button"
-          onClick={() => insertText("@")}
-          disabled={busy || disabled}
-          className="dc-composer-button"
-          data-role="mention"
-          aria-label="멘션 삽입"
-          title="@멘션"
-        >
-          <AtSign size={17} />
-        </button>
-        <button
-          type="button"
-          onClick={() => setEmojiOpen((current) => !current)}
-          disabled={busy || disabled}
-          className="dc-composer-button"
-          data-role="emoji"
-          aria-label="이모지 삽입"
-          aria-expanded={emojiOpen}
-          aria-controls={emojiListId}
-          title="이모지"
-        >
-          <Smile size={17} />
-        </button>
         {emojiOpen && (
           <div
             id={emojiListId}

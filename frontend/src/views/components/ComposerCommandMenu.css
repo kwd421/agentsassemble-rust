@@ -74,3 +74,47 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+
+.dc-composer-button.dc-composer-tools-toggle,
+.dc-composer-tools-menu {
+  display: none;
+}
+
+@media (max-width: 900px) {
+  .dc-composer-bar:has(.dc-composer-tools-toggle) {
+    grid-template-columns: minmax(0, 1fr) 44px 44px;
+  }
+
+  .dc-composer-bar .dc-composer-wide-tool {
+    display: none;
+  }
+
+  .dc-composer-button.dc-composer-tools-toggle {
+    display: grid;
+    width: 44px;
+    height: 44px;
+    order: 5;
+  }
+
+  .dc-composer-bar:has(.dc-composer-tools-toggle) .send {
+    order: 6;
+  }
+
+  .dc-composer-tools-menu {
+    display: contents;
+  }
+
+  .dc-composer-tools-menu .dc-composer-command-menu {
+    left: auto;
+    right: 0;
+  }
+
+  .dc-composer-tools-menu button:focus-visible {
+    outline: 2px solid var(--color-accent);
+  }
+
+  .dc-composer-tools-menu button:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+}

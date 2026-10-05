@@ -1,8 +1,10 @@
 # Verification Contract
 
-- 2026-10-06 서버 행 편집: 이름만 제목/이 기기 · OS, 편집 시 외부 버튼 숨김·편집 전 미리보기 숨김·연필 재사용·저장/취소와 작은 조건부 복원; 저장/취소/실패/복원 포함 9/9 통과; 서명·배포 없음.
+- 2026-10-06 좁은 채팅 도구: 900px 이하 + 메뉴에 첨부/앱/멘션/이모지, 기존 ComposerCommandMenu·토큰·동작/권한 재사용, 넓은 폭 보존; composer 24/24·Chromium 2/2 및 v2 after 17장 확인, 이번 세 건 공통 푸시 직전 make verify 1회 exit 0(frontend 1,124 및 Rust/desktop·필수 게이트); 기존 패널 겹침/작은 회색 안내/모의 side-chat 503은 남음, 서명·배포 없음.
 
-- 2026-10-06 화면 보고서 문구: 공용 참가 확인/서버 이름 미리보기의 서버 접미 제거, 해당 서버 첫 저장 방 또는 새 회의실, keep-all; 영향 화면 29/29 통과, v2 Chromium 캡처는 후속 행과 함께 기록; 서명·배포 없음.
+- 2026-10-06 서버 행 편집: 이름만 제목/이 기기 · OS, 편집 시 외부 버튼 숨김·편집 전 미리보기 숨김·연필 재사용·저장/취소와 작은 조건부 복원; 저장/취소/실패/복원 포함 9/9 통과, ui-report/v2-after-servers·first-server·first-server-edit 두 폭 캡처 확인; 서명·배포 없음.
+
+- 2026-10-06 화면 보고서 문구: 공용 참가 확인/서버 이름 미리보기의 서버 접미 제거, 해당 서버 첫 저장 방 또는 새 회의실, keep-all; 영향 화면 29/29 통과, ui-report/v2-after-consent·server-name-edit·first-server-edit 1280×800/800×900 캡처 확인; 서명·배포 없음.
 
 - 2026-10-06 Daybreak 서버 이름 M2/L2 보완: epoch/파생 이름 변경만 PUT·영구 4xx 보류·0013 legacy rollback 보호·epoch 필수·NFC/Cc/Cf 정리; Worker 영향 96+SQL 분할 1 및 구조/map 통과(수정 전 회귀 실패 확인), Rust make verify 1회는 기존 epoch 테스트 2건에서 중단 후 계약에 맞게 수정, 영향 재검사·잔여 필수 검사 통과(frontend 1,122/Rust 1,106/desktop 47, Clippy·diff·artifact); 원격·배포·서명·수동 검증 없음.
 

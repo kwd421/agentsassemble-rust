@@ -1,4 +1,4 @@
-import { BarChart3 } from "lucide-react";
+import { BarChart3, type LucideIcon } from "lucide-react";
 
 
 export type ComposerCommand = {
@@ -26,44 +26,53 @@ export function matchingComposerCommands(message: string): ComposerCommand[] {
   );
 }
 
-export default function ComposerCommandMenu({
+type MenuItem = { id: string; label: string; command?: string; description?: string; icon?: LucideIcon; disabled?: boolean };
+
+export default function ComposerCommandMenu<T extends MenuItem>({
   listId,
   commands,
   activeIndex,
   onActiveIndexChange,
   onSelect,
+  actions = false,
 }: {
   listId: string;
-  commands: ComposerCommand[];
+  commands: T[];
   activeIndex: number;
   onActiveIndexChange: (index: number) => void;
-  onSelect: (command: ComposerCommand) => void;
+  onSelect: (command: T) => void;
+  actions?: boolean;
 }) {
   return (
-    <div className="dc-composer-command-menu" aria-label="채팅 명령" role="listbox" id={listId}>
-      <small>명령</small>
-      {commands.map((item, index) => (
-        <button
-          key={item.id}
-          id={`${listId}-option-${index}`}
-          type="button"
-          role="option"
-          aria-selected={index === activeIndex}
-          data-active={index === activeIndex}
-          onMouseDown={(event) => event.preventDefault()}
-          onMouseEnter={() => onActiveIndexChange(index)}
-          onClick={() => onSelect(item)}
-        >
-          <span className="dc-composer-command-icon" aria-hidden="true">
-            <BarChart3 size={17} />
-          </span>
-          <span className="dc-composer-command-copy">
-            <strong>{item.command}</strong>
-            <span>{item.label}</span>
-            <small>{item.description}</small>
-          </span>
-        </button>
-      ))}
+    <div className="dc-composer-command-menu" aria-label={actions ? "채팅 도구" : "채팅 명령"} role={actions ? "menu" : "listbox"} id={listId}>
+      {!actions && <small>명령</small>}
+      {commands.map((item, index) => {
+        const Icon = item.icon || BarChart3;
+        return (
+          <button
+            key={item.id}
+            id={`${listId}-option-${index}`}
+            type="button"
+            role={actions ? "menuitem" : "option"}
+            disabled={item.disabled}
+            aria-selected={actions ? undefined : index === activeIndex}
+            data-active={index === activeIndex}
+            onFocus={() => onActiveIndexChange(index)}
+            onMouseDown={(event) => event.preventDefault()}
+            onMouseEnter={() => onActiveIndexChange(index)}
+            onClick={() => onSelect(item)}
+          >
+            <span className="dc-composer-command-icon" aria-hidden="true">
+              <Icon size={17} />
+            </span>
+            <span className="dc-composer-command-copy">
+              {item.command && <strong>{item.command}</strong>}
+              <span>{item.label}</span>
+              {item.description && <small>{item.description}</small>}
+            </span>
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -66,6 +66,25 @@ describe("LobbyComposer", () => {
     expect((screen.getByLabelText("채팅 입력") as HTMLTextAreaElement).value).toBe("👍");
   });
 
+  it("reuses tool permissions and returns focus when the compact menu closes", () => {
+    render(<LobbyComposer meetingId="room-a" onPosted={vi.fn()} postingMode="guest" />);
+    const toggle = screen.getByRole("button", { name: "채팅 도구 열기" });
+    fireEvent.click(toggle);
+    const menu = screen.getByRole("menu", { name: "채팅 도구" });
+    expect(within(menu).getByRole("menuitem", { name: "첨부 추가" })).toHaveProperty("disabled", true);
+    expect(within(menu).getByRole("menuitem", { name: "채팅 앱" })).toBe(document.activeElement);
+    fireEvent.keyDown(document.activeElement!, { key: "End" });
+    expect(within(menu).getByRole("menuitem", { name: "이모지 삽입" })).toBe(document.activeElement);
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(document.activeElement).toBe(toggle);
+    fireEvent.change(screen.getByLabelText("채팅 입력"), { target: { value: "/vote" } });
+    fireEvent.click(toggle);
+    expect(screen.queryByRole("listbox", { name: "채팅 명령" })).toBeNull();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("menu")).toBeNull();
+  });
+
   it("keeps a message unsent while the canonical socket is unavailable", async () => {
     const onPosted = vi.fn();
     render(
