@@ -27,28 +27,29 @@ type Consent = {
 function failureMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const messages: Record<string, string> = {
-      admission_session_unavailable: "이 방에는 다시 참가할 수 없어요. 방 관리자에게 문의해 주세요.",
+      member_membership_ended: "이 방에는 다시 참가할 수 없어요. 방 관리자에게 문의해 주세요.",
+      admission_session_unavailable: "참가를 마치지 못했어요. 다시 시도해 주세요.",
       idempotency_conflict: "이 초대로는 참가할 수 없어요. 방 관리자에게 새 초대를 받아 주세요.",
       participant_identity_conflict: "참가자 정보를 확인하지 못했어요. 방 관리자에게 문의해 주세요.",
       member_challenge_invalid: "참가 요청을 사용할 수 없어요. 다시 시도해 주세요.",
-      member_redeem_failed: "계정을 확인하지 못했어요. 다시 시도해 주세요.",
+      member_redeem_failed: "참가를 마치지 못했어요. 다시 시도해 주세요.",
       invite_invalid: "초대나 방을 사용할 수 없어요. 방 관리자에게 문의해 주세요.",
       token_expired: "초대가 만료됐어요. 새 초대를 받아 주세요.",
       invite_revoked: "취소된 초대예요. 새 초대를 받아 주세요.",
     };
-    return messages[error.code] || "참가할 수 없어요. 다시 시도해 주세요.";
+    return messages[error.code] || "참가를 마치지 못했어요. 다시 시도해 주세요.";
   }
-  if (error instanceof TypeError) return "서버에 연결할 수 없어요. 연결을 확인하고 다시 시도해 주세요.";
+  if (error instanceof TypeError) return "참가를 마치지 못했어요. 다시 시도해 주세요.";
   // Only exact user-facing messages may cross the native/parser error boundary.
   const messages = [
     "참가 요청이 만료됐어요. 다시 시도해 주세요.",
-    "참가를 완료하지 못했어요. 다시 시도해 주세요.",
+    "참가를 마치지 못했어요. 다시 시도해 주세요.",
     "참가 요청이 없어요. 원래 초대 링크를 다시 열어 주세요.",
     "로그인 계정이 바뀌었어요. 다시 시도해 주세요.",
     "서버 주소가 변경됐어요. 다시 시도해 주세요.",
   ];
   return error instanceof Error && messages.includes(error.message)
-    ? error.message : "참가를 준비하지 못했어요. 초대 링크에서 다시 시도해 주세요.";
+    ? error.message : "참가를 마치지 못했어요. 다시 시도해 주세요.";
 }
 
 export default function MemberJoinPanel({ host, request, entryError, onCancel }: {
@@ -79,8 +80,8 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
     }
     const payload = await joinRoomMember(pending, grant.grant_token, createSecureRequestId(), host.clientId, host.deviceToken);
     if (!active.current) return;
-    if (payload.server_id !== pending.server_id) throw new Error("참가를 완료하지 못했어요. 다시 시도해 주세요.");
-    if (!(await host.onComplete(payload))) throw new Error("참가를 완료하지 못했어요. 다시 시도해 주세요.");
+    if (payload.server_id !== pending.server_id) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
+    if (!(await host.onComplete(payload))) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
   }
 
   async function prepare() {
@@ -94,7 +95,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
       targetRequest = memberTargetRequest(record.current);
       if (!isDesktopWebview()) {
         const central = centralAccountEntryUrl();
-        if (!central) throw new Error("참가를 준비하지 못했어요. 초대 링크에서 다시 시도해 주세요.");
+        if (!central) throw new Error("참가를 마치지 못했어요. 다시 시도해 주세요.");
         const url = centralMemberEntryUrl(new URL(central).origin, targetRequest);
         storeMemberHandoff(record.current);
         setStatus("참가를 준비하고 있어요");

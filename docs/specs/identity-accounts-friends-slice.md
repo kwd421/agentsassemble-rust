@@ -126,7 +126,8 @@ challenge 재사용·만료/동시 입장/세션 사용/C4a 거절/중앙 오류
 한해서 이를 대체하는 세션 테이블 migration이 필요하다. v81의 기존 테이블·credential 의미를
 바꾸지 않는 additive 계약을 넘는다. C4a(80/81 reader)는 82를 열기 전에 거절한다.
 80/최소81에서 기존 세션·profile·native pairing·bootstrap revision 80을 보존하여 upgrade한다.
-세션 수명/종료는 기존 human 세션과 동일하며, 만료·종료된 canonical 결과는 재발급하지 않는다.
+세션 수명/종료는 기존 human 세션과 동일하다. Joined 멤버의 새 요청은 기존 admission을
+출처로 새 세션을 발급하며, 이전 세션 만료·종료는 재입장을 막지 않는다.
 
 H1 API (양쪽 요청 모두 기존 `x-device-token` 브라우저 credential 필수):
 - `POST /api/room-invite/member-challenge` `{invite_token}` →
@@ -1637,3 +1638,22 @@ make verify 한 번; 기능별 커밋/푸시와 VERIFICATION 건별 한 줄. 서
 서버 admission/권한/상태/실패/재시도/저장/프로토콜과 기존 버튼 활성 조건은 변경하지 않는다.
 기존 토큰/스타일만 재사용하며 화면 테스트, 푸시 직전 make verify 한 번으로 검증한다.
 서명 빌드/수동 검증/배포는 제외하고 최종 미감은 관리자 소유다.
+
+### 종료된 멤버 세션 후 재입장 보완 (2026-10-05)
+
+0.1.14 실기 재현: Joined와 member_admissions가 남아도 첫 session_key가 ended/expired이면
+재입장을 SessionUnavailable로 거절한다. member-join → admission → session_provenance를
+수정하여 같은 사용자/admission/범위로 새 요청별 세션을 발급한다. 새 초대는 소비하지 않는다.
+신규 요청의 세션 키는 기존 admission seed, browser fingerprint, request UUID에 결합하고
+각 세션의 출처는 기존 binding/user/participant/room/scope/input hash 및 키 결합을 검증한다.
+기존 첫 세션 출처도 그대로 유효하다. 스키마 변경 없이 단일 active participant 세션 제약을
+유지하고 새 세션 발급 시 기존 active 세션을 종료하여 기존 revocation 통지 경로로 전달한다.
+동일 browser/request 재시도는 저장된 같은 결과·세션을 반환하며 종료 세션을 되살리지 않는다.
+성공한 HTTP challenge는 기존 300초/1024개 한도 안에서 요청 fingerprint와 검증된 신원을
+보관하여 정확한 재시도에만 재사용한다. 동시 redeem은 한 번만; 실패·불명 결과는 폐기한다.
+새 초대 유효성, exact scope, Left/Kicked 거절, epoch/만료/browser 결합을 계속 검사한다.
+Left/Kicked는 member_membership_ended로 구분하며 공용 UI에서만 재참가 불가를 안내한다.
+admission_session_unavailable 및 기타 일시 실패는 “참가를 마치지 못했어요. 다시 시도해 주세요.”.
+회귀: 만료/종료 뒤 같은·다른 기기 재입장, 새 세션/같은 사용자/출처/소비 불변, 정확 재시도,
+동시 요청·교체·rollback, Kicked 및 오류 매핑. 관련 테스트 후 make verify 한 번과 기능 커밋/푸시.
+서명 빌드·수동 검증·배포 제외.

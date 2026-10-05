@@ -29,18 +29,20 @@ async fn member_devices_retry_canonical_result_without_profile_overwrite_or_devi
         let (store, now) = fixture().await;
         store.set_registration_epoch(Some("epoch")).await?;
         insert_invite(&store, [1; 32], [2; 32], "guest", uses, now).await;
-        let first = admitted(
-            store
-                .admit_human(&member(2, 3, "First snapshot"), now)
-                .await?,
-        );
+        let first_request = member(2, 3, "First snapshot");
+        let first = admitted(store.admit_human(&first_request, now).await?);
+        let exact = admitted(store.admit_human(&first_request, now).await?);
+        assert!(exact.deduplicated());
+        let expected_bearer = first.session_bearer() == exact.session_bearer();
+        assert!(expected_bearer);
         let fingerprint: [u8; 32] = Sha256::digest(first.session_bearer().as_bytes()).into();
         let auth = store.authorize_human_session(&fingerprint).await?;
         assert_eq!(auth.principal().display_name, "First snapshot");
         let replay = admitted(store.admit_human(&member(2, 4, "New name"), now).await?);
-        assert!(replay.deduplicated());
-        assert_eq!(first.result(), replay.result());
-        assert_eq!(first.session_bearer(), replay.session_bearer());
+        assert!(!replay.deduplicated());
+        assert_eq!(first.result().agent_id, replay.result().agent_id);
+        let expected_bearer = first.session_bearer() != replay.session_bearer();
+        assert!(expected_bearer);
         assert_eq!(
             sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM central_identity_bindings")
                 .fetch_one(&store.pool)
@@ -59,7 +61,14 @@ async fn member_devices_retry_canonical_result_without_profile_overwrite_or_devi
                 .await?,
             1
         );
-        store.revalidate_human_session_authorization(&auth).await?;
+        assert!(
+            store
+                .revalidate_human_session_authorization(&auth)
+                .await
+                .is_err()
+        );
+        let fingerprint: [u8; 32] = Sha256::digest(replay.session_bearer().as_bytes()).into();
+        store.authorize_human_session(&fingerprint).await?;
         // Ordinary browser replay must never accept a bound user or member result.
         let mut tx = store.pool.begin().await?;
         assert!(
@@ -101,7 +110,7 @@ async fn member_other_scope_and_terminal_participants_do_not_consume_or_create_s
         for join in [2, 6] {
             assert!(matches!(
                 store.admit_human(&member(join, 4, "Member"), now).await?,
-                HumanAdmissionDecision::Rejected(HumanAdmissionRejection::SessionUnavailable)
+                HumanAdmissionDecision::Rejected(HumanAdmissionRejection::MemberMembershipEnded)
             ));
         }
         assert_eq!(
@@ -116,6 +125,23 @@ async fn member_other_scope_and_terminal_participants_do_not_consume_or_create_s
                 .await?,
             1
         );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn member_nonjoined_states_are_not_misreported_as_left_or_kicked() -> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
+    let first = admitted(store.admit_human(&member(2, 3, "Member"), now).await?);
+    for status in ["exported", "detached"] {
+        sqlx::query("UPDATE participants SET participant_json = json_set(participant_json, '$.status', ?) WHERE participant_id = ?")
+            .bind(status).bind(&first.result().agent_id).execute(&store.pool).await?;
+        assert!(matches!(
+            store.admit_human(&member(2, 4, "Member"), now).await?,
+            HumanAdmissionDecision::Rejected(HumanAdmissionRejection::SessionUnavailable)
+        ));
     }
     Ok(())
 }
@@ -137,9 +163,18 @@ async fn member_two_device_race_reads_committed_winner() -> TestResult {
     }
     let second = admitted(tasks.pop().ok_or("task")?.await??);
     let first = admitted(tasks.pop().ok_or("task")?.await??);
-    assert_ne!(first.deduplicated(), second.deduplicated());
-    assert_eq!(first.result(), second.result());
-    assert_eq!(first.session_bearer(), second.session_bearer());
+    assert!(!first.deduplicated() && !second.deduplicated());
+    assert_eq!(first.result().agent_id, second.result().agent_id);
+    let expected_bearer = first.session_bearer() != second.session_bearer();
+    assert!(expected_bearer);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>(
+            "SELECT COUNT(*) FROM human_room_sessions WHERE state = 'active'"
+        )
+        .fetch_one(&store.pool)
+        .await?,
+        1
+    );
     assert_eq!(
         sqlx::query_scalar::<_, i64>("SELECT use_count FROM room_invites")
             .fetch_one(&store.pool)
@@ -252,9 +287,10 @@ async fn member_new_invite_reenters_after_original_revocation_or_expiry() -> Tes
                 .admit_human(&member(6, 4, "Other browser"), now)
                 .await?,
         );
-        assert!(replay.deduplicated());
-        assert_eq!(first.result(), replay.result());
-        assert_eq!(first.session_bearer(), replay.session_bearer());
+        assert!(!replay.deduplicated());
+        assert_eq!(first.result().agent_id, replay.result().agent_id);
+        let expected_bearer = first.session_bearer() != replay.session_bearer();
+        assert!(expected_bearer);
         let fingerprint: [u8; 32] = Sha256::digest(replay.session_bearer().as_bytes()).into();
         let auth = store.authorize_human_session(&fingerprint).await?;
         assert_eq!(auth.principal().display_name, "Hihi");
@@ -289,9 +325,124 @@ async fn member_new_invite_reenters_after_original_revocation_or_expiry() -> Tes
                 .bind(status).bind(&first.result().agent_id).execute(&store.pool).await?;
             assert!(matches!(
                 store.admit_human(&member(6, 5, "Hihi"), now).await?,
-                HumanAdmissionDecision::Rejected(HumanAdmissionRejection::SessionUnavailable)
+                HumanAdmissionDecision::Rejected(HumanAdmissionRejection::MemberMembershipEnded)
             ));
         }
     }
+    Ok(())
+}
+
+#[tokio::test]
+async fn member_reenters_after_session_expiry_or_end_and_retries_exactly() -> TestResult {
+    for browser in [3, 4] {
+        for change in [
+            "UPDATE human_room_sessions SET state = 'ended'",
+            "UPDATE human_room_sessions SET admitted_at = admitted_at - 7200000000, expires_at = expires_at - 7200000000",
+        ] {
+            let (store, now) = fixture().await;
+            store.set_registration_epoch(Some("epoch")).await?;
+            insert_invite(&store, [1; 32], [2; 32], "original", 10, now).await;
+            insert_invite(&store, [5; 32], [6; 32], "new", 10, now).await;
+            let first = admitted(store.admit_human(&member(2, 3, "Hihi"), now).await?);
+            sqlx::query(change).execute(&store.pool).await?;
+            let request = member(6, browser, "Ignored");
+            let next = admitted(store.admit_human(&request, now).await?);
+            assert_eq!(first.result().agent_id, next.result().agent_id);
+            assert_eq!(next.result().display_name, "Hihi");
+            let expected_bearer = first.session_bearer() != next.session_bearer();
+            assert!(expected_bearer);
+            let fingerprint: [u8; 32] = Sha256::digest(next.session_bearer().as_bytes()).into();
+            store.authorize_human_session(&fingerprint).await?;
+            let retry = admitted(store.admit_human(&request, now).await?);
+            assert!(retry.deduplicated());
+            assert_eq!(retry.result(), next.result());
+            let expected_bearer = retry.session_bearer() == next.session_bearer();
+            assert!(expected_bearer);
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(DISTINCT user_id) FROM human_room_sessions"
+                )
+                .fetch_one(&store.pool)
+                .await?,
+                1
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT COUNT(DISTINCT member_admission_id) FROM human_room_sessions"
+                )
+                .fetch_one(&store.pool)
+                .await?,
+                1
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>(
+                    "SELECT use_count FROM room_invites WHERE base_participant_id = 'new'"
+                )
+                .fetch_one(&store.pool)
+                .await?,
+                0
+            );
+            assert_eq!(
+                sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM human_room_sessions")
+                    .fetch_one(&store.pool)
+                    .await?,
+                2
+            );
+            sqlx::query("UPDATE human_room_sessions SET browser_credential_fingerprint = ? WHERE state = 'active'")
+                .bind([9_u8; 32].as_slice()).execute(&store.pool).await?;
+            assert!(store.authorize_human_session(&fingerprint).await.is_err());
+        }
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn member_same_request_race_issues_once() -> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
+    admitted(store.admit_human(&member(2, 3, "Hihi"), now).await?);
+    let request = std::sync::Arc::new(member(2, 4, "Hihi"));
+    let barrier = std::sync::Arc::new(tokio::sync::Barrier::new(2));
+    let mut tasks = Vec::new();
+    for _ in 0..2 {
+        let (store, request, barrier) = (store.clone(), request.clone(), barrier.clone());
+        tasks.push(tokio::spawn(async move {
+            barrier.wait().await;
+            store.admit_human(&request, now).await
+        }));
+    }
+    let first = admitted(tasks.pop().ok_or("task")?.await??);
+    let second = admitted(tasks.pop().ok_or("task")?.await??);
+    assert_ne!(first.deduplicated(), second.deduplicated());
+    assert_eq!(first.result(), second.result());
+    let expected_bearer = first.session_bearer() == second.session_bearer();
+    assert!(expected_bearer);
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM human_room_sessions")
+            .fetch_one(&store.pool)
+            .await?,
+        2
+    );
+    Ok(())
+}
+
+#[tokio::test]
+async fn member_failed_reentry_rolls_back_session_replacement() -> TestResult {
+    let (store, now) = fixture().await;
+    store.set_registration_epoch(Some("epoch")).await?;
+    insert_invite(&store, [1; 32], [2; 32], "guest", 10, now).await;
+    let first = admitted(store.admit_human(&member(2, 3, "Hihi"), now).await?);
+    sqlx::query("CREATE TRIGGER fail_reentry BEFORE INSERT ON human_room_sessions BEGIN SELECT RAISE(ABORT, 'test failure'); END")
+        .execute(&store.pool).await?;
+    assert!(store.admit_human(&member(2, 4, "Hihi"), now).await.is_err());
+    let fingerprint: [u8; 32] = Sha256::digest(first.session_bearer().as_bytes()).into();
+    store.authorize_human_session(&fingerprint).await?;
+    assert_eq!(
+        sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM human_room_sessions")
+            .fetch_one(&store.pool)
+            .await?,
+        1
+    );
     Ok(())
 }

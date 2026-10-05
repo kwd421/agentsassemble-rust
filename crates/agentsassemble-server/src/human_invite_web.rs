@@ -405,6 +405,10 @@ impl From<HumanAdmissionRejection> for HumanInviteHttpError {
                 "room_admission_capacity_reached",
                 "Room admission capacity was reached.",
             ),
+            HumanAdmissionRejection::MemberMembershipEnded => Self::forbidden(
+                "member_membership_ended",
+                "The member has left or was removed from this room.",
+            ),
             HumanAdmissionRejection::SessionUnavailable => Self::forbidden(
                 "admission_session_unavailable",
                 "The completed admission session is unavailable.",
@@ -521,6 +525,11 @@ mod tests {
         );
         assert_eq!(member.status, StatusCode::FORBIDDEN);
         assert_eq!(member.code, "central_member_unsupported");
+
+        let ended = HumanInviteHttpError::from(HumanAdmissionRejection::MemberMembershipEnded);
+        assert_eq!(ended.code, "member_membership_ended");
+        let unavailable = HumanInviteHttpError::from(HumanAdmissionRejection::SessionUnavailable);
+        assert_eq!(unavailable.code, "admission_session_unavailable");
 
         let collision = HumanInviteHttpError::from(HumanAdmissionRejection::IdentityConflict);
         assert_eq!(collision.status, StatusCode::FORBIDDEN);

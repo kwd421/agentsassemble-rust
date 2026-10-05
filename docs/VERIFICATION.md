@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 member session reentry correction: expired/ended first sessions no longer block Joined members; per-request sessions retain admission provenance, exact retries and single-active-session revocation, with no new invite consumption; persistence 10/10, challenge/error mapping 3/3, member HTTP integration and frontend 20/20 passed; one pre-push make verify passed all tests (Rust workspace 1,097, frontend 1,117, desktop 47) then stopped at Clippy; corrected without gate exceptions or bearer logging, final affected Rust 38/38 plus workspace Clippy/architecture/format/diff/artifact gates passed; no signed build, manual verification or deployment.
+
 - 2026-10-05 C agent chooser structure: content-height unselected modal, header refresh icon with preserved refresh/error semantics and category headings; affected screen tests 70/70 plus compact refresh 3/3 and Chromium invite layout 2/2 passed; one final pre-push make verify exited 0 (frontend 1,115, desktop 47, workspace Rust and all mandatory gates); covers all three C commits; no signing/manual verification/deployment.
 
 - 2026-10-05 C member consent structure: shared central/native server initial and sentence heading, account/origin/help, full-width join and text cancel; member screen tests 18/18 passed with existing grant/admission/cancel/error assertions preserved; no signing/manual verification/deployment.

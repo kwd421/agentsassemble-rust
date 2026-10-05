@@ -53,7 +53,6 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
         tokio::spawn(async move { serve(host, state, host_shutdown, async { Ok(()) }).await });
     let client = reqwest::Client::new();
     let first = assert_admission(&client, &base, invite.join_code(), &mut received).await?;
-    assert_durable_replay(&store, &invite, &central, &first).await?;
     // Real room WebSocket uses the member session through the ordinary session owner.
     let token = first["session_token"].as_str().ok_or("token")?;
     assert_member_socket(&client, &base, token).await;
@@ -66,6 +65,7 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
         &mut received,
     )
     .await?;
+    assert_durable_replay(&store, &invite, &central, &first).await?;
     cancellation.cancel();
     host_task.await??;
     worker_task.await??;
@@ -236,19 +236,32 @@ async fn assert_admission(
     assert_eq!(call["challenge_hash"], first_challenge["challenge_hash"]);
     assert_eq!(first["display_name"], "Member snapshot");
     assert_eq!(first["stable_identity"], true);
-    assert_eq!(
-        join(
-            client,
-            base,
-            invite,
-            DEVICE,
-            &first_challenge,
-            "aamg1.first"
-        )
-        .await?
-        .status(),
-        StatusCode::UNAUTHORIZED
-    );
+    let retry = join(
+        client,
+        base,
+        invite,
+        DEVICE,
+        &first_challenge,
+        "aamg1.first",
+    )
+    .await?;
+    assert_eq!(retry.status(), StatusCode::OK);
+    let same_response = retry.json::<Value>().await? == first;
+    assert!(same_response, "exact HTTP retry must preserve the response");
+    let mut changed = first_challenge.clone();
+    changed["request_id"] = json!(uuid::Uuid::new_v4().to_string());
+    for (browser, challenge, grant) in [
+        (DEVICE, &changed, "aamg1.first"),
+        (DEVICE, &first_challenge, "aamg1.changed"),
+        (second_device.as_str(), &first_challenge, "aamg1.first"),
+    ] {
+        assert_eq!(
+            join(client, base, invite, browser, challenge, grant)
+                .await?
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+    }
     assert!(received.try_recv().is_err());
     // The last one-use slot is consumed; a fresh browser can still recover canonical admission.
     let next = challenge(client, base, invite, &second_device).await?;
@@ -259,12 +272,12 @@ async fn assert_admission(
     assert_join_correlation(&replay, &next, &second_device);
     assert_ne!(first["request_id"], replay["request_id"]);
     assert_ne!(first["client_id"], replay["client_id"]);
-    let mut canonical = replay;
-    canonical["request_id"] = first["request_id"].clone();
-    canonical["client_id"] = first["client_id"].clone();
-    assert_eq!(first, canonical);
+    assert_eq!(first["agent_id"], replay["agent_id"]);
+    assert_eq!(first["display_name"], replay["display_name"]);
+    let new_session = first["session_token"] != replay["session_token"];
+    assert!(new_session, "new device needs a new session");
     received.recv().await.ok_or("second redeem")?;
-    Ok(first)
+    Ok(replay)
 }
 
 async fn assert_failures(
@@ -381,10 +394,17 @@ async fn assert_durable_replay(
     let HumanAdmissionDecision::Admitted(commit) = store.admit_human(&request, now).await? else {
         panic!("canonical admission must replay");
     };
-    assert!(commit.deduplicated());
-    assert_eq!(json!(commit.result().request_id), first["request_id"]);
-    assert_eq!(json!(commit.result().client_id), first["client_id"]);
-    let same_bearer = first["session_token"] == commit.session_bearer();
-    assert!(same_bearer, "canonical bearer must remain unchanged");
+    assert!(!commit.deduplicated());
+    assert_eq!(json!(commit.result().agent_id), first["agent_id"]);
+    assert_eq!(commit.result().client_id, "durable-retry-client");
+    let new_session = first["session_token"] != commit.session_bearer();
+    assert!(new_session, "new request needs a new session");
+    let HumanAdmissionDecision::Admitted(retry) = store.admit_human(&request, now).await? else {
+        panic!("exact request must replay");
+    };
+    assert!(retry.deduplicated());
+    assert_eq!(commit.result(), retry.result());
+    let same_bearer = commit.session_bearer() == retry.session_bearer();
+    assert!(same_bearer);
     Ok(())
 }

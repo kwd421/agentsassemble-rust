@@ -38,6 +38,7 @@ pub enum HumanAdmissionRejection {
     IdentityConflict,
     CapacityReached,
     SessionUnavailable,
+    MemberMembershipEnded,
     IdempotencyConflict,
 }
 

@@ -25,6 +25,7 @@ struct Challenge {
     epoch: String,
     expires: DateTime<Utc>,
     redeeming: bool,
+    completed: Option<([u8; 32], MemberAdmission)>,
 }
 
 impl MemberChallenges {
@@ -59,6 +60,7 @@ impl MemberChallenges {
                 epoch,
                 expires,
                 redeeming: false,
+                completed: None,
             },
         );
         Ok((id, expires))
@@ -71,10 +73,15 @@ impl MemberChallenges {
         browser: [u8; 32],
         epoch: &str,
         now: DateTime<Utc>,
+        request_hash: [u8; 32],
     ) -> Result<Challenge, HumanInviteHttpError> {
         let mut entries = self.0.lock();
         let challenge = entries.get_mut(id).ok_or_else(invalid_challenge)?;
-        if challenge.redeeming
+        if (challenge.redeeming
+            && challenge
+                .completed
+                .as_ref()
+                .is_none_or(|(hash, _)| *hash != request_hash))
             || challenge.expires <= now
             || challenge.invite != invite
             || challenge.browser != browser
@@ -172,12 +179,12 @@ pub(super) async fn join(
         credential,
         browser,
         &HumanAdmissionInput {
-            request_id: body.request_id,
+            request_id: body.request_id.clone(),
             meeting_id_assertion: String::new(),
             display_name: String::new(),
             participant_type: "human".into(),
             owner_display_name: String::new(),
-            client_id: body.client_id,
+            client_id: body.client_id.clone(),
             avatar_image_url: String::new(),
         },
     )
@@ -190,48 +197,19 @@ pub(super) async fn join(
     }
     let response_request_id = prepared.request_id().to_string();
     let response_client_id = prepared.client_id().to_owned();
-    let epoch = state
-        .store
-        .registration_epoch()
-        .await?
-        .ok_or_else(invalid_challenge)?;
-    let challenge = state.member_challenges.claim(
-        &body.challenge_id,
-        Sha256::digest(body.invite_token.trim().as_bytes()).into(),
-        browser,
-        &epoch,
-        Utc::now(),
-    )?;
-    let hash = URL_SAFE_NO_PAD.encode(Sha256::digest(body.challenge_id.as_bytes()));
-    let redeemed = state
-        .central_directory
-        .member_admission(
-            &state.central_host_identity,
-            &state.store,
-            &body.grant_token,
-            &hash,
-            &epoch,
-        )
-        .await;
-    // All outcomes, including unknown responses, require a new challenge. Cancellation
-    // leaves a claimed tombstone until expiry, so it can never trigger a second redeem.
-    state.member_challenges.0.lock().remove(&body.challenge_id);
-    let identity = redeemed.map_err(|_| {
-        HumanInviteHttpError::new(
-            StatusCode::BAD_GATEWAY,
-            "member_redeem_failed",
-            "Member verification failed. Start again with a fresh challenge and grant.",
-        )
-    })?;
-    let prepared = prepared.with_member(MemberAdmission {
-        issuer: identity.issuer,
-        person_id: identity.person_id,
-        display_name: identity.display_name,
-        registration_epoch: epoch,
-        challenge_expires_at: challenge.expires,
-    });
+    let request_hash: [u8; 32] = Sha256::digest(
+        json!([body.grant_token, body.request_id, body.client_id])
+            .to_string()
+            .as_bytes(),
+    )
+    .into();
+    let member = redeem_member(&state, &body, browser, request_hash).await?;
+    let prepared = prepared.with_member(member.clone());
     match state.rooms.admit_human(prepared).await? {
         HumanAdmissionDecision::Admitted(commit) => {
+            if let Some(challenge) = state.member_challenges.0.lock().get_mut(&body.challenge_id) {
+                challenge.completed = Some((request_hash, member));
+            }
             let (mut result, session_token) = commit.into_result_and_bearer();
             // Correlate this HTTP response without changing the durable canonical result.
             result.request_id = response_request_id;
@@ -247,6 +225,57 @@ pub(super) async fn join(
         }
         HumanAdmissionDecision::Rejected(reason) => Err(reason.into()),
     }
+}
+
+async fn redeem_member(
+    state: &AppState,
+    body: &MemberJoinRequest,
+    browser: [u8; 32],
+    request_hash: [u8; 32],
+) -> Result<MemberAdmission, HumanInviteHttpError> {
+    let epoch = state
+        .store
+        .registration_epoch()
+        .await?
+        .ok_or_else(invalid_challenge)?;
+    let challenge = state.member_challenges.claim(
+        &body.challenge_id,
+        Sha256::digest(body.invite_token.trim().as_bytes()).into(),
+        browser,
+        &epoch,
+        Utc::now(),
+        request_hash,
+    )?;
+    if let Some((_, member)) = challenge.completed {
+        return Ok(member);
+    }
+    let hash = URL_SAFE_NO_PAD.encode(Sha256::digest(body.challenge_id.as_bytes()));
+    let redeemed = state
+        .central_directory
+        .member_admission(
+            &state.central_host_identity,
+            &state.store,
+            &body.grant_token,
+            &hash,
+            &epoch,
+        )
+        .await;
+    let identity = redeemed.map_err(|_| {
+        // Failed/unknown redemption cannot be retried; only committed success is retained.
+        state.member_challenges.0.lock().remove(&body.challenge_id);
+        HumanInviteHttpError::new(
+            StatusCode::BAD_GATEWAY,
+            "member_redeem_failed",
+            "Member verification failed. Start again with a fresh challenge and grant.",
+        )
+    })?;
+    Ok(MemberAdmission {
+        issuer: identity.issuer,
+        person_id: identity.person_id,
+        display_name: identity.display_name,
+        registration_epoch: epoch,
+        challenge_expires_at: challenge.expires,
+    })
 }
 
 #[cfg(test)]
@@ -265,21 +294,25 @@ mod tests {
             ([1; 32], [3; 32], "epoch"),
             ([1; 32], [2; 32], "other"),
         ] {
-            assert!(challenges.claim(&id, invite, browser, epoch, now).is_err());
+            assert!(
+                challenges
+                    .claim(&id, invite, browser, epoch, now, [0; 32])
+                    .is_err()
+            );
         }
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", expires)
+                .claim(&id, [1; 32], [2; 32], "epoch", expires, [0; 32])
                 .is_err()
         );
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", now)
+                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32])
                 .is_ok()
         );
         assert!(
             challenges
-                .claim(&id, [1; 32], [2; 32], "epoch", now)
+                .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32])
                 .is_err()
         );
         for _ in 1..CHALLENGE_LIMIT {
@@ -317,7 +350,7 @@ mod tests {
             tasks.push(tokio::spawn(async move {
                 barrier.wait().await;
                 challenges
-                    .claim(&id, [1; 32], [2; 32], "epoch", now)
+                    .claim(&id, [1; 32], [2; 32], "epoch", now, [0; 32])
                     .is_ok()
             }));
         }
