@@ -106,6 +106,7 @@ struct MemberJoinRequest {
     challenge_id: String,
     grant_token: String,
     request_id: String,
+    client_id: String,
 }
 
 pub(super) async fn start(
@@ -176,11 +177,19 @@ pub(super) async fn join(
             display_name: String::new(),
             participant_type: "human".into(),
             owner_display_name: String::new(),
-            client_id: String::new(),
+            client_id: body.client_id,
             avatar_image_url: String::new(),
         },
     )
     .map_err(HumanInviteHttpError::from_input)?;
+    if prepared.client_id().is_empty() {
+        return Err(HumanInviteHttpError::bad_request(
+            "client_id_required",
+            "client_id is required.",
+        ));
+    }
+    let response_request_id = prepared.request_id().to_string();
+    let response_client_id = prepared.client_id().to_owned();
     let epoch = state
         .store
         .registration_epoch()
@@ -223,7 +232,10 @@ pub(super) async fn join(
     });
     match state.rooms.admit_human(prepared).await? {
         HumanAdmissionDecision::Admitted(commit) => {
-            let (result, session_token) = commit.into_result_and_bearer();
+            let (mut result, session_token) = commit.into_result_and_bearer();
+            // Correlate this HTTP response without changing the durable canonical result.
+            result.request_id = response_request_id;
+            result.client_id = response_client_id;
             let bootstrap = state.store.local_bootstrap_status().await?;
             Ok(Json(JoinResponse {
                 result,

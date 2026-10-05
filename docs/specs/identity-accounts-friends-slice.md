@@ -111,9 +111,11 @@ H1 API (양쪽 요청 모두 기존 `x-device-token` 브라우저 credential 필
 - `POST /api/room-invite/member-challenge` `{invite_token}` →
   `{challenge_id, challenge_hash, server_id, registration_epoch, expires_at}` (Unix seconds, 300초).
   사용 상한에 도달한 초대도 이미 commit된 결과 복구를 위해 challenge만 발급할 수 있다.
-- `POST /api/room-invite/member-join` `{invite_token, challenge_id, grant_token, request_id}` →
+- `POST /api/room-invite/member-join` `{invite_token, challenge_id, grant_token, request_id, client_id}` →
   기존 `/api/room-invite/join` 성공 응답 (`session_token`, 사용자/방/서버 정보 포함).
-  canonical 결과 재시도는 최초 `request_id`와 bearer를 그대로 반환하며 초대를 다시 소비하지 않는다.
+  `client_id`는 기존 join의 공통 정규화를 사용하며 빈 값은 거절한다. 최초/재입장 HTTP 응답은
+  이번 요청의 `request_id`와 `client_id`로 기존 프론트 join 검증기를 만족한다. durable 재생 결과는
+  최초 request/client ID와 bearer를 보존하고, 출처·멱등성 판단 및 초대 소비 규칙은 바꾸지 않는다.
 - 실패 시 session 없이 기존 error envelope를 반환한다. challenge 오류는 401
   `member_challenge_invalid`, 중앙 거절/불명/장애는 502 `member_redeem_failed`,
   challenge 상한(호스트당 1024)은 429 `member_challenge_capacity`; 방/초대 거절은 기존 코드다.

@@ -53,6 +53,7 @@ async fn member_http_signs_redeem_binds_browser_replays_and_fails_closed() -> Te
         tokio::spawn(async move { serve(host, state, host_shutdown, async { Ok(()) }).await });
     let client = reqwest::Client::new();
     let first = assert_admission(&client, &base, invite.join_code(), &mut received).await?;
+    assert_durable_replay(&store, &invite, &central, &first).await?;
     // Real room WebSocket uses the member session through the ordinary session owner.
     let token = first["session_token"].as_str().ok_or("token")?;
     assert_member_socket(&client, &base, token).await;
@@ -84,7 +85,9 @@ async fn challenge(
         .send()
         .await?;
     assert_eq!(response.status(), StatusCode::OK);
-    response.json().await
+    let mut body: Value = response.json().await?;
+    body["request_id"] = json!(uuid::Uuid::new_v4().to_string());
+    Ok(body)
 }
 async fn join(
     client: &reqwest::Client,
@@ -96,7 +99,7 @@ async fn join(
 ) -> Result<reqwest::Response, reqwest::Error> {
     client.post(format!("{base}/api/room-invite/member-join"))
         .header("x-device-token", browser)
-        .json(&json!({"invite_token":invite,"challenge_id":challenge["challenge_id"],"grant_token":grant,"request_id":uuid::Uuid::new_v4().to_string()})).send().await
+        .json(&json!({"invite_token":invite,"challenge_id":challenge["challenge_id"],"grant_token":grant,"request_id":challenge["request_id"],"client_id":format!("client-{browser}")})).send().await
 }
 
 async fn assert_member_socket(client: &reqwest::Client, base: &str, token: &str) {
@@ -252,7 +255,14 @@ async fn assert_admission(
     let replay = join(client, base, invite, &second_device, &next, "aamg1.second").await?;
     assert_eq!(replay.status(), StatusCode::OK);
     let replay: Value = replay.json().await?;
-    assert_eq!(first, replay);
+    assert_join_correlation(&first, &first_challenge, DEVICE);
+    assert_join_correlation(&replay, &next, &second_device);
+    assert_ne!(first["request_id"], replay["request_id"]);
+    assert_ne!(first["client_id"], replay["client_id"]);
+    let mut canonical = replay;
+    canonical["request_id"] = first["request_id"].clone();
+    canonical["client_id"] = first["client_id"].clone();
+    assert_eq!(first, canonical);
     received.recv().await.ok_or("second redeem")?;
     Ok(first)
 }
@@ -288,5 +298,93 @@ async fn assert_failures(
         let fingerprint: [u8; 32] = Sha256::digest(token.as_bytes()).into();
         store.authorize_human_session(&fingerprint).await?;
     }
+    Ok(())
+}
+
+// Correlation requirements of parseRoomInviteJoinResponse: nonempty current request,
+// room and client IDs on both first admission and another browser's canonical retry.
+fn assert_join_correlation(response: &Value, challenge: &Value, browser: &str) {
+    assert_eq!(response["status"], "admitted");
+    assert_eq!(response["request_id"], challenge["request_id"]);
+    assert_eq!(response["meeting_id"], "general");
+    assert_eq!(response["client_id"], format!("client-{browser}"));
+    for field in [
+        "request_id",
+        "client_id",
+        "session_token",
+        "agent_id",
+        "owner_id",
+        "display_name",
+        "provider_kind",
+        "connection_kind",
+        "room_label",
+        "server_id",
+        "authority_lineage_id",
+    ] {
+        assert!(
+            response[field]
+                .as_str()
+                .is_some_and(|value| !value.trim().is_empty()),
+            "{field}"
+        );
+    }
+    assert_eq!(response["participant_type"], "human");
+    assert_eq!(response["client_type"], "browser");
+    assert_eq!(response["invite_scope"], "room");
+    for field in ["expires_at", "room_created_at"] {
+        assert!(
+            chrono::DateTime::parse_from_rfc3339(response[field].as_str().unwrap_or_default())
+                .is_ok()
+        );
+    }
+    for field in ["stable_identity", "operator"] {
+        assert!(response[field].is_boolean());
+    }
+    for field in ["room_topic", "owner_display_name"] {
+        assert!(response[field].is_string());
+    }
+}
+
+async fn assert_durable_replay(
+    store: &agentsassemble_persistence::SqliteStore,
+    invite: &agentsassemble_server::IssuedHumanInviteCredentials,
+    issuer: &str,
+    first: &Value,
+) -> TestResult {
+    use agentsassemble_persistence::{
+        HumanAdmissionDecision, HumanAdmissionInput, HumanInviteCredentialEvidence,
+        MemberAdmission, PreparedHumanAdmission,
+    };
+    let now = chrono::Utc::now();
+    let request = PreparedHumanAdmission::prepare(
+        HumanInviteCredentialEvidence::JoinCode {
+            fingerprint: *invite.join_code_fingerprint(),
+        },
+        [2; 32],
+        &HumanAdmissionInput {
+            request_id: uuid::Uuid::new_v4().to_string(),
+            meeting_id_assertion: "general".into(),
+            display_name: String::new(),
+            participant_type: "human".into(),
+            owner_display_name: String::new(),
+            client_id: "durable-retry-client".into(),
+            avatar_image_url: String::new(),
+        },
+    )?
+    .with_member(MemberAdmission {
+        issuer: issuer.into(),
+        person_id: "person-1".into(),
+        display_name: "Ignored".into(),
+        registration_epoch: "member-epoch".into(),
+        challenge_expires_at: now + chrono::Duration::seconds(30),
+    });
+    let HumanAdmissionDecision::Admitted(commit) = store.admit_human(&request, now).await? else {
+        panic!("canonical admission must replay");
+    };
+    assert!(commit.deduplicated());
+    assert_eq!(json!(commit.result().request_id), first["request_id"]);
+    assert_eq!(json!(commit.result().client_id), first["client_id"]);
+    let same_bearer = first["session_token"] == commit.session_bearer();
+    assert!(same_bearer, "canonical bearer must remain unchanged");
     Ok(())
 }
