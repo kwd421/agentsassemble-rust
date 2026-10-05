@@ -11,18 +11,26 @@ use crate::{
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-async fn install_v81(store: &SqliteStore) -> Result<(), sqlx::Error> {
-    // Keep this fixture tied to the owning contract, including UNIQUE/FK/index definitions.
-    let contract = include_str!("../../../docs/specs/identity-accounts-friends-slice.md");
-    let ddl = contract
-        .split("```sql\n")
-        .nth(1)
+fn member_ddl() -> &'static str {
+    // Keep fixtures tied to the owning contract, including UNIQUE/FK/index definitions.
+    include_str!("../../../docs/specs/identity-accounts-friends-slice.md")
+        .split_once("```sql\n")
         .unwrap_or_else(|| panic!("v81 contract DDL"))
-        .split("```")
-        .next()
-        .unwrap_or_else(|| panic!("DDL closing fence"));
+        .1
+        .split_once("```")
+        .unwrap_or_else(|| panic!("DDL closing fence"))
+        .0
+}
+
+async fn install_v81(store: &SqliteStore) -> Result<(), sqlx::Error> {
     let mut tx = store.pool.begin().await?;
-    sqlx::raw_sql(ddl).execute(&mut *tx).await?;
+    let ddl = member_ddl()
+        .to_lowercase()
+        .replace("user_id", "\"user_id\"")
+        .replace(' ', " \t ");
+    sqlx::raw_sql(sqlx::AssertSqlSafe(ddl))
+        .execute(&mut *tx)
+        .await?;
     sqlx::query("UPDATE runtime_metadata SET value = '81' WHERE key = 'schema_version'")
         .execute(&mut *tx)
         .await?;
@@ -234,14 +242,7 @@ async fn floor_rejects_newer_versions_and_incomplete_81() -> TestResult {
 
 #[tokio::test]
 async fn floor_rejects_malformed_81_structure() -> TestResult {
-    let contract = include_str!("../../../docs/specs/identity-accounts-friends-slice.md");
-    let ddl = contract
-        .split("```sql\n")
-        .nth(1)
-        .unwrap_or_else(|| panic!("contract DDL"))
-        .split("```")
-        .next()
-        .unwrap_or_else(|| panic!("DDL fence"));
+    let ddl = member_ddl();
     for (original, replacement) in [
         (") STRICT", ")"),
         ("created_at INTEGER", "created_at TEXT"),
@@ -254,6 +255,16 @@ async fn floor_rejects_malformed_81_structure() -> TestResult {
         (",\n    UNIQUE(issuer, user_id)", ""),
         ("REFERENCES user_profiles(user_id) ON DELETE RESTRICT", ""),
         ("ON DELETE RESTRICT", "ON DELETE CASCADE"),
+        ("PRIMARY KEY", "PRIMARY KEY ON CONFLICT REPLACE"),
+        (
+            "UNIQUE(issuer, person_id)",
+            "UNIQUE(issuer, person_id) ON CONFLICT REPLACE",
+        ),
+        (
+            "UNIQUE(issuer, user_id)",
+            "UNIQUE(issuer, user_id) ON CONFLICT REPLACE",
+        ),
+        (") STRICT", ", CHECK(created_at > 0)) STRICT"),
         (
             "REFERENCES user_profiles(user_id)",
             "REFERENCES user_profiles(participant_id)",

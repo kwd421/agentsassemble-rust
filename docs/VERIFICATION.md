@@ -2,6 +2,7 @@
 
 ## C4a Daybreak corrections (2026-10-05)
 
+- M1 re-review: exact normalized sqlite_schema DDL replaces PRAGMA checks; original 13 plus 4 conflict/constraint mutations and formatted valid DDL covered; persistence 411/411 passed; `make verify` passed once (Rust 1,080, desktop 46, frontend 1,043; all gates passed).
 - H1 confirmed: bound browser one-use admission failed before correction; admission-boundary guard now rejects fresh/repeated and pre-binding exact replay without writes (4 attempts). Persistence: 411 passed.
 - M1 confirmed: non-STRICT v81 was accepted before correction; read-only schema/PRAGMA validation now rejects 13 malformed structures. Valid v80/v81 schema/data and native pairing retention passed with persistence 411/411 in the final verify run.
 - Focus wait: unchanged activeElement assertion now awaits the focus effect; CustomChannelView 11/11 and frontend 1,043/1,043 (174 files) passed.
