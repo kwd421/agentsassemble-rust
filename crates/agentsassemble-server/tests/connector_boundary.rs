@@ -5,10 +5,7 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::human_invite;
 
 #[tokio::test]
 async fn connector_http_keeps_agent_custody_and_publishes_exact_commands()
@@ -192,8 +189,7 @@ mod connector_client;
 
 #[path = "connector_boundary/client_retry.rs"]
 mod client_retry;
-#[path = "support/lossy_http.rs"]
-mod lossy_http;
+use crate::support::lossy_http;
 
 #[path = "connector_boundary/mcp.rs"]
 mod mcp;

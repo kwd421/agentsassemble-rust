@@ -1,3 +1,4 @@
+use crate::support;
 use agentsassemble_domain::{
     AgentSessionDraft, AuthenticatedPrincipal, CapabilitySet, ClientKind, InviteScope,
     LOCAL_OPERATOR_PARTICIPANT_ID, LOCAL_OPERATOR_USER_ID,
@@ -7,10 +8,6 @@ use agentsassemble_persistence::{
 };
 use agentsassemble_server::issue_local_ticket;
 use serde_json::{Value, json};
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
 
 #[tokio::test]
 async fn full_persona_capacity_create_configure_and_reopen_fit_actual_socket()

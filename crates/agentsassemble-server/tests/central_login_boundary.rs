@@ -3,10 +3,7 @@ use agentsassemble_protocol::{CentralLoginAction, CentralLoginResult, LocalContr
 use agentsassemble_server::central_login_control;
 use reqwest::{Client, StatusCode};
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 #[tokio::test]
 async fn native_return_before_bootstrap_requires_expected_state_and_local_ingress() {

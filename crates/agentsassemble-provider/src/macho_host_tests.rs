@@ -2,6 +2,11 @@ use std::{fs, path::Path, process::Command};
 
 #[test]
 fn staged_loader_retains_its_declared_library_after_source_removal() {
+    if super::super::executable_staging::run_in_private_temp_process(
+        "filesystem::macho_host::tests::staged_loader_retains_its_declared_library_after_source_removal",
+    ) {
+        return;
+    }
     let fixture = tempfile::tempdir().unwrap_or_else(|e| panic!("fixture: {e}"));
     let root = fixture
         .path()

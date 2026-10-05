@@ -7,14 +7,9 @@ use agentsassemble_server::{
 use serde_json::json;
 use uuid::Uuid;
 
-#[path = "support/attendee.rs"]
-mod attendee;
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/provider_fixture.rs"]
-mod provider_fixture;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::attendee;
+use crate::support::human_invite;
+use crate::support::provider_fixture;
 
 #[tokio::test]
 async fn external_client_owns_fixture_process_and_only_reports_exact_confirmed_cleanup()

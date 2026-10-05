@@ -27,6 +27,11 @@ fn package(root: &Path) -> PathBuf {
 
 #[tokio::test]
 async fn staged_package_launch_preserves_siblings_and_cleanup() {
+    if super::super::executable_staging::run_in_private_temp_process(
+        "filesystem::cursor_executable::tests::staged_package_launch_preserves_siblings_and_cleanup",
+    ) {
+        return;
+    }
     let root = tempfile::tempdir().unwrap_or_else(|error| panic!("create fixture: {error}"));
     let entry = package(root.path());
     let identity = super::cursor_executable_identity(entry.to_string_lossy().into_owned())

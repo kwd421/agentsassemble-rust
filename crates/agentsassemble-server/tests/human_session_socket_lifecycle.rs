@@ -10,10 +10,7 @@ use reqwest::Client;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::human_invite::{
     canonical_session_token, fixture, fixture_with_max_uses, join, open_session_socket,
@@ -48,6 +45,7 @@ async fn durable_session_deadline_closes_an_active_socket() {
     // the blocking guard if an assertion unwinds.
     let (release_clock, clock_held) = std::sync::mpsc::channel::<()>();
     let clock_guard = tokio::task::spawn_blocking(move || clock_held.recv());
+    socket.processing_barrier().await;
     tokio::time::pause();
     for nonce in 0..14 {
         tokio::time::advance(Duration::from_mins(4)).await;
@@ -59,6 +57,7 @@ async fn durable_session_deadline_closes_an_active_socket() {
         let pong = socket.receive_json().await;
         assert_eq!(pong["op"], "pong");
         assert_eq!(pong["nonce"], format!("keepalive-{nonce}"));
+        socket.processing_barrier().await;
         tokio::time::pause();
     }
     // Cross the durable one-hour deadline without reaching the independent

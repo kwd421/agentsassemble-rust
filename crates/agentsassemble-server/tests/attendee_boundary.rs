@@ -4,13 +4,10 @@ use reqwest::Client;
 use serde_json::{Value, json};
 use uuid::Uuid;
 
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::human_invite;
+use crate::support::room_socket_peer;
 
-#[path = "support/attendee.rs"]
-mod attendee;
+use crate::support::attendee;
 use attendee::fixture;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;

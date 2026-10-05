@@ -91,6 +91,24 @@ where
         }
     }
 
+    // The connection handles this control frame only after prior application
+    // work, without starting another database activity write. Wait for its Pong
+    // before advancing fake time past any in-flight handshake/persistence timeout.
+    pub async fn processing_barrier(&mut self) {
+        let nonce = b"clock-barrier".to_vec();
+        self.socket
+            .send(Message::Ping(nonce.clone().into()))
+            .await
+            .unwrap_or_else(|error| panic!("send clock barrier: {error}"));
+        let reply = self
+            .socket
+            .next()
+            .await
+            .unwrap_or_else(|| panic!("socket closed before clock barrier"))
+            .unwrap_or_else(|error| panic!("receive clock barrier: {error}"));
+        assert_eq!(reply, Message::Pong(nonce.into()));
+    }
+
     pub async fn send_binary(&mut self, bytes: Vec<u8>) {
         self.socket
             .send(Message::Binary(bytes.into()))

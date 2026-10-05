@@ -10,7 +10,7 @@ use rmcp::{
 };
 use serde_json::{Map, json};
 
-pub(super) fn script(
+pub(crate) fn script(
     transcript: &Path,
     portal_endpoint: &Path,
     portal_token: &Path,
@@ -104,7 +104,7 @@ IFS= read -r forever
     )
 }
 
-pub(super) async fn wait_for_value(path: &Path, description: &str) -> String {
+pub(crate) async fn wait_for_value(path: &Path, description: &str) -> String {
     for _ in 0..500 {
         if let Ok(value) = std::fs::read_to_string(path)
             && !value.is_empty()
@@ -116,7 +116,7 @@ pub(super) async fn wait_for_value(path: &Path, description: &str) -> String {
     panic!("RoomPortal {description} was not published");
 }
 
-pub(super) async fn wait_for_turn(path: &Path, expected: &str) {
+pub(crate) async fn wait_for_turn(path: &Path, expected: &str) {
     for _ in 0..500 {
         if std::fs::read_to_string(path).is_ok_and(|value| value == expected) {
             return;
@@ -126,7 +126,7 @@ pub(super) async fn wait_for_turn(path: &Path, expected: &str) {
     panic!("provider fixture did not receive turn {expected}");
 }
 
-pub(super) async fn publish(endpoint: &str, token: &str, content: &str) -> String {
+pub(crate) async fn publish(endpoint: &str, token: &str, content: &str) -> String {
     let client = ()
         .serve(StreamableHttpClientTransport::from_config(
             StreamableHttpClientTransportConfig::with_uri(endpoint).auth_header(token),
@@ -153,7 +153,7 @@ pub(super) async fn publish(endpoint: &str, token: &str, content: &str) -> Strin
     view
 }
 
-pub(super) async fn call_tool(
+pub(crate) async fn call_tool(
     client: &RunningService<rmcp::RoleClient, ()>,
     name: &'static str,
     arguments: serde_json::Value,

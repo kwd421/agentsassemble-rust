@@ -159,6 +159,34 @@ fn reclaim_stale_directory(path: &Path) -> io::Result<()> {
     Ok(())
 }
 
+// These binding tests assert immediate Drop cleanup. Give their production
+// staging owner a private process-wide temp root, so unrelated allocations cannot
+// force the documented deferred-reclamation path. Never mutate the parent env.
+#[cfg(test)]
+pub(super) fn run_in_private_temp_process(test_name: &str) -> bool {
+    const CHILD: &str = "AGENTSASSEMBLE_STAGING_TEST_CHILD";
+    if std::env::var(CHILD).as_deref() == Ok(test_name) {
+        return false;
+    }
+    let root = tempfile::tempdir().unwrap_or_else(|error| panic!("private temp root: {error}"));
+    let output = std::process::Command::new(
+        std::env::current_exe().unwrap_or_else(|error| panic!("test executable: {error}")),
+    )
+    .args(["--exact", test_name, "--nocapture"])
+    .env(CHILD, test_name)
+    .env("TMPDIR", root.path())
+    .output()
+    .unwrap_or_else(|error| panic!("isolated staging test: {error}"));
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success() && stdout.contains("1 passed; 0 failed"),
+        "isolated staging test failed ({test_name}): {}\n{stdout}\n{}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    true
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

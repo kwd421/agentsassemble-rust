@@ -710,10 +710,11 @@ mod tests {
 
     #[test]
     fn exact_pending_and_missing_leases_are_distinct_gone_proofs() {
-        let lease = HeldRuntimeLease::prepare("lease-test-room", "lease-test-session")
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let lease = HeldRuntimeLease::prepare("lease-test-room", &session_id)
             .unwrap_or_else(|error| panic!("prepare runtime lease: {error}"));
         assert_eq!(
-            observe_runtime_lease("lease-test-room", "lease-test-session"),
+            observe_runtime_lease("lease-test-room", &session_id),
             LeaseObservation::GenerationGone {
                 launch_token: lease.token().to_owned()
             }
@@ -721,7 +722,7 @@ mod tests {
         let mut lease = lease;
         lease.release_and_remove();
         assert_eq!(
-            observe_runtime_lease("lease-test-room", "lease-test-session"),
+            observe_runtime_lease("lease-test-room", &session_id),
             LeaseObservation::Missing
         );
     }
@@ -739,18 +740,19 @@ mod tests {
 
     #[test]
     fn launching_lease_requires_the_handoff_lifetime_or_runtime_evidence() {
-        let lease = HeldRuntimeLease::prepare("lease-launch-room", "lease-launch-session")
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let lease = HeldRuntimeLease::prepare("lease-launch-room", &session_id)
             .unwrap_or_else(|error| panic!("prepare launch lease: {error}"));
         lease
             .begin_launch_effect()
             .unwrap_or_else(|error| panic!("begin launch effect: {error}"));
         assert_eq!(
-            observe_runtime_lease("lease-launch-room", "lease-launch-session"),
+            observe_runtime_lease("lease-launch-room", &session_id),
             LeaseObservation::Active
         );
         lease.release_launch_lifetime();
         assert_eq!(
-            observe_runtime_lease("lease-launch-room", "lease-launch-session"),
+            observe_runtime_lease("lease-launch-room", &session_id),
             LeaseObservation::GenerationGone {
                 launch_token: lease.token().to_owned()
             }
@@ -760,7 +762,8 @@ mod tests {
 
     #[test]
     fn unlocked_unix_lease_requires_recorded_group_absence() {
-        let lease = HeldRuntimeLease::prepare("lease-group-room", "lease-group-session")
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let lease = HeldRuntimeLease::prepare("lease-group-room", &session_id)
             .unwrap_or_else(|error| panic!("prepare group runtime lease: {error}"));
         lease
             .begin_launch_effect()
@@ -772,12 +775,12 @@ mod tests {
         )
         .unwrap_or_else(|error| panic!("activate group runtime lease: {error}"));
         assert_eq!(
-            observe_runtime_lease("lease-group-room", "lease-group-session"),
+            observe_runtime_lease("lease-group-room", &session_id),
             LeaseObservation::Active
         );
         drop(anchor);
         assert_eq!(
-            observe_runtime_lease("lease-group-room", "lease-group-session"),
+            observe_runtime_lease("lease-group-room", &session_id),
             LeaseObservation::Active
         );
         lease.cleanup_pre_effect();
@@ -785,7 +788,8 @@ mod tests {
 
     #[test]
     fn unlocked_unix_lease_requires_guardian_cleanup_receipt() {
-        let lease = HeldRuntimeLease::prepare("lease-lifetime-room", "lease-lifetime-session")
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let lease = HeldRuntimeLease::prepare("lease-lifetime-room", &session_id)
             .unwrap_or_else(|error| panic!("prepare lifetime runtime lease: {error}"));
         lease
             .begin_launch_effect()
@@ -799,18 +803,18 @@ mod tests {
             .unwrap_or_else(|error| panic!("activate lifetime runtime lease: {error}"));
         drop(anchor);
         assert_eq!(
-            observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
+            observe_runtime_lease("lease-lifetime-room", &session_id),
             LeaseObservation::Active
         );
         drop(lifetime);
         assert_eq!(
-            observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
+            observe_runtime_lease("lease-lifetime-room", &session_id),
             LeaseObservation::Unknown
         );
         super::mark_unix_runtime_gone(lease.path(), lease.token())
             .unwrap_or_else(|error| panic!("record guardian cleanup receipt: {error}"));
         assert_eq!(
-            observe_runtime_lease("lease-lifetime-room", "lease-lifetime-session"),
+            observe_runtime_lease("lease-lifetime-room", &session_id),
             LeaseObservation::GenerationGone {
                 launch_token: lease.token().to_owned()
             }
@@ -822,7 +826,8 @@ mod tests {
     fn previous_boot_unix_marker_is_a_process_absence_proof() {
         use fs2::FileExt;
 
-        let lease = HeldRuntimeLease::prepare("lease-old-boot-room", "lease-old-boot-session")
+        let session_id = uuid::Uuid::new_v4().to_string();
+        let lease = HeldRuntimeLease::prepare("lease-old-boot-room", &session_id)
             .unwrap_or_else(|error| panic!("prepare old-boot runtime lease: {error}"));
         lease
             .begin_launch_effect()
@@ -849,7 +854,7 @@ mod tests {
         FileExt::unlock(&file)
             .unwrap_or_else(|error| panic!("unlock old-boot runtime lease: {error}"));
         assert_eq!(
-            observe_runtime_lease("lease-old-boot-room", "lease-old-boot-session"),
+            observe_runtime_lease("lease-old-boot-room", &session_id),
             LeaseObservation::PreviousBoot {
                 boot_identity: old_boot,
                 launch_token: lease.token().to_owned()

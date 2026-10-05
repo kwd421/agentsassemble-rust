@@ -14,14 +14,9 @@ use tokio::sync::Notify;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-#[path = "support/attendee.rs"]
-mod attendee;
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/provider_fixture.rs"]
-mod provider_fixture;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::attendee;
+use crate::support::human_invite;
+use crate::support::provider_fixture;
 
 fn adapter() -> ProviderAdapter {
     ProviderAdapter::with_guardian_executable(Path::new(env!(
@@ -90,7 +85,12 @@ async fn own_catalog_add_only_start_and_exact_cleanup_do_not_use_the_room_host_c
         "local_attendee_invitation_owned"
     );
     let running = service.start(request.request_id).await?;
-    assert_eq!(running.phase, Phase::Running);
+    assert_eq!(
+        running.phase,
+        Phase::Running,
+        "code={:?}",
+        running.error_code
+    );
     assert_eq!(running.participant_id, admitted.participant_id);
     let snapshot = store.snapshot("general", 0, 200).await?;
     assert_eq!(snapshot.agent_sessions.len(), 1);
@@ -156,7 +156,9 @@ async fn self_targeted_attendees_finish_cleanup_before_their_server_closes_ingre
                 Phase::Running
             } else {
                 Phase::Admitted
-            }
+            },
+            "code={:?}",
+            created.error_code
         );
         // No explicit attendee cancel: this is the actual AppState shutdown owner.
         server.stop().await;

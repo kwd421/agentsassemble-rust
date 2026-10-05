@@ -13,10 +13,7 @@ use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::human_invite::{canonical_session_token, fixture, join, start as start_invite};
 

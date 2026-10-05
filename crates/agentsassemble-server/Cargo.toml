@@ -4,6 +4,12 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 default-run = "agentsassemble-server"
+# One harness links the server once; individual suites are Rust modules.
+autotests = false
+
+[[test]]
+name = "integration"
+path = "tests/integration/main.rs"
 
 [dependencies]
 hex.workspace = true

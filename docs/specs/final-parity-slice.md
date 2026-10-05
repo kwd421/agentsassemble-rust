@@ -59,16 +59,50 @@ Remove macOS dSYM duplication at the existing target-specific rustflags owner
 (the current `packed` flag overrides Cargo profiles), retaining test
 `line-tables-only` and file/line failure backtraces. Do not apply `unpacked` to
 Windows, where rustc does not support it; other target settings stay unchanged.
-Combine the 49 server integration targets into one harness while retaining every
+Combine the 49 server integration targets into meaningfully few harnesses while retaining every
 case, assertion and fixture lifetime; the old target name becomes its module
 filter. Audit process environment, global state, ports, temporary directories and
 SQLite writer ownership before sharing a process. Only reproduced interference
 justifies fixture changes; no global serialization or weaker assertions.
-Record identical-command before/after allocated bytes, a successful full
-`make verify` and its final target size, and three simultaneous full Rust suite
+Record identical-command before/after allocated bytes, the outcome of one
+`make verify` invocation and its final target size, and three simultaneous full Rust suite
 runs using normal parallel test threads. Preserve gates, user data and unrelated
 work; no deployment or signed build. Retire superseded Cargo artifacts only with
 the existing maintenance owner after all active builds finish.
+
+The first three-process run reproduced existing provider fixture interference:
+Mach-O and Cursor package tests require immediate staging removal, but their
+shared process-wide temporary root legitimately defers deletion under another
+owner's lock; runtime lease tests also reuse fixed on-disk session keys between
+processes. Preserve the immediate deletion assertions by running just those two
+staging cases in exact-test subprocesses with private `TMPDIR` values, through the
+same production binding APIs. Give every runtime-lease fixture a unique session
+key. Do not change production cleanup/lease semantics, add retries, or serialize
+the full suites. The child must confirm exactly one passing case, not merely a
+successful empty filter. The next run exposed the same external lease-key
+collision in server recovery/interrupt unit tests. Namespace their common `draft`
+fixture's agent ID by its unique workspace identity, retaining deterministic IDs
+within one fixture and all exact-generation/replay assertions. Agent Session
+integration fixtures also reuse creation request IDs; production intentionally
+derives session IDs from room/principal/request identity. Prefix the shared
+`send_create` helper's request ID with this test process's ID, keeping same-process
+replays identical while separating simultaneous suite runs. Parallel integration
+also exposed fake-time advances racing in-flight socket/SQLite work in central
+owner and human-session lifetime cases. Add a WebSocket control Ping/Pong barrier
+before advancing time, retaining every duration and expiry assertion. ACK helpers
+must fail immediately on an unexpected NACK instead of waiting for nonexistent
+success frames; retain the existing positive frame-count checks. Declare shared support modules once at
+the harness root and import them into suites; preserve the duplicate-module lint.
+The unified harness also exposed startup-cost contention under three simultaneous
+runs: guardians remained alive but missed the unchanged five-second initial
+handoff timeout. Splitting harnesses and private temporary-root subprocesses did
+not eliminate it; those experiments must not be retained as fixes. The unoptimized
+server fixture executable is about 177 MiB and native custody validates/stages it.
+Use `opt-level = 1` for the test profile to reduce executable footprint and native
+startup work, retaining debug assertions, overflow checks and line-table debug
+information. Keep one integration harness and all original timeout/flow assertions;
+remeasure artifacts and repeat the actual file/line failure-backtrace probe.
+
 
 Actual Codex startup exposes an upstream transport mismatch: the installed native
 Code Mode Host accepts a `grpc://127.0.0.1:0` listener and publishes a canonical

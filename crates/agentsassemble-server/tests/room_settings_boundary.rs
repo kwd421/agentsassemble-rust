@@ -1,11 +1,7 @@
 use agentsassemble_domain::InviteScope;
 use serde_json::{Value, json};
 
-mod support {
-    pub mod human_invite;
-    pub mod local_socket;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::{human_invite::fixture, local_socket::connect};
 

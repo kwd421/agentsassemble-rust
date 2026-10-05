@@ -11,18 +11,11 @@ use serde_json::json;
 use std::time::Duration;
 use uuid::Uuid;
 
-#[path = "support/attendee.rs"]
-mod attendee;
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/local_socket.rs"]
-mod local_socket;
-#[path = "support/native_interrupt_fixture.rs"]
-mod native_interrupt_fixture;
-#[path = "support/provider_fixture.rs"]
-mod provider_fixture;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::attendee;
+use crate::support::human_invite;
+use crate::support::local_socket;
+use crate::support::native_interrupt_fixture;
+use crate::support::provider_fixture;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

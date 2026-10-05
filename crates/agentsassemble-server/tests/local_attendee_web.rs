@@ -10,14 +10,9 @@ use serde_json::json;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-#[path = "support/attendee.rs"]
-mod attendee;
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/provider_fixture.rs"]
-mod provider_fixture;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::attendee;
+use crate::support::human_invite;
+use crate::support::provider_fixture;
 
 #[tokio::test]
 async fn local_http_creation_uses_only_its_local_operator_and_preserves_remote_membership_identity()

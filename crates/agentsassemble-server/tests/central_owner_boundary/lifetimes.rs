@@ -65,6 +65,7 @@ async fn connected_session_survives_five_minutes_and_central_logout_with_zero_ow
         (190, "after-three-minutes"),
         (191, "after-five-minutes-and-central-logout"),
     ] {
+        socket.processing_barrier().await;
         tokio::time::pause();
         tokio::time::advance(Duration::from_secs(seconds)).await;
         tokio::time::resume();

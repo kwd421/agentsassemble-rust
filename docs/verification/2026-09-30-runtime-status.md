@@ -28,7 +28,7 @@ Only the named paths were run; no broad suite rerun. Cargo environment:
 `CARGO_PROFILE_DEV_BUILD_OVERRIDE_STRIP=none`,
 `CARGO_PROFILE_TEST_BUILD_OVERRIDE_STRIP=none`.
 
-- Server tests: `cargo test -p agentsassemble-server --test agent_session_boundary <name> -- --nocapture`.
+- Server tests: `cargo test -p agentsassemble-server --test integration agent_session_boundary::<name> -- --nocapture`.
 - Companion: `cargo test -p agentsassemble-provider codex_code_mode_host_start_failure_preserves_cleanup_authority -- --nocapture`.
 - ACP probe: `cargo test -p agentsassemble-provider diagnostic_acp_rejection_loses_cause -- --nocapture`.
 - Persistence probe: `cargo test -p agentsassemble-persistence startup_gone_terminalizes_old_start_and_unblocks_a_new_request -- --nocapture`.

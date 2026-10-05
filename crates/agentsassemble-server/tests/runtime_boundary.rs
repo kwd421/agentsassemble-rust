@@ -20,10 +20,7 @@ use tokio::{
 use tokio_tungstenite::{WebSocketStream, connect_async, tungstenite::Message};
 use tokio_util::sync::CancellationToken;
 
-mod support {
-    pub mod local_socket;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::{
     local_socket::{connect, request_ticket},

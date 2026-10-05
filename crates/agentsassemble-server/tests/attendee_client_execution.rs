@@ -11,18 +11,12 @@ use serde_json::json;
 use std::time::Duration;
 use uuid::Uuid;
 
-#[path = "support/attendee.rs"]
-mod attendee;
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/local_socket.rs"]
-mod local_socket;
-#[path = "support/provider_fixture.rs"]
-mod provider_fixture;
-#[path = "support/room_portal_fixture.rs"]
-mod room_portal_fixture;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::attendee;
+use crate::support::human_invite;
+use crate::support::local_socket;
+use crate::support::provider_fixture;
+use crate::support::room_portal_fixture;
+use crate::support::room_socket_peer;
 
 #[path = "attendee_client_execution/tools.rs"]
 mod tool_relay;

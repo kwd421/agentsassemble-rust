@@ -17,10 +17,7 @@ mod control_pipe_message_attachments;
 #[cfg(unix)]
 #[path = "control_pipe/runtime_restart.rs"]
 mod runtime_restart;
-mod support {
-    #[path = "../support/room_socket_peer.rs"]
-    pub mod room_socket_peer;
-}
+use crate::support;
 const PUBLIC_ORIGIN: &str = "https://public.example.test";
 const PROXY_SECRET: &str = "manual-ingress-control-secret-000000001";
 #[test]

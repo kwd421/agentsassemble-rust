@@ -7,10 +7,7 @@ use agentsassemble_server::{
 use reqwest::{Client, StatusCode};
 use serde_json::{Value, json};
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+use crate::support;
 use support::human_invite::{fixture, start};
 
 type TestResult<T = ()> = Result<T, Box<dyn std::error::Error>>;

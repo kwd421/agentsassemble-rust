@@ -1,7 +1,6 @@
-use std::{path::Path, time::Duration};
-#[path = "../support/native_interrupt_fixture.rs"]
-mod native_interrupt_fixture;
+use crate::support::native_interrupt_fixture;
 use native_interrupt_fixture::script as interrupt_fixture;
+use std::{path::Path, time::Duration};
 
 use serde_json::{Value, json};
 

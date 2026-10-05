@@ -2,11 +2,7 @@ use agentsassemble_domain::InviteScope;
 use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use serde_json::{Value, json};
 
-mod support {
-    pub mod human_invite;
-    pub mod local_socket;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::{
     human_invite::{canonical_session_token, fixture, join, open_session_socket, start},

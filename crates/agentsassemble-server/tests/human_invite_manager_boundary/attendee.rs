@@ -1,11 +1,8 @@
 use super::*;
+use crate::support::human_invite;
 use agentsassemble_domain::{FriendDetails, FriendParticipantType, InviteScope, SaveFriend};
 use agentsassemble_server::RoomAttendeeClient;
 use uuid::Uuid;
-#[path = "../support/human_invite.rs"]
-mod human_invite;
-#[path = "../support/room_socket_peer.rs"]
-mod room_socket_peer;
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 

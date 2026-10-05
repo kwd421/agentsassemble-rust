@@ -18,10 +18,7 @@ use tokio::{
 use tokio_tungstenite::MaybeTlsStream;
 use tokio_util::sync::CancellationToken;
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::{
     human_invite::{canonical_session_token, fixture, join, open_session_socket, start},

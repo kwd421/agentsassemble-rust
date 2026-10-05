@@ -12,8 +12,7 @@ use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::room_socket_peer;
 use room_socket_peer::RoomSocketPeer;
 
 const ORIGIN: &str = "https://pairing.example.test";

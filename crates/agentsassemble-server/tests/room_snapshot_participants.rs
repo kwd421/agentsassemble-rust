@@ -7,10 +7,7 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 use uuid::Uuid;
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 #[tokio::test]
 async fn repeated_departures_preserve_history_without_growing_required_socket_metadata()

@@ -691,8 +691,14 @@ pub(crate) mod tests {
             persona_card_id,
             transport,
         ]);
+        // Runtime leases live outside the fixture database. Keep IDs stable within
+        // this workspace without colliding with another test process's leases.
+        let agent_id = uuid::Uuid::new_v5(
+            &uuid::Uuid::NAMESPACE_OID,
+            format!("{workspace_identity}:{agent_id}").as_bytes(),
+        );
         AgentSessionDraft {
-            agent_id: agent_id.to_owned(),
+            agent_id: format!("codex-{agent_id}"),
             display_name: "Terra".to_owned(),
             provider_kind: provider_kind.to_owned(),
             runtime_kind: runtime_kind.to_owned(),

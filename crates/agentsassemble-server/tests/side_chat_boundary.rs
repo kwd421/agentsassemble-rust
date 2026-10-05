@@ -8,10 +8,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use reqwest::{Client, StatusCode};
 use serde_json::json;
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+use crate::support;
 use support::human_invite::{canonical_session_token, fixture, join, start};
 
 #[tokio::test]

@@ -14,12 +14,9 @@ use sha2::{Digest, Sha256};
 use std::{collections::BTreeMap, time::Duration};
 use uuid::Uuid;
 
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/local_socket.rs"]
-mod local_socket;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::human_invite;
+use crate::support::local_socket;
+use crate::support::room_socket_peer;
 
 #[path = "provider_request_broker/socket.rs"]
 mod request_socket;

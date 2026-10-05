@@ -82,6 +82,8 @@ opt-level = 3
 # file/line backtraces; variable/type inspection remains a full-debug opt-in.
 # macOS split-debuginfo is set in .cargo/config.toml, not this portable profile.
 [profile.test]
+# Reduce linked code size and native fixture startup cost; assertions stay enabled.
+opt-level = 1
 debug = "line-tables-only"
 
 [profile.test.package.sha2]

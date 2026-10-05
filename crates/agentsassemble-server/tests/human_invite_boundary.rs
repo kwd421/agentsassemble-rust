@@ -10,11 +10,7 @@ use tokio::{
     net::TcpStream,
 };
 
-mod support {
-    pub mod human_invite;
-    pub mod human_profile_target;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::{
     human_invite::{

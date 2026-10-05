@@ -2,14 +2,9 @@ use agentsassemble_persistence::AttendeeCleanupReport;
 use agentsassemble_server::RoomAttendeeClient;
 use uuid::Uuid;
 
-#[path = "support/attendee.rs"]
-mod attendee;
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/lossy_http.rs"]
-mod lossy_http;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::attendee;
+use crate::support::human_invite;
+use crate::support::lossy_http;
 
 #[tokio::test]
 async fn unstarted_attendee_recovers_lost_admission_and_leave_without_external_stop_work()

@@ -1,5 +1,20 @@
 # Verification Contract
 
+## Server integration harness and artifact footprint (2026-10-05)
+
+The 49 server integration targets now share `tests/integration/main.rs`; each
+original file remains an unchanged module. Before/after `--list` comparison
+preserved all 186 suite-qualified case names exactly. Run a suite with
+`cargo test -p agentsassemble-server --test integration runtime_boundary::`.
+Makefile and CI already use workspace-wide commands; the two document references
+now show the module-filter form.
+The first full build after consolidation (`cargo test --workspace --all-features
+--no-run`, exit 0) measured 4,199,604 KiB (4.005 GiB) in `target`, 3,770,364 KiB
+in `target/debug/deps`, and zero dSYM directories. One initial full workspace run
+passed, including all 186 integration cases with normal parallel test threads.
+Two other simultaneous runs exposed pre-existing provider fixture interference;
+the follow-up correction and final verification are recorded below when complete.
+
 ## macOS debug artifact layout (2026-10-05)
 
 The unchanged-command baseline (`cargo test --workspace --all-features --no-run`,
@@ -62,7 +77,8 @@ file description, replacement-writer exclusion, and refusal to close a live clon
 Both passed (the targeted persistence filter passed five tests total).
 
 After correction, ten complete `cargo test -p agentsassemble-server --all-features
---test runtime_boundary` invocations, with up to four processes concurrently and
+--test integration runtime_boundary::` invocations (current equivalent of the
+original `--test runtime_boundary`), with up to four processes concurrently and
 default parallel test execution, passed 10/10 (100 tests, zero failures).
 Affected boundary verification also passed 19 Agent Session, 13 control-pipe and
 10 runtime tests. The requested single `make verify` stopped at its initial artifact

@@ -13,10 +13,7 @@ use sha2::{Digest, Sha256};
 use tokio::net::TcpListener;
 use tokio_util::sync::CancellationToken;
 
-mod support {
-    pub mod human_invite;
-    pub mod room_socket_peer;
-}
+use crate::support;
 use support::human_invite::{fixture, join};
 
 const ORIGIN: &str = "https://recovery.example.test";

@@ -7,11 +7,7 @@ use reqwest::Client;
 use serde_json::json;
 use sha2::{Digest, Sha256};
 
-mod support {
-    pub mod human_invite;
-    pub mod local_socket;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::{
     human_invite::{canonical_session_token, fixture, join, open_session_socket, start},

@@ -19,14 +19,11 @@ use tokio_tungstenite::connect_async;
 use tokio_util::sync::CancellationToken;
 
 #[cfg(unix)]
-#[path = "support/room_portal_fixture.rs"]
-mod room_portal_fixture;
+use crate::support::room_portal_fixture;
 
-#[path = "support/provider_fixture.rs"]
-mod provider_fixture;
+use crate::support::provider_fixture;
 
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::room_socket_peer;
 
 use room_socket_peer::RoomSocketPeer;
 
@@ -615,6 +612,9 @@ async fn send_create<S>(socket: &mut RoomSocketPeer<S>, request_id: &str, payloa
 where
     S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
 {
+    // Session IDs derive from command identity, not the fixture's private DB.
+    // Preserve replay keys within this run without sharing leases with other runs.
+    let request_id = format!("{}:{request_id}", std::process::id());
     socket
         .send_json(&json!({"op": "command", "request_id": request_id, "action": "agent.create", "payload": payload}))
         .await;
@@ -660,6 +660,11 @@ where
     let mut ack = None;
     for _ in 0..limit {
         let frame = receive_json(socket).await;
+        assert_ne!(
+            frame["op"], "nack",
+            "command rejected: action={}, code={}",
+            frame["action"], frame["error"]["code"]
+        );
         if frame["op"] == "ack" {
             ack = Some(frame);
         }
@@ -674,6 +679,11 @@ where
 {
     for _ in 0..32 {
         let frame = receive_json(socket).await;
+        assert_ne!(
+            frame["op"], "nack",
+            "command rejected: action={}, code={}",
+            frame["action"], frame["error"]["code"]
+        );
         if frame["op"] == "ack" {
             return frame;
         }

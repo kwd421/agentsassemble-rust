@@ -14,11 +14,7 @@ use serde_json::json;
 use tokio::{net::TcpListener, task::JoinHandle};
 use tokio_util::sync::CancellationToken;
 
-mod support {
-    pub mod human_invite;
-    pub mod local_socket;
-    pub mod room_socket_peer;
-}
+use crate::support;
 
 use support::{
     human_invite::{canonical_session_token, fixture, join, open_session_socket, start},

@@ -7,16 +7,12 @@ use serde_json::{Value, json};
 use tokio_tungstenite::{connect_async, tungstenite::client::IntoClientRequest};
 use uuid::Uuid;
 
-#[path = "support/attendee.rs"]
-mod attendee;
-#[path = "support/human_invite.rs"]
-mod human_invite;
-#[path = "support/local_socket.rs"]
-mod local_socket;
+use crate::support::attendee;
+use crate::support::human_invite;
+use crate::support::local_socket;
 #[path = "attendee_socket/random.rs"]
 mod random;
-#[path = "support/room_socket_peer.rs"]
-mod room_socket_peer;
+use crate::support::room_socket_peer;
 #[path = "attendee_socket/tools.rs"]
 mod tools;
 
