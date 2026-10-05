@@ -130,6 +130,11 @@ Enrollment 생성은 진행·visible/관계·결과·unknown 수용 용량을 �
 
 중복 전이는 refcount를 다시 바꾸지 않는다. tombstone 압축/정리는 재생 방지와 결과 재조회 계약 충족 뒤에만 수행한다. 사용자 명시 정리는 unknown 표식과 예약 전환을 원자 적용하며 “호스트 결과 미확인·목록 숨김”으로 표시한다. 탈퇴 성공이 아니다. 늦은 결과는 확정하되 숨김 해제나 parent 신규 발급은 하지 않는다. unknown은 진행 한도를 회복하나 무한 보관을 보장하지 않는다. 보존 용량 포화는 명시적 오류로 신규 가입만 제한하며 기존 미확정을 삭제하거나 거짓 실패로 만들지 않는다.
 
+### C3c-1b 호스트·공용 프론트 epoch 전달
+
+등록/bootstrap에서 받은 opaque `registration_epoch`는 호스트의 기존 `runtime_metadata`와 프론트 서버 목록에 server identity와 함께 저장하고, 등록 갱신·claim·endpoint publish/renew/offline·grant/redeem·이름·아이콘 및 존재하는 삭제/북마크 요청의 최상위 JSON에 포함한다(스키마 상승 없음); epoch 없는 업그레이드 상태는 다음 응답까지 필드를 생략하며 등록/claim proof는 epoch가 있으면 Worker의 LF 구분·마지막 LF 없는 `AA-HOST-REGISTER-2`/`AA-HOST-CLAIM-2`를 사용한다.
+자기 서버의 일반 등록만 409 `incarnation_conflict`에서 저장 epoch를 지우고 같은 키로 한 번 재등록하며, claim·다른 경로 및 두 번째 실패는 오류로 남긴다; 저장·실제 요청 body·Worker와 동일한 proof 바이트·단일 재시도·epoch 없는 상태를 영향받는 자동 테스트로 검증하고 배포·서명 빌드·수동 검증은 제외한다.
+
 ### 기존 account/server deletion 및 registration 확장
 
 중앙 `Security model`의 계정 삭제/서버 등록 삭제 및 owner account의 server cascade, `Server icons`의 삭제 계약은 C3에서 다음 요구를 적용한다. 삭제 상태·최소 person/incarnation/key provenance를 물리 삭제와 분리한다. redeemed 결과·예약·검증키를 cascade 삭제하지 않고 삭제 incarnation은 terminal/hidden으로 유지한다.

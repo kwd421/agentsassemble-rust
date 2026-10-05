@@ -100,6 +100,8 @@ pub struct HostRegistrationEnvelope {
     host_public_key_jwk: HostPublicJwk,
     host_key_fingerprint: String,
     host_registration_proof: HostRegistrationProof,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    registration_epoch: Option<String>,
 }
 
 pub(crate) struct HostRequestSignature {
@@ -253,6 +255,7 @@ impl CentralHostIdentity {
         &self,
         owner_person_id: &str,
         claim_ownership: bool,
+        registration_epoch: Option<&str>,
     ) -> Result<HostRegistrationEnvelope, HostIdentityError> {
         let issued_at = Utc::now().timestamp();
         let mut nonce_bytes = [0_u8; REGISTRATION_NONCE_BYTES];
@@ -260,18 +263,24 @@ impl CentralHostIdentity {
             .fill(&mut nonce_bytes)
             .map_err(|_| HostIdentityError::Entropy)?;
         let nonce = URL_SAFE_NO_PAD.encode(nonce_bytes);
-        let context = if claim_ownership {
-            "AA-HOST-CLAIM-1"
-        } else {
-            REGISTRATION_CONTEXT
+        let context = match (claim_ownership, registration_epoch.is_some()) {
+            (true, true) => "AA-HOST-CLAIM-2",
+            (false, true) => "AA-HOST-REGISTER-2",
+            (true, false) => "AA-HOST-CLAIM-1",
+            (false, false) => REGISTRATION_CONTEXT,
         };
-        let transcript = format!(
+        let mut transcript = format!(
             "{context}\n{}\n{owner_person_id}\n{issued_at}\n{nonce}",
             self.server_id
         );
+        if let Some(epoch) = registration_epoch {
+            transcript.push('\n');
+            transcript.push_str(epoch);
+        }
         let signature = URL_SAFE_NO_PAD.encode(self.key_pair.sign(transcript.as_bytes()).as_ref());
         let device = host_device_info(Some(self.server_id.to_string()))?;
         Ok(HostRegistrationEnvelope {
+            registration_epoch: registration_epoch.map(str::to_owned),
             host_name: device.host_name,
             host_os: device.host_os,
             server_id: self.server_id.to_string(),
@@ -373,6 +382,52 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn epoch_registration_and_claim_match_worker_v2_bytes() {
+        let store = SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|e| panic!("store: {e}"));
+        let persistent = store
+            .host_identity()
+            .await
+            .unwrap_or_else(|e| panic!("identity: {e}"));
+        let identity = CentralHostIdentity::from_persistent(&persistent)
+            .unwrap_or_else(|e| panic!("key: {e}"));
+        for claim in [false, true] {
+            let envelope = identity
+                .registration_envelope("per_owner_12345678", claim, Some("epoch-worker-opaque"))
+                .unwrap_or_else(|e| panic!("proof: {e}"));
+            let proof = &envelope.host_registration_proof;
+            // Same independent join as Worker test/server_epoch.test.mjs registrationBody.
+            let transcript = [
+                if claim {
+                    "AA-HOST-CLAIM-2"
+                } else {
+                    "AA-HOST-REGISTER-2"
+                },
+                identity.server_id(),
+                "per_owner_12345678",
+                &proof.issued_at.to_string(),
+                &proof.nonce,
+                "epoch-worker-opaque",
+            ]
+            .join("\n");
+            let signature = URL_SAFE_NO_PAD
+                .decode(&proof.signature)
+                .unwrap_or_else(|e| panic!("signature: {e}"));
+            let public_key = URL_SAFE_NO_PAD
+                .decode(identity.public_key_x())
+                .unwrap_or_else(|e| panic!("public key: {e}"));
+            ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, public_key)
+                .verify(transcript.as_bytes(), &signature)
+                .unwrap_or_else(|_| panic!("Worker v2 transcript"));
+            assert_eq!(
+                serde_json::to_value(envelope).unwrap_or_else(|e| panic!("json: {e}"))["registration_epoch"],
+                "epoch-worker-opaque"
+            );
+        }
+    }
+
+    #[tokio::test]
     async fn registration_envelope_matches_the_central_worker_transcript() {
         let store = SqliteStore::open("sqlite::memory:")
             .await
@@ -385,7 +440,7 @@ mod tests {
             .unwrap_or_else(|error| panic!("derive host identity: {error}"));
         let owner = "per_central-owner_123456";
         let envelope = identity
-            .registration_envelope(owner, false)
+            .registration_envelope(owner, false, None)
             .unwrap_or_else(|error| panic!("create registration proof: {error}"));
 
         #[cfg(target_os = "macos")]
@@ -445,7 +500,7 @@ mod tests {
             ]
         );
         let claimed = identity
-            .registration_envelope(owner, true)
+            .registration_envelope(owner, true, None)
             .unwrap_or_else(|error| panic!("create ownership claim: {error}"));
         let claim_transcript = format!(
             "AA-HOST-CLAIM-1\n{}\n{owner}\n{}\n{}",
@@ -484,10 +539,10 @@ mod tests {
         let identity = CentralHostIdentity::from_persistent(&persistent)
             .unwrap_or_else(|error| panic!("derive host identity: {error}"));
         let first = identity
-            .registration_envelope("per_owner_12345678", false)
+            .registration_envelope("per_owner_12345678", false, None)
             .unwrap_or_else(|error| panic!("first proof: {error}"));
         let second = identity
-            .registration_envelope("per_owner_12345678", false)
+            .registration_envelope("per_owner_12345678", false, None)
             .unwrap_or_else(|error| panic!("second proof: {error}"));
 
         assert_eq!(first.server_id, second.server_id);

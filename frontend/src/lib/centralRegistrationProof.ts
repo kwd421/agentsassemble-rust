@@ -5,8 +5,6 @@ import {
   isBase64UrlText,
 } from "./base64Url";
 
-const REGISTRATION_CONTEXT = "AA-HOST-REGISTER-1";
-
 type HostPublicJwk = {
   crv: "Ed25519";
   ext: true;
@@ -18,6 +16,7 @@ type HostPublicJwk = {
 export type HostOs = "macos" | "windows" | "linux" | "other";
 
 export type HostRegistrationEnvelope = {
+  registration_epoch?: string;
   host_name: string;
   host_os: HostOs;
   server_id: string;
@@ -99,6 +98,7 @@ export async function verifyCentralRegistrationEnvelope(
       "host_public_key_jwk",
       "host_key_fingerprint",
       "host_registration_proof",
+      ...(value && typeof value === "object" && "registration_epoch" in value ? ["registration_epoch"] : []),
     ],
     "호스트 등록 증명"
   );
@@ -107,6 +107,10 @@ export async function verifyCentralRegistrationEnvelope(
     envelope.host_key_fingerprint !== binding.host_key_fingerprint
   ) {
     throw new Error("호스트 등록 증명이 native 권위와 일치하지 않습니다.");
+  }
+  if (envelope.registration_epoch !== undefined &&
+    (typeof envelope.registration_epoch !== "string" || !envelope.registration_epoch)) {
+    throw new Error("서버 등록 epoch가 올바르지 않습니다.");
   }
   validateHostName(envelope.host_name);
   validateHostOs(envelope.host_os);
@@ -141,7 +145,9 @@ export async function verifyCentralRegistrationEnvelope(
   const publicKeyBytes = decodeBase64Url(jwk.x, 32, "호스트 공개키");
   const nonce = decodeBase64Url(proof.nonce, 18, "호스트 등록 nonce");
   const signature = decodeBase64Url(proof.signature, 64, "호스트 등록 서명");
-  const transcript = `${claimOwnership ? "AA-HOST-CLAIM-1" : REGISTRATION_CONTEXT}\n${binding.server_id}\n${expectedOwnerPersonId}\n${proof.issued_at}\n${encodeBase64Url(nonce)}`;
+  const prefix = claimOwnership ? "AA-HOST-CLAIM" : "AA-HOST-REGISTER";
+  const epoch = envelope.registration_epoch;
+  const transcript = `${prefix}-${epoch === undefined ? 1 : 2}\n${binding.server_id}\n${expectedOwnerPersonId}\n${proof.issued_at}\n${encodeBase64Url(nonce)}${epoch === undefined ? "" : `\n${epoch}`}`;
   const publicKey = await crypto.subtle.importKey(
     "raw",
     publicKeyBytes,

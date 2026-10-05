@@ -9,7 +9,7 @@ use serde_json::json;
 
 use crate::{
     AppState,
-    central_host_identity::{HostIdentityError, HostRegistrationEnvelope},
+    central_host_identity::HostIdentityError,
     http_api::{BodyDecodeError, consume_central_registration, decode_json_body, exact_tauri_cors},
 };
 
@@ -17,10 +17,24 @@ const MAX_REGISTRATION_BODY_BYTES: usize = 4 * 1024;
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
-struct RegistrationRequest {
+struct ProofRequest {
     owner_person_id: String,
     #[serde(default)]
     claim_ownership: bool,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
+struct EpochRequest {
+    server_id: String,
+    registration_epoch: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+enum RegistrationRequest {
+    Proof(ProofRequest),
+    Epoch(EpochRequest),
 }
 
 pub(crate) fn routes() -> Router<AppState> {
@@ -36,22 +50,49 @@ registered_routes! {
 async fn issue_registration_proof(
     State(state): State<AppState>,
     request: Request,
-) -> Result<Json<HostRegistrationEnvelope>, RegistrationHttpError> {
+) -> Result<Json<serde_json::Value>, RegistrationHttpError> {
     if !consume_central_registration(&state, request.headers()).await {
         return Err(RegistrationHttpError::local_operator_required());
     }
     let payload: RegistrationRequest = decode_json_body(request, MAX_REGISTRATION_BODY_BYTES)
         .await
         .map_err(RegistrationHttpError::from_body)?;
+    let payload = match payload {
+        RegistrationRequest::Epoch(epoch) => {
+            if epoch.server_id != state.central_host_identity.server_id()
+                || epoch
+                    .registration_epoch
+                    .as_ref()
+                    .is_some_and(String::is_empty)
+            {
+                return Err(RegistrationHttpError::bad_request(
+                    "registration epoch binding is invalid",
+                ));
+            }
+            state
+                .store
+                .set_registration_epoch(epoch.registration_epoch.as_deref())
+                .await
+                .map_err(|_| RegistrationHttpError::persistence())?;
+            return Ok(Json(json!({"status": "ok"})));
+        }
+        RegistrationRequest::Proof(proof) => proof,
+    };
     let owner_person_id = payload.owner_person_id.trim();
     if !valid_owner_person_id(owner_person_id) {
         return Err(RegistrationHttpError::bad_request(
             "owner_person_id is invalid",
         ));
     }
+    let epoch = state
+        .store
+        .registration_epoch()
+        .await
+        .map_err(|_| RegistrationHttpError::persistence())?;
     state
         .central_host_identity
-        .registration_envelope(owner_person_id, payload.claim_ownership)
+        .registration_envelope(owner_person_id, payload.claim_ownership, epoch.as_deref())
+        .and_then(|envelope| serde_json::to_value(envelope).map_err(HostIdentityError::Json))
         .map(Json)
         .map_err(|error| RegistrationHttpError::from_identity(&error))
 }
@@ -102,6 +143,14 @@ impl RegistrationHttpError {
             BodyDecodeError::InvalidJson | BodyDecodeError::NonEmpty => {
                 Self::bad_request("Request JSON is invalid.")
             }
+        }
+    }
+
+    const fn persistence() -> Self {
+        Self {
+            status: StatusCode::SERVICE_UNAVAILABLE,
+            code: "registration_epoch_unavailable",
+            message: "Stored registration epoch is unavailable.",
         }
     }
 

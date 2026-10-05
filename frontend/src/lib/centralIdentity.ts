@@ -10,7 +10,7 @@ import {
 } from "./desktopBridge";
 import { encodeBase64Url } from "./base64Url";
 import { centralOwnerServerUrl } from "./centralOwnerConnect";
-import { type HostOs, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
+import { type HostOs, type HostRegistrationEnvelope, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
 export const CENTRAL_SESSION_CLEARED_EVENT = "agentsassemble:central-session-cleared";
@@ -38,6 +38,7 @@ export type CentralSession = {
 
 export type CentralServer = {
   server_id: string;
+  registration_epoch?: string;
   relation: "owner" | "bookmark";
   alias: string;
   /** Versioned reference to the server icon on the central origin; "" when unset. */
@@ -334,7 +335,7 @@ async function responsePayload<T>(response: Response, central = true): Promise<T
       payload?.error?.message || `중앙 서버가 HTTP ${response.status}을 반환했습니다.`;
     if (response.status === 401) throw new CentralAuthError(message, payload?.error?.code);
     if (central && (response.status === 429 || response.status >= 500)) throw new CentralTemporaryError(message);
-    throw new Error(message);
+    throw Object.assign(new Error(message), { status: response.status, code: payload?.error?.code });
   }
   return payload;
 }
@@ -650,7 +651,7 @@ export async function openCentralOwnedServer(server: CentralServer): Promise<voi
     session,
     `/v1/servers/${encodeURIComponent(server.server_id)}/connect-grants`,
     "POST",
-    {}
+    { registration_epoch: server.registration_epoch }
   );
   const keys = Object.keys(grant as object).sort().join(",");
   if (
@@ -692,55 +693,56 @@ export async function fetchLocalServerInfo(): Promise<LocalServerInfo> {
   return responsePayload<LocalServerInfo>(response, false);
 }
 
+async function updateLocalRegistrationEpoch(serverId: string, epoch: string | null, deviceToken = ""): Promise<void> {
+  const request = { method: "POST", cache: "no-store",
+    headers: { "content-type": "application/json", ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }) },
+    body: JSON.stringify({ server_id: serverId, registration_epoch: epoch }),
+  } satisfies RequestInit;
+  const response = isDesktopWebview() ? (await fetchDesktopCentralRegistration(request)).response
+    : await fetch("/api/central-directory/registration-proof", request);
+  await responsePayload(response, false);
+}
+
 export async function registerLocalServer(deviceToken: string): Promise<void> {
   const session = loadCentralSession();
   if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
-  const registrationRequest = {
-    method: "POST",
-    cache: "no-store",
-    headers: {
-      "content-type": "application/json",
-      ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }),
-    },
-    body: JSON.stringify({ owner_person_id: session.person.person_id,
-      ...(session.pending_account_switch ? { claim_ownership: true } : {}),
-    }),
-  } satisfies RequestInit;
-  const desktop = isDesktopWebview();
-  const registration = desktop
-    ? await fetchDesktopCentralRegistration(registrationRequest)
-    : null;
-  const proofResponse = registration
-    ? registration.response
-    : await fetch("/api/central-directory/registration-proof", registrationRequest);
-  const payload = await responsePayload<unknown>(proofResponse, false);
-  const local = registration
-    ? await verifyCentralRegistrationEnvelope(
-        payload,
-        session.person.person_id,
-        registration.binding,
-        session.pending_account_switch === true
-      )
-    : (payload as LocalServerInfo & {
-        host_name: string;
-        host_os: HostOs;
-        host_registration_proof: {
-          owner_person_id: string;
-          issued_at: number;
-          nonce: string;
-          signature: string;
-        };
+  for (let attempt = 0; attempt < 2; attempt++) {
+    const registrationRequest = {
+      method: "POST", cache: "no-store",
+      headers: { "content-type": "application/json",
+        ...(isDesktopWebview() ? {} : { "x-device-token": deviceToken }) },
+      body: JSON.stringify({ owner_person_id: session.person.person_id,
+        ...(session.pending_account_switch ? { claim_ownership: true } : {}) }),
+    } satisfies RequestInit;
+    const registration = isDesktopWebview()
+      ? await fetchDesktopCentralRegistration(registrationRequest) : null;
+    const proofResponse = registration ? registration.response
+      : await fetch("/api/central-directory/registration-proof", registrationRequest);
+    const payload = await responsePayload<HostRegistrationEnvelope>(proofResponse, false);
+    const local = registration ? await verifyCentralRegistrationEnvelope(payload,
+      session.person.person_id, registration.binding, session.pending_account_switch === true) : payload;
+    validateHostName(local.host_name);
+    validateHostOs(local.host_os);
+    let registered: { registration_epoch?: string };
+    try {
+      registered = await signedRequest(session, "/v1/servers", "POST", {
+        server_id: local.server_id, label: local.host_name, host_os: local.host_os,
+        host_public_key_jwk: local.host_public_key_jwk,
+        host_registration_proof: local.host_registration_proof,
+        registration_epoch: local.registration_epoch,
+        ...(session.pending_account_switch ? { claim_ownership: true } : {}),
       });
-  validateHostName(local.host_name);
-  validateHostOs(local.host_os);
-  await signedRequest(session, "/v1/servers", "POST", {
-    server_id: local.server_id,
-    label: local.host_name,
-    host_os: local.host_os,
-    host_public_key_jwk: local.host_public_key_jwk,
-    host_registration_proof: local.host_registration_proof,
-    ...(session.pending_account_switch ? { claim_ownership: true } : {}),
-  });
+    } catch (error) {
+      if (attempt !== 0 || session.pending_account_switch || !(error instanceof Error) ||
+        !("status" in error) || error.status !== 409 || !("code" in error) || error.code !== "incarnation_conflict") throw error;
+      await updateLocalRegistrationEpoch(local.server_id, null, deviceToken);
+      continue;
+    }
+    if (registered.registration_epoch !== undefined) {
+      await updateLocalRegistrationEpoch(local.server_id, registered.registration_epoch, deviceToken);
+    }
+    break;
+  }
   const current = loadCentralSession();
   if (current?.token === session.token && current.pending_account_switch) {
     delete current.pending_account_switch;
@@ -771,7 +773,7 @@ export async function renameCentralServer(server: CentralServerDisplay, name: st
   if (!session) throw new CentralAuthError("중앙 로그인이 필요합니다. 다시 로그인해 주세요.");
   if (server.relation !== "owner") throw new Error("서버 소유자만 이름을 바꿀 수 있습니다.");
   await signedRequest(session, `/v1/servers/${encodeURIComponent(server.server_id)}/name`, "POST", {
-    name, expected_name: server.alias || server.server_id,
+    registration_epoch: server.registration_epoch, name, expected_name: server.alias || server.server_id,
   });
   if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었습니다. 다시 확인해 주세요.");
 }
@@ -810,7 +812,7 @@ export async function setCentralServerIcon(server: CentralServerDisplay, icon: F
     session,
     `/v1/servers/${encodeURIComponent(server.server_id)}/icon`,
     "POST",
-    { icon: icon ? await pngDataUrl(icon) : "", expected_icon: server.icon || "" }
+    { registration_epoch: server.registration_epoch, icon: icon ? await pngDataUrl(icon) : "", expected_icon: server.icon || "" }
   );
   if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었습니다. 다시 확인해 주세요.");
   return String(result.icon || "");

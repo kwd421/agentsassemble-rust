@@ -15,7 +15,7 @@ function bytesToBase64Url(bytes: Uint8Array): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
 }
 
-async function signedFixture(claimOwnership = false): Promise<{
+async function signedFixture(claimOwnership = false, epoch?: string): Promise<{
   binding: DesktopCentralRegistrationBinding;
   envelope: HostRegistrationEnvelope;
 }> {
@@ -40,7 +40,10 @@ async function signedFixture(claimOwnership = false): Promise<{
   );
   const issuedAt = 1_788_000_000;
   const nonce = bytesToBase64Url(new Uint8Array(18).fill(7));
-  const transcript = `${claimOwnership ? "AA-HOST-CLAIM-1" : "AA-HOST-REGISTER-1"}\n${SERVER_ID}\n${OWNER_ID}\n${issuedAt}\n${nonce}`;
+  // Worker test/server_epoch.test.mjs uses the same LF join, without a final LF.
+  const prefix = claimOwnership ? "AA-HOST-CLAIM" : "AA-HOST-REGISTER";
+  const transcript = [`${prefix}-${epoch === undefined ? 1 : 2}`, SERVER_ID, OWNER_ID,
+    String(issuedAt), nonce, ...(epoch === undefined ? [] : [epoch])].join("\n");
   const signature = bytesToBase64Url(
     new Uint8Array(
       await crypto.subtle.sign(
@@ -57,6 +60,7 @@ async function signedFixture(claimOwnership = false): Promise<{
       host_key_fingerprint: fingerprint,
     },
     envelope: {
+      ...(epoch === undefined ? {} : { registration_epoch: epoch }),
       host_name: "Test Mac",
       host_os: "macos",
       server_id: SERVER_ID,
@@ -74,6 +78,13 @@ async function signedFixture(claimOwnership = false): Promise<{
 }
 
 describe("central registration proof authority", () => {
+  it.each([false, true])("verifies epoch-aware Worker bytes and rejects stripping or substituting epoch (claim=%s)", async (claim) => {
+    const fixture = await signedFixture(claim, "0123456789abcdef0123456789abcdef");
+    await expect(verifyCentralRegistrationEnvelope(fixture.envelope, OWNER_ID, fixture.binding, claim)).resolves.toEqual(fixture.envelope);
+    await expect(verifyCentralRegistrationEnvelope({ ...fixture.envelope, registration_epoch: "replacement" }, OWNER_ID, fixture.binding, claim)).rejects.toThrow();
+    delete fixture.envelope.registration_epoch;
+    await expect(verifyCentralRegistrationEnvelope(fixture.envelope, OWNER_ID, fixture.binding, claim)).rejects.toThrow();
+  });
   it("accepts only an explicitly requested purpose-bound ownership claim", async () => {
     const claim = await signedFixture(true);
     await expect(verifyCentralRegistrationEnvelope(claim.envelope, OWNER_ID, claim.binding, true)).resolves.toEqual(claim.envelope);

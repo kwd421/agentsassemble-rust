@@ -1,7 +1,7 @@
 import type { CentralServer } from "./centralIdentity";
 
 // Presentation only. No endpoint, host proof or credential can cross this boundary.
-export type CentralServerDisplay = Pick<CentralServer, "server_id" | "alias" | "icon" | "host_os" | "relation">;
+export type CentralServerDisplay = Pick<CentralServer, "server_id" | "registration_epoch" | "alias" | "icon" | "host_os" | "relation">;
 const KEY = "agentsassemble.centralDirectoryDisplay.v1";
 export function clearCentralDirectoryCache() { localStorage.removeItem(KEY); }
 export function saveCentralDirectoryCache(personId: string, servers: CentralServerDisplay[]) {
@@ -9,7 +9,8 @@ export function saveCentralDirectoryCache(personId: string, servers: CentralServ
 }
 function project(server: CentralServerDisplay): CentralServerDisplay {
   return { server_id: server.server_id, alias: server.alias, icon: server.icon || "",
-    host_os: server.host_os, relation: server.relation };
+    host_os: server.host_os, relation: server.relation,
+    ...(server.registration_epoch === undefined ? {} : { registration_epoch: server.registration_epoch }) };
 }
 export function loadCentralDirectoryCache(personId: string): CentralServerDisplay[] {
   const value = JSON.parse(localStorage.getItem(KEY) || "null");

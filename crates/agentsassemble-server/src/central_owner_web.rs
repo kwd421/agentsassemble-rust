@@ -95,6 +95,7 @@ async fn exchange(
         .central_directory
         .owner_admission(
             &state.central_host_identity,
+            &state.store,
             &body.grant_token,
             &origin,
             body.generation,

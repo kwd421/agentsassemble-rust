@@ -179,6 +179,7 @@ impl CentralDirectory {
     pub(crate) async fn owner_admission(
         &self,
         identity: &CentralHostIdentity,
+        store: &SqliteStore,
         credential: &str,
         origin: &str,
         generation: i64,
@@ -186,10 +187,9 @@ impl CentralDirectory {
     ) -> Result<agentsassemble_persistence::OwnerAdmission, CentralDirectoryError> {
         let inner = self.0.as_ref().ok_or(CentralDirectoryError::Disabled)?;
         let path = format!("/v1/servers/{}/connect-grants/redeem", identity.server_id());
-        let body = serde_json::to_vec(&json!({ "grant_token": credential, "origin": origin,
-            "generation": generation }))
-        .map_err(|_| CentralDirectoryError::InvalidResponse)?;
-        let bytes = send_signed(inner, identity, Method::POST, &path, body).await?;
+        let body = json!({ "grant_token": credential, "origin": origin,
+            "generation": generation });
+        let bytes = send_signed(inner, identity, store, Method::POST, &path, body).await?;
         let response: OwnerAdmissionResponse =
             serde_json::from_slice(&bytes).map_err(|_| CentralDirectoryError::InvalidResponse)?;
         if response.status != "authorized"
@@ -227,18 +227,18 @@ async fn publish_online(
     renew: bool,
 ) -> Result<(), CentralDirectoryError> {
     let now = Utc::now().timestamp();
-    let body = serde_json::to_vec(&json!({
+    let body = json!({
         "origin": origin,
         "generation": if renew { store.current_central_endpoint_generation().await? } else { store.next_central_endpoint_generation().await? },
         "issued_at": now,
         "lease_expires_at": now + LEASE_SECONDS,
-    }))
-    .map_err(|_| CentralDirectoryError::InvalidResponse)?;
+    });
     let suffix = if renew { "/renew" } else { "" };
     let path = format!("/v1/servers/{}/endpoint{suffix}", identity.server_id());
     send_signed(
         inner,
         identity,
+        store,
         if renew { Method::POST } else { Method::PUT },
         &path,
         body,
@@ -252,23 +252,27 @@ async fn publish_offline(
     store: &SqliteStore,
     identity: &CentralHostIdentity,
 ) -> Result<(), CentralDirectoryError> {
-    let body = serde_json::to_vec(&json!({
+    let body = json!({
         "generation": store.next_central_endpoint_generation().await?,
         "issued_at": Utc::now().timestamp(),
-    }))
-    .map_err(|_| CentralDirectoryError::InvalidResponse)?;
+    });
     let path = format!("/v1/servers/{}/endpoint", identity.server_id());
-    send_signed(inner, identity, Method::DELETE, &path, body).await?;
+    send_signed(inner, identity, store, Method::DELETE, &path, body).await?;
     Ok(())
 }
 
 async fn send_signed(
     inner: &CentralDirectoryInner,
     identity: &CentralHostIdentity,
+    store: &SqliteStore,
     method: Method,
     path: &str,
-    body: Vec<u8>,
+    mut body: serde_json::Value,
 ) -> Result<Vec<u8>, CentralDirectoryError> {
+    if let Some(epoch) = store.registration_epoch().await? {
+        body["registration_epoch"] = epoch.into();
+    }
+    let body = serde_json::to_vec(&body).map_err(|_| CentralDirectoryError::InvalidResponse)?;
     let signature = identity.sign_host_request(method.as_str(), path, &body)?;
     let endpoint = inner
         .base_url
@@ -340,6 +344,134 @@ fn normalize_base_url(value: &str) -> Result<Url, CentralDirectoryError> {
 #[cfg(test)]
 mod tests {
     use super::{normalize_base_url, retry_delay};
+
+    #[tokio::test]
+    async fn host_routes_sign_the_stored_epoch_and_omit_it_before_upgrade() {
+        use axum::{
+            Router,
+            body::Bytes,
+            http::{HeaderMap, Method, Uri},
+            routing::any,
+        };
+        let store = agentsassemble_persistence::SqliteStore::open("sqlite::memory:")
+            .await
+            .unwrap_or_else(|e| panic!("store: {e}"));
+        let persistent = store
+            .host_identity()
+            .await
+            .unwrap_or_else(|e| panic!("identity: {e}"));
+        let identity = crate::CentralHostIdentity::from_persistent(&persistent)
+            .unwrap_or_else(|e| panic!("key: {e}"));
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let router = Router::new().route(
+            "/{*path}",
+            any(
+                move |method: Method, uri: Uri, headers: HeaderMap, body: Bytes| {
+                    let tx = tx.clone();
+                    async move {
+                        tx.send((method, uri, headers, body))
+                            .unwrap_or_else(|_| panic!("capture"));
+                        axum::Json(serde_json::json!({"status": "ok"}))
+                    }
+                },
+            ),
+        );
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
+            .await
+            .unwrap_or_else(|e| panic!("bind: {e}"));
+        let address = listener
+            .local_addr()
+            .unwrap_or_else(|e| panic!("address: {e}"));
+        let cancellation = tokio_util::sync::CancellationToken::new();
+        let shutdown = cancellation.clone();
+        let task = tokio::spawn(async move {
+            axum::serve(listener, router)
+                .with_graceful_shutdown(shutdown.cancelled_owned())
+                .await
+                .unwrap_or_else(|e| panic!("serve: {e}"));
+        });
+        let directory = super::CentralDirectory::configured(&format!("http://{address}"))
+            .unwrap_or_else(|e| panic!("directory: {e}"));
+        let inner = directory.0.as_ref().unwrap_or_else(|| panic!("configured"));
+        for epoch in [None, Some("opaque-registration-epoch")] {
+            store
+                .set_registration_epoch(epoch)
+                .await
+                .unwrap_or_else(|e| panic!("epoch: {e}"));
+            super::publish_online(inner, &store, &identity, "https://host.example", false)
+                .await
+                .unwrap_or_else(|e| panic!("publish: {e}"));
+            super::publish_online(inner, &store, &identity, "https://host.example", true)
+                .await
+                .unwrap_or_else(|e| panic!("renew: {e}"));
+            super::publish_offline(inner, &store, &identity)
+                .await
+                .unwrap_or_else(|e| panic!("offline: {e}"));
+            assert!(
+                directory
+                    .owner_admission(
+                        &identity,
+                        &store,
+                        "grant",
+                        "https://host.example",
+                        1,
+                        &[0; 32]
+                    )
+                    .await
+                    .is_err()
+            );
+            for (method, suffix) in [
+                ("PUT", "endpoint"),
+                ("POST", "endpoint/renew"),
+                ("DELETE", "endpoint"),
+                ("POST", "connect-grants/redeem"),
+            ] {
+                let (actual, uri, headers, body) =
+                    rx.recv().await.unwrap_or_else(|| panic!("request"));
+                assert_eq!(actual.as_str(), method);
+                assert!(uri.path().ends_with(suffix));
+                verify_epoch_request(&identity, &headers, &body, method, uri.path(), epoch);
+            }
+        }
+        cancellation.cancel();
+        task.await.unwrap_or_else(|e| panic!("join: {e}"));
+    }
+
+    fn verify_epoch_request(
+        identity: &crate::CentralHostIdentity,
+        headers: &axum::http::HeaderMap,
+        body: &[u8],
+        method: &str,
+        path: &str,
+        epoch: Option<&str>,
+    ) {
+        use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
+        use sha2::{Digest, Sha256};
+        let value: serde_json::Value =
+            serde_json::from_slice(body).unwrap_or_else(|e| panic!("body: {e}"));
+        assert_eq!(
+            value
+                .get("registration_epoch")
+                .and_then(serde_json::Value::as_str),
+            epoch
+        );
+        let canonical = format!(
+            "AA-HOST-1\n{method}\n{}\n{}\n{}\n{}",
+            path,
+            headers["x-aa-host-timestamp"].to_str().unwrap_or_default(),
+            headers["x-aa-host-nonce"].to_str().unwrap_or_default(),
+            URL_SAFE_NO_PAD.encode(Sha256::digest(body))
+        );
+        let signature = URL_SAFE_NO_PAD
+            .decode(&headers["x-aa-host-signature"])
+            .unwrap_or_else(|e| panic!("signature: {e}"));
+        let key = URL_SAFE_NO_PAD
+            .decode(identity.public_key_x())
+            .unwrap_or_else(|e| panic!("key: {e}"));
+        ring::signature::UnparsedPublicKey::new(&ring::signature::ED25519, key)
+            .verify(canonical.as_bytes(), &signature)
+            .unwrap_or_else(|_| panic!("signature must bind epoch body"));
+    }
 
     #[test]
     fn central_url_rejects_credentials_paths_and_public_http() {

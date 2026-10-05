@@ -151,6 +151,91 @@ async fn central_registration_is_one_use_signed_and_keeps_a_zero_room_authority(
 }
 
 #[tokio::test]
+async fn registration_epoch_updates_are_local_and_bound_to_this_host() {
+    let store = zero_room_fixture().await;
+    let id = store
+        .host_identity()
+        .await
+        .unwrap_or_else(|e| panic!("identity: {e}"))
+        .server_id()
+        .to_owned();
+    let tickets = TicketStore::new(Duration::from_secs(30), 32);
+    let server = start_with_registration(store.clone(), tickets.clone()).await;
+    let client = Client::new();
+    let route = format!(
+        "{}/api/central-directory/registration-proof",
+        server.base_url
+    );
+    let saved = json!({"server_id": id, "registration_epoch": "worker-epoch"});
+    assert_eq!(
+        client
+            .post(&route)
+            .json(&saved)
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("unauthorized: {e}"))
+            .status(),
+        reqwest::StatusCode::FORBIDDEN
+    );
+    for (body, expected) in [
+        (
+            json!({"server_id": "different-server", "registration_epoch": "worker-epoch"}),
+            reqwest::StatusCode::BAD_REQUEST,
+        ),
+        (saved, reqwest::StatusCode::OK),
+    ] {
+        let ticket = issue_registration_ticket(&tickets).await;
+        let result = client
+            .post(&route)
+            .bearer_auth(ticket)
+            .json(&body)
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("save: {e}"));
+        assert_eq!(result.status(), expected);
+    }
+    assert_eq!(
+        store
+            .registration_epoch()
+            .await
+            .unwrap_or_else(|e| panic!("stored: {e}")),
+        Some("worker-epoch".into())
+    );
+    let ticket = issue_registration_ticket(&tickets).await;
+    let proof: Value = client
+        .post(&route)
+        .bearer_auth(ticket)
+        .json(&json!({"owner_person_id": "per_owner_12345678"}))
+        .send()
+        .await
+        .unwrap_or_else(|e| panic!("proof: {e}"))
+        .json()
+        .await
+        .unwrap_or_else(|e| panic!("json: {e}"));
+    assert_eq!(proof["registration_epoch"], "worker-epoch");
+    let ticket = issue_registration_ticket(&tickets).await;
+    assert_eq!(
+        client
+            .post(&route)
+            .bearer_auth(ticket)
+            .json(&json!({"server_id": id, "registration_epoch": null}))
+            .send()
+            .await
+            .unwrap_or_else(|e| panic!("clear: {e}"))
+            .status(),
+        reqwest::StatusCode::OK
+    );
+    assert_eq!(
+        store
+            .registration_epoch()
+            .await
+            .unwrap_or_else(|e| panic!("cleared: {e}")),
+        None
+    );
+    server.stop().await;
+}
+
+#[tokio::test]
 async fn default_server_does_not_mount_or_advertise_central_registration() {
     let store = zero_room_fixture().await;
     let tickets = TicketStore::new(Duration::from_secs(30), 32);

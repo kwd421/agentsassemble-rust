@@ -83,6 +83,35 @@ impl PersistentHostIdentity {
 }
 
 impl SqliteStore {
+    /// Reads the central incarnation attached to this installation's server identity.
+    /// # Errors
+    /// Returns database read failures.
+    pub async fn registration_epoch(&self) -> Result<Option<String>, PersistenceError> {
+        Ok(sqlx::query_scalar(
+            "SELECT value FROM runtime_metadata WHERE key = 'central_registration_epoch'",
+        )
+        .fetch_optional(&self.pool)
+        .await?)
+    }
+
+    /// Stores the epoch returned by Central, or clears it before one re-registration.
+    /// # Errors
+    /// Returns database write failures.
+    pub async fn set_registration_epoch(
+        &self,
+        epoch: Option<&str>,
+    ) -> Result<(), PersistenceError> {
+        if let Some(epoch) = epoch {
+            sqlx::query("INSERT INTO runtime_metadata(key, value) VALUES ('central_registration_epoch', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+                .bind(epoch).execute(&self.pool).await?;
+        } else {
+            sqlx::query("DELETE FROM runtime_metadata WHERE key = 'central_registration_epoch'")
+                .execute(&self.pool)
+                .await?;
+        }
+        Ok(())
+    }
+
     /// Loads the exact file-backed Ed25519 private key bound to this server ID.
     ///
     /// # Errors
@@ -184,6 +213,17 @@ mod tests {
             .host_identity()
             .await
             .unwrap_or_else(|error| panic!("load first host identity: {error}"));
+        assert_eq!(
+            first
+                .registration_epoch()
+                .await
+                .unwrap_or_else(|e| panic!("legacy epoch: {e}")),
+            None
+        );
+        first
+            .set_registration_epoch(Some("opaque-worker-epoch"))
+            .await
+            .unwrap_or_else(|e| panic!("save epoch: {e}"));
         let first_server_id = first_identity.server_id().to_owned();
         let first_private_key = first_identity.private_key_pkcs8().to_vec();
         let first_session_hmac_key = *first_identity.session_hmac_key();
@@ -210,6 +250,24 @@ mod tests {
             .await
             .unwrap_or_else(|error| panic!("load reopened host identity: {error}"));
         assert_eq!(reopened_identity.server_id(), first_server_id);
+        assert_eq!(
+            reopened
+                .registration_epoch()
+                .await
+                .unwrap_or_else(|e| panic!("read epoch: {e}")),
+            Some("opaque-worker-epoch".into())
+        );
+        reopened
+            .set_registration_epoch(None)
+            .await
+            .unwrap_or_else(|e| panic!("clear epoch: {e}"));
+        assert_eq!(
+            reopened
+                .registration_epoch()
+                .await
+                .unwrap_or_else(|e| panic!("cleared epoch: {e}")),
+            None
+        );
         assert!(
             reopened_identity.private_key_pkcs8() == first_private_key,
             "host private key changed across reopen"
