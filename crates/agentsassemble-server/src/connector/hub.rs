@@ -6,7 +6,7 @@ use parking_lot::Mutex;
 use serde_json::{Value, json};
 use url::Url;
 
-use crate::connector_client::{RoomConnectorClient, transport::normalize_server};
+use crate::connector::client::{RoomConnectorClient, transport::normalize_server};
 
 pub(super) struct ConnectorHub {
     allowed_servers: Option<Vec<Url>>,
@@ -87,7 +87,7 @@ impl ConnectorHub {
             // This public preparation step retains capacity. Require evidence of
             // an issued capability before reserving it; admission still validates
             // scope, expiry, revocation and retry identity in its transaction.
-            let (_, bearer) = crate::connector_client::transport::parse_invite(invite)
+            let (_, bearer) = crate::connector::client::transport::parse_invite(invite)
                 .map_err(|error| error.code)?;
             let fingerprint = crate::http_api::purpose_credential_fingerprint(
                 &bearer,

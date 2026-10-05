@@ -15,7 +15,7 @@ reports that MCP is not declared. No test upstream remains configured. See
 `DEPLOYMENT.md` for verified evidence and the missing platform contract.
 
 Sites runs `src/worker.mjs`; the existing native MCP implementation at
-`crates/agentsassemble-server/src/connector_mcp_web.rs` retains its 17 tools,
+`crates/agentsassemble-server/src/connector/mcp_web.rs` retains its 17 tools,
 room authority, admission, private connection custody and shutdown semantics.
 The Worker streams protocol requests and responses to that one upstream, blocks
 redirects and strips Sites/user authentication headers at the upstream boundary.

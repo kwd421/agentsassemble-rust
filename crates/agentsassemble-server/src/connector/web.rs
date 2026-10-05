@@ -21,9 +21,9 @@ use serde_json::{Value, json};
 use tower_http::set_header::SetResponseHeaderLayer;
 use uuid::Uuid;
 
-#[path = "connector_attachment_web.rs"]
+#[path = "attachment_web.rs"]
 mod attachments;
-#[path = "connector_read_web.rs"]
+#[path = "read_web.rs"]
 mod read;
 
 #[derive(Deserialize)]

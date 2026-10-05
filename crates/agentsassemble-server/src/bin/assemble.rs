@@ -1,4 +1,4 @@
-use agentsassemble_server::connector_mcp::transport::{serve_remote, serve_stdio};
+use agentsassemble_server::connector::mcp::transport::{serve_remote, serve_stdio};
 use clap::{Parser, Subcommand};
 
 #[path = "../attendee/cli.rs"]

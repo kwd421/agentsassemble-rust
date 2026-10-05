@@ -9,6 +9,17 @@ own the current review state. Configured real-provider proof
 and Pro review remain final-closeout work. The dated implementation notes below retain their original
 intermediate verification status; this current status and the closure record govern.
 
+## Connector and persistence path-only grouping (2026-10-05)
+
+Move server `connector_*` (13 files) into `connector/` and persistence
+`attendee_*` (26 files, including tests) into `attendee/`, dropping file prefixes.
+Retain connector CLI/MCP/HTTP entry points and room-runtime ownership, and attendee
+admission, custody, turn, tools, interruption and cleanup storage semantics.
+Only file/module/import paths change; preserve exact visibility, authority,
+state transitions, retry/failure behavior and existing public item exports.
+No old-module aliases. Verify each crate with existing build/tests, then one
+pre-push `make verify`; no deployment, signing or manual verification.
+
 ## Path-only folder grouping (2026-10-05)
 
 Move the 23 server `attendee_*` source files into `attendee/`, preserving

@@ -10,11 +10,11 @@ use rmcp::{
 };
 use serde_json::{Value, json};
 
-#[path = "connector_tool_contract.rs"]
+#[path = "tool_contract.rs"]
 mod contract;
-#[path = "connector_hub.rs"]
+#[path = "hub.rs"]
 mod hub;
-#[path = "connector_mcp_transport.rs"]
+#[path = "mcp_transport.rs"]
 pub mod transport;
 use contract::{
     AttachmentRead, AttachmentUpload, Choose, Connection, Context, Join, Leave, Read, Roll, Say,

@@ -1,5 +1,5 @@
 use super::{InviteScope, Uuid, fixture, human_invite, json, mcp::call};
-use agentsassemble_server::connector_mcp::ConnectorMcp;
+use agentsassemble_server::connector::mcp::ConnectorMcp;
 use rmcp::{
     RoleClient, ServiceExt,
     model::CallToolRequestParams,

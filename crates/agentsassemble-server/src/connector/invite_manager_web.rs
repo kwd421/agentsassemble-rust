@@ -11,7 +11,7 @@ use uuid::Uuid;
 
 use crate::{
     AppState,
-    connector_web::ConnectorHttpError,
+    connector::web::ConnectorHttpError,
     http_api::{PRIVATE_NO_STORE, bearer_credential, decode_json_body, exact_tauri_cors},
 };
 

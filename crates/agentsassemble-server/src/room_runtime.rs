@@ -45,7 +45,7 @@ pub use attendee_execution::{AttendeeOperation, AttendeeOperationResult};
 
 #[path = "attendee/runtime.rs"]
 mod attendee;
-#[path = "connector_runtime.rs"]
+#[path = "connector/runtime.rs"]
 pub(crate) mod connector;
 
 #[path = "side_chat_runtime.rs"]

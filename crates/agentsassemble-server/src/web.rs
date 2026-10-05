@@ -181,12 +181,12 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::public_ingress_web::routes())
         .merge(crate::human_session_exchange_web::routes())
         .merge(crate::human_invite_manager_web::routes())
-        .merge(crate::connector_invite_manager_web::routes())
-        .merge(crate::connector_invite_document::routes())
+        .merge(crate::connector::invite_manager_web::routes())
+        .merge(crate::connector::invite_document::routes())
         .merge(crate::operator_pairing_web::routes())
         .merge(crate::human_invite_web::routes())
-        .merge(crate::connector_web::routes())
-        .merge(crate::connector_mcp_web::routes(&state))
+        .merge(crate::connector::web::routes())
+        .merge(crate::connector::mcp_web::routes(&state))
         .merge(crate::attendee::web::routes());
     if state.central_registration_enabled {
         app = app.merge(crate::central::registration_web::routes());

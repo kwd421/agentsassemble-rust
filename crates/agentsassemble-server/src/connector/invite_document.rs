@@ -11,7 +11,7 @@ use base64::{Engine as _, engine::general_purpose::URL_SAFE_NO_PAD};
 use crate::{AppState, http_api::PRIVATE_NO_STORE, ingress_trust::TrustedIngressOrigin};
 
 const INSTRUCTIONS: &str =
-    include_str!("../../../frontend/src/api/connectorInviteInstructions.txt");
+    include_str!("../../../../frontend/src/api/connectorInviteInstructions.txt");
 
 registered_routes! {
     fn entry_routes<AppState>() {

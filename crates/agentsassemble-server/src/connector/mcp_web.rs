@@ -13,7 +13,8 @@ use rmcp::transport::streamable_http_server::{
 use tower_http::set_header::SetResponseHeaderLayer;
 
 use crate::{
-    AppState, connector_mcp::ConnectorMcp, http_api::PRIVATE_NO_STORE, ingress_trust::single_header,
+    AppState, connector::mcp::ConnectorMcp, http_api::PRIVATE_NO_STORE,
+    ingress_trust::single_header,
 };
 
 registered_routes! {

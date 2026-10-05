@@ -1,6 +1,6 @@
 use super::{InviteScope, Uuid, fixture, human_invite, json, mcp};
 use agentsassemble_protocol::RoomAction;
-use agentsassemble_server::connector_client::RoomConnectorClient;
+use agentsassemble_server::connector::client::RoomConnectorClient;
 use rmcp::model::CallToolRequestParams;
 use std::time::Duration;
 

@@ -1,6 +1,6 @@
 use super::{InviteScope, Uuid, fixture, human_invite, json};
 use agentsassemble_protocol::RoomAction;
-use agentsassemble_server::connector_client::RoomConnectorClient;
+use agentsassemble_server::connector::client::RoomConnectorClient;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
 #[tokio::test]

@@ -1,6 +1,6 @@
 use super::{InviteScope, Uuid, fixture, human_invite, json};
 use agentsassemble_protocol::RoomAction;
-use agentsassemble_server::connector_client::RoomConnectorClient;
+use agentsassemble_server::connector::client::RoomConnectorClient;
 use rmcp::{RoleClient, ServiceExt, model::CallToolRequestParams, service::RunningService};
 use serde_json::Value;
 use std::{process::Stdio, time::Duration};

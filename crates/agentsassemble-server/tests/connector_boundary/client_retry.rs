@@ -1,6 +1,6 @@
 use super::{InviteScope, Uuid, fixture, human_invite, json};
 use agentsassemble_protocol::RoomAction;
-use agentsassemble_server::connector_client::RoomConnectorClient;
+use agentsassemble_server::connector::client::RoomConnectorClient;
 #[tokio::test]
 async fn lost_admission_and_command_responses_recover_the_original_receipts()
 -> Result<(), Box<dyn std::error::Error>> {

@@ -5,7 +5,7 @@ use reqwest::{Client, RequestBuilder};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
-#[path = "connector_client_transport.rs"]
+#[path = "client_transport.rs"]
 pub(crate) mod transport;
 use sha2::{Digest, Sha256};
 use std::{sync::Arc, time::Duration};
