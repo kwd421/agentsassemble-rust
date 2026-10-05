@@ -52,6 +52,24 @@ Cargo profile override. Ordinary development and release profiles stay unchanged
 After all baseline work stops, use the existing artifact owner to retire the
 replaced artifacts, then verify the same full suite and measure the resulting size.
 
+2026-10-05 artifact reduction acceptance: the 18 GiB target budget remains
+unchanged. The reachable verification entry points are `cargo test --workspace
+--all-features --no-run`, filtered server integration tests, and `make verify`.
+Remove macOS dSYM duplication at the existing target-specific rustflags owner
+(the current `packed` flag overrides Cargo profiles), retaining test
+`line-tables-only` and file/line failure backtraces. Do not apply `unpacked` to
+Windows, where rustc does not support it; other target settings stay unchanged.
+Combine the 49 server integration targets into one harness while retaining every
+case, assertion and fixture lifetime; the old target name becomes its module
+filter. Audit process environment, global state, ports, temporary directories and
+SQLite writer ownership before sharing a process. Only reproduced interference
+justifies fixture changes; no global serialization or weaker assertions.
+Record identical-command before/after allocated bytes, a successful full
+`make verify` and its final target size, and three simultaneous full Rust suite
+runs using normal parallel test threads. Preserve gates, user data and unrelated
+work; no deployment or signed build. Retire superseded Cargo artifacts only with
+the existing maintenance owner after all active builds finish.
+
 Actual Codex startup exposes an upstream transport mismatch: the installed native
 Code Mode Host accepts a `grpc://127.0.0.1:0` listener and publishes a canonical
 `http://127.0.0.1:<port>` gRPC endpoint. Its former `ws://` invocation exits before

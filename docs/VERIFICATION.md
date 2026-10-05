@@ -1,5 +1,21 @@
 # Verification Contract
 
+## macOS debug artifact layout (2026-10-05)
+
+The unchanged-command baseline (`cargo test --workspace --all-features --no-run`,
+exit 0) retained 23,671,048 KiB (22.574 GiB) in `target`, including 23,249,100 KiB
+(22.172 GiB) in `target/debug/deps`, measured with `du -sk`.
+After builds stopped, `make artifact-prune` retired that superseded cache.
+The macOS-only rustflags owner now selects `split-debuginfo=unpacked`; the portable
+test profile keeps `line-tables-only`. A temporary, intentionally failing Cargo
+test with `RUST_BACKTRACE=1` exited 101 and resolved its stack frame to
+`crates/agentsassemble-domain/tests/artifact_backtrace_probe.rs:3:5` (plus its
+closure at line 2). The probe source was then removed. No dSYM was generated.
+Windows/Linux configuration is unchanged; native Windows execution was not run.
+Rust documents that Windows does not support `unpacked`, so a global Cargo profile
+setting would be inappropriate:
+[split-debuginfo](https://doc.rust-lang.org/rustc/codegen-options/index.html#split-debuginfo).
+
 ## C4a host compatibility floor (2026-10-05)
 
 Contract-first commit `e8b242e9` freezes the schema 81 minimum binding DDL in

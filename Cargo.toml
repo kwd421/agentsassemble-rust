@@ -80,6 +80,7 @@ opt-level = 3
 
 # The full macOS test build spent 20.37 GiB on dSYMs alone. Keep actionable
 # file/line backtraces; variable/type inspection remains a full-debug opt-in.
+# macOS split-debuginfo is set in .cargo/config.toml, not this portable profile.
 [profile.test]
 debug = "line-tables-only"
 
