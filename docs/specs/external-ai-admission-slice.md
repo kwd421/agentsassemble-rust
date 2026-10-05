@@ -9,6 +9,23 @@ own the current review state. Configured real-provider proof
 and Pro review remain final-closeout work. The dated implementation notes below retain their original
 intermediate verification status; this current status and the closure record govern.
 
+## Concurrent interrupt and turn delivery (2026-10-05)
+
+Parallel artifact-reduction verification exposed an external attendee socket race.
+`attendee_socket::run_session` checks for an interrupt before asking
+`SqliteStore::deliver_attendee_turn` for an assignment. An interrupt/mute effect
+may commit between those two reads. The turn-delivery transaction must then return
+no eligible assignment while retaining the pending canonical effect, rather than
+turn that expected lifecycle state into a terminal socket NACK. The existing room
+event wakes the socket to deliver the exact interrupt; no new polling or retry is
+introduced. Connection replacement/revocation, unready custody and invalid turn
+phases remain errors. Exact-generation interrupt delivery and HTTP quiescence
+report/replay retain their existing owners and checks.
+
+Extend the existing persistence interrupt case to impose that interleaving, both
+before and after interrupt delivery, and retain the full socket interrupt/mute and
+retained/gone flow. Do not suppress the NACK in the client or relax assertions.
+
 ## Definition and observed entry points
 
 The original checkout is verified at `d504647`. Retained owners are

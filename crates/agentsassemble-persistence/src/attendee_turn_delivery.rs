@@ -1,6 +1,6 @@
 use crate::{
     AttendeeConnectionAuthorization, PersistenceError, ProviderTurnAssignmentEnvelope,
-    ProviderTurnExecutionPhase, ProviderTurnStartAuthority, SqliteStore,
+    ProviderTurnEffectPhase, ProviderTurnExecutionPhase, ProviderTurnStartAuthority, SqliteStore,
     attendee_invites::rejected,
 };
 use chrono::{DateTime, Utc};
@@ -22,7 +22,7 @@ impl SqliteStore {
     /// Delivers or recovers one exact assignment with connection authorization in the same transaction.
     ///
     /// # Errors
-    /// Rejects unready/replaced/revoked custody, effect-bearing turns and corrupt assignment state.
+    /// Rejects unready/replaced/revoked custody, invalid effect/turn state and corrupt assignments.
     pub async fn deliver_attendee_turn(
         &self,
         connection: &AttendeeConnectionAuthorization,
@@ -50,6 +50,19 @@ impl SqliteStore {
             return Ok(None);
         };
         let execution = &candidate.execution;
+        if execution.phase == ProviderTurnExecutionPhase::InterruptPending
+            && candidate.effect.as_ref().is_some_and(|effect| {
+                matches!(
+                    effect.phase,
+                    ProviderTurnEffectPhase::Prepared | ProviderTurnEffectPhase::Dispatching
+                )
+            })
+        {
+            // An interrupt may commit after the socket's interrupt lookup. There is
+            // no deliverable turn; its queued room event will wake the interrupt owner.
+            tx.commit().await?;
+            return Ok(None);
+        }
         if candidate.effect.is_some()
             || !matches!(
                 execution.phase,

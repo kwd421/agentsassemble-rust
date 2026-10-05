@@ -53,7 +53,11 @@ async fn run_case(muted: bool, runtime: &str) -> TestResult {
     let interrupt = external
         .receive_json_with_timeout(Duration::from_secs(2))
         .await;
-    assert_eq!(interrupt["type"], "interrupt");
+    assert_eq!(
+        interrupt["type"], "interrupt",
+        "code={}, muted={muted}, runtime={runtime}",
+        interrupt["error"]["code"]
+    );
     assert_eq!(
         interrupt["interrupt"]["authority"],
         turn["assignment"]["authority"]

@@ -2,18 +2,94 @@
 
 ## Server integration harness and artifact footprint (2026-10-05)
 
-The 49 server integration targets now share `tests/integration/main.rs`; each
-original file remains an unchanged module. Before/after `--list` comparison
-preserved all 186 suite-qualified case names exactly. Run a suite with
+The 49 server integration targets now share `tests/integration/main.rs`; original
+files remain suite modules and common support is declared once at the harness
+root. Before/after `--list` comparison preserved all 186 suite-qualified case
+names exactly. Run a suite with
 `cargo test -p agentsassemble-server --test integration runtime_boundary::`.
-Makefile and CI already use workspace-wide commands; the two document references
-now show the module-filter form.
-The first full build after consolidation (`cargo test --workspace --all-features
---no-run`, exit 0) measured 4,199,604 KiB (4.005 GiB) in `target`, 3,770,364 KiB
-in `target/debug/deps`, and zero dSYM directories. One initial full workspace run
-passed, including all 186 integration cases with normal parallel test threads.
-Two other simultaneous runs exposed pre-existing provider fixture interference;
-the follow-up correction and final verification are recorded below when complete.
+Makefile and CI already use workspace commands; both document references now use
+the module filter. No lint suppression or gate change was needed.
+
+Parallel verification exposed these fixture defects, now corrected:
+
+- Mach-O and Cursor staging cases asserted immediate deletion while other tests
+  held the shared staging-root lock. Their exact original assertions run in child
+  processes with private `TMPDIR` roots; each parent requires exactly one passing
+  child case. Production deferred-reclamation semantics are unchanged.
+- Five runtime-lease cases reused external lease keys across processes. Their
+  session IDs are now unique. Server recovery/interrupt unit fixtures derive
+  deterministic agent IDs from each unique workspace and the original label.
+- Agent Session creation request IDs include the test process ID, isolating the
+  derived runtime lease while preserving same-process replay. ACK helpers reject
+  unexpected NACKs immediately and retain positive frame counts.
+- Central owner and human-session lifetime cases await a control Ping/Pong
+  barrier before advancing fake time, avoiding in-flight socket/SQLite work.
+  Every expiry duration and assertion is unchanged.
+
+Native guardian startup also exceeded the unchanged five-second initial handoff
+bound under simultaneous load; diagnostics confirmed the guardian was still alive.
+Splitting harnesses and private-root subprocesses did not resolve that startup
+cost, so neither experiment remains. `profile.test.opt-level = 1` reduces the
+server fixture executable from about 177 to 74 MiB and reduces validation/staging
+work. The previously failing 25-case mixed workload then passed in all three
+simultaneous runs. Debug assertions and overflow checks passed explicit temporary
+probes; an intentional failure still resolved `artifact_backtrace_probe.rs:3:5`
+and its closure at `2:30`. Probe sources were removed afterwards. No original
+cases, assertions or timeouts were removed or relaxed; no suite-wide lock,
+sleep/retry or test-thread limit was added. The tradeoff is optimized compilation:
+the clean workspace no-run build took 4 minutes 16 seconds on this machine.
+
+With builds stopped, the existing artifact owner retired superseded diagnostic
+artifacts. The unchanged `cargo test --workspace --all-features --no-run` command
+passed on the final code. `du -sk target target/debug/deps` measured:
+
+| Measurement | target (KiB) | target/debug/deps (KiB) |
+| --- | ---: | ---: |
+| Before | 23,671,048 | 23,249,100 |
+| After | 3,417,404 | 3,162,756 |
+
+That is 22.574 to 3.259 GiB for target (85.6 percent less), and 22.172 to 3.016 GiB
+for deps. The final no-run footprint contained zero dSYM directories.
+Three simultaneous complete `cargo test --workspace --all-features --no-fail-fast`
+runs each exited 0: 1,078 passed, zero failed, including all 186 integration cases.
+After all verification, retained dev/desktop/test caches totaled 10,022,164 KiB
+(9.558 GiB) in target and 9,121,872 KiB (8.699 GiB) in deps; dSYM count remained
+zero. The unchanged 18 GiB artifact limit passed. Final architecture/policy,
+format, workspace Clippy, desktop Clippy and 46 desktop tests, diff and artifact
+checks all passed separately; this does not change the single `make verify`
+result below.
+
+The first optimized three-workspace run passed twice and exposed one external
+attendee interrupt/socket race in the third. A deterministic extension to the
+existing persistence interrupt test reproduced `operation_in_progress`: an
+interrupt committed after the socket's interrupt check but before its turn query.
+Turn delivery now returns no eligible assignment only for canonical
+`InterruptPending` with a prepared/dispatching effect, leaving delivery to the
+existing interrupt owner and room-event wake. Other invalid phases and all
+connection authority checks still reject. The regression failed before the fix;
+all 22 affected attendee persistence cases passed after it. Test counts and the
+socket's interrupt/mute/retained/gone assertions are unchanged.
+
+The single requested `make verify` invocation exited 2 at the unchanged frontend
+`CustomChannelView.test.tsx:35` input-focus assertion: 1,042/1,043 tests passed.
+Its end-of-run target was 4,832,720 KiB (4.609 GiB), with 4,352,648 KiB in deps.
+The unchanged failing file passed all 11 tests on a separate focused rerun;
+`make verify` itself was not repeated and is not reported as successful.
+Architecture/policy/format, workspace check and frontend build passed before
+that failure. Separate remaining checks passed desktop Clippy and all 46 desktop
+tests; that separate workspace's profile is unchanged. Shared support declarations
+corrected Clippy's duplicate-module failure without an exception.
+An invalid concurrent verification attempt ran desktop preparation beside the
+three Rust suites. `desktop/scripts/prepare_sidecar.mjs` builds the dev server
+into the same `target/debug/agentsassemble-server` path, replacing the 74 MiB
+test-profile executable with a 183 MiB dev executable while tests were running;
+all three suites then failed three native startup cases. After those processes
+finished, the same workspace no-run command restored the 74 MiB test executable
+without rebuilding. The final three-run check therefore follows desktop/build
+gates with no other build changing its executables. This orders verification
+commands only; test concurrency and all repository gates remain unchanged.
+No deployment, signing, real-provider run or automated security scan was added. `.agents/` and
+`scripts/__pycache__/` were untouched.
 
 ## macOS debug artifact layout (2026-10-05)
 
@@ -26,7 +102,9 @@ test profile keeps `line-tables-only`. A temporary, intentionally failing Cargo
 test with `RUST_BACKTRACE=1` exited 101 and resolved its stack frame to
 `crates/agentsassemble-domain/tests/artifact_backtrace_probe.rs:3:5` (plus its
 closure at line 2). The probe source was then removed. No dSYM was generated.
-Windows/Linux configuration is unchanged; native Windows execution was not run.
+Windows/Linux split-debuginfo settings are unchanged. Test `opt-level = 1` is
+portable and retains default assertions/overflow checks; native Windows execution
+was not run.
 Rust documents that Windows does not support `unpacked`, so a global Cargo profile
 setting would be inappropriate:
 [split-debuginfo](https://doc.rust-lang.org/rustc/codegen-options/index.html#split-debuginfo).

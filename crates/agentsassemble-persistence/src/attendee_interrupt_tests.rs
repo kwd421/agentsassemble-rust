@@ -47,6 +47,9 @@ async fn exact_external_interrupt_reconnect_and_report_preserve_canonical_quiesc
                 )
                 .await?;
         }
+        // The socket may have checked for an interrupt just before the command
+        // committed. Its subsequent turn lookup must leave that effect to its owner.
+        assert_interrupt_blocks_turn(&store, &connection, now).await?;
         assert!(
             store
                 .record_attendee_turn_report(&connection, &turn, now)
@@ -58,6 +61,7 @@ async fn exact_external_interrupt_reconnect_and_report_preserve_canonical_quiesc
             .await?
             .ok_or("interrupt missing")?;
         assert_eq!(interrupted.authority.execution_id, turn.execution_id);
+        assert_interrupt_blocks_turn(&store, &connection, now).await?;
         let replacement = store
             .claim_attendee_connection(connection.session(), Uuid::new_v4(), now)
             .await?
@@ -123,6 +127,20 @@ async fn readiness_cannot_change_exact_runtime_interrupt_capability_on_reconnect
         store.record_attendee_ready(&replacement, &ready, now).await,
         Err(PersistenceError::CommandRejected { code, .. }) if matches!(code.as_bytes(), b"runtime_owner_mismatch")
     ));
+    Ok(())
+}
+
+async fn assert_interrupt_blocks_turn(
+    store: &crate::SqliteStore,
+    connection: &crate::AttendeeConnectionAuthorization,
+    now: chrono::DateTime<chrono::Utc>,
+) -> TestResult {
+    assert!(
+        store
+            .deliver_attendee_turn(connection, now)
+            .await?
+            .is_none()
+    );
     Ok(())
 }
 
