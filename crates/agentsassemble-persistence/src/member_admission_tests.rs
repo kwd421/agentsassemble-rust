@@ -82,13 +82,15 @@ async fn member_devices_retry_canonical_result_without_profile_overwrite_or_devi
 }
 
 #[tokio::test]
-async fn member_other_invite_and_terminal_participants_do_not_consume_or_create_sessions()
+async fn member_other_scope_and_terminal_participants_do_not_consume_or_create_sessions()
 -> TestResult {
     let (store, now) = fixture().await;
     store.set_registration_epoch(Some("epoch")).await?;
     insert_invite(&store, [1; 32], [2; 32], "guest-one", 10, now).await;
     insert_invite(&store, [5; 32], [6; 32], "guest-two", 10, now).await;
     let first = admitted(store.admit_human(&member(2, 3, "Member"), now).await?);
+    sqlx::query("UPDATE room_invites SET invite_scope = 'read_only' WHERE base_participant_id = 'guest-two'")
+        .execute(&store.pool).await?;
     assert!(matches!(
         store.admit_human(&member(6, 4, "Member"), now).await?,
         HumanAdmissionDecision::Rejected(HumanAdmissionRejection::IdempotencyConflict)
@@ -226,6 +228,70 @@ async fn member_rechecks_invite_and_room_after_redemption() -> TestResult {
                 .await?,
             0
         );
+    }
+    Ok(())
+}
+
+#[tokio::test]
+async fn member_new_invite_reenters_after_original_revocation_or_expiry() -> TestResult {
+    for change in [
+        "UPDATE room_invites SET revoked = 1 WHERE base_participant_id = 'guest-one'",
+        "UPDATE room_invites SET expires_at = created_at + 1 WHERE base_participant_id = 'guest-one'",
+    ] {
+        let (store, now) = fixture().await;
+        store.set_registration_epoch(Some("epoch")).await?;
+        insert_invite(&store, [1; 32], [2; 32], "guest-one", 10, now).await;
+        insert_invite(&store, [5; 32], [6; 32], "guest-two", 10, now).await;
+        let first = admitted(store.admit_human(&member(2, 3, "Hihi"), now).await?);
+        let users: i64 = sqlx::query_scalar("SELECT COUNT(*) FROM user_profiles")
+            .fetch_one(&store.pool)
+            .await?;
+        sqlx::query(change).execute(&store.pool).await?;
+        let replay = admitted(
+            store
+                .admit_human(&member(6, 4, "Other browser"), now)
+                .await?,
+        );
+        assert!(replay.deduplicated());
+        assert_eq!(first.result(), replay.result());
+        assert_eq!(first.session_bearer(), replay.session_bearer());
+        let fingerprint: [u8; 32] = Sha256::digest(replay.session_bearer().as_bytes()).into();
+        let auth = store.authorize_human_session(&fingerprint).await?;
+        assert_eq!(auth.principal().display_name, "Hihi");
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM user_profiles")
+                .fetch_one(&store.pool)
+                .await?,
+            users
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>(
+                "SELECT use_count FROM room_invites WHERE base_participant_id = 'guest-two'"
+            )
+            .fetch_one(&store.pool)
+            .await?,
+            0
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM member_admissions")
+                .fetch_one(&store.pool)
+                .await?,
+            1
+        );
+        assert_eq!(
+            sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM human_device_credentials")
+                .fetch_one(&store.pool)
+                .await?,
+            0
+        );
+        for status in ["left", "kicked"] {
+            sqlx::query("UPDATE participants SET participant_json = json_set(participant_json, '$.status', ?) WHERE participant_id = ?")
+                .bind(status).bind(&first.result().agent_id).execute(&store.pool).await?;
+            assert!(matches!(
+                store.admit_human(&member(6, 5, "Hihi"), now).await?,
+                HumanAdmissionDecision::Rejected(HumanAdmissionRejection::SessionUnavailable)
+            ));
+        }
     }
     Ok(())
 }

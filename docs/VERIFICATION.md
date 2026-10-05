@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 member reentry: persistence member admission 6/6 passed; revoked/expired original invite + same-scope new invite on another browser preserves user/canonical provenance and zero new-invite consumption; different scope and Left/Kicked remain denied. No signed build, manual verification or deployment.
+
 - 2026-10-05 join-profile overlay correction: split avatar-row layout from the shared app/web panel overlay introduced in `87a6aec0` (2026-08-23), which also blocked anonymous admission; Chromium 1024x768 regression reproduced the pre-fix hit-target failure, then passed both button hit targets/clicks and in-card avatar/photo layout (2/2, screenshot inspected), existing profile-screen tests 4/4 passed. One pre-push `make verify` passed frontend 1,097 and desktop 47 tests but exited 2 at existing Rust `frontend_release::tests::source_replacement_retains_release_and_corruption_is_rejected` (WouldBlock, OS 35); no rerun or Rust edits, remaining Clippy/diff/artifact gates passed; shared Tauri code fixed, packaged runtime unverified.
 
 - 2026-10-05 provider chooser loading correction: frontend-only dimming/order uses `discovery_status != "loading" && !available`; server-shaped initial loading fixture and loading/available/unavailable screen regression passed (3/3), one pre-push `make verify` passed (exit 0); no signed build or manual visual verification.

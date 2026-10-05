@@ -92,7 +92,9 @@ H1은 Rust 서버 API까지만 구현한다. 기존 invite preflight, 방 큐, h
 profile 생성, 세션 bearer, AA-HOST-1 중앙 클라이언트를 재사용한다. 중앙 W1 redeem은
 신원만 증명하고 호스트 트랜잭션은 invite/방/상한/Left·Kicked를 재검사한다.
 (issuer, person_id) binding은 기존 사용자를 재사용하며 프로필을 덮어쓰지 않는다.
-(binding, invite) 결과를 저장하고 (binding, room) UNIQUE로 다른 초대/scope를 거절한다.
+(binding, invite) 결과와 (binding, room) UNIQUE를 유지한다. 기존 Joined 멤버는 같은 방의
+같은 scope 새 초대로 다른 기기에서도 기존 admission을 재사용하며 새 초대를 소비하지 않는다.
+원래 초대의 폐기·만료는 재입장에 영향을 주지 않는다. 다른 scope는 conflict, Left/Kicked는 거절한다.
 새 challenge는 invite/browser fingerprint, server incarnation, 만료에 묶이며 상한 있는
 메모리에서 원자적으로 redeeming을 선점한다. 중앙 응답 불명·오류는 폐기하고 새
 challenge/grant를 요구한다. commit 직전에도 만료/epoch를 검사하며 익명 fallback은 없다.
@@ -1583,3 +1585,24 @@ fields; identical metadata within one minute affects zero rows. Regressions must
 fail on the prior code and cover rollback, successful retry/read, and metadata write
 counts. One commit/push, affected crate tests, then one make verify; no deployment,
 signed build, manual verification, or changes to .agents/ and scripts/__pycache__/.
+
+### 멤버 재입장·초대/동의 화면 보완 (2026-10-05)
+
+진입점: member-challenge/member-join → persistence admission, 공용 app/web
+AppOverlays → GuestJoinProfilePanel/MemberJoinPanel 및 로그인/callback/오류 화면.
+호스트가 binding/멤버십/세션 provenance를 계속 소유하며 새 사용자·admission·초대 소비 없이
+기존 canonical 세션을 재사용한다. 기존 세션 만료·종료 및 challenge/새 초대 검사는 유지한다.
+SQLite writer 직렬화와 기존 스키마·API·명시적 재시도를 유지한다.
+검증은 폐기/만료된 첫 초대 + 새 같은 범위 초대/다른 브라우저의 동일 사용자·provenance·
+소비 불변, 다른 범위 conflict, Left/Kicked 거절을 포함한다.
+화면 미감·문구는 관리자(Claude) 지정 그대로 사용한다. 초대 제목은 “‘{방 이름}’에 초대받았어요”,
+아바타/이름 유지, “로그인하고 참가”(첫 강조)/“게스트로 참가”(보조),
+“로그인하면 다른 기기에서도 같은 사람으로 참가할 수 있어요.” 안내를 표시한다.
+중간 화면은 “로그인하고 참가”, “Google로 계속”, “참가를 준비하고 있어요”를 사용한다.
+동의 제목은 “{서버 이름} 서버에 참가할까요?”, “계정  {이름}” 한 줄과 작은 origin 한 줄,
+“참가하면 이 서버에 내 이름과 프로필이 보여요.”, “참가하기”(강조)/“취소”(보조)를 표시한다.
+UUID·ISO 시각·내부 용어·영어 오류는 표시하지 않는다. Left/Kicked는
+“이 방에는 다시 참가할 수 없어요. 방 관리자에게 문의해 주세요.”, 다른 범위는
+“이 초대로는 참가할 수 없어요. 방 관리자에게 새 초대를 받아 주세요.”로 안내한다.
+새 추상화 없이 기존 컴포넌트/보조 스타일 재사용. 관련 crate/화면 테스트 후 푸시 직전
+make verify 한 번; 기능별 커밋/푸시와 VERIFICATION 건별 한 줄. 서명·수동 검증·배포 제외.

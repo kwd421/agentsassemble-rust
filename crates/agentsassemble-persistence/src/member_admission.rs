@@ -92,7 +92,7 @@ pub(crate) async fn admit(
         invite.signed_token_fingerprint,
     ))?)
     .into();
-    let previous = sqlx::query("SELECT invite_id, input_hash, session_key, result_json FROM member_admissions WHERE binding_id = ? AND room_id = ?")
+    let previous = sqlx::query("SELECT invite_id, invite_scope, input_hash, session_key, result_json FROM member_admissions WHERE binding_id = ? AND room_id = ?")
         .bind(&binding).bind(&invite.room_id).fetch_optional(&mut **tx).await?;
     if let Some(row) = previous {
         return replay(store, tx, &invite, input_hash, row, now).await;
@@ -162,8 +162,9 @@ async fn replay(
     row: sqlx::sqlite::SqliteRow,
     now: DateTime<Utc>,
 ) -> Result<HumanAdmissionDecision, PersistenceError> {
-    if row.try_get::<String, _>("invite_id")? != invite.invite_id
-        || row.try_get::<Vec<u8>, _>("input_hash")? != input_hash
+    if row.try_get::<String, _>("invite_scope")? != invite_scope_storage(invite.invite_scope)
+        || (row.try_get::<String, _>("invite_id")? == invite.invite_id
+            && row.try_get::<Vec<u8>, _>("input_hash")? != input_hash)
     {
         return Ok(denied(Rejection::IdempotencyConflict));
     }
