@@ -32,7 +32,8 @@ work is active or waiting, and remove it when it closes.
   (C4a approved (`7c2d2d34`)). Approved minimal v2/v2.1 supersedes the remaining
   full-design sequence: W1 central grants `84f604be`; H1 Rust host persistence/API
   implemented with schema 82 (session credential constraint exceeds the additive
-  v81 floor). Remaining: F1 frontend and V1 packaged verification; reservation,
+  v81 floor). F1 shared frontend implemented with W2/W3 central test doubles;
+  V1 packaged verification and the W2/W3 production rollout remain pending. Reservation,
   outbox/result confirmation and membership projection are deferred to rail (c).
   C3a central floor deployed to production (Worker `79a181cd`, version `8c190b48`).
   [Owning contract](docs/specs/identity-accounts-friends-slice.md#초대-멤버를-중앙-계정에-묶기--c1-승인-계약-2026-10-05).

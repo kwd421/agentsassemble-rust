@@ -100,6 +100,37 @@ describe("useRoomAdmission", () => {
     vi.unstubAllGlobals();
   });
 
+  it("applies a member callback through the existing session owner without anonymous preflight/join", async () => {
+    const onRoomJoined = vi.fn();
+    const { result } = renderHook(() => useRoomAdmission({
+      deviceToken: DEVICE_TOKEN, clientId: CLIENT_ID, guestInvite: null,
+      guestJoinToken: "invite-1", operatorPairingToken: "", initialSession: null,
+      onPairingTokenConsumed: vi.fn(), onRoomJoined, onResetToLobby: vi.fn(),
+      memberReturn: { record: { invite_token: "invite-1", meeting_id: "room-2",
+        challenge_id: "challenge", challenge_hash: "a".repeat(43), server_id: SESSION_SURFACE.server_id,
+        registration_epoch: "epoch", handoff_state: "b".repeat(43), expires_at: 9_999_999_999 } },
+    }));
+    expect(apiMocks.preflightRoomInvite).not.toHaveBeenCalled();
+    expect(apiMocks.joinRoomInvite).not.toHaveBeenCalled();
+    expect(result.current.memberJoin?.meetingId).toBe("room-2");
+    await act(async () => {
+      await result.current.memberJoin!.onComplete({
+        ...SESSION_SURFACE, status: "admitted", request_id: "request", client_id: CLIENT_ID,
+        session_token: "member-session", agent_id: "member", display_name: "중앙 회원",
+        meeting_id: "room-2", invite_scope: "room", participant_type: "human", client_type: "browser",
+        provider_kind: "manual", connection_kind: "native_remote_room_client", expires_at: null,
+        room_label: "Room Two", room_topic: "", room_created_at: "2026-10-05T00:00:00Z",
+        owner_id: "user", owner_display_name: "", stable_identity: true, operator: false,
+        guide: { welcome: "", how_to: [], etiquette: [], session: { expires_in_seconds: 0, rejoin: "" } },
+      });
+    });
+    expect(result.current.admissionState.kind).toBe("joined");
+    expect(loadRoomGuestSession()?.sessionToken).toBe("member-session");
+    expect(onRoomJoined).toHaveBeenCalledOnce();
+    expect(result.current.admittedSessionToken).toBe("member-session");
+    expect(window.location.search).toBe("");
+  });
+
   it("auto-joins only when preflight recognizes the server-side identity", async () => {
     apiMocks.preflightRoomInvite.mockResolvedValue({
       status: "known_user",

@@ -20,6 +20,16 @@ vi.mock("./ImageCropper", () => ({
 describe("GuestJoinProfilePanel", () => {
   afterEach(cleanup);
 
+  it("offers central admission without changing the anonymous join action", () => {
+    const onJoin = vi.fn(); const onMemberJoin = vi.fn();
+    render(<GuestJoinProfilePanel displayName="Guest" onJoin={onJoin} onMemberJoin={onMemberJoin}
+      onDisplayNameChange={vi.fn()} onAvatarImageChange={vi.fn()} />);
+    fireEvent.click(screen.getByRole("button", { name: /^입장$/ }));
+    expect(onJoin).toHaveBeenCalledOnce(); expect(onMemberJoin).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "중앙 계정으로 입장" }));
+    expect(onMemberJoin).toHaveBeenCalledOnce(); expect(onJoin).toHaveBeenCalledOnce();
+  });
+
   it("keeps the cropped avatar in the browser until admission", async () => {
     const onAvatarImageChange = vi.fn();
     const croppedFile = new File(["avatar"], "avatar.png", { type: "image/png" });

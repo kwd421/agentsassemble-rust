@@ -68,6 +68,18 @@ export function centralOwnerServerUrl(
   origin: string,
   connect: CentralOwnerConnect
 ): string {
+  const url = new URL(exactCentralServerOrigin(origin));
+  const encoded = encodeBase64Url(
+    new TextEncoder().encode(JSON.stringify(connect))
+  );
+  // Remote owners enter through the existing public device-pairing shell.
+  // /app is intentionally private; authority still comes from the signed grant.
+  url.pathname = "/pair";
+  url.hash = `${FRAGMENT_PREFIX}${encoded}`;
+  return url.toString();
+}
+
+export function exactCentralServerOrigin(origin: string): string {
   const url = new URL(origin);
   if (
     url.protocol !== "https:" ||
@@ -79,14 +91,7 @@ export function centralOwnerServerUrl(
   ) {
     throw new Error("중앙 서버 주소가 안전하지 않습니다.");
   }
-  const encoded = encodeBase64Url(
-    new TextEncoder().encode(JSON.stringify(connect))
-  );
-  // Remote owners enter through the existing public device-pairing shell.
-  // /app is intentionally private; authority still comes from the signed grant.
-  url.pathname = "/pair";
-  url.hash = `${FRAGMENT_PREFIX}${encoded}`;
-  return url.toString();
+  return url.origin;
 }
 
 export function centralOwnerConnectFromUrl(url: string): CentralOwnerConnect | null {

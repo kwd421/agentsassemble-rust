@@ -72,7 +72,7 @@ import {
 } from "./useRoomSettingsController";
 import { useSidebarResize } from "./useSidebarResize";
 
-export function useAppController(deviceToken: string, clientId: string) {
+export function useAppController(deviceToken: string, clientId: string, memberReturn?: import("../lib/central/memberConnect").MemberReturn) {
   const ownerWorkspace = useCentralOwnerWorkspace(deviceToken);
   const [operatorPairingToken, setOperatorPairingToken] = useState(
     consumeOperatorPairingTokenFromUrl
@@ -81,7 +81,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     consumeGuestRecoveryRequestFromUrl
   );
   const [startupRoute] = useState(() =>
-    createStartupRoute({ operatorPairingPending: Boolean(operatorPairingToken) })
+    createStartupRoute({ operatorPairingPending: Boolean(operatorPairingToken), memberInviteToken: memberReturn?.record?.invite_token })
   );
   // Navigation custody only: retained admission never authorizes a server request.
   const lastOwnerRoomUid = useRef(startupRoute.guestSession?.centralOwner ? startupRoute.guestSession.roomUid || "" : "");
@@ -212,10 +212,11 @@ export function useAppController(deviceToken: string, clientId: string) {
     setPendingGuestAvatarImage,
     requestGuestJoin,
     retryOperatorPairing,
-    acceptRecoveredSession, acceptOwnerSession,
+    acceptRecoveredSession, acceptOwnerSession, memberJoin,
     expireGuestSession,
     clearGuestSession,
   } = useRoomAdmission({
+    memberReturn,
     deviceToken,
     clientId,
     guestInvite,
@@ -733,7 +734,7 @@ export function useAppController(deviceToken: string, clientId: string) {
     openRoomMenu, openRoomSettings, operatorPairingPending, operatorPairingState,
     pendingGuestAvatarImage, pendingGuestDisplayName, pendingMessageSearchTarget,
     publicInviteStatus,
-    requestGuestJoin, retryOperatorPairing,
+    requestGuestJoin, retryOperatorPairing, memberJoin,
     roomAppearanceAssets, roomAppearances, roomDirectorySyncIssue, roomInvite,
     roomHttpAuthority, roomMenu, roomMessageSearch, roomSettings, roomSocket,
     rooms, scopedAgents, scopedMentionables, serverProductSurface,

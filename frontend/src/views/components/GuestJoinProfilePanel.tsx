@@ -1,10 +1,12 @@
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { ImagePlus, LogIn, RotateCcw } from "lucide-react";
 import { fileToBase64 } from "../../api/http";
 import type { OperatorPairingState } from "../../app/useRoomAdmission";
 import ImageCropper from "./ImageCropper";
 
 type GuestJoinProfilePanelProps = {
+  children?: ReactNode;
+  onMemberJoin?: () => void;
   displayName: string;
   avatarImage?: string;
   status?: string;
@@ -19,6 +21,8 @@ type GuestJoinProfilePanelProps = {
 };
 
 export default function GuestJoinProfilePanel({
+  children,
+  onMemberJoin,
   displayName,
   avatarImage,
   status = "",
@@ -67,9 +71,9 @@ export default function GuestJoinProfilePanel({
         }
       >
         <h1>
-          {pairing ? "운영자 기기 연결" : retryMode ? "입장 확인" : "입장 프로필"}
+          {pairing ? "운영자 기기 연결" : children ? "중앙 계정으로 입장" : retryMode ? "입장 확인" : "입장 프로필"}
         </h1>
-        {!pairing && !retryMode && (
+        {!children && !pairing && !retryMode && (
           <div className="dc-guest-avatar-row">
           <span className="dc-guest-avatar" data-has-image={Boolean(avatarImage)}>
             {avatarImage ? <img src={avatarImage} alt="" /> : avatarLabel}
@@ -117,14 +121,14 @@ export default function GuestJoinProfilePanel({
             다시 시도
           </button>
         )}
-        {!pairing && !retryMode && cropFile && (
+        {!children && !pairing && !retryMode && cropFile && (
           <ImageCropper
             file={cropFile}
             onCancel={() => setCropFile(null)}
             onCropped={(file) => void handleCropped(file)}
           />
         )}
-        {!pairing && !retryMode && (
+        {!children && !pairing && !retryMode && (
           <>
             <label className="dc-guest-name-field">
               이름
@@ -145,10 +149,15 @@ export default function GuestJoinProfilePanel({
               <LogIn size={16} />
               입장
             </button>
+            {onMemberJoin && <button type="button" className="dc-member-session-button"
+              disabled={busy || avatarPreparing} onClick={onMemberJoin}>
+              <LogIn size={16} /> 중앙 계정으로 입장
+            </button>}
           </>
         )}
+        {children}
         {(status || uploadStatus) && (
-          <p className="dc-member-session-status preserve-words">{uploadStatus || status}</p>
+          <p role={retryMode ? "alert" : "status"} className="dc-member-session-status preserve-words">{uploadStatus || status}</p>
         )}
       </section>
     </div>

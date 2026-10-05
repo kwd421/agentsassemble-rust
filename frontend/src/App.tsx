@@ -9,13 +9,15 @@ import { isDesktopWebview } from "./lib/desktopBridge";
 export default function App({
   deviceToken,
   clientId,
+  memberReturn,
 }: {
   deviceToken: string;
   clientId: string;
+  memberReturn?: import("./lib/central/memberConnect").MemberReturn;
 }) {
-  const controller = useAppController(deviceToken, clientId);
+  const controller = useAppController(deviceToken, clientId, memberReturn);
   const finishStartup = useCallback(() => { void controller.refreshCentralDirectory(); }, [controller.refreshCentralDirectory]);
-  if (controller.centralDirectory?.status === "authentication-required") return <StartupIdentityGate deviceToken={deviceToken} onComplete={finishStartup} />;
+  if (controller.centralDirectory?.status === "authentication-required" && !controller.guestJoinToken) return <StartupIdentityGate deviceToken={deviceToken} onComplete={finishStartup} />;
   return <>
     {!isDesktopWebview() && <FrontendUpdateNotice connected={controller.canonicalRoom.connectionState === "connected"} />}
     <AppView controller={controller} />

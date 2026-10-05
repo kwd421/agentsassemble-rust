@@ -1,4 +1,5 @@
 import { browserDeviceDescription } from "../lib/ownerDeviceDescription";
+import { parseMemberChallenge, type MemberHandoff } from "../lib/central/memberConnect";
 import {
   parseOperatorPairingRedeemResponse,
   parseRoomInviteAdmissionResponse,
@@ -91,6 +92,21 @@ export function preflightRoomInvite({
     { invite_token: inviteToken },
     { deviceToken, sessionToken }
   ).then(parseRoomInviteAdmissionResponse);
+}
+
+export async function challengeRoomMember(inviteToken: string, deviceToken: string) {
+  return parseMemberChallenge(await postJsonWithIdentity<unknown>(
+    "/api/room-invite/member-challenge", { invite_token: inviteToken }, { deviceToken }
+  ));
+}
+
+export async function joinRoomMember(record: MemberHandoff, grantToken: string,
+  requestId: string, clientId: string, deviceToken: string) {
+  const payload = await postJsonWithIdentity<unknown>("/api/room-invite/member-join", {
+    invite_token: record.invite_token, challenge_id: record.challenge_id,
+    grant_token: grantToken, request_id: requestId, client_id: clientId,
+  }, { deviceToken });
+  return parseRoomInviteJoinResponse(payload, requestId, record.meeting_id, clientId);
 }
 
 export function redeemOperatorPairing({

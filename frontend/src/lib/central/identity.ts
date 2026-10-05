@@ -1,4 +1,7 @@
 import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
+import { parseMemberGrant, type MemberTargetRequest } from "./memberConnect";
+import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
+import { exactCentralServerOrigin } from "./ownerConnect";
 import { CentralTemporaryError, fetchCentral } from "./connectionError";
 import {
   controlDesktopCentralLogin,
@@ -634,6 +637,33 @@ export async function bootstrapCentral(signal?: AbortSignal): Promise<CentralBoo
   localStorage.setItem(SESSION_KEY, JSON.stringify({ ...current, person: payload.person }));
   saveCentralDirectoryCache(payload.person.person_id, payload.servers);
   return payload;
+}
+
+export async function issueCentralMemberGrant(request: MemberTargetRequest, signal?: AbortSignal) {
+  const session = loadCentralSession();
+  if (!session) throw new CentralAuthError("중앙 로그인이 필요해요.");
+  const value = await signedRequest<unknown>(session,
+    `/v1/servers/${encodeURIComponent(request.server_id)}/member-grants`, "POST",
+    { registration_epoch: request.registration_epoch, challenge_hash: request.challenge_hash }, signal);
+  if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
+  return parseMemberGrant(value, request);
+}
+
+export async function previewCentralMember(request: MemberTargetRequest, signal?: AbortSignal) {
+  const session = loadCentralSession();
+  if (!session) throw new CentralAuthError("중앙 로그인이 필요해요.");
+  const value = strictRecord(await signedRequest<unknown>(session,
+    `/v1/servers/${encodeURIComponent(request.server_id)}/member-preview`, "POST",
+    { registration_epoch: request.registration_epoch }, signal), "입장할 서버");
+  assertExactKeys(value, ["server_id", "label", "endpoint_origin", "endpoint_generation"], "입장할 서버");
+  if (value.server_id !== request.server_id || typeof value.endpoint_generation !== "number" ||
+      !Number.isSafeInteger(value.endpoint_generation) || value.endpoint_generation < 1) {
+    throw new Error("입장할 서버 정보를 확인하지 못했어요.");
+  }
+  if (loadCentralSession()?.token !== session.token) throw new CentralAuthError("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
+  return { server_id: request.server_id, label: requiredString(value, "label", "입장할 서버"),
+    endpoint_origin: exactCentralServerOrigin(requiredString(value, "endpoint_origin", "입장할 서버")),
+    endpoint_generation: value.endpoint_generation };
 }
 
 export async function openCentralOwnedServer(server: CentralServer): Promise<void> {

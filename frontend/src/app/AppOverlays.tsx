@@ -9,12 +9,14 @@ import type { AppController } from "./useAppController";
 import AgentCreateModal from "../views/components/AgentCreateModal";
 import ConnectorJoinNotice from "../views/components/ConnectorJoinNotice";
 import GuestJoinProfilePanel from "../views/components/GuestJoinProfilePanel";
+import MemberJoinPanel from "../views/components/MemberJoinPanel";
 import LeaveRoomDialog from "../views/components/LeaveRoomDialog";
 import RoomInviteModal from "../views/components/RoomInviteModal";
 import RoomSettingsModal from "../views/components/RoomSettingsModal";
 
 export default function AppOverlays({ controller, companionInvites }: { controller: AppController; companionInvites: CompanionInviteControls }) {
   const [hostCreation, setHostCreation] = useState(false);
+  const [memberSelected, setMemberSelected] = useState(false);
   const ownComputer = !isDesktopWebview() && companionInvites.available && !hostCreation;
   const closeCreation = () => { setHostCreation(false); controller.setAgentCreateOpen(false); };
   const {
@@ -28,7 +30,7 @@ export default function AppOverlays({ controller, companionInvites }: { controll
     inviteRoom, leaveRoom, leaveRoomTarget, mobileViewport,
     operatorPairingPending, operatorPairingState,
     pendingGuestAvatarImage, pendingGuestDisplayName, publicInviteStatus,
-    requestGuestJoin, retryOperatorPairing, roomAppearanceAssets, roomInvite,
+    requestGuestJoin, retryOperatorPairing, memberJoin, roomAppearanceAssets, roomInvite,
     roomLifecycle, pairedRoomLifecycle, roomSettings, roomSocket,
     setLeaveRoomTargetId, setPendingGuestAvatarImage, setPendingGuestDisplayName,
     setSettingsModal, settingsModalInitialSectionId, settingsModalRoom, startInviteTunnel,
@@ -179,7 +181,9 @@ export default function AppOverlays({ controller, companionInvites }: { controll
         {(guestJoinToken || operatorPairingPending) &&
           (!guestSession || guestPreflightRetryable || guestJoinRetryable) &&
           !guestExpired && (
-          <GuestJoinProfilePanel
+          memberJoin && (memberSelected || memberJoin.callback) ? <MemberJoinPanel
+            host={memberJoin} onCancel={memberJoin.callback ? undefined : () => setMemberSelected(false)} /> : <GuestJoinProfilePanel
+            onMemberJoin={memberJoin ? () => setMemberSelected(true) : undefined}
             pairing={operatorPairingPending}
             pairingState={operatorPairingState}
             retryMode={

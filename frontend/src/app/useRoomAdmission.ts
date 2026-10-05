@@ -5,7 +5,9 @@ import {
   redeemOperatorPairing,
   type GuestRecoveryRedeemResponse,
   type OperatorPairingRedeemResponse,
+  type RoomInviteJoinResponse,
 } from "../api";
+import type { MemberReturn } from "../lib/central/memberConnect";
 import { ApiError, GUEST_SESSION_EXPIRED_MESSAGE } from "../lib/apiErrors";
 import { loadRememberedGuestProfile, rememberGuestProfile } from "../lib/deviceIdentity";
 import { roomFromGuestSession, type RoomDockItem } from "../lib/roomDockModel";
@@ -33,6 +35,7 @@ import {
 } from "./roomAdmissionState";
 
 type RoomAdmissionOptions = {
+  memberReturn?: MemberReturn;
   deviceToken: string;
   clientId: string;
   guestInvite: RoomDockItem | null;
@@ -67,6 +70,7 @@ function pairingFailureIsRetryable(error: unknown): boolean {
 }
 
 export function useRoomAdmission({
+  memberReturn,
   deviceToken,
   clientId,
   guestInvite,
@@ -80,7 +84,9 @@ export function useRoomAdmission({
   const [admissionState, dispatchAdmission] = useReducer(
     admissionReducer,
     { guestJoinToken, operatorPairingToken, initialSession },
-    initialAdmissionState
+    (options) => memberReturn
+      ? { kind: "profile_required" as const, session: null, status: "" as const }
+      : initialAdmissionState(options)
   );
   const [pendingGuestDisplayName, setPendingGuestDisplayName] = useState("Guest");
   const [pendingGuestAvatarImage, setPendingGuestAvatarImage] = useState("");
@@ -353,6 +359,11 @@ export function useRoomAdmission({
     const attempt = beginAdmissionAttempt();
     return applyJoinedSession(roomGuestSessionFromPairingPayload(payload), "pairing", attempt.isCurrent);
   }, [applyJoinedSession, beginAdmissionAttempt]);
+
+  const acceptMemberSession = useCallback(async (payload: RoomInviteJoinResponse) => {
+    const attempt = beginAdmissionAttempt();
+    return applyJoinedSession(roomGuestSessionFromJoinPayload(guestJoinToken, payload), "invite", attempt.isCurrent);
+  }, [applyJoinedSession, beginAdmissionAttempt, guestJoinToken]);
 
   const acceptRecoveredSession = useCallback(
     async (payload: GuestRecoveryRedeemResponse) => {
@@ -725,6 +736,10 @@ export function useRoomAdmission({
   ]);
 
   return {
+    memberJoin: admissionState.kind === "profile_required" ? {
+      inviteToken: guestJoinToken, meetingId: memberReturn?.record?.meeting_id || expectedInviteRoomIdRef.current,
+      deviceToken, clientId, callback: memberReturn, onComplete: acceptMemberSession,
+    } : undefined,
     admissionState,
     guestSession,
     admittedSessionToken,

@@ -121,7 +121,33 @@ H1 API (양쪽 요청 모두 기존 `x-device-token` 브라우저 credential 필
   challenge 상한(호스트당 1024)은 429 `member_challenge_capacity`; 방/초대 거절은 기존 코드다.
   UI는 명시적 재시도로 challenge와 중앙 grant를 새로 발급하며 자동 재시도하지 않는다.
 
-F1 화면, V1 packaged 검증, 예약/outbox/결과 확인/중앙 membership projection 및 목록 동기화,
+### 최소판 F1 (2026-10-05, 승인 설계 v3/v3.1)
+
+기존 공용 app/web 초대 화면에 중앙 계정 입장을 추가하며 익명 입장과 기존 세션
+처리를 보존한다. 기존 중앙 로그인·AA-DEVICE-1 서명·join 응답 검증·세션 적용을
+재사용한다. 앱은 메모리에서 challenge→로그인→동의→grant→join을 진행한다.
+웹은 호스트 sessionStorage에 무작위 handoff_state별 초대/challenge/서버/epoch/hash/
+만료/방 정보를 보관하고 중앙 `/member-join`으로 이동한다. 이동 fragment에는
+server_id, registration_epoch, challenge_hash, handoff_state만 둔다. 중앙은 로그인
+왕복 동안 대기 정보를 자신의 origin에 보존하며, 현재 계정·중앙의 서버 이름/ID·
+정확한 endpoint origin을 표시한 명시적 동의 전에는 grant를 발급하지 않는다.
+동의 전 W3 `POST /v1/servers/{server_id}/member-preview`에 기존 중앙 세션/기기 서명으로
+`{registration_epoch}`를 보내고 `{server_id,label,endpoint_origin,endpoint_generation}`을
+검증한다. 동의한 계정과 preview의 origin/generation이 발급 시 바뀌면 이동/입장을 거절한다.
+W2 응답의 endpoint_origin은 정확한 HTTPS origin이어야 하며 고정 `/join` 콜백만
+붙인다. 콜백은 파싱/렌더 전에 central-member fragment를 무조건 제거하고 일치하는
+호스트 기록을 take-and-delete한 뒤 기존 browser credential로 member-join한다.
+grant는 메모리/일회성 fragment 외 저장하지 않는다. 불일치·만료·연결·중앙 오류 및
+Left/Kicked/다른 초대 conflict는 한국어 오류와 명시적 재시도를 제공하며 challenge부터
+다시 시작한다. 기록이 없으면 원래 초대를 다시 열어야 한다. 자동 재시도·익명 fallback은 없다.
+중앙 오류의 명시적 재시도는 preview로 확인한 origin에 grant 없는 retry 콜백을 보내 새
+challenge를 시작한다. preview 이전 오류는 신뢰할 반환 주소가 없으므로 이전 초대 화면으로
+돌아가며, 로그인 왕복으로 이전 화면도 잃었으면 원래 초대를 다시 연다.
+검증은 변경 화면의 앱/웹 왕복·로그인 복귀·동의·origin/상관관계/만료·fragment 선제 제거·
+실패 재시도·익명 회귀를 테스트 대역으로 검사한다. Rust/Worker 수정·배포·서명 빌드·
+수동 검증은 이번 F1 범위가 아니며 `make verify`는 푸시 직전 한 번 실행한다.
+
+V1 packaged 검증, 예약/outbox/결과 확인/중앙 membership projection 및 목록 동기화,
 leave receipt, 익명 merge·전환/scope 변경/reapproval은 유예한다. leave 응답 유실은 결과 불명이다.
 
 ### 파일 지도

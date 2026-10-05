@@ -18,6 +18,8 @@ import {
 import { centralAccountEntryUrl, isCentralWebEntry } from "../../lib/central/identity";
 import StartupIdentityGate from "./StartupIdentityGate";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
+import type { MemberReturn } from "../../lib/central/memberConnect";
+import GuestJoinProfilePanel from "./GuestJoinProfilePanel";
 
 function browserEntranceHasAuthority(): boolean {
   const url = window.location.href;
@@ -32,8 +34,10 @@ function browserEntranceHasAuthority(): boolean {
 
 export default function StartupIdentityBoundary({
   children,
+  memberReturn,
 }: {
   children: (identity: { deviceToken: string; clientId: string }) => ReactNode;
+  memberReturn?: MemberReturn;
 }) {
   const [centralOwnerConnect] = useState(() => { clearStoredCentralOwnerWorkspace(); return consumeCentralOwnerConnectFromUrl(); });
   const [ownerWorkspace, setOwnerWorkspace] = useState<CentralOwnerWorkspace | null>(null);
@@ -41,7 +45,7 @@ export default function StartupIdentityBoundary({
     () => isBundledDesktopWebview() && !centralOwnerConnect
   );
   const [browserEntrance] = useState(
-    () => !desktop && (Boolean(centralOwnerConnect) || browserEntranceHasAuthority())
+    () => !desktop && (Boolean(centralOwnerConnect || memberReturn?.record) || browserEntranceHasAuthority())
   );
   const [ready, setReady] = useState(browserEntrance && !centralOwnerConnect);
   const [browserIdentity] = useState(() => {
@@ -70,6 +74,10 @@ export default function StartupIdentityBoundary({
     setOwnerWorkspace(session);
     setReady(true);
   }, []);
+
+  if (memberReturn && !memberReturn.record) return <GuestJoinProfilePanel displayName=""
+    retryMode="join" status={memberReturn.error || "입장 기록이 없어요. 원래 초대 링크를 다시 열어 주세요."}
+    onDisplayNameChange={() => {}} onAvatarImageChange={() => {}} onJoin={() => window.history.back()} />;
 
   if (isCentralWebEntry()) return <StartupIdentityGate deviceToken="" onComplete={finishCentralEntry} />;
 

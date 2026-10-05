@@ -58,6 +58,24 @@ afterEach(() => {
 });
 
 describe("StartupIdentityBoundary", () => {
+  it("lets a consumed member callback enter the existing product without a token in the URL", () => {
+    boundaryMocks.desktop = false;
+    window.history.replaceState({}, "", "/join");
+    render(<StartupIdentityBoundary memberReturn={{ record: {
+      invite_token: "invite", meeting_id: "room", server_id: "server", registration_epoch: "epoch",
+      challenge_id: "challenge", challenge_hash: "a".repeat(43), handoff_state: "b".repeat(43), expires_at: 9_999_999_999,
+    } }}>{() => <main aria-label="product" />}</StartupIdentityBoundary>);
+    expect(screen.getByRole("main", { name: "product" })).toBeTruthy();
+    expect(deviceMocks.getOrCreateBrowserCredential).toHaveBeenCalled();
+  });
+
+  it("shows missing callback custody without exposing anonymous admission", () => {
+    boundaryMocks.desktop = false;
+    render(<StartupIdentityBoundary memberReturn={{ error: "입장 기록이 없어요." }}>{() => <main aria-label="product" />}</StartupIdentityBoundary>);
+    expect(screen.getByRole("alert").textContent).toContain("입장 기록이 없어요");
+    expect(screen.queryByRole("main", { name: "product" })).toBeNull();
+    expect(screen.queryByRole("textbox", { name: "이름" })).toBeNull();
+  });
   it("requires fresh central entry even when previous root and room credentials were stored", () => {
     boundaryMocks.desktop = false;
     boundaryMocks.session = { centralOwner: true, expiresAt: null };
