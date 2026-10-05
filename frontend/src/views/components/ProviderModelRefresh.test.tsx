@@ -13,16 +13,17 @@ it("does not probe before selection, then automatically inspects and manually re
     status: "ready", catalog_revision: "fresh", discovered_at: "2026-09-09T00:00:00Z",
     providers: [{ id: "codex", discovery_status: "ready" }, { id: "deepseek", discovery_status: "failed" }],
   } as ProviderCatalog);
-  const view = render(<ProviderModelRefresh title="Harness Providers" providerId="" automaticAllowed />);
+  const view = render(<ProviderModelRefresh compact title="Harness Providers" providerId="" automaticAllowed />);
   expect(refreshLocalProviderCatalog).not.toHaveBeenCalled();
-  view.rerender(<ProviderModelRefresh title="Harness Providers" providerId="codex" automaticAllowed />);
+  expect(screen.getByRole("button", { name: "제공자 다시 확인" }).getAttribute("title")).toBe("제공자 다시 확인");
+  view.rerender(<ProviderModelRefresh compact title="Harness Providers" providerId="codex" automaticAllowed />);
   await waitFor(() => expect(refreshLocalProviderCatalog).toHaveBeenCalledWith("codex", false, expect.any(AbortSignal)));
-  await waitFor(() => expect(screen.getByRole("button", { name: "모델 목록 새로고침" }).hasAttribute("disabled")).toBe(false));
-  fireEvent.click(screen.getByRole("button", { name: "모델 목록 새로고침" }));
+  await waitFor(() => expect(screen.getByRole("button", { name: "제공자 다시 확인" }).hasAttribute("disabled")).toBe(false));
+  fireEvent.click(screen.getByRole("button", { name: "제공자 다시 확인" }));
   expect(await screen.findByText("모델 목록을 새로고침했어요.")).toBeTruthy();
   expect(refreshLocalProviderCatalog).toHaveBeenLastCalledWith("codex", true, undefined);
   vi.mocked(refreshLocalProviderCatalog).mockRejectedValue(new Error("연결 실패"));
-  fireEvent.click(screen.getByRole("button", { name: "모델 목록 새로고침" }));
+  fireEvent.click(screen.getByRole("button", { name: "제공자 다시 확인" }));
   expect(await screen.findByText("연결 실패")).toBeTruthy();
   expect(screen.queryByText("모델 목록을 새로고침했어요.")).toBeNull();
 });

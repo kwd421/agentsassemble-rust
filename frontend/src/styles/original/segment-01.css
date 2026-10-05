@@ -654,3 +654,26 @@ button:disabled,
   font-size: 12px;
   font-weight: 800;
 }
+
+.dc-agent-create-modal[data-provider-selected="false"] { height: auto; max-height: calc(100dvh - 28px); }
+.dc-agent-head-actions { display: flex; align-items: flex-start; gap: 8px; }
+.dc-agent-header-refresh { position: relative; }
+.dc-agent-header-refresh > [role="status"] {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 1;
+  width: 240px;
+  padding: 12px;
+  border: 1px solid var(--color-panel-separator);
+  border-radius: 6px;
+  background: var(--color-panel);
+}
+.dc-agent-provider-category + .dc-agent-provider-category { margin-top: 6px; }
+.dc-agent-provider-category > h3 {
+  color: var(--color-text-secondary);
+  font-size: 12px;
+  font-weight: 900;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}

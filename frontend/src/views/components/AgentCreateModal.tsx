@@ -398,6 +398,7 @@ export default function AgentCreateModal({
     <div className="dc-modal-backdrop" role="presentation" onMouseDown={onClose}>
       <section
         className="dc-agent-create-modal"
+        data-provider-selected={Boolean(selectedProvider)}
         role="dialog"
         aria-modal="true"
         aria-label="에이전트 추가"
@@ -408,23 +409,27 @@ export default function AgentCreateModal({
             <p className="dc-agent-create-kicker preserve-words">{roomLabel}</p>
             <h2>에이전트 추가</h2>
           </div>
-          <button type="button" onClick={onClose} aria-label="닫기">
-            <X size={18} />
-          </button>
+          <div className="dc-agent-head-actions">
+            <ProviderModelRefresh
+              onCatalogChange={onCatalogChange}
+              localAvailable={localProviderActions}
+              title="제공자"
+              compact
+              providerId={existingSessionId ? "" : selectedProvider?.id || ""}
+              automaticAllowed={Boolean(selectedProvider &&
+                selectedProvider.discovery_error_code !== "authentication_required" &&
+                (!selectedProvider.credential_available || credentialStatus?.configured))}
+            />
+            <button type="button" onClick={onClose} aria-label="닫기">
+              <X size={18} />
+            </button>
+          </div>
         </header>
 
         <div className="dc-agent-create-body">
-          <ProviderModelRefresh
-            onCatalogChange={onCatalogChange}
-            localAvailable={localProviderActions}
-            title="제공자"
-            providerId={existingSessionId ? "" : selectedProvider?.id || ""}
-            automaticAllowed={Boolean(selectedProvider &&
-              selectedProvider.discovery_error_code !== "authentication_required" &&
-              (!selectedProvider.credential_available || credentialStatus?.configured))}
-          />
+          {!selectedProvider && statusMessage && <p className="dc-agent-create-note">{statusMessage}</p>}
           {PROVIDER_GROUPS.map(({ id, label }) => (
-            <section className="dc-agent-section" key={id}>
+            <section className="dc-agent-section dc-agent-provider-category" key={id}>
               <h3 className="dc-agent-section-title">{label}</h3>
               <div className="dc-agent-provider-grid" role="list" aria-label={`${label} 제공자`}>
                 {groupedProviders[id].map(renderProviderChoice)}
@@ -586,7 +591,7 @@ export default function AgentCreateModal({
               </section>
             )}
 
-          {statusMessage && (
+          {selectedProvider && statusMessage && (
             <p className="dc-agent-create-status preserve-words">{statusMessage}</p>
           )}
         </div>

@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 C agent chooser structure: content-height unselected modal, header refresh icon with preserved refresh/error semantics and category headings; affected screen tests 70/70 plus compact refresh 3/3 and Chromium invite layout 2/2 passed; one final pre-push make verify exited 0 (frontend 1,115, desktop 47, workspace Rust and all mandatory gates); covers all three C commits; no signing/manual verification/deployment.
+
 - 2026-10-05 C member consent structure: shared central/native server initial and sentence heading, account/origin/help, full-width join and text cancel; member screen tests 18/18 passed with existing grant/admission/cancel/error assertions preserved; no signing/manual verification/deployment.
 
 - 2026-10-05 C invite structure: shared opaque backdrop, 64px room initial, avatar upload beside full remaining-width name, stacked actions; profile screen 4/4 and Chromium layout/click regression 2/2 passed; preflight lacks server label/icon so no invented metadata; no signing/manual verification/deployment.

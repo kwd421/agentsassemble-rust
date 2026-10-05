@@ -27,6 +27,14 @@ provider names, catalog_group and create payload contracts, retries and setup.
 Acceptance: affected frontend tests; one pre-push make verify. No signed build,
 manual verification or deployment; visual acceptance belongs to the user.
 
+### 화면 구조 개편 C (2026-10-05)
+
+공용 AgentCreateModal은 제공자 선택 전 내용 높이에 맞추고 선택 안내는 목록 위에 둔다.
+기존 ProviderModelRefresh의 동작/활성 조건/자동 확인/오류 표시는 유지하며 헤더 닫기 왼쪽에
+아이콘 버튼(툴팁/접근성 이름: 제공자 다시 확인)을 둔다. 세 제공자 구역 제목은 작은 굵은
+카테고리 글씨와 충분한 대비/위 여백을 사용한다. 새 디자인 시스템/라이브러리, 서버 계약,
+선택/생성/재시도 동작 변경 없이 화면 테스트와 최종 make verify 한 번으로 검증한다.
+
 ## Definition
 
 A host selects an installed provider/model from the authoritative live catalog, creates a durable Agent Session, and can ultimately start that same session so its canonical room-context reply is published back into the room.

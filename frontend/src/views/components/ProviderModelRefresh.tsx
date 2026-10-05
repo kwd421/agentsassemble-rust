@@ -4,8 +4,8 @@ import { refreshLocalProviderCatalog } from "../../api/providerOperations";
 import type { ProviderCatalog } from "../../types/generated/ProviderCatalog";
 import { isDesktopWebview } from "../../lib/desktopBridge";
 
-export default function ProviderModelRefresh({ title, providerId, automaticAllowed, localAvailable = true, onCatalogChange }: {
-  title: string; providerId: string; automaticAllowed: boolean; localAvailable?: boolean; onCatalogChange?: (catalog: ProviderCatalog) => void;
+export default function ProviderModelRefresh({ title, compact = false, providerId, automaticAllowed, localAvailable = true, onCatalogChange }: {
+  compact?: boolean; title: string; providerId: string; automaticAllowed: boolean; localAvailable?: boolean; onCatalogChange?: (catalog: ProviderCatalog) => void;
 }) {
   const [busy, setBusy] = useState(false);
   const [status, setStatus] = useState("");
@@ -50,14 +50,14 @@ export default function ProviderModelRefresh({ title, providerId, automaticAllow
     return () => { generation.current += 1; controller.abort(); };
   }, [automaticAllowed, desktop, providerId, refresh]);
 
-  return <div className="dc-agent-section">
+  return <div className={compact ? "dc-agent-header-refresh" : "dc-agent-section"}>
     <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-      <p className="dc-agent-section-title">{title}</p>
+      {!compact && <p className="dc-agent-section-title">{title}</p>}
       {desktop && <button
         type="button"
         className="ops-button"
-        aria-label="모델 목록 새로고침"
-        title="모델 목록 새로고침"
+        aria-label={compact ? "제공자 다시 확인" : "모델 목록 새로고침"}
+        title={compact ? "제공자 다시 확인" : "모델 목록 새로고침"}
         aria-busy={busy}
         style={{ width: 44, height: 44, flex: "0 0 auto", display: "grid", placeItems: "center" }}
         disabled={busy || !providerId || !automaticAllowed}

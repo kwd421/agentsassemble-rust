@@ -21,8 +21,12 @@ describe("AgentCreateModal provider selection", () => {
     );
 
     expect(screen.queryByLabelText("표시 이름")).toBeNull();
+    expect(screen.getByRole("dialog").getAttribute("data-provider-selected")).toBe("false");
+    const hint = screen.getByText("사용할 제공자를 골라 주세요.");
+    expect(hint.compareDocumentPosition(screen.getByRole("list", { name: "구독 에이전트 제공자" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await userEvent.click(screen.getByRole("listitem", { name: "Codex" }));
     expect(screen.getByLabelText("표시 이름")).toBeTruthy();
+    expect(screen.getByRole("dialog").getAttribute("data-provider-selected")).toBe("true");
   });
 });
 
