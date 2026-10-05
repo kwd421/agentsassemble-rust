@@ -51,48 +51,20 @@ pub(crate) async fn validate_schema_version(pool: &SqlitePool) -> Result<(), Per
 }
 
 async fn validate_member_schema(pool: &SqlitePool) -> Result<(), PersistenceError> {
-    let expected = [
-        "CREATE TABLE central_identity_bindings (
-            binding_id TEXT PRIMARY KEY NOT NULL,
-            issuer TEXT NOT NULL, person_id TEXT NOT NULL,
-            user_id TEXT NOT NULL REFERENCES user_profiles(user_id) ON DELETE RESTRICT,
-            created_at INTEGER NOT NULL, UNIQUE(issuer, person_id), UNIQUE(issuer, user_id)) STRICT",
-        "CREATE INDEX central_identity_bindings_user ON central_identity_bindings(user_id)",
-    ]
-    .map(normalize_member_ddl);
+    use crate::central_identity_bindings::{TABLE_DDL, USER_INDEX_DDL};
+
     let stored = sqlx::query_scalar::<_, String>(
-        "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL AND
-         ((name = 'central_identity_bindings' AND type = 'table') OR
-          (name = 'central_identity_bindings_user' AND type = 'index')) ORDER BY name",
+        "SELECT sql FROM sqlite_schema WHERE sql IS NOT NULL
+         AND tbl_name = 'central_identity_bindings' ORDER BY name",
     )
     .fetch_all(pool)
     .await?;
-    let actual = stored.iter().map(|ddl| normalize_member_ddl(ddl));
-    if !actual.eq(expected) {
+    if stored != [TABLE_DDL, USER_INDEX_DDL] {
         return Err(PersistenceError::InvalidSchemaVersion(
             "81: central_identity_bindings does not match the member storage contract".to_owned(),
         ));
     }
     Ok(())
-}
-
-fn normalize_member_ddl(ddl: &str) -> String {
-    let mut quote = None;
-    ddl.chars()
-        .filter(|&ch| match quote {
-            Some(end) if ch == end => {
-                quote = None;
-                false
-            }
-            Some(_) => true, // Preserve whitespace inside quoted identifiers.
-            None if matches!(ch, '"' | '\'' | '`' | '[') => {
-                quote = Some(if ch == '[' { ']' } else { ch });
-                false
-            }
-            None => !ch.is_ascii_whitespace(),
-        })
-        .map(|ch| ch.to_ascii_lowercase())
-        .collect()
 }
 
 // Called only after the existing host key and database authority have been verified.

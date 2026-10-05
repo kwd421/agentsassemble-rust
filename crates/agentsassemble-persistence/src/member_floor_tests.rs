@@ -11,24 +11,14 @@ use crate::{
 
 type TestResult = Result<(), Box<dyn std::error::Error>>;
 
-fn member_ddl() -> &'static str {
-    // Keep fixtures tied to the owning contract, including UNIQUE/FK/index definitions.
-    include_str!("../../../docs/specs/identity-accounts-friends-slice.md")
-        .split_once("```sql\n")
-        .unwrap_or_else(|| panic!("v81 contract DDL"))
-        .1
-        .split_once("```")
-        .unwrap_or_else(|| panic!("DDL closing fence"))
-        .0
+fn member_ddl() -> String {
+    use crate::central_identity_bindings::{TABLE_DDL, USER_INDEX_DDL};
+    format!("{TABLE_DDL};\n{USER_INDEX_DDL};\n")
 }
 
 async fn install_v81(store: &SqliteStore) -> Result<(), sqlx::Error> {
     let mut tx = store.pool.begin().await?;
-    let ddl = member_ddl()
-        .to_lowercase()
-        .replace("user_id", "\"user_id\"")
-        .replace(' ', " \t ");
-    sqlx::raw_sql(sqlx::AssertSqlSafe(ddl))
+    sqlx::raw_sql(sqlx::AssertSqlSafe(member_ddl()))
         .execute(&mut *tx)
         .await?;
     sqlx::query("UPDATE runtime_metadata SET value = '81' WHERE key = 'schema_version'")
@@ -244,6 +234,15 @@ async fn floor_rejects_newer_versions_and_incomplete_81() -> TestResult {
 async fn floor_rejects_malformed_81_structure() -> TestResult {
     let ddl = member_ddl();
     for (original, replacement) in [
+        ("binding_id", "\"binding\"\"_id\""),
+        (
+            ") STRICT;",
+            ") STRICT; CREATE TRIGGER extra_binding_trigger AFTER INSERT ON central_identity_bindings BEGIN SELECT 1; END;",
+        ),
+        (
+            ") STRICT;",
+            ") STRICT; CREATE UNIQUE INDEX extra_binding_unique ON central_identity_bindings(created_at);",
+        ),
         (") STRICT", ")"),
         ("created_at INTEGER", "created_at TEXT"),
         ("person_id TEXT NOT NULL", "person_id TEXT"),

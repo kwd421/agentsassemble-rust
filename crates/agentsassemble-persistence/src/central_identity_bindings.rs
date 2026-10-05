@@ -5,6 +5,19 @@ use crate::{PersistenceError, account_identity::rejected};
 
 pub(crate) const MEMBER_SCHEMA_VERSION: i64 = 81;
 
+// C4b must execute these exact statements; SQLite stores them without a semicolon.
+pub(crate) const TABLE_DDL: &str = "CREATE TABLE central_identity_bindings (
+    binding_id TEXT PRIMARY KEY NOT NULL,
+    issuer TEXT NOT NULL,
+    person_id TEXT NOT NULL,
+    user_id TEXT NOT NULL REFERENCES user_profiles(user_id) ON DELETE RESTRICT,
+    created_at INTEGER NOT NULL,
+    UNIQUE(issuer, person_id),
+    UNIQUE(issuer, user_id)
+) STRICT";
+pub(crate) const USER_INDEX_DDL: &str =
+    "CREATE INDEX central_identity_bindings_user ON central_identity_bindings(user_id)";
+
 /// Check inside the credential/admission owner's transaction, including exact replay.
 /// An unreadable v81 binding is an error, never anonymous authority.
 pub(crate) async fn require_unbound_user(
