@@ -4,9 +4,9 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import CentralServerList from "./CentralServerList";
 import "../../test/nativeDialog";
-import { fetchCentralServerIcon, renameCentralServer, setCentralServerIcon, type CentralServer } from "../../lib/centralIdentity";
+import { fetchCentralServerIcon, renameCentralServer, setCentralServerIcon, type CentralServer } from "../../lib/central/identity";
 
-vi.mock("../../lib/centralIdentity", () => ({
+vi.mock("../../lib/central/identity", () => ({
   renameCentralServer: vi.fn(),
   setCentralServerIcon: vi.fn(),
   fetchCentralServerIcon: vi.fn(),

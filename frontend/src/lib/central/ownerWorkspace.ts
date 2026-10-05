@@ -1,10 +1,10 @@
-import { fetchOwnerSession } from "./ownerSessionTransport";
-import { ApiError } from "./apiErrors";
-import { browserDeviceDescription } from "./ownerDeviceDescription";
-import { type CentralOwnerConnect } from "./centralOwnerConnect";
-import { parseStrictRoomDirectory, parseStrictRoomCreateResponse } from "./roomDirectoryContract";
-import { parseOperatorPairingRedeemResponse } from "./roomAdmissionContract";
-import { assertExactKeys, requiredString, strictRecord } from "./strictJsonContract";
+import { fetchOwnerSession } from "../ownerSessionTransport";
+import { ApiError } from "../apiErrors";
+import { browserDeviceDescription } from "../ownerDeviceDescription";
+import { type CentralOwnerConnect } from "./ownerConnect";
+import { parseStrictRoomDirectory, parseStrictRoomCreateResponse } from "../roomDirectoryContract";
+import { parseOperatorPairingRedeemResponse } from "../roomAdmissionContract";
+import { assertExactKeys, requiredString, strictRecord } from "../strictJsonContract";
 
 export type CentralOwnerWorkspace = Omit<CentralOwnerConnect, "grantToken" | "expiresAt"> & {
   sessionToken: string;

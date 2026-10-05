@@ -1,6 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { isCentralTemporaryError, fetchCentral } from "./centralConnectionError";
-import { unsignedPost, isCentralAuthenticationError } from "./centralIdentity";
+import { isCentralTemporaryError, fetchCentral } from "./connectionError";
+import { unsignedPost, isCentralAuthenticationError } from "./identity";
 afterEach(() => vi.unstubAllGlobals());
 it.each([429, 500, 502, 503, 504])("classifies HTTP %s as transient, never authentication", async status => {
   vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("unavailable", { status })));

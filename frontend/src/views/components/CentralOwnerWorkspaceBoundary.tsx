@@ -1,8 +1,8 @@
 import { observeOwnerSessionRejection } from "../../lib/ownerSessionTransport";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { centralAccountEntryUrl } from "../../lib/centralIdentity";
-import { CentralOwnerWorkspaceContext } from "../../lib/centralOwnerWorkspaceContext";
-import { type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import { centralAccountEntryUrl } from "../../lib/central/identity";
+import { CentralOwnerWorkspaceContext } from "../../lib/central/ownerWorkspaceContext";
+import { type CentralOwnerWorkspace } from "../../lib/central/ownerWorkspace";
 import type { CentralOwnerSessionStatus } from "../../types/generated/CentralOwnerSessionStatus";
 
 export default function CentralOwnerWorkspaceBoundary({ session, children }: { session: CentralOwnerWorkspace; children: ReactNode }) {

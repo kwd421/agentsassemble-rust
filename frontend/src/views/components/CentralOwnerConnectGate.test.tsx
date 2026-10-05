@@ -9,13 +9,13 @@ const mocks = vi.hoisted(() => ({
   rooms: vi.fn(), exchange: vi.fn(),
 }));
 
-vi.mock("../../lib/centralOwnerWorkspace", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../lib/centralOwnerWorkspace")>()),
+vi.mock("../../lib/central/ownerWorkspace", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../lib/central/ownerWorkspace")>()),
   exchangeCentralOwnerSession: mocks.exchange,
   fetchCentralOwnerRooms: mocks.rooms,
 }));
 
-vi.mock("../../lib/centralOwnerConnect", () => ({ verifyCentralOwnerHost: mocks.verify }));
+vi.mock("../../lib/central/ownerConnect", () => ({ verifyCentralOwnerHost: mocks.verify }));
 
 afterEach(() => {
   cleanup();

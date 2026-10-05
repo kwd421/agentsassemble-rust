@@ -5,7 +5,7 @@ import {
   centralOwnerServerUrl,
   consumeCentralOwnerConnectFromUrl,
   type CentralOwnerConnect,
-} from "./centralOwnerConnect";
+} from "./ownerConnect";
 
 const connect: CentralOwnerConnect = {
   grantToken: `aacg1.${"a".repeat(43)}`,

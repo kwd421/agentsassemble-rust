@@ -1,4 +1,4 @@
-import type { CentralServerDisplay } from "../../lib/centralDirectoryCache";
+import type { CentralServerDisplay } from "../../lib/central/directoryCache";
 import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import { useEffect, useRef, useState } from "react";
 import { Camera, Pencil } from "lucide-react";
@@ -8,7 +8,7 @@ import {
   renameCentralServer,
   setCentralServerIcon,
   type CentralServer,
-} from "../../lib/centralIdentity";
+} from "../../lib/central/identity";
 import ImageCropDialog from "./ImageCropDialog";
 
 const OS_LABELS = { macos: "macOS", windows: "Windows", linux: "Linux", other: "기타 OS" };

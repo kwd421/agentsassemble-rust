@@ -1,7 +1,7 @@
 import { useCentralDirectory } from "./useCentralDirectory";
 import { projectRoomConnections } from "../lib/serverConnectionState";
-import { openCentralOwnedServer } from "../lib/centralIdentity";
-import type { CentralServerDisplay } from "../lib/centralDirectoryCache";
+import { openCentralOwnedServer } from "../lib/central/identity";
+import type { CentralServerDisplay } from "../lib/central/directoryCache";
 import { useRoomInvitationAccess } from "./useRoomInvitationAccess";
 import { Hash } from "lucide-react";
 import { isCustomChannelId } from "../lib/customChannelId";
@@ -61,7 +61,7 @@ import { useDismissMenus } from "./useDismissMenus";
 import { useRoomAdmission } from "./useRoomAdmission";
 import { useRoomAppearanceAssets } from "./useRoomAppearanceAssets";
 import { useRoomCreation } from "./useRoomCreation";
-import { clearStoredCentralOwnerWorkspace } from "../lib/centralOwnerWorkspace";
+import { clearStoredCentralOwnerWorkspace } from "../lib/central/ownerWorkspace";
 import { useCentralOwnerWorkspace } from "./useCentralOwnerWorkspace";
 import { useRoomDirectory } from "./useRoomDirectory";
 import { useRoomInviteController } from "./useRoomInviteController";

@@ -4,7 +4,7 @@ import type { UserProfileIdentity } from "../../api";
 import type { OwnerDeviceSession } from "../../types/generated/OwnerDeviceSession";
 import type { RevokeOwnerDevices } from "../../types/generated/RevokeOwnerDevices";
 import { listOwnerDevices, revokeOwnerDevices } from "../../api/ownerDevices";
-import { CentralOwnerWorkspaceContext } from "../../lib/centralOwnerWorkspaceContext";
+import { CentralOwnerWorkspaceContext } from "../../lib/central/ownerWorkspaceContext";
 import "./OwnerDevicesPanel.css";
 
 type Selection = { request: RevokeOwnerDevices; name: string; current: boolean };

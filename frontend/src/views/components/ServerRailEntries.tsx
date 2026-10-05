@@ -1,6 +1,6 @@
 import { ServerIcon } from "./CentralServerList";
 import type { CentralDirectoryState } from "../../app/useCentralDirectory";
-import type { CentralServerDisplay } from "../../lib/centralDirectoryCache";
+import type { CentralServerDisplay } from "../../lib/central/directoryCache";
 import { CONNECTION_LABELS } from "../../lib/serverConnectionState";
 
 export default function ServerRailEntries({ directory, localServerIds, connectingId, onOpen }: {

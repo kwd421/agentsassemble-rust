@@ -4,7 +4,7 @@ import {
   loadCentralSession,
   loadPendingCentralRecoveryCode,
   saveGuestResult,
-} from "./centralIdentity";
+} from "./identity";
 
 const VALID_CODE = "AAAA-BBBB-CCCC-DDDD-EEEE-FFFF-GGGG-HHHH";
 

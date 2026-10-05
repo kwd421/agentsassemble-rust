@@ -4,7 +4,7 @@ import StartupIdentityGate from "./StartupIdentityGate";
 
 const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), open: vi.fn(), logout: vi.fn(), prepare: vi.fn(),
   session: null as object | null, callback: null as ((response: { credential: string }) => void) | null }));
-vi.mock("../../lib/centralIdentity", () => ({
+vi.mock("../../lib/central/identity", () => ({
   CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => true, isCentralWebEntry: () => true,
   centralSessionLoggedOut: () => false, loadPendingCentralRecoveryCode: () => "",
@@ -12,7 +12,7 @@ vi.mock("../../lib/centralIdentity", () => ({
   isCentralAuthenticationError: () => false,
   logoutCentral: mocks.logout, openCentralOwnedServer: mocks.open,
 }));
-vi.mock("../../lib/centralWebGoogle", () => ({
+vi.mock("../../lib/central/webGoogle", () => ({
   startCentralWebGoogle: mocks.prepare, completeCentralWebGoogleReturn: async () => {},
 }));
 vi.mock("../../lib/desktopBridge", () => ({

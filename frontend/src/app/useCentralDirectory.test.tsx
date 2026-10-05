@@ -1,10 +1,10 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, expect, it, vi } from "vitest";
-import { CentralTemporaryError } from "../lib/centralConnectionError";
-import { saveCentralDirectoryCache } from "../lib/centralDirectoryCache";
+import { CentralTemporaryError } from "../lib/central/connectionError";
+import { saveCentralDirectoryCache } from "../lib/central/directoryCache";
 import { useCentralDirectory } from "./useCentralDirectory";
 const mocks = vi.hoisted(() => ({ bootstrap: vi.fn(), session: null as object | null }));
-vi.mock("../lib/centralIdentity", () => ({ bootstrapCentral: mocks.bootstrap,
+vi.mock("../lib/central/identity", () => ({ bootstrapCentral: mocks.bootstrap,
   CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => true, loadCentralSession: () => mocks.session,
   isCentralAuthenticationError: (e: Error) => e.message === "401",

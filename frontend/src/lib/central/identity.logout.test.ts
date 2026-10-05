@@ -17,7 +17,7 @@ it("keeps a failed logout retryable and persists logout only after a signed revo
   const fetcher = vi.fn().mockRejectedValueOnce(new Error("offline")).mockResolvedValueOnce(Response.json({ ok: true }));
   vi.stubGlobal("fetch", fetcher);
   localStorage.setItem("agentsassemble.centralSession.v1", JSON.stringify({ token: "fixture-session", expires_at: 9_999_999_999, device_id: device.deviceId, person: { person_id: "fixture-person", identity_kind: "google", display_name: "Name" } }));
-  const { logoutCentral, loadCentralSession, centralSessionLoggedOut } = await import("./centralIdentity");
+  const { logoutCentral, loadCentralSession, centralSessionLoggedOut } = await import("./identity");
   await expect(logoutCentral()).rejects.toThrow("offline");
   expect(loadCentralSession()?.token).toBe("fixture-session");
   expect(centralSessionLoggedOut()).toBe(false);
@@ -52,7 +52,7 @@ it.each(["logged-out", "expired-session"])("replaces a %s account slot only afte
     requests.push(JSON.parse(String(init.body)));
     throw new Error("offline before login completed");
   }));
-  const { createCentralGuest, centralSessionLoggedOut, loadCentralSession } = await import("./centralIdentity");
+  const { createCentralGuest, centralSessionLoggedOut, loadCentralSession } = await import("./identity");
   expect(loadCentralSession()).toBeNull();
   await expect(createCentralGuest("New account")).rejects.toThrow();
   expect(requests).toHaveLength(0);

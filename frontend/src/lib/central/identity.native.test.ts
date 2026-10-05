@@ -1,8 +1,8 @@
 import { afterEach, expect, it, vi } from "vitest";
-import { loadCentralSession, loginCentralGoogle } from "./centralIdentity";
+import { loadCentralSession, loginCentralGoogle } from "./identity";
 
 const { control } = vi.hoisted(() => ({ control: vi.fn() }));
-vi.mock("./desktopBridge", () => ({ controlDesktopCentralLogin: control, openDesktopCentralGoogleLogin: vi.fn() }));
+vi.mock("../desktopBridge", () => ({ controlDesktopCentralLogin: control, openDesktopCentralGoogleLogin: vi.fn() }));
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); control.mockReset(); localStorage.clear(); });
 
 it("retires the native return if cancellation arrives while start is in flight", async () => {

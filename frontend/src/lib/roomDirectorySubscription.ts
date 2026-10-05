@@ -1,7 +1,7 @@
 import { ApiError } from "./apiErrors";
 import { isPrivateNoStoreResponse, responseError } from "../api/http";
 import { fetchDesktopOperatorRuntime } from "./desktopBridge";
-import { parseOwnerSessionStatus } from "./centralOwnerWorkspaceStatus";
+import { parseOwnerSessionStatus } from "./central/ownerWorkspaceStatus";
 import type { CentralOwnerSessionStatus } from "../types/generated/CentralOwnerSessionStatus";
 
 export type OpenDirectoryStream = (signal: AbortSignal) => Promise<Response>;

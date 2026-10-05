@@ -6,8 +6,8 @@ import {
 } from "../../lib/deviceIdentity";
 import { isBundledDesktopWebview } from "../../lib/desktopBridge";
 import { guestRecoveryRequestFromUrl } from "../../lib/guestRecovery";
-import { consumeCentralOwnerConnectFromUrl } from "../../lib/centralOwnerConnect";
-import { clearStoredCentralOwnerWorkspace, type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import { consumeCentralOwnerConnectFromUrl } from "../../lib/central/ownerConnect";
+import { clearStoredCentralOwnerWorkspace, type CentralOwnerWorkspace } from "../../lib/central/ownerWorkspace";
 import CentralOwnerWorkspaceBoundary from "./CentralOwnerWorkspaceBoundary";
 import {
   joinInviteTokenFromUrl,
@@ -15,7 +15,7 @@ import {
   operatorPairingTokenFromUrl,
   roomGuestSessionExpired,
 } from "../../lib/roomGuestSession";
-import { centralAccountEntryUrl, isCentralWebEntry } from "../../lib/centralIdentity";
+import { centralAccountEntryUrl, isCentralWebEntry } from "../../lib/central/identity";
 import StartupIdentityGate from "./StartupIdentityGate";
 import CentralOwnerConnectGate from "./CentralOwnerConnectGate";
 

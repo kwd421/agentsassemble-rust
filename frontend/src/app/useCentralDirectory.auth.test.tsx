@@ -1,8 +1,8 @@
 import { act, cleanup, renderHook } from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { bootstrapCentral, clearCentralSession, fetchCentralServerIcon, loadCentralSession,
-  registerLocalServer, openCentralOwnedServer, renameCentralServer, saveSession, setCentralServerIcon, unsignedPost } from "../lib/centralIdentity";
-import { loadCentralDirectoryCache, saveCentralDirectoryCache } from "../lib/centralDirectoryCache";
+  registerLocalServer, openCentralOwnedServer, renameCentralServer, saveSession, setCentralServerIcon, unsignedPost } from "../lib/central/identity";
+import { loadCentralDirectoryCache, saveCentralDirectoryCache } from "../lib/central/directoryCache";
 import { useCentralDirectory } from "./useCentralDirectory";
 
 const legacyKey = "agentsassemble.centralServers.v1";

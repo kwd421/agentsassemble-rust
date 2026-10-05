@@ -5,8 +5,8 @@ import { useAppController } from "./useAppController";
 
 const mocks = vi.hoisted(() => ({ refresh: vi.fn(), open: vi.fn(), directory: null as CentralDirectoryState | null }));
 vi.mock("./useCentralDirectory", () => ({ useCentralDirectory: () => ({ directory: mocks.directory, refresh: mocks.refresh }) }));
-vi.mock("../lib/centralIdentity", async (original) => ({
-  ...await original<typeof import("../lib/centralIdentity")>(), openCentralOwnedServer: mocks.open,
+vi.mock("../lib/central/identity", async (original) => ({
+  ...await original<typeof import("../lib/central/identity")>(), openCentralOwnedServer: mocks.open,
 }));
 vi.mock("../useCanonicalRoom", () => {
   const room = { room: null, socket: null, connectionState: "disconnected", roomSettings: null,

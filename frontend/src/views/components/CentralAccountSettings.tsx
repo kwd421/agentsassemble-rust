@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import { centralAccountEntryUrl, centralIdentityConfigured, loadCentralSession, logoutCentral } from "../../lib/centralIdentity";
+import { centralAccountEntryUrl, centralIdentityConfigured, loadCentralSession, logoutCentral } from "../../lib/central/identity";
 
 export default function CentralAccountSettings({ disabled }: { disabled: boolean }) {
   const [session] = useState(loadCentralSession);

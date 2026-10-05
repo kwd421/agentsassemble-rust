@@ -1,5 +1,5 @@
-import type { CentralOwnerSessionStatus } from "../types/generated/CentralOwnerSessionStatus";
-import { assertExactKeys, strictRecord } from "./strictJsonContract";
+import type { CentralOwnerSessionStatus } from "../../types/generated/CentralOwnerSessionStatus";
+import { assertExactKeys, strictRecord } from "../strictJsonContract";
 
 export function parseOwnerSessionStatus(value: unknown): CentralOwnerSessionStatus {
   const record = strictRecord(value, "서버 세션 상태");

@@ -1,10 +1,10 @@
 import { describe, expect, it } from "vitest";
 
-import type { DesktopCentralRegistrationBinding } from "./desktopBridge";
+import type { DesktopCentralRegistrationBinding } from "../desktopBridge";
 import {
   type HostRegistrationEnvelope,
   verifyCentralRegistrationEnvelope,
-} from "./centralRegistrationProof";
+} from "./registrationProof";
 
 const SERVER_ID = "0198f492-c76a-7000-8000-000000000001";
 const OWNER_ID = "per_owner_12345678";

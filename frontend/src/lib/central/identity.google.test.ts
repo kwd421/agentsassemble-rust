@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { parseCentralGoogleHandoff } from "./centralIdentity";
+import { parseCentralGoogleHandoff } from "./identity";
 
 describe("central Google handoff protocol", () => {
   it("accepts a native handoff that opens Google's standard authorization page", () => {

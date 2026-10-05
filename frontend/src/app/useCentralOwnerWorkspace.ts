@@ -1,6 +1,6 @@
-import { CentralOwnerWorkspaceContext } from "../lib/centralOwnerWorkspaceContext";
+import { CentralOwnerWorkspaceContext } from "../lib/central/ownerWorkspaceContext";
 import { useCallback, useContext, useEffect, useMemo, useRef } from "react";
-import { createCentralOwnerRoom, enterCentralOwnerRoom, fetchCentralOwnerRooms, openCentralOwnerDirectoryStream } from "../lib/centralOwnerWorkspace";
+import { createCentralOwnerRoom, enterCentralOwnerRoom, fetchCentralOwnerRooms, openCentralOwnerDirectoryStream } from "../lib/central/ownerWorkspace";
 import type { RoomDockItem } from "../lib/roomDockModel";
 import type { OperatorPairingRedeemResponse } from "../lib/roomAdmissionContract";
 import type { createRoom } from "../api";

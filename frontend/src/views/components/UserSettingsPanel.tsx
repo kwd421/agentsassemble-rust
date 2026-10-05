@@ -6,7 +6,7 @@ import { resolveAttachmentReference } from "../../lib/attachmentReference";
 import { profileCssVars } from "../../lib/userProfileModel";
 import GoogleAccountSettings from "./GoogleAccountSettings";
 import CentralAccountSettings from "./CentralAccountSettings";
-import { centralIdentityConfigured } from "../../lib/centralIdentity";
+import { centralIdentityConfigured } from "../../lib/central/identity";
 import GuestRecoverySettings from "./GuestRecoverySettings";
 import OwnerDevicesPanel from "./OwnerDevicesPanel";
 import { isDesktopWebview } from "../../lib/desktopBridge";

@@ -1,9 +1,9 @@
 import { LoaderCircle } from "lucide-react";
 import { useEffect, useState } from "react";
-import { verifyCentralOwnerHost, type CentralOwnerConnect } from "../../lib/centralOwnerConnect";
-import { exchangeCentralOwnerSession, fetchCentralOwnerRooms, type CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import { verifyCentralOwnerHost, type CentralOwnerConnect } from "../../lib/central/ownerConnect";
+import { exchangeCentralOwnerSession, fetchCentralOwnerRooms, type CentralOwnerWorkspace } from "../../lib/central/ownerWorkspace";
 import { bindRoomDirectoryAuthority } from "../../lib/roomDirectoryContract";
-import { centralAccountEntryUrl } from "../../lib/centralIdentity";
+import { centralAccountEntryUrl } from "../../lib/central/identity";
 
 export default function CentralOwnerConnectGate({ connect, deviceToken, onComplete }: {
   connect: CentralOwnerConnect; deviceToken: string; onComplete: (session: CentralOwnerWorkspace) => void;

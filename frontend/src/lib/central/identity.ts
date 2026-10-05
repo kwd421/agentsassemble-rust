@@ -1,5 +1,5 @@
-import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./centralDirectoryCache";
-import { CentralTemporaryError, fetchCentral } from "./centralConnectionError";
+import { clearCentralDirectoryCache, saveCentralDirectoryCache, type CentralServerDisplay } from "./directoryCache";
+import { CentralTemporaryError, fetchCentral } from "./connectionError";
 import {
   controlDesktopCentralLogin,
   fetchDesktopCentralRegistration,
@@ -7,10 +7,10 @@ import {
   isDesktopWebview,
   openDesktopCentralGoogleLogin,
   openDesktopCentralOwnedServer,
-} from "./desktopBridge";
-import { encodeBase64Url } from "./base64Url";
-import { centralOwnerServerUrl } from "./centralOwnerConnect";
-import { type HostOs, type HostRegistrationEnvelope, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./centralRegistrationProof";
+} from "../desktopBridge";
+import { encodeBase64Url } from "../base64Url";
+import { centralOwnerServerUrl } from "./ownerConnect";
+import { type HostOs, type HostRegistrationEnvelope, validateHostName, validateHostOs, verifyCentralRegistrationEnvelope } from "./registrationProof";
 
 const SESSION_KEY = "agentsassemble.centralSession.v1";
 export const CENTRAL_SESSION_CLEARED_EVENT = "agentsassemble:central-session-cleared";

@@ -1,6 +1,6 @@
 import { afterEach, expect, it } from "vitest";
-import { clearCentralSession, saveSession } from "./centralIdentity";
-import { loadCentralDirectoryCache, saveCentralDirectoryCache } from "./centralDirectoryCache";
+import { clearCentralSession, saveSession } from "./identity";
+import { loadCentralDirectoryCache, saveCentralDirectoryCache } from "./directoryCache";
 const person = { person_id: "account-one", display_name: "Name", identity_kind: "google" as const };
 const session = { token: "secret-token", device_id: "device", expires_at: 9_999_999_999 };
 const server = { server_id: "server", alias: "My Mac", icon: "/v1/servers/server/icon/version.png",

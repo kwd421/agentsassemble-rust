@@ -1,4 +1,4 @@
-import type { CentralServer } from "./centralIdentity";
+import type { CentralServer } from "./identity";
 
 // Presentation only. No endpoint, host proof or credential can cross this boundary.
 export type CentralServerDisplay = Pick<CentralServer, "server_id" | "registration_epoch" | "alias" | "icon" | "host_os" | "relation">;

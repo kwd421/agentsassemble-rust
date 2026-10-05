@@ -1,4 +1,4 @@
-import { CentralTemporaryError } from "../../lib/centralConnectionError";
+import { CentralTemporaryError } from "../../lib/central/connectionError";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -71,7 +71,7 @@ vi.mock("../../lib/desktopBridge", () => ({
 vi.mock("../../lib/deviceIdentity", () => ({
   rememberGuestProfile: vi.fn(),
 }));
-vi.mock("../../lib/centralIdentity", () => ({
+vi.mock("../../lib/central/identity", () => ({
   CENTRAL_SESSION_CLEARED_EVENT: "agentsassemble:central-session-cleared",
   centralIdentityConfigured: () => centralMocks.configured,
   isCentralWebEntry: () => false,

@@ -3,7 +3,7 @@ import type { UserProfileIdentity } from "./userProfile";
 import type { OwnerDevices } from "../types/generated/OwnerDevices";
 import type { OwnerDeviceSession } from "../types/generated/OwnerDeviceSession";
 import type { RevokeOwnerDevices } from "../types/generated/RevokeOwnerDevices";
-import { validateHostName, validateHostOs } from "../lib/centralRegistrationProof";
+import { validateHostName, validateHostOs } from "../lib/central/registrationProof";
 import { assertExactKeys, strictRecord, stringField } from "../lib/strictJsonContract";
 import { fetchJsonServerOperator, postJsonServerOperator, responseError, serverOwnerSessionHeaders } from "./http";
 

@@ -1,10 +1,10 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { centralOwnerServerUrl } from "../../lib/centralOwnerConnect";
-import type { CentralOwnerWorkspace } from "../../lib/centralOwnerWorkspace";
+import { centralOwnerServerUrl } from "../../lib/central/ownerConnect";
+import type { CentralOwnerWorkspace } from "../../lib/central/ownerWorkspace";
 import { useContext } from "react";
-import { CentralOwnerWorkspaceContext } from "../../lib/centralOwnerWorkspaceContext";
+import { CentralOwnerWorkspaceContext } from "../../lib/central/ownerWorkspaceContext";
 import type { CentralOwnerSessionStatus } from "../../types/generated/CentralOwnerSessionStatus";
 import StartupIdentityBoundary from "./StartupIdentityBoundary";
 

@@ -1,11 +1,11 @@
 import { useCentralDirectory } from "../../app/useCentralDirectory";
-import { isCentralTemporaryError } from "../../lib/centralConnectionError";
-import type { CentralServerDisplay } from "../../lib/centralDirectoryCache";
+import { isCentralTemporaryError } from "../../lib/central/connectionError";
+import type { CentralServerDisplay } from "../../lib/central/directoryCache";
 import ConnectionBanner from "./ConnectionBanner";
 import type { HostDeviceInfo } from "../../types/generated/HostDeviceInfo";
 import CentralServerList from "./CentralServerList";
 import CentralAccountSettings from "./CentralAccountSettings";
-import { startCentralWebGoogle, completeCentralWebGoogleReturn } from "../../lib/centralWebGoogle";
+import { startCentralWebGoogle, completeCentralWebGoogleReturn } from "../../lib/central/webGoogle";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ArrowLeft,
@@ -34,7 +34,7 @@ import {
   openCentralOwnedServer,
   recoverCentralGuest,
   registerLocalServer,
-} from "../../lib/centralIdentity";
+} from "../../lib/central/identity";
 import {
   fetchDesktopOperatorRuntime,
   initializeDesktopBootstrap,

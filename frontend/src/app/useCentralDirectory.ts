@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { CENTRAL_SESSION_CLEARED_EVENT, bootstrapCentral, centralIdentityConfigured, loadCentralSession, isCentralAuthenticationError,
-  type CentralBootstrap, type CentralPerson, type CentralSession } from "../lib/centralIdentity";
-import { loadCentralDirectoryCache, type CentralServerDisplay } from "../lib/centralDirectoryCache";
-import { isCentralTemporaryError } from "../lib/centralConnectionError";
+  type CentralBootstrap, type CentralPerson, type CentralSession } from "../lib/central/identity";
+import { loadCentralDirectoryCache, type CentralServerDisplay } from "../lib/central/directoryCache";
+import { isCentralTemporaryError } from "../lib/central/connectionError";
 
 export type CentralDirectoryState = {
   status: "connected" | "central-unconfirmed" | "authentication-required" | "error";

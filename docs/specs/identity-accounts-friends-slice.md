@@ -96,7 +96,7 @@ Status: Phase 5 locally verified and approved by Daybreak through `1e24adf`, C0/
 - `crates/agentsassemble-persistence/src/host_owner_session.rs`, `crates/agentsassemble-server/src/owner_session_lifetime.rs`: member가 따를 기존 owner 연결 수명 계약.
 - `crates/agentsassemble-server/src/central/directory.rs`, `server_identity_web.rs`, `central/registration_web.rs`: 중앙 통신·등록·server-info 검증 경계.
 - `crates/agentsassemble-protocol/src/central_member.rs` (예정), `crates/agentsassemble-server/src/central_member_web.rs` (예정): member 전용 타입/issue·redeem·connect·결과 경계.
-- `frontend/src/lib/centralIdentity.ts`, `frontend/src/views/components/CentralServerList.tsx`, `frontend/src/lib/centralMemberConnect.ts` (예정): 앱/웹 공통 목록·재입장·불확실성 UI, 플랫폼은 transport/capability만 분리.
+- `frontend/src/lib/central/identity.ts`, `frontend/src/views/components/CentralServerList.tsx`, `frontend/src/lib/centralMemberConnect.ts` (예정): 앱/웹 공통 목록·재입장·불확실성 UI, 플랫폼은 transport/capability만 분리.
 - 중앙 외부 소유 계약: `/Users/seinel/Projects/AgentsAssemble-owner-session/infra/identity-directory/README.md`의 `Security model`, `Server icons (backend contract, 2026-10-04)`, `Abuse and expiry contract (C2)` 및 그 `Grant retry decision`, `Bounded scheduled cleanup and capacity`, `Compatibility and verification` 절을 **C3에서 갱신**한다. 이번 C1은 그 저장소를 수정하지 않는다. member enrollment/projection·삭제/floor 하위 절도 해당 README에 추가할 예정이며 별도 병렬 계약을 만들지 않는다.
 - 입장/entitlement/세션 세부 소유자는 [invite 계약](human-invite-admission-session-slice.md#중앙-member-입장과-세션--c1-승인-계약-2026-10-05), participant/server 종료와 room generation은 [lifecycle 계약](room-lifecycle-slice.md#중앙-member의-방-local서버-종료--c1-승인-계약-2026-10-05)이다.
 
@@ -410,7 +410,7 @@ isolated package while preserving the active Windows room.
 - `crates/agentsassemble-server/src/room_socket.rs` and `room_socket_session.rs`: pre-frame retention through socket-loop exit.
 - `crates/agentsassemble-server/src/owner_devices_web.rs`: native/remote device HTTP routes and committed revocation publication.
 - `crates/agentsassemble-protocol/src/central_owner.rs`: canonical owner/device wire types; `frontend/src/types/generated/` derives from these.
-- `frontend/src/lib/centralOwnerWorkspace.ts`: in-memory owner credential exchange, device description and room requests.
+- `frontend/src/lib/central/ownerWorkspace.ts`: in-memory owner credential exchange, device description and room requests.
 - `frontend/src/lib/ownerSessionTransport.ts`: root HTTP rejection notification owned by the mounted workspace boundary.
 - `frontend/src/lib/roomDirectorySubscription.ts`: bounded stream recovery and network-online listener cleanup.
 - `frontend/src/views/components/CentralOwnerConnectGate.tsx`: verified new-entry gate without an ongoing lease timer.

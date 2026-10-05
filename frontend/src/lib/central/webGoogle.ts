@@ -1,5 +1,5 @@
-import { authDeviceBody, isCentralWebEntry, parseCentralGoogleHandoff, saveSession, unsignedPost, type CentralPerson, type CentralSession } from "./centralIdentity";
-import { encodeBase64Url } from "./base64Url";
+import { authDeviceBody, isCentralWebEntry, parseCentralGoogleHandoff, saveSession, unsignedPost, type CentralPerson, type CentralSession } from "./identity";
+import { encodeBase64Url } from "../base64Url";
 
 const PENDING_KEY = "agentsassemble.centralWebGoogle.v1";
 type PendingLogin = {

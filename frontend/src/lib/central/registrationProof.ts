@@ -1,9 +1,9 @@
-import type { DesktopCentralRegistrationBinding } from "./desktopBridge";
+import type { DesktopCentralRegistrationBinding } from "../desktopBridge";
 import {
   decodeCanonicalBase64Url,
   encodeBase64Url,
   isBase64UrlText,
-} from "./base64Url";
+} from "../base64Url";
 
 type HostPublicJwk = {
   crv: "Ed25519";

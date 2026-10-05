@@ -1,9 +1,9 @@
-import { decodeCanonicalBase64Url, encodeBase64Url } from "./base64Url";
+import { decodeCanonicalBase64Url, encodeBase64Url } from "../base64Url";
 import {
   assertExactKeys,
   requiredString,
   strictRecord,
-} from "./strictJsonContract";
+} from "../strictJsonContract";
 
 const FRAGMENT_PREFIX = "central-owner=";
 const GRANT_PATTERN = /^aacg1\.[A-Za-z0-9_-]{43}$/;
