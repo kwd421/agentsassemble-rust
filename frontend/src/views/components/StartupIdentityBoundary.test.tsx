@@ -72,7 +72,7 @@ describe("StartupIdentityBoundary", () => {
   it("shows missing callback custody without exposing anonymous admission", () => {
     boundaryMocks.desktop = false;
     render(<StartupIdentityBoundary memberReturn={{ error: "입장 기록이 없어요." }}>{() => <main aria-label="product" />}</StartupIdentityBoundary>);
-    expect(screen.getByRole("alert").textContent).toContain("입장 기록이 없어요");
+    expect(screen.getByRole("alert").textContent).toContain("원래 초대 링크를 다시 열어 주세요");
     expect(screen.queryByRole("main", { name: "product" })).toBeNull();
     expect(screen.queryByRole("textbox", { name: "이름" })).toBeNull();
   });

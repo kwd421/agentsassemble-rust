@@ -27,21 +27,28 @@ type Consent = {
 function failureMessage(error: unknown): string {
   if (error instanceof ApiError) {
     const messages: Record<string, string> = {
-      admission_session_unavailable: "나갔거나 강퇴된 방에는 이 초대로 다시 들어갈 수 없어요. 호스트에게 문의해 주세요.",
-      idempotency_conflict: "이미 다른 초대로 참여한 방이에요. 처음 사용한 초대를 열어 주세요.",
-      participant_identity_conflict: "이 방의 기존 참가자 정보와 충돌해요. 호스트에게 문의해 주세요.",
-      member_challenge_invalid: "입장 확인이 만료됐거나 사용할 수 없어요. 다시 시도해 주세요.",
-      member_redeem_failed: "중앙 계정을 확인하지 못했어요. 다시 시도해 주세요.",
-      invite_invalid: "초대나 방을 사용할 수 없어요. 호스트에게 확인해 주세요.",
+      admission_session_unavailable: "이 방에는 다시 참가할 수 없어요. 방 관리자에게 문의해 주세요.",
+      idempotency_conflict: "이 초대로는 참가할 수 없어요. 방 관리자에게 새 초대를 받아 주세요.",
+      participant_identity_conflict: "참가자 정보를 확인하지 못했어요. 방 관리자에게 문의해 주세요.",
+      member_challenge_invalid: "참가 요청을 사용할 수 없어요. 다시 시도해 주세요.",
+      member_redeem_failed: "계정을 확인하지 못했어요. 다시 시도해 주세요.",
+      invite_invalid: "초대나 방을 사용할 수 없어요. 방 관리자에게 문의해 주세요.",
       token_expired: "초대가 만료됐어요. 새 초대를 받아 주세요.",
       invite_revoked: "취소된 초대예요. 새 초대를 받아 주세요.",
     };
-    return messages[error.code] || "서버에서 입장을 허용하지 않았어요. 다시 시도해 주세요.";
+    return messages[error.code] || "참가할 수 없어요. 다시 시도해 주세요.";
   }
   if (error instanceof TypeError) return "서버에 연결할 수 없어요. 연결을 확인하고 다시 시도해 주세요.";
-  // Native/parser failures can contain input data. Only known Korean UI errors are shown.
-  return error instanceof Error && !(error instanceof SyntaxError) && /[가-힣]/.test(error.message)
-    ? error.message : "중앙 계정 입장에 실패했어요. 다시 시도해 주세요.";
+  // Only exact user-facing messages may cross the native/parser error boundary.
+  const messages = [
+    "참가 요청이 만료됐어요. 다시 시도해 주세요.",
+    "참가를 완료하지 못했어요. 다시 시도해 주세요.",
+    "참가 요청이 없어요. 원래 초대 링크를 다시 열어 주세요.",
+    "로그인 계정이 바뀌었어요. 다시 시도해 주세요.",
+    "서버 주소가 변경됐어요. 다시 시도해 주세요.",
+  ];
+  return error instanceof Error && messages.includes(error.message)
+    ? error.message : "참가를 준비하지 못했어요. 초대 링크에서 다시 시도해 주세요.";
 }
 
 export default function MemberJoinPanel({ host, request, entryError, onCancel }: {
@@ -49,8 +56,8 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
 }) {
   const [consent, setConsent] = useState<Consent | null>(null);
   const [busy, setBusy] = useState(!entryError);
-  const [status, setStatus] = useState("입장을 준비하고 있어요.");
-  const [error, setError] = useState(entryError || "");
+  const [status, setStatus] = useState("참가를 준비하고 있어요");
+  const [error, setError] = useState(entryError ? failureMessage(new Error(entryError)) : "");
   const record = useRef<MemberHandoff | undefined>(host?.callback?.record);
   const active = useRef(true);
   const flight = useRef(false);
@@ -68,43 +75,43 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
   async function finish(pending: MemberHandoff, grant: MemberGrant) {
     if (!host || !active.current) return;
     if (pending.expires_at <= Date.now() / 1000 || grant.expires_at <= Date.now() / 1000) {
-      throw new Error("입장 요청이 만료됐어요. 다시 시도해 주세요.");
+      throw new Error("참가 요청이 만료됐어요. 다시 시도해 주세요.");
     }
     const payload = await joinRoomMember(pending, grant.grant_token, createSecureRequestId(), host.clientId, host.deviceToken);
     if (!active.current) return;
-    if (payload.server_id !== pending.server_id) throw new Error("입장 응답의 서버가 일치하지 않아요.");
-    if (!(await host.onComplete(payload))) throw new Error("방 입장을 완료하지 못했어요. 다시 시도해 주세요.");
+    if (payload.server_id !== pending.server_id) throw new Error("참가를 완료하지 못했어요. 다시 시도해 주세요.");
+    if (!(await host.onComplete(payload))) throw new Error("참가를 완료하지 못했어요. 다시 시도해 주세요.");
   }
 
   async function prepare() {
     setConsent(null);
     let targetRequest = request;
     if (host) {
-      setStatus("초대와 서버를 확인하고 있어요.");
+      setStatus("참가를 준비하고 있어요");
       const challenge = await challengeRoomMember(host.inviteToken, host.deviceToken);
       if (!active.current) return;
       record.current = createMemberHandoff(challenge, host.inviteToken, host.meetingId);
       targetRequest = memberTargetRequest(record.current);
       if (!isDesktopWebview()) {
         const central = centralAccountEntryUrl();
-        if (!central) throw new Error("중앙 계정 서버가 설정되지 않았어요.");
+        if (!central) throw new Error("참가를 준비하지 못했어요. 초대 링크에서 다시 시도해 주세요.");
         const url = centralMemberEntryUrl(new URL(central).origin, targetRequest);
         storeMemberHandoff(record.current);
-        setStatus("중앙 계정 확인 화면으로 이동하고 있어요.");
+        setStatus("참가를 준비하고 있어요");
         window.location.assign(url);
         return;
       }
       if (!loadCentralSession()) {
         loginAbort.current = new AbortController();
-        await loginCentralGoogle(message => { if (active.current) setStatus(message); }, loginAbort.current.signal);
+        await loginCentralGoogle(() => { if (active.current) setStatus("참가를 준비하고 있어요"); }, loginAbort.current.signal);
       }
     } else {
       await completeCentralWebGoogleReturn();
     }
     if (!active.current) return;
-    if (!targetRequest) throw new Error("입장 요청이 없어요. 원래 초대 링크를 다시 열어 주세요.");
+    if (!targetRequest) throw new Error("참가 요청이 없어요. 원래 초대 링크를 다시 열어 주세요.");
     const session = loadCentralSession();
-    if (!session) { setStatus("중앙 계정으로 로그인하면 입장 확인을 이어가요."); return; }
+    if (!session) { setStatus("로그인하면 참가를 이어갈 수 있어요."); return; }
     const target = await previewCentralMember(targetRequest);
     if (!active.current) return;
     if (loadCentralSession()?.token !== session.token) throw new Error("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
@@ -124,7 +131,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
       }); });
     }
     const returned = (event: PageTransitionEvent) => {
-      if (event.persisted && host && !isDesktopWebview()) setError("입장을 완료하지 않았어요. 다시 시도해 주세요.");
+      if (event.persisted && host && !isDesktopWebview()) setError("참가를 완료하지 않았어요. 다시 시도해 주세요.");
     };
     window.addEventListener("pageshow", returned);
     return () => { active.current = false; loginAbort.current?.abort(); window.removeEventListener("pageshow", returned); };
@@ -134,8 +141,9 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
   async function confirm() {
     if (!consent || busy) return;
     await run(async () => {
+      setStatus("참가를 준비하고 있어요");
       if (loadCentralSession()?.token !== consent.sessionToken) throw new Error("로그인 계정이 바뀌었어요. 다시 시도해 주세요.");
-      if (record.current && record.current.expires_at <= Date.now() / 1000) throw new Error("입장 요청이 만료됐어요. 다시 시도해 주세요.");
+      if (record.current && record.current.expires_at <= Date.now() / 1000) throw new Error("참가 요청이 만료됐어요. 다시 시도해 주세요.");
       const grant = await issueCentralMemberGrant(consent.request);
       if (!active.current) return;
       if (grant.endpoint_origin !== consent.target.endpoint_origin || grant.endpoint_generation !== consent.target.endpoint_generation) {
@@ -157,25 +165,24 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
   }
 
   return <GuestJoinProfilePanel displayName="" busy={busy} status={error || status}
+    title={consent && !error ? `${consent.target.label} 서버에 참가할까요?` : "로그인하고 참가"}
     retryMode={error ? "join" : undefined} onJoin={retry}
     onDisplayNameChange={() => {}} onAvatarImageChange={() => {}}>
-    <section aria-label="중앙 계정 입장" className="grid gap-3 text-text-primary">
+    <section aria-label="서버 참가" className="grid gap-3 text-text-primary">
       {consent && !error && <>
-        <h2 className="text-lg font-bold">이 계정으로 서버에 입장할까요?</h2>
-        <dl className="grid gap-2 text-sm break-all">
-          <dt>중앙 계정</dt><dd>{consent.account}</dd>
-          <dt>서버</dt><dd>{consent.target.label} ({consent.target.server_id})</dd>
-          <dt>서버 주소</dt><dd>{consent.target.endpoint_origin}</dd>
+        <dl className="flex min-w-0 gap-2 text-sm">
+          <dt className="shrink-0">계정</dt><dd className="truncate">{consent.account}</dd>
         </dl>
-        <p className="text-sm text-text-muted">이 서버에 중앙 계정의 이름과 식별 정보를 전달해요.</p>
-        <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>동의하고 입장</button>
+        <p className="truncate text-xs text-text-muted">{consent.target.endpoint_origin}</p>
+        <p className="text-sm text-text-muted">참가하면 이 서버에 내 이름과 프로필이 보여요.</p>
+        <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>참가하기</button>
       </>}
       {!host && !busy && !error && !consent && <button type="button" className="dc-guest-join-button"
         onClick={() => void run(async () => {
           loginAbort.current = new AbortController();
           await startCentralWebGoogle(loginAbort.current.signal);
         })}>Google로 계속</button>}
-      {(!host || onCancel) && !busy && <button type="button" className="dc-member-session-button"
+      {(!host || onCancel) && !busy && <button type="button" className="dc-member-session-button" data-active="false"
         onClick={onCancel || (() => { clearCentralMemberRequest(); window.history.back(); })}>취소</button>}
     </section>
   </GuestJoinProfilePanel>;

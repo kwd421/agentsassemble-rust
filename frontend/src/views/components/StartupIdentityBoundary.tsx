@@ -76,7 +76,7 @@ export default function StartupIdentityBoundary({
   }, []);
 
   if (memberReturn && !memberReturn.record) return <GuestJoinProfilePanel displayName=""
-    retryMode="join" status={memberReturn.error || "입장 기록이 없어요. 원래 초대 링크를 다시 열어 주세요."}
+    retryMode="join" status="참가를 준비하지 못했어요. 원래 초대 링크를 다시 열어 주세요."
     onDisplayNameChange={() => {}} onAvatarImageChange={() => {}} onJoin={() => window.history.back()} />;
 
   if (isCentralWebEntry()) return <StartupIdentityGate deviceToken="" onComplete={finishCentralEntry} />;

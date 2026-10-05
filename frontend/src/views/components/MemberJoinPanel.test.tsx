@@ -22,7 +22,7 @@ const challenge = { server_id: "server", registration_epoch: "epoch", challenge_
   challenge_hash: "a".repeat(43), expires_at: Math.floor(Date.now() / 1000) + 300 };
 const target = { server_id: "server", label: "친구의 서버", endpoint_origin: "https://host.test", endpoint_generation: 7 };
 const grant = { ...target, label: undefined, registration_epoch: "epoch", grant_token: `aamg1.${"g".repeat(43)}`, expires_at: challenge.expires_at };
-const session = { token: "central-private-session", person: { display_name: "중앙 사용자", person_id: "person" } };
+const session = { token: "central-private-session", person: { display_name: "Hihi", person_id: "person" } };
 const host = () => ({ inviteToken: "private-invite", meetingId: "room", deviceToken: "browser-credential", clientId: "client",
   onComplete: vi.fn().mockResolvedValue(true) });
 const realWindow = window;
@@ -45,14 +45,17 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 async function agree() {
-  fireEvent.click(await screen.findByRole("button", { name: "동의하고 입장" }));
+  fireEvent.click(await screen.findByRole("button", { name: "참가하기" }));
 }
 
 describe("member invite screen", () => {
   it("requires explicit consent, displays canonical account/server/origin, and admits natively once", async () => {
     const props = host(); render(<StrictMode><MemberJoinPanel host={props} /></StrictMode>);
-    await screen.findByText("중앙 사용자");
-    expect(screen.getByText("친구의 서버 (server)")).toBeTruthy();
+    await screen.findByText("Hihi");
+    expect(screen.getByRole("heading", { name: "친구의 서버 서버에 참가할까요?" })).toBeTruthy();
+    expect(screen.getByText("계정").parentElement?.textContent).toBe("계정Hihi");
+    expect(screen.getByText("참가하면 이 서버에 내 이름과 프로필이 보여요.")).toBeTruthy();
+    expect(screen.queryByText(/중앙|입장 프로필|\(server\)/)).toBeNull();
     expect(screen.getByText("https://host.test")).toBeTruthy();
     expect(mocks.issue).not.toHaveBeenCalled(); expect(mocks.join).not.toHaveBeenCalled();
     await agree(); await waitFor(() => expect(props.onComplete).toHaveBeenCalledOnce());
@@ -62,21 +65,43 @@ describe("member invite screen", () => {
     expect(sessionStorage.length).toBe(0); expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
+  it("cancels consent with a secondary button without issuing a grant", async () => {
+    const onCancel = vi.fn();
+    render(<MemberJoinPanel host={host()} onCancel={onCancel} />);
+    await screen.findByRole("button", { name: "참가하기" });
+    const cancel = screen.getByRole("button", { name: "취소" });
+    expect(cancel.getAttribute("data-active")).toBe("false");
+    fireEvent.click(cancel);
+    expect(onCancel).toHaveBeenCalledOnce(); expect(mocks.issue).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    "중앙 오류 server_id 550e8400-e29b-41d4-a716-446655440000 2026-10-05T12:00:00Z",
+    "fetch failed",
+  ])("never displays raw entry or parser errors: %s", async (message) => {
+    const view = render(<MemberJoinPanel entryError={message} />);
+    expect(screen.getByRole("alert").textContent).not.toContain(message);
+    view.unmount();
+    mocks.preview.mockRejectedValueOnce(new Error(message));
+    render(<MemberJoinPanel host={host()} />);
+    expect((await screen.findByRole("alert")).textContent).not.toContain(message);
+  });
+
   it("reuses native login, then stops at consent", async () => {
     mocks.session.mockReturnValue(null);
     mocks.nativeLogin.mockImplementation(async () => { mocks.session.mockReturnValue(session); return session; });
     render(<MemberJoinPanel host={host()} />);
-    await screen.findByRole("button", { name: "동의하고 입장" });
+    await screen.findByRole("button", { name: "참가하기" });
     expect(mocks.nativeLogin).toHaveBeenCalledOnce(); expect(mocks.issue).not.toHaveBeenCalled();
   });
 
   it.each([
     ["host", "서버에 연결할 수 없어요", new TypeError("fetch failed")],
-    ["central", "중앙 서버에 연결할 수 없어요", new Error("중앙 서버에 연결할 수 없어요")],
-    ["expiry", "만료", new ApiError(401, "private internal failure", "member_challenge_invalid")],
-    ["redeem", "중앙 계정을 확인하지 못했어요", new ApiError(502, "internal", "member_redeem_failed")],
-    ["left/kicked", "나갔거나 강퇴된 방", new ApiError(403, "internal", "admission_session_unavailable")],
-    ["other invite", "이미 다른 초대", new ApiError(409, "internal", "idempotency_conflict")],
+    ["central", "초대 링크에서 다시 시도해 주세요", new Error("중앙 서버에 연결할 수 없어요")],
+    ["expiry", "참가 요청을 사용할 수 없어요", new ApiError(401, "private internal failure", "member_challenge_invalid")],
+    ["redeem", "계정을 확인하지 못했어요", new ApiError(502, "internal", "member_redeem_failed")],
+    ["left/kicked", "이 방에는 다시 참가할 수 없어요. 방 관리자에게 문의해 주세요.", new ApiError(403, "internal", "admission_session_unavailable")],
+    ["other invite", "이 초대로는 참가할 수 없어요. 방 관리자에게 새 초대를 받아 주세요.", new ApiError(409, "internal", "idempotency_conflict")],
   ])("shows %s failure and retries from a fresh challenge without login", async (stage, message, error) => {
     if (stage === "host") mocks.challenge.mockRejectedValueOnce(error);
     else if (stage === "central") mocks.preview.mockRejectedValueOnce(error);
@@ -88,7 +113,7 @@ describe("member invite screen", () => {
     await Promise.resolve(); expect(mocks.challenge).toHaveBeenCalledTimes(before);
     mocks.challenge.mockResolvedValue({ ...challenge, challenge_id: "fresh", challenge_hash: "b".repeat(43) });
     fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
-    await screen.findByRole("button", { name: "동의하고 입장" });
+    await screen.findByRole("button", { name: "참가하기" });
     expect(mocks.challenge).toHaveBeenCalledTimes(before + 1);
     expect(mocks.nativeLogin).not.toHaveBeenCalled();
     await agree(); await waitFor(() => expect(mocks.join).toHaveBeenLastCalledWith(
@@ -104,7 +129,7 @@ describe("member invite screen", () => {
 
   it("refuses an account switch before the consent click", async () => {
     render(<MemberJoinPanel host={host()} />);
-    await screen.findByText("중앙 사용자"); mocks.session.mockReturnValue({ ...session, token: "different" });
+    await screen.findByText("Hihi"); mocks.session.mockReturnValue({ ...session, token: "different" });
     await agree(); expect((await screen.findByRole("alert")).textContent).toContain("계정이 바뀌");
     expect(mocks.issue).not.toHaveBeenCalled();
   });
@@ -129,7 +154,7 @@ describe("member invite screen", () => {
     realWindow.history.replaceState({}, "", "/?code=test-code&state=test-state");
     mocks.webReturn.mockImplementationOnce(async () => { mocks.session.mockReturnValue(session); });
     const returned = render(<MemberJoinPanel request={consumeCentralMemberRequest()} />);
-    await screen.findByRole("button", { name: "동의하고 입장" }); expect(mocks.issue).not.toHaveBeenCalled();
+    await screen.findByRole("button", { name: "참가하기" }); expect(mocks.issue).not.toHaveBeenCalled();
     await agree(); await waitFor(() => expect(mocks.navigate).toHaveBeenCalledTimes(2));
     expect(sessionStorage.length).toBe(0); returned.unmount();
     Object.entries(hostStorage).forEach(([key, value]) => sessionStorage.setItem(key, value));
@@ -147,13 +172,13 @@ describe("member invite screen", () => {
     render(<MemberJoinPanel host={{ ...host(), callback: { record: createMemberHandoff(challenge, "private-invite", "room"), error: "입장 요청이 만료됐어요." } }} />);
     await screen.findByRole("alert"); expect(mocks.challenge).not.toHaveBeenCalled(); expect(mocks.join).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: "다시 시도" }));
-    await screen.findByRole("button", { name: "동의하고 입장" }); expect(mocks.challenge).toHaveBeenCalledOnce();
+    await screen.findByRole("button", { name: "참가하기" }); expect(mocks.challenge).toHaveBeenCalledOnce();
   });
 
   it("does not redirect or issue on central entry before the user consents", async () => {
     render(<MemberJoinPanel request={memberTargetRequest(createMemberHandoff(challenge, "invite", "room"))} />);
     expect(screen.queryByRole("button", { name: "Google로 계속" })).toBeNull();
-    await screen.findByRole("button", { name: "동의하고 입장" });
+    await screen.findByRole("button", { name: "참가하기" });
     expect(mocks.issue).not.toHaveBeenCalled(); expect(mocks.navigate).not.toHaveBeenCalled();
   });
 
@@ -171,7 +196,7 @@ describe("member invite screen", () => {
     expect(callback.retry).toBe(true); expect(callback.grant).toBeUndefined();
     central.unmount();
     render(<MemberJoinPanel host={{ ...host(), callback }} />);
-    await screen.findByRole("button", { name: "동의하고 입장" });
+    await screen.findByRole("button", { name: "참가하기" });
     expect(mocks.challenge).toHaveBeenCalledOnce(); expect(mocks.join).not.toHaveBeenCalled();
     expect(mocks.issue).toHaveBeenCalledOnce();
   });

@@ -45,7 +45,7 @@ for (const admission of ["anonymous", "central"] as const) {
       expect((await request).postDataJSON()).toMatchObject({ display_name: "Layout Guest" });
     } else {
       await page.getByRole("button", { name: "로그인하고 참가", exact: true }).click();
-      await expect(page.getByRole("region", { name: "중앙 계정 입장", exact: true })).toBeVisible();
+      await expect(page.getByRole("region", { name: "서버 참가", exact: true })).toBeVisible();
     }
   });
 }
