@@ -163,3 +163,7 @@
 .dc-server-row[data-state="connecting"] .dc-server-row-dot {
   background: #e9b949;
 }
+
+.dc-server-name-preview {
+  word-break: keep-all;
+}

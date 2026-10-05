@@ -171,7 +171,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
   return <GuestJoinProfilePanel displayName="" busy={busy} status={error || status}
     title={consent && !error ? title : "로그인하고 참가"}
     identityLabel={consent && !error ? roomName : undefined}
-    serverLabel={consent && !error ? `${consent.target.label} 서버에서 열린 방` : undefined}
+    serverLabel={consent && !error ? `${consent.target.label}에서 열린 방` : undefined}
     titleContent={consent && !error ? <>{roomName ? <>‘<strong>{roomName}</strong>’에 참가할까요?</> : title}</> : undefined}
     retryMode={error ? "join" : undefined} onJoin={retry}
     onDisplayNameChange={() => {}} onAvatarImageChange={() => {}}>

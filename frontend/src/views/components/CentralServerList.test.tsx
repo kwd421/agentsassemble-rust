@@ -4,6 +4,8 @@ import userEvent from "@testing-library/user-event";
 import { afterEach, expect, it, vi } from "vitest";
 import CentralServerList from "./CentralServerList";
 import "../../test/nativeDialog";
+import { loadRoomDockItems } from "../../lib/roomDockPersistence";
+vi.mock("../../lib/roomDockPersistence", () => ({ loadRoomDockItems: vi.fn(() => []) }));
 import { fetchCentralServerIcon, renameCentralServer, setCentralServerIcon, type CentralServer } from "../../lib/central/identity";
 
 vi.mock("../../lib/central/identity", () => ({
@@ -16,7 +18,7 @@ vi.mock("./ImageCropper", () => ({
     <button type="button" onClick={() => onCropped(file)}>적용</button>
   ),
 }));
-afterEach(() => { cleanup(); vi.resetAllMocks(); });
+afterEach(() => { cleanup(); vi.resetAllMocks(); vi.mocked(loadRoomDockItems).mockReturnValue([]); });
 const host: CentralServer = { server_id: "server-0001", alias: "Mac Studio", host_os: "macos", relation: "owner", endpoint: null, host_public_key_jwk: {}, host_key_fingerprint: "test" };
 
 it("matches the local installation by ID, opens it explicitly and keeps rename", async () => {
@@ -158,4 +160,20 @@ it("restores a fixed server name only after the existing rename operation succee
   expect((screen.getByRole("textbox") as HTMLInputElement).value).toBe("작업용");
   await user.click(screen.getByRole("button", { name: "기본 이름으로 되돌리기" }));
   expect(await screen.findByRole("button", { name: "Owner의 Mac Studio 이름 변경" })).toBeTruthy();
+});
+
+ it("previews the first room belonging to the edited server, or a new room", async () => {
+  const user = userEvent.setup();
+  vi.mocked(loadRoomDockItems).mockReturnValue([
+    { serverId: "other", label: "다른 서버 방" },
+    { serverId: host.server_id, label: "실제 첫 방" },
+    { serverId: host.server_id, label: "두 번째 방" },
+  ] as ReturnType<typeof loadRoomDockItems>);
+  render(<CentralServerList servers={[host]} liveServers={[]} busy={false} onOpen={async () => {}} onRefresh={async () => {}} />);
+  await user.click(screen.getByRole("button", { name: "Mac Studio 이름 변경" }));
+  expect(screen.getByText(/‘실제 첫 방’ · Mac Studio에서 열린 방/)).toBeTruthy();
+  await user.click(screen.getByRole("button", { name: "취소" }));
+  vi.mocked(loadRoomDockItems).mockReturnValue([]);
+  await user.click(screen.getByRole("button", { name: "Mac Studio 이름 변경" }));
+  expect(screen.getByText(/‘새 회의실’ · Mac Studio에서 열린 방/)).toBeTruthy();
 });

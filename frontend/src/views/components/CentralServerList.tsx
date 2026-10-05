@@ -9,6 +9,7 @@ import {
   setCentralServerIcon,
   type CentralServer,
 } from "../../lib/central/identity";
+import { loadRoomDockItems } from "../../lib/roomDockPersistence";
 import ImageCropDialog from "./ImageCropDialog";
 
 const OS_LABELS = { macos: "macOS", windows: "Windows", linux: "Linux", other: "기타 OS" };
@@ -106,9 +107,10 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
     } finally { operation.current = false; setSaving(false); }
   }
 
-  function namePreview(name: string) {
-    return <p className="text-xs text-text-muted preserve-words">
-      초대받은 사람에게는 이렇게 보여요<br />‘친구들과 대화’ · {name} 서버에서 열린 방
+  function namePreview(name: string, serverId?: string | null) {
+    const roomName = loadRoomDockItems().find(room => serverId && room.serverId === serverId)?.label || "새 회의실";
+    return <p className="dc-server-name-preview text-xs text-text-muted preserve-words">
+      초대받은 사람에게는 이렇게 보여요<br />‘{roomName}’ · {name}에서 열린 방
     </p>;
   }
 
@@ -117,7 +119,7 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
       <label className="grid gap-1 text-[13px] text-text-secondary">서버 이름
         <input autoFocus className="rounded-lg bg-[#1e1f22] px-3 py-2 text-[15px] text-text-primary" value={editingName} maxLength={80} disabled={busy || saving} onChange={(event) => setName(event.target.value)} />
       </label>
-      {namePreview(editingName.trim())}
+      {namePreview(editingName.trim(), server?.server_id || localHost?.server_id)}
       <div className="flex flex-wrap items-center gap-2">
         <button type="submit" className="ops-cta min-h-11 px-4" disabled={busy || saving || !editingName.trim() || editingName.trim().length > 80}>이름 저장</button>
         <button type="button" className="ops-button" disabled={saving} onClick={() => { setEditingId(null); setError(""); }}>취소</button>
@@ -138,7 +140,7 @@ export default function CentralServerList({ servers, busy, localHost, profileNam
           <span className="dc-server-row-meta">
             {localHost.server_id ? "이 계정에 아직 등록되지 않았어요" : "새 서버"} · <span aria-label="호스트 운영체제">{OS_LABELS[localHost.host_os as keyof typeof OS_LABELS]}</span>
           </span>
-          {editingId === "local" ? nameEditor(localDefaultName) : namePreview(localName || localDefaultName)}
+          {editingId === "local" ? nameEditor(localDefaultName) : namePreview(localName || localDefaultName, localHost.server_id)}
         </div>
         <div className="dc-server-row-actions">
           <button type="button" className="ops-button min-h-11" disabled={busy || saving || !localDefaultName}

@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-06 화면 보고서 문구: 공용 참가 확인/서버 이름 미리보기의 서버 접미 제거, 해당 서버 첫 저장 방 또는 새 회의실, keep-all; 영향 화면 29/29 통과, v2 Chromium 캡처는 후속 행과 함께 기록; 서명·배포 없음.
+
 - 2026-10-06 Daybreak 서버 이름 M2/L2 보완: epoch/파생 이름 변경만 PUT·영구 4xx 보류·0013 legacy rollback 보호·epoch 필수·NFC/Cc/Cf 정리; Worker 영향 96+SQL 분할 1 및 구조/map 통과(수정 전 회귀 실패 확인), Rust make verify 1회는 기존 epoch 테스트 2건에서 중단 후 계약에 맞게 수정, 영향 재검사·잔여 필수 검사 통과(frontend 1,122/Rust 1,106/desktop 47, Clippy·diff·artifact); 원격·배포·서명·수동 검증 없음.
 
 - 2026-10-06 방 지속 지시: Codex unsubscribe/resume developer_instructions·Claude SDK append(snapshot:false)·OpenCode 격리 agent prompt·API/LM Studio/Ollama 매 요청 system으로 방 규칙/고정 카드 이동, Cursor/Grok 유지; lore/history·동결 복구·카드 교체 및 요청/설정 검증 통과, 일반 방 턴 약 702자(API 953자)+고정 카드 분량 감소; make verify 1회는 구형 통합 fixture 4건에서 중단했고 수정 후 통합 188/188·최종 Codex/API/주사위 회귀·SDK 16/16·Clippy 및 나머지 게이트 통과(누적 workspace Rust 1,105, frontend 1,119, desktop 47); 실제 제공자·서명·수동 검증·배포 없음.
