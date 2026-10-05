@@ -28,8 +28,9 @@ work is active or waiting, and remove it when it closes.
   changes (screen was locked); Tailscale support is deferred by the user.
 - Central member binding (approved design, six rounds): C1 contracts `e5134655`
   (approved), schema 81 floor contract `e8b242e9` and C4a host floor `67d46320`
-  (Daybreak H1/M1 corrected; re-review pending). Remaining: Daybreak re-review of C4a, C3a central floor, C3b
+  (C4a approved (`7c2d2d34`)). Remaining: C3b
   barrier, C3c, C4b migration, C5 exposure, C6 verification.
+  C3a central floor deployed to production (Worker `79a181cd`, version `8c190b48`).
   [Owning contract](docs/specs/identity-accounts-friends-slice.md#초대-멤버를-중앙-계정에-묶기--c1-승인-계약-2026-10-05).
 - Open verification: Windows physical-device checks (recent Discord-style UI,
   server icons, interactive install/update `desktop-v0.1.4`, attendee CLI); full
