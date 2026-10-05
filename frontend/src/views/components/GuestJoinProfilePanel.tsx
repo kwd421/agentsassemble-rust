@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { ImagePlus, LogIn, RotateCcw } from "lucide-react";
+import { LogIn, RotateCcw } from "lucide-react";
 import { fileToBase64 } from "../../api/http";
 import type { OperatorPairingState } from "../../app/useRoomAdmission";
 import ImageCropper from "./ImageCropper";
@@ -7,6 +7,9 @@ import ImageCropper from "./ImageCropper";
 type GuestJoinProfilePanelProps = {
   children?: ReactNode;
   title?: string;
+  titleContent?: ReactNode;
+  identityLabel?: string;
+  serverLabel?: string;
   roomLabel?: string;
   onMemberJoin?: () => void;
   displayName: string;
@@ -25,6 +28,9 @@ type GuestJoinProfilePanelProps = {
 export default function GuestJoinProfilePanel({
   children,
   title,
+  titleContent,
+  identityLabel,
+  serverLabel,
   roomLabel,
   onMemberJoin,
   displayName,
@@ -77,28 +83,36 @@ export default function GuestJoinProfilePanel({
             : heading
         }
       >
-        <h1>
-          {heading}
-        </h1>
+        {(identityLabel || (!children && !pairing && !retryMode && roomLabel)) &&
+          <span className="dc-join-identity-icon" aria-hidden="true">{(identityLabel || roomLabel || "").slice(0, 1).toUpperCase()}</span>}
+        <h1>{titleContent || heading}</h1>
+        {serverLabel && <p className="dc-join-server-label">{serverLabel}</p>}
         {!children && !pairing && !retryMode && (
           <div className="dc-guest-avatar-row">
-          <span className="dc-guest-avatar" data-has-image={Boolean(avatarImage)}>
-            {avatarImage ? <img src={avatarImage} alt="" /> : avatarLabel}
-          </span>
-          <label className="dc-member-session-button">
-            <ImagePlus size={15} />
-            프로필 사진
-            <input
-              className="sr-only"
-              type="file"
-              accept="image/*"
-              onChange={(event) => {
-                const file = event.currentTarget.files?.[0] || null;
-                if (file) setCropFile(file);
-                event.currentTarget.value = "";
-              }}
-            />
-          </label>
+            <label className="dc-guest-avatar" data-has-image={Boolean(avatarImage)}>
+              {avatarImage ? <img src={avatarImage} alt="" /> : <span aria-hidden="true">{avatarLabel}</span>}
+              <input
+                className="sr-only"
+                type="file"
+                aria-label="프로필 사진"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.currentTarget.files?.[0] || null;
+                  if (file) setCropFile(file);
+                  event.currentTarget.value = "";
+                }}
+              />
+            </label>
+            <label className="dc-guest-name-field">
+              이름
+              <input
+                type="text"
+                maxLength={80}
+                value={displayName}
+                onChange={(event) => onDisplayNameChange(event.currentTarget.value)}
+                placeholder="방에서 보일 이름"
+              />
+            </label>
           </div>
         )}
         {pairing && pairingState === "pairing_failed_retryable" && (
@@ -137,16 +151,6 @@ export default function GuestJoinProfilePanel({
         )}
         {!children && !pairing && !retryMode && (
           <>
-            <label className="dc-guest-name-field">
-              이름
-              <input
-                type="text"
-                maxLength={80}
-                value={displayName}
-                onChange={(event) => onDisplayNameChange(event.currentTarget.value)}
-                placeholder="방에서 보일 이름"
-              />
-            </label>
             {onMemberJoin && <button type="button" className="dc-guest-join-button"
               disabled={busy || avatarPreparing} onClick={onMemberJoin}>
               <LogIn size={16} /> 로그인하고 참가

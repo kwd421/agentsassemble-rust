@@ -22,10 +22,14 @@ describe("GuestJoinProfilePanel", () => {
 
   it("offers central admission without changing the anonymous join action", () => {
     const onJoin = vi.fn(); const onMemberJoin = vi.fn();
-    render(<GuestJoinProfilePanel roomLabel="수다방" displayName="Guest" onJoin={onJoin} onMemberJoin={onMemberJoin}
+    render(<GuestJoinProfilePanel roomLabel="수다방" serverLabel="친구 서버" displayName="Guest" onJoin={onJoin} onMemberJoin={onMemberJoin}
       onDisplayNameChange={vi.fn()} onAvatarImageChange={vi.fn()} />);
     expect(screen.getByRole("heading", { name: "‘수다방’에 초대받았어요" })).toBeTruthy();
     expect(screen.getByText("로그인하면 다른 기기에서도 같은 사람으로 참가할 수 있어요.")).toBeTruthy();
+    expect(screen.getByText("친구 서버")).toBeTruthy();
+    const photo = screen.getByLabelText("프로필 사진");
+    expect(photo.closest(".dc-guest-avatar")).toBeTruthy();
+    expect(photo.closest(".dc-guest-avatar-row")?.contains(screen.getByRole("textbox", { name: "이름" }))).toBe(true);
     const buttons = screen.getAllByRole("button");
     expect(buttons[0].textContent).toContain("로그인하고 참가");
     expect(buttons[0].className).toBe("dc-guest-join-button");

@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 C invite structure: shared opaque backdrop, 64px room initial, avatar upload beside full remaining-width name, stacked actions; profile screen 4/4 and Chromium layout/click regression 2/2 passed; preflight lacks server label/icon so no invented metadata; no signing/manual verification/deployment.
+
 - 2026-10-05 compact chat width: shared member/side-chat panels reuse compact overlays below 1280px, keep a minimum chat column and accessible close control; Chromium admission/snapshot regression passed at 768/800/814/900/1024/1100px with a 420px sidebar and companion card, positive textarea width, panel switching and actual text entry; frontend build passed; no signing, manual verification or deployment.
 
 - 2026-10-05 startup timeout continuity: fetch/body timeout signals preserve the saved session, display-only server list and existing bounded background retry; caller cancellation/auth rejection stay separate; affected startup/directory/identity/copy regressions passed, including first WebKit AbortError and background recovery; user-facing 중앙 wording and saved-list/rail UUID labels removed, cache-corruption and validation banners distinguished; one pre-push make verify passed (frontend 1,113, workspace Rust 1,093, desktop 47 and all mandatory gates), supplementary UUID copy regressions 8/8, final frontend build and architecture/source-growth/diff checks passed; no signing, manual verification or deployment.

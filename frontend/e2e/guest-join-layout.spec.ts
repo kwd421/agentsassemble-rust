@@ -35,8 +35,14 @@ for (const admission of ["anonymous", "central"] as const) {
     const nameField = await page.getByRole("textbox", { name: "이름" }).boundingBox();
     expect(row!.x).toBeGreaterThan(card!.x);
     expect(row!.x + row!.width).toBeLessThan(card!.x + card!.width);
-    expect(row!.y + row!.height).toBeLessThan(nameField!.y);
-    await expect(avatarRow.getByText("프로필 사진")).toBeVisible();
+    expect(nameField!.y).toBeGreaterThanOrEqual(row!.y);
+    expect(nameField!.y + nameField!.height).toBeLessThanOrEqual(row!.y + row!.height);
+    expect(nameField!.x + nameField!.width).toBeCloseTo(row!.x + row!.width, 0);
+    await expect(avatarRow.getByLabel("프로필 사진")).toHaveAttribute("type", "file");
+    await expect(avatarRow.getByText("프로필 사진", { exact: true })).toHaveCount(0);
+    await expect(page.locator(".dc-join-identity-icon")).toHaveCSS("width", "64px");
+    expect(await page.locator(".dc-guest-join-panel").evaluate(element =>
+      getComputedStyle(element).backgroundColor)).toMatch(/^rgb\(/);
     await page.screenshot({ path: testInfo.outputPath("join-profile.png") });
 
     if (admission === "anonymous") {
