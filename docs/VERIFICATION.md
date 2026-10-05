@@ -1,5 +1,7 @@
 # Verification Contract
 
+- 2026-10-05 C member consent structure: shared central/native server initial and sentence heading, account/origin/help, full-width join and text cancel; member screen tests 18/18 passed with existing grant/admission/cancel/error assertions preserved; no signing/manual verification/deployment.
+
 - 2026-10-05 C invite structure: shared opaque backdrop, 64px room initial, avatar upload beside full remaining-width name, stacked actions; profile screen 4/4 and Chromium layout/click regression 2/2 passed; preflight lacks server label/icon so no invented metadata; no signing/manual verification/deployment.
 
 - 2026-10-05 compact chat width: shared member/side-chat panels reuse compact overlays below 1280px, keep a minimum chat column and accessible close control; Chromium admission/snapshot regression passed at 768/800/814/900/1024/1100px with a 420px sidebar and companion card, positive textarea width, panel switching and actual text entry; frontend build passed; no signing, manual verification or deployment.

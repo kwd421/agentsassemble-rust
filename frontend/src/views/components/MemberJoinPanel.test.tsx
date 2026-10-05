@@ -51,9 +51,9 @@ async function agree() {
 describe("member invite screen", () => {
   it("requires explicit consent, displays canonical account/server/origin, and admits natively once", async () => {
     const props = host(); render(<StrictMode><MemberJoinPanel host={props} /></StrictMode>);
-    await screen.findByText("Hihi");
-    expect(screen.getByRole("heading", { name: "친구의 서버 서버에 참가할까요?" })).toBeTruthy();
-    expect(screen.getByText("계정").parentElement?.textContent).toBe("계정Hihi");
+    await screen.findByText("Hihi 계정으로 참가");
+    expect(screen.getByRole("heading", { name: "친구의 서버에 참가할까요?" })).toBeTruthy();
+    expect(screen.getByText("Hihi 계정으로 참가")).toBeTruthy();
     expect(screen.getByText("참가하면 이 서버에 내 이름과 프로필이 보여요.")).toBeTruthy();
     expect(screen.queryByText(/중앙|입장 프로필|\(server\)/)).toBeNull();
     expect(screen.getByText("https://host.test")).toBeTruthy();
@@ -70,7 +70,7 @@ describe("member invite screen", () => {
     render(<MemberJoinPanel host={host()} onCancel={onCancel} />);
     await screen.findByRole("button", { name: "참가하기" });
     const cancel = screen.getByRole("button", { name: "취소" });
-    expect(cancel.getAttribute("data-active")).toBe("false");
+    expect(cancel.className).toBe("dc-join-cancel");
     fireEvent.click(cancel);
     expect(onCancel).toHaveBeenCalledOnce(); expect(mocks.issue).not.toHaveBeenCalled();
   });
@@ -129,7 +129,7 @@ describe("member invite screen", () => {
 
   it("refuses an account switch before the consent click", async () => {
     render(<MemberJoinPanel host={host()} />);
-    await screen.findByText("Hihi"); mocks.session.mockReturnValue({ ...session, token: "different" });
+    await screen.findByText("Hihi 계정으로 참가"); mocks.session.mockReturnValue({ ...session, token: "different" });
     await agree(); expect((await screen.findByRole("alert")).textContent).toContain("계정이 바뀌");
     expect(mocks.issue).not.toHaveBeenCalled();
   });

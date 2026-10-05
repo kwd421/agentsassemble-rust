@@ -165,14 +165,14 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
   }
 
   return <GuestJoinProfilePanel displayName="" busy={busy} status={error || status}
-    title={consent && !error ? `${consent.target.label} 서버에 참가할까요?` : "로그인하고 참가"}
+    title={consent && !error ? `${consent.target.label}에 참가할까요?` : "로그인하고 참가"}
+    identityLabel={consent && !error ? consent.target.label : undefined}
+    titleContent={consent && !error ? <><strong>{consent.target.label}</strong>에 참가할까요?</> : undefined}
     retryMode={error ? "join" : undefined} onJoin={retry}
     onDisplayNameChange={() => {}} onAvatarImageChange={() => {}}>
     <section aria-label="서버 참가" className="grid gap-3 text-text-primary">
       {consent && !error && <>
-        <dl className="flex min-w-0 gap-2 text-sm">
-          <dt className="shrink-0">계정</dt><dd className="truncate">{consent.account}</dd>
-        </dl>
+        <p className="text-sm preserve-words">{consent.account} 계정으로 참가</p>
         <p className="truncate text-xs text-text-muted">{consent.target.endpoint_origin}</p>
         <p className="text-sm text-text-muted">참가하면 이 서버에 내 이름과 프로필이 보여요.</p>
         <button type="button" className="dc-guest-join-button" disabled={busy} onClick={() => void confirm()}>참가하기</button>
@@ -182,7 +182,7 @@ export default function MemberJoinPanel({ host, request, entryError, onCancel }:
           loginAbort.current = new AbortController();
           await startCentralWebGoogle(loginAbort.current.signal);
         })}>Google로 계속</button>}
-      {(!host || onCancel) && !busy && <button type="button" className="dc-member-session-button" data-active="false"
+      {(!host || onCancel) && !busy && <button type="button" className="dc-join-cancel"
         onClick={onCancel || (() => { clearCentralMemberRequest(); window.history.back(); })}>취소</button>}
     </section>
   </GuestJoinProfilePanel>;
