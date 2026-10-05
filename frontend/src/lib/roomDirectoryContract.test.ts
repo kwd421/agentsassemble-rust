@@ -158,11 +158,19 @@ describe("room directory contracts", () => {
     }
   });
 
-  it("does not recompute a server-only surface digest", async () => {
-    const payload = directory([]);
-    payload.server_product_surface = { ...surface, digest: "d".repeat(64) };
-    await expect(bindRoomDirectoryAuthority(parseStrictRoomDirectory(payload), null,
-      "https://server-only-surface.example")).resolves.toBe(true);
+  it("rejects a remote replacement surface reusing the pinned revision and digest", async () => {
+    const origin = "https://remote-surface-pin.example";
+    const authority = parseStrictRoomDirectory(directory([]));
+    await expect(bindRoomDirectoryAuthority(authority, null, origin)).resolves.toBe(true);
+    const replacement = parseStrictRoomDirectory({
+      ...directory([]),
+      server_product_surface: {
+        ...surface, http_routes: [{ method: "GET", path: "/api/rooms" }],
+      },
+    });
+    await expect(verifyAndBindRoomSessionSurface(replacement, () => true, origin))
+      .rejects.toThrow(/digest/);
+    expect(currentServerProductSurface(origin)).toEqual(surface);
   });
 
   it("rejects duplicate canonical room IDs or room UIDs", () => {

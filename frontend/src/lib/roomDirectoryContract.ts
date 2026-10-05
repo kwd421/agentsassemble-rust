@@ -264,23 +264,24 @@ export async function bindRoomDirectoryAuthority(
   origin = window.location.origin,
   isCurrent: () => boolean = () => true
 ): Promise<boolean> {
-  if (trustedSurface) {
-    // Only the independent native bootstrap provides a trusted digest.
-    const surface = authority.server_product_surface;
-    const computed = await sha256Hex(
-      lengthDelimitedTranscript("agentsassemble.server-product-surface.v1", [
-        String(surface.revision),
-        ...surface.http_routes.map((route) => `${route.method} ${route.path}`),
-        "streams", ...surface.websocket_streams,
-        "actions", ...surface.websocket_actions,
-      ])
-    );
-    if (
-      trustedSurface.revision !== surface.revision ||
-      trustedSurface.digest !== surface.digest || computed !== trustedSurface.digest
-    ) {
-      throw new Error("서버 제품 표면 digest가 네이티브 bootstrap 권위와 일치하지 않습니다.");
-    }
+  const surface = authority.server_product_surface;
+  // Bind digest to content so remote hosts cannot reuse a pinned/cached digest for a different surface.
+  const computed = await sha256Hex(
+    lengthDelimitedTranscript("agentsassemble.server-product-surface.v1", [
+      String(surface.revision),
+      ...surface.http_routes.map((route) => `${route.method} ${route.path}`),
+      "streams", ...surface.websocket_streams,
+      "actions", ...surface.websocket_actions,
+    ])
+  );
+  if (computed !== surface.digest) {
+    throw new Error("서버 제품 표면 digest가 등록부 내용과 일치하지 않습니다.");
+  }
+  if (
+    trustedSurface &&
+    (trustedSurface.revision !== surface.revision || trustedSurface.digest !== surface.digest)
+  ) {
+    throw new Error("서버 제품 표면 digest가 네이티브 bootstrap 권위와 일치하지 않습니다.");
   }
   if (!isCurrent()) return false;
   bindVerifiedRoomDirectoryAuthority(authority, origin);

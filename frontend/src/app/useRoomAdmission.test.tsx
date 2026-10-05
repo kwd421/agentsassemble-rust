@@ -282,10 +282,14 @@ describe("useRoomAdmission", () => {
     expect(onRoomJoined).not.toHaveBeenCalled();
   });
 
-  it("keeps recovery open when its server surface cannot be bound", async () => {
-    surfaceMocks.verifyAndBindRoomSessionSurface.mockRejectedValue(
-      new Error("제품 표면 digest가 일치하지 않습니다.")
+  it("rejects a recovery surface reusing an already verified admission digest", async () => {
+    const actual = await vi.importActual<typeof import("../lib/roomDirectoryContract")>(
+      "../lib/roomDirectoryContract"
     );
+    surfaceMocks.verifyAndBindRoomSessionSurface.mockImplementation((authority, isCurrent) =>
+      actual.verifyAndBindRoomSessionSurface(authority, isCurrent, "https://admission-pin.example")
+    );
+    persistRoomGuestSession(SESSION);
     const { result } = renderHook(() =>
       useRoomAdmission({
         deviceToken: DEVICE_TOKEN,
@@ -294,16 +298,21 @@ describe("useRoomAdmission", () => {
         guestJoinToken: "",
         operatorPairingToken: "",
         onPairingTokenConsumed: vi.fn(),
-        initialSession: null,
+        initialSession: SESSION,
         onRoomJoined: vi.fn(),
         onResetToLobby: vi.fn(),
       })
     );
 
+    await waitFor(() => expect(result.current.admittedSessionToken).toBe(SESSION.sessionToken));
     let accepted = true;
     await act(async () => {
       accepted = await result.current.acceptRecoveredSession({
         ...SESSION_SURFACE,
+        server_product_surface: {
+          ...TEST_SERVER_PRODUCT_SURFACE,
+          http_routes: [{ method: "GET", path: "/api/rooms" }],
+        },
         status: "recovered",
         session_token: "untrusted-recovery",
         agent_id: "guest-1",
@@ -330,8 +339,9 @@ describe("useRoomAdmission", () => {
       code: "server_surface_invalid",
       retryable: false,
     });
-    expect(result.current.guestSession).toBeNull();
-    expect(loadRoomGuestSession()).toBeNull();
+    expect(result.current.admittedSessionToken).toBe("");
+    expect(result.current.guestSession).toEqual(SESSION);
+    expect(loadRoomGuestSession()).toEqual(SESSION);
   });
 
   it("uses a remembered profile only to prefill an unknown-device form", async () => {

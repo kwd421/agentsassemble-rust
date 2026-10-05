@@ -41,10 +41,15 @@ User-required behavior: directory, room creation, room-session admission and soc
 subscription accept unknown response fields while retaining required fields, runtime
 types, authority/room/participant identity, revision and cursor checks. Remote-host
 JSON remains untrusted; generated TypeScript types do not validate it at runtime.
-Remove server-only surface hash self-checks and receipt digest equality. Keep the
-native bootstrap comparison and its transcript hash: the private native grant is
-an independent source for the HTTP surface. Keep the lifetime surface pin and
-admission cache key until their owning contracts change. No auth/ticket changes.
+Daybreak Finding 1 correction: restore local surface digest recomputation before
+all directory/session bindings, including remote hosts. The digest must identify
+known surface content for the lifetime pin and admission verification cache; a
+replacement B with A's revision/digest must fail before binding or session storage.
+Keep native bootstrap comparison, exactKeys relaxation and receipt digest cleanup.
+Admission stores its verified key only after binding succeeds; all replacement
+join/pair/recovery/owner sessions must pass that binding before publication.
+Verify A then forged B through binding and admission, retaining stale cancellation.
+No auth/ticket changes.
 The old frontend requires digest in directory/session surfaces and subscriptions;
 removing server fields now would break cached clients. This is expand only: retain
 Rust producers, protocol/generated fields and compatibility tests. Later contract

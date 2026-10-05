@@ -5,7 +5,7 @@
 Completed work lives in Git and `docs/VERIFICATION.md`. Add an entry here only while
 work is active or waiting, and remove it when it closes.
 
-- Contract follow-up: after cached old frontends retire, remove server-surface digest wire fields/producers/types/tests where unused; native bootstrap trust and admission cache consumers must be resolved first (2026-10-05 expand cleanup).
+- Contract follow-up: after cached old frontends retire, remove server-surface digest wire fields/producers/types/tests where unused; native bootstrap trust, content-bound lifetime pin and admission cache consumers must be resolved first (2026-10-05 expand cleanup).
 - Active phase: Phase 9 final exposure, integration, resource measurement and
   authorized real-provider verification. [Acceptance](docs/specs/final-parity-slice.md).
   Phases 1-8 are closed (Phase 8 through `f776e2e`); closing reviews and evidence are
