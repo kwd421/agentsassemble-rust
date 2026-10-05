@@ -8,9 +8,9 @@ use agentsassemble_provider::ProviderAdapter;
 
 use crate::{AttendeeClientError, AttendeeJoined};
 
-#[path = "attendee_client_execution.rs"]
+#[path = "client_execution.rs"]
 mod execution;
-#[path = "attendee_client_interrupt.rs"]
+#[path = "client_interrupt.rs"]
 mod interrupt;
 pub use execution::AttendeeExecution;
 pub use interrupt::AttendeeInterrupt;

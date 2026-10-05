@@ -1,10 +1,10 @@
-#[path = "attendee_socket_requests.rs"]
+#[path = "socket_requests.rs"]
 mod requests;
 pub(super) use requests::SocketRequests;
 
 use std::time::Duration;
 
-use crate::attendee_wire::AttendeeSocketFrame as Frame;
+use crate::attendee::wire::AttendeeSocketFrame as Frame;
 use agentsassemble_persistence::{AttendeeConnectionAuthorization, AttendeeSessionAuthorization};
 use axum::extract::ws::{Message, WebSocket};
 use futures_util::{StreamExt, stream::SplitSink};
@@ -115,7 +115,7 @@ async fn run_session(
     let mut ready = false;
     let mut delivered = None;
     let mut delivered_interrupt = None;
-    let idle = tokio::time::sleep(crate::attendee_wire::SOCKET_IDLE);
+    let idle = tokio::time::sleep(crate::attendee::wire::SOCKET_IDLE);
     tokio::pin!(idle);
     loop {
         if deliver_stop(state, connection, &mut sender).await != Some(false) {
@@ -140,7 +140,7 @@ async fn run_session(
             () = &mut idle => break,
             message = receiver.next() => {
                 let Some(Ok(message)) = message else { break; };
-                idle.as_mut().reset(tokio::time::Instant::now() + crate::attendee_wire::SOCKET_IDLE);
+                idle.as_mut().reset(tokio::time::Instant::now() + crate::attendee::wire::SOCKET_IDLE);
                 let Some(became_ready) = receive(state, connection, &mut sender, &mut requests, message).await else { break; };
                 ready |= became_ready;
             }

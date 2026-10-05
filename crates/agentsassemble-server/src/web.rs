@@ -187,7 +187,7 @@ pub fn router(state: AppState) -> Router {
         .merge(crate::human_invite_web::routes())
         .merge(crate::connector_web::routes())
         .merge(crate::connector_mcp_web::routes(&state))
-        .merge(crate::attendee_web::routes());
+        .merge(crate::attendee::web::routes());
     if state.central_registration_enabled {
         app = app.merge(crate::central_registration_web::routes());
     }

@@ -1,5 +1,5 @@
-pub(super) use crate::attendee_wire::AttendeeSocketRequest as Request;
-use crate::attendee_wire::{AttendeeSocketFailure, AttendeeSocketFrame as Frame};
+pub(super) use crate::attendee::wire::AttendeeSocketRequest as Request;
+use crate::attendee::wire::{AttendeeSocketFailure, AttendeeSocketFrame as Frame};
 use agentsassemble_persistence::{AttendeeConnectionAuthorization, PersistenceError};
 use uuid::Uuid;
 

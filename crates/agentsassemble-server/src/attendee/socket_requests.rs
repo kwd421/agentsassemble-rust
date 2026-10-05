@@ -21,7 +21,7 @@ struct DeliveryReceipt {
     delivered: bool,
 }
 
-pub(in crate::attendee_web) struct SocketRequests {
+pub(in crate::attendee::web) struct SocketRequests {
     pending: Option<Pending>,
     completed: Option<DeliveryReceipt>,
 }

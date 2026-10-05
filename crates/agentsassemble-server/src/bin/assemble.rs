@@ -1,7 +1,7 @@
 use agentsassemble_server::connector_mcp::transport::{serve_remote, serve_stdio};
 use clap::{Parser, Subcommand};
 
-#[path = "../attendee_cli.rs"]
+#[path = "../attendee/cli.rs"]
 mod attendee;
 #[path = "../release_health_cli.rs"]
 mod release_health;

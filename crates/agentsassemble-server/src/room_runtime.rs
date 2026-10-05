@@ -39,11 +39,11 @@ use crate::room_command_execution::CommandExecution;
 mod command_queue;
 pub(crate) use command_queue::{RoomCommand, RoomCommandSession};
 
-#[path = "attendee_execution.rs"]
+#[path = "attendee/execution.rs"]
 mod attendee_execution;
 pub use attendee_execution::{AttendeeOperation, AttendeeOperationResult};
 
-#[path = "attendee_runtime.rs"]
+#[path = "attendee/runtime.rs"]
 mod attendee;
 #[path = "connector_runtime.rs"]
 pub(crate) mod connector;

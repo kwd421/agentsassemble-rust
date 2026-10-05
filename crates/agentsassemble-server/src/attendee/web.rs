@@ -1,15 +1,15 @@
-#[path = "attendee_entry_web.rs"]
+#[path = "entry_web.rs"]
 mod entry;
 pub(crate) use entry::HTTP_ROUTES as ENTRY_HTTP_ROUTES;
-#[path = "attendee_cleanup_web.rs"]
+#[path = "cleanup_web.rs"]
 mod cleanup;
-#[path = "attendee_interrupt_web.rs"]
+#[path = "interrupt_web.rs"]
 mod interrupt;
-#[path = "attendee_socket.rs"]
+#[path = "socket.rs"]
 mod socket;
-#[path = "attendee_socket_protocol.rs"]
+#[path = "socket_protocol.rs"]
 mod socket_protocol;
-#[path = "attendee_tool_web.rs"]
+#[path = "tool_web.rs"]
 mod tool;
 
 use crate::{

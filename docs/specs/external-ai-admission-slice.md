@@ -9,10 +9,19 @@ own the current review state. Configured real-provider proof
 and Pro review remain final-closeout work. The dated implementation notes below retain their original
 intermediate verification status; this current status and the closure record govern.
 
+## Path-only folder grouping (2026-10-05)
+
+Move the 23 server `attendee_*` source files into `attendee/`, preserving
+CLI, HTTP, socket, client and room-runtime entry points, existing authority,
+visibility, state transitions and failure/retry behavior. Only file/module paths
+change; existing public item exports remain, with no old-module aliases.
+Acceptance uses server build/tests and unchanged architecture gates; no provider,
+packaged/manual verification or deployment is part of this move.
+
 ## Concurrent interrupt and turn delivery (2026-10-05)
 
 Parallel artifact-reduction verification exposed an external attendee socket race.
-`attendee_socket::run_session` checks for an interrupt before asking
+`attendee::web::socket::run_session` checks for an interrupt before asking
 `SqliteStore::deliver_attendee_turn` for an assignment. An interrupt/mute effect
 may commit between those two reads. The turn-delivery transaction must then return
 no eligible assignment while retaining the pending canonical effect, rather than

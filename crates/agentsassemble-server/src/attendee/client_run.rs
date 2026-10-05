@@ -11,11 +11,11 @@ use std::time::Duration;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-#[path = "attendee_client_run_tools.rs"]
+#[path = "client_run_tools.rs"]
 mod tools;
 use tools::Tools;
 
-#[path = "attendee_client_run_requests.rs"]
+#[path = "client_run_requests.rs"]
 mod requests;
 use requests::Requests;
 
